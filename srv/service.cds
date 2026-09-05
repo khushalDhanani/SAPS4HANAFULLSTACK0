@@ -50,7 +50,6 @@ service PurchaseOrderService {
         TaxCode: String;
         NetAmount: Decimal;
         RequisitionerName: String;
-        RequirementTracking: String;
     }
 
     type POHeader {

@@ -20,7 +20,7 @@ function registerPurchaseOrderHandlers(srv) {
         // Step A: Business validation
         const validation = validateCreatePurchaseOrderPayload(req.data);
         if (!validation.isValid) {
-            req.error(400, validation.errors.join('; '));
+            req.error(400, validation.message);
             return;
         }
 

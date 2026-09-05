@@ -1,6 +1,59 @@
 
 # Changes Log
 
+## 2026-09-05 11:50 IST
+- **Agent**: Antigravity
+- **Change**: Strengthened Purchase Order validation across the full stack: friendly immediate UX validation in Fiori UI, authoritative business validation in CAP, and ERP-specific Gateway error translation.
+- **Files**:
+  - `srv/validation/purchaseOrder.validation.js`
+  - `srv/handlers/purchaseOrder.handler.js`
+  - `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`
+  - `test/unit/validation.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: The user reported that validation was too weak. UI validation only checked 5 basic fields (`item.Material && item.Plant && item.OrderQuantity && item.StorageLocation && item.UnitOfMeasure`), whereas the backend payload contains header organizational data, currencies, dates, Incoterms, and pricing. In full-stack architecture, UI validation is only for immediate UX feedback; the backend (CAP) must own authoritative business validation, and S/4 Gateway owns ERP-specific validations.
+- **Fix & Enhancements**:
+  1. In `srv/validation/purchaseOrder.validation.js`:
+     - Added strict header validation for `PurchaseOrderType`, `CompanyCode`, `PurchasingOrganization`, `PurchasingGroup`, `Supplier`, `Currency`, `DocumentDate`, format constraints, and length limits.
+     - Enforced ISO 4217 3-letter currency code validation (`/^[A-Za-z]{3}$/`).
+     - Enforced DocumentDate validity check (`isNaN(new Date(...).getTime())`).
+     - Enforced Incoterms cross-field rule: if `IncotermsClassification` is provided, `IncotermsLocation1` is mandatory (max 70 chars).
+     - Added field length bounds (`CompanyCode` <= 4, `Plant` <= 4, `StorageLocation` <= 4, `TaxCode` <= 2, `PurchasingGroup` <= 3).
+     - Enforced `OrderQuantity` positive bounds (> 0 and <= 999,999,999) and `NetPriceAmount` non-negative bounds (>= 0).
+     - Formatted structured error objects `{ field, message }` and joined message string.
+  2. In `srv/handlers/purchaseOrder.handler.js`:
+     - Returned `validation.message` on HTTP 400 Bad Request.
+  3. In `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`:
+     - Implemented `_validateUI(oData)` validating header organizational fields, Incoterms location rule, item fields, and positive quantities.
+     - Displayed friendly, field-specific messages in `MessageBox.error`.
+     - Safely parsed CAP OData V4 JSON error responses from `fetch`.
+  4. In `test/unit/validation.test.js`:
+     - Added unit tests covering ISO currency codes, invalid dates, Incoterms cross-field rules, field length limits, quantity and price bounds.
+- **Validation**:
+  - `node -c app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`: Clean (Code 0).
+  - `node -c srv/validation/purchaseOrder.validation.js`: Clean (Code 0).
+  - `npm run test:unit`: 7 passed, 7 total suites (42 tests passed) in 0.403s.
+  - `npm run test:integration`: 6 passed, 6 total suites (17 tests passed) in 5.28s.
+  - `npm run test:e2e`: 1 passed, 1 total suite (7 tests passed) in 1.76s.
+  - `npm test`: All 14 test suites (66 tests) passed in 8.19s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Multi-tiered validation architecture is active: UI provides immediate friendly feedback, CAP enforces authoritative business rules, and S/4 handles ERP-specific checks.
+
+## 2026-09-05 11:48 IST
+- **Agent**: Antigravity
+- **Change**: Removed unmapped "ghost field" `RequirementTracking` from `POItem` contract in `srv/service.cds`.
+- **Files**:
+  - `srv/service.cds`
+  - `WORKSTATUS.md`
+- **Reason**: `RequirementTracking` was previously declared in `srv/service.cds` (`POItem`) but was not sent to S/4. S/4 Gateway's standard `C_PurchaseOrderItemTP` payload does not accept this field (it previously caused a fatal `CX_DS_EP_PROPERTY_ERROR`), and the Fiori UI does not expose or use it. Leaving unsupported "ghost fields" creates contract divergence where the API advertises fields that backend services silently ignore.
+- **Fix**: Removed `RequirementTracking: String;` from `type POItem` in `srv/service.cds`, aligning the CDS service contract with what is implemented and supported end-to-end.
+- **Validation**:
+  - `npx cds compile srv/service.cds`: Succeeded with code 0.
+  - `npm test`: All 14 test suites (62 tests) passed with code 0.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Service contract is clean, with zero unmapped ghost fields.
+
 ## 2026-09-05 11:46 IST
 - **Agent**: Antigravity
 - **Change**: Refactored CAP service architecture into decoupled layers (`handlers/`, `validation/`, `mapping/`, `integration/`) strictly adhering to `AGENTS.md` boundaries; separated PO business logic from S/4 technical integration.

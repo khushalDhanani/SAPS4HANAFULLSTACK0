@@ -211,27 +211,52 @@ sap.ui.define([
             }, 0);
         },
 
+        _validateUI: function (oData) {
+            var aErrors = [];
+
+            // 1. Header Validation
+            if (!oData.header.PurchaseOrderType) aErrors.push("Document Type is required.");
+            if (!oData.header.CompanyCode) aErrors.push("Company Code is required.");
+            if (!oData.header.PurchasingOrganization) aErrors.push("Purchasing Organization is required.");
+            if (!oData.header.PurchasingGroup) aErrors.push("Purchasing Group is required.");
+            if (!oData.header.Supplier) aErrors.push("Supplier is required.");
+            if (!oData.header.Currency) aErrors.push("Currency is required.");
+            if (!oData.header.DocumentDate) aErrors.push("Document Date is required.");
+
+            if (oData.header.IncotermsClassification && !oData.header.IncotermsLocation1) {
+                aErrors.push("Incoterms Location is required when Incoterms is specified.");
+            }
+
+            // 2. Items Validation
+            if (!oData.items || oData.items.length === 0) {
+                aErrors.push("Please add at least one line item.");
+            } else {
+                oData.items.forEach(function (item, idx) {
+                    var sItemNo = item.PurchaseOrderItem || "Item #" + (idx + 1);
+                    if (!item.Material) aErrors.push(sItemNo + ": Material is required.");
+                    if (!item.Plant) aErrors.push(sItemNo + ": Plant is required.");
+                    if (!item.StorageLocation) aErrors.push(sItemNo + ": Storage Location is required.");
+                    if (!item.UnitOfMeasure) aErrors.push(sItemNo + ": Unit of Measure is required.");
+
+                    var fQty = parseFloat(item.OrderQuantity);
+                    if (!item.OrderQuantity || isNaN(fQty) || fQty <= 0) {
+                        aErrors.push(sItemNo + ": Order Quantity must be greater than 0.");
+                    }
+                });
+            }
+
+            return aErrors;
+        },
+
         onCreatePress: function () {
             var oModel = this.getView().getModel("newPO");
             var oData = oModel.getData();
             var that = this;
 
-            // Basic Validation
-            if (!oData.header.PurchaseOrderType || !oData.header.CompanyCode || !oData.header.Supplier) {
-                MessageBox.error("Please fill all required header fields.");
-                return;
-            }
-            if (oData.items.length === 0) {
-                MessageBox.error("Please add at least one item.");
-                return;
-            }
-
-            var bItemValid = oData.items.every(function (item) {
-                return item.Material && item.Plant && item.OrderQuantity && item.StorageLocation && item.UnitOfMeasure;
-            });
-
-            if (!bItemValid) {
-                MessageBox.error("Please fill all required fields for all items.");
+            // Immediate UX Validation
+            var aUIErrors = this._validateUI(oData);
+            if (aUIErrors.length > 0) {
+                MessageBox.error(aUIErrors.join("\n"));
                 return;
             }
 
@@ -251,7 +276,15 @@ sap.ui.define([
                 .then(function (response) {
                     sap.ui.core.BusyIndicator.hide();
                     if (!response.ok) {
-                        return response.text().then(function (txt) { throw new Error(txt); });
+                        return response.text().then(function (txt) {
+                            try {
+                                var oJson = JSON.parse(txt);
+                                var sMsg = oJson.error && oJson.error.message ? oJson.error.message : txt;
+                                throw new Error(sMsg);
+                            } catch (e) {
+                                throw new Error(e.message || txt);
+                            }
+                        });
                     }
                     return response.json();
                 })
