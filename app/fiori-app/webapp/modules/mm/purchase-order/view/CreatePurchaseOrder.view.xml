@@ -9,20 +9,22 @@
 
     <Page
         id="createPOPage"
-        title="Create Purchase Order"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
+        showHeader="false"
         backgroundDesign="Solid">
-        <headerContent>
-            <ObjectStatus
-                id="headerPOStatus"
-                text="{newPO>/header/StatusText}"
-                state="{newPO>/header/StatusState}"
-                icon="{newPO>/header/StatusIcon}" />
-        </headerContent>
         <content>
             <VBox class="sapUiResponsiveMargin">
-                <Panel headerText="Header Details" class="sapUiSmallMarginBottom">
+                <Panel class="sapUiSmallMarginBottom">
+                    <headerToolbar>
+                        <Toolbar>
+                            <Title text="Header Details" level="H3" />
+                            <ToolbarSpacer />
+                            <ObjectStatus
+                                id="headerPOStatus"
+                                text="{newPO>/header/StatusText}"
+                                state="{newPO>/header/StatusState}"
+                                icon="{newPO>/header/StatusIcon}" />
+                        </Toolbar>
+                    </headerToolbar>
                     <f:SimpleForm 
                         id="poHeaderForm"
                         editable="true"

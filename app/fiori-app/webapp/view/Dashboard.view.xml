@@ -6,35 +6,22 @@
     displayBlock="true">
     <Page
         id="dashboardPage"
-        title="{i18n>dashboardTitle}"
-        showNavButton="false"
+        showHeader="false"
         backgroundDesign="Solid"
         class="sapUiSizeCompact">
-        <headerContent>
-            <ObjectStatus
-                id="dashConnectionStatus"
-                text="{i18n>tagLive}"
-                state="Success"
-                icon="sap-icon://connected" />
-            <Button
-                id="btnUserProfile"
-                icon="sap-icon://customer"
-                text="{auth>/user/username}"
-                type="Transparent"
-                tooltip="{i18n>userProfileTitle}"
-                press=".onOpenUserProfile" />
-            <Button
-                id="btnRefreshDashboard"
-                icon="sap-icon://refresh"
-                tooltip="{i18n>btnRefresh}"
-                press=".onRefresh" />
-        </headerContent>
         <content>
             <VBox class="sapUiResponsiveMargin">
-                <!-- Welcome Message -->
-                <VBox class="sapUiSmallMarginBottom">
+                <!-- Welcome Message and Refresh Action -->
+                <HBox class="sapUiSmallMarginBottom" justifyContent="SpaceBetween" alignItems="Center">
                     <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H2" />
-                </VBox>
+                    <Button
+                        id="btnRefreshDashboard"
+                        icon="sap-icon://refresh"
+                        text="{i18n>btnRefresh}"
+                        type="Transparent"
+                        tooltip="{i18n>btnRefresh}"
+                        press=".onRefresh" />
+                </HBox>
 
                 <!-- SECTION 1: Business Modules (Extensible Platform Catalog) -->
                 <Panel

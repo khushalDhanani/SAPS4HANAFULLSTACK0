@@ -1,0 +1,24 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:f="sap.f"
+    xmlns:core="sap.ui.core">
+    <f:ShellBar
+        id="appShellBar"
+        visible="{auth>/isAuthenticated}"
+        title="{shellModel>/currentTitle}"
+        homeIcon="{shellModel>/logoUrl}"
+        homeIconTooltip="{i18n>homeTooltip}"
+        homeIconPressed=".onHomeIconPressed"
+        showNavButton="{shellModel>/showNavButton}"
+        navButtonPressed=".onNavButtonPressed">
+        <f:profile>
+            <Avatar
+                id="shellUserAvatar"
+                displaySize="XS"
+                initials="{auth>/user/avatarInitials}"
+                fallbackIcon="sap-icon://customer"
+                tooltip="{auth>/user/username}"
+                press=".onOpenUserProfile" />
+        </f:profile>
+    </f:ShellBar>
+</core:FragmentDefinition>

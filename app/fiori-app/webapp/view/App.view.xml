@@ -2,7 +2,14 @@
     controllerName="saps4hana.fiori.controller.App"
     xmlns:mvc="sap.ui.core.mvc"
     displayBlock="true"
-    xmlns="sap.m">
-    <App id="app">
-    </App>
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <VBox fitContainer="true" height="100%" class="appRootContainer">
+        <core:Fragment fragmentName="saps4hana.fiori.fragment.CommonHeader" type="XML" />
+        <App id="app" class="appPagesContainer">
+            <layoutData>
+                <FlexItemData growFactor="1" shrinkFactor="1" baseSize="0" />
+            </layoutData>
+        </App>
+    </VBox>
 </mvc:View>

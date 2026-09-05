@@ -1,1 +1,41 @@
-/* Custom CSS removed. Using standard SAPUI5 styling and Compact density. */
+/* Root Application Shell Layout */
+.appRootContainer {
+    height: 100vh;
+    overflow: hidden;
+}
+
+.appPagesContainer {
+    flex: 1 1 auto;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ShellBar Brand Identity Logo */
+.sapFShellBar .sapFShellBarHomeIcon {
+    height: 2.15rem !important;
+    max-height: 2.15rem !important;
+    width: auto !important;
+    max-width: 6.5rem !important;
+    object-fit: contain !important;
+    background-color: #ffffff !important;
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18) !important;
+    margin-right: 0.75rem !important;
+    margin-left: 0.25rem !important;
+    vertical-align: middle !important;
+    cursor: pointer !important;
+    display: inline-block !important;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+
+/* Responsive scaling on compact/mobile screens */
+@media (max-width: 600px) {
+    .sapFShellBar .sapFShellBarHomeIcon {
+        height: 1.75rem !important;
+        max-height: 1.75rem !important;
+        max-width: 4.5rem !important;
+        padding: 2px 5px !important;
+        margin-right: 0.5rem !important;
+    }
+}

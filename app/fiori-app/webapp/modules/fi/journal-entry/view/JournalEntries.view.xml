@@ -8,27 +8,9 @@
     
     <Page
         id="journalEntriesPage"
-        title="{i18n>fiPageTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
-        backgroundDesign="List"
+        showHeader="false"
+        backgroundDesign="Solid"
         class="sapUiSizeCompact">
-        
-        <headerContent>
-            <ObjectStatus
-                id="fiConnectionStatus"
-                text="{i18n>tagLive}"
-                state="Success"
-                icon="sap-icon://connected" />
-            <Button
-                id="btnUserProfile"
-                icon="sap-icon://customer"
-                text="{auth>/user/username}"
-                type="Transparent"
-                tooltip="{i18n>userProfileTitle}"
-                press=".onOpenUserProfile" />
-        </headerContent>
-
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- KPI Header -->

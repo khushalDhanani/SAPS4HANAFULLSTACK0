@@ -1,6 +1,162 @@
 
 # Changes Log
 
+## 2026-09-05 17:31 IST
+- **Agent**: Antigravity
+- **Change**: Restored 100% authentic original logo asset and eliminated artificial color conversions:
+  1. Asset Restoration (`app/fiori-app/webapp/assets/AeElementally.png`):
+     - Restored the exact, unaltered original binary asset downloaded from `https://myapp.airis.co.in/src/app/ClientResources/Airis/AeElementally.png`.
+     - Verified via `cmp` byte-for-byte fidelity against original download.
+     - Removed artificial white/dark duplicate assets (`AeElementally-white.png`, `AeElementally-dark.png`).
+  2. Authentic Badge Container Styling (`style.css`):
+     - Removed artificial color manipulation filters (`filter: brightness(0) invert(1)`).
+     - Wrapped the authentic logo inside a clean, high-contrast white badge container (`background-color: #ffffff`, `padding: 3px 8px`, `border-radius: 4px`, `box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18)`).
+     - Allows the original black emblem and brand typography to be fully visible, crisp, and unaltered across any ShellBar background theme.
+- **Files Modified**:
+  - `app/fiori-app/webapp/assets/AeElementally.png`
+  - `app/fiori-app/webapp/css/style.css`
+- **Reason**: User feedback: "Logo Color Convesion is not a proper." Artificial pixel color conversion was replaced with authentic asset preservation displayed within a clean brand container.
+- **Validation**:
+  - `cmp app/fiori-app/webapp/assets/AeElementally.png <original_download>`: Identical (Code 0).
+  - `git diff --check`: Passed with 0 whitespace / formatting issues (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 288 ms (Code 0).
+  - `npm test`: All 24 test suites (195 tests) passed (Code 0).
+- **Result**: Passed. Authentic brand logo restored without any color alteration, presented legibly inside a polished white badge container.
+
+
+
+## 2026-09-05 17:27 IST
+- **Agent**: Antigravity
+- **Change**: Optimized Brand Identity logo asset, rendering, sizing, alignment, and responsive layout in `sap.f.ShellBar`:
+  1. Asset Optimization & Localization (`app/fiori-app/webapp/assets/`):
+     - Identified root cause of non-visibility: original logo consisted purely of black pixels (`rgb(0,0,0)`) which lacked contrast and blended invisibly into the dark header bar.
+     - Generated high-contrast, pure-white asset (`AeElementally.png` & `AeElementally-white.png`) with identical alpha channels and preserved the original black asset (`AeElementally-dark.png`).
+     - Bundled local asset directly into webapp assets, removing external network latency, CORS risks, and 404/hotlinking failure modes.
+  2. Dynamic Module Path Resolution (`App.controller.js` & `CommonHeader.fragment.xml`):
+     - Initialized `logoUrl` in `shellModel` via `sap.ui.require.toUrl("saps4hana/fiori/assets/AeElementally.png")`.
+     - Bound `homeIcon="{shellModel>/logoUrl}"` in `CommonHeader.fragment.xml` for resilient path resolution across all deployment environments.
+  3. Visual Polish, Sizing & Alignment (`style.css`):
+     - Configured `.sapFShellBar .sapFShellBarHomeIcon` with `height: 2.25rem !important`, `max-height: 2.25rem !important`, `max-width: 6.5rem !important`, and `object-fit: contain !important` to fit comfortably within the 2.75rem ShellBar without vertical overflow.
+     - Added `margin-right: 0.75rem !important` and `margin-left: 0.25rem !important` for clean spacing next to the title and nav button.
+     - Added subtle drop-shadow (`filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35))`) and smooth hover micro-animations (`opacity: 0.88`, `transform: scale(1.02)`).
+     - Added CSS fallback filter `brightness(0) invert(1)` in case dark assets or remote URLs are loaded.
+     - Implemented responsive mobile rules (`@media (max-width: 600px)` scaling height to `1.75rem` and max-width to `4.5rem`), preventing layout distortion or title truncation on mobile.
+- **Files Modified**:
+  - `app/fiori-app/webapp/fragment/CommonHeader.fragment.xml`
+  - `app/fiori-app/webapp/controller/App.controller.js`
+  - `app/fiori-app/webapp/css/style.css`
+- **Files Created**:
+  - `app/fiori-app/webapp/assets/AeElementally.png`
+  - `app/fiori-app/webapp/assets/AeElementally-white.png`
+  - `app/fiori-app/webapp/assets/AeElementally-dark.png`
+- **Reason**: User request: "Fix the Brand Identity logo appearance. Inspect the existing implementation, asset path, sizing, alignment, spacing, and SAPUI5 layout, then make the logo visually polished, properly positioned, and responsive without breaking the existing header design."
+- **Validation**:
+  - `git diff --check`: Passed with 0 whitespace / formatting issues (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 688 ms (Code 0).
+  - `npm test`: All 24 test suites (195 tests) passed (Code 0).
+  - Local asset HTTP test: `http://localhost:4004/fiori-app/webapp/assets/AeElementally.png` returns HTTP 200 OK.
+  - Pixel analysis: Verified non-transparent pixels rendered in crisp white (`rgb(255,255,255)`) with full alpha preservation.
+- **Result**: Passed. Brand Identity logo renders with high contrast, crisp proportions, responsive behavior, and clear alignment with the ShellBar header.
+
+
+
+## 2026-09-05 17:23 IST
+- **Agent**: Antigravity
+- **Change**: Configured custom company/brand logo in `CommonHeader.fragment.xml`:
+  - Updated `sap.f.ShellBar` `homeIcon` property to point directly to `https://myapp.airis.co.in/src/app/ClientResources/Airis/AeElementally.png`.
+  - Retained `homeIconPressed=".onHomeIconPressed"` to enable seamless click-to-dashboard navigation from the logo.
+- **Files Modified**:
+  - `app/fiori-app/webapp/fragment/CommonHeader.fragment.xml`
+- **Reason**: User request: "Add this logo in header : https://myapp.airis.co.in/src/app/ClientResources/Airis/AeElementally.png".
+- **Validation**:
+  - `git diff --check`: Passed with 0 whitespace / formatting issues (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 303 ms (Code 0).
+  - `npm test`: All 24 test suites (195 tests) passed (Code 0).
+  - Remote image availability verified: HTTP 200 OK via curl (`Content-Length: 19048`, `image/png`).
+- **Result**: Passed. Logo configured on `sap.f.ShellBar` with functional navigation to Dashboard.
+
+
+
+## 2026-09-05 17:21 IST
+- **Agent**: Antigravity
+- **Change**: Streamlined application header in `CommonHeader.fragment.xml` and cleaned up i18n properties:
+  1. Removed `appHeaderTitle` ("SAP S/4HANA") as shell title across the platform; set `title="{shellModel>/currentTitle}"` directly on `sap.f.ShellBar` and eliminated `secondTitle`.
+  2. Removed `tagLive` / `shellConnectionStatus` (`ObjectStatus` in `f:additionalContent`) from the ShellBar.
+  3. Cleaned up unused i18n property keys `appHeaderTitle`, `tagLive`, and `tagLiveTooltip` from `i18n.properties` and `i18n_en.properties`.
+- **Files Modified**:
+  - `app/fiori-app/webapp/fragment/CommonHeader.fragment.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+- **Reason**: User request: "appHeaderTitle Not need this accross platfrom and this is also not need check and remove : tagLive. Don't used DevChome tool."
+- **Validation**:
+  - `git diff --check`: Passed with 0 whitespace / formatting issues (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 683 ms (Code 0).
+  - `npm test`: All 24 test suites (195 tests) passed (Code 0).
+  - Browser DevTools checks omitted as explicitly requested by user ("Don't used DevChome tool").
+- **Result**: Passed. ShellBar displays active view title directly, connection tag removed, and no unused i18n tokens remain.
+
+
+
+## 2026-09-05 17:18 IST
+- **Agent**: Antigravity
+- **Change**: Standardized and unified application header across the platform using canonical SAP Fiori `sap.f.ShellBar` component:
+  1. Reusable Fragment (`app/fiori-app/webapp/fragment/CommonHeader.fragment.xml`):
+     - Created reusable XML fragment implementing `sap.f.ShellBar` (`id="appShellBar"`).
+     - Bound visibility to `{auth>/isAuthenticated}` so it is displayed across all application views and automatically hidden on `/login` or unauthenticated states.
+     - Branded with title `{i18n>appHeaderTitle}` ("SAP S/4HANA"), dynamic subtitle `{shellModel>/currentTitle}`, home icon `sap-icon://dimension` with press handler `.onHomeIconPressed`, and dynamic navigation button (`showNavButton="{shellModel>/showNavButton}"`) with `.onNavButtonPressed`.
+     - Integrated user profile avatar in `f:profile` with `sap.m.Avatar` (`id="shellUserAvatar"`, initials `{auth>/user/avatarInitials}`, press `.onOpenUserProfile`).
+     - Added canonical connectivity status in `f:additionalContent` with `sap.m.ObjectStatus` (`id="shellConnectionStatus"`, text `{i18n>tagLive}`, state `Success`, icon `sap-icon://connected`).
+  2. Root Shell Architecture (`app/fiori-app/webapp/view/App.view.xml` & `style.css`):
+     - Embedded `CommonHeader.fragment.xml` above `<App id="app">` within a root flex container (`.appRootContainer`).
+     - Configured `.appRootContainer` (`height: 100vh; overflow: hidden`) and `.appPagesContainer` (`flex: 1 1 auto; height: 100%`) ensuring 100% viewport fit and zero double window-level scrollbars.
+  3. App Shell Controller (`app/fiori-app/webapp/controller/App.controller.js`):
+     - Extended `BaseController` to leverage centralized user profile popover (`onOpenUserProfile`) and logout flows (`onLogoutPress`, `onLogout`).
+     - Initialized `shellModel` (`currentTitle`, `showNavButton`, `navTarget`).
+     - Attached router `routeMatched` listener to update contextual route titles ("Enterprise Operations Dashboard", "Purchase Orders", "Create Purchase Order", "Purchase Order <ID>", "Journal Entry Items") and toggle back navigation buttons when appropriate.
+     - Implemented `onHomeIconPressed` routing to `dashboard` and `onNavButtonPressed` routing to dynamic `navTarget` (or PO list / dashboard).
+  4. View De-duplication & Simplification:
+     - `Dashboard.view.xml`: Set `showHeader="false"` on `<Page>`, moved dashboard refresh button to the Welcome section toolbar, and removed redundant status and profile controls.
+     - `PurchaseOrders.view.xml`: Set `showHeader="false"` on `<Page>`, removed redundant custom header toolbar with duplicate status/profile controls.
+     - `CreatePurchaseOrder.view.xml`: Set `showHeader="false"` on `<Page>`, preserved header form draft status in panel toolbar, and removed duplicate status/profile controls.
+     - `JournalEntries.view.xml`: Set `showHeader="false"` on `<Page>`, standardized `backgroundDesign="Solid"`, and removed duplicate status/profile controls.
+  5. Manifest & Library Dependencies (`app/fiori-app/webapp/manifest.json`):
+     - Declared `"sap.f": {}` and `"sap.uxap": {}` under `sap.ui5.dependencies.libs`.
+  6. Internationalization (`app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`):
+     - Added localized keys `appHeaderTitle`, `homeTooltip`, `createPOTitle`, `poDetailShellTitle`, `tagLiveTooltip`.
+- **Files Modified**:
+  - `app/fiori-app/webapp/manifest.json`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `app/fiori-app/webapp/view/App.view.xml`
+  - `app/fiori-app/webapp/controller/App.controller.js`
+  - `app/fiori-app/webapp/css/style.css`
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+  - `app/fiori-app/webapp/modules/fi/journal-entry/view/JournalEntries.view.xml`
+- **Files Created**:
+  - `app/fiori-app/webapp/fragment/CommonHeader.fragment.xml`
+- **Reason**: Implement a common, reusable SAP Fiori ShellBar header across the application to eliminate duplicate, fragmented headers, ensure consistent branding and status display, provide intuitive navigation, and adhere strictly to SAPUI5/Fiori Horizon standards.
+- **Validation**:
+  - `git diff --check`: Passed with 0 whitespace / formatting issues (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 320 ms (Code 0).
+  - `npm test`: All 24 test suites (195 tests) passed (Code 0).
+  - Browser Verification via Chrome DevTools MCP:
+    - Tested `#/dashboard`: ShellBar rendered with title "SAP S/4HANA", subtitle "Enterprise Operations Dashboard", live status badge, and user avatar. Profile popover opened and rendered user info.
+    - Tested `#/mm/purchase-orders`: ShellBar rendered with subtitle "Purchase Orders" and back navigation button. Pressing back navigated to Dashboard.
+    - Tested `#/mm/purchase-orders/create`: ShellBar rendered with subtitle "Create Purchase Order". Form panel header status preserved.
+    - Tested `#/mm/purchase-orders/300000001`: ShellBar rendered with subtitle "Purchase Order 300000001" and back button above ObjectPageLayout.
+    - Tested `#/fi/journal-entries`: ShellBar rendered with subtitle "Journal Entry Items" and back button.
+    - Tested unauthenticated visibility: Checked binding of `visible` to `auth>/isAuthenticated` (`oShellBar.getVisible()` dynamically switches between `true` when authenticated and `false` when unauthenticated).
+- **Result**: Passed. Platform now possesses a unified, responsive, accessible `sap.f.ShellBar` header across all views with zero duplicate headers or double scrollbars.
+
+
+
 ## 2026-09-05 17:02 IST
 - **Agent**: Antigravity
 - **Change**: Added visible button text (`text="{i18n>btnBack}"`) to the Back navigation button (`btnDetailBack`) in `PurchaseOrderDetail.view.xml`:

@@ -47,7 +47,9 @@
       "libs": {
         "sap.ui.core": {},
         "sap.m": {},
-        "sap.ui.comp": {}
+        "sap.ui.comp": {},
+        "sap.f": {},
+        "sap.uxap": {}
       }
     },
     "models": {

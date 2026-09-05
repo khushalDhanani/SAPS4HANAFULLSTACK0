@@ -6,26 +6,8 @@
     xmlns:core="sap.ui.core">
     <Page
         id="purchaseOrdersPage"
-        title="{i18n>pageTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
+        showHeader="false"
         backgroundDesign="Solid">
-        <headerContent>
-            <ObjectStatus
-                id="connectionStatus"
-                text="{i18n>tagLive}"
-                state="Success"
-                icon="sap-icon://connected"
-                class="sapUiSmallMarginEnd" />
-            <Button
-                id="btnUserProfilePO"
-                icon="sap-icon://customer"
-                text="{auth>/user/username}"
-                type="Transparent"
-                tooltip="{i18n>userProfileTitle}"
-                press=".onOpenUserProfile"
-                class="sapUiTinyMarginEnd" />
-        </headerContent>
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- KPI Tiles Section -->
