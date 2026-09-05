@@ -61,7 +61,7 @@ describe('Integration: Create Purchase Order Action', () => {
         }
     });
 
-    it('should return 500 with mapped S/4 business exception when backend fails', async () => {
+    it('should return 422 Unprocessable Entity with mapped S/4 business validation exception when backend rejects business input', async () => {
         const backendError = new Error('Request failed with status code 400');
         backendError.response = {
             status: 400,
@@ -72,11 +72,75 @@ describe('Integration: Create Purchase Order Action', () => {
 
         try {
             await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
-            throw new Error('Expected POST to fail with 500 when backend fails but it succeeded');
+            throw new Error('Expected POST to fail with 422 when backend validation fails but it succeeded');
         } catch (error) {
             expect(error.response).toBeDefined();
-            expect(error.response.status).toBe(500);
+            expect(error.response.status).toBe(422);
             expect(error.response.data.error.message).toContain('Address is incomplete. Please enter country/region.');
+        }
+    });
+
+    it('should return 503 Service Unavailable when S/4 backend connection fails', async () => {
+        const connError = new Error('connect ECONNREFUSED s4gateway.corp:443');
+        connError.code = 'ECONNREFUSED';
+
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockRejectedValueOnce(connError);
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+            throw new Error('Expected POST to fail with 503 when backend is unavailable but it succeeded');
+        } catch (error) {
+            expect(error.response).toBeDefined();
+            expect(error.response.status).toBe(503);
+            expect(error.response.data.error.message).toContain('ECONNREFUSED');
+        }
+    });
+
+    it('should return 403 Forbidden when S/4 backend rejects with authorization error', async () => {
+        const authzError = new Error('Request failed with status code 403');
+        authzError.response = {
+            status: 403,
+            data: {
+                error: {
+                    code: '/IWBEP/CX_MGW_NOT_AUTHORIZED',
+                    message: { value: 'User not authorized to create PO for Purchasing Group 001' }
+                }
+            }
+        };
+
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockRejectedValueOnce(authzError);
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+            throw new Error('Expected POST to fail with 403 when user is not authorized but it succeeded');
+        } catch (error) {
+            expect(error.response).toBeDefined();
+            expect(error.response.status).toBe(403);
+            expect(error.response.data.error.message).toContain('User not authorized');
+        }
+    });
+
+    it('should return 409 Conflict when S/4 record is locked by another user', async () => {
+        const lockError = new Error('Request failed with status code 409');
+        lockError.response = {
+            status: 409,
+            data: {
+                error: {
+                    code: 'ME/006',
+                    message: { value: 'Supplier 10300001 is currently locked by user CB9980000001' }
+                }
+            }
+        };
+
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockRejectedValueOnce(lockError);
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+            throw new Error('Expected POST to fail with 409 when document is locked but it succeeded');
+        } catch (error) {
+            expect(error.response).toBeDefined();
+            expect(error.response.status).toBe(409);
+            expect(error.response.data.error.message).toContain('locked by user');
         }
     });
 

@@ -2,7 +2,7 @@ const purchaseOrderAdapter = require('../integration/s4hana/PurchaseOrderAdapter
 const { validateCreatePurchaseOrderPayload } = require('../validation/purchaseOrder.validation');
 const { normalizePurchaseOrderData } = require('../mapping/purchaseOrder.mapper');
 const { mapToS4Payload } = require('../integration/s4hana/PurchaseOrderMapper');
-const { extractS4ErrorMessage } = require('../integration/s4hana/S4ErrorMapper');
+const { mapS4Error } = require('../integration/s4hana/S4ErrorMapper');
 
 /**
  * Derives the authenticated business user identity from CAP request and security context.
@@ -82,9 +82,9 @@ function registerPurchaseOrderHandlers(srv) {
             const result = await purchaseOrderAdapter.createPurchaseOrder(s4Payload);
             return result.PurchaseOrder || 'PO Created but no ID returned';
         } catch (error) {
-            const sapError = extractS4ErrorMessage(error);
-            console.error('[PurchaseOrderService] Error creating PO:', sapError);
-            req.error(500, `Failed to create Purchase Order: ${sapError}`);
+            const sapError = mapS4Error(error);
+            console.error(`[PurchaseOrderService] Error creating PO (${sapError.status}):`, sapError.message);
+            req.error(sapError.status, `Failed to create Purchase Order: ${sapError.message}`);
         }
     });
 }

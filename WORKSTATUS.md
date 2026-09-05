@@ -1,6 +1,48 @@
 
 # Changes Log
 
+## 2026-09-05 12:03 IST
+- **Agent**: Antigravity
+- **Change**: Implemented semantic SAP error model across backend and frontend: distinguished 400, 401, 403, 404, 409, 422, 502/503, and 500 status codes; enhanced Fiori UI with contextual dialog titles and user guidance.
+- **Files**:
+  - `srv/integration/s4hana/S4ErrorMapper.js`
+  - `srv/handlers/purchaseOrder.handler.js`
+  - `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`
+  - `test/unit/errorMapping.test.js`
+  - `test/integration/createPurchaseOrder.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: Previously, all errors originating from S/4HANA operations were blindly converted to generic `req.error(500, "Failed to create Purchase Order...")`. This masked legitimate business validation errors (e.g. missing plant, incomplete address, locked vendors), authorization denials, and temporary network issues as internal server crashes. The Fiori UI was left unable to display targeted, actionable feedback to end users.
+- **Fix & Enhancements**:
+  1. In `srv/integration/s4hana/S4ErrorMapper.js`:
+     - Implemented `mapS4Error(error)` returning semantic `{ status, message, code, details }`:
+       - `422`: S/4 Gateway `/IWBEP/CX_MGW_BUSI_EXCEPTION` and standard SAP message classes (`ME/*`, `M3/*`, `MM/*`, `AM/*`, `06/*`, `BAPI/*`) for business validation errors.
+       - `400`: User input syntax or invalid request format.
+       - `401`: Destination/user authentication failures.
+       - `403`: Missing authorizations (`CX_MGW_NOT_AUTHORIZED`, authorization denied).
+       - `404`: Master data or document not found.
+       - `409`: Document or vendor locked by another transaction/user.
+       - `502` / `503`: S/4 Gateway connection failures, network timeouts, or service unavailability (`ECONNREFUSED`, `ETIMEDOUT`, 502, 503, 504).
+       - `500`: Explicit `CX_MGW_TECH_EXCEPTION` or unhandled internal technical crash.
+  2. In `srv/handlers/purchaseOrder.handler.js`:
+     - Catch block uses `const sapError = mapS4Error(error)` and throws `req.error(sapError.status, sapError.message)`.
+  3. In `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`:
+     - Added `_getErrorMessageConfig(oError)` providing targeted dialog titles ("Business Validation Error", "Authorization Denied", "Document Locked / Conflict", "S/4HANA Backend Unavailable", "Invalid Input") and user-friendly messages.
+  4. In `test/unit/errorMapping.test.js`:
+     - Added 10 unit tests verifying semantic status code mapping for 400, 401, 403, 404, 409, 422, 502/503, and 500.
+  5. In `test/integration/createPurchaseOrder.test.js`:
+     - Updated integration tests to verify that S/4 business validation exceptions return HTTP 422 instead of 500.
+     - Added integration tests for 503 (Backend Unavailable), 403 (Forbidden / Authorization), and 409 (Conflict / Locked).
+- **Validation**:
+  - `node -c srv/integration/s4hana/S4ErrorMapper.js`: Clean (Code 0).
+  - `node -c srv/handlers/purchaseOrder.handler.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`: Clean (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! No findings detected (0 errors, 0 warnings).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 282 ms, Component-preload generated.
+  - `npm test`: All 15 test suites (89 tests) passed in 7.63s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Comprehensive SAP error model in place end-to-end; business validation errors return 422, authorization errors return 403, locking conflicts return 409, and backend network outages return 503 with tailored Fiori UI dialogs.
+
 ## 2026-09-05 12:00 IST
 - **Agent**: Antigravity
 - **Change**: Eliminated raw `fetch()` calls from frontend presentation layer by introducing centralized `ODataClient` and `PurchaseOrderService`.
