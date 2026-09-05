@@ -9,6 +9,8 @@ service AuthService {
         username      : String;
         avatarInitials: String;
         system        : String;
-        loginTimestamp : String;
+        loginTimestamp: String;
+        token         : String;
+        scopes        : array of String;
     };
 }

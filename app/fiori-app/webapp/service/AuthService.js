@@ -92,7 +92,9 @@ sap.ui.define([
                             username: oServerUser.username || sTrimmedUser,
                             avatarInitials: oServerUser.avatarInitials || sTrimmedUser.substring(0, 2).toUpperCase(),
                             system: oServerUser.system || "PRD",
-                            loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                            token: oServerUser.token || null,
+                            scopes: oServerUser.scopes || []
                         };
 
                         var oStorageData = {
@@ -141,6 +143,21 @@ sap.ui.define([
 
         getCurrentUser: function () {
             return this._oModel.getProperty("/user");
+        },
+
+        getToken: function () {
+            var oUser = this._oModel.getProperty("/user");
+            if (oUser && oUser.token) {
+                return oUser.token;
+            }
+            try {
+                var sRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+                if (sRaw) {
+                    var parsed = JSON.parse(sRaw);
+                    return (parsed && parsed.user && parsed.user.token) || null;
+                }
+            } catch (e) {}
+            return null;
         }
     });
 

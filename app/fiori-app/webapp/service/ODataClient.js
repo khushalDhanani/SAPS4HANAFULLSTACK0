@@ -112,6 +112,18 @@ sap.ui.define([], function () {
                         mHeaders["X-CSRF-Token"] = token;
                     }
 
+                    if (!mHeaders["Authorization"]) {
+                        try {
+                            var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
+                            if (sSession) {
+                                var oParsed = JSON.parse(sSession);
+                                if (oParsed && oParsed.user && oParsed.user.token) {
+                                    mHeaders["Authorization"] = "Bearer " + oParsed.user.token;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+
                     var bodyData = options.body;
                     if (bodyData && typeof bodyData === "object") {
                         mHeaders["Content-Type"] = mHeaders["Content-Type"] || "application/json";

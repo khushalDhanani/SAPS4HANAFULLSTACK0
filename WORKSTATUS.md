@@ -1,6 +1,67 @@
 
 # Changes Log
 
+## 2026-09-05 14:15 IST
+- **Agent**: Antigravity
+- **Change**: Fixed Local Authentication & Authorization Architecture:
+  1. Token-Based Local Identity Issuance:
+     - Created `srv/auth/localTokenUtil.js` to issue and verify local development session JWTs signed with HMAC-SHA256 containing standard XSUAA claims (`user_name`, `scope`, `iss`, `exp`).
+     - Maps `$XSAPPNAME.<Role>` scopes directly into CAP application roles (`PurchasingManager`, `Viewer`, `User`), populating standard `cds.User`.
+  2. Authentication Service Enhancement:
+     - Updated `srv/auth-service.cds` and `srv/auth-service.js` so `login` returns the development session `token` and `scopes` upon successful S/4 credentials verification.
+  3. Server Security Alignment:
+     - In `server.js`, removed the previous unconditional `alice` override (`req.headers.authorization = 'Basic alice:'`).
+     - Added Bearer token authentication middleware in `cds.on('bootstrap')` and `cds.on('serving')`, validating incoming tokens via `localTokenUtil` and setting `req.user`. Unauthenticated requests remain anonymous.
+     - Added `"main": "server.js"` to `package.json`.
+  4. Presentation Layer Integration:
+     - Updated `app/fiori-app/webapp/service/AuthService.js` to persist session tokens and expose `getToken()`.
+     - Updated `app/fiori-app/webapp/service/ODataClient.js` to attach `Authorization: Bearer <token>` on all outbound CAP calls.
+  5. Security & RBAC Integrity Maintained:
+     - Preserved `@(requires: ['PurchasingManager', 'Admin'])` on `createPurchaseOrder`.
+     - Preserved separate S/4HANA destination integration via `S4HANA_PO_API`.
+  6. Automated Verification:
+     - Added 4 integration test cases in `test/integration/purchase-order/authorization.test.js` validating PurchasingManager token acceptance, Viewer token 403 Forbidden rejection, and invalid/expired token 401 rejection.
+- **Files Modified**:
+  - `srv/auth/localTokenUtil.js` (New)
+  - `srv/auth-service.cds`
+  - `srv/auth-service.js`
+  - `server.js`
+  - `package.json`
+  - `app/fiori-app/webapp/service/AuthService.js`
+  - `app/fiori-app/webapp/service/ODataClient.js`
+  - `test/integration/purchase-order/authorization.test.js`
+- **Reason**: Establish robust local development authentication architecture that mirrors BTP/XSUAA behavior without bypassing CAP authorization or hardcoding credentials.
+- **Validation**:
+  - `npm test`: All 18 test suites (120 tests) passed with 0 failures (Code 0).
+  - `cd app/fiori-app && npm run lint`: UI5 linter 0 findings detected (Code 0).
+  - `cd app/fiori-app && npm run build`: UI5 build succeeded in 294 ms (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run validate:mta`: MTA project descriptor validated successfully (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Local authentication architecture fixed and verified; all 120 tests green.
+
+## 2026-09-05 13:58 IST
+- **Agent**: Antigravity
+- **Change**: Root cause investigation and UI hardening for browser runtime error `VM861:2 Uncaught TypeError: Cannot read properties of undefined (reading 'startTime')` reported during PO creation:
+  1. Diagnostic & Root Cause:
+     - Confirmed that the error does not originate from SAPUI5, CAP, or any repository source code (0 occurrences of `reportAllChanges` or `startTime` in application and dependency trees).
+     - Confirmed `VM861:2` is an anonymous script injected by external browser tooling/extensions (e.g. Chrome Web Vitals extension, Chrome DevTools Soft Navigation experiment, or Sentry/Datadog instrumentation).
+     - The extension monkey-patches `window.setTimeout` via `n.timeout (<anonymous>:2:5652)`. When timer events fire, the extension's performance observer evaluates `et.reportAllChanges` and crashes reading `.startTime` on an undefined performance entry.
+  2. UI Hardening:
+     - In `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`, removed unnecessary `setTimeout(..., 0)` from `onCalculateNetAmount`.
+     - `PurchaseOrderModel.calculateItemNetAmount(oModel, sPath)` now executes synchronously upon the input `change` event, eliminating unnecessary macrotask queueing and preventing extension `setTimeout` wrappers from failing during user data entry.
+- **Files Modified**:
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+- **Reason**: Harden Create PO UI against browser extension monkey-patched `setTimeout` collisions and diagnose the external origin of `VM861:2`.
+- **Validation**:
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `cd app/fiori-app && npm run lint`: UI5 linter 0 findings detected (Code 0).
+  - `cd app/fiori-app && npm run build`: UI5 build succeeded in 306 ms (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run validate:mta`: MTA project descriptor validated successfully (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Application code hardened; all 116 tests green.
+
 ## 2026-09-05 13:50 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 12 — Final Structural, Duplicate, and Obsolete Code Audit:

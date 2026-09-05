@@ -60,10 +60,7 @@ sap.ui.define([
             var sPath = oContext.getPath();
             var oModel = this.getView().getModel("newPO");
 
-            // Defer update to allow UI5 event and measurement cycle to finish
-            setTimeout(function () {
-                PurchaseOrderModel.calculateItemNetAmount(oModel, sPath);
-            }, 0);
+            PurchaseOrderModel.calculateItemNetAmount(oModel, sPath);
         },
 
         _getErrorMessageConfig: function (oError) {

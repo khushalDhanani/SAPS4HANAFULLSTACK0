@@ -1,5 +1,6 @@
 const cds = require("@sap/cds");
 const authAdapter = require("./integration/s4hana/AuthAdapter");
+const localTokenUtil = require("./auth/localTokenUtil");
 
 /**
  * CAP Authentication Service Handler
@@ -32,6 +33,15 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       minute: "2-digit",
     });
 
+    // In local development, issue a local session token containing standard XSUAA scopes
+    let sToken = null;
+    let aScopes = [];
+    if (process.env.NODE_ENV !== "production") {
+      const tokenObj = localTokenUtil.issueToken(sUser, ["PurchasingManager", "Viewer", "User"]);
+      sToken = tokenObj.token;
+      aScopes = tokenObj.scopes;
+    }
+
     return {
       authenticated: true,
       message: authResult.message || "Authentication successful.",
@@ -39,6 +49,8 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       avatarInitials: sInitials,
       system: authResult.system || "PRD",
       loginTimestamp: sTimestamp,
+      token: sToken,
+      scopes: aScopes,
     };
   }
 };

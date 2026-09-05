@@ -83,6 +83,8 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
     });
 }
 
+const localTokenUtil = require('./srv/auth/localTokenUtil');
+
 // Local development bootstrap handlers
 cds.on('bootstrap', (app) => {
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
@@ -91,12 +93,16 @@ cds.on('bootstrap', (app) => {
         next();
     });
 
-    // In local development, default unauthenticated browser requests to canonical mock user 'alice'
-    // so UI5 batch requests and value helps load without 403 Forbidden
-    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+    // In local development, verify Bearer tokens (JWT with standard XSUAA claims)
+    if (process.env.NODE_ENV !== 'production') {
         app.use((req, res, next) => {
-            if (!req.headers.authorization) {
-                req.headers.authorization = 'Basic ' + Buffer.from('alice:').toString('base64');
+            const auth = req.headers.authorization;
+            if (auth && auth.match(/^bearer\s+/i)) {
+                const token = auth.replace(/^bearer\s+/i, '').trim();
+                const u = localTokenUtil.verifyToken(token);
+                if (u) {
+                    req.user = u;
+                }
             }
             next();
         });
@@ -123,6 +129,20 @@ cds.on('bootstrap', (app) => {
             isProductiveSystem: false
         });
     });
+});
+
+// Ensure CAP service request context inherits verified user from Express in local development
+cds.on('serving', (srv) => {
+    if (process.env.NODE_ENV !== 'production') {
+        srv.prepend(() => {
+            srv.before('*', (req) => {
+                const rawReq = req._?.req;
+                if (rawReq?.user && (!req.user || req.user._is_anonymous)) {
+                    req.user = rawReq.user;
+                }
+            });
+        });
+    }
 });
 
 // Delegate to default CAP server bootstrap
