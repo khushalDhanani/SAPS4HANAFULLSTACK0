@@ -1,5 +1,8 @@
 const cds = require('@sap/cds');
 const purchaseOrderAdapter = require('./integration/s4hana/PurchaseOrderAdapter');
+const { validateCreatePurchaseOrderPayload } = require('./service/PurchaseOrderValidator');
+const { mapToS4Payload } = require('./integration/s4hana/PurchaseOrderMapper');
+const { extractS4ErrorMessage } = require('./integration/s4hana/PurchaseOrderErrorMapper');
 
 module.exports = cds.service.impl(async function() {
     // Delegate READ operations to the dedicated S/4HANA integration adapters
@@ -31,73 +34,29 @@ module.exports = cds.service.impl(async function() {
     });
 
     this.on('createPurchaseOrder', async (req) => {
-        const { header, items } = req.data;
-        if (!header || !items || items.length === 0) {
-            req.error(400, 'Header and at least one Item are required');
+        // 1. Validate payload
+        const validation = validateCreatePurchaseOrderPayload(req.data);
+        if (!validation.isValid) {
+            req.error(400, validation.errors.join('; '));
             return;
         }
 
-        // Map payload for S/4HANA MM_PUR_PO_MAINT_V2_SRV
-        const payload = {
-            PurchaseOrderType: header.PurchaseOrderType,
-            CompanyCode: header.CompanyCode,
-            PurchasingOrganization: header.PurchasingOrganization,
-            PurchasingGroup: header.PurchasingGroup,
-            Supplier: header.Supplier,
-            PurchaseOrderDate: header.DocumentDate ? `/Date(${new Date(header.DocumentDate).getTime()})/` : undefined,
-            DocumentCurrency: header.Currency,
-            IncotermsClassification: header.IncotermsClassification || undefined,
-            IncotermsLocation1: header.IncotermsLocation1 || undefined,
-            PaymentTerms: header.PaymentTerms || undefined,
-            to_PurchaseOrderItemTP: items.map(item => ({
-                PurchaseOrderItem: item.PurchaseOrderItem || "10",
-                Material: item.Material,
-                MaterialGroup: item.MaterialGroup || undefined,
-                PurchaseOrderItemCategory: item.PurchaseOrderItemCategory || undefined,
-                AccountAssignmentCategory: item.AccountAssignmentCategory || undefined,
-                Plant: item.Plant,
-                StorageLocation: item.StorageLocation || undefined,
-                OrderQuantity: String(item.OrderQuantity),
-                PurchaseOrderQuantityUnit: item.UnitOfMeasure,
-                NetPriceAmount: String(item.NetPriceAmount || "0.00"),
-                TaxCode: item.TaxCode || undefined,
-                NetAmount: item.NetAmount ? String(item.NetAmount) : undefined,
-                RequisitionerName: item.RequisitionerName || "Fiori User",
-                to_PurOrdScheduleLineTP: [
-                    {
-                        ScheduleLineOrderQuantity: String(item.OrderQuantity),
-                        ScheduleLineDeliveryDate: header.DocumentDate ? `/Date(${new Date(header.DocumentDate).getTime()})/` : undefined
-                    }
-                ]
-            }))
-        };
+        // 2. Map payload to S/4HANA OData structure
+        let payload;
+        try {
+            payload = mapToS4Payload(req.data.header, req.data.items);
+        } catch (mapErr) {
+            req.error(400, `Payload mapping error: ${mapErr.message}`);
+            return;
+        }
 
+        // 3. Create PO via adapter
         try {
             const result = await purchaseOrderAdapter.createPurchaseOrder(payload);
             return result.PurchaseOrder || "PO Created but no ID returned";
         } catch (error) {
-            console.error(error.message, error.response?.data);
-            let sapError = error.response?.data?.error?.message?.value;
-            if (!sapError) {
-                // Try parsing JSON embedded in fetch error message
-                const jsonMatch = error.message.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    try {
-                        const parsed = JSON.parse(jsonMatch[0]);
-                        sapError = parsed.error?.message?.value;
-                        const details = parsed.error?.innererror?.errordetails;
-                        if (Array.isArray(details) && details.length > 0) {
-                            const detailMsgs = details.map(d => d.message).filter(Boolean);
-                            if (detailMsgs.length > 0) {
-                                sapError = detailMsgs.join('; ');
-                            }
-                        }
-                    } catch (e) {}
-                }
-            }
-            if (!sapError) {
-                sapError = error.message;
-            }
+            const sapError = extractS4ErrorMessage(error);
+            console.error('[PurchaseOrderService] Error creating PO:', sapError);
             req.error(500, `Failed to create Purchase Order: ${sapError}`);
         }
     });

@@ -1,0 +1,22 @@
+[
+  {
+    "PurchaseOrder": "4500001001",
+    "PurchaseOrderType": "NB",
+    "CompanyCode": "1010",
+    "PurchasingOrganization": "1010",
+    "PurchasingGroup": "001",
+    "Supplier": "10300001",
+    "DocumentCurrency": "EUR",
+    "GrossAmount": "250.00"
+  },
+  {
+    "PurchaseOrder": "4500001002",
+    "PurchaseOrderType": "NB",
+    "CompanyCode": "1010",
+    "PurchasingOrganization": "1010",
+    "PurchasingGroup": "001",
+    "Supplier": "10300002",
+    "DocumentCurrency": "EUR",
+    "GrossAmount": "1200.00"
+  }
+]

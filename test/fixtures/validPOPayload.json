@@ -1,0 +1,31 @@
+{
+  "header": {
+    "PurchaseOrderType": "NB",
+    "CompanyCode": "1010",
+    "PurchasingOrganization": "1010",
+    "PurchasingGroup": "001",
+    "Supplier": "10300001",
+    "DocumentDate": "2026-09-05",
+    "Currency": "EUR",
+    "IncotermsClassification": "EXW",
+    "IncotermsLocation1": "MUMBAI",
+    "PaymentTerms": "0001"
+  },
+  "items": [
+    {
+      "PurchaseOrderItem": "10",
+      "PurchaseOrderItemCategory": "0",
+      "AccountAssignmentCategory": "K",
+      "Material": "TG11",
+      "MaterialGroup": "L001",
+      "Plant": "1010",
+      "StorageLocation": "101A",
+      "OrderQuantity": "10",
+      "UnitOfMeasure": "PC",
+      "NetPriceAmount": "25.00",
+      "TaxCode": "V1",
+      "NetAmount": "250.00",
+      "RequisitionerName": "Buyer 1"
+    }
+  ]
+}

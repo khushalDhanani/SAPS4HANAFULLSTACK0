@@ -1,66 +1,83 @@
-require('../../server');
 const cds = require('@sap/cds');
-const { POST, GET, expect } = cds.test(__dirname + '/../../');
+const purchaseOrderAdapter = require('../../srv/integration/s4hana/PurchaseOrderAdapter');
+const validPayload = require('../fixtures/validPOPayload.json');
+const s4Errors = require('../fixtures/s4ErrorResponses.json');
+const { POST } = cds.test(__dirname + '/../../');
 
-describe('Purchase Order Integration', () => {
+describe('Integration: Create Purchase Order Action', () => {
 
-    it('should query the service metadata', async () => {
-        const { status } = await GET('/odata/v4/purchase-order/$metadata');
+    let createPOSpy;
+
+    afterEach(() => {
+        createPOSpy?.mockRestore();
+    });
+
+    it('should successfully execute createPurchaseOrder action and return created PO ID', async () => {
+        // Controlled mock returning successful creation response
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockResolvedValueOnce({
+            PurchaseOrder: '4500001001',
+            IsActiveEntity: true
+        });
+
+        const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+
         expect(status).toBe(200);
+        expect(data).toHaveProperty('value', '4500001001');
+        expect(createPOSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should query Value Help entities', async () => {
-        try {
-            const { status, data } = await GET('/odata/v4/purchase-order/DocumentTypeVH?$top=1');
-            expect(status).toBe(200);
-            expect(data.value).toBeInstanceOf(Array);
-        } catch (error) {
-            expect(error.response).toBeDefined();
-            expect([401, 500, 502]).toContain(error.response.status);
-        }
-    });
-
-    it('should execute createPurchaseOrder action', async () => {
-        const payload = {
+    it('should reject with 400 Bad Request when payload is missing required header fields', async () => {
+        const invalidPayload = {
             header: {
-                PurchaseOrderType: "NB",
-                CompanyCode: "1010",
-                PurchasingOrganization: "1010",
-                PurchasingGroup: "001",
-                Supplier: "10300001",
-                DocumentDate: new Date().toISOString().split('T')[0],
-                Currency: "EUR",
-                IncotermsClassification: "EXW",
-                IncotermsLocation1: "MUMBAI",
-                PaymentTerms: "0001"
+                PurchaseOrderType: 'NB'
+                // Missing CompanyCode, PurchasingOrganization, PurchasingGroup, Supplier, etc.
             },
-            items: [
-                {
-                    PurchaseOrderItem: "10",
-                    PurchaseOrderItemCategory: "0",
-                    AccountAssignmentCategory: "K",
-                    Material: "TG11",
-                    MaterialGroup: "L001",
-                    Plant: "1010",
-                    StorageLocation: "101A",
-                    OrderQuantity: "10",
-                    UnitOfMeasure: "PC",
-                    NetPriceAmount: "10.00"
-                }
-            ]
+            items: validPayload.items
         };
 
         try {
-            const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', payload);
-            console.log('Success response:', data);
-            expect([200, 201]).toContain(status);
-            expect(data).toHaveProperty('value');
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', invalidPayload);
+            throw new Error('Expected POST to fail with 400 Bad Request but it succeeded');
         } catch (error) {
-            console.error('Error response:', error.response?.data || error.message);
-            // Must not fail draft creation
-            const errMsg = error.response?.data?.error?.message || error.message;
-            expect(errMsg).not.toContain('Draft creation failed');
+            expect(error.response).toBeDefined();
+            expect(error.response.status).toBe(400);
+            expect(error.response.data.error.message).toContain('required');
         }
-    }, 30000);
+    });
+
+    it('should reject with 400 Bad Request when payload contains no items', async () => {
+        const payloadNoItems = {
+            header: validPayload.header,
+            items: []
+        };
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', payloadNoItems);
+            throw new Error('Expected POST to fail with 400 Bad Request but it succeeded');
+        } catch (error) {
+            expect(error.response).toBeDefined();
+            expect(error.response.status).toBe(400);
+            expect(error.response.data.error.message).toContain('At least one item is required');
+        }
+    });
+
+    it('should return 500 with mapped S/4 business exception when backend fails', async () => {
+        const backendError = new Error('Request failed with status code 400');
+        backendError.response = {
+            status: 400,
+            data: s4Errors.addressIncompleteError
+        };
+
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockRejectedValueOnce(backendError);
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+            throw new Error('Expected POST to fail with 500 when backend fails but it succeeded');
+        } catch (error) {
+            expect(error.response).toBeDefined();
+            expect(error.response.status).toBe(500);
+            expect(error.response.data.error.message).toContain('Address is incomplete. Please enter country/region.');
+        }
+    });
 
 });

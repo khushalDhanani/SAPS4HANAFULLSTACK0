@@ -1,0 +1,80 @@
+{
+  "DocumentTypeVH": [
+    {
+      "PurchasingDocumentType": "NB",
+      "PurchasingDocumentType_Text": "Standard PO"
+    },
+    {
+      "PurchasingDocumentType": "FO",
+      "PurchasingDocumentType_Text": "Framework Order"
+    }
+  ],
+  "CompanyCodeVH": [
+    {
+      "CompanyCode": "1010",
+      "CompanyCodeName": "Company Code 1010"
+    }
+  ],
+  "PurchasingOrgVH": [
+    {
+      "PurchasingOrganization": "1010",
+      "PurchasingOrganizationName": "Purchasing Org 1010"
+    }
+  ],
+  "PurchasingGroupVH": [
+    {
+      "PurchasingGroup": "001",
+      "PurchasingGroupName": "Purchasing Group 001"
+    }
+  ],
+  "SupplierVH": [
+    {
+      "Supplier": "10300001",
+      "SupplierName": "Domestic Supplier 1",
+      "CityName": "Walldorf"
+    },
+    {
+      "Supplier": "10300002",
+      "SupplierName": "Domestic Supplier 2",
+      "CityName": "Berlin"
+    }
+  ],
+  "MaterialVH": [
+    {
+      "Material": "TG11",
+      "MaterialName": "Trading Goods 11"
+    },
+    {
+      "Material": "MZ-FG-M500",
+      "MaterialName": "Finished Good M500"
+    }
+  ],
+  "CurrencyVH": [
+    {
+      "Currency": "EUR",
+      "Currency_Text": "Euro"
+    },
+    {
+      "Currency": "USD",
+      "Currency_Text": "US Dollar"
+    }
+  ],
+  "PlantVH": [
+    {
+      "Plant": "1010",
+      "PlantName": "Plant 1 DE"
+    }
+  ],
+  "StorageLocationVH": [
+    {
+      "StorageLocation": "101A",
+      "StorageLocationName": "Storage Loc 101A"
+    }
+  ],
+  "UnitOfMeasureVH": [
+    {
+      "UnitOfMeasure": "PC",
+      "UnitOfMeasure_Text": "Piece"
+    }
+  ]
+}

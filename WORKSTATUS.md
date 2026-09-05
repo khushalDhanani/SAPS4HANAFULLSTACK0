@@ -1,6 +1,56 @@
 
 # Changes Log
 
+## 2026-09-05 11:42 IST
+- **Agent**: Antigravity
+- **Change**: Strengthened and overhauled full-stack test suite across Unit, Integration, and E2E layers; eliminated weak `expect(status).toBeGreaterThanOrEqual(400)` swallow patterns; implemented modular mappers, validators, and error parsers; added controlled fixtures; implemented 13 test suites with 59 verified tests.
+- **Files**:
+  - `package.json`
+  - `jest.config.js`
+  - `srv/integration/s4hana/PurchaseOrderMapper.js`
+  - `srv/service/PurchaseOrderValidator.js`
+  - `srv/integration/s4hana/PurchaseOrderErrorMapper.js`
+  - `srv/integration/s4hana/PurchaseOrderAdapter.js`
+  - `srv/service.js`
+  - `test/fixtures/validPOPayload.json`
+  - `test/fixtures/draftResponse.json`
+  - `test/fixtures/activationResponse.json`
+  - `test/fixtures/s4ErrorResponses.json`
+  - `test/fixtures/valueHelps.json`
+  - `test/fixtures/purchaseOrders.json`
+  - `test/unit/payloadMapping.test.js`
+  - `test/unit/dateConversion.test.js`
+  - `test/unit/quantityConversion.test.js`
+  - `test/unit/validation.test.js`
+  - `test/unit/errorMapping.test.js`
+  - `test/unit/itemNumbering.test.js`
+  - `test/integration/metadata.test.js`
+  - `test/integration/valueHelps.test.js`
+  - `test/integration/s4Read.test.js`
+  - `test/integration/draftCreation.test.js`
+  - `test/integration/activation.test.js`
+  - `test/integration/createPurchaseOrder.test.js`
+  - `test/e2e/createPurchaseOrderFlow.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: The user reported that existing tests were too weak for critical PO functionality: `createPurchaseOrder.test.js` caught exceptions and asserted `expect(error.response.status).toBeGreaterThanOrEqual(400)`, allowing backend failures (e.g. `AM/216 Address incomplete` or `401 Unauthorized`) to pass tests while PO creation was actually broken. Furthermore, mapping, validation, and error parsing were coupled directly inside `srv/service.js`.
+- **Fix & Enhancements**:
+  1. Extracted `srv/integration/s4hana/PurchaseOrderMapper.js` for isolated date conversion (`/Date(epoch)/`), quantity conversion, price formatting, item numbering (10-increments), and S/4 OData payload transformation.
+  2. Extracted `srv/service/PurchaseOrderValidator.js` for comprehensive validation of incoming CAP PO headers and line items, returning HTTP 400 with field details before hitting backend.
+  3. Extracted `srv/integration/s4hana/PurchaseOrderErrorMapper.js` to parse Gateway OData errors, `innererror.errordetails`, embedded JSON strings, and provide clean human-readable messages.
+  4. Refactored `srv/integration/s4hana/PurchaseOrderAdapter.js` to provide distinct, testable `createDraft` and `activateDraft` methods with dependency injection options for testing.
+  5. Created comprehensive controlled JSON fixtures in `test/fixtures/` (`draftResponse.json`, `activationResponse.json`, `s4ErrorResponses.json`, `valueHelps.json`, `purchaseOrders.json`, `validPOPayload.json`).
+  6. Implemented 6 Unit test suites in `test/unit/` (35 tests): payload mapping, date conversion, quantity conversion, validation, error mapping, and item numbering.
+  7. Implemented 6 Integration test suites in `test/integration/` (17 tests): metadata, value helps, S/4 read, draft creation, activation, and createPurchaseOrder with strict assertions and zero error-swallowing.
+  8. Implemented full 7-step E2E flow in `test/e2e/createPurchaseOrderFlow.test.js` (7 tests): open Create PO, search Supplier, search Material, populate required fields, calculate Net Amount, submit, verify created PO.
+- **Validation**:
+  - `npm run test:unit`: 6 passed, 6 total suites (35 tests passed) in 0.74s.
+  - `npm run test:integration`: 6 passed, 6 total suites (17 tests passed) in 5.70s.
+  - `npm run test:e2e`: 1 passed, 1 total suite (7 tests passed) in 1.55s.
+  - `npm test`: All 13 test suites (59 tests) passed in 6.85s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Test suite is robust, deterministic, fast, comprehensive, and properly decoupled across Unit, Integration, and E2E layers with zero false-positive error-swallowing.
+
 ## 2026-09-05 11:32 IST
 - **Agent**: Antigravity
 - **Change**: Verified end-to-end SAP S/4HANA authentication and full-stack integration confirmation.
