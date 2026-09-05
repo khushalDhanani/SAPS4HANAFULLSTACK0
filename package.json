@@ -1,7 +1,7 @@
 {
   "name": "saps4hanafullstack",
   "version": "1.0.0",
-  "description": "SAP S/4HANA Procurement Workspace",
+  "description": "SAP S/4HANA Enterprise Full-Stack Platform",
   "main": "server.js",
   "scripts": {
     "start": "cds watch",

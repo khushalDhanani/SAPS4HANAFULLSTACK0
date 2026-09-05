@@ -36,188 +36,121 @@
                     <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H2" />
                 </VBox>
 
-                <!-- Executive KPI Grid -->
-                <Panel headerText="Procurement Metrics &amp; Gateway Health" class="sapUiSmallMarginBottom">
-                <HBox id="dashboardKpiContainer" wrap="Wrap">
-                    <GenericTile
-                        id="kpiTotalPOs"
-                        header="{i18n>dashboardKpiActivePOs}"
-                        subheader="{i18n>dashboardKpiActivePOsDesc}"
-                        press=".onNavigateToPurchaseOrders"
-                        class="sapUiTinyMargin">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiTotalPOsVal"
-                                value="{dashboardView>/totalCount}"
-                                icon="sap-icon://sales-order"
-                                valueColor="Neutral" />
-                        </TileContent>
-                    </GenericTile>
+                <!-- SECTION 1: Business Modules (Extensible Platform Catalog) -->
+                <Panel
+                    id="panelBusinessModules"
+                    headerText="{i18n>dashboardSectionModules}"
+                    class="sapUiSmallMarginBottom"
+                    expandable="true"
+                    expanded="true">
+                    <HBox id="businessModulesContainer" wrap="Wrap" alignItems="Center">
+                        <!-- Materials Management (MM) - Purchase Orders Module Tile -->
+                        <GenericTile
+                            id="tileModuleMM"
+                            header="{i18n>dashboardModuleMM}"
+                            subheader="{i18n>dashboardModuleMMSub}"
+                            press=".onNavigateToPurchaseOrders"
+                            class="sapUiTinyMargin">
+                            <TileContent unit="{i18n>dashboardKpiActivePOs}">
+                                <NumericContent
+                                    id="kpiTotalPOsVal"
+                                    value="{dashboardView>/totalCount}"
+                                    icon="sap-icon://sales-order"
+                                    valueColor="Neutral" />
+                            </TileContent>
+                        </GenericTile>
 
-                    <GenericTile
-                        id="kpiSuppliersTile"
-                        header="{i18n>dashboardKpiSuppliers}"
-                        subheader="{i18n>dashboardKpiSuppliersDesc}"
-                        press=".onNavigateToPurchaseOrders"
-                        class="sapUiTinyMargin">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiSuppliersVal"
-                                value="{dashboardView>/supplierCount}"
-                                icon="sap-icon://supplier"
-                                valueColor="Good" />
-                        </TileContent>
-                    </GenericTile>
+                        <!-- Active Suppliers Tile within MM -->
+                        <GenericTile
+                            id="tileModuleSuppliers"
+                            header="{i18n>dashboardKpiSuppliers}"
+                            subheader="{i18n>dashboardKpiSuppliersDesc}"
+                            press=".onNavigateToPurchaseOrders"
+                            class="sapUiTinyMargin">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiSuppliersVal"
+                                    value="{dashboardView>/supplierCount}"
+                                    icon="sap-icon://supplier"
+                                    valueColor="Good" />
+                            </TileContent>
+                        </GenericTile>
 
-                    <GenericTile
-                        id="kpiSpendTile"
-                        header="{i18n>dashboardKpiSpend}"
-                        subheader="{i18n>dashboardKpiSpendDesc}"
-                        press=".onNavigateToPurchaseOrders"
-                        class="sapUiTinyMargin">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiSpendVal"
-                                value="{dashboardView>/totalSpend}"
-                                scale="M $"
-                                icon="sap-icon://money-bills"
-                                valueColor="Critical" />
-                        </TileContent>
-                    </GenericTile>
-
-                    <GenericTile
-                        id="kpiCompleteTile"
-                        header="{i18n>dashboardKpiRate}"
-                        subheader="{i18n>dashboardKpiRateDesc}"
-                        press=".onNavigateToPurchaseOrders"
-                        class="sapUiTinyMargin">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiCompleteVal"
-                                value="{dashboardView>/completeRate}"
-                                scale="%"
-                                icon="sap-icon://accept"
-                                valueColor="Good" />
-                        </TileContent>
-                    </GenericTile>
-
-                    <GenericTile
-                        id="kpiSystemTile"
-                        header="{i18n>dashboardKpiSystem}"
-                        subheader="{i18n>dashboardKpiSystemDesc}"
-                        class="sapUiTinyMargin">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiSystemVal"
-                                value="100"
-                                scale="%"
-                                icon="sap-icon://database"
-                                valueColor="Good" />
-                        </TileContent>
-                    </GenericTile>
-                </HBox>
-                </Panel>
-
-
-
-                <!-- Synchronized Purchase Orders Table Preview -->
-                <Table
-                    id="recentOrdersTable"
-                    items="{
-                        path: '/PurchaseOrders',
-                        parameters: {
-                            $count: true
-                        },
-                        sorter: { path: 'PurchaseOrder', descending: false }
-                    }"
-                    growing="true"
-                    growingThreshold="10"
-                    mode="SingleSelectMaster"
-                    itemPress=".onItemPress"
-                    sticky="ColumnHeaders,HeaderToolbar">
-                    <headerToolbar>
-                        <OverflowToolbar id="recentTableToolbar">
-                            <Title
-                                id="recentTableTitle"
-                                text="{i18n>dashboardRecentTitle}"
-                                level="H3" />
-                            <ToolbarSpacer />
-                            <SearchField
-                                id="recentSearchField"
-                                placeholder="{i18n>searchPlaceholder}"
-                                width="300px"
-                                search=".onSearch"
-                                liveChange=".onSearch" />
+                        <!-- Module Quick Actions -->
+                        <VBox class="sapUiTinyMargin sapUiContentPadding" justifyContent="Center">
                             <Button
-                                id="btnViewAllPOs"
-                                text="{i18n>dashboardViewAll}"
+                                id="btnQuickCreatePO"
+                                text="{i18n>dashboardModuleMMCreate}"
+                                icon="sap-icon://add"
+                                type="Emphasized"
+                                press=".onNavigateToCreatePO"
+                                class="sapUiTinyMarginBottom" />
+                            <Button
+                                id="btnQuickManagePOs"
+                                text="{i18n>dashboardModuleMMAction}"
+                                icon="sap-icon://open-folder"
                                 type="Transparent"
                                 press=".onNavigateToPurchaseOrders" />
-                        </OverflowToolbar>
-                    </headerToolbar>
-                    <columns>
-                        <Column id="colDashPO">
-                            <Text text="{i18n>colPurchaseOrder}" />
-                        </Column>
-                        <Column id="colDashSup" minScreenWidth="Tablet" demandPopin="true">
-                            <Text text="{i18n>colSupplier}" />
-                        </Column>
-                        <Column id="colDashCo" minScreenWidth="Desktop" demandPopin="true">
-                            <Text text="{i18n>colCompany}" />
-                        </Column>
-                        <Column id="colDashOrg" minScreenWidth="Desktop" demandPopin="true">
-                            <Text text="{i18n>colPurchasingOrg}" />
-                        </Column>
-                        <Column id="colDashDate" minScreenWidth="Tablet" demandPopin="true">
-                            <Text text="{i18n>colCreationDate}" />
-                        </Column>
-                        <Column id="colDashStat" hAlign="End">
-                            <Text text="{i18n>colStatus}" />
-                        </Column>
-                    </columns>
-                    <items>
-                        <ColumnListItem
-                            id="dashPoRow"
-                            type="Navigation">
-                            <cells>
-                                <ObjectIdentifier
-                                    id="dashPoId"
-                                    title="{PurchaseOrder}"
-                                    text="{PurchaseOrderType}" />
-                                <ObjectIdentifier
-                                    id="dashPoSupplier"
-                                    title="{SupplierName}"
-                                    text="{Supplier}" />
-                                <Text
-                                    id="dashPoCompany"
-                                    text="{CompanyCode} ({CompanyCodeName})" />
-                                <Text
-                                    id="dashPoOrg"
-                                    text="{PurchasingOrganization} / {PurchasingGroup}" />
-                                <Text
-                                    id="dashPoDate"
-                                    text="{
-                                        path: 'CreationDate',
-                                        formatter: '.formatter.formatDate'
-                                    }" />
-                                <ObjectStatus
-                                    id="dashPoStatus"
-                                    text="{
-                                        path: 'PurchasingCompletenessStatus',
-                                        formatter: '.formatter.completenessText'
-                                    }"
-                                    state="{
-                                        path: 'PurchasingCompletenessStatus',
-                                        formatter: '.formatter.completenessState'
-                                    }"
-                                    icon="{
-                                        path: 'PurchasingCompletenessStatus',
-                                        formatter: '.formatter.completenessIcon'
-                                    }" />
-                            </cells>
-                        </ColumnListItem>
-                    </items>
-                </Table>
+                        </VBox>
+                    </HBox>
+                </Panel>
+
+                <!-- SECTION 2: Platform & Gateway Status -->
+                <Panel
+                    id="panelPlatformHealth"
+                    headerText="{i18n>dashboardSectionHealth}"
+                    class="sapUiSmallMarginBottom"
+                    expandable="true"
+                    expanded="true">
+                    <HBox id="dashboardHealthContainer" wrap="Wrap">
+                        <GenericTile
+                            id="kpiSystemTile"
+                            header="{i18n>dashboardKpiSystem}"
+                            subheader="{i18n>dashboardKpiSystemDesc}"
+                            class="sapUiTinyMargin">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiSystemVal"
+                                    value="100"
+                                    scale="%"
+                                    icon="sap-icon://database"
+                                    valueColor="Good" />
+                            </TileContent>
+                        </GenericTile>
+
+                        <GenericTile
+                            id="kpiSpendTile"
+                            header="{i18n>dashboardKpiSpend}"
+                            subheader="{i18n>dashboardKpiSpendDesc}"
+                            press=".onNavigateToPurchaseOrders"
+                            class="sapUiTinyMargin">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiSpendVal"
+                                    value="{dashboardView>/totalSpend}"
+                                    scale="M $"
+                                    icon="sap-icon://money-bills"
+                                    valueColor="Critical" />
+                            </TileContent>
+                        </GenericTile>
+
+                        <GenericTile
+                            id="kpiCompleteTile"
+                            header="{i18n>dashboardKpiRate}"
+                            subheader="{i18n>dashboardKpiRateDesc}"
+                            press=".onNavigateToPurchaseOrders"
+                            class="sapUiTinyMargin">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiCompleteVal"
+                                    value="{dashboardView>/completeRate}"
+                                    scale="%"
+                                    icon="sap-icon://accept"
+                                    valueColor="Good" />
+                            </TileContent>
+                        </GenericTile>
+                    </HBox>
+                </Panel>
             </VBox>
         </content>
     </Page>

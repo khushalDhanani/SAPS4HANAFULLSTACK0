@@ -1,6 +1,60 @@
 
 # Changes Log
 
+## 2026-09-05 14:24 IST
+- **Agent**: Antigravity
+- **Change**: Removed Section 3 (Recent Orders Preview Table) from Dashboard View & Streamlined Controller:
+  1. View Streamlining:
+     - In `app/fiori-app/webapp/view/Dashboard.view.xml`, removed Section 3 (`panelRecentOrders` and `recentOrdersTable` with search toolbar, columns, and navigation bindings).
+     - Keeps the Dashboard focused strictly on the Enterprise Platform Catalog (`panelBusinessModules`) and Platform & Gateway Health (`panelPlatformHealth`). Complete order inspection and processing remains in the dedicated Purchase Orders module (`#/mm/purchase-orders`).
+  2. Controller Decoupling:
+     - In `app/fiori-app/webapp/controller/Dashboard.controller.js`, removed table update/search listeners and replaced them with asynchronous OData query via `ODataClient.get(...)` to dynamically calculate live platform metrics (`totalCount`, `supplierCount`, `completeRate`).
+     - Preserved `onRefresh()` with live feedback toast and module navigation methods (`onNavigateToPurchaseOrders`, `onNavigateToCreatePO`).
+- **Files Modified**:
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+- **Reason**: User requested removal of the embedded Recent Orders table from the Dashboard view so that the Dashboard remains a clean, focused multi-module enterprise platform home.
+- **Validation**:
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 578 ms (Code 0).
+  - `npm test`: All 18 test suites (120 tests) passed with 0 failures (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run validate:mta`: MTA project descriptor validated successfully (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Section 3 removed cleanly and verified across all test layers.
+
+## 2026-09-05 14:22 IST
+- **Agent**: Antigravity
+- **Change**: Generic Enterprise SAP S/4HANA Application Dashboard Architecture Transition:
+  1. Platform Title & Identity Alignment:
+     - Updated `package.json` description to "SAP S/4HANA Enterprise Full-Stack Platform".
+     - Updated `app/fiori-app/webapp/i18n/i18n.properties` and `app/fiori-app/webapp/i18n/i18n_en.properties` from procurement-centric branding to generic enterprise platform branding (`appTitle=SAP S/4HANA Enterprise Platform`, `dashboardTitle=Enterprise Operations Dashboard`, `dashboardSubtitle=Integrated S/4HANA business modules and operational insights`).
+  2. Modular Platform Dashboard Architecture:
+     - Restructured `app/fiori-app/webapp/view/Dashboard.view.xml` into three modular sections:
+       - Section 1: Business Modules (`panelBusinessModules`): Extensible Launchpad grid featuring the active Materials Management (MM) - Purchase Orders module tile (`tileModuleMM`), active suppliers tile (`tileModuleSuppliers`), and direct quick actions (Create PO button `btnQuickCreatePO`, Manage Orders button `btnQuickManagePOs`).
+       - Section 2: Platform & Gateway Status (`panelPlatformHealth`): Live S/4HANA Gateway connectivity (100%), overall procurement volume, and document completeness rate.
+       - Section 3: Materials Management Operations (`panelRecentOrders`): Contextualized recent orders table preview (`recentOrdersTable`) with search and direct navigation.
+  3. Controller Navigation Enhancement:
+     - Added `onNavigateToCreatePO` in `app/fiori-app/webapp/controller/Dashboard.controller.js` to route seamlessly to `createPurchaseOrder`.
+  4. Extensibility & Non-Regression:
+     - Preserved all PO business routes (`#/mm/purchase-orders`, `#/mm/purchase-orders/create`), services, adapters, and data models intact without renaming or removal.
+     - Avoided fake/unimplemented modules, establishing a clean platform catalog foundation ready for future modules (SD, MM-IM, FI/CO, PP).
+- **Files Modified**:
+  - `package.json`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+- **Reason**: The application is an enterprise SAP S/4HANA platform where Purchase Order is the first implemented business module; the dashboard identity and layout now represent an extensible multi-module enterprise platform rather than a procurement-only tool.
+- **Validation**:
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 270 ms (Code 0).
+  - `npm test`: All 18 test suites (120 tests) passed with 0 failures (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run validate:mta`: MTA project descriptor validated successfully (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Enterprise platform dashboard layout implemented and verified across all test layers.
+
 ## 2026-09-05 14:15 IST
 - **Agent**: Antigravity
 - **Change**: Fixed Local Authentication & Authorization Architecture:

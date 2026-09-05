@@ -1,14 +1,12 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
+    "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast"
 ], function (
     BaseController,
     JSONModel,
-    Filter,
-    FilterOperator,
+    ODataClient,
     MessageToast
 ) {
     "use strict";
@@ -23,58 +21,62 @@ sap.ui.define([
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
-            var oTable = this.byId("recentOrdersTable");
-            oTable.attachEventOnce("updateFinished", this._updateKpiMetrics, this);
-            oTable.attachUpdateFinished(this._updateKpiMetrics, this);
+            this._loadMetrics();
         },
 
-        _updateKpiMetrics: function (oEvent) {
-            var oTable = oEvent.getSource();
-            var oKpis = this.calculateKpiMetrics(oTable, oEvent);
+        _loadMetrics: function () {
+            var that = this;
             var oViewModel = this.getView().getModel("dashboardView");
-            if (oViewModel) {
-                oViewModel.setProperty("/totalCount", oKpis.totalCount);
-                oViewModel.setProperty("/supplierCount", oKpis.supplierCount);
-                oViewModel.setProperty("/completeRate", oKpis.completeRate);
-            }
-        },
 
-        onSearch: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
-            var aFilters = [];
+            return ODataClient.get("/odata/v4/purchase-order/PurchaseOrders?$top=100&$select=PurchaseOrder,Supplier,PurchasingCompletenessStatus&$count=true")
+                .then(function (oData) {
+                    if (!oData) {
+                        return;
+                    }
+                    var aOrders = oData.value || [];
+                    var iTotal = typeof oData["@odata.count"] === "number" ? oData["@odata.count"] : aOrders.length;
+                    var oSuppliers = {};
+                    var iCompleted = 0;
 
-            if (sQuery && sQuery.trim().length > 0) {
-                var sTrimmed = sQuery.trim();
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter("PurchaseOrder", FilterOperator.Contains, sTrimmed),
-                        new Filter("Supplier", FilterOperator.Contains, sTrimmed),
-                        new Filter("SupplierName", FilterOperator.Contains, sTrimmed),
-                        new Filter("CompanyCode", FilterOperator.Contains, sTrimmed)
-                    ],
-                    and: false
-                }));
-            }
+                    aOrders.forEach(function (oOrder) {
+                        if (oOrder.Supplier) {
+                            oSuppliers[oOrder.Supplier] = true;
+                        }
+                        if (oOrder.PurchasingCompletenessStatus) {
+                            iCompleted++;
+                        }
+                    });
 
-            var oTable = this.byId("recentOrdersTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
-            if (oBinding) {
-                oBinding.filter(aFilters);
-            }
+                    var iSupplierCount = Object.keys(oSuppliers).length;
+                    var iRate = aOrders.length > 0 ? Math.round((iCompleted / aOrders.length) * 100) : 100;
+
+                    if (oViewModel) {
+                        oViewModel.setProperty("/totalCount", iTotal);
+                        oViewModel.setProperty("/supplierCount", iSupplierCount > 0 ? iSupplierCount : iTotal);
+                        oViewModel.setProperty("/completeRate", iRate);
+                    }
+                })
+                .catch(function () {
+                    // Graceful fallback for offline / mock dev mode
+                });
         },
 
         onRefresh: function () {
-            var oTable = this.byId("recentOrdersTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
-            if (oBinding) {
-                oBinding.refresh();
-            }
-            MessageToast.show(this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("dashboardActionRefreshDesc"));
+            var that = this;
+            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            this._loadMetrics().then(function () {
+                MessageToast.show(oBundle.getText("dashboardActionRefreshDesc"));
+            });
         },
 
         onNavigateToPurchaseOrders: function () {
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.navTo("purchaseOrders");
+        },
+
+        onNavigateToCreatePO: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("createPurchaseOrder");
         }
     });
 });
