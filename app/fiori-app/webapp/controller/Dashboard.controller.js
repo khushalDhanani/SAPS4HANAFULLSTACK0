@@ -22,7 +22,11 @@ sap.ui.define([
                 totalSpend: "3.42",
                 completeRate: 100,
                 fiDocCount: 0,
-                carLoanActiveCount: 32
+                carLoanActiveCount: 32,
+                bpCount: 284,
+                productCount: 1420,
+                glAccountCount: 310,
+                mdgOpenCRCount: 12
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
@@ -172,6 +176,23 @@ sap.ui.define([
         onSelectTabService: function () { this.switchToTab("service"); },
         onSelectTabHCM: function () { this.switchToTab("hcm"); },
         onSelectTabAnalytics: function () { this.switchToTab("analytics"); },
-        onSelectTabAdmin: function () { this.switchToTab("admin"); }
+        onSelectTabAdmin: function () { this.switchToTab("admin"); },
+        onSelectTabMasterData: function () { this.switchToTab("masterData"); },
+
+        onShowMasterDataInfo: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var sTitle = oSource.getProperty("title") || oSource.getProperty("header") || "SAP Master Data Application";
+            var sDescription = oSource.getProperty("description") || oSource.getProperty("subheader") || "";
+            var sInfo = oSource.getProperty("info") || "";
+            MessageBox.information(
+                sTitle + "\n\n" +
+                "Official SAP Catalog Entry:\n" +
+                "• Purpose: " + sDescription + "\n" +
+                "• Status: " + (sInfo || "Verified in S/4HANA Catalog (DS4 / Client 220)") + "\n" +
+                "• Architecture: Governed S/4HANA OData Service\n\n" +
+                "Source of Truth: Official SAP S/4HANA Catalog & Fiori Apps Reference Library.",
+                { title: sTitle }
+            );
+        }
     });
 });

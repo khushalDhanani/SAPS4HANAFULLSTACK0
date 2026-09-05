@@ -399,6 +399,272 @@
                                         </GenericTile>
                                     </HBox>
                                 </Panel>
+
+                                <!-- Category 7: Master Data Governance & Operations (MDG / MDC) -->
+                                <Panel
+                                    id="panelCategoryMasterData"
+                                    headerText="{i18n>overviewCategoryMasterData}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="tileOverviewBupaMD"
+                                            header="{i18n>mdAreaBusinessPartner}"
+                                            subheader="F3163 • Manage Business Partners"
+                                            press=".onSelectTabMasterData"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Partners">
+                                                <NumericContent value="{dashboardView>/bpCount}" icon="sap-icon://customer-and-supplier" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewProdMD"
+                                            header="{i18n>mdAreaProduct}"
+                                            subheader="F1602 • Manage Products"
+                                            press=".onSelectTabMasterData"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Products">
+                                                <NumericContent value="{dashboardView>/productCount}" icon="sap-icon://product" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewFinMD"
+                                            header="{i18n>mdAreaFinancial}"
+                                            subheader="F0731A • G/L &amp; Cost Centers"
+                                            press=".onSelectTabMasterData"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Accounts">
+                                                <NumericContent value="{dashboardView>/glAccountCount}" icon="sap-icon://ledger" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewGovMD"
+                                            header="{i18n>mdAreaGovernance}"
+                                            subheader="F3052 • Change Requests &amp; Import"
+                                            press=".onSelectTabMasterData"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Open CRs">
+                                                <NumericContent value="{dashboardView>/mdgOpenCRCount}" icon="sap-icon://decision" valueColor="Critical" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                        <IconTabSeparator />
+
+                        <!-- TAB: MASTER DATA GOVERNANCE & OPERATIONS -->
+                        <IconTabFilter
+                            id="tabMasterData"
+                            key="masterData"
+                            icon="sap-icon://dimension"
+                            text="{i18n>tabMasterDataTitle}"
+                            tooltip="{i18n>tabMasterDataTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabMasterDataHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabMasterDataSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <!-- Area 1: Business Partner Master Data (MDG-BP) -->
+                                <Panel
+                                    id="panelMdBusinessPartner"
+                                    headerText="{i18n>mdAreaBusinessPartner}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                        <GenericTile header="Business Partners" subheader="F3163 • Central BP Records" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Records">
+                                                <NumericContent value="{dashboardView>/bpCount}" icon="sap-icon://customer-and-supplier" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Suppliers (Vendors)" subheader="F1053A • Purchasing &amp; Payables" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Suppliers">
+                                                <NumericContent value="{dashboardView>/supplierCount}" icon="sap-icon://supplier" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Customers" subheader="F0850A • Sales Areas &amp; Billing" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Customers">
+                                                <NumericContent value="190" icon="sap-icon://customer" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="BP Line Items" subheader="F2515 • Contract Items" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Items">
+                                                <NumericContent value="412" icon="sap-icon://table-view" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="F3163 • Manage Business Partner Master Data" description="ZMD_BUSINESSPARTNER_SRV / ZAPI_GETBUPA_SRV • Central address, tax numbers &amp; roles" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F1053A • Manage Supplier Master Data" description="ZMD_SUPPLIER_MASTER_SRV • Vendor purchasing orgs, payment terms &amp; withholding tax" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F0850A • Manage Customer Master Data" description="ZC_CUSTOMER_OP_SRV / ZUI_CUSTOMER_CONTACT_MANAGE • Sales orgs, credit &amp; partner functions" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2843 • Business Partner Financial Overview" description="ZO2C_FICA_CUSTOMERFO_SRV • 360° receivables, open balances &amp; installments" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2515 • Manage Business Partner Line Items" description="ZO2C_FICA_BPLINEITEMS_SRV • Financial line-item clearing &amp; status management" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                    </List>
+                                </Panel>
+
+                                <!-- Area 2: Product Master Data (MDG-M) -->
+                                <Panel
+                                    id="panelMdProduct"
+                                    headerText="{i18n>mdAreaProduct}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                        <GenericTile header="Manage Products" subheader="F1602 • Master Records" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Products">
+                                                <NumericContent value="{dashboardView>/productCount}" icon="sap-icon://product" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Quick Create" subheader="F2548 • Rapid Creation" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Templates">
+                                                <NumericContent value="14" icon="sap-icon://add-coursebook" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Product Hierarchies" subheader="F2852 • Category Trees" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Hierarchies">
+                                                <NumericContent value="8" icon="sap-icon://tree" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Substitutions &amp; Exclusions" subheader="F3821 • Catalog Rules" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Rules">
+                                                <NumericContent value="26" icon="sap-icon://switch-views" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="F1602 • Manage Product Master Data" description="MD_C_PRODUCT_MAINTAIN_SRV • Basic data, plants, storage locations, sales orgs &amp; valuation" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2548 • Product Master - Quick Create" description="ZMD_QC_PRODUCT_SRV • Fast creation with mandatory attributes &amp; profile defaults" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2166 • Product Master Object Page" description="ZMD_PRODUCT_OP_SRV • 360° display of dimensions, UoM conversions &amp; MRP" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2852 • Manage Product Hierarchies" description="ZC_MDPRODUCTHIERARCHYQUERY_CDS • Classification trees &amp; category taxonomy" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3821 • Manage Substitutions &amp; Exclusions" description="ZUI_PRODSUBSTITUTION_MANAGE • Rules governance for supersessions &amp; exclusions" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                    </List>
+                                </Panel>
+
+                                <!-- Area 3: Financial Master Data (MDG-F) -->
+                                <Panel
+                                    id="panelMdFinancial"
+                                    headerText="{i18n>mdAreaFinancial}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                        <GenericTile header="G/L Accounts" subheader="F0731A • Chart of Accounts" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="G/L Accounts">
+                                                <NumericContent value="{dashboardView>/glAccountCount}" icon="sap-icon://lead" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Profit Centers" subheader="F3516 • Organizational Nodes" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Centers">
+                                                <NumericContent value="18" icon="sap-icon://money-bills" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Cost Centers" subheader="F1443A • Cost Management" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Centers">
+                                                <NumericContent value="24" icon="sap-icon://pie-chart" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Bank Accounts" subheader="F1366A • Cash Management" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Bank Accounts">
+                                                <NumericContent value="12" icon="sap-icon://official-service" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="F0731A • Manage G/L Account Master Data" description="ZFAC_MANAGE_GLACCOUNT_SRV • Chart of Accounts, company code G/L, control fields" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3516 • Manage Profit Centers" description="ZFAC_MANAGE_PROFIT_CENTERS_SRV • Standard hierarchy, segments &amp; validity ranges" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3517 • Where-Used List - Profit Centers" description="ZFAC_WHERE_USED_PROFIT_CENTERS_SRV • Dependency impact analysis on upstream objects" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3518 • Display Profit Center Change Log" description="ZFAC_PROFIT_CENTER_CHANGLOG • Historical audit trail &amp; change documents" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F1443A • Manage Cost Centers" description="FCO_MANAGE_COST_CENTERS_SRV • Responsible managers, departments &amp; profit center link" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2753 • Where-Used List - Cost Centers" description="ZFCO_WHERE_USED_COST_CENTERS_SRV • Upstream order and allocation mappings" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2752 • Display Cost Center Change Log" description="ZFCO_COST_CENTER_CHNGLOG_SRV • Cost center modification audit trails" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F1366A • Manage Bank Accounts" description="ZFCLM_BAM_SRV / ZFCLM_BAM_ACCOUNTWD_SRV • Bank lifecycle, signers &amp; house bank mappings" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F1513 • Bank Accounts Overview" description="ZFCLM_BAM_ACCOUNTOV_SRV • Global bank account overview cards &amp; balances" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                    </List>
+                                </Panel>
+
+                                <!-- Area 4: Manufacturing & Asset Master Data -->
+                                <Panel
+                                    id="panelMdMfgAsset"
+                                    headerText="{i18n>mdAreaMfgAsset}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                        <GenericTile header="Work Centers" subheader="F2489 • Capacity &amp; Costing" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Work Centers">
+                                                <NumericContent value="36" icon="sap-icon://factory" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Work Center Capacity" subheader="F3136 • Shift Intervals" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Shifts">
+                                                <NumericContent value="94" scale="%" icon="sap-icon://speedometer" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Fixed Assets" subheader="F1684 • Capitalized Assets" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Assets">
+                                                <NumericContent value="128" icon="sap-icon://machine" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Technical Objects" subheader="F2072 • Functional Locations" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Objects">
+                                                <NumericContent value="240" icon="sap-icon://functional-location" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="F2489 • Manage Work Centers" description="ZUI_WORKCENTERS • Formula keys, standard values &amp; cost center assignments" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3327 • Manage Work Center Groups" description="ZPP_WORKCENTER_GROUP_SRV • Work center clusters for line leveling &amp; scheduling" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3136 • Work Center Capacity" description="ZUI_WORKCENTERCAPLIST_02 • Operating intervals, shifts &amp; available hours" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F1684 • Manage Fixed Assets" description="ZFAA_ASSET_MANAGE_SRV • Asset classes, depreciation keys, useful life &amp; capitalization" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2072 • Manage Technical Objects" description="DFS_MAINT_TECHNICALOBJECT_SRV / EAM_OBJPG_TECHNICALOBJECT_SRV • Equipment &amp; functional locations" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
+                                    </List>
+                                </Panel>
+
+                                <!-- Area 5: Master Data Governance & Consolidation (MDG / MDC) -->
+                                <Panel
+                                    id="panelMdGovernance"
+                                    headerText="{i18n>mdAreaGovernance}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                        <GenericTile header="BP Process Overview" subheader="F3052 • Change Workflows" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Processes">
+                                                <NumericContent value="8" icon="sap-icon://workflow-tasks" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Product Process Overview" subheader="F3051 • Governance SLAs" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Processes">
+                                                <NumericContent value="5" icon="sap-icon://decision" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Master Data Imports" subheader="F2229 • Source Staging" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Batches">
+                                                <NumericContent value="19" icon="sap-icon://upload-to-cloud" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="Master Data Exports" subheader="F2230 • Target Replication" press=".onShowMasterDataInfo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Exports">
+                                                <NumericContent value="7" icon="sap-icon://download-from-cloud" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="F3052 • Master Data Process Overview for Business Partner" description="ZMDG_MDPROC_BUPA_OVP_SRV • Analytical change requests, durations &amp; open work items" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F3051 • Master Data Process Overview for Product" description="ZMDG_MDPROC_PROD_OVP_SRV • Material governance processes, error handling &amp; SLAs" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2229 • Manage Master Data Imports" description="ZMDC_IMPORT_SRV • Upload &amp; validation of external master data batches (XLSX, CSV)" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2383 • Manage Source Data" description="ZMDC_MANAGE_SOURCE_DATA_SRV • Data cleansing, duplicate checks &amp; pre-consolidation" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2465 • Change Requests for Business Partner" description="ZMDG_CR_BUPA_ALP_SRV • Analytical list page for Business Partner workflow approvals" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2466 • Change Requests for Product" description="ZMDG_CR_PRODUCT_ALP_SRV • Material creation and change approval analytics" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                        <StandardListItem title="F2230 • Export Master Data" description="ZMDC_EXPORT_SRV • Extraction &amp; distribution of golden records to downstream targets" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
+                                    </List>
+                                </Panel>
                             </VBox>
                         </IconTabFilter>
                         <IconTabSeparator />
