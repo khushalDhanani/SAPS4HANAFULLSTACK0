@@ -1,6 +1,28 @@
 
 # Changes Log
 
+## 2026-09-05 13:48 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 11 — S/4HANA Integration Consistency Review:
+  1. Performed thorough architectural review of the mixed S/4HANA integration approach in `PurchaseOrderAdapter.js`:
+     - Confirmed `cds.connect.to('C_PURCHASEORDER_FS_SRV')` (PO reads) and `cds.connect.to('MM_PUR_PO_MAINT_V2_SRV')` (Value Helps) are intentional, idiomatic, and technically valid: CAP CQL query translation, automatic OData V2 result unrolling, and CSN model-driven projection validation.
+     - Confirmed SAP Cloud SDK `getDestination()` + `executeHttpRequest()` for PO draft creation and activation is strictly required: S/4HANA OData V2 draft-and-activation requires sticky HTTP session management (`Set-Cookie` -> `Cookie`) and CSRF token affinity (`SessionContext`) across the two-phase transaction (`/C_PurchaseOrderTP` -> `/C_PurchaseOrderTPActivation`), which generic stateless `cds.connect.to` does not expose.
+     - Confirmed both mechanisms share the same logical BTP destination architecture (`S4HANA_PO_API`), target the same S/4 Gateway client (`220`), and enforce consistent error handling (`S4ErrorMapper`).
+     - Confirmed zero hardcoded credentials or production URLs.
+  2. Removed duplicate script `"validate": "mbt validate"` from `package.json`, retaining canonical `"validate:mta": "mbt validate"`.
+  3. Preserved `C_PURCHASEORDER_FS_SRV` and `MM_PUR_PO_MAINT_V2_SRV` definitions in `package.json` under `cds.requires`.
+- **Files Modified**:
+  - `package.json`
+- **Reason**: Confirm technical validity of the dual integration pattern and eliminate duplicate script declaration in root manifest.
+- **Validation**:
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `cd app/fiori-app && npm run lint`: UI5 linter 0 findings detected (Code 0).
+  - `cd app/fiori-app && npm run build`: UI5 build succeeded in 269 ms (Code 0).
+  - `npm run validate:mta`: MTA project descriptor validated successfully (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Mixed S/4 integration architecture confirmed technically valid and unified; all 116 tests green.
+
 ## 2026-09-05 13:46 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 11 — Final Code & Configuration Audit:

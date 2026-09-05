@@ -9,7 +9,6 @@
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "jest test/e2e --runInBand",
-    "validate": "mbt validate",
     "validate:mta": "mbt validate",
     "build:mta": "mbt build"
   },
