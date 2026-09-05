@@ -29,6 +29,34 @@ sap.ui.define([
         completenessText: function (bComplete) {
             var oResourceBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
             return bComplete ? oResourceBundle.getText("statusComplete") : oResourceBundle.getText("statusIncomplete");
+        },
+
+        docTypeDisplay: function (sDocType) {
+            return sDocType || "-";
+        },
+
+        supplierDisplay: function (sName, sId) {
+            if (!sName && !sId) {
+                return "-";
+            }
+            if (!sName) {
+                return String(sId);
+            }
+            return sName + " (" + (sId || "-") + ")";
+        },
+
+        companyDisplay: function (sCode, sName) {
+            if (!sCode && !sName) {
+                return "-";
+            }
+            return (sCode || "-") + " - " + (sName || "");
+        },
+
+        purchasingOrgDisplay: function (sOrg, sGroup) {
+            if (!sOrg && !sGroup) {
+                return "-";
+            }
+            return (sOrg || "-") + " / " + (sGroup || "-");
         }
     };
 });

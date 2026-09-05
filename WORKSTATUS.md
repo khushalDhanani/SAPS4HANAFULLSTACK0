@@ -1,6 +1,48 @@
 
 # Changes Log
 
+## 2026-09-05 12:35 IST
+- **Agent**: Antigravity
+- **Change**: Executed Phase 3 Security & Architectural Boundary Hardening:
+  1. Extracted S/4HANA Gateway authentication into `srv/integration/s4hana/AuthAdapter.js`, ensuring technical S/4 communication strictly resides within `srv/integration/s4hana/` per `AGENTS.md`.
+  2. Refactored `srv/auth-service.js` to delegate credentials validation to `AuthAdapter` rather than making direct `fetch()` calls.
+  3. Refactored `app/fiori-app/webapp/service/AuthService.js` to route login requests via centralized `ODataClient.post()` with uniform error extraction and CSRF handling.
+  4. Added comprehensive unit tests for `AuthAdapter` covering credential validation, missing inputs, network failures (503), authentication failures (401/403), and destination base URL resolution.
+- **Files Modified**:
+  - `srv/auth-service.js` (Delegates S/4 Gateway validation to `AuthAdapter`)
+  - `app/fiori-app/webapp/service/AuthService.js` (Uses `ODataClient.post()` for login)
+- **Files Created**:
+  - `srv/integration/s4hana/AuthAdapter.js` (Encapsulates S/4 Gateway catalog ping and Basic auth validation)
+  - `test/unit/authAdapter.test.js` (10 unit tests for `AuthAdapter`)
+- **Validation**:
+  - `npm test`: All 17 test suites (102 tests) passed with 0 failures (Code 0).
+  - `npx jest test/unit/authAdapter.test.js`: All 10 tests passed (Code 0).
+  - `npm run lint` (in `app/fiori-app`): Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 257 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. S/4 Gateway authentication boundaries hardened, centralized ODataClient adopted in frontend AuthService, and test coverage expanded from 92 to 102 tests.
+
+## 2026-09-05 12:25 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 2 frontend shared-code cleanup from approved architecture audit: extracted genuinely shared UI logic (KPI metrics aggregation, User Profile Popover, Logout confirmation, PO Detail Dialog) into `BaseController.js`, extracted shared XML fragments (`PurchaseOrderDetailDialog.fragment.xml`, `UserProfilePopover.fragment.xml`), and unified display helpers in `model/formatter.js`.
+- **Files Modified**:
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js` (Inherits from `BaseController`, removed duplicate profile popover, logout dialog, KPI calculations, and PO detail dialog)
+  - `app/fiori-app/webapp/controller/PurchaseOrders.controller.js` (Inherits from `BaseController`, removed duplicate profile popover, logout dialog, KPI calculations, and PO detail dialog)
+  - `app/fiori-app/webapp/model/formatter.js` (Added `docTypeDisplay`, `supplierDisplay`, `companyDisplay`, `purchasingOrgDisplay`)
+- **Files Created**:
+  - `app/fiori-app/webapp/controller/BaseController.js` (Shared base controller managing KPI aggregation, user profile popover, logout confirmation, and PO detail dialog loading)
+  - `app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml` (Shared XML fragment for PO quick detail view)
+  - `app/fiori-app/webapp/fragment/UserProfilePopover.fragment.xml` (Shared XML fragment for user profile popover and logout trigger)
+- **Validation**:
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 288 ms (Code 0).
+  - `npm test`: All 16 test suites (92 tests) passed in 7.168s with 0 failures (Code 0).
+  - `git diff --check`: Clean, zero trailing whitespace or formatting issues (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+- **Result**: Passed. Frontend duplicate code removed cleanly without unnecessary abstractions; PO business behavior preserved.
+
+
 ## 2026-09-05 12:20 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 1 repository cleanup from approved architecture audit: removed confirmed obsolete code (`PurchaseOrderErrorMapper.js`, `PurchaseOrderApi.js`), duplicate XSUAA descriptor (`config/xsuaa/xs-security.json`), redundant `.gitkeep` files in populated directories, dead placeholder trees (`publish/`, `scripts/`, empty `srv/integration/s4hana/` subdirectories, empty `docs/` subdirectories), empty UI5 test/formatter directories, and `db/data/` (unused per ADR-0001).

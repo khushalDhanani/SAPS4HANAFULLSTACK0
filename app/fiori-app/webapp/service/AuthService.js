@@ -1,7 +1,8 @@
 sap.ui.define([
     "sap/ui/base/Object",
-    "sap/ui/model/json/JSONModel"
-], function (BaseObject, JSONModel) {
+    "sap/ui/model/json/JSONModel",
+    "saps4hana/fiori/service/ODataClient"
+], function (BaseObject, JSONModel, ODataClient) {
     "use strict";
 
     var STORAGE_KEY = "saps4hana_fiori_auth_session";
@@ -56,8 +57,7 @@ sap.ui.define([
 
         /**
          * Authenticate against the actual S/4HANA system via CAP AuthService backend.
-         * No credentials are validated on the client — they are sent to the CAP server
-         * which forwards them to the S/4HANA Gateway for verification.
+         * Uses centralized ODataClient for CSRF, retries, and error handling.
          */
         login: function (sUsername, sPassword, bRememberMe) {
             var that = this;
@@ -73,96 +73,56 @@ sap.ui.define([
                     return;
                 }
 
-                // Call CAP AuthService login action
-                fetch("/odata/v4/auth/login", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-                    body: JSON.stringify({
-                        username: sTrimmedUser,
-                        password: sTrimmedPass
+                // Call CAP AuthService login action via centralized ODataClient
+                ODataClient.post("/odata/v4/auth/login", {
+                    username: sTrimmedUser,
+                    password: sTrimmedPass
+                })
+                    .then(function (oServerUser) {
+                        // If server returned authenticated: false, reject cleanly with message
+                        if (!oServerUser || oServerUser.authenticated === false) {
+                            reject({
+                                code: "AUTH_FAILED",
+                                message: (oServerUser && oServerUser.message) || "Invalid username or password. Please verify your S/4HANA credentials."
+                            });
+                            return;
+                        }
+
+                        var oUserSession = {
+                            username: oServerUser.username || sTrimmedUser,
+                            avatarInitials: oServerUser.avatarInitials || sTrimmedUser.substring(0, 2).toUpperCase(),
+                            system: oServerUser.system || "PRD",
+                            loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        };
+
+                        var sToken = "S4_TOKEN_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+                        var oStorageData = {
+                            user: oUserSession,
+                            token: sToken
+                        };
+
+                        if (bRememberMe) {
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
+                            localStorage.setItem(REMEMBER_KEY, oUserSession.username);
+                        } else {
+                            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
+                            localStorage.removeItem(REMEMBER_KEY);
+                        }
+
+                        that._oModel.setProperty("/isAuthenticated", true);
+                        that._oModel.setProperty("/user", oUserSession);
+                        that._oModel.setProperty("/rememberMe", bRememberMe);
+
+                        resolve(oUserSession);
                     })
-                })
-                .then(function (response) {
-                    return response.text().then(function (sText) {
-                        var oData = null;
-                        try {
-                            oData = JSON.parse(sText);
-                        } catch (e) {
-                            // Non-JSON response (e.g. plain text 401 or HTML 502/503)
-                            var sSnippet = (sText || "").trim();
-                            oData = {
-                                error: {
-                                    message: (sSnippet && sSnippet.length < 200 && !sSnippet.startsWith("<"))
-                                        ? sSnippet
-                                        : "Authentication service responded with HTTP " + response.status + " (" + (response.statusText || "Error") + ")"
-                                }
-                            };
-                        }
-                        return { status: response.status, ok: response.ok, data: oData };
-                    });
-                })
-                .then(function (result) {
-                    if (!result.ok) {
-                        var sErrorMsg = "Authentication failed. Please check your credentials.";
-                        if (result.data && result.data.error && result.data.error.message) {
-                            sErrorMsg = result.data.error.message;
-                        }
+                    .catch(function (err) {
                         reject({
                             code: "AUTH_FAILED",
-                            message: sErrorMsg
+                            message: (err && err.message)
+                                ? err.message
+                                : "Cannot connect to the authentication service. Please check your network connection and try again."
                         });
-                        return;
-                    }
-
-                    var oServerUser = result.data;
-
-                    // If server returned authenticated: false, reject cleanly with message
-                    if (oServerUser && oServerUser.authenticated === false) {
-                        reject({
-                            code: "AUTH_FAILED",
-                            message: oServerUser.message || "Invalid username or password. Please verify your S/4HANA credentials."
-                        });
-                        return;
-                    }
-
-                    var oUserSession = {
-                        username: oServerUser.username || sTrimmedUser,
-                        avatarInitials: oServerUser.avatarInitials || sTrimmedUser.substring(0, 2).toUpperCase(),
-                        system: oServerUser.system || "PRD",
-                        loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    };
-
-                    var sToken = "S4_TOKEN_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-                    var oStorageData = {
-                        user: oUserSession,
-                        token: sToken
-                    };
-
-                    if (bRememberMe) {
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                        localStorage.setItem(REMEMBER_KEY, oUserSession.username);
-                    } else {
-                        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                        localStorage.removeItem(REMEMBER_KEY);
-                    }
-
-                    that._oModel.setProperty("/isAuthenticated", true);
-                    that._oModel.setProperty("/user", oUserSession);
-                    that._oModel.setProperty("/rememberMe", bRememberMe);
-
-                    resolve(oUserSession);
-                })
-                .catch(function (err) {
-                    reject({
-                        code: "NETWORK_ERROR",
-                        message: (err && err.message && err.message !== "Failed to fetch")
-                            ? err.message
-                            : "Cannot connect to the authentication service. Please check your network connection and try again."
                     });
-                });
             });
         },
 

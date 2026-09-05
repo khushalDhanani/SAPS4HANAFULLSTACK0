@@ -1,0 +1,25 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <ResponsivePopover
+        id="userProfilePopover"
+        title="{i18n>userProfileTitle}"
+        placement="Bottom"
+        contentWidth="280px">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <Label text="{i18n>loginUsername}:" design="Bold" />
+                <Text id="popoverUserName" text="{auth>/user/username}" class="sapUiTinyMarginBottom" />
+                <Label text="{i18n>userProfileSystem}:" design="Bold" />
+                <Text id="popoverUserSystem" text="{auth>/user/system}" class="sapUiSmallMarginBottom" />
+                <Button
+                    id="btnLogoutPopover"
+                    text="{i18n>btnLogout}"
+                    type="Reject"
+                    icon="sap-icon://log-out"
+                    width="100%"
+                    press=".onLogoutPress" />
+            </VBox>
+        </content>
+    </ResponsivePopover>
+</core:FragmentDefinition>

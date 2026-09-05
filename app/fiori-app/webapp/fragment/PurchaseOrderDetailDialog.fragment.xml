@@ -1,0 +1,48 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="poDetailDialog"
+        title="{i18n>dialogTitle} — {PurchaseOrder}"
+        type="Message"
+        contentWidth="400px">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <HBox>
+                    <Label text="{i18n>colPurchaseOrder}:" width="160px" design="Bold" />
+                    <Text text="{PurchaseOrder}" />
+                </HBox>
+                <HBox>
+                    <Label text="{i18n>colDocType}:" width="160px" design="Bold" />
+                    <Text text="{path: 'PurchaseOrderType', formatter: '.formatter.docTypeDisplay'}" />
+                </HBox>
+                <HBox>
+                    <Label text="{i18n>colSupplier}:" width="160px" design="Bold" />
+                    <Text text="{parts: ['SupplierName', 'Supplier'], formatter: '.formatter.supplierDisplay'}" />
+                </HBox>
+                <HBox>
+                    <Label text="{i18n>colCompany}:" width="160px" design="Bold" />
+                    <Text text="{parts: ['CompanyCode', 'CompanyCodeName'], formatter: '.formatter.companyDisplay'}" />
+                </HBox>
+                <HBox>
+                    <Label text="{i18n>colPurchasingOrg}:" width="160px" design="Bold" />
+                    <Text text="{parts: ['PurchasingOrganization', 'PurchasingGroup'], formatter: '.formatter.purchasingOrgDisplay'}" />
+                </HBox>
+                <HBox>
+                    <Label text="{i18n>colCreationDate}:" width="160px" design="Bold" />
+                    <Text text="{path: 'CreationDate', formatter: '.formatter.formatDate'}" />
+                </HBox>
+                <HBox>
+                    <Label text="{i18n>colStatus}:" width="160px" design="Bold" />
+                    <Text text="{path: 'PurchasingCompletenessStatus', formatter: '.formatter.completenessText'}" />
+                </HBox>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnClosePoDetail"
+                text="{i18n>dialogClose}"
+                press=".onClosePoDetailDialog" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>
