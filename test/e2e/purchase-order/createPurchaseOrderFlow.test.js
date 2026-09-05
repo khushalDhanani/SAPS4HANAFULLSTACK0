@@ -2,7 +2,9 @@ const cds = require('@sap/cds');
 const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const valueHelpsFixture = require('../../fixtures/purchase-order/valueHelps.json');
 const purchaseOrdersFixture = require('../../fixtures/purchase-order/purchaseOrders.json');
-const { POST, GET } = cds.test(__dirname + '/../../../');
+const cdsTest = cds.test(__dirname + '/../../../');
+cdsTest.defaults.auth = { username: 'alice', password: '' };
+const { POST, GET } = cdsTest;
 
 describe('E2E: Create Purchase Order Full User Journey', () => {
 

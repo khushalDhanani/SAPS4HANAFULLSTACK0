@@ -33,24 +33,29 @@ flowchart TD
         POSrv --> ODataClient
     end
 
-    subgraph CAP ["CAP Application Layer (Node.js)"]
-        ODataSrv["service.cds / service.js\n(/odata/v4/purchase-order)"]
-        POHandler["purchaseOrder.handler.js\n(PO Actions & Identity)"]
-        VHHandler["valueHelp.handler.js\n(Entity Routing)"]
-        POVal["purchaseOrder.validation.js\n(Authoritative Business Rules)"]
-        POMapper["purchaseOrder.mapper.js\n(Domain Entity Transformation)"]
+    subgraph CAP ["CAP SAP MM Domain Layer (Node.js)"]
+        ODataSrv["srv/service.cds & service.js\n(/odata/v4/purchase-order)"]
+        MMService["srv/mm/purchase-order/service.cds\n(PurchaseOrderService with RBAC)"]
+        POHandler["srv/mm/purchase-order/handlers/purchaseOrder.handler.js\n(PO Actions & Identity)"]
+        VHConfig["srv/mm/purchase-order/handlers/valueHelp.config.js\n(PO Entity Configuration)"]
+        VHHandler["srv/handlers/valueHelp.handler.js\n(Generic VH Engine)"]
+        POVal["srv/mm/purchase-order/validation/purchaseOrder.validation.js\n(Authoritative Business Rules)"]
+        POMapper["srv/mm/purchase-order/mapping/purchaseOrder.mapper.js\n(Domain Entity Transformation)"]
 
-        ODataSrv --> POHandler
-        ODataSrv --> VHHandler
+        ODataSrv --> MMService
+        MMService --> POHandler
+        MMService --> VHHandler
+        VHHandler --> VHConfig
         POHandler --> POVal
         POHandler --> POMapper
     end
 
     subgraph Integration ["S/4HANA Integration Layer"]
-        Adapter["PurchaseOrderAdapter.js\n(Draft Creation & Activation)"]
-        S4Mapper["PurchaseOrderMapper.js\n(OData V2 Payload Formatter)"]
-        Session["SessionContext.js\n(Stateless Per-Request CSRF)"]
-        ErrMap["S4ErrorMapper.js\n(RFC-Compliant Status Mapping)"]
+        Adapter["srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js\n(Draft Creation & Activation)"]
+        S4Mapper["srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper.js\n(OData V2 Payload Formatter)"]
+        AuthAdp["srv/integration/s4hana/AuthAdapter.js\n(S/4 Gateway Logon & Destination)"]
+        Session["srv/integration/s4hana/SessionContext.js\n(Stateless Per-Request CSRF)"]
+        ErrMap["srv/integration/s4hana/S4ErrorMapper.js\n(RFC-Compliant Status Mapping)"]
 
         POMapper --> Adapter
         Adapter --> S4Mapper
@@ -347,25 +352,29 @@ cd app/fiori-app && npm run lint
 npm run validate:mta
 ```
 
-### Test Coverage Summary
+### Test Coverage Summary (18 Suites, 116 Tests)
 
 - **Unit Tests (`test/unit/`)**:
-  - `validation.test.js`: Authoritative header and line item validation rules.
-  - `domainMapping.test.js`: CAP domain entity to S/4 payload transformations.
-  - `payloadMapping.test.js`: OData V2 structure translation, field name mappings.
+  - `authAdapter.test.js`: S/4HANA Gateway credential validation, Cloud SDK HTTP execution, and Destination resolution.
+  - `errorMapping.test.js`: Semantic SAP Gateway error code mapping (400, 401, 403, 404, 409, 422, 502, 503, 500).
   - `sessionContext.test.js`: Concurrency isolation for per-request CSRF and session cookies.
-  - `userIdentity.test.js`: Authenticated requisitioner derivation (`XSUAA -> CAP req.user`).
-  - `errorMapping.test.js`: Comprehensive SAP Gateway error code mapping (400, 401, 403, 404, 409, 422, 502, 500).
-  - `dateConversion.test.js` & `quantityConversion.test.js`: OData timestamp and numeric conversions.
-  - `itemNumbering.test.js`: S/4 line item sequence formatting (`00010`, `00020`).
-- **Integration Tests (`test/integration/`)**:
-  - `draftCreation.test.js`: S/4 draft header and item generation.
-  - `activation.test.js`: Draft activation function import orchestration.
-  - `createPurchaseOrder.test.js`: Two-phase end-to-end creation flow.
-  - `valueHelps.test.js`: Entity routing for Suppliers, Materials, and Plants.
-  - `metadata.test.js`: S/4 EDMX metadata validation.
-- **End-to-End Tests (`test/e2e/`)**:
-  - `createPurchaseOrderFlow.test.js`: Full lifecycle simulation from Fiori HTTP payload to activated S/4 Purchase Order.
+  - `purchase-order/validation.test.js`: Authoritative header and line item validation rules.
+  - `purchase-order/domainMapping.test.js`: CAP domain entity normalization and defaulting.
+  - `purchase-order/payloadMapping.test.js`: S/4HANA OData V2 structure translation and field mappings.
+  - `purchase-order/userIdentity.test.js`: Authenticated requisitioner derivation and production security isolation.
+  - `purchase-order/dateConversion.test.js`: OData `/Date(epoch)/` timestamp conversions.
+  - `purchase-order/quantityConversion.test.js`: Numeric quantity and price formatting.
+  - `purchase-order/itemNumbering.test.js`: Standard 10-increment line item sequence formatting (`00010`, `00020`).
+- **Integration Tests (`test/integration/purchase-order/`)**:
+  - `authorization.test.js`: Role-Based Access Control (RBAC) tests for Viewer, PurchasingManager, and Anonymous.
+  - `createPurchaseOrder.test.js`: Two-phase end-to-end draft and activation orchestration with error classifications.
+  - `draftCreation.test.js`: S/4 draft header and item generation via `C_PurchaseOrderTP`.
+  - `activation.test.js`: Draft activation function import orchestration via `C_PurchaseOrderTPActivation`.
+  - `s4Read.test.js`: Purchase order query and key read operations.
+  - `valueHelps.test.js`: Entity routing and deduplication for Suppliers, Materials, Plants, and Currencies.
+  - `metadata.test.js`: S/4 EDMX metadata validation and OData V4 service contract verification.
+- **End-to-End Tests (`test/e2e/purchase-order/`)**:
+  - `createPurchaseOrderFlow.test.js`: Full 7-step user journey simulation from Fiori HTTP payload to activated S/4 Purchase Order.
 
 ---
 
@@ -440,69 +449,146 @@ SAPS4HANAFULLSTACK/
 ├── AGENTS.md                             # Full-stack engineering instructions & workflow rules
 ├── README.md                             # Repository technical documentation
 ├── WORKSTATUS.md                         # Single source of truth for work logs & validation
+├── jest.config.js                        # Jest configuration
 ├── mta.yaml                              # Multi-Target Application deployment descriptor
-├── package.json                          # CAP backend scripts & Cloud SDK dependencies
-├── xs-security.json                      # XSUAA security roles & OAuth2 configuration
+├── package.json                          # CAP backend scripts, Cloud SDK dependencies & auth profiles
+├── server.js                             # CAP bootstrap, destination registration & local dev handlers
+├── xs-security.json                      # Canonical XSUAA security roles & OAuth2 configuration
 │
 ├── app/
 │   ├── fiori-app/                        # SAP Fiori (SAPUI5) Presentation Layer
 │   │   ├── package.json                  # UI5 tooling scripts (start, build, lint)
 │   │   ├── ui5.yaml                      # UI5 server and build configuration
+│   │   ├── xs-app.json                   # UI5 standalone route descriptor (XSUAA & CSRF)
 │   │   └── webapp/
-│   │       ├── Component.js              # SAPUI5 component lifecycle
-│   │       ├── manifest.json             # Fiori application descriptor & OData routing
-│   │       ├── controller/
-│   │       │   ├── App.controller.js     # Root application controller
-│   │       │   ├── CreatePurchaseOrder.controller.js # UI event handling & navigation
-│   │       │   ├── PurchaseOrderModel.js # Client-side state & calculations
-│   │       │   ├── ValueHelpService.js   # Value help search dialog management
-│   │       │   ├── PurchaseOrderService.js # High-level API orchestration
-│   │       │   └── ODataClient.js        # HTTP client & SAP error translation
-│   │       ├── view/
+│   │       ├── Component.js              # SAPUI5 component lifecycle & route guards
+│   │       ├── index.html                # Application launchpad page
+│   │       ├── manifest.json             # Fiori application descriptor & MM route navigation
+│   │       ├── controller/               # Shared Application Shell Controllers
+│   │       │   ├── App.controller.js     # Root shell controller
+│   │       │   ├── BaseController.js     # Shared controller (KPI aggregation, profile, dialogs)
+│   │       │   ├── Dashboard.controller.js # Workspace analytics dashboard controller
+│   │       │   └── Login.controller.js   # Standalone authentication controller
+│   │       ├── view/                     # Shared Application Shell Views
 │   │       │   ├── App.view.xml          # Root shell view
-│   │       │   └── CreatePurchaseOrder.view.xml # Purchase Order creation form
+│   │       │   ├── Dashboard.view.xml    # Workspace analytics dashboard view
+│   │       │   └── Login.view.xml        # Standalone authentication view
+│   │       ├── modules/                  # SAP Business Domain Modules
+│   │       │   └── mm/                   # Materials Management Domain
+│   │       │       └── purchase-order/   # Purchase Order Module
+│   │       │           ├── controller/
+│   │       │           │   ├── PurchaseOrders.controller.js # PO worklist & filtering
+│   │       │           │   └── CreatePurchaseOrder.controller.js # PO creation UI logic
+│   │       │           ├── model/
+│   │       │           │   └── PurchaseOrderModel.js # PO client state, validation & item numbering
+│   │       │           ├── service/
+│   │       │           │   └── PurchaseOrderService.js # PO domain API service
+│   │       │           └── view/
+│   │       │               ├── PurchaseOrders.view.xml # PO list view
+│   │       │               └── CreatePurchaseOrder.view.xml # PO creation form view
+│   │       ├── fragment/                 # Shared Reusable XML Fragments
+│   │       │   ├── PurchaseOrderDetailDialog.fragment.xml # Quick detail dialog
+│   │       │   └── UserProfilePopover.fragment.xml # User profile & logout popover
+│   │       ├── model/                    # Shared View Models & Formatters
+│   │       │   ├── formatter.js          # Unified display formatters
+│   │       │   └── models.js             # Device & layout models
+│   │       ├── service/                  # Shared Frontend Infrastructure Services
+│   │       │   ├── AuthService.js        # UI session presentation state manager
+│   │       │   ├── ODataClient.js        # HTTP client with CSRF & transient retries
+│   │       │   └── ValueHelpService.js   # Generic value help dialog manager
 │   │       └── i18n/
-│   │           └── i18n.properties      # UI internationalization strings
+│   │           ├── i18n.properties      # UI internationalization strings
+│   │           └── i18n_en.properties   # English fallback bundle
 │   └── router/                           # Managed Application Router
-│       └── xs-app.json                   # Approuter reverse proxy routing rules
+│       ├── package.json                  # Approuter package descriptor
+│       └── xs-app.json                   # Approuter reverse proxy routing rules (XSUAA & CSRF)
 │
 ├── config/                               # Service configuration templates
-│   ├── destinations/                     # BTP destination JSON definitions
-│   └── xsuaa/                            # XSUAA service configuration templates
+│   ├── approuter/                        # Local approuter environment config
+│   │   └── default-env.json
+│   ├── connectivity/                     # BTP connectivity service credentials
+│   │   └── connectivity-service.json
+│   └── destinations/                     # BTP destination definitions
+│       └── destination-service.json
 │
 ├── db/                                   # CDS Persistence Model
 │   └── schema.cds                        # Domain models and entity definitions
 │
 ├── srv/                                  # CAP Application Service Layer
-│   ├── service.cds                       # Purchase Order OData V4 service definition
-│   ├── service.js                        # CAP service implementation bootstrap
-│   ├── handlers/
-│   │   ├── purchaseOrder.handler.js      # Purchase order action handlers & identity
-│   │   └── valueHelp.handler.js          # Value help entity routing
-│   ├── validation/
-│   │   └── purchaseOrder.validation.js   # Authoritative business validation rules
-│   ├── mapping/
-│   │   └── purchaseOrder.mapper.js       # CAP domain to integration mapping
-│   ├── integration/
+│   ├── service.cds                       # Application facade (re-exports MM Purchase Order)
+│   ├── service.js                        # Application bootstrap (delegates to MM Purchase Order)
+│   ├── auth-service.cds                  # Standalone authentication service definition
+│   ├── auth-service.js                   # Standalone authentication service handler
+│   ├── handlers/                         # Shared Generic CAP Handlers
+│   │   └── valueHelp.handler.js          # Generic value help registration engine
+│   ├── mm/                               # Business Domain Services (SAP MM)
+│   │   └── purchase-order/               # Purchase Order Business Service
+│   │       ├── service.cds               # PO Service with authoritative RBAC annotations
+│   │       ├── service.js                # PO Service implementation & handler registration
+│   │       ├── handlers/
+│   │       │   ├── purchaseOrder.handler.js # PO CRUD handlers, identity derivation & validation
+│   │       │   └── valueHelp.config.js   # PO value help entity mappings & reader bindings
+│   │       ├── mapping/
+│   │       │   └── purchaseOrder.mapper.js # Domain normalization & defaulting
+│   │       └── validation/
+│   │           └── purchaseOrder.validation.js # Authoritative business validation rules
+│   ├── integration/                      # S/4HANA Technical Integration Layer
 │   │   └── s4hana/
-│   │       ├── PurchaseOrderAdapter.js   # S/4HANA OData V2 client & workflow
-│   │       ├── PurchaseOrderMapper.js    # S/4 OData V2 payload formatter
-│   │       ├── SessionContext.js         # Stateless per-request CSRF & session manager
-│   │       └── S4ErrorMapper.js          # RFC-compliant SAP error mapper
-│   └── external/                         # External S/4HANA EDMX service specifications
-│       ├── C_PURCHASEORDER_FS_SRV.cds
-│       └── MM_PUR_PO_MAINT_V2_SRV.cds
+│   │       ├── AuthAdapter.js            # Shared S/4 Gateway logon & Cloud SDK HTTP execution
+│   │       ├── S4ErrorMapper.js          # Shared semantic SAP error status mapping
+│   │       ├── SessionContext.js         # Shared request-isolated CSRF & cookie manager
+│   │       └── mm/                       # MM Integration Adapters
+│   │           └── purchase-order/       # Purchase Order S/4HANA Adapter
+│   │               ├── PurchaseOrderAdapter.js # S/4HANA OData V2 draft & activation orchestration
+│   │               └── PurchaseOrderMapper.js  # S/4 OData V2 payload formatter & date converter
+│   └── external/                         # External S/4HANA EDMX Specifications
+│       ├── C_PURCHASEORDER_FS_SRV.cds    # Purchase Order Read / Analytics service model
+│       ├── C_PURCHASEORDER_FS_SRV.edmx
+│       ├── MM_PUR_PO_MAINT_V2_SRV.csn    # Purchase Order Maintenance service model
+│       └── MM_PUR_PO_MAINT_V2_SRV.edmx
 │
-├── test/                                 # Automated Test Suite
-│   ├── unit/                             # Isolated unit tests (validation, mappers, errors)
-│   ├── integration/                      # S/4 mock integration tests
-│   ├── e2e/                              # Simulated end-to-end creation flow tests
-│   └── fixtures/                         # Reusable mock payloads and error responses
+├── test/                                 # Automated Test Suite (18 Suites, 116 Tests)
+│   ├── unit/                             # Isolated Unit Tests
+│   │   ├── authAdapter.test.js           # S/4 Gateway logon & Cloud SDK HTTP tests
+│   │   ├── errorMapping.test.js          # Semantic SAP error mapping tests
+│   │   ├── sessionContext.test.js        # Request-isolated session concurrency tests
+│   │   └── purchase-order/               # Purchase Order Domain Unit Tests
+│   │       ├── dateConversion.test.js    # OData /Date(epoch)/ conversion tests
+│   │       ├── domainMapping.test.js     # Domain normalization & defaulting tests
+│   │       ├── itemNumbering.test.js     # Standard 10-increment numbering tests
+│   │       ├── payloadMapping.test.js    # S/4 OData V2 payload formatting tests
+│   │       ├── quantityConversion.test.js# Numeric quantity & price conversion tests
+│   │       ├── userIdentity.test.js      # Identity derivation & production isolation tests
+│   │       └── validation.test.js        # Authoritative business validation tests
+│   ├── integration/                      # Integration Test Suites
+│   │   └── purchase-order/               # Purchase Order Integration Tests
+│   │       ├── activation.test.js        # Draft activation function import tests
+│   │       ├── authorization.test.js     # RBAC tests (Viewer, PurchasingManager, Anonymous)
+│   │       ├── createPurchaseOrder.test.js # Two-phase creation & error handling tests
+│   │       ├── draftCreation.test.js     # Draft header & item creation tests
+│   │       ├── metadata.test.js          # EDMX metadata & contract tests
+│   │       ├── s4Read.test.js            # PO query & single-key read tests
+│   │       └── valueHelps.test.js        # Value help entity routing & deduplication tests
+│   ├── e2e/                              # End-to-End User Journey Tests
+│   │   └── purchase-order/
+│   │       └── createPurchaseOrderFlow.test.js # Full 7-step PO user journey simulation
+│   └── fixtures/                         # Controlled Domain Test Fixtures
+│       └── purchase-order/
+│           ├── activationResponse.json   # S/4 activation response payload
+│           ├── draftResponse.json        # S/4 draft creation response payload
+│           ├── purchaseOrders.json       # OData PO query results fixture
+│           ├── s4ErrorResponses.json     # Gateway error response fixture
+│           ├── validPOPayload.json       # Valid CAP PO request payload
+│           └── valueHelps.json           # Value help entity fixture
 │
 └── mta/                                  # MTA Environment Extensions
     └── extensions/
         ├── dev/                          # Development space configuration
+        │   └── dev.mtaext
+        ├── test/                         # Test space configuration
+        │   └── test.mtaext
         └── prod/                         # Production space configuration
+            └── prod.mtaext
 ```
 
 ---

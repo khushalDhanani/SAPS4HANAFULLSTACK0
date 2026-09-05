@@ -71,10 +71,49 @@ describe('Unit: User Identity Resolution (resolveUserIdentity)', () => {
         expect(resolveUserIdentity(req)).toBe('SYSTEM');
     });
 
-    it('should safely return SYSTEM when req is null or undefined', () => {
+    it('should safely return SYSTEM when req is null or undefined in development', () => {
         delete process.env.S4_USER;
         expect(resolveUserIdentity(null)).toBe('SYSTEM');
         expect(resolveUserIdentity(undefined)).toBe('SYSTEM');
+    });
+
+    describe('Production Security Isolation (NODE_ENV=production)', () => {
+        const origNodeEnv = process.env.NODE_ENV;
+
+        beforeEach(() => {
+            process.env.NODE_ENV = 'production';
+        });
+
+        afterEach(() => {
+            process.env.NODE_ENV = origNodeEnv;
+        });
+
+        it('should derive identity from trusted XSUAA logon_name in production', () => {
+            const req = {
+                user: {
+                    id: '12345',
+                    attr: { logon_name: 'PROD_BUYER' }
+                }
+            };
+            expect(resolveUserIdentity(req)).toBe('PROD_BUYER');
+        });
+
+        it('should IGNORE client-supplied x-user-id header in production and fail closed', () => {
+            const req = {
+                user: { id: 'anonymous' },
+                headers: { 'x-user-id': 'MALICIOUS_CLIENT_USER' }
+            };
+            expect(() => resolveUserIdentity(req)).toThrow('Authentication required: Trusted user identity cannot be determined');
+        });
+
+        it('should fail closed when unauthenticated without falling back to SYSTEM in production', () => {
+            const req = { user: { id: 'anonymous' } };
+            expect(() => resolveUserIdentity(req)).toThrow('Authentication required: Trusted user identity cannot be determined');
+        });
+
+        it('should fail closed when req is null in production', () => {
+            expect(() => resolveUserIdentity(null)).toThrow('Authentication required: Missing request context in production');
+        });
     });
 
 });

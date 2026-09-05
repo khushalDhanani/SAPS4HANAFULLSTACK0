@@ -6,13 +6,26 @@ const { mapS4Error } = require('../../../integration/s4hana/S4ErrorMapper');
 
 /**
  * Derives the authenticated business user identity from CAP request and security context.
- * Flow: XSUAA user attributes (logon_name/email) -> req.user.id -> req.user.name -> env S4_USER -> 'SYSTEM'.
+ * In production:
+ *   1. XSUAA user attributes (logon_name, email)
+ *   2. CAP authenticated user ID (req.user.id !== 'anonymous')
+ *   3. CAP user name (req.user.name !== 'anonymous')
+ *   4. Fails closed (rejects) if trusted identity cannot be determined.
+ * In non-production (local development / test):
+ *   1. XSUAA user attributes / CAP user id
+ *   2. Custom forwarded 'x-user-id' header (strictly non-production)
+ *   3. Configured environment fallback (S4_USER || 'SYSTEM')
  *
  * @param {import('@sap/cds').Request} req
  * @returns {string}
  */
 function resolveUserIdentity(req) {
-    if (!req) return process.env.S4_USER || 'SYSTEM';
+    if (!req) {
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('Authentication required: Missing request context in production');
+        }
+        return process.env.S4_USER || 'SYSTEM';
+    }
 
     // 1. XSUAA user attributes (e.g. logon_name, email)
     if (req.user?.attr?.logon_name) {
@@ -32,13 +45,18 @@ function resolveUserIdentity(req) {
         return String(req.user.name).trim();
     }
 
-    // 4. Custom forwarded user header if any
+    // In production, do NOT trust client headers or silently fall back to privileged system users
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('Authentication required: Trusted user identity cannot be determined');
+    }
+
+    // 4. Custom forwarded user header (strictly non-production / local dev only)
     const headerUser = req.headers?.['x-user-id'] || req._?.req?.headers?.['x-user-id'];
     if (headerUser && String(headerUser).trim() !== '') {
         return String(headerUser).trim();
     }
 
-    // 5. Configured system / service user fallback
+    // 5. Configured system / service user fallback (non-production only)
     return process.env.S4_USER || 'SYSTEM';
 }
 
@@ -63,7 +81,13 @@ function registerPurchaseOrderHandlers(srv) {
         }
 
         // Derive authenticated requester identity
-        const authenticatedUser = resolveUserIdentity(req);
+        let authenticatedUser;
+        try {
+            authenticatedUser = resolveUserIdentity(req);
+        } catch (authErr) {
+            req.error(401, authErr.message);
+            return;
+        }
 
         // Step B: Domain normalization
         const normalized = normalizePurchaseOrderData(req.data, { user: authenticatedUser });

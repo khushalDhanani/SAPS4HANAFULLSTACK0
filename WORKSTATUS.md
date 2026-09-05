@@ -1,6 +1,88 @@
 
 # Changes Log
 
+## 2026-09-05 13:20 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 8 — Clean Up & Finalize Repository Structure:
+  1. Inspected full repository structure following Steps 1–7 across frontend, CAP service, S/4HANA integration, tests, and configuration.
+  2. Verified zero obsolete files, zero duplicate implementations, zero unused placeholder directories, and zero redundant `.gitkeep` files in populated directories.
+  3. Confirmed exactly one authoritative implementation for every Purchase Order responsibility:
+     - Presentation: `app/fiori-app/webapp/modules/mm/purchase-order/`
+     - CAP Service & Domain: `srv/mm/purchase-order/`
+     - S/4HANA Integration: `srv/integration/s4hana/mm/purchase-order/`
+     - Shared Infrastructure: `srv/handlers/`, `srv/integration/s4hana/`, `app/fiori-app/webapp/service/`, `controller/BaseController.js`.
+  4. Verified strict enforcement of automated test hierarchy under `/test` (18 suites, 116 tests) with zero tests in production directories or repository root.
+  5. Updated `README.md` to reflect finalized SAP MM architecture, component paths, test breakdown (18 suites, 116 tests), and repository tree structure.
+- **Files Modified**:
+  - `README.md`
+- **Reason**: Finalized the repository structure and documentation after the SAP MM → Purchase Order refactor, ensuring clear architectural boundaries, single authoritative implementations, and no dead/speculative code.
+- **Validation**:
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npm run test:unit`: All 10 unit test suites (81 tests) passed (Code 0).
+  - `npm run test:integration`: All 7 integration test suites (28 tests) passed (Code 0).
+  - `npm run test:e2e`: 1 E2E test suite (7 tests) passed (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 260 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+  - `git status`: Verified clean tree matching expected modifications.
+- **Result**: Passed. Repository structure, architectural boundaries, and documentation are cleanly finalized with zero regressions.
+
+## 2026-09-05 13:15 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 7 — Security & Authentication Boundary Hardening:
+  1. Enforced Role-Based Access Control (RBAC) in `srv/mm/purchase-order/service.cds` strictly based on canonical `xs-security.json`:
+     - Service-level `@(requires: 'authenticated-user')`.
+     - Read-level `@(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin'])` for `PurchaseOrders` entity and all Value Help entities.
+     - Operation-level `@(requires: ['PurchasingManager', 'Admin'])` for action `createPurchaseOrder`, preventing Viewers from creating Purchase Orders.
+  2. Hardened requester identity derivation in `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`:
+     - In production (`process.env.NODE_ENV === 'production'`), client-supplied `x-user-id` header is strictly ignored, and silent fallbacks to `SYSTEM` or `admin` are eliminated. Fails closed with HTTP 401 when trusted identity cannot be resolved.
+     - In non-production, isolated `x-user-id` and local mock fallbacks for safe development and testing.
+  3. Sanitized frontend authentication in `app/fiori-app/webapp/service/AuthService.js`:
+     - Removed fake token generation (`sToken = "S4_TOKEN_" + ...`) and fake token storage from browser storage.
+     - Restricted `AuthService` to managing UI session presentation state and user preferences (`rememberMe`).
+     - Confirmed zero storage of SAP passwords, credentials, or fake tokens in `sessionStorage` or `localStorage`.
+  4. Hardened Approuter and HTML5 deployment security descriptors:
+     - `app/router/xs-app.json`: Configured `authenticationType: "xsuaa"` and `csrfProtection: true` on `/odata/v4/(.*)` and HTML5 repo routes, maintaining `/auth/(.*)` as `"none"` with CSRF protection for local standalone compatibility.
+     - `app/fiori-app/xs-app.json`: Updated `authenticationMethod: "route"` with `authenticationType: "xsuaa"` and `csrfProtection: true`.
+  5. Configured profile-based CAP authentication in `package.json` under `cds.requires.auth`:
+     - Configured canonical test and development users (`alice`: PurchasingManager/Admin/Viewer/User, `bob`: Viewer/User).
+     - Ensured production defaults cleanly to JWT authentication (`{ kind: 'jwt', vcap: { label: 'xsuaa' } }`).
+  6. Added comprehensive security and authorization test suite in `test/integration/purchase-order/authorization.test.js`:
+     - Verified unauthenticated requests to `createPurchaseOrder`, `PurchaseOrders`, and `DocumentTypeVH` are rejected with HTTP 401 Unauthorized.
+     - Verified Viewers (`bob`) can read `PurchaseOrders` and Value Helps (HTTP 200) but are rejected from `createPurchaseOrder` with HTTP 403 Forbidden.
+     - Verified Purchasing Managers (`alice`) are authorized to create purchase orders and read data (HTTP 200).
+  7. Added production security isolation unit tests in `test/unit/purchase-order/userIdentity.test.js`.
+  8. Configured authenticated manager credentials in integration and E2E test suites (`createPurchaseOrder.test.js`, `s4Read.test.js`, `valueHelps.test.js`, `metadata.test.js`, `createPurchaseOrderFlow.test.js`).
+- **Files Created**:
+  - `test/integration/purchase-order/authorization.test.js` (8 RBAC integration tests)
+- **Files Modified**:
+  - `srv/mm/purchase-order/service.cds`
+  - `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`
+  - `app/fiori-app/webapp/service/AuthService.js`
+  - `app/router/xs-app.json`
+  - `app/fiori-app/xs-app.json`
+  - `package.json`
+  - `test/unit/purchase-order/userIdentity.test.js`
+  - `test/integration/purchase-order/createPurchaseOrder.test.js`
+  - `test/integration/purchase-order/metadata.test.js`
+  - `test/integration/purchase-order/s4Read.test.js`
+  - `test/integration/purchase-order/valueHelps.test.js`
+  - `test/e2e/purchase-order/createPurchaseOrderFlow.test.js`
+- **Reason**: Established hardened security boundaries, trust isolation, and RBAC protection between frontend, CAP, and S/4HANA integration.
+- **Validation**:
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npm run test:unit`: All 10 unit test suites (81 tests) passed (Code 0).
+  - `npm run test:integration`: All 7 integration test suites (28 tests) passed (Code 0).
+  - `npm run test:e2e`: 1 E2E test suite (7 tests) passed (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 720 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Security, trust boundaries, and RBAC protection fully verified with zero regressions.
+
 ## 2026-09-05 13:05 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 6 — Reorganize Tests by SAP MM → Purchase Order:

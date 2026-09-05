@@ -2,7 +2,9 @@ const cds = require('@sap/cds');
 const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const validPayload = require('../../fixtures/purchase-order/validPOPayload.json');
 const s4Errors = require('../../fixtures/purchase-order/s4ErrorResponses.json');
-const { POST } = cds.test(__dirname + '/../../../');
+const cdsTest = cds.test(__dirname + '/../../../');
+cdsTest.defaults.auth = { username: 'alice', password: '' };
+const { POST } = cdsTest;
 
 describe('Integration: Create Purchase Order Action', () => {
 

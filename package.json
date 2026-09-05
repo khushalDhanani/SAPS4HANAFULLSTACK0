@@ -31,6 +31,52 @@
   },
   "cds": {
     "requires": {
+      "auth": {
+        "[development]": {
+          "kind": "mocked",
+          "users": {
+            "alice": {
+              "roles": [
+                "User",
+                "Admin",
+                "Viewer",
+                "PurchasingManager"
+              ]
+            },
+            "bob": {
+              "roles": [
+                "User",
+                "Viewer"
+              ]
+            }
+          }
+        },
+        "[test]": {
+          "kind": "mocked",
+          "users": {
+            "alice": {
+              "roles": [
+                "User",
+                "Admin",
+                "Viewer",
+                "PurchasingManager"
+              ]
+            },
+            "bob": {
+              "roles": [
+                "User",
+                "Viewer"
+              ]
+            }
+          }
+        },
+        "[production]": {
+          "kind": "jwt",
+          "vcap": {
+            "label": "xsuaa"
+          }
+        }
+      },
       "C_PURCHASEORDER_FS_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/C_PURCHASEORDER_FS_SRV",

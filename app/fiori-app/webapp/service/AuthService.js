@@ -42,7 +42,7 @@ sap.ui.define([
             if (sRawSession) {
                 try {
                     var oSession = JSON.parse(sRawSession);
-                    if (oSession && oSession.user && oSession.token) {
+                    if (oSession && oSession.user && oSession.user.username) {
                         this._oModel.setProperty("/isAuthenticated", true);
                         this._oModel.setProperty("/user", oSession.user);
                         return true;
@@ -95,10 +95,8 @@ sap.ui.define([
                             loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                         };
 
-                        var sToken = "S4_TOKEN_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
                         var oStorageData = {
-                            user: oUserSession,
-                            token: sToken
+                            user: oUserSession
                         };
 
                         if (bRememberMe) {

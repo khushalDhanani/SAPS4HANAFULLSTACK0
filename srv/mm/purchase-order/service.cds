@@ -1,8 +1,10 @@
 using { C_PURCHASEORDER_FS_SRV as external } from '../../external/C_PURCHASEORDER_FS_SRV';
 using { MM_PUR_PO_MAINT_V2_SRV as maint } from '../../external/MM_PUR_PO_MAINT_V2_SRV';
 
+@(requires: 'authenticated-user')
 service PurchaseOrderService {
     @readonly
+    @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin'])
     entity PurchaseOrders as projection on external.C_PurchaseOrderFs {
         key PurchaseOrder,
         PurchaseOrderType,
@@ -18,23 +20,23 @@ service PurchaseOrderService {
         PurchasingCompletenessStatus
     };
 
-    // Value Help Entities
-    @readonly entity DocumentTypeVH as projection on external.I_PurchasingDocumentType;
-    @readonly entity SupplierVH as projection on maint.C_MM_SupplierValueHelp;
-    @readonly entity CompanyCodeVH as projection on maint.C_MM_CompanyCodeValueHelp;
-    @readonly entity PurchasingOrgVH as projection on maint.C_PurchasingOrgValueHelp;
-    @readonly entity PurchasingGroupVH as projection on maint.C_PurchasingGroupValueHelp;
-    @readonly entity MaterialVH as projection on maint.C_MM_MaterialValueHelp;
-    @readonly entity PlantVH as projection on maint.C_MM_PlantValueHelp;
-    @readonly entity StorageLocationVH as projection on maint.C_MM_StorLocValueHelp;
-    @readonly entity MaterialGroupVH as projection on maint.C_MM_MaterialGroupValueHelp;
-    @readonly entity IncotermsClassificationVH as projection on maint.C_MM_IncotermValueHelp;
-    @readonly entity PaymentTermsVH as projection on maint.C_MM_PaymentTermValueHelp;
+    // Value Help Entities (Accessible to Viewers and Purchasing Managers)
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity DocumentTypeVH as projection on external.I_PurchasingDocumentType;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity SupplierVH as projection on maint.C_MM_SupplierValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity CompanyCodeVH as projection on maint.C_MM_CompanyCodeValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PurchasingOrgVH as projection on maint.C_PurchasingOrgValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PurchasingGroupVH as projection on maint.C_PurchasingGroupValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity MaterialVH as projection on maint.C_MM_MaterialValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PlantVH as projection on maint.C_MM_PlantValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity StorageLocationVH as projection on maint.C_MM_StorLocValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity MaterialGroupVH as projection on maint.C_MM_MaterialGroupValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity IncotermsClassificationVH as projection on maint.C_MM_IncotermValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PaymentTermsVH as projection on maint.C_MM_PaymentTermValueHelp;
     
     // Generic VH Entities from FS service
-    @readonly entity CurrencyVH as projection on external.I_CurrencyStdVH;
-    @readonly entity UnitOfMeasureVH as projection on external.I_UnitOfMeasure;
-    @readonly entity TaxCodeVH as projection on external.I_TaxCode;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity CurrencyVH as projection on external.I_CurrencyStdVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity UnitOfMeasureVH as projection on external.I_UnitOfMeasure;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity TaxCodeVH as projection on external.I_TaxCode;
 
     type POItem {
         PurchaseOrderItem: String;
@@ -65,5 +67,6 @@ service PurchaseOrderService {
         PaymentTerms: String;
     }
 
+    @(requires: ['PurchasingManager', 'Admin'])
     action createPurchaseOrder(header: POHeader, items: array of POItem) returns String;
 }
