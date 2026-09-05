@@ -5,7 +5,7 @@ const cds = require('@sap/cds');
  * Read-only projections are automatically delegated to the external S/4HANA service by CAP.
  */
 module.exports = cds.service.impl(async function() {
-    const external = await cds.connect.to('FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV');
+    const external = await cds.connect.to('FAC_GL_JOURNALENTRY_VER_SRV');
 
     this.on('READ', 'JournalEntryItems', async (req) => {
         try {

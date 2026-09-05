@@ -50,7 +50,7 @@
                     id="tableJournalEntries"
                     items="{
                         path: 'fiService>/JournalEntryItems',
-                        sorter: { path: 'PostingDate', descending: true },
+                        sorter: { path: 'AccountingDocument', descending: true },
                         parameters: { $count: true }
                     }"
                     updateFinished=".onUpdateFinished"
@@ -79,7 +79,7 @@
                     <columns>
                         <Column><Text text="{i18n>fiColDocument}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColGLAccount}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColPostingDate}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColFiscalYear}" /></Column>
                         <Column hAlign="Center"><Text text="{i18n>fiColDebitCredit}" /></Column>
                         <Column hAlign="End"><Text text="{i18n>fiColAmount}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>fiColCostCenter}" /></Column>
@@ -90,14 +90,11 @@
                             <cells>
                                 <ObjectIdentifier
                                     title="{fiService>AccountingDocument}"
-                                    text="{fiService>CompanyCodeName} ({fiService>CompanyCode})" />
+                                    text="{i18n>fiCompanyCodeLabel} {fiService>SourceCompanyCode}" />
                                 <ObjectIdentifier
-                                    title="{fiService>GLAccountLongName}"
+                                    title="{fiService>GLAccountName}"
                                     text="{fiService>GLAccount}" />
-                                <Text text="{
-                                    path: 'fiService>PostingDate',
-                                    formatter: '.formatter.formatDate'
-                                }" />
+                                <Text text="{fiService>FiscalYear}" />
                                 <ObjectStatus
                                     text="{
                                         path: 'fiService>DebitCreditCode',

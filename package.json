@@ -97,16 +97,16 @@
           }
         }
       },
-      "FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV": {
+      "FAC_GL_JOURNALENTRY_VER_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV",
+        "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
         "credentials": {
           "url": "http://localhost:5000"
         },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
-            "path": "/sap/opu/odata/sap/FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV"
+            "path": "/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV"
           }
         }
       }
