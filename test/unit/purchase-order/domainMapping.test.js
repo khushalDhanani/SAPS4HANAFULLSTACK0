@@ -1,5 +1,5 @@
-const { normalizePurchaseOrderData } = require('../../srv/mapping/purchaseOrder.mapper');
-const validPayload = require('../fixtures/validPOPayload.json');
+const { normalizePurchaseOrderData } = require('../../../srv/mm/purchase-order/mapping/purchaseOrder.mapper');
+const validPayload = require('../../fixtures/validPOPayload.json');
 
 describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
 

@@ -1,4 +1,4 @@
-const purchaseOrderAdapter = require('../integration/s4hana/PurchaseOrderAdapter');
+const purchaseOrderAdapter = require('../integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 
 const FS_VALUE_HELP_ENTITIES = [
     'CurrencyVH',

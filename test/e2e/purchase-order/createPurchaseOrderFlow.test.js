@@ -1,8 +1,8 @@
 const cds = require('@sap/cds');
-const purchaseOrderAdapter = require('../../srv/integration/s4hana/PurchaseOrderAdapter');
-const valueHelpsFixture = require('../fixtures/valueHelps.json');
-const purchaseOrdersFixture = require('../fixtures/purchaseOrders.json');
-const { POST, GET } = cds.test(__dirname + '/../../');
+const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
+const valueHelpsFixture = require('../../fixtures/valueHelps.json');
+const purchaseOrdersFixture = require('../../fixtures/purchaseOrders.json');
+const { POST, GET } = cds.test(__dirname + '/../../../');
 
 describe('E2E: Create Purchase Order Full User Journey', () => {
 

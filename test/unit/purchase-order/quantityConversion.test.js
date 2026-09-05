@@ -1,4 +1,4 @@
-const { formatQuantity, formatPriceAmount } = require('../../srv/integration/s4hana/PurchaseOrderMapper');
+const { formatQuantity, formatPriceAmount } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
 
 describe('Unit: Quantity & Price Conversion', () => {
 

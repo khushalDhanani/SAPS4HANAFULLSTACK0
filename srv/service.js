@@ -1,5 +1,5 @@
 const cds = require('@sap/cds');
-const registerPurchaseOrderHandlers = require('./handlers/purchaseOrder.handler');
+const registerPurchaseOrderHandlers = require('./mm/purchase-order/handlers/purchaseOrder.handler');
 const registerValueHelpHandlers = require('./handlers/valueHelp.handler');
 
 /**

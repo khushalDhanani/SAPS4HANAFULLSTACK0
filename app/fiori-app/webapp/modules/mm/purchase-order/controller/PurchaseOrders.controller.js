@@ -13,7 +13,7 @@ sap.ui.define([
 ) {
     "use strict";
 
-    return BaseController.extend("saps4hana.fiori.controller.PurchaseOrders", {
+    return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrders", {
         onInit: function () {
             var oViewModel = new JSONModel({
                 totalCount: 0,

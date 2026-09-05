@@ -1,7 +1,7 @@
 const httpClient = require('@sap-cloud-sdk/http-client');
-const purchaseOrderAdapter = require('../../srv/integration/s4hana/PurchaseOrderAdapter');
-const activationResponseFixture = require('../fixtures/activationResponse.json');
-const s4Errors = require('../fixtures/s4ErrorResponses.json');
+const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
+const activationResponseFixture = require('../../fixtures/activationResponse.json');
+const s4Errors = require('../../fixtures/s4ErrorResponses.json');
 
 describe('Integration: S/4 Activation', () => {
 

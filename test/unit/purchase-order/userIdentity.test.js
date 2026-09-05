@@ -1,4 +1,4 @@
-const { resolveUserIdentity } = require('../../srv/handlers/purchaseOrder.handler');
+const { resolveUserIdentity } = require('../../../srv/mm/purchase-order/handlers/purchaseOrder.handler');
 
 describe('Unit: User Identity Resolution (resolveUserIdentity)', () => {
     const originalEnv = process.env.S4_USER;

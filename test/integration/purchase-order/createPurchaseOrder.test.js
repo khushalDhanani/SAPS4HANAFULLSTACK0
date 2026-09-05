@@ -1,8 +1,8 @@
 const cds = require('@sap/cds');
-const purchaseOrderAdapter = require('../../srv/integration/s4hana/PurchaseOrderAdapter');
-const validPayload = require('../fixtures/validPOPayload.json');
-const s4Errors = require('../fixtures/s4ErrorResponses.json');
-const { POST } = cds.test(__dirname + '/../../');
+const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
+const validPayload = require('../../fixtures/validPOPayload.json');
+const s4Errors = require('../../fixtures/s4ErrorResponses.json');
+const { POST } = cds.test(__dirname + '/../../../');
 
 describe('Integration: Create Purchase Order Action', () => {
 

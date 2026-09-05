@@ -1,5 +1,5 @@
 <mvc:View
-    controllerName="saps4hana.fiori.controller.CreatePurchaseOrder"
+    controllerName="saps4hana.fiori.modules.mm.purchase-order.controller.CreatePurchaseOrder"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
     xmlns:f="sap.ui.layout.form"

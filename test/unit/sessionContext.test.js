@@ -1,5 +1,5 @@
 const SessionContext = require('../../srv/integration/s4hana/SessionContext');
-const purchaseOrderAdapter = require('../../srv/integration/s4hana/PurchaseOrderAdapter');
+const purchaseOrderAdapter = require('../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 
 describe('Unit: SessionContext & Thread-Safe Session Isolation', () => {
 

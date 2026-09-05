@@ -1,8 +1,8 @@
-const purchaseOrderAdapter = require('../integration/s4hana/PurchaseOrderAdapter');
+const purchaseOrderAdapter = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const { validateCreatePurchaseOrderPayload } = require('../validation/purchaseOrder.validation');
 const { normalizePurchaseOrderData } = require('../mapping/purchaseOrder.mapper');
-const { mapToS4Payload } = require('../integration/s4hana/PurchaseOrderMapper');
-const { mapS4Error } = require('../integration/s4hana/S4ErrorMapper');
+const { mapToS4Payload } = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
+const { mapS4Error } = require('../../../integration/s4hana/S4ErrorMapper');
 
 /**
  * Derives the authenticated business user identity from CAP request and security context.

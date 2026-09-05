@@ -113,11 +113,13 @@
         },
         "TargetPurchaseOrders": {
           "id": "purchaseOrders",
-          "name": "PurchaseOrders"
+          "name": "PurchaseOrders",
+          "path": "saps4hana.fiori.modules.mm.purchase-order.view"
         },
         "TargetCreatePurchaseOrder": {
           "id": "createPurchaseOrder",
-          "name": "CreatePurchaseOrder"
+          "name": "CreatePurchaseOrder",
+          "path": "saps4hana.fiori.modules.mm.purchase-order.view"
         }
       }
     }

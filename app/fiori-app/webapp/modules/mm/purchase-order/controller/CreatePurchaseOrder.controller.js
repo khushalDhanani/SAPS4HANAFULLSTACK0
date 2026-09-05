@@ -3,13 +3,13 @@ sap.ui.define([
     "sap/m/MessageBox",
     "sap/m/MessageToast",
     "sap/ui/core/BusyIndicator",
-    "saps4hana/fiori/model/PurchaseOrderModel",
+    "saps4hana/fiori/modules/mm/purchase-order/model/PurchaseOrderModel",
     "saps4hana/fiori/service/ValueHelpService",
-    "saps4hana/fiori/service/PurchaseOrderService"
+    "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService"
 ], function (Controller, MessageBox, MessageToast, BusyIndicator, PurchaseOrderModel, ValueHelpService, PurchaseOrderService) {
     "use strict";
 
-    return Controller.extend("saps4hana.fiori.controller.CreatePurchaseOrder", {
+    return Controller.extend("saps4hana.fiori.modules.mm.purchase-order.controller.CreatePurchaseOrder", {
         onInit: function () {
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.getRoute("createPurchaseOrder").attachPatternMatched(this._onRouteMatched, this);

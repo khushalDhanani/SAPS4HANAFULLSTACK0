@@ -1,5 +1,5 @@
-const { validateCreatePurchaseOrderPayload } = require('../../srv/validation/purchaseOrder.validation');
-const validPayload = require('../fixtures/validPOPayload.json');
+const { validateCreatePurchaseOrderPayload } = require('../../../srv/mm/purchase-order/validation/purchaseOrder.validation');
+const validPayload = require('../../fixtures/validPOPayload.json');
 
 describe('Unit: Validation', () => {
 

@@ -1,5 +1,5 @@
 const cds = require('@sap/cds');
-const purchaseOrderAdapter = require('../../srv/integration/s4hana/PurchaseOrderAdapter');
+const purchaseOrderAdapter = require('../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const valueHelpsFixture = require('../fixtures/valueHelps.json');
 const { GET } = cds.test(__dirname + '/../../');
 

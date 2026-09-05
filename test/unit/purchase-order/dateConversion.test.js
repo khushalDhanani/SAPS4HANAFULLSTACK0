@@ -1,4 +1,4 @@
-const { formatDateToODataV2 } = require('../../srv/integration/s4hana/PurchaseOrderMapper');
+const { formatDateToODataV2 } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
 
 describe('Unit: Date Conversion', () => {
 

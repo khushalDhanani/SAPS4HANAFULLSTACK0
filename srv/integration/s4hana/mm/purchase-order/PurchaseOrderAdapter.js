@@ -2,7 +2,7 @@
 const cds = require('@sap/cds');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');
-const SessionContext = require('./SessionContext');
+const SessionContext = require('../../SessionContext');
 
 /**
  * Adapter class to encapsulate all communication with S/4HANA services

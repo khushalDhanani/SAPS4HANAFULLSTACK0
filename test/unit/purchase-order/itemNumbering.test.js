@@ -1,4 +1,4 @@
-const { formatItemNumber } = require('../../srv/integration/s4hana/PurchaseOrderMapper');
+const { formatItemNumber } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
 
 describe('Unit: Item Numbering', () => {
 
