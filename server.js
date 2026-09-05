@@ -64,13 +64,23 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
         headers: headers
     };
 
+    const credsFI = {
+        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV`,
+        authentication: 'BasicAuthentication',
+        username: process.env.S4_USERNAME,
+        password: process.env.S4_PASSWORD,
+        headers: headers
+    };
+
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.C_PURCHASEORDER_FS_SRV = Object.assign(cds.env.requires.C_PURCHASEORDER_FS_SRV || { kind: 'odata-v2', model: 'srv/external/C_PURCHASEORDER_FS_SRV' }, { credentials: credsFS });
     cds.env.requires.MM_PUR_PO_MAINT_V2_SRV = Object.assign(cds.env.requires.MM_PUR_PO_MAINT_V2_SRV || { kind: 'odata-v2', model: 'srv/external/MM_PUR_PO_MAINT_V2_SRV' }, { credentials: credsMaint });
+    cds.env.requires.FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV = Object.assign(cds.env.requires.FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV || { kind: 'odata-v2', model: 'srv/external/FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV' }, { credentials: credsFI });
 
     if (cds.requires) {
         if (cds.requires.C_PURCHASEORDER_FS_SRV) cds.requires.C_PURCHASEORDER_FS_SRV.credentials = credsFS;
         if (cds.requires.MM_PUR_PO_MAINT_V2_SRV) cds.requires.MM_PUR_PO_MAINT_V2_SRV.credentials = credsMaint;
+        if (cds.requires.FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV) cds.requires.FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV.credentials = credsFI;
     }
 
     registerDestination({

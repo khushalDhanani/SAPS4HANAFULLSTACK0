@@ -5,38 +5,54 @@
   "scopes": [
     {
       "name": "$XSAPPNAME.Viewer",
-      "description": "View Purchase Orders and Analytics"
-    },
-    {
-      "name": "$XSAPPNAME.PurchasingManager",
-      "description": "Create and Manage Purchase Orders"
-    },
-    {
-      "name": "$XSAPPNAME.User",
-      "description": "Standard User Access to Purchase Order Application"
+      "description": "View business data"
     },
     {
       "name": "$XSAPPNAME.Admin",
-      "description": "Administrator Access to Purchase Order Application"
+      "description": "Administer business data"
+    },
+    {
+      "name": "$XSAPPNAME.PurchasingManager",
+      "description": "Create and manage purchase orders"
+    },
+    {
+      "name": "$XSAPPNAME.FinanceViewer",
+      "description": "View financial accounting journal entry data"
     }
   ],
   "attributes": [],
   "role-templates": [
     {
       "name": "Viewer",
-      "description": "View Purchase Orders and Analytics",
+      "description": "Read-only access",
+      "scope-references": [
+        "$XSAPPNAME.Viewer"
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Full access",
       "scope-references": [
         "$XSAPPNAME.Viewer",
-        "$XSAPPNAME.User"
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.PurchasingManager",
+        "$XSAPPNAME.FinanceViewer"
       ]
     },
     {
       "name": "PurchasingManager",
-      "description": "Create and Manage Purchase Orders",
+      "description": "Purchasing operations",
       "scope-references": [
-        "$XSAPPNAME.PurchasingManager",
-        "$XSAPPNAME.Admin",
-        "$XSAPPNAME.User"
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.PurchasingManager"
+      ]
+    },
+    {
+      "name": "FinanceViewer",
+      "description": "Financial accounting viewer",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.FinanceViewer"
       ]
     }
   ],

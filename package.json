@@ -17,7 +17,8 @@
   "dependencies": {
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
-    "@sap/cds": "^10.0.6"
+    "@sap/cds": "^10.0.6",
+    "@sap-cloud-sdk/resilience": "^4"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
@@ -37,7 +38,8 @@
                 "User",
                 "Admin",
                 "Viewer",
-                "PurchasingManager"
+                "PurchasingManager",
+                "FinanceViewer"
               ]
             },
             "bob": {
@@ -56,7 +58,8 @@
                 "User",
                 "Admin",
                 "Viewer",
-                "PurchasingManager"
+                "PurchasingManager",
+                "FinanceViewer"
               ]
             },
             "bob": {
@@ -91,6 +94,19 @@
           "credentials": {
             "destination": "S4HANA_PO_API",
             "path": "/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV"
+          }
+        }
+      },
+      "FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV",
+        "credentials": {
+          "url": "http://localhost:5000"
+        },
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/FAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV"
           }
         }
       }

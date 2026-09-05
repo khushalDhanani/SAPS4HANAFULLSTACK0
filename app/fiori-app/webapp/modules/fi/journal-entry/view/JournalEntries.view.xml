@@ -1,0 +1,129 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.fi.journal-entry.controller.JournalEntries"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.f"
+    displayBlock="true">
+    
+    <Page
+        id="journalEntriesPage"
+        title="{i18n>fiPageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        backgroundDesign="List"
+        class="sapUiSizeCompact">
+        
+        <headerContent>
+            <ObjectStatus
+                id="fiConnectionStatus"
+                text="{i18n>tagLive}"
+                state="Success"
+                icon="sap-icon://connected" />
+            <Button
+                id="btnUserProfile"
+                icon="sap-icon://customer"
+                text="{auth>/user/username}"
+                type="Transparent"
+                tooltip="{i18n>userProfileTitle}"
+                press=".onOpenUserProfile" />
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- KPI Header -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile class="sapUiTinyMarginEnd" header="{i18n>fiKpiTotalDocs}" subheader="{i18n>fiPageSubtitle}">
+                        <TileContent>
+                            <NumericContent value="{fiView>/totalCount}" icon="sap-icon://document-text" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiTinyMarginEnd" header="{i18n>fiKpiGLAccounts}">
+                        <TileContent>
+                            <NumericContent value="{fiView>/glAccountCount}" icon="sap-icon://loan" valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- Journal Entries Table -->
+                <Table
+                    id="tableJournalEntries"
+                    items="{
+                        path: 'fiService>/JournalEntryItems',
+                        sorter: { path: 'PostingDate', descending: true },
+                        parameters: { $count: true }
+                    }"
+                    updateFinished=".onUpdateFinished"
+                    growing="true"
+                    growingScrollToLoad="true"
+                    mode="SingleSelectMaster"
+                    selectionChange=".onItemPress"
+                    class="sapUiResponsiveMargin">
+                    
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title text="{i18n>fiPageTitle} ({fiView>/totalCount})" level="H2"/>
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="searchField"
+                                width="30%"
+                                placeholder="{i18n>fiSearchPlaceholder}"
+                                search=".onSearch" />
+                            <Button
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>btnRefresh}"
+                                press=".onRefresh" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+
+                    <columns>
+                        <Column><Text text="{i18n>fiColDocument}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColGLAccount}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColPostingDate}" /></Column>
+                        <Column hAlign="Center"><Text text="{i18n>fiColDebitCredit}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>fiColAmount}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>fiColCostCenter}" /></Column>
+                    </columns>
+
+                    <items>
+                        <ColumnListItem type="Active">
+                            <cells>
+                                <ObjectIdentifier
+                                    title="{fiService>AccountingDocument}"
+                                    text="{fiService>CompanyCodeName} ({fiService>CompanyCode})" />
+                                <ObjectIdentifier
+                                    title="{fiService>GLAccountLongName}"
+                                    text="{fiService>GLAccount}" />
+                                <Text text="{
+                                    path: 'fiService>PostingDate',
+                                    formatter: '.formatter.formatDate'
+                                }" />
+                                <ObjectStatus
+                                    text="{
+                                        path: 'fiService>DebitCreditCode',
+                                        formatter: '.formatter.formatDebitCredit'
+                                    }"
+                                    state="{
+                                        path: 'fiService>DebitCreditCode',
+                                        formatter: '.formatter.debitCreditState'
+                                    }"
+                                    icon="{= ${fiService>DebitCreditCode} === 'S' ? 'sap-icon://arrow-bottom' : 'sap-icon://arrow-top' }" />
+                                <ObjectNumber
+                                    number="{
+                                        path: 'fiService>AmountInCompanyCodeCurrency',
+                                        formatter: '.formatter.formatAmount'
+                                    }"
+                                    unit="{fiService>CompanyCodeCurrency}"
+                                    state="{
+                                        path: 'fiService>DebitCreditCode',
+                                        formatter: '.formatter.debitCreditState'
+                                    }" />
+                                <Text text="{fiService>CostCenter}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

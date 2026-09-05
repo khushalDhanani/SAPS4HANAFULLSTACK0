@@ -92,6 +92,22 @@
                                 type="Transparent"
                                 press=".onNavigateToPurchaseOrders" />
                         </VBox>
+
+                        <!-- Financial Accounting (FI) - Journal Entries Module Tile -->
+                        <GenericTile
+                            id="tileModuleFI"
+                            header="{i18n>dashboardModuleFI}"
+                            subheader="{i18n>dashboardModuleFISub}"
+                            press=".onNavigateToJournalEntries"
+                            class="sapUiTinyMargin">
+                            <TileContent unit="{i18n>dashboardKpiFIDocs}">
+                                <NumericContent
+                                    id="kpiFIDocsVal"
+                                    value="{dashboardView>/fiDocCount}"
+                                    icon="sap-icon://accounting-document-verification"
+                                    valueColor="Neutral" />
+                            </TileContent>
+                        </GenericTile>
                     </HBox>
                 </Panel>
 

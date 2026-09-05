@@ -17,7 +17,8 @@ sap.ui.define([
                 totalCount: 0,
                 supplierCount: 0,
                 totalSpend: "3.42",
-                completeRate: 100
+                completeRate: 100,
+                fiDocCount: 0
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
@@ -58,6 +59,18 @@ sap.ui.define([
                 })
                 .catch(function () {
                     // Graceful fallback for offline / mock dev mode
+                })
+                .then(function () {
+                    // Fetch FI metrics
+                    return ODataClient.get("/odata/v4/journal-entry/JournalEntryItems?$top=1&$count=true");
+                })
+                .then(function (oData) {
+                    if (oData && typeof oData["@odata.count"] === "number") {
+                        oViewModel.setProperty("/fiDocCount", oData["@odata.count"]);
+                    }
+                })
+                .catch(function () {
+                    // Graceful fallback for offline / mock dev mode
                 });
         },
 
@@ -77,6 +90,11 @@ sap.ui.define([
         onNavigateToCreatePO: function () {
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.navTo("createPurchaseOrder");
+        },
+
+        onNavigateToJournalEntries: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("journalEntries");
         }
     });
 });

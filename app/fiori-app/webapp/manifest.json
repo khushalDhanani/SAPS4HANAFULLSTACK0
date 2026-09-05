@@ -17,6 +17,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "fiService": {
+        "uri": "/odata/v4/journal-entry/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -51,6 +59,15 @@
       },
       "": {
         "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "fiService": {
+        "dataSource": "fiService",
         "preload": true,
         "settings": {
           "operationMode": "Server",
@@ -100,6 +117,11 @@
           "name": "createPurchaseOrder",
           "pattern": "mm/purchase-orders/create",
           "target": "TargetCreatePurchaseOrder"
+        },
+        {
+          "name": "journalEntries",
+          "pattern": "fi/journal-entries",
+          "target": "TargetJournalEntries"
         }
       ],
       "targets": {
@@ -120,6 +142,11 @@
           "id": "createPurchaseOrder",
           "name": "CreatePurchaseOrder",
           "path": "saps4hana.fiori.modules.mm.purchase-order.view"
+        },
+        "TargetJournalEntries": {
+          "id": "journalEntries",
+          "name": "JournalEntries",
+          "path": "saps4hana.fiori.modules.fi.journal-entry.view"
         }
       }
     }
