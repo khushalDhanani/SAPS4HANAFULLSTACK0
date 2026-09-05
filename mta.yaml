@@ -1,0 +1,12 @@
+_schema-version: "3.3"
+ID: SAPS4HANAFULLSTACK
+version: 1.0.0
+
+description: SAP S/4HANA Full Stack Fiori and CAP Application
+
+parameters:
+  enable-parallel-deployments: true
+
+modules: []
+
+resources: []

@@ -1,0 +1,179 @@
+<mvc:View
+    controllerName="saps4hana.fiori.controller.CreatePurchaseOrder"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:uxap="sap.uxap"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="createPOPage"
+        title="Create Purchase Order"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        backgroundDesign="Solid">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <Panel headerText="Header Details" class="sapUiSmallMarginBottom">
+                    <f:SimpleForm 
+                        id="poHeaderForm"
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="3" labelSpanL="3" labelSpanM="3" labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="4" emptySpanL="4" emptySpanM="4" emptySpanS="0"
+                        columnsXL="1" columnsL="1" columnsM="1"
+                        singleContainerFullSize="false" >
+                        <f:content>
+                            <Label text="Document Type" required="true" />
+                            <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="e.g. NB" maxLength="4" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/DocumentTypeVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
+                                </suggestionItems>
+                            </Input>
+                            
+                            <Label text="Company Code" required="true" />
+                            <Input id="inCompanyCode" value="{newPO>/header/CompanyCode}" placeholder="e.g. 1010" maxLength="4" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/CompanyCodeVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{CompanyCodeName}" />
+                                </suggestionItems>
+                            </Input>
+                            
+                            <Label text="Purchasing Organization" required="true" />
+                            <Input id="inPurchOrg" value="{newPO>/header/PurchasingOrganization}" placeholder="e.g. 1010" maxLength="4" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/PurchasingOrgVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{PurchasingOrganization}" text="{PurchasingOrganization}" additionalText="{PurchasingOrganizationName}" />
+                                </suggestionItems>
+                            </Input>
+                            
+                            <Label text="Purchasing Group" required="true" />
+                            <Input id="inPurchGrp" value="{newPO>/header/PurchasingGroup}" placeholder="e.g. 001" maxLength="3" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/PurchasingGroupVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{PurchasingGroup}" text="{PurchasingGroup}" additionalText="{PurchasingGroupName}" />
+                                </suggestionItems>
+                            </Input>
+                            
+                            <Label text="Supplier" required="true" />
+                            <Input id="inSupplier" value="{newPO>/header/Supplier}" placeholder="e.g. 10300001" maxLength="10" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/SupplierVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{SupplierName}" />
+                                </suggestionItems>
+                            </Input>
+
+                            <Label text="Document Date" required="true" />
+                            <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="long" required="true" />
+
+                            <Label text="Currency" required="true" />
+                            <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="e.g. EUR" maxLength="5" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/CurrencyVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{Currency}" text="{Currency}" additionalText="{Currency_Text}" />
+                                </suggestionItems>
+                            </Input>
+
+                            <Label text="Incoterms" />
+                            <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="e.g. EXW" maxLength="3" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/IncotermsClassificationVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{IncotermsClassification}" text="{IncotermsClassification}" additionalText="{IncotermsClassificationName}" />
+                                </suggestionItems>
+                            </Input>
+                            
+                            <Label text="Incoterms Location 1" />
+                            <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="e.g. MUMBAI" maxLength="70" />
+
+                            <Label text="Payment Terms" />
+                            <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="e.g. 0001" maxLength="4" 
+                                showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/PaymentTermsVH}">
+                                <suggestionItems>
+                                    <core:ListItem key="{PaymentTerms}" text="{PaymentTerms}" additionalText="{PaymentTermsName}" />
+                                </suggestionItems>
+                            </Input>
+                        </f:content>
+                    </f:SimpleForm>
+                </Panel>
+
+                <Panel headerText="Items">
+                    <headerToolbar>
+                        <Toolbar>
+                            <Title text="Items ({= ${newPO>/items}.length })" level="H2"/>
+                            <ToolbarSpacer />
+                            <Button icon="sap-icon://add" text="Add Item" press=".onAddItem" type="Transparent" />
+                        </Toolbar>
+                    </headerToolbar>
+                    <Table
+                        id="poItemsTable"
+                        items="{newPO>/items}"
+                        noDataText="No items added yet."
+                        mode="Delete"
+                        delete=".onDeleteItem">
+                        <columns>
+                            <Column><Text text="Item" /></Column>
+                            <Column><Text text="Plant" /></Column>
+                            <Column><Text text="Storage Location" /></Column>
+                            <Column><Text text="Material Description" /></Column>
+                            <Column><Text text="Quantity" /></Column>
+                            <Column><Text text="Unit" /></Column>
+                            <Column><Text text="Net Price" /></Column>
+                            <Column><Text text="Tax Code" /></Column>
+                            <Column><Text text="Net Amount" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                     <Text text="{newPO>PurchaseOrderItem}" />
+                                    <Input value="{newPO>Plant}" placeholder="e.g. 1010" required="true" 
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/PlantVH}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{PlantName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newPO>StorageLocation}" placeholder="e.g. 101A" required="true" 
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/StorageLocationVH}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{StorageLocationName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newPO>Material}" placeholder="e.g. TG11" required="true" 
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/MaterialVH}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{Material}" text="{Material}" additionalText="{MaterialName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newPO>OrderQuantity}" type="Number" required="true" change=".onCalculateNetAmount" />
+                                    <Input value="{newPO>UnitOfMeasure}" placeholder="e.g. PC" required="true" 
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/UnitOfMeasureVH}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{UnitOfMeasure}" text="{UnitOfMeasure}" additionalText="{UnitOfMeasure_Text}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newPO>NetPriceAmount}" type="Number" placeholder="0.00" change=".onCalculateNetAmount" />
+                                    <Input value="{newPO>TaxCode}" placeholder="e.g. V1" maxLength="2" 
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{/TaxCodeVH}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{TaxCode}" text="{TaxCode}" additionalText="{TaxCode_Text}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newPO>NetAmount}" type="Number" placeholder="0.00" editable="false" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+        <footer>
+            <OverflowToolbar>
+                <ToolbarSpacer />
+                <Button id="btnSave" text="Create" type="Emphasized" press=".onCreatePress" />
+                <Button id="btnCancel" text="Cancel" press=".onCancelPress" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

@@ -1,0 +1,39 @@
+{
+  "name": "saps4hanafullstack",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "cds watch",
+    "watch": "cds watch",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@sap-cloud-sdk/connectivity": "^4",
+    "@sap-cloud-sdk/http-client": "^4",
+    "@sap-cloud-sdk/resilience": "^4",
+    "@sap/cds": "^10.0.6"
+  },
+  "devDependencies": {
+    "@cap-js/cds-test": "^1.0.2",
+    "@cap-js/sqlite": "^3.0.2",
+    "@sap/cds-dk": "^10.0.7",
+    "cds-plugin-ui5": "^0.17.4",
+    "jest": "^30.5.1"
+  },
+  "cds": {
+    "requires": {
+      "C_PURCHASEORDER_FS_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/C_PURCHASEORDER_FS_SRV"
+      },
+      "MM_PUR_PO_MAINT_V2_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/MM_PUR_PO_MAINT_V2_SRV"
+      }
+    }
+  }
+}

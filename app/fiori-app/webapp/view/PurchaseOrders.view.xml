@@ -1,0 +1,222 @@
+<mvc:View
+    controllerName="saps4hana.fiori.controller.PurchaseOrders"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:fb="sap.ui.comp.filterbar"
+    xmlns:core="sap.ui.core">
+    <Page
+        id="purchaseOrdersPage"
+        title="{i18n>pageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        backgroundDesign="Solid">
+        <headerContent>
+            <ObjectStatus
+                id="connectionStatus"
+                text="{i18n>tagLive}"
+                state="Success"
+                icon="sap-icon://connected"
+                class="sapUiSmallMarginEnd" />
+            <Button
+                id="btnUserProfilePO"
+                icon="sap-icon://customer"
+                text="{auth>/user/username}"
+                type="Transparent"
+                tooltip="{i18n>userProfileTitle}"
+                press=".onOpenUserProfile"
+                class="sapUiTinyMarginEnd" />
+            <Button
+                id="btnRefreshHeader"
+                icon="sap-icon://refresh"
+                tooltip="{i18n>btnRefresh}"
+                press=".onRefresh"
+                class="sapUiTinyMarginEnd" />
+        </headerContent>
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- KPI Tiles Section -->
+                <Panel headerText="Key Performance Indicators" class="sapUiSmallMarginBottom">
+                <HBox id="kpiContainer" wrap="Wrap">
+                    <GenericTile
+                        id="kpiTotalOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiTotalOrders}"
+                        subheader="{i18n>kpiTotalOrdersDesc}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalOrdersVal"
+                                value="{viewModel>/totalCount}"
+                                icon="sap-icon://sales-order"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiSuppliers"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiSuppliers}"
+                        subheader="{i18n>kpiSuppliersDesc}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiSuppliersVal"
+                                value="{viewModel>/supplierCount}"
+                                icon="sap-icon://supplier"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiComplete"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiComplete}"
+                        subheader="{i18n>kpiCompleteDesc}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiCompleteVal"
+                                value="{viewModel>/completeRate}"
+                                scale="%"
+                                icon="sap-icon://accept"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+                </Panel>
+
+                <!-- Advanced Filter Bar -->
+                <Panel class="sapUiSmallMarginBottom" width="auto">
+                    <fb:FilterBar 
+                        id="poFilterBar" 
+                        search=".onFilterBarSearch" 
+                        showClearOnFB="true" 
+                        clear=".onFilterBarClear" 
+                        useToolbar="false">
+                        <fb:filterGroupItems>
+                            <fb:FilterGroupItem groupName="G1" name="PurchaseOrder" label="{i18n>colPurchaseOrder}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input id="fbPO" placeholder="Enter PO Number" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="Supplier" label="{i18n>colSupplier}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input id="fbSupplier" placeholder="Enter Supplier" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="CompanyCode" label="{i18n>colCompany}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input id="fbCompanyCode" placeholder="Enter Company Code" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                        </fb:filterGroupItems>
+                    </fb:FilterBar>
+                </Panel>
+
+
+
+                <!-- Responsive Table -->
+                <Table
+                    id="purchaseOrdersTable"
+                    items="{
+                        path: '/PurchaseOrders',
+                        parameters: {
+                            $count: true
+                        },
+                        sorter: { path: 'PurchaseOrder', descending: false }
+                    }"
+                    growing="true"
+                    growingThreshold="20"
+                    mode="SingleSelectMaster"
+                    itemPress=".onItemPress"
+                    sticky="ColumnHeaders,HeaderToolbar"
+                    class="sapUiResponsiveContentPadding">
+                    <headerToolbar>
+                        <OverflowToolbar id="tableToolbar">
+                            <Title
+                                id="tableTitle"
+                                text="{i18n>tableTitle}"
+                                level="H2" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="searchField"
+                                placeholder="{i18n>searchPlaceholder}"
+                                width="300px"
+                                search=".onSearch"
+                                liveChange=".onSearch" />
+                            <Button
+                                id="btnRefreshTable"
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>btnRefresh}"
+                                press=".onRefresh" />
+                            <Button
+                                id="btnCreatePO"
+                                text="Create PO"
+                                type="Emphasized"
+                                press=".onCreatePO" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column id="colPO">
+                            <Text text="{i18n>colPurchaseOrder}" />
+                        </Column>
+                        <Column id="colSup" minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>colSupplier}" />
+                        </Column>
+                        <Column id="colCo" minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>colCompany}" />
+                        </Column>
+                        <Column id="colOrg" minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>colPurchasingOrg}" />
+                        </Column>
+                        <Column id="colDate" minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>colCreationDate}" />
+                        </Column>
+                        <Column id="colStat" hAlign="End">
+                            <Text text="{i18n>colStatus}" />
+                        </Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem
+                            id="poRow"
+                            type="Navigation">
+                            <cells>
+                                <ObjectIdentifier
+                                    id="poId"
+                                    title="{PurchaseOrder}"
+                                    text="{PurchaseOrderType}" />
+                                <ObjectIdentifier
+                                    id="poSupplier"
+                                    title="{SupplierName}"
+                                    text="{Supplier}" />
+                                <Text
+                                    id="poCompany"
+                                    text="{CompanyCode} ({CompanyCodeName})" />
+                                <Text
+                                    id="poOrg"
+                                    text="{PurchasingOrganization} / {PurchasingGroup}" />
+                                <Text
+                                    id="poDate"
+                                    text="{
+                                        path: 'CreationDate',
+                                        formatter: '.formatter.formatDate'
+                                    }" />
+                                <ObjectStatus
+                                    id="poStatus"
+                                    text="{
+                                        path: 'PurchasingCompletenessStatus',
+                                        formatter: '.formatter.completenessText'
+                                    }"
+                                    state="{
+                                        path: 'PurchasingCompletenessStatus',
+                                        formatter: '.formatter.completenessState'
+                                    }"
+                                    icon="{
+                                        path: 'PurchasingCompletenessStatus',
+                                        formatter: '.formatter.completenessIcon'
+                                    }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

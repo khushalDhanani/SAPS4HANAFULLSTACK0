@@ -1,0 +1,224 @@
+<mvc:View
+    controllerName="saps4hana.fiori.controller.Dashboard"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+    <Page
+        id="dashboardPage"
+        title="{i18n>dashboardTitle}"
+        showNavButton="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <headerContent>
+            <ObjectStatus
+                id="dashConnectionStatus"
+                text="{i18n>tagLive}"
+                state="Success"
+                icon="sap-icon://connected" />
+            <Button
+                id="btnUserProfile"
+                icon="sap-icon://customer"
+                text="{auth>/user/username}"
+                type="Transparent"
+                tooltip="{i18n>userProfileTitle}"
+                press=".onOpenUserProfile" />
+            <Button
+                id="btnRefreshDashboard"
+                icon="sap-icon://refresh"
+                tooltip="{i18n>btnRefresh}"
+                press=".onRefresh" />
+        </headerContent>
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Welcome Message -->
+                <VBox class="sapUiSmallMarginBottom">
+                    <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H2" />
+                </VBox>
+
+                <!-- Executive KPI Grid -->
+                <Panel headerText="Procurement Metrics &amp; Gateway Health" class="sapUiSmallMarginBottom">
+                <HBox id="dashboardKpiContainer" wrap="Wrap">
+                    <GenericTile
+                        id="kpiTotalPOs"
+                        header="{i18n>dashboardKpiActivePOs}"
+                        subheader="{i18n>dashboardKpiActivePOsDesc}"
+                        press=".onNavigateToPurchaseOrders"
+                        class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalPOsVal"
+                                value="{dashboardView>/totalCount}"
+                                icon="sap-icon://sales-order"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiSuppliersTile"
+                        header="{i18n>dashboardKpiSuppliers}"
+                        subheader="{i18n>dashboardKpiSuppliersDesc}"
+                        press=".onNavigateToPurchaseOrders"
+                        class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiSuppliersVal"
+                                value="{dashboardView>/supplierCount}"
+                                icon="sap-icon://supplier"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiSpendTile"
+                        header="{i18n>dashboardKpiSpend}"
+                        subheader="{i18n>dashboardKpiSpendDesc}"
+                        press=".onNavigateToPurchaseOrders"
+                        class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiSpendVal"
+                                value="{dashboardView>/totalSpend}"
+                                scale="M $"
+                                icon="sap-icon://money-bills"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiCompleteTile"
+                        header="{i18n>dashboardKpiRate}"
+                        subheader="{i18n>dashboardKpiRateDesc}"
+                        press=".onNavigateToPurchaseOrders"
+                        class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiCompleteVal"
+                                value="{dashboardView>/completeRate}"
+                                scale="%"
+                                icon="sap-icon://accept"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiSystemTile"
+                        header="{i18n>dashboardKpiSystem}"
+                        subheader="{i18n>dashboardKpiSystemDesc}"
+                        class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiSystemVal"
+                                value="100"
+                                scale="%"
+                                icon="sap-icon://database"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+                </Panel>
+
+
+
+                <!-- Synchronized Purchase Orders Table Preview -->
+                <Table
+                    id="recentOrdersTable"
+                    items="{
+                        path: '/PurchaseOrders',
+                        parameters: {
+                            $count: true
+                        },
+                        sorter: { path: 'PurchaseOrder', descending: false }
+                    }"
+                    growing="true"
+                    growingThreshold="10"
+                    mode="SingleSelectMaster"
+                    itemPress=".onItemPress"
+                    sticky="ColumnHeaders,HeaderToolbar">
+                    <headerToolbar>
+                        <OverflowToolbar id="recentTableToolbar">
+                            <Title
+                                id="recentTableTitle"
+                                text="{i18n>dashboardRecentTitle}"
+                                level="H3" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="recentSearchField"
+                                placeholder="{i18n>searchPlaceholder}"
+                                width="300px"
+                                search=".onSearch"
+                                liveChange=".onSearch" />
+                            <Button
+                                id="btnViewAllPOs"
+                                text="{i18n>dashboardViewAll}"
+                                type="Transparent"
+                                press=".onNavigateToPurchaseOrders" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column id="colDashPO">
+                            <Text text="{i18n>colPurchaseOrder}" />
+                        </Column>
+                        <Column id="colDashSup" minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>colSupplier}" />
+                        </Column>
+                        <Column id="colDashCo" minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>colCompany}" />
+                        </Column>
+                        <Column id="colDashOrg" minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>colPurchasingOrg}" />
+                        </Column>
+                        <Column id="colDashDate" minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>colCreationDate}" />
+                        </Column>
+                        <Column id="colDashStat" hAlign="End">
+                            <Text text="{i18n>colStatus}" />
+                        </Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem
+                            id="dashPoRow"
+                            type="Navigation">
+                            <cells>
+                                <ObjectIdentifier
+                                    id="dashPoId"
+                                    title="{PurchaseOrder}"
+                                    text="{PurchaseOrderType}" />
+                                <ObjectIdentifier
+                                    id="dashPoSupplier"
+                                    title="{SupplierName}"
+                                    text="{Supplier}" />
+                                <Text
+                                    id="dashPoCompany"
+                                    text="{CompanyCode} ({CompanyCodeName})" />
+                                <Text
+                                    id="dashPoOrg"
+                                    text="{PurchasingOrganization} / {PurchasingGroup}" />
+                                <Text
+                                    id="dashPoDate"
+                                    text="{
+                                        path: 'CreationDate',
+                                        formatter: '.formatter.formatDate'
+                                    }" />
+                                <ObjectStatus
+                                    id="dashPoStatus"
+                                    text="{
+                                        path: 'PurchasingCompletenessStatus',
+                                        formatter: '.formatter.completenessText'
+                                    }"
+                                    state="{
+                                        path: 'PurchasingCompletenessStatus',
+                                        formatter: '.formatter.completenessState'
+                                    }"
+                                    icon="{
+                                        path: 'PurchasingCompletenessStatus',
+                                        formatter: '.formatter.completenessIcon'
+                                    }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

@@ -1,0 +1,15 @@
+{
+  "name": "saps4hana-fiori-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SAP S/4HANA Full Stack Fiori Application",
+  "scripts": {
+    "start": "ui5 serve --open index.html",
+    "build": "ui5 build --all",
+    "lint": "ui5lint"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0",
+    "@ui5/linter": "^1.23.5"
+  }
+}

@@ -1,0 +1,88 @@
+<mvc:View
+    controllerName="saps4hana.fiori.controller.Login"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+    <Page
+        id="loginPage"
+        showHeader="false"
+        enableScrolling="false">
+        <content>
+            <VBox
+                id="loginCenterBox"
+                height="100%"
+                alignItems="Center"
+                justifyContent="Center">
+                
+                <Panel id="loginPanel" width="400px" class="sapUiResponsiveMargin">
+                    <headerToolbar>
+                        <Toolbar>
+                            <core:Icon src="sap-icon://dimension" />
+                            <Title text="SAP S/4HANA" level="H2" />
+                        </Toolbar>
+                    </headerToolbar>
+                    <content>
+                        <MessageStrip
+                            id="loginMessageStrip"
+                            text="{loginView>/errorMessage}"
+                            type="Error"
+                            showIcon="true"
+                            showCloseButton="true"
+                            visible="{loginView>/hasError}"
+                            close=".onDismissError"
+                            class="sapUiSmallMarginBottom" />
+
+                        <form:SimpleForm
+                            id="loginForm"
+                            editable="true"
+                            layout="ColumnLayout"
+                            columnsM="1"
+                            columnsL="1"
+                            columnsXL="1">
+                            <form:content>
+                                <Label text="{i18n>loginUsername}" required="true" labelFor="inputUsername" />
+                                <Input
+                                    id="inputUsername"
+                                    value="{loginView>/username}"
+                                    placeholder="{i18n>loginUsernamePlaceholder}"
+                                    valueState="{loginView>/usernameState}"
+                                    valueStateText="{loginView>/usernameStateText}"
+                                    liveChange=".onInputChange"
+                                    submit=".onLogin" />
+                                
+                                <Label text="{i18n>loginPassword}" required="true" labelFor="inputPassword" />
+                                <Input
+                                    id="inputPassword"
+                                    type="Password"
+                                    value="{loginView>/password}"
+                                    placeholder="{i18n>loginPasswordPlaceholder}"
+                                    valueState="{loginView>/passwordState}"
+                                    valueStateText="{loginView>/passwordStateText}"
+                                    liveChange=".onInputChange"
+                                    submit=".onLogin" />
+                                
+                                <Label text="" />
+                                <CheckBox
+                                    id="chkRemember"
+                                    text="{i18n>loginRememberMe}"
+                                    selected="{loginView>/rememberMe}" />
+                                
+                                <Label text="" />
+                                <Button
+                                    id="btnLogin"
+                                    text="{i18n>loginBtnSignIn}"
+                                    type="Emphasized"
+                                    icon="sap-icon://log-in"
+                                    press=".onLogin"
+                                    busy="{loginView>/isBusy}" />
+                            </form:content>
+                        </form:SimpleForm>
+                            
+                    </content>
+                </Panel>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>
