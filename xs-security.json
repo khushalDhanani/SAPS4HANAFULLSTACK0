@@ -4,6 +4,14 @@
   "description": "Security profile for SAP S/4HANA Full-Stack Fiori and CAP application",
   "scopes": [
     {
+      "name": "$XSAPPNAME.Viewer",
+      "description": "View Purchase Orders and Analytics"
+    },
+    {
+      "name": "$XSAPPNAME.PurchasingManager",
+      "description": "Create and Manage Purchase Orders"
+    },
+    {
       "name": "$XSAPPNAME.User",
       "description": "Standard User Access to Purchase Order Application"
     },
@@ -18,6 +26,7 @@
       "name": "Viewer",
       "description": "View Purchase Orders and Analytics",
       "scope-references": [
+        "$XSAPPNAME.Viewer",
         "$XSAPPNAME.User"
       ]
     },
@@ -25,8 +34,9 @@
       "name": "PurchasingManager",
       "description": "Create and Manage Purchase Orders",
       "scope-references": [
-        "$XSAPPNAME.User",
-        "$XSAPPNAME.Admin"
+        "$XSAPPNAME.PurchasingManager",
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.User"
       ]
     }
   ],

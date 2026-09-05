@@ -2,7 +2,6 @@
   "name": "saps4hanafullstack",
   "version": "1.0.0",
   "description": "SAP S/4HANA Procurement Workspace",
-  "main": "server.js",
   "scripts": {
     "start": "cds watch",
     "watch": "cds watch",
@@ -10,6 +9,7 @@
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "jest test/e2e --runInBand",
+    "validate": "mbt validate",
     "validate:mta": "mbt validate",
     "build:mta": "mbt build"
   },
@@ -44,22 +44,6 @@
               "roles": [
                 "User",
                 "Viewer"
-              ]
-            },
-            "KHUSHAL": {
-              "roles": [
-                "User",
-                "Admin",
-                "Viewer",
-                "PurchasingManager"
-              ]
-            },
-            "khushal": {
-              "roles": [
-                "User",
-                "Admin",
-                "Viewer",
-                "PurchasingManager"
               ]
             }
           }

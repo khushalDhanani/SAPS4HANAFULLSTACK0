@@ -1,6 +1,61 @@
 
 # Changes Log
 
+## 2026-09-05 13:42 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 10B — Remove Unnecessary Static Configuration:
+  1. Removed redundant `"main": "server.js"` from root `package.json`: verified CAP runtime automatically discovers and bootstraps `server.js` from root conventions without an explicit package entry point.
+  2. Added `"validate": "mbt validate"` script alias to `scripts` in `package.json` to support direct `npm run validate` invocation alongside `"validate:mta"`.
+  3. Verified description is `"SAP S/4HANA Procurement Workspace"` and verified empty metadata (`keywords: []`, `author: ""`) remains removed.
+  4. Verified `@sap-cloud-sdk/resilience` remains completely removed from `package.json` with 0 code references.
+  5. Verified mock users under `[development]` and `[test]` strictly contain canonical test identities (`alice`, `bob`) with zero personal usernames (`KHUSHAL`, `khushal`).
+  6. Verified legitimate static application configuration is preserved in `cds.requires`:
+     - `C_PURCHASEORDER_FS_SRV`: `kind: "odata-v2"`, model, destination `S4HANA_PO_API`, path `/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV`.
+     - `MM_PUR_PO_MAINT_V2_SRV`: `kind: "odata-v2"`, model, destination `S4HANA_PO_API`, path `/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV`.
+     - `auth.[production]`: `kind: "jwt"`, `vcap: { "label": "xsuaa" }`.
+  7. Verified security rule: `package.json` contains zero passwords, tokens, client secrets, certificates, or personal production identities.
+- **Files Modified**:
+  - `package.json`
+- **Reason**: Remove redundant static configuration and provide clean MTA validation scripting while safeguarding static service metadata and zero-secrets security rules.
+- **Validation**:
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `cd app/fiori-app && npm run lint`: UI5 linter 0 findings detected (Code 0).
+  - `cd app/fiori-app && npm run build`: UI5 build succeeded in 250 ms (Code 0).
+  - `npm run validate`: MTA descriptor validation passed (`mbt validate`, Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Static configuration cleanly sanitized, full validation pass green.
+
+## 2026-09-05 13:40 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 10 Security Correction — Remove Username-Based Authorization:
+  1. Audited repository for hardcoded username patterns (`user.id ===`, `username ===`, `user.name ===`, `alice`, `bob`, `KHUSHAL`, `khushal`): confirmed zero authorization decisions or role assignments in production application business logic are based on usernames.
+  2. Removed personal mock usernames (`"KHUSHAL"` and `"khushal"`) from `package.json` under `cds.requires.auth.[development].users`, retaining strictly canonical test identities:
+     - `alice`: `["User", "Admin", "Viewer", "PurchasingManager"]`
+     - `bob`: `["User", "Viewer"]`
+  3. Aligned BTP XSUAA scopes and role templates in `xs-security.json`: explicitly added `$XSAPPNAME.Viewer` and `$XSAPPNAME.PurchasingManager` to `"scopes"` and mapped them into the `Viewer` and `PurchasingManager` role templates, ensuring seamless 1-to-1 parity between BTP XSUAA JWT token scopes and CAP `@requires` annotations in production.
+  4. Confirmed production authorization is strictly role/scope based at the CAP service boundary (`srv/mm/purchase-order/service.cds`): `@(requires: ['PurchasingManager', 'Admin'])` on `createPurchaseOrder` and `@(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin'])` on projections/value helps.
+  5. Confirmed authenticated user identity (`resolveUserIdentity(req)`) is used exclusively for the `RequisitionerName` audit tracking field and domain context, and fails closed in production for unauthenticated requests.
+  6. Verified complete architectural separation between: Application Authorization (CAP `@requires` / XSUAA scopes), S/4HANA Technical Connectivity (Cloud SDK / BTP Destination), and S/4HANA Business Authorization (Gateway ABAP authorization objects).
+- **Files Modified**:
+  - `package.json`
+  - `xs-security.json`
+- **Reason**: Remove hardcoded personal mock usernames, ensure production authorization is strictly role/scope-based, and establish exact parity between XSUAA scopes and CAP `@requires` checks.
+- **Validation**:
+  - `git grep -E "(user\.id|username|user\.name)\s*===|user\.id\s*==|username\s*==" -- srv/ app/`: 0 findings (Code 1).
+  - `git grep -i "khushal" -- ":(exclude)WORKSTATUS.md"`: 0 findings (Code 1).
+  - `npx jest test/integration/purchase-order/authorization.test.js --verbose`: 8/8 tests passed (Code 0).
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npm run test:unit`: 10 test suites (81 tests) passed (Code 0).
+  - `npm run test:integration`: 7 test suites (28 tests) passed (Code 0).
+  - `npm run test:e2e`: 1 test suite (7 tests) passed (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run lint` (`app/fiori-app`): UI5 linter 0 findings detected (Code 0).
+  - `npm run build` (`app/fiori-app`): UI5 build succeeded in 298 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Username-based authorization completely eradicated; production security is 100% role/scope-based; all 116 tests green.
+
 ## 2026-09-05 13:35 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 10A — package.json Cleanup:
