@@ -4,7 +4,7 @@
 [![SAPUI5](https://img.shields.io/badge/SAPUI5-v1.120+-E35205.svg)](https://ui5.sap.com)
 [![Cloud SDK](https://img.shields.io/badge/SAP%20Cloud%20SDK-v4-0A6ED1.svg)](https://sap.github.io/cloud-sdk/)
 [![MTA](https://img.shields.io/badge/MTA-Cloud%20Foundry-303030.svg)](https://help.sap.com/docs/BTP)
-[![Tests](https://img.shields.io/badge/Tests-16%20Suites%20Passing-success.svg)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-18%20Suites%20Passing-success.svg)](#testing)
 [![UI5 Linter](https://img.shields.io/badge/UI5%20Linter-0%20Findings-success.svg)](#testing)
 
 An enterprise-grade, full-stack procurement application integrating **SAP Fiori (SAPUI5)** with **SAP S/4HANA (Cloud / On-Premise)** through the **SAP Cloud Application Programming Model (CAP)** and **SAP Business Technology Platform (BTP)**.
@@ -133,7 +133,7 @@ flowchart TD
 | **Frontend** | SAPUI5 | 1.120+ | Responsive SAP Fiori UX and control library |
 | **Frontend Tooling** | `@ui5/cli`, `@ui5/linter` | 4.x / 1.x | UI5 local server, build packaging, and static analysis |
 | **Backend Framework** | SAP Cloud Application Programming (CAP) | Node.js `@sap/cds` v10 | OData V4 service model, routing, and business logic |
-| **SAP Integration** | SAP Cloud SDK | v4.x | BTP Destination lookup, HTTP client, resilience, and retry |
+| **SAP Integration** | SAP Cloud SDK | v4.x | BTP Destination lookup and HTTP client |
 | **Local Persistence** | `@cap-js/sqlite` | 3.x | Lightweight local SQLite database for mock testing |
 | **Security & Auth** | SAP XSUAA (`@sap/xssec`, Approuter) | Dedicated | OAuth 2.0 JWT validation, RBAC, and route authentication |
 | **Deployment / MTA** | Cloud MTA Build Tool (`mbt`) | 1.2+ | Multi-Target Application archive packaging for Cloud Foundry |
