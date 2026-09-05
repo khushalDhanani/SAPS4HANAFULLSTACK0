@@ -36,7 +36,7 @@ sap.ui.define([
                 },
                 items: [
                     {
-                        PurchaseOrderItem: "1",
+                        PurchaseOrderItem: "10",
                         PurchaseOrderItemCategory: "0",
                         AccountAssignmentCategory: "",
                         Material: "",
@@ -98,7 +98,12 @@ sap.ui.define([
                 confirm: function (oConfirmEvent) {
                     var oSelectedItem = oConfirmEvent.getParameter("selectedItem");
                     if (oSelectedItem) {
-                        oInput.setValue(oSelectedItem.getTitle());
+                        var sKey = oSelectedItem.getTitle();
+                        oInput.setValue(sKey);
+                        var oBinding = oInput.getBinding("value");
+                        if (oBinding) {
+                            oBinding.setValue(sKey);
+                        }
                     }
                 }
             });

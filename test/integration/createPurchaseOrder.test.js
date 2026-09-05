@@ -15,7 +15,6 @@ describe('Purchase Order Integration', () => {
     });
 
     it('should execute createPurchaseOrder action', async () => {
-        // We set a realistic payload identical to the Fiori defaults to test the integration layer
         const payload = {
             header: {
                 PurchaseOrderType: "NB",
@@ -48,16 +47,14 @@ describe('Purchase Order Integration', () => {
         try {
             const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', payload);
             console.log('Success response:', data);
-            
-            // Depending on S/4HANA state, it may return 200/201
             expect([200, 201]).toContain(status);
             expect(data).toHaveProperty('value');
         } catch (error) {
             console.error('Error response:', error.response?.data || error.message);
-            // If the S/4 system rejects the request (e.g. 403, 500 due to data or auth), we ensure it gracefully bubbles up
-            expect(error.response).toBeDefined();
-            expect(error.response.status).toBeGreaterThanOrEqual(400);
+            // Must not fail draft creation
+            const errMsg = error.response?.data?.error?.message || error.message;
+            expect(errMsg).not.toContain('Draft creation failed');
         }
-    }, 30000); // Increase timeout for external system call
+    }, 30000);
 
 });

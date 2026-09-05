@@ -45,5 +45,24 @@ if (process.env.S4_DESTINATION_URL) {
     };
 }
 
+// Handle UI5 Layered Repository (LRep / Flexibility) requests in local dev to eliminate 404 console errors
+cds.on('bootstrap', (app) => {
+    app.get('/sap/bc/lrep/flex/data/:appId', (req, res) => {
+        res.json({
+            changes: [],
+            contexts: [],
+            loadModules: false
+        });
+    });
+    app.get('/sap/bc/lrep/flex/settings', (req, res) => {
+        res.json({
+            isKeyUser: false,
+            isAtoAvailable: false,
+            isAtoDone: false,
+            isProductiveSystem: false
+        });
+    });
+});
+
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;
