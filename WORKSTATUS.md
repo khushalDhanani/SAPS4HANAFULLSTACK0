@@ -1,6 +1,59 @@
 
 # Changes Log
 
+## 2026-09-05 12:45 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 3 — Establish SAP MM → Purchase Order Module Boundary:
+  1. Restructured backend MM business logic into `srv/mm/purchase-order/` containing `service.cds`, `service.js`, `handlers/purchaseOrder.handler.js`, `validation/purchaseOrder.validation.js`, and `mapping/purchaseOrder.mapper.js`. Removed empty legacy directories `srv/validation/` and `srv/mapping/`.
+  2. Maintained root `srv/service.cds` and `srv/service.js` delegating to MM Purchase Order module, preserving external `/odata/v4/purchase-order/` service contract and generic value help handlers.
+  3. Relocated S/4HANA PO integration components into `srv/integration/s4hana/mm/purchase-order/` (`PurchaseOrderAdapter.js`, `PurchaseOrderMapper.js`), keeping shared S/4 infrastructure (`SessionContext.js`, `S4ErrorMapper.js`, `AuthAdapter.js`) in `srv/integration/s4hana/`.
+  4. Restructured UI5 frontend into MM module boundary `app/fiori-app/webapp/modules/mm/purchase-order/` (`controller/`, `view/`, `model/`, `service/`).
+  5. Updated `manifest.json` routing targets (`TargetPurchaseOrders`, `TargetCreatePurchaseOrder`) to point to `saps4hana.fiori.modules.mm.purchase-order.view`. Preserved standard routing behavior (Dashboard -> Purchase Orders -> Create Purchase Order).
+  6. Reorganized Purchase Order test suites under repository-level `test/` (`test/unit/purchase-order/`, `test/integration/purchase-order/`, `test/e2e/purchase-order/`), updating all relative require paths and `cds.test` paths. Retained shared tests at `test/unit/` and `test/integration/`.
+- **Files Moved**:
+  - `srv/handlers/purchaseOrder.handler.js` -> `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`
+  - `srv/validation/purchaseOrder.validation.js` -> `srv/mm/purchase-order/validation/purchaseOrder.validation.js`
+  - `srv/mapping/purchaseOrder.mapper.js` -> `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`
+  - `srv/integration/s4hana/PurchaseOrderAdapter.js` -> `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`
+  - `srv/integration/s4hana/PurchaseOrderMapper.js` -> `srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper.js`
+  - `app/fiori-app/webapp/controller/PurchaseOrders.controller.js` -> `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+  - `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js` -> `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+  - `app/fiori-app/webapp/view/PurchaseOrders.view.xml` -> `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/view/CreatePurchaseOrder.view.xml` -> `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+  - `app/fiori-app/webapp/model/PurchaseOrderModel.js` -> `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+  - `app/fiori-app/webapp/service/PurchaseOrderService.js` -> `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`
+  - `test/unit/dateConversion.test.js` -> `test/unit/purchase-order/dateConversion.test.js`
+  - `test/unit/domainMapping.test.js` -> `test/unit/purchase-order/domainMapping.test.js`
+  - `test/unit/itemNumbering.test.js` -> `test/unit/purchase-order/itemNumbering.test.js`
+  - `test/unit/payloadMapping.test.js` -> `test/unit/purchase-order/payloadMapping.test.js`
+  - `test/unit/quantityConversion.test.js` -> `test/unit/purchase-order/quantityConversion.test.js`
+  - `test/unit/userIdentity.test.js` -> `test/unit/purchase-order/userIdentity.test.js`
+  - `test/unit/validation.test.js` -> `test/unit/purchase-order/validation.test.js`
+  - `test/integration/activation.test.js` -> `test/integration/purchase-order/activation.test.js`
+  - `test/integration/createPurchaseOrder.test.js` -> `test/integration/purchase-order/createPurchaseOrder.test.js`
+  - `test/integration/draftCreation.test.js` -> `test/integration/purchase-order/draftCreation.test.js`
+  - `test/integration/s4Read.test.js` -> `test/integration/purchase-order/s4Read.test.js`
+  - `test/e2e/createPurchaseOrderFlow.test.js` -> `test/e2e/purchase-order/createPurchaseOrderFlow.test.js`
+- **Files Created**:
+  - `srv/mm/purchase-order/service.cds`
+  - `srv/mm/purchase-order/service.js`
+- **Files Modified**:
+  - `srv/service.cds`
+  - `srv/service.js`
+  - `srv/handlers/valueHelp.handler.js`
+  - `app/fiori-app/webapp/manifest.json`
+  - `test/unit/sessionContext.test.js`
+  - `test/integration/valueHelps.test.js`
+- **Validation**:
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npx cds build --production`: Succeeded (Code 0).
+  - `npm test`: All 17 test suites (102 tests) passed (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 314 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. SAP MM -> Purchase Order module boundary cleanly established across backend, integration, frontend, and tests without functional change or regression.
+
 ## 2026-09-05 12:35 IST
 - **Agent**: Antigravity
 - **Change**: Executed Phase 3 Security & Architectural Boundary Hardening:
