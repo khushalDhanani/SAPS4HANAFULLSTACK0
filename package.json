@@ -6,7 +6,9 @@
   "scripts": {
     "start": "cds watch",
     "watch": "cds watch",
-    "test": "jest"
+    "test": "jest",
+    "validate:mta": "mbt validate",
+    "build:mta": "mbt build"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,11 @@
+{
+  "name": "saps4hana-approuter",
+  "version": "1.0.0",
+  "description": "Application Router for SAP S/4HANA Full-Stack Fiori & CAP",
+  "dependencies": {
+    "@sap/approuter": "^22.0.0"
+  },
+  "scripts": {
+    "start": "node node_modules/@sap/approuter/approuter.js"
+  }
+}

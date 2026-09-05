@@ -1,0 +1,39 @@
+{
+  "xsappname": "SAPS4HANAFULLSTACK",
+  "tenant-mode": "dedicated",
+  "description": "Security profile for SAP S/4HANA Full-Stack Fiori and CAP application",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.User",
+      "description": "Standard User Access to Purchase Order Application"
+    },
+    {
+      "name": "$XSAPPNAME.Admin",
+      "description": "Administrator Access to Purchase Order Application"
+    }
+  ],
+  "attributes": [],
+  "role-templates": [
+    {
+      "name": "Viewer",
+      "description": "View Purchase Orders and Analytics",
+      "scope-references": [
+        "$XSAPPNAME.User"
+      ]
+    },
+    {
+      "name": "PurchasingManager",
+      "description": "Create and Manage Purchase Orders",
+      "scope-references": [
+        "$XSAPPNAME.User",
+        "$XSAPPNAME.Admin"
+      ]
+    }
+  ],
+  "oauth2-configuration": {
+    "credential-types": [
+      "binding-secret",
+      "x509"
+    ]
+  }
+}

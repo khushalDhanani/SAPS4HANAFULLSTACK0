@@ -1,0 +1,5 @@
+{
+  "service": "connectivity",
+  "service-plan": "lite",
+  "description": "BTP Connectivity Service binding for SAP Cloud Connector communication"
+}
