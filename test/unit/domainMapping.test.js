@@ -38,7 +38,24 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
         expect(item.UnitOfMeasure).toBe('PC');
         expect(item.NetPriceAmount).toBe('20.00');
         expect(item.NetAmount).toBe('100.00'); // 5 * 20
-        expect(item.RequisitionerName).toBe('Fiori User');
+        expect(item.RequisitionerName).toBe('SYSTEM');
+    });
+
+    it('should derive requisitioner name from authenticated user context', () => {
+        const rawData = {
+            header: validPayload.header,
+            items: [
+                {
+                    Material: 'TG11',
+                    Plant: '1010',
+                    OrderQuantity: '5',
+                    NetPriceAmount: '20'
+                }
+            ]
+        };
+
+        const result = normalizePurchaseOrderData(rawData, { user: 'AUTH_BUYER' });
+        expect(result.items[0].RequisitionerName).toBe('AUTH_BUYER');
     });
 
     it('should preserve explicit custom item numbers and requisitioner name', () => {

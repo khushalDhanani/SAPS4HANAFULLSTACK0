@@ -78,7 +78,7 @@ function formatPriceAmount(priceInput) {
  * @param {Array<Object>} items
  * @returns {Object}
  */
-function mapToS4Payload(header, items) {
+function mapToS4Payload(header, items, options = {}) {
     if (!header) {
         throw new Error('Header is required for S/4 payload mapping');
     }
@@ -86,6 +86,7 @@ function mapToS4Payload(header, items) {
         throw new Error('At least one item is required for S/4 payload mapping');
     }
 
+    const defaultRequisitioner = options.user || 'SYSTEM';
     const poDateFormatted = formatDateToODataV2(header.DocumentDate);
 
     const payload = {
@@ -111,7 +112,7 @@ function mapToS4Payload(header, items) {
                 OrderQuantity: formattedQty,
                 PurchaseOrderQuantityUnit: item.UnitOfMeasure,
                 NetPriceAmount: formattedPrice,
-                RequisitionerName: item.RequisitionerName || 'Fiori User',
+                RequisitionerName: item.RequisitionerName || defaultRequisitioner,
                 ...(item.StorageLocation ? { StorageLocation: item.StorageLocation } : {}),
                 ...(item.MaterialGroup ? { MaterialGroup: item.MaterialGroup } : {}),
                 ...(item.PurchaseOrderItemCategory ? { PurchaseOrderItemCategory: item.PurchaseOrderItemCategory } : {}),

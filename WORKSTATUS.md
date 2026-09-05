@@ -1,6 +1,77 @@
 
 # Changes Log
 
+## 2026-09-05 11:58 IST
+- **Agent**: Antigravity
+- **Change**: Refactored `CreatePurchaseOrder.controller.js` by decoupling responsibilities into modular single-responsibility units: client-side state (`PurchaseOrderModel.js`), Value-Help metadata and dialogs (`ValueHelpService.js`), and CAP HTTP communication (`PurchaseOrderApi.js`).
+- **Files**:
+  - `app/fiori-app/webapp/model/PurchaseOrderModel.js`
+  - `app/fiori-app/webapp/service/ValueHelpService.js`
+  - `app/fiori-app/webapp/service/PurchaseOrderApi.js`
+  - `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`
+  - `WORKSTATUS.md`
+- **Reason**: `CreatePurchaseOrder.controller.js` was becoming a 324-line "god controller" combining model state initialization, line-item arrays, re-numbering, calculations, value-help dictionaries, dialog building, search filtering, UX validation, HTTP `fetch`, and error handling. This violated separation of concerns and generated `no-globals` errors in `ui5lint`.
+- **Fix & Enhancements**:
+  1. Created `app/fiori-app/webapp/model/PurchaseOrderModel.js`:
+     - Encapsulates `createInitialModel(sUser)`, `addItem(oModel, sUser)`, `deleteItem(oModel, iIndex)` with automatic 10-increment re-numbering, `calculateItemNetAmount(oModel, sPath)`, `validateUI(oData)`, and `getCurrentUserName(oComponent)` with safe FLP container and component user model resolution.
+  2. Created `app/fiori-app/webapp/service/ValueHelpService.js`:
+     - Encapsulates value-help dictionary metadata, `openValueHelp(oView, oInput, fnCallback)` instantiating `SelectDialog` with imported `StandardListItem`, and `applySuggestionFilter(oInput, sValue)`.
+  3. Created `app/fiori-app/webapp/service/PurchaseOrderApi.js`:
+     - Encapsulates CAP action invocation `POST /odata/v4/purchase-order/createPurchaseOrder` and parses JSON OData V4 errors and messages safely.
+  4. Refactored `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`:
+     - Reduced to ~90 lines of purely UI interaction, event delegation, and navigation.
+     - Replaced global `sap.ui.core.BusyIndicator` with direct AMD import `"sap/ui/core/BusyIndicator"`.
+- **Validation**:
+  - `node -c app/fiori-app/webapp/model/PurchaseOrderModel.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/service/ValueHelpService.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/service/PurchaseOrderApi.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`: Clean (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! No findings detected (0 errors, 0 warnings).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 397 ms, Component-preload generated.
+  - `npm test`: All 15 test suites (76 tests) passed in 7.65s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Controller decoupled into clean, modular, and UI5-linter compliant components.
+
+## 2026-09-05 11:55 IST
+- **Agent**: Antigravity
+- **Change**: Eliminated hardcoded "Fiori User" requisitioner. Dynamically derived requester from authenticated identity hierarchy (`XSUAA user -> CAP req.user -> business identity -> S/4 Requisitioner`).
+- **Files**:
+  - `srv/handlers/purchaseOrder.handler.js`
+  - `srv/mapping/purchaseOrder.mapper.js`
+  - `srv/integration/s4hana/PurchaseOrderMapper.js`
+  - `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`
+  - `test/unit/domainMapping.test.js`
+  - `test/unit/payloadMapping.test.js`
+  - `test/unit/userIdentity.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: The user requested removing the temporary workaround `RequisitionerName: item.RequisitionerName || "Fiori User"`. In production SAP S/4HANA architectures, the requisitioner must not be hardcoded to a static string across all POs. It should be dynamically derived from the authenticated security context: XSUAA JWT token attributes (`logon_name`, `email`) -> CAP `req.user.id` -> `req.user.name` -> custom forwarded headers -> fallback to configured service user (`process.env.S4_USER`) -> safe unauthenticated default (`'SYSTEM'`). In Fiori UI, newly added items also inherit the logged-in user identity from FLP or the user model.
+- **Fix & Enhancements**:
+  1. In `srv/handlers/purchaseOrder.handler.js`:
+     - Added `resolveUserIdentity(req)` helper to extract authenticated identity from XSUAA token attributes (`req.user.attr.logon_name`, `req.user.attr.email`), CAP `req.user.id` (excluding `'anonymous'`), `req.user.name`, `x-user-id` header, and environment fallback `S4_USER` / `'SYSTEM'`.
+     - Passed resolved authenticated user context into `normalizePurchaseOrderData(req.data, { user: authenticatedUser })` and `mapToS4Payload(normalized.header, normalized.items, { user: authenticatedUser })`.
+     - Exported `resolveUserIdentity` helper.
+  2. In `srv/mapping/purchaseOrder.mapper.js`:
+     - Updated `normalizePurchaseOrderData(data, context = {})` to derive `defaultRequisitioner` from `context.user` (defaulting to `'SYSTEM'`), removing hardcoded `"Fiori User"`.
+  3. In `srv/integration/s4hana/PurchaseOrderMapper.js`:
+     - Updated `mapToS4Payload(header, items, options = {})` to derive `defaultRequisitioner` from `options.user || 'SYSTEM'`.
+  4. In `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`:
+     - Added `_getCurrentUserName()` method to extract user identity from `sap.ushell.Container.getUser().getId()` (when running in Fiori Launchpad) or owner component's user model.
+     - Initialized `RequisitionerName` on new items in `_resetModel()` and `onAddItem()` using `_getCurrentUserName()`.
+  5. In `test/unit/domainMapping.test.js`:
+     - Updated unit tests to verify `RequisitionerName` resolution from context user (`{ user: 'AUTH_BUYER' }`), fallback to `'SYSTEM'`, and preservation of explicit custom requisitioner names.
+  6. In `test/unit/payloadMapping.test.js`:
+     - Added unit tests for `options.user` handling, `'SYSTEM'` fallback, and explicit `item.RequisitionerName` precedence.
+  7. In `test/unit/userIdentity.test.js`:
+     - Added unit test suite with 8 tests thoroughly validating identity resolution across XSUAA attributes, CAP user objects, custom headers, environment fallbacks, and null/undefined handling.
+- **Validation**:
+  - `node -c srv/handlers/purchaseOrder.handler.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`: Clean (Code 0).
+  - `npm test`: All 15 test suites (76 tests) passed in 7.12s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Zero hardcoded "Fiori User" strings remain. Requester identity is dynamically derived end-to-end through the authenticated identity chain.
+
 ## 2026-09-05 11:50 IST
 - **Agent**: Antigravity
 - **Change**: Strengthened Purchase Order validation across the full stack: friendly immediate UX validation in Fiori UI, authoritative business validation in CAP, and ERP-specific Gateway error translation.

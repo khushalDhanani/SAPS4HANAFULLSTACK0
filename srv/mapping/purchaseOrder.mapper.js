@@ -5,16 +5,23 @@
 
 /**
  * Normalizes and sanitizes incoming Purchase Order creation data at the CAP domain level.
+ * Derives the default requisitioner from the authenticated user context rather than a static string.
  *
  * @param {Object} data
  * @param {Object} data.header
  * @param {Array<Object>} data.items
+ * @param {Object} [context] - Execution context containing authenticated user
+ * @param {string} [context.user] - Authenticated user identity (e.g., from req.user)
  * @returns {{ header: Object, items: Array<Object> }}
  */
-function normalizePurchaseOrderData(data) {
+function normalizePurchaseOrderData(data, context = {}) {
     if (!data || !data.header || !Array.isArray(data.items)) {
         return data;
     }
+
+    const defaultRequisitioner = (context.user && String(context.user).trim() !== '')
+        ? String(context.user).trim()
+        : 'SYSTEM';
 
     const header = {
         PurchaseOrderType: String(data.header.PurchaseOrderType || 'NB').trim(),
@@ -34,6 +41,9 @@ function normalizePurchaseOrderData(data) {
         const qty = Number(item.OrderQuantity) || 1;
         const price = Number(item.NetPriceAmount) || 0;
         const calculatedNetAmount = (qty * price).toFixed(2);
+        const itemRequisitioner = (item.RequisitionerName && String(item.RequisitionerName).trim() !== '')
+            ? String(item.RequisitionerName).trim()
+            : defaultRequisitioner;
 
         return {
             PurchaseOrderItem: itemNo,
@@ -44,7 +54,7 @@ function normalizePurchaseOrderData(data) {
             UnitOfMeasure: String(item.UnitOfMeasure || 'PC').trim().toUpperCase(),
             NetPriceAmount: price.toFixed(2),
             NetAmount: item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount,
-            RequisitionerName: item.RequisitionerName ? String(item.RequisitionerName).trim() : 'Fiori User',
+            RequisitionerName: itemRequisitioner,
             MaterialGroup: item.MaterialGroup ? String(item.MaterialGroup).trim() : undefined,
             PurchaseOrderItemCategory: item.PurchaseOrderItemCategory ? String(item.PurchaseOrderItemCategory).trim() : undefined,
             AccountAssignmentCategory: item.AccountAssignmentCategory ? String(item.AccountAssignmentCategory).trim() : undefined,

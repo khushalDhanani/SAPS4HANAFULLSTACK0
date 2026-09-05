@@ -105,4 +105,36 @@ describe('Unit: Payload Mapping', () => {
         expect(() => mapToS4Payload(validPayload.header, null)).toThrow('At least one item is required');
     });
 
+    it('should derive RequisitionerName from options.user or fallback to SYSTEM when item RequisitionerName is absent', () => {
+        const itemWithoutReq = [
+            {
+                Material: 'TG11',
+                Plant: '1010',
+                OrderQuantity: 1,
+                UnitOfMeasure: 'PC'
+            }
+        ];
+
+        // 1. With options.user
+        const payloadWithUser = mapToS4Payload(validPayload.header, itemWithoutReq, { user: 'AUTH_TESTER' });
+        expect(payloadWithUser.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('AUTH_TESTER');
+
+        // 2. Without options.user -> fallback to SYSTEM
+        const payloadWithoutUser = mapToS4Payload(validPayload.header, itemWithoutReq);
+        expect(payloadWithoutUser.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('SYSTEM');
+
+        // 3. Explicit item RequisitionerName overrides options.user
+        const itemWithExplicitReq = [
+            {
+                Material: 'TG11',
+                Plant: '1010',
+                OrderQuantity: 1,
+                UnitOfMeasure: 'PC',
+                RequisitionerName: 'CUSTOM_REQ'
+            }
+        ];
+        const payloadWithExplicit = mapToS4Payload(validPayload.header, itemWithExplicitReq, { user: 'AUTH_TESTER' });
+        expect(payloadWithExplicit.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('CUSTOM_REQ');
+    });
+
 });
