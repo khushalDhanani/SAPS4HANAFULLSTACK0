@@ -48,6 +48,22 @@
                 "User",
                 "Viewer"
               ]
+            },
+            "KHUSHAL": {
+              "roles": [
+                "User",
+                "Admin",
+                "Viewer",
+                "PurchasingManager"
+              ]
+            },
+            "khushal": {
+              "roles": [
+                "User",
+                "Admin",
+                "Viewer",
+                "PurchasingManager"
+              ]
             }
           }
         },

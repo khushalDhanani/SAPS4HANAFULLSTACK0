@@ -37,19 +37,25 @@ sap.ui.define([
                     var oError = oEvent.getParameter("error");
                     var oStatus = that.byId("connectionStatus");
                     if (oError) {
+                        var iStatus = oError.statusCode || oError.status || (oError.response && oError.response.statusCode) || 500;
+                        var sMessage = oError.message || "Failed to load Purchase Orders from SAP S/4HANA.";
                         if (oStatus) {
                             oStatus.setState("Error");
-                            oStatus.setText("S/4HANA Auth Error (401)");
+                            oStatus.setText(iStatus === 401 ? "S/4HANA Auth Error (401)" : "Connection Error (" + iStatus + ")");
                             oStatus.setIcon("sap-icon://alert");
                         }
-                        MessageBox.error(
-                            "Failed to load Purchase Orders from SAP S/4HANA.\n\n" +
-                            "The SAP S/4HANA Gateway (System DS4, Client 220) rejected the configured credentials with HTTP 401 Unauthorized.\n\n" +
-                            "Action Required:\n" +
-                            "1. Verify that the password in .env.local is current.\n" +
-                            "2. Check transaction SU01 in SAP to ensure user account 'KHUSHAL' is not locked due to failed logon attempts.",
-                            { title: "S/4HANA Authentication Error" }
-                        );
+                        if (iStatus === 401) {
+                            MessageBox.error(
+                                "Failed to load Purchase Orders from SAP S/4HANA.\n\n" +
+                                "The SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\n" +
+                                "Action Required:\n" +
+                                "1. Verify that the password in .env.local is current.\n" +
+                                "2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts.",
+                                { title: "S/4HANA Authentication Error" }
+                            );
+                        } else {
+                            MessageBox.error(sMessage, { title: "Error Loading Purchase Orders" });
+                        }
                     } else if (oStatus) {
                         oStatus.setState("Success");
                         oStatus.setText("Live S/4HANA");

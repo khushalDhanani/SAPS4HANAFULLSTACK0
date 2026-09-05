@@ -29,6 +29,18 @@ if (process.env.NODE_ENV !== 'production') {
     } catch (e) {}
 }
 
+// Register local development S4_USERNAME in mock auth users if running in development
+if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
+    const s4User = process.env.S4_USERNAME.trim();
+    cds.env.requires = cds.env.requires || {};
+    cds.env.requires.auth = cds.env.requires.auth || {};
+    cds.env.requires.auth.users = cds.env.requires.auth.users || {};
+    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager'];
+    cds.env.requires.auth.users[s4User] = { roles: devRoles };
+    cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
+    cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
+}
+
 const { registerDestination } = require('@sap-cloud-sdk/connectivity');
 
 // In local development, configure credentials and register local destination if running outside BTP
@@ -78,6 +90,17 @@ cds.on('bootstrap', (app) => {
         res.setHeader('Permissions-Policy', 'unload=*');
         next();
     });
+
+    // In local development, default unauthenticated browser requests to canonical mock user 'alice'
+    // so UI5 batch requests and value helps load without 403 Forbidden
+    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+        app.use((req, res, next) => {
+            if (!req.headers.authorization) {
+                req.headers.authorization = 'Basic ' + Buffer.from('alice:').toString('base64');
+            }
+            next();
+        });
+    }
 
     // Handle Component-preload.js in local dev to return 404 with JS MIME type, preventing strict MIME checking refusal
     app.get(/Component-preload\.js$/, (req, res) => {

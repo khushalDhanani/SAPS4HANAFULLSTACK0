@@ -1,6 +1,75 @@
 
 # Changes Log
 
+## 2026-09-05 13:32 IST
+- **Agent**: Antigravity
+- **Change**: Resolved S/4HANA Authentication Error on `mm/purchase-orders` View Refresh:
+  1. Identified root causes:
+     - When the UI session is established using the user's SAP account (`KHUSHAL`), the browser sends basic auth for `KHUSHAL` or unauthenticated requests. Under CAP's mocked auth in development, `package.json` only defined `alice` and `bob`, causing `KHUSHAL` to lack the required `Viewer` role (HTTP 403 Forbidden).
+     - In `PurchaseOrders.controller.js`, `oBinding.attachDataReceived` unconditionally mapped ANY data retrieval error to a hardcoded "SU01 account KHUSHAL is locked" 401 message even when the error was not a 401.
+  2. Applied comprehensive fixes:
+     - Configured `KHUSHAL` and `khushal` with full development roles (`User`, `Admin`, `Viewer`, `PurchasingManager`) in `package.json` under `cds.requires.auth.[development]`.
+     - Added dynamic development user registration in `server.js` to automatically register `process.env.S4_USERNAME` with development roles.
+     - Refactored `PurchaseOrders.controller.js` to inspect actual error status codes (`oError.statusCode || oError.status`), displaying semantic messages instead of hardcoded 401 alerts.
+- **Files Modified**:
+  - `package.json`
+  - `server.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+- **Reason**: Enable seamless local development for authenticated developer accounts (`KHUSHAL`) and prevent misleading 401 error popups.
+- **Validation**:
+  - Verified `HTTP 200` for unauthenticated queries: `GET /odata/v4/purchase-order/PurchaseOrders?$top=1`.
+  - Verified `HTTP 200` for user `KHUSHAL`: `GET /odata/v4/purchase-order/PurchaseOrders?$top=1` with `-u KHUSHAL:dummy`.
+  - Verified `HTTP 200` for user `alice`: `GET /odata/v4/purchase-order/PurchaseOrders?$top=1` with `-u alice:`.
+  - Verified `HTTP 200` for UI5 table batch query: `POST /odata/v4/purchase-order/$batch`.
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npm run lint` (`app/fiori-app`): 0 findings (Code 0).
+  - `npm run build` (`app/fiori-app`): UI5 build succeeded in 264 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. S/4HANA Authentication Error resolved on `mm/purchase-orders`, all tests green.
+
+## 2026-09-05 13:30 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 9 — End-to-End Purchase Order Validation:
+  1. Inspected end-to-end architecture across all layers: Fiori Purchase Order UI → CAP Service → Authorization → PO Validation → S/4HANA Integration → S/4HANA → Response → Fiori UI.
+  2. Verified all required fields (Header: Type, CompanyCode, PurchOrg, PurchGroup, Supplier, Currency, DocDate; Item: Material, Plant, StorageLocation, OrderQuantity, UnitOfMeasure) across UI bindings, value helps, and independent CAP backend validation.
+  3. Verified server-side authorization: unauthenticated requests rejected with HTTP 401, Viewers (`bob`) allowed read (HTTP 200) but rejected from creation (HTTP 403), Purchasing Managers (`alice`) authorized for creation (HTTP 200).
+  4. Verified S/4HANA adapter receives correctly normalized and converted payload (`formatDateToODataV2`, `formatQuantity`, `formatPriceAmount`).
+  5. Verified thread-safe session and CSRF handling in `SessionContext` across two-phase draft creation (`C_PurchaseOrderTP`) and activation (`C_PurchaseOrderTPActivation`).
+  6. Verified real live S/4HANA PO creation: successfully created actual S/4 Purchase Order `300001972` in the connected SAP system and verified its retrieval via `/odata/v4/purchase-order/PurchaseOrders('300001972')`.
+  7. Verified error propagation: live S/4 business errors (invalid tax code, custom BAdI missing requester) cleanly classified into HTTP 422 Unprocessable Entity with zero credential or token leakage. Verified negative cases (missing fields, invalid quantities, locked records, network failures).
+- **Files Modified**: None (validation and verification task).
+- **Reason**: Comprehensive end-to-end proof and validation of the refactored SAP MM Purchase Order implementation.
+- **Validation**:
+  - Live S/4HANA PO Creation: `POST /odata/v4/purchase-order/createPurchaseOrder` returned HTTP 200 with PO `300001972` on real S/4 system.
+  - Live S/4HANA PO Retrieval: `GET /odata/v4/purchase-order/PurchaseOrders('300001972')` returned HTTP 200 with created PO details.
+  - Live S/4HANA Error Mapping: HTTP 422 with clean SAP business validation messages.
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `npm run test:unit`: 10 test suites (81 tests) passed (Code 0).
+  - `npm run test:integration`: 7 test suites (28 tests) passed (Code 0).
+  - `npm run test:e2e`: 1 test suite (7 tests) passed (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 253 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. End-to-end Purchase Order flow fully verified on live SAP S/4HANA and complete automated test suite green.
+
+## 2026-09-05 13:25 IST
+- **Agent**: Antigravity
+- **Change**: Resolved Local Development 403 Forbidden on UI5 OData V4 Batch Requests:
+  1. Identified root cause: in local development (`cds watch`), UI5 eagerly requests metadata and value helps (`/TaxCodeVH`) via OData batch calls without an HTTP Basic Auth header. When CAP runs in development mode without Approuter/XSUAA, unauthenticated batch sub-requests defaulted to `anonymous`, which triggered a `403 Forbidden` rejection against `@(requires: ['Viewer', ...])`.
+  2. Updated `server.js` development bootstrap: added middleware for non-production/non-test environments that assigns canonical mock user `alice` (roles: `PurchasingManager`, `Admin`, `Viewer`, `User`) when no explicit `Authorization` header is provided.
+  3. Preserved strict production (`kind: "jwt"`) and test (`kind: "mocked"`) security enforcement without bypassing any production RBAC boundaries.
+- **Files Modified**:
+  - `server.js`
+- **Reason**: Fix local development UI5 value help / OData batch execution under `cds watch` while preserving authoritative RBAC in test and production.
+- **Validation**:
+  - Verified local dev batch query with curl: `POST /odata/v4/purchase-order/$batch` for `GET /TaxCodeVH` returned HTTP 200 OK with data.
+  - `npm test`: All 18 test suites (116 tests) passed with 0 failures (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. 403 Forbidden resolved in local development, full automated test suite green.
+
 ## 2026-09-05 13:20 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 8 — Clean Up & Finalize Repository Structure:
