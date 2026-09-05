@@ -30,18 +30,8 @@ modules:
           srv-url: ${default-url}
     requires:
       - name: saps4hana-auth
-      - name: saps4hana-db
       - name: saps4hana-connectivity
       - name: saps4hana-destination
-
-  # ------------------ DATABASE DEPLOYER (HANA) ------------------
-  - name: saps4hana-db-deployer
-    type: hdb
-    path: gen/db
-    parameters:
-      buildpack: nodejs_buildpack
-    requires:
-      - name: saps4hana-db
 
   # ------------------ APPLICATION ROUTER ------------------
   - name: saps4hana-approuter
@@ -121,13 +111,6 @@ resources:
             - https://*~{app-api/app-uri}/**
     requires:
       - name: app-api
-
-  # ------------------ HANA HDI CONTAINER ------------------
-  - name: saps4hana-db
-    type: com.sap.xs.hdi-container
-    parameters:
-      service: hana
-      service-plan: hdi-shared
 
   # ------------------ CONNECTIVITY SERVICE ------------------
   - name: saps4hana-connectivity

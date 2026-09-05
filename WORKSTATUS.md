@@ -1,6 +1,30 @@
 
 # Changes Log
 
+## 2026-09-05 10:52 IST
+- **Agent**: Antigravity
+- **Change**: Formalized Option A (Pure S/4HANA Integration Façade Architecture) — created ADR-0001, ARCHITECTURE.md, annotated db/schema.cds, and streamlined mta.yaml.
+- **Files**:
+  - Created `docs/decisions/ADR-0001-s4-centric-integration-facade.md`
+  - Created `docs/architecture/ARCHITECTURE.md`
+  - Modified `db/schema.cds`
+  - Modified `mta.yaml`
+- **Reason**: The user noted that `db/schema.cds` was empty, indicating the application operates as an integration façade over SAP S/4HANA rather than a local CAP persistence layer. The user requested making the architectural decision explicit between Option A (S/4-centric integration app) and Option B (Full CAP domain application with local HANA persistence), favoring Option A.
+- **Fix**:
+  - Created `docs/decisions/ADR-0001-s4-centric-integration-facade.md` formally recording the decision to operate as Option A (Pure S/4HANA Integration Façade), detailing rationale, trade-offs, single-source-of-truth preservation, and elimination of unnecessary SAP HANA Cloud HDI costs.
+  - Created `docs/architecture/ARCHITECTURE.md` providing full architectural documentation, topology diagram (Fiori UI5 → Approuter → CAP Service → BTP Destination/Connectivity → SAP S/4HANA Gateway), component boundaries, and security model.
+  - Annotated `db/schema.cds` with CDS comments explicitly documenting that the persistence model delegates all state, master data, validation, and document lifecycle management solely to S/4HANA.
+  - Streamlined `mta.yaml` by removing the unused `saps4hana-db-deployer` module, `saps4hana-db` resource (`com.sap.xs.hdi-container`), and the `saps4hana-db` dependency from `saps4hana-srv`, eliminating redundant BTP HDI memory quota allocation.
+- **Validation**:
+  - `npx cds compile db/schema.cds && npx cds compile srv/service.cds`: Succeeded with code 0.
+  - `mbt validate`: Succeeded with code 0 (`INFO validating the MTA project`).
+  - `mbt validate -e mta/extensions/dev/dev.mtaext`: Succeeded with code 0.
+  - `mbt validate -e mta/extensions/test/test.mtaext`: Succeeded with code 0.
+  - `mbt validate -e mta/extensions/prod/prod.mtaext`: Succeeded with code 0.
+  - `npm test`: All 3/3 Jest integration tests passed.
+  - `git diff --check`: Passed with code 0.
+- **Result**: Passed. The S/4-centric façade architectural decision is formally documented, the database layer is explicitly marked, and the deployment topology is optimized.
+
 ## 2026-09-05 10:49 IST
 - **Agent**: Antigravity
 - **Change**: Defined complete SAP BTP MTA deployment topology (`mta.yaml`), approuter module, XSUAA security descriptor, environment extensions, and configuration templates.
