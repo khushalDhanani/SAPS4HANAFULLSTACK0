@@ -62,9 +62,22 @@ sap.ui.define([
             if (!vDate) {
                 return "";
             }
+            if (typeof vDate === "string") {
+                var aParts = vDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (aParts) {
+                    return aParts[3] + "-" + aParts[2] + "-" + aParts[1];
+                }
+                var mODataV2 = vDate.match(/\/Date\((\d+)\)\//);
+                if (mODataV2) {
+                    vDate = parseInt(mODataV2[1], 10);
+                }
+            }
             var oDate = vDate instanceof Date ? vDate : new Date(vDate);
+            if (isNaN(oDate.getTime())) {
+                return vDate;
+            }
             var oDateFormat = DateFormat.getDateInstance({
-                style: "medium"
+                pattern: "dd-MM-yyyy"
             });
             return oDateFormat.format(oDate);
         }

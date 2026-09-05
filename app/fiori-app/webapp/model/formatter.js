@@ -8,12 +8,22 @@ sap.ui.define([
             if (!sDate) {
                 return "";
             }
-            var oDate = new Date(sDate);
+            if (typeof sDate === "string") {
+                var aParts = sDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (aParts) {
+                    return aParts[3] + "-" + aParts[2] + "-" + aParts[1];
+                }
+                var mODataV2 = sDate.match(/\/Date\((\d+)\)\//);
+                if (mODataV2) {
+                    sDate = parseInt(mODataV2[1], 10);
+                }
+            }
+            var oDate = sDate instanceof Date ? sDate : new Date(sDate);
             if (isNaN(oDate.getTime())) {
                 return sDate;
             }
             var oDateFormat = DateFormat.getDateInstance({
-                pattern: "yyyy-MM-dd"
+                pattern: "dd-MM-yyyy"
             });
             return oDateFormat.format(oDate);
         },

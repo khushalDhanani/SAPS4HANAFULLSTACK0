@@ -1,6 +1,92 @@
 
 # Changes Log
 
+## 2026-09-05 15:42 IST
+- **Agent**: Antigravity
+- **Change**: Standardized Date Display Across the Platform to Strict DD-MM-YYYY Standard:
+  1. Common & Module Formatters Standardized:
+     - In `app/fiori-app/webapp/model/formatter.js`, updated `formatDate` from `yyyy-MM-dd` to `dd-MM-yyyy` (`DD-MM-YYYY`). Added timezone-safe ISO string matcher (`YYYY-MM-DD` / ISO timestamps) and OData V2 `/Date(epoch)/` handling so dates reliably display in user-expected `DD-MM-YYYY` across timezones without day shifts.
+     - In `app/fiori-app/webapp/modules/fi/journal-entry/model/formatter.js`, updated `formatDate` from `style: "medium"` to `pattern: "dd-MM-yyyy"`, ensuring financial journal entry views strictly adhere to the uniform platform standard.
+  2. Fiori XML Views & Date Controls:
+     - In `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`, updated FilterBar's `fbDateRange` (`DateRangeSelection`) `displayFormat` from `yyyy-MM-dd` to `dd-MM-yyyy`.
+     - In `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`, updated Document Date's `inDocDate` (`DatePicker`) `displayFormat` from `long` to `dd-MM-yyyy`.
+     - In `PurchaseOrderDetailDialog.fragment.xml` and `PurchaseOrders.view.xml` table rows, existing date text controls bind to `.formatter.formatDate`, now rendering all dates consistently as `DD-MM-YYYY`.
+  3. Formatter Unit Testing:
+     - Created `test/unit/purchase-order/formatter.test.js` covering 11 tests across common/MM formatters and FI formatters, testing ISO dates, ISO datetimes, Date instances, OData V2 epoch dates, empty/invalid values, and display helpers.
+- **Files Modified**:
+  - `app/fiori-app/webapp/model/formatter.js`
+  - `app/fiori-app/webapp/modules/fi/journal-entry/model/formatter.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+  - `test/unit/purchase-order/formatter.test.js` (New)
+- **Reason**: User enforced strict platform rule: "Follow the platform UI standards exactly. The view purpose and data format must be respected. All dates must be displayed as DD-MM-YYYY consistently."
+- **Validation**:
+  - `npm test`: All 22 test suites (164 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 328 ms (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. All dates across the platform are now consistently displayed in DD-MM-YYYY format.
+
+## 2026-09-05 15:37 IST
+- **Agent**: Antigravity
+- **Change**: Updated Purchase Orders Default List Ordering to Prioritize Latest Entered Data First:
+  1. Primary and Secondary Chronological Sorters in View:
+     - In `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml:L211`, updated the `items` binding sorters from `PurchaseOrder desc` to `[{ path: 'CreationDate', descending: true }, { path: 'PurchaseOrder', descending: true }]`.
+     - In SAP S/4HANA, purchase order document numbers are allocated across disparate number ranges (e.g. `30...` for standard/domestic POs vs `90...` for non-valuated POs). S/4HANA `CreationDate` corresponds to the document Entry Date (`ERDAT`/`AEDAT`). Ordering by `CreationDate desc` followed by `PurchaseOrder desc` guarantees that the most recently entered purchase orders appear at the top of the table.
+     - Updated column header `colDate` sort indicator to `Descending` and set `colPO` sort indicator to `None`.
+  2. Controller Sort Initialization & Column Sorting:
+     - In `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+       - Initialized `this._sCurrentSortProperty = "CreationDate"` and `this._bCurrentSortDescending = true` in `onInit`.
+       - In `onSortColumn`, when sorting by `CreationDate`, added secondary sorter `PurchaseOrder` in the same direction (`aSorters.push(new Sorter("PurchaseOrder", this._bCurrentSortDescending))`), preserving deterministic intra-day ordering.
+  3. Test Suite Verification:
+     - Updated `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` to assert initial `CreationDate desc` state, updated initial column indicators (`colDate` Descending, `colPO` None), and updated toggle and multi-column sorting assertions.
+- **Files Modified**:
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+  - `test/unit/purchase-order/purchaseOrdersFilterSort.test.js`
+- **Reason**: User requested seeing latest entered data first on `/mm/purchase-orders` (`PurchaseOrders.view.xml:L211`).
+- **Validation**:
+  - `npm test`: All 21 test suites (153 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 326 ms (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+  - Verified live OData query order: `$orderby=CreationDate desc,PurchaseOrder desc` brings today's newly created documents (`300001975`, `300001974`, etc.) to the top, resolving the issue where older series POs (such as `9000000050` from 2025) previously appeared first.
+- **Result**: Passed. Latest entered data is now loaded first by default.
+
+## 2026-09-05 15:28 IST
+- **Agent**: Antigravity
+- **Change**: Refactored Purchase Orders FilterBar, Table UI, and Enforced Descending (DESC) Record Ordering:
+  1. Descending Sort Order Requirement (/mm/purchase-orders Shows Records Always DESC):
+     - Updated `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml` items binding sorter from `descending: false` to `descending: true`.
+     - Updated table column `colPO` default `sortIndicator` to `Descending`.
+     - In `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+       - `onInit`: Initialized `this._bCurrentSortDescending = true` and updated `viewModel` so the Purchase Orders list always loads in descending order by default (showing newest purchase orders first).
+       - `onSortColumn`: Clicking the active sort column toggles between Descending and Ascending (`!this._bCurrentSortDescending`). Selecting a new sort column defaults to Descending (`true`) before applying `new Sorter(sProperty, bDescending)` to the table binding.
+  2. Purchase Orders FilterBar and Table UI Standards Refactor:
+     - FilterBar Overhaul: Configured `showGoOnFB="true"`, `showClearOnFB="true"`, and added standard filter items for Purchase Order (`fbPO`), Supplier (`fbSupplier` with `/SupplierVH`), Company Code (`fbCompanyCode` with `/CompanyCodeVH`), Purchasing Organization (`fbPurchasingOrg` with `/PurchasingOrgVH`), Purchasing Group (`fbPurchasingGroup` with `/PurchasingGroupVH`), Document Type (`fbDocType` with `/DocumentTypeVH`), Creation Date Range (`fbDateRange` using `DateRangeSelection`), and Status (`fbStatus` select).
+     - Clean Table Toolbar: Standardized sequence to `Title (tableTitle)` → `SearchField (searchField)` → `Refresh Button (btnRefreshTable)` → `Create PO (btnCreatePO)`. Removed duplicate refresh button from page header.
+     - Table Layout & Pop-ins: Added explicit column widths, center alignment for status, and pop-in attributes for tablet/phone responsive views.
+     - Interactive Column Sorters: Enabled column header sorting on `PurchaseOrder`, `SupplierName`, `CompanyCode`, `PurchasingOrganization`, `CreationDate`, and `PurchasingCompletenessStatus`, translating directly to OData `$orderby`.
+     - State Preservation on Refresh: Preserved active filters and sorting when refreshing the table binding (`oBinding.refresh()`).
+     - Internationalization: Externalized all user-facing labels, placeholders, and tooltips in `i18n.properties` and `i18n_en.properties`.
+  3. Comprehensive Unit Testing:
+     - Added `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` covering 24 tests across default initial DESC sort state, single and multi-field filtering, DateRange `BT`/`EQ`/`GE` operations, completeness status, clear action, column toggles, switching columns with DESC default, and state preservation.
+- **Files Modified**:
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` (New)
+- **Reason**: User requested fixing the Purchase Orders FilterBar and Table UI to follow SAP Fiori standards and ensuring "/mm/purchase-orders Shows Records Always DESC" so the latest POs are prioritized.
+- **Validation**:
+  - `npm test`: All 21 test suites (153 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+  - Verified live S/4HANA OData sorting: ASC returns oldest POs (`300000001`), DESC returns latest POs (`9000000050`).
+- **Result**: Passed. FilterBar and Table UI refactored and verified; default record ordering set to DESC.
+
 ## 2026-09-05 14:24 IST
 - **Agent**: Antigravity
 - **Change**: Removed Section 3 (Recent Orders Preview Table) from Dashboard View & Streamlined Controller:

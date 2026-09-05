@@ -67,7 +67,7 @@
                             </Input>
 
                             <Label text="Document Date" required="true" />
-                            <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="long" required="true" />
+                            <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true" />
 
                             <Label text="Currency" required="true" />
                             <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="e.g. EUR" maxLength="5" 

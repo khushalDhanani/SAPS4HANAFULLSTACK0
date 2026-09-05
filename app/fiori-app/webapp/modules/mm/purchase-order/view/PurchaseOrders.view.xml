@@ -25,61 +25,55 @@
                 tooltip="{i18n>userProfileTitle}"
                 press=".onOpenUserProfile"
                 class="sapUiTinyMarginEnd" />
-            <Button
-                id="btnRefreshHeader"
-                icon="sap-icon://refresh"
-                tooltip="{i18n>btnRefresh}"
-                press=".onRefresh"
-                class="sapUiTinyMarginEnd" />
         </headerContent>
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- KPI Tiles Section -->
-                <Panel headerText="Key Performance Indicators" class="sapUiSmallMarginBottom">
-                <HBox id="kpiContainer" wrap="Wrap">
-                    <GenericTile
-                        id="kpiTotalOrders"
-                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                        header="{i18n>kpiTotalOrders}"
-                        subheader="{i18n>kpiTotalOrdersDesc}">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiTotalOrdersVal"
-                                value="{viewModel>/totalCount}"
-                                icon="sap-icon://sales-order"
-                                valueColor="Neutral" />
-                        </TileContent>
-                    </GenericTile>
+                <Panel headerText="{i18n>kpiSectionTitle}" class="sapUiSmallMarginBottom">
+                    <HBox id="kpiContainer" wrap="Wrap">
+                        <GenericTile
+                            id="kpiTotalOrders"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>kpiTotalOrders}"
+                            subheader="{i18n>kpiTotalOrdersDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiTotalOrdersVal"
+                                    value="{viewModel>/totalCount}"
+                                    icon="sap-icon://sales-order"
+                                    valueColor="Neutral" />
+                            </TileContent>
+                        </GenericTile>
 
-                    <GenericTile
-                        id="kpiSuppliers"
-                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                        header="{i18n>kpiSuppliers}"
-                        subheader="{i18n>kpiSuppliersDesc}">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiSuppliersVal"
-                                value="{viewModel>/supplierCount}"
-                                icon="sap-icon://supplier"
-                                valueColor="Good" />
-                        </TileContent>
-                    </GenericTile>
+                        <GenericTile
+                            id="kpiSuppliers"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>kpiSuppliers}"
+                            subheader="{i18n>kpiSuppliersDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiSuppliersVal"
+                                    value="{viewModel>/supplierCount}"
+                                    icon="sap-icon://supplier"
+                                    valueColor="Good" />
+                            </TileContent>
+                        </GenericTile>
 
-                    <GenericTile
-                        id="kpiComplete"
-                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                        header="{i18n>kpiComplete}"
-                        subheader="{i18n>kpiCompleteDesc}">
-                        <TileContent>
-                            <NumericContent
-                                id="kpiCompleteVal"
-                                value="{viewModel>/completeRate}"
-                                scale="%"
-                                icon="sap-icon://accept"
-                                valueColor="Good" />
-                        </TileContent>
-                    </GenericTile>
-                </HBox>
+                        <GenericTile
+                            id="kpiComplete"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>kpiComplete}"
+                            subheader="{i18n>kpiCompleteDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiCompleteVal"
+                                    value="{viewModel>/completeRate}"
+                                    scale="%"
+                                    icon="sap-icon://accept"
+                                    valueColor="Good" />
+                            </TileContent>
+                        </GenericTile>
+                    </HBox>
                 </Panel>
 
                 <!-- Advanced Filter Bar -->
@@ -87,30 +81,124 @@
                     <fb:FilterBar 
                         id="poFilterBar" 
                         search=".onFilterBarSearch" 
-                        showClearOnFB="true" 
-                        clear=".onFilterBarClear" 
+                        showGoOnFB="true"
+                        showClearOnFB="true"
+                        clear=".onFilterBarClear"
                         useToolbar="false">
                         <fb:filterGroupItems>
                             <fb:FilterGroupItem groupName="G1" name="PurchaseOrder" label="{i18n>colPurchaseOrder}" visibleInFilterBar="true">
                                 <fb:control>
-                                    <Input id="fbPO" placeholder="Enter PO Number" />
+                                    <Input id="fbPO" placeholder="{i18n>filterPOPlaceholder}" />
                                 </fb:control>
                             </fb:FilterGroupItem>
                             <fb:FilterGroupItem groupName="G1" name="Supplier" label="{i18n>colSupplier}" visibleInFilterBar="true">
                                 <fb:control>
-                                    <Input id="fbSupplier" placeholder="Enter Supplier" />
+                                    <Input
+                                        id="fbSupplier"
+                                        placeholder="{i18n>filterSupplierPlaceholder}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        suggestionItems="{path: '/SupplierVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{SupplierName}" />
+                                        </suggestionItems>
+                                    </Input>
                                 </fb:control>
                             </fb:FilterGroupItem>
                             <fb:FilterGroupItem groupName="G1" name="CompanyCode" label="{i18n>colCompany}" visibleInFilterBar="true">
                                 <fb:control>
-                                    <Input id="fbCompanyCode" placeholder="Enter Company Code" />
+                                    <Input
+                                        id="fbCompanyCode"
+                                        placeholder="{i18n>filterCompanyPlaceholder}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        suggestionItems="{path: '/CompanyCodeVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{CompanyCodeName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="PurchasingOrganization" label="{i18n>colPurchasingOrg}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbPurchasingOrg"
+                                        placeholder="{i18n>filterPurchasingOrgPlaceholder}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        suggestionItems="{path: '/PurchasingOrgVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{PurchasingOrganization}" text="{PurchasingOrganization}" additionalText="{PurchasingOrganizationName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="PurchasingGroup" label="{i18n>colPurchasingGroup}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbPurchasingGroup"
+                                        placeholder="{i18n>filterPurchasingGroupPlaceholder}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        suggestionItems="{path: '/PurchasingGroupVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{PurchasingGroup}" text="{PurchasingGroup}" additionalText="{PurchasingGroupName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="PurchaseOrderType" label="{i18n>colDocType}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbDocType"
+                                        placeholder="{i18n>filterDocTypePlaceholder}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        suggestionItems="{path: '/DocumentTypeVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
+                                        </suggestionItems>
+                                    </Input>
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="CreationDate" label="{i18n>colCreationDate}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <DateRangeSelection
+                                        id="fbDateRange"
+                                        placeholder="{i18n>filterDateRangePlaceholder}"
+                                        displayFormat="dd-MM-yyyy"
+                                        valueFormat="yyyy-MM-dd" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="PurchasingCompletenessStatus" label="{i18n>colStatus}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Select id="fbStatus" selectedKey="" width="100%">
+                                        <items>
+                                            <core:Item key="" text="{i18n>filterAll}" />
+                                            <core:Item key="true" text="{i18n>statusComplete}" />
+                                            <core:Item key="false" text="{i18n>statusIncomplete}" />
+                                        </items>
+                                    </Select>
                                 </fb:control>
                             </fb:FilterGroupItem>
                         </fb:filterGroupItems>
                     </fb:FilterBar>
                 </Panel>
-
-
 
                 <!-- Responsive Table -->
                 <Table
@@ -120,7 +208,10 @@
                         parameters: {
                             $count: true
                         },
-                        sorter: { path: 'PurchaseOrder', descending: false }
+                        sorter: [
+                            { path: 'CreationDate', descending: true },
+                            { path: 'PurchaseOrder', descending: true }
+                        ]
                     }"
                     growing="true"
                     growingThreshold="20"
@@ -148,29 +239,65 @@
                                 press=".onRefresh" />
                             <Button
                                 id="btnCreatePO"
-                                text="Create PO"
+                                text="{i18n>btnCreatePO}"
                                 type="Emphasized"
                                 press=".onCreatePO" />
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
-                        <Column id="colPO">
-                            <Text text="{i18n>colPurchaseOrder}" />
+                        <Column id="colPO" width="11rem" sortIndicator="None">
+                            <header>
+                                <Link id="linkColPO" text="{i18n>colPurchaseOrder}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="PurchaseOrder" />
+                                    </customData>
+                                </Link>
+                            </header>
                         </Column>
-                        <Column id="colSup" minScreenWidth="Tablet" demandPopin="true">
-                            <Text text="{i18n>colSupplier}" />
+                        <Column id="colSup" width="15rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                            <header>
+                                <Link id="linkColSup" text="{i18n>colSupplier}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="SupplierName" />
+                                    </customData>
+                                </Link>
+                            </header>
                         </Column>
-                        <Column id="colCo" minScreenWidth="Desktop" demandPopin="true">
-                            <Text text="{i18n>colCompany}" />
+                        <Column id="colCo" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                            <header>
+                                <Link id="linkColCo" text="{i18n>colCompany}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="CompanyCode" />
+                                    </customData>
+                                </Link>
+                            </header>
                         </Column>
-                        <Column id="colOrg" minScreenWidth="Desktop" demandPopin="true">
-                            <Text text="{i18n>colPurchasingOrg}" />
+                        <Column id="colOrg" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                            <header>
+                                <Link id="linkColOrg" text="{i18n>colPurchasingOrg}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="PurchasingOrganization" />
+                                    </customData>
+                                </Link>
+                            </header>
                         </Column>
-                        <Column id="colDate" minScreenWidth="Tablet" demandPopin="true">
-                            <Text text="{i18n>colCreationDate}" />
+                        <Column id="colDate" width="10rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="Descending">
+                            <header>
+                                <Link id="linkColDate" text="{i18n>colCreationDate}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="CreationDate" />
+                                    </customData>
+                                </Link>
+                            </header>
                         </Column>
-                        <Column id="colStat" hAlign="End">
-                            <Text text="{i18n>colStatus}" />
+                        <Column id="colStat" width="9rem" hAlign="Center" sortIndicator="None">
+                            <header>
+                                <Link id="linkColStat" text="{i18n>colStatus}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="PurchasingCompletenessStatus" />
+                                    </customData>
+                                </Link>
+                            </header>
                         </Column>
                     </columns>
                     <items>

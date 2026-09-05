@@ -3,22 +3,35 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
-    "sap/m/MessageBox"
+    "sap/ui/model/Sorter",
+    "sap/ui/core/library",
+    "sap/m/MessageBox",
+    "saps4hana/fiori/service/ValueHelpService"
 ], function (
     BaseController,
     JSONModel,
     Filter,
     FilterOperator,
-    MessageBox
+    Sorter,
+    coreLibrary,
+    MessageBox,
+    ValueHelpService
 ) {
     "use strict";
 
+    var SortOrder = coreLibrary.SortOrder;
+
     return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrders", {
         onInit: function () {
+            this._sCurrentSortProperty = "CreationDate";
+            this._bCurrentSortDescending = true;
+
             var oViewModel = new JSONModel({
                 totalCount: 0,
                 supplierCount: 0,
-                completeRate: 100
+                completeRate: 100,
+                sortProperty: this._sCurrentSortProperty,
+                sortDescending: this._bCurrentSortDescending
             });
             this.getView().setModel(oViewModel, "viewModel");
 
@@ -76,6 +89,15 @@ sap.ui.define([
             }
         },
 
+        onValueHelpRequest: function (oEvent) {
+            ValueHelpService.openValueHelp(this.getView(), oEvent.getSource());
+        },
+
+        onSuggest: function (oEvent) {
+            var sValue = oEvent.getParameter("suggestValue");
+            ValueHelpService.applySuggestionFilter(oEvent.getSource(), sValue);
+        },
+
         onSearch: function () {
             this._applyFilters();
         },
@@ -85,16 +107,51 @@ sap.ui.define([
         },
 
         onFilterBarClear: function () {
-            this.byId("fbPO").setValue("");
-            this.byId("fbSupplier").setValue("");
-            this.byId("fbCompanyCode").setValue("");
+            var oFbPO = this.byId("fbPO");
+            var oFbSupplier = this.byId("fbSupplier");
+            var oFbCompanyCode = this.byId("fbCompanyCode");
+            var oFbPurchasingOrg = this.byId("fbPurchasingOrg");
+            var oFbPurchasingGroup = this.byId("fbPurchasingGroup");
+            var oFbDocType = this.byId("fbDocType");
+            var oFbDateRange = this.byId("fbDateRange");
+            var oFbStatus = this.byId("fbStatus");
+
+            if (oFbPO) oFbPO.setValue("");
+            if (oFbSupplier) oFbSupplier.setValue("");
+            if (oFbCompanyCode) oFbCompanyCode.setValue("");
+            if (oFbPurchasingOrg) oFbPurchasingOrg.setValue("");
+            if (oFbPurchasingGroup) oFbPurchasingGroup.setValue("");
+            if (oFbDocType) oFbDocType.setValue("");
+
+            if (oFbDateRange) {
+                oFbDateRange.setValue("");
+                if (typeof oFbDateRange.setDateValue === "function") {
+                    oFbDateRange.setDateValue(null);
+                    oFbDateRange.setSecondDateValue(null);
+                }
+            }
+
+            if (oFbStatus) {
+                oFbStatus.setSelectedKey("");
+            }
+
             this._applyFilters();
         },
 
-        _applyFilters: function () {
+        _formatDateToISO: function (oDate) {
+            if (!oDate || !(oDate instanceof Date) || isNaN(oDate.getTime())) {
+                return null;
+            }
+            var iYear = oDate.getFullYear();
+            var sMonth = String(oDate.getMonth() + 1).padStart(2, "0");
+            var sDay = String(oDate.getDate()).padStart(2, "0");
+            return iYear + "-" + sMonth + "-" + sDay;
+        },
+
+        _buildFilterCriteria: function () {
             var aFilters = [];
 
-            // 1. Search Query Filter (Global Search)
+            // 1. Global Toolbar Search Query
             var oSearchField = this.byId("searchField");
             var sQuery = oSearchField ? oSearchField.getValue() : "";
             if (sQuery && sQuery.trim().length > 0) {
@@ -110,21 +167,84 @@ sap.ui.define([
                 }));
             }
 
-            // 2. Advanced Filter Bar
+            // 2. FilterBar: Purchase Order Number
             var oFbPO = this.byId("fbPO");
-            var oFbSupplier = this.byId("fbSupplier");
-            var oFbCompanyCode = this.byId("fbCompanyCode");
-
             if (oFbPO && oFbPO.getValue().trim() !== "") {
                 aFilters.push(new Filter("PurchaseOrder", FilterOperator.Contains, oFbPO.getValue().trim()));
             }
+
+            // 3. FilterBar: Supplier (Matches ID or Name)
+            var oFbSupplier = this.byId("fbSupplier");
             if (oFbSupplier && oFbSupplier.getValue().trim() !== "") {
-                aFilters.push(new Filter("SupplierName", FilterOperator.Contains, oFbSupplier.getValue().trim()));
-            }
-            if (oFbCompanyCode && oFbCompanyCode.getValue().trim() !== "") {
-                aFilters.push(new Filter("CompanyCode", FilterOperator.Contains, oFbCompanyCode.getValue().trim()));
+                var sSupplier = oFbSupplier.getValue().trim();
+                aFilters.push(new Filter({
+                    filters: [
+                        new Filter("Supplier", FilterOperator.Contains, sSupplier),
+                        new Filter("SupplierName", FilterOperator.Contains, sSupplier)
+                    ],
+                    and: false
+                }));
             }
 
+            // 4. FilterBar: Company Code
+            var oFbCompanyCode = this.byId("fbCompanyCode");
+            if (oFbCompanyCode && oFbCompanyCode.getValue().trim() !== "") {
+                aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, oFbCompanyCode.getValue().trim()));
+            }
+
+            // 5. FilterBar: Purchasing Organization
+            var oFbPurchasingOrg = this.byId("fbPurchasingOrg");
+            if (oFbPurchasingOrg && oFbPurchasingOrg.getValue().trim() !== "") {
+                aFilters.push(new Filter("PurchasingOrganization", FilterOperator.EQ, oFbPurchasingOrg.getValue().trim()));
+            }
+
+            // 6. FilterBar: Purchasing Group
+            var oFbPurchasingGroup = this.byId("fbPurchasingGroup");
+            if (oFbPurchasingGroup && oFbPurchasingGroup.getValue().trim() !== "") {
+                aFilters.push(new Filter("PurchasingGroup", FilterOperator.EQ, oFbPurchasingGroup.getValue().trim()));
+            }
+
+            // 7. FilterBar: Purchase Order Type
+            var oFbDocType = this.byId("fbDocType");
+            if (oFbDocType && oFbDocType.getValue().trim() !== "") {
+                aFilters.push(new Filter("PurchaseOrderType", FilterOperator.EQ, oFbDocType.getValue().trim()));
+            }
+
+            // 8. FilterBar: Creation Date Range
+            var oFbDateRange = this.byId("fbDateRange");
+            if (oFbDateRange) {
+                var dStart = typeof oFbDateRange.getDateValue === "function" ? oFbDateRange.getDateValue() : null;
+                var dEnd = typeof oFbDateRange.getSecondDateValue === "function" ? oFbDateRange.getSecondDateValue() : null;
+                var sStart = this._formatDateToISO(dStart);
+                var sEnd = this._formatDateToISO(dEnd);
+
+                if (sStart && sEnd) {
+                    if (sStart === sEnd) {
+                        aFilters.push(new Filter("CreationDate", FilterOperator.EQ, sStart));
+                    } else {
+                        aFilters.push(new Filter("CreationDate", FilterOperator.BT, sStart, sEnd));
+                    }
+                } else if (sStart) {
+                    aFilters.push(new Filter("CreationDate", FilterOperator.GE, sStart));
+                }
+            }
+
+            // 9. FilterBar: Completeness Status
+            var oFbStatus = this.byId("fbStatus");
+            if (oFbStatus) {
+                var sStatusKey = oFbStatus.getSelectedKey();
+                if (sStatusKey === "true") {
+                    aFilters.push(new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, true));
+                } else if (sStatusKey === "false") {
+                    aFilters.push(new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, false));
+                }
+            }
+
+            return aFilters;
+        },
+
+        _applyFilters: function () {
+            var aFilters = this._buildFilterCriteria();
             var oFinalFilter = aFilters.length > 0 ? new Filter({ filters: aFilters, and: true }) : [];
 
             var oTable = this.byId("purchaseOrdersTable");
@@ -134,10 +254,55 @@ sap.ui.define([
             }
         },
 
+        onSortColumn: function (oEvent) {
+            var oLink = oEvent.getSource();
+            var sSortProperty = oLink.data ? oLink.data("sortProperty") : null;
+            if (!sSortProperty) {
+                return;
+            }
+
+            if (this._sCurrentSortProperty === sSortProperty) {
+                this._bCurrentSortDescending = !this._bCurrentSortDescending;
+            } else {
+                this._sCurrentSortProperty = sSortProperty;
+                this._bCurrentSortDescending = true;
+            }
+
+            var oTable = this.byId("purchaseOrdersTable");
+            var aColumns = oTable ? oTable.getColumns() : [];
+            var sActiveIndicator = this._bCurrentSortDescending ? SortOrder.Descending : SortOrder.Ascending;
+
+            aColumns.forEach(function (oCol) {
+                var oHeader = oCol.getHeader();
+                var sColProp = oHeader && oHeader.data ? oHeader.data("sortProperty") : null;
+                if (sColProp === sSortProperty) {
+                    oCol.setSortIndicator(sActiveIndicator);
+                } else {
+                    oCol.setSortIndicator(SortOrder.None);
+                }
+            });
+
+            var oViewModel = this.getView().getModel("viewModel");
+            if (oViewModel) {
+                oViewModel.setProperty("/sortProperty", this._sCurrentSortProperty);
+                oViewModel.setProperty("/sortDescending", this._bCurrentSortDescending);
+            }
+
+            var oBinding = oTable ? oTable.getBinding("items") : null;
+            if (oBinding) {
+                var aSorters = [new Sorter(this._sCurrentSortProperty, this._bCurrentSortDescending)];
+                if (this._sCurrentSortProperty === "CreationDate") {
+                    aSorters.push(new Sorter("PurchaseOrder", this._bCurrentSortDescending));
+                }
+                oBinding.sort(aSorters);
+            }
+        },
+
         onRefresh: function () {
             var oTable = this.byId("purchaseOrdersTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {
+                // oBinding.refresh() reloads data while retaining active filters ($filter) and sorters ($orderby)
                 oBinding.refresh();
             }
         },
