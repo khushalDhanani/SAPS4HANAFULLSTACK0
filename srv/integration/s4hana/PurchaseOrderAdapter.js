@@ -2,10 +2,14 @@
 const cds = require('@sap/cds');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');
+const SessionContext = require('./SessionContext');
 
 /**
  * Adapter class to encapsulate all communication with S/4HANA services
  * using SAP Cloud SDK and BTP Destination management.
+ *
+ * Designed to be completely stateless to guarantee thread-safe concurrent execution
+ * without CSRF token or session cookie collisions between parallel requests.
  */
 class PurchaseOrderAdapter {
   constructor() {
@@ -72,10 +76,11 @@ class PurchaseOrderAdapter {
 
   /**
    * Creates a Purchase Order Draft in S/4HANA.
+   * Produces an isolated, request-scoped SessionContext containing the session cookies and CSRF token.
    *
    * @param {Object} payload - Mapped S/4 Purchase Order payload
    * @param {Object} [options] - Optional overrides (destination, executeHttpRequest, etc.)
-   * @returns {Promise<{ draftUUID: string, draftData: Object, cookie: string, token: string }>}
+   * @returns {Promise<SessionContext>}
    */
   async createDraft(payload, options = {}) {
     const destination = options.destination || await this._getDestination();
@@ -92,7 +97,7 @@ class PurchaseOrderAdapter {
         'Content-Type': 'application/json',
         ...(options.headers || {})
       }
-    }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : false });
+    }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
 
     const draftResult = draftResp.data;
     const draftData = draftResult.d || draftResult;
@@ -101,23 +106,18 @@ class PurchaseOrderAdapter {
       throw new Error('DraftUUID not returned from draft creation');
     }
 
-    const req = draftResp.request;
-    const cookie = req?.getHeader ? req.getHeader('cookie') : req?._headers?.cookie;
-    const token = req?.getHeader ? req.getHeader('x-csrf-token') : req?._headers?.['x-csrf-token'];
-
-    return {
+    // Wrap in request-isolated session context — zero state stored on the adapter singleton
+    return SessionContext.fromResponse(draftResp, {
       draftUUID,
-      draftData,
-      cookie,
-      token
-    };
+      draftData
+    });
   }
 
   /**
-   * Activates a Purchase Order Draft in S/4HANA.
+   * Activates a Purchase Order Draft in S/4HANA using the request's isolated session context.
    *
    * @param {Object} draftData - Draft data containing DraftUUID and PurchaseOrder
-   * @param {Object} [sessionContext] - Session cookie and CSRF token from draft creation
+   * @param {Object|SessionContext} [sessionContext] - Session cookie and CSRF token from draft creation
    * @param {Object} [options] - Optional overrides
    * @returns {Promise<Object>}
    */
@@ -133,7 +133,7 @@ class PurchaseOrderAdapter {
     }
 
     const cookie = sessionContext.cookie;
-    const token = sessionContext.token;
+    const token = sessionContext.token || sessionContext.csrfToken;
     const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
 
     const actResp = await executeFn(destination, {
@@ -158,15 +158,23 @@ class PurchaseOrderAdapter {
 
   /**
    * Create a Purchase Order using SAP Cloud SDK.
-   * Performs draft creation followed by activation with automatic CSRF management.
+   * Performs draft creation followed by activation with automatic, per-request isolated session context.
+   *
+   * @param {Object} payload
+   * @param {Object} [options]
+   * @returns {Promise<Object>}
    */
   async createPurchaseOrder(payload, options = {}) {
-    const draft = await this.createDraft(payload, options);
-    return await this.activateDraft(draft.draftData, { cookie: draft.cookie, token: draft.token }, options);
+    // 1. Create draft and capture request-isolated session context
+    const session = await this.createDraft(payload, options);
+
+    // 2. Activate draft within the exact same isolated session context
+    return await this.activateDraft(session.draftData, session, options);
   }
 }
 
 const defaultAdapter = new PurchaseOrderAdapter();
 defaultAdapter.PurchaseOrderAdapter = PurchaseOrderAdapter;
+defaultAdapter.SessionContext = SessionContext;
 
 module.exports = defaultAdapter;

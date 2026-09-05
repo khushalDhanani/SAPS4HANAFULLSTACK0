@@ -1,6 +1,38 @@
 
 # Changes Log
 
+## 2026-09-05 12:05 IST
+- **Agent**: Antigravity
+- **Change**: Hardened CSRF and session management: eliminated shared mutable adapter state (`this._csrfToken`, `this._csrfCookie`); introduced request-isolated `SessionContext` ensuring thread-safe concurrent execution.
+- **Files**:
+  - `srv/integration/s4hana/SessionContext.js`
+  - `srv/integration/s4hana/PurchaseOrderAdapter.js`
+  - `test/unit/sessionContext.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: The user identified that storing CSRF tokens and session cookies on a singleton adapter instance (`this._csrfToken`, `this._csrfCookie`) is a dangerous anti-pattern under concurrent multi-user execution. Concurrent requests could overwrite each other's session state, cause CSRF token collisions, or send the wrong session cookies to S/4HANA Gateway. The adapter must be strictly stateless, with all session state scoped exclusively to the individual request execution.
+- **Fix & Enhancements**:
+  1. Created `srv/integration/s4hana/SessionContext.js`:
+     - Encapsulates transient, request-isolated session state (`cookie`, `token`, `csrfToken`, `draftUUID`, `draftData`).
+     - `SessionContext.fromResponse(response, extraData)`: Extracts `set-cookie` arrays from S/4 Gateway HTTP responses, formats and merges them with request cookies, and extracts `X-CSRF-Token` headers cleanly.
+  2. Refactored `srv/integration/s4hana/PurchaseOrderAdapter.js`:
+     - Made `PurchaseOrderAdapter` 100% stateless. Confirmed zero mutable session properties on `this` (`_csrfToken` / `_csrfCookie`).
+     - `createDraft(payload, options)` wraps the draft response in a fresh `SessionContext` and returns it.
+     - `activateDraft(draftData, sessionContext, options)` consumes the request-isolated `SessionContext` without touching any shared instance state.
+     - `createPurchaseOrder(payload, options)` orchestrates draft creation and activation through the request-scoped `SessionContext`.
+  3. Added `test/unit/sessionContext.test.js`:
+     - Tested `SessionContext.fromResponse` with complex Set-Cookie arrays and CSRF headers.
+     - Verified `purchaseOrderAdapter` singleton has NO mutable session properties (`_csrfToken`, `_csrfCookie` are undefined).
+     - Tested concurrent execution of parallel PO requests with distinct sessions, verifying complete memory isolation and zero session crosstalk.
+- **Validation**:
+  - `node -c srv/integration/s4hana/SessionContext.js`: Clean (Code 0).
+  - `node -c srv/integration/s4hana/PurchaseOrderAdapter.js`: Clean (Code 0).
+  - `npm test`: All 16 test suites (92 tests) passed in 7.62s with 0 failures.
+  - `npm run lint` (in `app/fiori-app`): UI5 linter clean (0 findings).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 282 ms.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Stateless adapter and request-isolated `SessionContext` architecture active; concurrent requests run in complete thread-safe isolation.
+
 ## 2026-09-05 12:03 IST
 - **Agent**: Antigravity
 - **Change**: Implemented semantic SAP error model across backend and frontend: distinguished 400, 401, 403, 404, 409, 422, 502/503, and 500 status codes; enhanced Fiori UI with contextual dialog titles and user guidance.
