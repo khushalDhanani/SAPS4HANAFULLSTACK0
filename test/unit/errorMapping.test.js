@@ -1,4 +1,4 @@
-const { extractS4ErrorMessage } = require('../../srv/integration/s4hana/PurchaseOrderErrorMapper');
+const { extractS4ErrorMessage } = require('../../srv/integration/s4hana/S4ErrorMapper');
 const s4Errors = require('../fixtures/s4ErrorResponses.json');
 
 describe('Unit: Error Mapping', () => {

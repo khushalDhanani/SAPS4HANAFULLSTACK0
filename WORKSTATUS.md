@@ -1,6 +1,39 @@
 
 # Changes Log
 
+## 2026-09-05 11:46 IST
+- **Agent**: Antigravity
+- **Change**: Refactored CAP service architecture into decoupled layers (`handlers/`, `validation/`, `mapping/`, `integration/`) strictly adhering to `AGENTS.md` boundaries; separated PO business logic from S/4 technical integration.
+- **Files**:
+  - `srv/service.js`
+  - `srv/handlers/purchaseOrder.handler.js`
+  - `srv/handlers/valueHelp.handler.js`
+  - `srv/validation/purchaseOrder.validation.js`
+  - `srv/mapping/purchaseOrder.mapper.js`
+  - `srv/integration/s4hana/S4ErrorMapper.js`
+  - `srv/integration/s4hana/PurchaseOrderErrorMapper.js`
+  - `test/unit/validation.test.js`
+  - `test/unit/errorMapping.test.js`
+  - `test/unit/domainMapping.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: `srv/service.js` was previously coordinating READ routing, value help routing and deduplication, PO validation, payload construction, S/4 orchestration, and error handling all in a single file, mixing PO business rules with S/4 technical mappings contrary to `AGENTS.md` architecture boundaries.
+- **Fix & Enhancements**:
+  1. Extracted `srv/handlers/valueHelp.handler.js` to register READ handlers for all 14 value help entities and handle `CurrencyVH` deduplication.
+  2. Extracted `srv/handlers/purchaseOrder.handler.js` to handle `READ PurchaseOrders` and orchestrate the `createPurchaseOrder` action.
+  3. Created `srv/validation/purchaseOrder.validation.js` containing business validation rules for PO header and item constraints.
+  4. Created `srv/mapping/purchaseOrder.mapper.js` for domain model normalization and defaulting.
+  5. Extracted `srv/integration/s4hana/S4ErrorMapper.js` for domain-agnostic S/4 Gateway error extraction (with backward-compatible re-export from `PurchaseOrderErrorMapper.js`).
+  6. Refactored `srv/service.js` into a lightweight dispatcher (9 lines) registering the decoupled handlers.
+  7. Added unit test suite `test/unit/domainMapping.test.js` and updated existing unit tests to point to new modules.
+- **Validation**:
+  - `npm run test:unit`: 7 passed, 7 total suites (38 tests passed) in 0.395s.
+  - `npm run test:integration`: 6 passed, 6 total suites (17 tests passed) in 5.30s.
+  - `npm run test:e2e`: 1 passed, 1 total suite (7 tests passed) in 1.46s.
+  - `npm test`: All 14 test suites (62 tests) passed in 7.73s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. CAP service architecture cleanly adheres to `AGENTS.md` boundaries with single-responsibility components and complete test coverage.
+
 ## 2026-09-05 11:42 IST
 - **Agent**: Antigravity
 - **Change**: Strengthened and overhauled full-stack test suite across Unit, Integration, and E2E layers; eliminated weak `expect(status).toBeGreaterThanOrEqual(400)` swallow patterns; implemented modular mappers, validators, and error parsers; added controlled fixtures; implemented 13 test suites with 59 verified tests.
