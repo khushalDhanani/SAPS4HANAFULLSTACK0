@@ -93,12 +93,12 @@
         },
         {
           "name": "purchaseOrders",
-          "pattern": "purchase-orders",
+          "pattern": "mm/purchase-orders",
           "target": "TargetPurchaseOrders"
         },
         {
           "name": "createPurchaseOrder",
-          "pattern": "create-purchase-order",
+          "pattern": "mm/purchase-orders/create",
           "target": "TargetCreatePurchaseOrder"
         }
       ],

@@ -1,6 +1,24 @@
 
 # Changes Log
 
+## 2026-09-05 12:50 IST
+- **Agent**: Antigravity
+- **Change**: Standardized UI5 URL routing patterns in `app/fiori-app/webapp/manifest.json`:
+  1. Updated `purchaseOrders` route pattern from `purchase-orders` to domain-scoped `mm/purchase-orders`.
+  2. Updated `createPurchaseOrder` route pattern from `create-purchase-order` to domain-scoped `mm/purchase-orders/create`.
+  3. Maintained unchanged route names (`purchaseOrders`, `createPurchaseOrder`), targets, and controller `navTo()` navigation logic across the application.
+- **Files Modified**:
+  - `app/fiori-app/webapp/manifest.json`
+- **Reason**: Aligned frontend URL hash routing patterns with the SAP MM business domain architecture established in Step 3, adhering to standard enterprise modular routing conventions (`mm/purchase-orders`).
+- **Validation**:
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 328 ms (Code 0).
+  - `npm test`: All 17 test suites (102 tests) passed in 7.158s with 0 failures (Code 0).
+  - `npm run validate:mta` (`mbt validate`): MTA validation succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Routing patterns standardized to domain-scoped MM hierarchy without regression or breaking navigation contracts.
+
+
 ## 2026-09-05 12:45 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 3 — Establish SAP MM → Purchase Order Module Boundary:
