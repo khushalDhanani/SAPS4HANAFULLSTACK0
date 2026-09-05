@@ -5,8 +5,8 @@ sap.ui.define([
     "sap/ui/core/BusyIndicator",
     "saps4hana/fiori/model/PurchaseOrderModel",
     "saps4hana/fiori/service/ValueHelpService",
-    "saps4hana/fiori/service/PurchaseOrderApi"
-], function (Controller, MessageBox, MessageToast, BusyIndicator, PurchaseOrderModel, ValueHelpService, PurchaseOrderApi) {
+    "saps4hana/fiori/service/PurchaseOrderService"
+], function (Controller, MessageBox, MessageToast, BusyIndicator, PurchaseOrderModel, ValueHelpService, PurchaseOrderService) {
     "use strict";
 
     return Controller.extend("saps4hana.fiori.controller.CreatePurchaseOrder", {
@@ -79,7 +79,7 @@ sap.ui.define([
             }
 
             BusyIndicator.show(0);
-            PurchaseOrderApi.createPurchaseOrder({
+            PurchaseOrderService.createPurchaseOrder({
                 header: oData.header,
                 items: oData.items
             })

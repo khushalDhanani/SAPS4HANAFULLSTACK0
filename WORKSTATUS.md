@@ -1,6 +1,41 @@
 
 # Changes Log
 
+## 2026-09-05 12:00 IST
+- **Agent**: Antigravity
+- **Change**: Eliminated raw `fetch()` calls from frontend presentation layer by introducing centralized `ODataClient` and `PurchaseOrderService`.
+- **Files**:
+  - `app/fiori-app/webapp/service/ODataClient.js`
+  - `app/fiori-app/webapp/service/PurchaseOrderService.js`
+  - `app/fiori-app/webapp/service/PurchaseOrderApi.js`
+  - `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`
+  - `WORKSTATUS.md`
+- **Reason**: The user requested eliminating raw `fetch()` invocations from frontend controllers. Direct `fetch()` lacks centralized CSRF token acquisition, automatic retry mechanisms on transient network/5xx failures, consistent error unwrapping, and mockability. Centralizing API communication into a domain service (`PurchaseOrderService`) backed by an HTTP client (`ODataClient`) provides production-grade resilience.
+- **Fix & Enhancements**:
+  1. Created `app/fiori-app/webapp/service/ODataClient.js`:
+     - Automatic CSRF token handling: checks cache or issues `HEAD` to `/odata/v4/purchase-order/` with `X-CSRF-Token: Fetch`. Sets `X-CSRF-Token` header on state-modifying requests (`POST`, `PUT`, `DELETE`).
+     - Automatic CSRF refresh & retry: If a request fails with HTTP 403, invalidates the token, re-fetches a fresh CSRF token, and re-executes the attempt.
+     - Transient error retries: Retries transient server errors (HTTP 502, 503, 504) or `TypeError` network disconnects up to `maxRetries` with exponential backoff.
+     - Centralized error response parsing: Unwraps OData V4 structured errors (`error.message`, `error.details`) or plain text into clean Error instances.
+     - Centralized response unwrapping: Safely parses JSON bodies or handles 204 No Content.
+  2. Created `app/fiori-app/webapp/service/PurchaseOrderService.js`:
+     - Domain API service exposing `createPurchaseOrder(oPayload)`, `getPurchaseOrders(sQuery)`, and `getPurchaseOrder(sPoNumber)`.
+  3. Refactored `app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`:
+     - Replaced any direct API calls with `PurchaseOrderService.createPurchaseOrder({ header, items })`.
+  4. Updated `app/fiori-app/webapp/service/PurchaseOrderApi.js`:
+     - Re-exports `PurchaseOrderService` for backwards compatibility.
+- **Validation**:
+  - `node -c app/fiori-app/webapp/service/ODataClient.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/service/PurchaseOrderService.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/service/PurchaseOrderApi.js`: Clean (Code 0).
+  - `node -c app/fiori-app/webapp/controller/CreatePurchaseOrder.controller.js`: Clean (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! No findings detected (0 errors, 0 warnings).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 438 ms, Component-preload generated.
+  - `npm test`: All 15 test suites (76 tests) passed in 6.24s with 0 failures.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Raw `fetch()` completely removed from controllers; centralized, resilient `PurchaseOrderService -> ODataClient -> CAP OData` architecture established.
+
 ## 2026-09-05 11:58 IST
 - **Agent**: Antigravity
 - **Change**: Refactored `CreatePurchaseOrder.controller.js` by decoupling responsibilities into modular single-responsibility units: client-side state (`PurchaseOrderModel.js`), Value-Help metadata and dialogs (`ValueHelpService.js`), and CAP HTTP communication (`PurchaseOrderApi.js`).
