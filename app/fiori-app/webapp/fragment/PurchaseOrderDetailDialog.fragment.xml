@@ -41,24 +41,33 @@
                     <ObjectStatus
                         text="{
                             parts: [
-                                { path: 'PurchasingCompletenessStatus' },
-                                { path: 'PurchaseOrderType' }
+                                { path: 'PurchasingDocumentStatus' },
+                                { path: 'PurchasingDocumentStatusName' },
+                                { path: 'ReleaseIsNotCompleted' },
+                                { path: 'PurchasingDocumentDeletionCode' },
+                                { path: 'PurchasingCompletenessStatus' }
                             ],
-                            formatter: '.formatter.completenessText'
+                            formatter: '.formatter.displayStatus'
                         }"
                         state="{
                             parts: [
-                                { path: 'PurchasingCompletenessStatus' },
-                                { path: 'PurchaseOrderType' }
+                                { path: 'PurchasingDocumentStatus' },
+                                { path: 'PurchasingDocumentStatusName' },
+                                { path: 'ReleaseIsNotCompleted' },
+                                { path: 'PurchasingDocumentDeletionCode' },
+                                { path: 'PurchasingCompletenessStatus' }
                             ],
-                            formatter: '.formatter.completenessState'
+                            formatter: '.formatter.displayStatusState'
                         }"
                         icon="{
                             parts: [
-                                { path: 'PurchasingCompletenessStatus' },
-                                { path: 'PurchaseOrderType' }
+                                { path: 'PurchasingDocumentStatus' },
+                                { path: 'PurchasingDocumentStatusName' },
+                                { path: 'ReleaseIsNotCompleted' },
+                                { path: 'PurchasingDocumentDeletionCode' },
+                                { path: 'PurchasingCompletenessStatus' }
                             ],
-                            formatter: '.formatter.completenessIcon'
+                            formatter: '.formatter.displayStatusIcon'
                         }" />
                 </HBox>
             </VBox>

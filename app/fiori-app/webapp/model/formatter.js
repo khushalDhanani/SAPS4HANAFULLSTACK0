@@ -3,6 +3,26 @@ sap.ui.define([
 ], function (DateFormat) {
     "use strict";
 
+    function _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
+        if (sDeletionCode === "L" || sStatusCode === "38" || (sStatusName && String(sStatusName).toLowerCase() === "rejected")) {
+            return "Rejected";
+        }
+        var bRelNotDone = bReleaseNotCompleted === true || bReleaseNotCompleted === "true";
+        if (sStatusCode === "02" || bRelNotDone || (sStatusName && String(sStatusName).toLowerCase().indexOf("approval") !== -1)) {
+            return "In Approval";
+        }
+        if (sStatusCode === "01" || (sStatusName && String(sStatusName).toLowerCase() === "draft")) {
+            return "Draft";
+        }
+        if (sStatusCode === "04" || sStatusCode === "05" || bCompleteness === true || bCompleteness === "true") {
+            return "Approved";
+        }
+        if (bCompleteness === false || bCompleteness === "false") {
+            return "Draft";
+        }
+        return "Approved";
+    }
+
     return {
         formatDate: function (sDate) {
             if (!sDate) {
@@ -28,51 +48,69 @@ sap.ui.define([
             return oDateFormat.format(oDate);
         },
 
-        completenessState: function (bComplete, sDocType) {
-            var bIsComplete = bComplete === true || bComplete === "true";
-            if (bIsComplete) {
-                return "Success";
-            }
-            return (sDocType && String(sDocType).trim()) ? "Information" : "Warning";
+        /**
+         * Computes the clean canonical Display Status from S/4HANA Purchasing Document status fields:
+         * - 'Rejected' (Status 38, deletion code L, or rejected text)
+         * - 'In Approval' (Status 02, release pending, or approval text)
+         * - 'Draft' (Status 01, completeness false, or draft text)
+         * - 'Approved' (Status 04 Sent, Status 05 Follow-On Documents, or completeness true)
+         *
+         * @param {string} [sStatusCode] - PurchasingDocumentStatus (e.g. '01', '02', '04', '05', '38')
+         * @param {string} [sStatusName] - PurchasingDocumentStatusName (e.g. 'Draft', 'In Approval', 'Sent', 'Follow-On Documents', 'Rejected')
+         * @param {boolean} [bReleaseNotCompleted] - ReleaseIsNotCompleted
+         * @param {string} [sDeletionCode] - PurchasingDocumentDeletionCode ('L')
+         * @param {boolean} [bCompleteness] - PurchasingCompletenessStatus
+         * @returns {string} Clean Display Status: 'Approved', 'Draft', 'Rejected', or 'In Approval'
+         */
+        displayStatus: function (sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
+            return _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness);
         },
 
-        completenessIcon: function (bComplete, sDocType) {
-            var bIsComplete = bComplete === true || bComplete === "true";
-            if (bIsComplete) {
-                return "sap-icon://accept";
+        displayStatusState: function (sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
+            var sStatus = _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness);
+            switch (sStatus) {
+                case "Approved":
+                    return "Success";
+                case "Draft":
+                    return "Information";
+                case "In Approval":
+                    return "Warning";
+                case "Rejected":
+                    return "Error";
+                default:
+                    return "None";
             }
-            return (sDocType && String(sDocType).trim()) ? "sap-icon://edit" : "sap-icon://alert";
         },
 
-        completenessText: function (bComplete, sDocType) {
-            var oResourceBundle = null;
-            try {
-                if (this && typeof this.getOwnerComponent === "function") {
-                    var oOwner = this.getOwnerComponent();
-                    if (oOwner && typeof oOwner.getModel === "function") {
-                        var oModel = oOwner.getModel("i18n");
-                        if (oModel && typeof oModel.getResourceBundle === "function") {
-                            oResourceBundle = oModel.getResourceBundle();
-                        }
-                    }
-                }
-            } catch (e) {
-                // Ignore missing resource bundle in tests or unbound contexts
+        displayStatusIcon: function (sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
+            var sStatus = _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness);
+            switch (sStatus) {
+                case "Approved":
+                    return "sap-icon://accept";
+                case "Draft":
+                    return "sap-icon://edit";
+                case "In Approval":
+                    return "sap-icon://pending";
+                case "Rejected":
+                    return "sap-icon://decline";
+                default:
+                    return "";
             }
+        },
 
-            var sCompleteBase = oResourceBundle ? oResourceBundle.getText("statusComplete") : "Completed";
-            var sIncompleteBase = oResourceBundle ? oResourceBundle.getText("statusIncomplete") : "Incomplete";
+        completenessState: function (bComplete) {
             var bIsComplete = bComplete === true || bComplete === "true";
+            return bIsComplete ? "Success" : "Information";
+        },
 
-            if (sDocType && String(sDocType).trim()) {
-                var sType = String(sDocType).trim();
-                if (bIsComplete) {
-                    return sCompleteBase + " (" + sType + " - Complete)";
-                }
-                return "In Preparation (" + sType + " - Incomplete)";
-            }
+        completenessIcon: function (bComplete) {
+            var bIsComplete = bComplete === true || bComplete === "true";
+            return bIsComplete ? "sap-icon://accept" : "sap-icon://edit";
+        },
 
-            return bIsComplete ? sCompleteBase : sIncompleteBase;
+        completenessText: function (bComplete) {
+            var bIsComplete = bComplete === true || bComplete === "true";
+            return bIsComplete ? "Approved" : "Draft";
         },
 
         docTypeDisplay: function (sDocType) {

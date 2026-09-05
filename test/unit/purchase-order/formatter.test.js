@@ -92,33 +92,50 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
 
         it('should correctly format completeness status, icon, and text without document type', () => {
             expect(mmFormatter.completenessState(true)).toBe("Success");
-            expect(mmFormatter.completenessState(false)).toBe("Warning");
+            expect(mmFormatter.completenessState(false)).toBe("Information");
 
             expect(mmFormatter.completenessIcon(true)).toBe("sap-icon://accept");
-            expect(mmFormatter.completenessIcon(false)).toBe("sap-icon://alert");
+            expect(mmFormatter.completenessIcon(false)).toBe("sap-icon://edit");
 
-            expect(mmFormatter.completenessText.call(oContext, true)).toBe("Complete");
-            expect(mmFormatter.completenessText.call(oContext, false)).toBe("Incomplete");
+            expect(mmFormatter.completenessText.call(oContext, true)).toBe("Approved");
+            expect(mmFormatter.completenessText.call(oContext, false)).toBe("Draft");
         });
 
-        it('should correctly format completeness status, icon, and text according to document type', () => {
-            // When complete with document type
-            expect(mmFormatter.completenessText.call(oContext, true, "NB")).toBe("Complete (NB - Complete)");
-            expect(mmFormatter.completenessText.call(oContext, true, "ZDOM")).toBe("Complete (ZDOM - Complete)");
-            expect(mmFormatter.completenessText.call(oContext, true, "FO")).toBe("Complete (FO - Complete)");
-            expect(mmFormatter.completenessState(true, "NB")).toBe("Success");
-            expect(mmFormatter.completenessIcon(true, "NB")).toBe("sap-icon://accept");
+        it('should correctly format canonical Display Status, state, and icon across S/4HANA status fields', () => {
+            // 1. Rejected (Status 38, deletion code L, or name Rejected)
+            expect(mmFormatter.displayStatus("38", "Rejected", true, "", false)).toBe("Rejected");
+            expect(mmFormatter.displayStatusState("38", "Rejected", true, "", false)).toBe("Error");
+            expect(mmFormatter.displayStatusIcon("38", "Rejected", true, "", false)).toBe("sap-icon://decline");
 
-            // When incomplete with document type (In Preparation)
-            expect(mmFormatter.completenessText.call(oContext, false, "NB")).toBe("In Preparation (NB - Incomplete)");
-            expect(mmFormatter.completenessText.call(oContext, false, "ZDOM")).toBe("In Preparation (ZDOM - Incomplete)");
-            expect(mmFormatter.completenessText.call(oContext, false, "UB")).toBe("In Preparation (UB - Incomplete)");
-            expect(mmFormatter.completenessState(false, "NB")).toBe("Information");
-            expect(mmFormatter.completenessIcon(false, "NB")).toBe("sap-icon://edit");
+            expect(mmFormatter.displayStatus("", "", false, "L", false)).toBe("Rejected");
+            expect(mmFormatter.displayStatusState("", "", false, "L", false)).toBe("Error");
 
-            // String boolean handling
-            expect(mmFormatter.completenessText.call(oContext, "true", "NB")).toBe("Complete (NB - Complete)");
-            expect(mmFormatter.completenessText.call(oContext, "false", "NB")).toBe("In Preparation (NB - Incomplete)");
+            // 2. In Approval (Status 02, release pending, or name In Approval)
+            expect(mmFormatter.displayStatus("02", "In Approval", true, "", false)).toBe("In Approval");
+            expect(mmFormatter.displayStatusState("02", "In Approval", true, "", false)).toBe("Warning");
+            expect(mmFormatter.displayStatusIcon("02", "In Approval", true, "", false)).toBe("sap-icon://pending");
+
+            expect(mmFormatter.displayStatus("", "", true, "", false)).toBe("In Approval");
+            expect(mmFormatter.displayStatusState("", "", true, "", false)).toBe("Warning");
+
+            // 3. Draft (Status 01, completeness false, or name Draft)
+            expect(mmFormatter.displayStatus("01", "Draft", false, "", true)).toBe("Draft");
+            expect(mmFormatter.displayStatusState("01", "Draft", false, "", true)).toBe("Information");
+            expect(mmFormatter.displayStatusIcon("01", "Draft", false, "", true)).toBe("sap-icon://edit");
+
+            expect(mmFormatter.displayStatus("", "", false, "", false)).toBe("Draft");
+            expect(mmFormatter.displayStatusState("", "", false, "", false)).toBe("Information");
+
+            // 4. Approved (Status 04 Sent, Status 05 Follow-On Documents, or Complete)
+            expect(mmFormatter.displayStatus("04", "Sent", false, "", false)).toBe("Approved");
+            expect(mmFormatter.displayStatusState("04", "Sent", false, "", false)).toBe("Success");
+            expect(mmFormatter.displayStatusIcon("04", "Sent", false, "", false)).toBe("sap-icon://accept");
+
+            expect(mmFormatter.displayStatus("05", "Follow-On Documents", false, "", false)).toBe("Approved");
+            expect(mmFormatter.displayStatusState("05", "Follow-On Documents", false, "", false)).toBe("Success");
+
+            expect(mmFormatter.displayStatus("", "", false, "", true)).toBe("Approved");
+            expect(mmFormatter.displayStatusState("", "", false, "", true)).toBe("Success");
         });
 
         it('should format supplier, company, purchasing org, and created by display helpers', () => {

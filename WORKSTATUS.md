@@ -1,6 +1,120 @@
 
 # Changes Log
 
+## 2026-09-05 16:24 IST
+- **Agent**: Antigravity
+- **Change**: Fixed runtime execution context in `displayStatusState` and `displayStatusIcon` (`app/fiori-app/webapp/model/formatter.js`):
+  - Root Cause: In UI5 data binding, formatter methods invoked from XML views (`.formatter.displayStatusState`) execute with `this` bound to the Controller instance rather than the formatter object. Calling `this.displayStatus(...)` resulted in runtime error `TypeError: this.displayStatus is not a function`.
+  - Fix: Defined `_resolveDisplayStatus` as an internal scoped function inside `formatter.js` module closure. Updated `displayStatus`, `displayStatusState`, and `displayStatusIcon` to invoke `_resolveDisplayStatus` directly, completely eliminating dependence on `this` context.
+- **Files Modified**:
+  - `app/fiori-app/webapp/model/formatter.js`
+- **Reason**: User reported runtime console error: `TypeError: this.displayStatus is not a function at c.displayStatusState`.
+- **Validation**:
+  - `npx jest test/unit/purchase-order/formatter.test.js`: 12 / 12 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/`: 10 test suites (101 tests) passed (Code 0).
+  - `npm test`: All 23 test suites (179 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 300 ms (Code 0).
+  - `git diff --check`: Clean (Code 0).
+- **Result**: Passed. Runtime `TypeError` resolved; formatters now execute safely regardless of execution context (`this`).
+
+## 2026-09-05 16:22 IST
+- **Agent**: Antigravity
+- **Change**: Replaced composite status text with canonical Display Statuses (Approved, Draft, In Approval, Rejected) across the full stack:
+  1. CAP Domain & S/4HANA Projection (`srv/mm/purchase-order/service.cds`):
+     - Added `ReleaseIsNotCompleted`, `PurchasingDocumentDeletionCode`, `PurchasingDocumentStatus`, and `PurchasingDocumentStatusName` to the `PurchaseOrders` projection on `external.C_PurchaseOrderFs`.
+     - Live queries against SAP S/4HANA verified returning native status codes and text: Status "01" (Draft), Status "02" (In Approval), Status "04" (Sent / Approved), Status "05" (Follow-On Documents / Approved), Status "38" (Rejected).
+  2. Formatter Layer (`app/fiori-app/webapp/model/formatter.js`):
+     - Implemented `displayStatus`: Evaluates S/4HANA status code, name, release indicator, deletion code, and completeness flag to return strictly the canonical Display Status (`Approved`, `Draft`, `In Approval`, `Rejected`).
+     - Implemented `displayStatusState`: Maps status to Fiori Semantic States (`Success` for Approved, `Information` for Draft, `Warning` for In Approval, `Error` for Rejected).
+     - Implemented `displayStatusIcon`: Maps status to Fiori Icons (`sap-icon://accept`, `sap-icon://edit`, `sap-icon://pending`, `sap-icon://decline`).
+     - Cleaned `completenessText`, `completenessState`, and `completenessIcon` to remove redundant suffixes like `(ZDOM - Complete)` and `(ZDOM - Incomplete)`, returning clean canonical labels.
+  3. View Layer (`app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`):
+     - FilterBar: Updated status select `fbStatus` with options: All (`filterAll`), Approved (`statusApproved`), Draft (`statusDraft`), In Approval (`statusInApproval`), and Rejected (`statusRejected`).
+     - Table Column `colStat`: Formatted width to `10rem` and set sort property to `PurchasingCompletenessStatus`.
+     - Table Row `poStatus`: Bound composite parts (`PurchasingDocumentStatus`, `PurchasingDocumentStatusName`, `ReleaseIsNotCompleted`, `PurchasingDocumentDeletionCode`, `PurchasingCompletenessStatus`) to `displayStatus`, `displayStatusState`, and `displayStatusIcon`.
+  4. Detail Dialog (`app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml`):
+     - Updated `ObjectStatus` composite binding to use `displayStatus`, `displayStatusState`, and `displayStatusIcon` for clean status presentation.
+  5. Controller Layer (`app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`):
+     - Updated `_buildFilterCriteria()` for `fbStatus` to handle `Approved` (Status 04/05/Complete), `Draft` (Status 01/Incomplete), `In Approval` (Status 02/Release pending), and `Rejected` (Status 38/Deletion code L).
+  6. PO Creation Model (`app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`):
+     - Updated `createInitialModel` and `computeStatus` to display clean `Draft` status when in preparation, removing verbose `In Preparation (NB - Incomplete)` strings.
+  7. i18n Properties (`app/fiori-app/webapp/i18n/i18n.properties`):
+     - Added localized keys `statusApproved=Approved`, `statusDraft=Draft`, `statusInApproval=In Approval`, `statusRejected=Rejected`.
+  8. Unit & Integration Test Suites:
+     - Updated `test/unit/purchase-order/formatter.test.js` to assert `displayStatus`, `displayStatusState`, and `displayStatusIcon` across S/4HANA status scenarios.
+     - Updated `test/unit/purchase-order/createPurchaseOrderStatus.test.js` for clean Draft and Ready to Create status texts.
+     - Updated `test/unit/purchase-order/purchaseOrdersFilterSort.test.js` to assert `Approved`, `Draft`, `In Approval`, and `Rejected` FilterBar queries.
+- **Files Modified**:
+  - `srv/mm/purchase-order/service.cds`
+  - `app/fiori-app/webapp/model/formatter.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+  - `app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `test/unit/purchase-order/formatter.test.js`
+  - `test/unit/purchase-order/createPurchaseOrderStatus.test.js`
+  - `test/unit/purchase-order/purchaseOrdersFilterSort.test.js`
+- **Reason**: User requested: "I nned to show this Display Status. other should be removed."
+- **Validation**:
+  - `npx jest test/unit/purchase-order/formatter.test.js`: 12 / 12 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/createPurchaseOrderStatus.test.js`: 11 / 11 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/purchaseOrdersFilterSort.test.js`: 27 / 27 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/`: 10 test suites (101 tests) passed (Code 0).
+  - `npm test`: All 23 test suites (179 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 639 ms (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Valid (Code 0).
+  - Live S/4HANA queries via curl verified across all 1,000 records: Draft (5), Approved (992), Rejected (1), In Approval (2).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Display Statuses (Approved, Draft, In Approval, Rejected) are now cleanly displayed in listing, details, and creation form; all redundant text has been removed.
+
+## 2026-09-05 16:12 IST
+- **Agent**: Antigravity
+- **Change**: Added "Created by" to Purchasing Documents Listing and Detail Dialog:
+  1. CAP Domain & S/4HANA Projection (`srv/mm/purchase-order/service.cds`):
+     - Exposed `CreatedByUser` (`@sap.label : 'Created By'`) and `UserFullName` (`@sap.label : 'Description'`) in the `PurchaseOrders` projection on `external.C_PurchaseOrderFs`.
+     - Verified live S/4HANA OData integration delivering author username and full name (e.g. `CreatedByUser: "SANDHLE"`, `UserFullName: "Shriram Andhale"`).
+  2. View Layer (`app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`):
+     - Table Column: Added `colCreatedBy` (`width="12rem"`, `minScreenWidth="Desktop"`, `demandPopin="true"`, `popinDisplay="Inline"`) with sort link mapped to `CreatedByUser`.
+     - Table Row: Added `ObjectIdentifier` `poCreatedBy` presenting the author's full name (`UserFullName`) as the primary title and username (`CreatedByUser`) as subtitle text.
+     - FilterBar: Added `fbCreatedBy` (`CreatedByUser`) FilterGroupItem allowing users to search by username or full name with live search and clear functionality.
+  3. Controller Layer (`app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`):
+     - Extended global toolbar search to include `CreatedByUser` and `UserFullName`.
+     - Added `fbCreatedBy` filter handling in `_buildFilterCriteria()` using case-insensitive contains.
+     - Added `fbCreatedBy` reset in `onFilterBarClear()`.
+     - Supported interactive column sorting for `CreatedByUser`.
+  4. Detail Dialog (`app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml`):
+     - Added "Created by" row formatted via `.formatter.createdByDisplay(UserFullName, CreatedByUser)`.
+  5. Formatter & i18n (`app/fiori-app/webapp/model/formatter.js`, `app/fiori-app/webapp/i18n/i18n.properties`):
+     - Added `createdByDisplay` helper in `formatter.js`.
+     - Added `colCreatedBy` and `filterCreatedByPlaceholder` in `i18n.properties`.
+  6. Unit Tests:
+     - In `test/unit/purchase-order/formatter.test.js`, added assertions for `createdByDisplay`.
+     - In `test/unit/purchase-order/purchaseOrdersFilterSort.test.js`, added tests for `fbCreatedBy` filtering, updated global search assertions, updated clear action assertions, and tested `CreatedByUser` column sorting.
+- **Files Modified**:
+  - `srv/mm/purchase-order/service.cds`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+  - `app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml`
+  - `app/fiori-app/webapp/model/formatter.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `test/unit/purchase-order/formatter.test.js`
+  - `test/unit/purchase-order/purchaseOrdersFilterSort.test.js`
+- **Reason**: User requested: "Add in Purchasing Documents listing : Created by".
+- **Validation**:
+  - `npx jest test/unit/purchase-order/purchaseOrdersFilterSort.test.js`: 25 / 25 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/formatter.test.js`: 12 / 12 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/`: 10 test suites (99 tests) passed (Code 0).
+  - `npm test`: All 23 test suites (177 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 283 ms (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Valid (Code 0).
+  - Live curl check against CAP S/4HANA OData: returns `CreatedByUser: "SANDHLE"`, `UserFullName: "Shriram Andhale"`.
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. "Created by" is fully integrated into the Purchasing Documents listing table, FilterBar, global search, column sorting, and detail popup dialog.
+
 ## 2026-09-05 16:05 IST
 - **Agent**: Antigravity
 - **Change**: Updated Status in PO Listing and Detail Dialog to Dynamically Reflect Document Type:

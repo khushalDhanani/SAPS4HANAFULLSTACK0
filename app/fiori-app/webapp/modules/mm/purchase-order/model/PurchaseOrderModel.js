@@ -54,7 +54,7 @@ sap.ui.define([
                     IncotermsClassification: "",
                     IncotermsLocation1: "",
                     PaymentTerms: "",
-                    StatusText: "In Preparation (NB - Incomplete)",
+                    StatusText: "Draft",
                     StatusState: "Information",
                     StatusIcon: "sap-icon://edit",
                     PurchasingCompletenessStatus: false
@@ -217,7 +217,7 @@ sap.ui.define([
 
             if (bComplete) {
                 return {
-                    text: "Ready to Create (" + sTypeLabel + " - Complete)",
+                    text: "Ready to Create",
                     state: "Success",
                     icon: "sap-icon://accept",
                     complete: true
@@ -226,7 +226,7 @@ sap.ui.define([
 
             if (sDocType) {
                 return {
-                    text: "In Preparation (" + sTypeLabel + " - Incomplete)",
+                    text: "Draft",
                     state: "Information",
                     icon: "sap-icon://edit",
                     complete: false
@@ -234,7 +234,7 @@ sap.ui.define([
             }
 
             return {
-                text: "Incomplete (Missing Document Type)",
+                text: "Draft",
                 state: "Warning",
                 icon: "sap-icon://alert",
                 complete: false

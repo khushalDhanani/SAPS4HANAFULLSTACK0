@@ -329,24 +329,56 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(aFilters[0].oValue1).toBe("2026-09-01");
         });
 
-        it('should filter by PurchasingCompletenessStatus when "true"', () => {
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("true");
+        it('should filter by Display Status Approved', () => {
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("Approved");
             const aFilters = controller._buildFilterCriteria();
 
             expect(aFilters.length).toBe(1);
-            expect(aFilters[0].sPath).toBe("PurchasingCompletenessStatus");
-            expect(aFilters[0].sOperator).toBe(FilterOperator.EQ);
-            expect(aFilters[0].oValue1).toBe(true);
+            expect(aFilters[0].bAnd).toBe(false);
+            expect(aFilters[0].aFilters.length).toBe(3);
+            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
+            expect(aFilters[0].aFilters[0].oValue1).toBe("04");
+            expect(aFilters[0].aFilters[1].sPath).toBe("PurchasingDocumentStatus");
+            expect(aFilters[0].aFilters[1].oValue1).toBe("05");
+            expect(aFilters[0].aFilters[2].sPath).toBe("PurchasingCompletenessStatus");
+            expect(aFilters[0].aFilters[2].oValue1).toBe(true);
         });
 
-        it('should filter by PurchasingCompletenessStatus when "false"', () => {
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("false");
+        it('should filter by Display Status Draft', () => {
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("Draft");
             const aFilters = controller._buildFilterCriteria();
 
             expect(aFilters.length).toBe(1);
-            expect(aFilters[0].sPath).toBe("PurchasingCompletenessStatus");
-            expect(aFilters[0].sOperator).toBe(FilterOperator.EQ);
-            expect(aFilters[0].oValue1).toBe(false);
+            expect(aFilters[0].bAnd).toBe(false);
+            expect(aFilters[0].aFilters.length).toBe(2);
+            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
+            expect(aFilters[0].aFilters[0].oValue1).toBe("01");
+            expect(aFilters[0].aFilters[1].sPath).toBe("PurchasingCompletenessStatus");
+            expect(aFilters[0].aFilters[1].oValue1).toBe(false);
+        });
+
+        it('should filter by Display Status In Approval', () => {
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("In Approval");
+            const aFilters = controller._buildFilterCriteria();
+
+            expect(aFilters.length).toBe(1);
+            expect(aFilters[0].bAnd).toBe(false);
+            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
+            expect(aFilters[0].aFilters[0].oValue1).toBe("02");
+            expect(aFilters[0].aFilters[1].sPath).toBe("ReleaseIsNotCompleted");
+            expect(aFilters[0].aFilters[1].oValue1).toBe(true);
+        });
+
+        it('should filter by Display Status Rejected', () => {
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("Rejected");
+            const aFilters = controller._buildFilterCriteria();
+
+            expect(aFilters.length).toBe(1);
+            expect(aFilters[0].bAnd).toBe(false);
+            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
+            expect(aFilters[0].aFilters[0].oValue1).toBe("38");
+            expect(aFilters[0].aFilters[1].sPath).toBe("PurchasingDocumentDeletionCode");
+            expect(aFilters[0].aFilters[1].oValue1).toBe("L");
         });
 
         it('should filter by CreatedByUser (matching user ID or full name)', () => {

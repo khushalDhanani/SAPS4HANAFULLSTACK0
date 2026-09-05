@@ -19,7 +19,11 @@ service PurchaseOrderService {
         CreationDate,
         CreatedByUser,
         UserFullName,
-        PurchasingCompletenessStatus
+        PurchasingCompletenessStatus,
+        ReleaseIsNotCompleted,
+        PurchasingDocumentDeletionCode,
+        PurchasingDocumentStatus,
+        PurchasingDocumentStatusName
     };
 
     // Value Help Entities (Accessible to Viewers and Purchasing Managers)

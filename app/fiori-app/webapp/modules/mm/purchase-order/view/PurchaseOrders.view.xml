@@ -199,8 +199,10 @@
                                     <Select id="fbStatus" selectedKey="" width="100%">
                                         <items>
                                             <core:Item key="" text="{i18n>filterAll}" />
-                                            <core:Item key="true" text="{i18n>statusComplete}" />
-                                            <core:Item key="false" text="{i18n>statusIncomplete}" />
+                                            <core:Item key="Approved" text="{i18n>statusApproved}" />
+                                            <core:Item key="Draft" text="{i18n>statusDraft}" />
+                                            <core:Item key="In Approval" text="{i18n>statusInApproval}" />
+                                            <core:Item key="Rejected" text="{i18n>statusRejected}" />
                                         </items>
                                     </Select>
                                 </fb:control>
@@ -308,7 +310,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colStat" width="12.5rem" hAlign="Center" sortIndicator="None">
+                        <Column id="colStat" width="10rem" hAlign="Center" sortIndicator="None">
                             <header>
                                 <Link id="linkColStat" text="{i18n>colStatus}" press=".onSortColumn">
                                     <customData>
@@ -351,24 +353,33 @@
                                     id="poStatus"
                                     text="{
                                         parts: [
-                                            { path: 'PurchasingCompletenessStatus' },
-                                            { path: 'PurchaseOrderType' }
+                                            { path: 'PurchasingDocumentStatus' },
+                                            { path: 'PurchasingDocumentStatusName' },
+                                            { path: 'ReleaseIsNotCompleted' },
+                                            { path: 'PurchasingDocumentDeletionCode' },
+                                            { path: 'PurchasingCompletenessStatus' }
                                         ],
-                                        formatter: '.formatter.completenessText'
+                                        formatter: '.formatter.displayStatus'
                                     }"
                                     state="{
                                         parts: [
-                                            { path: 'PurchasingCompletenessStatus' },
-                                            { path: 'PurchaseOrderType' }
+                                            { path: 'PurchasingDocumentStatus' },
+                                            { path: 'PurchasingDocumentStatusName' },
+                                            { path: 'ReleaseIsNotCompleted' },
+                                            { path: 'PurchasingDocumentDeletionCode' },
+                                            { path: 'PurchasingCompletenessStatus' }
                                         ],
-                                        formatter: '.formatter.completenessState'
+                                        formatter: '.formatter.displayStatusState'
                                     }"
                                     icon="{
                                         parts: [
-                                            { path: 'PurchasingCompletenessStatus' },
-                                            { path: 'PurchaseOrderType' }
+                                            { path: 'PurchasingDocumentStatus' },
+                                            { path: 'PurchasingDocumentStatusName' },
+                                            { path: 'ReleaseIsNotCompleted' },
+                                            { path: 'PurchasingDocumentDeletionCode' },
+                                            { path: 'PurchasingCompletenessStatus' }
                                         ],
-                                        formatter: '.formatter.completenessIcon'
+                                        formatter: '.formatter.displayStatusIcon'
                                     }" />
                             </cells>
                         </ColumnListItem>

@@ -246,14 +246,43 @@ sap.ui.define([
                 }));
             }
 
-            // 10. FilterBar: Completeness Status
+            // 10. FilterBar: Display Status (Approved, Draft, In Approval, Rejected)
             var oFbStatus = this.byId("fbStatus");
             if (oFbStatus) {
                 var sStatusKey = oFbStatus.getSelectedKey();
-                if (sStatusKey === "true") {
-                    aFilters.push(new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, true));
-                } else if (sStatusKey === "false") {
-                    aFilters.push(new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, false));
+                if (sStatusKey === "Approved" || sStatusKey === "true") {
+                    aFilters.push(new Filter({
+                        filters: [
+                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "04"),
+                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "05"),
+                            new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, true)
+                        ],
+                        and: false
+                    }));
+                } else if (sStatusKey === "Draft" || sStatusKey === "false") {
+                    aFilters.push(new Filter({
+                        filters: [
+                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "01"),
+                            new Filter("PurchasingCompletenessStatus", FilterOperator.EQ, false)
+                        ],
+                        and: false
+                    }));
+                } else if (sStatusKey === "In Approval") {
+                    aFilters.push(new Filter({
+                        filters: [
+                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "02"),
+                            new Filter("ReleaseIsNotCompleted", FilterOperator.EQ, true)
+                        ],
+                        and: false
+                    }));
+                } else if (sStatusKey === "Rejected") {
+                    aFilters.push(new Filter({
+                        filters: [
+                            new Filter("PurchasingDocumentStatus", FilterOperator.EQ, "38"),
+                            new Filter("PurchasingDocumentDeletionCode", FilterOperator.EQ, "L")
+                        ],
+                        and: false
+                    }));
                 }
             }
 

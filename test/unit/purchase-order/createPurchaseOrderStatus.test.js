@@ -61,12 +61,12 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
     });
 
     describe('createInitialModel default status', () => {
-        it('should initialize with default status In Preparation for standard NB document type', () => {
+        it('should initialize with default status Draft for standard NB document type', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
             const header = oModel.getProperty('/header');
 
             expect(header.PurchaseOrderType).toBe('NB');
-            expect(header.StatusText).toBe('In Preparation (NB - Incomplete)');
+            expect(header.StatusText).toBe('Draft');
             expect(header.StatusState).toBe('Information');
             expect(header.StatusIcon).toBe('sap-icon://edit');
             expect(header.PurchasingCompletenessStatus).toBe(false);
@@ -74,7 +74,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
     });
 
     describe('computeStatus based on Document Type', () => {
-        it('should reflect different document types (NB, ZDOM, FO, UB) when incomplete', () => {
+        it('should reflect Draft display status when incomplete', () => {
             const testTypes = ['NB', 'ZDOM', 'FO', 'UB', 'EC'];
 
             testTypes.forEach(type => {
@@ -88,7 +88,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
                 };
 
                 const status = PurchaseOrderModel.computeStatus(oData);
-                expect(status.text).toBe(`In Preparation (${type} - Incomplete)`);
+                expect(status.text).toBe('Draft');
                 expect(status.state).toBe('Information');
                 expect(status.icon).toBe('sap-icon://edit');
                 expect(status.complete).toBe(false);
@@ -105,7 +105,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             };
 
             const status = PurchaseOrderModel.computeStatus(oDataMissingType);
-            expect(status.text).toBe('Incomplete (Missing Document Type)');
+            expect(status.text).toBe('Draft');
             expect(status.state).toBe('Warning');
             expect(status.icon).toBe('sap-icon://alert');
             expect(status.complete).toBe(false);
@@ -122,7 +122,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             expect(statusEmpty.complete).toBe(false);
         });
 
-        it('should return Ready to Create (<Type> - Complete) when all required fields and items are valid', () => {
+        it('should return Ready to Create when all required fields and items are valid', () => {
             const oDataComplete = {
                 header: {
                     PurchaseOrderType: 'NB',
@@ -147,7 +147,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             };
 
             const status = PurchaseOrderModel.computeStatus(oDataComplete);
-            expect(status.text).toBe('Ready to Create (NB - Complete)');
+            expect(status.text).toBe('Ready to Create');
             expect(status.state).toBe('Success');
             expect(status.icon).toBe('sap-icon://accept');
             expect(status.complete).toBe(true);
@@ -178,7 +178,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             };
 
             const status = PurchaseOrderModel.computeStatus(oDataCustom);
-            expect(status.text).toBe('Ready to Create (ZDOM - Complete)');
+            expect(status.text).toBe('Ready to Create');
             expect(status.state).toBe('Success');
             expect(status.complete).toBe(true);
         });
@@ -210,13 +210,13 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
 
             const statusIncomplete = PurchaseOrderModel.computeStatus(oDataWithInco);
             expect(statusIncomplete.complete).toBe(false);
-            expect(statusIncomplete.text).toBe('In Preparation (NB - Incomplete)');
+            expect(statusIncomplete.text).toBe('Draft');
 
             // Add location
             oDataWithInco.header.IncotermsLocation1 = 'BERLIN';
             const statusComplete = PurchaseOrderModel.computeStatus(oDataWithInco);
             expect(statusComplete.complete).toBe(true);
-            expect(statusComplete.text).toBe('Ready to Create (NB - Complete)');
+            expect(statusComplete.text).toBe('Ready to Create');
         });
 
         it('should invalidate if item quantity is missing or <= 0', () => {
@@ -244,7 +244,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
 
             const status = PurchaseOrderModel.computeStatus(oDataZeroQty);
             expect(status.complete).toBe(false);
-            expect(status.text).toBe('In Preparation (NB - Incomplete)');
+            expect(status.text).toBe('Draft');
         });
     });
 
@@ -253,13 +253,13 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
             
             // Initial check
-            expect(oModel.getProperty('/header/StatusText')).toBe('In Preparation (NB - Incomplete)');
+            expect(oModel.getProperty('/header/StatusText')).toBe('Draft');
 
             // Change document type to FO
             oModel.setProperty('/header/PurchaseOrderType', 'FO');
             PurchaseOrderModel.updateStatus(oModel);
 
-            expect(oModel.getProperty('/header/StatusText')).toBe('In Preparation (FO - Incomplete)');
+            expect(oModel.getProperty('/header/StatusText')).toBe('Draft');
             expect(oModel.getProperty('/header/StatusState')).toBe('Information');
 
             // Fill all required fields
@@ -275,7 +275,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
 
             PurchaseOrderModel.updateStatus(oModel);
 
-            expect(oModel.getProperty('/header/StatusText')).toBe('Ready to Create (FO - Complete)');
+            expect(oModel.getProperty('/header/StatusText')).toBe('Ready to Create');
             expect(oModel.getProperty('/header/StatusState')).toBe('Success');
             expect(oModel.getProperty('/header/StatusIcon')).toBe('sap-icon://accept');
             expect(oModel.getProperty('/header/PurchasingCompletenessStatus')).toBe(true);
@@ -291,7 +291,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
 
             const res = PurchaseOrderModel.updateStatus(rawObj);
             expect(res.complete).toBe(false);
-            expect(rawObj.header.StatusText).toBe('In Preparation (NB - Incomplete)');
+            expect(rawObj.header.StatusText).toBe('Draft');
             expect(rawObj.header.PurchasingCompletenessStatus).toBe(false);
         });
 
