@@ -86,8 +86,22 @@ sap.ui.define([
                     })
                 })
                 .then(function (response) {
-                    return response.json().then(function (data) {
-                        return { status: response.status, ok: response.ok, data: data };
+                    return response.text().then(function (sText) {
+                        var oData = null;
+                        try {
+                            oData = JSON.parse(sText);
+                        } catch (e) {
+                            // Non-JSON response (e.g. plain text 401 or HTML 502/503)
+                            var sSnippet = (sText || "").trim();
+                            oData = {
+                                error: {
+                                    message: (sSnippet && sSnippet.length < 200 && !sSnippet.startsWith("<"))
+                                        ? sSnippet
+                                        : "Authentication service responded with HTTP " + response.status + " (" + (response.statusText || "Error") + ")"
+                                }
+                            };
+                        }
+                        return { status: response.status, ok: response.ok, data: oData };
                     });
                 })
                 .then(function (result) {
@@ -104,6 +118,15 @@ sap.ui.define([
                     }
 
                     var oServerUser = result.data;
+
+                    // If server returned authenticated: false, reject cleanly with message
+                    if (oServerUser && oServerUser.authenticated === false) {
+                        reject({
+                            code: "AUTH_FAILED",
+                            message: oServerUser.message || "Invalid username or password. Please verify your S/4HANA credentials."
+                        });
+                        return;
+                    }
 
                     var oUserSession = {
                         username: oServerUser.username || sTrimmedUser,
@@ -135,7 +158,9 @@ sap.ui.define([
                 .catch(function (err) {
                     reject({
                         code: "NETWORK_ERROR",
-                        message: "Cannot connect to the authentication service. Please check your network connection and try again."
+                        message: (err && err.message && err.message !== "Failed to fetch")
+                            ? err.message
+                            : "Cannot connect to the authentication service. Please check your network connection and try again."
                     });
                 });
             });

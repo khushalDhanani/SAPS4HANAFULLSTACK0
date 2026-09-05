@@ -1,32 +1,11 @@
-// PurchaseOrderAdapter for S/4HANA integration
+// PurchaseOrderAdapter for S/4HANA integration using SAP Cloud SDK
 const cds = require('@sap/cds');
-const fs = require('fs');
-const path = require('path');
-
-// Load .env.local into process.env
-(function loadEnvLocal() {
-  try {
-    const envPath = path.resolve(cds.root || process.cwd(), '.env.local');
-    if (fs.existsSync(envPath)) {
-      const lines = fs.readFileSync(envPath, 'utf8').split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx > 0) {
-          const key = trimmed.substring(0, eqIdx).trim();
-          const val = trimmed.substring(eqIdx + 1).trim();
-          if (!process.env[key]) {
-            process.env[key] = val;
-          }
-        }
-      }
-    }
-  } catch (e) {}
-})();
+const { getDestination } = require('@sap-cloud-sdk/connectivity');
+const { executeHttpRequest } = require('@sap-cloud-sdk/http-client');
 
 /**
- * Adapter class to encapsulate all communication with the S/4HANA services.
+ * Adapter class to encapsulate all communication with S/4HANA services
+ * using SAP Cloud SDK and BTP Destination management.
  */
 class PurchaseOrderAdapter {
   constructor() {
@@ -66,95 +45,86 @@ class PurchaseOrderAdapter {
   }
 
   /**
-   * Create a Purchase Order using the maintenance service.
-   * Performs draft creation followed by activation.
+   * Resolve destination for S/4HANA communication using SAP Cloud SDK.
+   * Resolves destination via BTP Destination Service (or registered local destination).
    */
-// Helper to fetch CSRF token
-  async _fetchCsrfToken() {
-    const creds = this.s4hanaMaint.options?.credentials || cds.env.requires.MM_PUR_PO_MAINT_V2_SRV.credentials;
-    const auth = Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-    const response = await fetch(`${creds.url}`, {
-      method: 'GET',
-      headers: {
-        'X-CSRF-Token': 'Fetch',
-        'Authorization': `Basic ${auth}`,
-        ...creds.headers
-      }
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch CSRF token: ${response.status}`);
+  async _getDestination() {
+    const destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
+    try {
+      const dest = await getDestination({ destinationName });
+      if (dest) return dest;
+    } catch (err) {
+      // In local development without BTP Destination Service, fallback to cds.env credentials
     }
-    this._csrfToken = response.headers.get('x-csrf-token');
-    
-    let cookies = [];
-    if (typeof response.headers.getSetCookie === 'function') {
-      cookies = response.headers.getSetCookie();
-    } else {
-      const rawCookie = response.headers.get('set-cookie');
-      if (rawCookie) {
-        cookies = rawCookie.split(/,(?=\s*[A-Za-z0-9_-]+\=)/);
-      }
+
+    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials;
+    if (creds && creds.url) {
+      return {
+        url: creds.url,
+        username: creds.username,
+        password: creds.password,
+        headers: creds.headers || {}
+      };
     }
-    if (cookies.length > 0) {
-      this._csrfCookie = cookies.map(c => c.split(';')[0].trim()).join('; ');
-    }
+
+    throw new Error(`[PurchaseOrderAdapter] Destination '${destinationName}' not found and no local credentials configured in cds.env.`);
   }
 
+  /**
+   * Create a Purchase Order using SAP Cloud SDK.
+   * Performs draft creation followed by activation with automatic CSRF management.
+   */
   async createPurchaseOrder(payload) {
     if (!this.s4hanaMaint) {
       this.s4hanaMaint = await cds.connect.to('MM_PUR_PO_MAINT_V2_SRV');
     }
-    // Ensure CSRF token
-    if (!this._csrfToken) {
-      await this._fetchCsrfToken();
-    }
-    const creds = this.s4hanaMaint.options?.credentials || cds.env.requires.MM_PUR_PO_MAINT_V2_SRV.credentials;
-    const auth = Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-    const baseUrl = creds.url;
-    // 1. Create draft
-    const draftResp = await fetch(`${baseUrl}/C_PurchaseOrderTP`, {
-      method: 'POST',
+
+    const destination = await this._getDestination();
+    const servicePath = '/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV';
+    const basePath = (destination.url && destination.url.includes(servicePath)) ? '' : servicePath;
+
+    // 1. Create draft using SAP Cloud SDK (automatic CSRF token retrieval)
+    const draftResp = await executeHttpRequest(destination, {
+      method: 'post',
+      url: `${basePath}/C_PurchaseOrderTP`,
+      data: payload,
       headers: {
-        'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'X-CSRF-Token': this._csrfToken,
-        'Authorization': `Basic ${auth}`,
-        'Cookie': this._csrfCookie,
-        ...creds.headers
-      },
-      body: JSON.stringify(payload)
+        'Content-Type': 'application/json'
+      }
     });
-    if (!draftResp.ok) {
-      const txt = await draftResp.text();
-      throw new Error(`Draft creation failed: ${draftResp.status} ${txt}`);
-    }
-    const draftResult = await draftResp.json();
-    
-    // In V2, the actual content is nested inside 'd'
+
+    const draftResult = draftResp.data;
     const draftData = draftResult.d || draftResult;
     const draftUUID = draftData.DraftUUID;
     if (!draftUUID) {
       throw new Error('DraftUUID not returned from draft creation');
     }
-    // 2. Activate draft
+
+    // Extract session cookie and CSRF token from draft creation request context
+    const req = draftResp.request;
+    const cookie = req?.getHeader ? req.getHeader('cookie') : req?._headers?.cookie;
+    const token = req?.getHeader ? req.getHeader('x-csrf-token') : req?._headers?.['x-csrf-token'];
+
+    // 2. Activate draft using SAP Cloud SDK
     const poParam = draftData.PurchaseOrder || '';
-    const query = `?PurchaseOrder='${poParam}'&DraftUUID=guid'${draftUUID}'&IsActiveEntity=false&%24format=json`;
-    
-    const actResp = await fetch(`${baseUrl}/C_PurchaseOrderTPActivation${query}`, {
-      method: 'POST',
+    const actResp = await executeHttpRequest(destination, {
+      method: 'post',
+      url: `${basePath}/C_PurchaseOrderTPActivation`,
+      params: {
+        PurchaseOrder: `'${poParam}'`,
+        DraftUUID: `guid'${draftUUID}'`,
+        IsActiveEntity: 'false',
+        '$format': 'json'
+      },
       headers: {
         'Accept': 'application/json',
-        'X-CSRF-Token': this._csrfToken,
-        'Authorization': `Basic ${auth}`,
-        'Cookie': this._csrfCookie,
-        ...creds.headers
+        ...(cookie ? { 'Cookie': cookie } : {}),
+        ...(token ? { 'X-CSRF-Token': token } : {})
       }
-    });
-    if (!actResp.ok) {
-      const txt = await actResp.text();
-      throw new Error(`Activation failed: ${actResp.status} ${txt}`);
-    }
-    const activationResult = await actResp.json();
+    }, { fetchCsrfToken: !token });
+
+    const activationResult = actResp.data;
     return activationResult.d || activationResult;
   }
 }

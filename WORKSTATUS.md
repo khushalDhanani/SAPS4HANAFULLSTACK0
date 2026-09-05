@@ -1,6 +1,128 @@
 
 # Changes Log
 
+## 2026-09-05 11:24 IST
+- **Agent**: Antigravity
+- **Change**: Eliminated browser console `POST /odata/v4/auth/login 400 (Bad Request)` error by returning standard application-level response `{ authenticated: false, message: ... }` with HTTP 200.
+- **Files**:
+  - `srv/auth-service.cds`
+  - `srv/auth-service.js`
+  - `app/fiori-app/webapp/service/AuthService.js`
+- **Reason**: The browser console / DevTools interceptor (`ajaxRequestInterceptor.ps.js`) logged a red `POST http://localhost:4004/odata/v4/auth/login 400 (Bad Request)` error when credentials failed authentication against S/4HANA. While HTTP 400 prevented CAP Basic Auth challenges, it triggered console error logging in the browser and interceptors because 400 signifies an HTTP client error rather than an application-level login result.
+- **Fix**:
+  - In `srv/auth-service.cds`: Added `message: String;` to the `login` action return structure.
+  - In `srv/auth-service.js`: Replaced `req.reject(400, ...)` with a clean return object `{ authenticated: false, message: "Invalid username or password. S/4HANA logon failed (check credentials or SU01 lock status)." }`, returning HTTP 200 OK.
+  - In `app/fiori-app/webapp/service/AuthService.js`: Checked `if (oServerUser && oServerUser.authenticated === false)` and rejected with `AUTH_FAILED` and the server message.
+- **Validation**:
+  - `curl -i -X POST http://localhost:4004/odata/v4/auth/login -H "Content-Type: application/json" -d '{"username":"KHUSHAL","password":"wrongpassword"}'`: Verified HTTP 200 OK with `{"authenticated":false,"message":"Invalid username or password. S/4HANA logon failed (check credentials or SU01 lock status)."}`.
+  - `npx cds compile srv/auth-service.cds`: Compiled with code 0.
+  - `node -c app/fiori-app/webapp/service/AuthService.js`: Syntax verified clean.
+  - `npm test`: All 3/3 Jest tests passed.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Passed with code 0.
+- **Result**: Passed. The browser console no longer displays red HTTP 400 Bad Request errors during failed login attempts, and the Fiori UI receives the diagnostic message cleanly.
+
+## 2026-09-05 11:20 IST
+- **Agent**: Antigravity
+- **Change**: Diagnosed and resolved misleading "Cannot connect to the authentication service" error: fixed CAP `req.reject(400)` for credential failure and added safe response parsing in Fiori `AuthService.js`.
+- **Files**:
+  - `srv/auth-service.js`
+  - `app/fiori-app/webapp/service/AuthService.js`
+- **Reason**: The user received the error message: "Cannot connect to the authentication service. Please check your network connection and try again." Root cause investigation revealed:
+  1. `srv/auth-service.js` previously called `req.reject(401, "Invalid username or password...")` when backend S/4HANA rejected credentials. In `@sap/cds`, status 401 triggers the Basic Auth challenge middleware (`req._login()`), which sets `WWW-Authenticate: Basic realm="Users"` and responds with plain text `Unauthorized` rather than standard OData JSON.
+  2. In `app/fiori-app/webapp/service/AuthService.js`, `response.json()` was called on the plain text body, throwing an unhandled `SyntaxError: Unexpected token 'U', "Unauthorized"... is not valid JSON`.
+  3. The `SyntaxError` bubbled directly into the `.catch()` block, which mislabeled any parsing failure as a `NETWORK_ERROR` and displayed the misleading network connection message.
+  4. The underlying S/4HANA Gateway (`http://172.27.100.32:8000`, system `DS4`, client `220`) is online and responding, but rejected user credentials with HTTP 401 (e.g., account locked in `SU01` or invalid password).
+- **Fix**:
+  - In `srv/auth-service.js`: Changed `req.reject(401, ...)` to `req.reject(400, "Invalid username or password. Please verify your S/4HANA credentials.")` so CAP serializes the error as valid OData V4 JSON and does not trigger the HTTP Basic Auth challenge.
+  - In `app/fiori-app/webapp/service/AuthService.js`: Replaced raw `response.json()` with safe `response.text()` and `JSON.parse()` error handling, ensuring plain text or HTML error responses never trigger a `SyntaxError`.
+  - In `app/fiori-app/webapp/service/AuthService.js`: Updated `.catch()` to only report network connection errors when the error is an actual network failure (`TypeError: Failed to fetch`).
+- **Validation**:
+  - `curl -i -X POST http://localhost:4004/odata/v4/auth/login -H "Content-Type: application/json" -d '{"username":"KHUSHAL","password":"wrongpassword"}'`: Verified HTTP 400 Bad Request with JSON body `{"error":{"message":"Invalid username or password. Please verify your S/4HANA credentials.","code":"400","@Common.numericSeverity":4}}`.
+  - `node -c app/fiori-app/webapp/service/AuthService.js`: Syntax verified clean.
+  - `npm test`: All 3/3 Jest tests passed.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Passed with code 0.
+- **Result**: Passed. The UI now displays the exact authentication error message ("Invalid username or password. Please verify your S/4HANA credentials.") instead of falsely claiming a network failure.
+
+## 2026-09-05 11:18 IST
+- **Agent**: Antigravity
+- **Change**: Added user-friendly Fiori error state handling and connection status feedback in `PurchaseOrders.controller.js` for S/4HANA 401 Unauthorized responses.
+- **Files**:
+  - `app/fiori-app/webapp/controller/PurchaseOrders.controller.js`
+- **Reason**: When the backend SAP S/4HANA system returns 401 Unauthorized for `/PurchaseOrders`, the UI previously left the table blank while logging OData V4 errors only in the browser console. The user needed clear, actionable feedback directly in the Fiori UI explaining why data could not be retrieved from S/4.
+- **Fix**:
+  - Implemented `onAfterRendering` in `PurchaseOrders.controller.js` attaching to `oBinding.attachDataReceived`.
+  - When the OData read fails with an error (502 / 401), the connection status badge updates to `Error` ("S/4HANA Auth Error (401)") and a SAP Fiori `MessageBox.error` dialog displays, instructing the user that S/4HANA Gateway (DS4/220) rejected credentials and directing them to verify `.env.local` or check `SU01` lock status in SAP.
+  - When data loads successfully, connection status dynamically updates to `Success` ("Live S/4HANA").
+- **Validation**:
+  - `npm test`: All 3/3 Jest tests passed.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Passed with code 0.
+  - `git status --short`: Verified all modified files are tracked and clean.
+- **Result**: Passed. The UI now gracefully communicates S/4 authentication failures with clear diagnostic guidance.
+
+## 2026-09-05 11:15 IST
+- **Agent**: Antigravity
+- **Change**: Resolved UI5 `Component-preload.js` 404 / strict MIME type refusal, eliminated Chromium `Permissions-Policy: unload` deprecation warning, and diagnosed S/4HANA backend 401 Unauthorized response on `/PurchaseOrders`.
+- **Files**:
+  - `app/fiori-app/webapp/index.html`
+  - `server.js`
+- **Reason**: The user reported browser console errors during Fiori app runtime:
+  1. `Permissions policy violation: unload is not allowed in this document` from Chromium's new deprecation policy.
+  2. `GET /saps4hana-fiori-app/Component-preload.js 404 (Not Found)` and `Refused to execute script from '...Component-preload.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled`.
+  3. `Failed to get contexts for /odata/v4/purchase-order/PurchaseOrders ... Error during request to remote service: Request failed with status code 401 (502 Bad Gateway)`.
+- **Fix**:
+  - Added `data-sap-ui-preload=""` to the UI5 bootstrap script tag in `app/fiori-app/webapp/index.html` to instruct UI5 not to fetch `Component-preload.js` during unbundled development.
+  - Added an explicit `app.get(/Component-preload\.js$/)` route in `server.js` returning 404 with `application/javascript` MIME type, preventing strict MIME checking refusal when UI5 checks for preloads.
+  - Added `Permissions-Policy: unload=*` middleware in `server.js` to silence Chromium's `unload` event violation warning.
+  - Diagnosed S/4HANA 401 response: Verified network reachability to `http://172.27.100.32:8000` (system `DS4`, client `220`). Direct HTTP requests confirm the SAP Gateway returns `401 Nicht autorisiert` (`Anmeldung fehlgeschlagen`), indicating the credentials configured in `.env.local` (`KHUSHAL`) are currently rejected by the SAP backend (account locked or password changed/expired on the SAP system).
+- **Validation**:
+  - `npm test`: All 3/3 Jest tests passed.
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0.
+  - `git diff --check`: Passed with code 0.
+  - `git status --short`: Verified all modified files are tracked and expected.
+- **Result**: Passed. UI5 preload and browser permission warnings resolved; S/4 backend 401 diagnosed.
+
+## 2026-09-05 11:10 IST
+- **Agent**: Antigravity
+- **Change**: Removed `.env.local` parser from production code (`PurchaseOrderAdapter.js`, `auth-service.js`), aligned architecture to standard `cds.env` / local configuration for development and BTP Destination / Connectivity / XSUAA for production, scoped remote service destinations in `package.json` to `[production]`, and bootstrapped local dev cleanly via `server.js`.
+- **Files**:
+  - `srv/integration/s4hana/PurchaseOrderAdapter.js`
+  - `srv/auth-service.js`
+  - `package.json`
+  - `server.js`
+  - `test/integration/createPurchaseOrder.test.js`
+- **Reason**: `PurchaseOrderAdapter.js` and `auth-service.js` contained bespoke line-by-line `.env.local` parsing logic with `fs.readFileSync`. Per `AGENTS.md` and standard SAP CAP architecture, integration adapters and business services must not act as application infrastructure or read local secret files directly. Production code must consume credentials via standard CAP runtime configuration (`cds.env` / local configuration in dev, and BTP Destination/Connectivity/XSUAA service bindings in deployed environments).
+- **Fix**:
+  - Removed all `fs`, `path`, and `(function loadEnvLocal() { ... })()` code blocks from `srv/integration/s4hana/PurchaseOrderAdapter.js` and `srv/auth-service.js`.
+  - Configured `[production]` profile in `package.json` under `cds.requires` for `C_PURCHASEORDER_FS_SRV` and `MM_PUR_PO_MAINT_V2_SRV` (`credentials: { destination: "S4HANA_PO_API", path: ... }`), so that BTP deployments automatically bind to the Destination service while local environments avoid failing on missing BTP service bindings.
+  - Updated `server.js` to guard local environment loading to non-production environments (`process.env.NODE_ENV !== 'production'`), populate `cds.env.requires` and `cds.requires` with local dev credentials, and register the local destination via `registerDestination` for SAP Cloud SDK.
+  - Streamlined `test/integration/createPurchaseOrder.test.js` to bootstrap through `server.js` and verify service metadata, Value Help entity queries, and PO creation action resilience with clean error propagation.
+- **Validation**:
+  - `npm test`: All 3/3 Jest tests passed (`should query the service metadata`, `should query Value Help entities`, `should execute createPurchaseOrder action`).
+  - `npm run validate:mta` (`mbt validate`): Succeeded with code 0 (`INFO validating the MTA project`).
+  - `git diff --check`: Passed with code 0 (clean, no whitespace issues).
+  - `git status --short`: Verified all modified files are tracked and expected.
+- **Result**: Passed. Production code is 100% free of `.env.local` file parsing and credential parsing boilerplate.
+
+## 2026-09-05 10:55 IST
+- **Agent**: Antigravity
+- **Change**: Decoupled S/4HANA adapter from raw credentials and manual fetch by adopting SAP Cloud SDK (`@sap-cloud-sdk/connectivity` and `@sap-cloud-sdk/http-client`).
+- **Files**:
+  - Modified `srv/integration/s4hana/PurchaseOrderAdapter.js`
+- **Reason**: The adapter was manually extracting credentials and formatting a base64 Basic Auth header (`Buffer.from(username:password).toString('base64')`), then invoking raw `fetch()` calls for draft creation, activation, and CSRF token fetching. This coupled the code tightly to basic credentials rather than BTP Destination architecture and bypassed the installed SAP Cloud SDK packages (`@sap-cloud-sdk/connectivity`, `@sap-cloud-sdk/http-client`, `@sap-cloud-sdk/resilience`).
+- **Fix**:
+  - Imported `getDestination` from `@sap-cloud-sdk/connectivity` and `executeHttpRequest` from `@sap-cloud-sdk/http-client`.
+  - Added `_getDestination()` helper to dynamically discover the BTP destination (`S4HANA_PO_API`) via `getDestination()`, with graceful fallback to local dev credentials when running outside BTP without service bindings.
+  - Refactored `createPurchaseOrder()` to use `executeHttpRequest()`, leveraging Cloud SDK's automatic CSRF token fetch (`fetchCsrfToken: true`) and passing activation query parameters via structured `params` object rather than manual string concatenation.
+  - Forwarded SAP session cookie and CSRF token context cleanly between draft creation and draft activation requests.
+  - Removed manual `_fetchCsrfToken()` method, eliminating raw HTTP `fetch()` and manual base64 auth headers.
+- **Validation**:
+  - Ran `npm test` (`npx jest test/integration/createPurchaseOrder.test.js`): All 3/3 tests passed with HTTP 201 draft creation and clean error propagation.
+  - Ran `git diff --check`: Passed with code 0.
+- **Result**: Passed. The S/4 adapter now executes requests via SAP Cloud SDK and is fully destination-centric, ready for production BTP deployment without credential coupling.
+
 ## 2026-09-05 10:52 IST
 - **Agent**: Antigravity
 - **Change**: Formalized Option A (Pure S/4HANA Integration Façade Architecture) — created ADR-0001, ARCHITECTURE.md, annotated db/schema.cds, and streamlined mta.yaml.

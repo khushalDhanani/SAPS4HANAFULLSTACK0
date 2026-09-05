@@ -1,31 +1,4 @@
 const cds = require("@sap/cds");
-const fs = require("fs");
-const path = require("path");
-
-// Load .env.local into process.env (CAP auto-loads .env but not .env.local)
-(function loadEnvLocal() {
-  try {
-    const envPath = path.resolve(cds.root || process.cwd(), ".env.local");
-    if (fs.existsSync(envPath)) {
-      const lines = fs.readFileSync(envPath, "utf8").split("\n");
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const eqIdx = trimmed.indexOf("=");
-        if (eqIdx > 0) {
-          const key = trimmed.substring(0, eqIdx).trim();
-          const val = trimmed.substring(eqIdx + 1).trim();
-          // Only set if not already present in environment
-          if (!process.env[key]) {
-            process.env[key] = val;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    // Silently ignore — deployed environments use BTP service bindings
-  }
-})();
 
 /**
  * CAP Authentication Service Handler
@@ -49,10 +22,16 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
     // Validate required fields
     if (!username || !username.trim()) {
-      return req.reject(400, "Username is required.");
+      return {
+        authenticated: false,
+        message: "Username is required."
+      };
     }
     if (!password || !password.trim()) {
-      return req.reject(400, "Password is required.");
+      return {
+        authenticated: false,
+        message: "Password is required."
+      };
     }
 
     const sUser = username.trim();
@@ -64,10 +43,10 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
     if (!sDestUrl) {
       console.error("[AuthService] S4_DESTINATION_URL is not configured.");
-      return req.reject(
-        500,
-        "S/4HANA system is not configured. Contact your administrator."
-      );
+      return {
+        authenticated: false,
+        message: "S/4HANA system is not configured. Contact your administrator."
+      };
     }
 
     // Build a safe read-only validation URL against Gateway catalog
@@ -92,13 +71,12 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     } catch (err) {
       // Network-level errors (DNS, connection refused, timeout, etc.)
       console.error("[AuthService] S/4HANA connection error:", err.message);
-      return req.reject(
-        503,
-        "Cannot connect to S/4HANA system. Please check network connectivity and try again."
-      );
+      return {
+        authenticated: false,
+        message: "Cannot connect to S/4HANA system. Please check network connectivity and try again."
+      };
     }
 
-    // Handle the S/4HANA response outside try-catch so req.reject doesn't get re-caught
     if (response.ok) {
       // Credentials are valid — S/4HANA accepted the Basic auth
       const sCapitalized =
@@ -111,26 +89,27 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
 
       return {
         authenticated: true,
+        message: "Authentication successful.",
         username: sUser,
         avatarInitials: sInitials,
         system: "PRD - Client " + sClient,
         loginTimestamp: sTimestamp,
       };
     } else if (response.status === 401 || response.status === 403) {
-      return req.reject(
-        401,
-        "Invalid username or password. Please verify your S/4HANA credentials."
-      );
+      return {
+        authenticated: false,
+        message: "Invalid username or password. S/4HANA logon failed (check credentials or SU01 lock status)."
+      };
     } else {
       console.error(
         "[AuthService] Unexpected S/4 response: " + response.status
       );
-      return req.reject(
-        502,
-        "S/4HANA system returned an unexpected response (HTTP " +
+      return {
+        authenticated: false,
+        message: "S/4HANA system returned an unexpected response (HTTP " +
           response.status +
           "). Please try again."
-      );
+      };
     }
   }
 };

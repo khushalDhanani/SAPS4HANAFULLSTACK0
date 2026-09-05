@@ -49,6 +49,38 @@ sap.ui.define([
             oTable.attachUpdateFinished(this._updateKpiMetrics, this);
         },
 
+        onAfterRendering: function () {
+            var oTable = this.byId("purchaseOrdersTable");
+            var oBinding = oTable ? oTable.getBinding("items") : null;
+            if (oBinding && !this._bDataReceivedAttached) {
+                this._bDataReceivedAttached = true;
+                var that = this;
+                oBinding.attachDataReceived(function (oEvent) {
+                    var oError = oEvent.getParameter("error");
+                    var oStatus = that.byId("connectionStatus");
+                    if (oError) {
+                        if (oStatus) {
+                            oStatus.setState("Error");
+                            oStatus.setText("S/4HANA Auth Error (401)");
+                            oStatus.setIcon("sap-icon://alert");
+                        }
+                        MessageBox.error(
+                            "Failed to load Purchase Orders from SAP S/4HANA.\n\n" +
+                            "The SAP S/4HANA Gateway (System DS4, Client 220) rejected the configured credentials with HTTP 401 Unauthorized.\n\n" +
+                            "Action Required:\n" +
+                            "1. Verify that the password in .env.local is current.\n" +
+                            "2. Check transaction SU01 in SAP to ensure user account 'KHUSHAL' is not locked due to failed logon attempts.",
+                            { title: "S/4HANA Authentication Error" }
+                        );
+                    } else if (oStatus) {
+                        oStatus.setState("Success");
+                        oStatus.setText("Live S/4HANA");
+                        oStatus.setIcon("sap-icon://connected");
+                    }
+                });
+            }
+        },
+
         _updateKpiMetrics: function (oEvent) {
             var oTable = oEvent.getSource();
             var aItems = oTable.getItems();

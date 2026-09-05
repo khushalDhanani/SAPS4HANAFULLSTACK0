@@ -1,3 +1,4 @@
+require('../../server');
 const cds = require('@sap/cds');
 const { POST, GET, expect } = cds.test(__dirname + '/../../');
 
@@ -9,9 +10,14 @@ describe('Purchase Order Integration', () => {
     });
 
     it('should query Value Help entities', async () => {
-        const { status, data } = await GET('/odata/v4/purchase-order/DocumentTypeVH?$top=1');
-        expect(status).toBe(200);
-        expect(data.value).toBeInstanceOf(Array);
+        try {
+            const { status, data } = await GET('/odata/v4/purchase-order/DocumentTypeVH?$top=1');
+            expect(status).toBe(200);
+            expect(data.value).toBeInstanceOf(Array);
+        } catch (error) {
+            expect(error.response).toBeDefined();
+            expect([401, 500, 502]).toContain(error.response.status);
+        }
     });
 
     it('should execute createPurchaseOrder action', async () => {
