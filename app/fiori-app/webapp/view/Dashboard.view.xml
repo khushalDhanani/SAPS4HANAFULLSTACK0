@@ -11,149 +11,977 @@
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
-                <!-- Welcome Message and Refresh Action -->
-                <HBox class="sapUiSmallMarginBottom" justifyContent="SpaceBetween" alignItems="Center">
-                    <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H2" />
-                    <Button
-                        id="btnRefreshDashboard"
-                        icon="sap-icon://refresh"
-                        text="{i18n>btnRefresh}"
-                        type="Transparent"
-                        tooltip="{i18n>btnRefresh}"
-                        press=".onRefresh" />
+                <!-- Compact Hero Header & Global Actions -->
+                <HBox class="sapUiSmallMarginBottom" justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <HBox alignItems="Center">
+                            <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H3" class="sapUiTinyMarginEnd" />
+                            <ObjectStatus text="Client 220 • S/4HANA Active" state="Success" inverted="false" />
+                        </HBox>
+                        <Text text="{i18n>dashboardSubtitle}" class="sapUiTinyMarginTop textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                        <Button
+                            id="btnQuickCreatePO"
+                            text="{i18n>dashboardModuleMMCreate}"
+                            icon="sap-icon://add"
+                            type="Emphasized"
+                            press=".onNavigateToCreatePO"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnQuickManagePOs"
+                            text="{i18n>dashboardModuleMMAction}"
+                            icon="sap-icon://open-folder"
+                            type="Default"
+                            press=".onNavigateToPurchaseOrders"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnRefreshDashboard"
+                            icon="sap-icon://refresh"
+                            text="{i18n>btnRefresh}"
+                            type="Transparent"
+                            tooltip="{i18n>btnRefresh}"
+                            press=".onRefresh" />
+                    </HBox>
                 </HBox>
 
-                <!-- SECTION 1: Business Modules (Extensible Platform Catalog) -->
-                <Panel
-                    id="panelBusinessModules"
-                    headerText="{i18n>dashboardSectionModules}"
-                    class="sapUiSmallMarginBottom"
-                    expandable="true"
-                    expanded="true">
-                    <HBox id="businessModulesContainer" wrap="Wrap" alignItems="Center">
-                        <!-- Materials Management (MM) - Purchase Orders Module Tile -->
-                        <GenericTile
-                            id="tileModuleMM"
-                            header="{i18n>dashboardModuleMM}"
-                            subheader="{i18n>dashboardModuleMMSub}"
-                            press=".onNavigateToPurchaseOrders"
-                            class="sapUiTinyMargin">
-                            <TileContent unit="{i18n>dashboardKpiActivePOs}">
-                                <NumericContent
-                                    id="kpiTotalPOsVal"
-                                    value="{dashboardView>/totalCount}"
-                                    icon="sap-icon://sales-order"
-                                    valueColor="Neutral" />
-                            </TileContent>
-                        </GenericTile>
+                <!-- Compact 15 Enterprise Domain Tabs -->
+                <IconTabBar
+                    id="dashboardTabBar"
+                    selectedKey="{dashboardView>/selectedTab}"
+                    select=".onTabSelect"
+                    headerMode="Inline"
+                    tabDensityMode="Compact"
+                    expandable="false"
+                    applyContentPadding="false"
+                    headerBackgroundDesign="Transparent"
+                    class="sapUiNoContentPadding">
+                    <items>
+                        <!-- TAB 1: OVERVIEW -->
+                        <IconTabFilter
+                            id="tabOverview"
+                            key="overview"
+                            icon="sap-icon://home"
+                            text="{i18n>tabOverviewTitle}"
+                            tooltip="{i18n>tabOverviewTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <!-- Category 1: Platform & Gateway Status -->
+                                <Panel
+                                    id="panelPlatformHealth"
+                                    headerText="{i18n>overviewCategoryHealth}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox id="dashboardHealthContainer" wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="kpiSystemTile"
+                                            header="{i18n>dashboardKpiSystem}"
+                                            subheader="{i18n>dashboardKpiSystemDesc}"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent>
+                                                <NumericContent value="100" scale="%" icon="sap-icon://database" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
 
-                        <!-- Active Suppliers Tile within MM -->
-                        <GenericTile
-                            id="tileModuleSuppliers"
-                            header="{i18n>dashboardKpiSuppliers}"
-                            subheader="{i18n>dashboardKpiSuppliersDesc}"
-                            press=".onNavigateToPurchaseOrders"
-                            class="sapUiTinyMargin">
-                            <TileContent>
-                                <NumericContent
-                                    id="kpiSuppliersVal"
-                                    value="{dashboardView>/supplierCount}"
-                                    icon="sap-icon://supplier"
-                                    valueColor="Good" />
-                            </TileContent>
-                        </GenericTile>
+                                        <GenericTile
+                                            id="kpiSpendTile"
+                                            header="{i18n>dashboardKpiSpend}"
+                                            subheader="{i18n>dashboardKpiSpendDesc}"
+                                            press=".onNavigateToPurchaseOrders"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent>
+                                                <NumericContent value="{dashboardView>/totalSpend}" scale="M $" icon="sap-icon://money-bills" valueColor="Critical" />
+                                            </TileContent>
+                                        </GenericTile>
 
-                        <!-- Module Quick Actions -->
-                        <VBox class="sapUiTinyMargin sapUiContentPadding" justifyContent="Center">
-                            <Button
-                                id="btnQuickCreatePO"
-                                text="{i18n>dashboardModuleMMCreate}"
-                                icon="sap-icon://add"
-                                type="Emphasized"
-                                press=".onNavigateToCreatePO"
-                                class="sapUiTinyMarginBottom" />
-                            <Button
-                                id="btnQuickManagePOs"
-                                text="{i18n>dashboardModuleMMAction}"
-                                icon="sap-icon://open-folder"
-                                type="Transparent"
-                                press=".onNavigateToPurchaseOrders" />
-                        </VBox>
+                                        <GenericTile
+                                            id="kpiCompleteTile"
+                                            header="{i18n>dashboardKpiRate}"
+                                            subheader="{i18n>dashboardKpiRateDesc}"
+                                            press=".onNavigateToPurchaseOrders"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent>
+                                                <NumericContent value="{dashboardView>/completeRate}" scale="%" icon="sap-icon://accept" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
 
-                        <!-- Financial Accounting (FI) - Journal Entries Module Tile -->
-                        <GenericTile
-                            id="tileModuleFI"
-                            header="{i18n>dashboardModuleFI}"
-                            subheader="{i18n>dashboardModuleFISub}"
-                            press=".onNavigateToJournalEntries"
-                            class="sapUiTinyMargin">
-                            <TileContent unit="{i18n>dashboardKpiFIDocs}">
-                                <NumericContent
-                                    id="kpiFIDocsVal"
-                                    value="{dashboardView>/fiDocCount}"
-                                    icon="sap-icon://accounting-document-verification"
-                                    valueColor="Neutral" />
-                            </TileContent>
-                        </GenericTile>
-                    </HBox>
-                </Panel>
+                                        <GenericTile
+                                            id="kpiOverviewFIDocs"
+                                            header="{i18n>dashboardKpiFIDocs}"
+                                            subheader="General Ledger Line Items"
+                                            press=".onNavigateToJournalEntries"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent>
+                                                <NumericContent value="{dashboardView>/fiDocCount}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
 
-                <!-- SECTION 2: Platform & Gateway Status -->
-                <Panel
-                    id="panelPlatformHealth"
-                    headerText="{i18n>dashboardSectionHealth}"
-                    class="sapUiSmallMarginBottom"
-                    expandable="true"
-                    expanded="true">
-                    <HBox id="dashboardHealthContainer" wrap="Wrap">
-                        <GenericTile
-                            id="kpiSystemTile"
-                            header="{i18n>dashboardKpiSystem}"
-                            subheader="{i18n>dashboardKpiSystemDesc}"
-                            class="sapUiTinyMargin">
-                            <TileContent>
-                                <NumericContent
-                                    id="kpiSystemVal"
-                                    value="100"
-                                    scale="%"
-                                    icon="sap-icon://database"
-                                    valueColor="Good" />
-                            </TileContent>
-                        </GenericTile>
+                                <!-- Category 2: Finance & Controlling (FI / CO) -->
+                                <Panel
+                                    id="panelCategoryFinance"
+                                    headerText="{i18n>overviewCategoryFinance}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="tileModuleFI"
+                                            header="{i18n>dashboardModuleFI}"
+                                            subheader="{i18n>dashboardModuleFISub}"
+                                            press=".onNavigateToJournalEntries"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashboardKpiFIDocs}">
+                                                <NumericContent id="kpiFIDocsVal" value="{dashboardView>/fiDocCount}" icon="sap-icon://lead" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
 
-                        <GenericTile
-                            id="kpiSpendTile"
-                            header="{i18n>dashboardKpiSpend}"
-                            subheader="{i18n>dashboardKpiSpendDesc}"
-                            press=".onNavigateToPurchaseOrders"
-                            class="sapUiTinyMargin">
-                            <TileContent>
-                                <NumericContent
-                                    id="kpiSpendVal"
-                                    value="{dashboardView>/totalSpend}"
-                                    scale="M $"
-                                    icon="sap-icon://money-bills"
-                                    valueColor="Critical" />
-                            </TileContent>
-                        </GenericTile>
+                                        <GenericTile
+                                            id="tileOverviewCO"
+                                            header="{i18n>tabCOTitle}"
+                                            subheader="Manage Cost Rates &amp; Allocations"
+                                            press=".onSelectTabCO"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Cost Centers">
+                                                <NumericContent value="24" icon="sap-icon://money-bills" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
 
-                        <GenericTile
-                            id="kpiCompleteTile"
-                            header="{i18n>dashboardKpiRate}"
-                            subheader="{i18n>dashboardKpiRateDesc}"
-                            press=".onNavigateToPurchaseOrders"
-                            class="sapUiTinyMargin">
-                            <TileContent>
-                                <NumericContent
-                                    id="kpiCompleteVal"
-                                    value="{dashboardView>/completeRate}"
-                                    scale="%"
-                                    icon="sap-icon://accept"
-                                    valueColor="Good" />
-                            </TileContent>
-                        </GenericTile>
-                    </HBox>
-                </Panel>
+                                        <GenericTile
+                                            id="tileOverviewCustomerBalances"
+                                            header="Customer Balances"
+                                            subheader="Accounts Receivable (FAR)"
+                                            press=".onSelectTabFI"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Active Debtors">
+                                                <NumericContent value="142" icon="sap-icon://customer" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewSettlement"
+                                            header="Cost Settlement"
+                                            subheader="Actual Settlement Runs (FCO)"
+                                            press=".onSelectTabCO"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Period Rate">
+                                                <NumericContent value="100" scale="%" icon="sap-icon://process" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+
+                                <!-- Category 3: Supply Chain, Sourcing & Commercial (MM / SD / EWM / TM) -->
+                                <Panel
+                                    id="panelCategorySupplyChain"
+                                    headerText="{i18n>overviewCategorySupplyChain}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="tileModuleMM"
+                                            header="{i18n>dashboardModuleMM}"
+                                            subheader="{i18n>dashboardModuleMMSub}"
+                                            press=".onNavigateToPurchaseOrders"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashboardKpiActivePOs}">
+                                                <NumericContent id="kpiTotalPOsVal" value="{dashboardView>/totalCount}" icon="sap-icon://sales-order" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileModuleSuppliers"
+                                            header="{i18n>dashboardKpiSuppliers}"
+                                            subheader="{i18n>dashboardKpiSuppliersDesc}"
+                                            press=".onNavigateToPurchaseOrders"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Vendors">
+                                                <NumericContent id="kpiSuppliersVal" value="{dashboardView>/supplierCount}" icon="sap-icon://supplier" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewSD"
+                                            header="{i18n>tabSDTitle}"
+                                            subheader="Orders, Quotes &amp; Accounts"
+                                            press=".onSelectTabSD"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Open Orders">
+                                                <NumericContent value="86" icon="sap-icon://sales-order" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewEWM"
+                                            header="{i18n>tabEWMTitle}"
+                                            subheader="Deliveries &amp; Pick Carts"
+                                            press=".onSelectTabEWM"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Shipments">
+                                                <NumericContent value="45" icon="sap-icon://inventory" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewTM"
+                                            header="{i18n>tabTMTitle}"
+                                            subheader="Vehicle Scheduling &amp; Freight"
+                                            press=".onSelectTabTM"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Routes">
+                                                <NumericContent value="16" icon="sap-icon://shipping-status" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+
+                                <!-- Category 4: Manufacturing, Quality & Assets (PP / QM / EAM / PS) -->
+                                <Panel
+                                    id="panelCategoryManufacturing"
+                                    headerText="{i18n>overviewCategoryManufacturing}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="tileOverviewPP"
+                                            header="{i18n>tabPPTitle}"
+                                            subheader="Capacity Evaluation &amp; Orders"
+                                            press=".onSelectTabPP"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Plant Load">
+                                                <NumericContent value="92" scale="%" icon="sap-icon://factory" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewQM"
+                                            header="{i18n>tabQMTitle}"
+                                            subheader="Inspection Lots &amp; FMEA"
+                                            press=".onSelectTabQM"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Lots Pending">
+                                                <NumericContent value="14" icon="sap-icon://quality-issue" valueColor="Critical" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewEAM"
+                                            header="{i18n>tabEAMTitle}"
+                                            subheader="Plant Maintenance &amp; Equipment"
+                                            press=".onSelectTabEAM"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Work Orders">
+                                                <NumericContent value="27" icon="sap-icon://machine" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewPS"
+                                            header="{i18n>tabPSTitle}"
+                                            subheader="Capital Projects &amp; WIP"
+                                            press=".onSelectTabPS"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Programs">
+                                                <NumericContent value="11" icon="sap-icon://project-definition-triangle-2" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+
+                                <!-- Category 5: Services, Workforce & Financing (Service / Car Loan / HCM) -->
+                                <Panel
+                                    id="panelCategoryServicesPeople"
+                                    headerText="{i18n>overviewCategoryServicesPeople}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="tileOverviewService"
+                                            header="{i18n>tabServiceTitle}"
+                                            subheader="Field Service Requests"
+                                            press=".onSelectTabService"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Work Requests">
+                                                <NumericContent value="18" icon="sap-icon://customer-service" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <!-- Car Loan & Financing Service -->
+                                        <GenericTile
+                                            id="tileOverviewCarLoans"
+                                            header="{i18n>carLoanCardTitle}"
+                                            subheader="{i18n>carLoanSectionDesc}"
+                                            press=".onSimulateCarLoan"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>carLoanKpiApplications}">
+                                                <NumericContent value="{dashboardView>/carLoanActiveCount}" icon="sap-icon://loan" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewHCM"
+                                            header="{i18n>tabHCMTitle}"
+                                            subheader="Active Workforce &amp; Structure"
+                                            press=".onSelectTabHCM"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Headcount">
+                                                <NumericContent value="480" icon="sap-icon://group" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewHCMLoans"
+                                            header="Company Loans"
+                                            subheader="Employee Loans (IT 0045)"
+                                            press=".onSelectTabHCM"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Active Loans">
+                                                <NumericContent value="15" icon="sap-icon://loan" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+
+                                <!-- Category 6: Executive Analytics & Platform Governance (Analytics / Admin) -->
+                                <Panel
+                                    id="panelCategoryAnalyticsGovernance"
+                                    headerText="{i18n>overviewCategoryAnalyticsGovernance}"
+                                    class="sapUiSmallMarginBottom"
+                                    expandable="true"
+                                    expanded="true">
+                                    <HBox wrap="Wrap" alignItems="Center">
+                                        <GenericTile
+                                            id="tileOverviewAnalyticsCash"
+                                            header="{i18n>tabAnalyticsTitle}"
+                                            subheader="90-Day Cash Flow Projection"
+                                            press=".onSelectTabAnalytics"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Forecast">
+                                                <NumericContent value="4.8" scale="M $" icon="sap-icon://line-chart-time-axis" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewAnalyticsDSO"
+                                            header="Days Sales Out."
+                                            subheader="DSO Receivable Metric"
+                                            press=".onSelectTabAnalytics"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Days">
+                                                <NumericContent value="34" icon="sap-icon://kpi-corporate-performance" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewAdminJobs"
+                                            header="{i18n>tabAdminTitle}"
+                                            subheader="Background Processing Jobs"
+                                            press=".onSelectTabAdmin"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Active Tasks">
+                                                <NumericContent value="12" icon="sap-icon://business-objects-mobile" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewAdminGateway"
+                                            header="Gateway Services"
+                                            subheader="Active Backend Catalog"
+                                            press=".onSelectTabAdmin"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Catalog Srvs">
+                                                <NumericContent value="1345" icon="sap-icon://sys-monitor" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                        <IconTabSeparator />
+
+                        <!-- TAB 2: FINANCE (FI) -->
+                        <IconTabFilter
+                            id="tabFI"
+                            key="fi"
+                            icon="sap-icon://lead"
+                            text="{i18n>tabFITitle}"
+                            tooltip="{i18n>tabFITooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Title text="{i18n>tabFIHeading}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>tabFISubheading}" class="textMuted" />
+                                    </VBox>
+                                    <Button id="btnQuickManageFI" text="{i18n>dashboardModuleFIAction}" icon="sap-icon://accounting-document-verification" type="Emphasized" press=".onNavigateToJournalEntries" class="sapUiTinyMarginBottom" />
+                                </HBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="{i18n>dashboardModuleFI}" subheader="G/L Journal Entry Line Items" press=".onNavigateToJournalEntries" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashboardKpiFIDocs}">
+                                            <NumericContent value="{dashboardView>/fiDocCount}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Customer Balances" subheader="Accounts Receivable (ZFAR)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Active Accounts">
+                                            <NumericContent value="142" icon="sap-icon://customer" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Bank Accounts" subheader="Cash Management (ZFCLM)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="House Banks">
+                                            <NumericContent value="18" icon="sap-icon://official-service" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="FAC_GL_JOURNALENTRY_VER_SRV" description="General Ledger Journal Entry Verification Service" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onNavigateToJournalEntries" />
+                                        <StandardListItem title="ZFAR_BALANCES_V2_SRV" description="Customer Balances V2 Fiori Elements Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFCLM_BAM_ACCOUNTOV_SRV" description="Cash Management Bank Accounts Overview Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFAP_APPROVEBANKPAYMENTS_SRV" description="Approve Bank Payments Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 3: CONTROLLING (CO) -->
+                        <IconTabFilter
+                            id="tabCO"
+                            key="co"
+                            icon="sap-icon://money-bills"
+                            text="{i18n>tabCOTitle}"
+                            tooltip="{i18n>tabCOTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabCOHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabCOSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Actual Cost Rate" subheader="Manage Rates (FCO)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Cost Centers">
+                                            <NumericContent value="24" icon="sap-icon://measurement-document" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Settlement Runs" subheader="Actual Settlement (FCO)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Run Period">
+                                            <NumericContent value="100" scale="%" icon="sap-icon://process" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Cost Allocations" subheader="Universal Allocation" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Cycles Active">
+                                            <NumericContent value="12" icon="sap-icon://business-objects-mobile" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZFCO_ACTUAL_COST_RATE_SRV" description="Manage Actual Cost Rate Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZUI_FCO_ACTL_SETTLEMENT_O2" description="Actual Settlement Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFCO_MANAGE_ALLOCATION_SRV" description="Manage Universal Allocations Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFCO_PA_REALIGNMENT_SRV" description="CO-PA Profitability Analysis Realignment Result" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                        <IconTabSeparator />
+
+                        <!-- TAB 4: PROCUREMENT (MM) -->
+                        <IconTabFilter
+                            id="tabMM"
+                            key="mm"
+                            icon="sap-icon://supplier"
+                            text="{i18n>tabMMTitle}"
+                            tooltip="{i18n>tabMMTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Title text="{i18n>tabMMHeading}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>tabMMSubheading}" class="textMuted" />
+                                    </VBox>
+                                    <HBox class="sapUiTinyMarginBottom">
+                                        <Button id="btnMMCreatePO" text="{i18n>dashboardModuleMMCreate}" icon="sap-icon://add" type="Emphasized" press=".onNavigateToCreatePO" class="sapUiTinyMarginEnd" />
+                                        <Button id="btnMMManagePOs" text="{i18n>dashboardModuleMMAction}" icon="sap-icon://open-folder" type="Default" press=".onNavigateToPurchaseOrders" />
+                                    </HBox>
+                                </HBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile id="tileMMActivePOs" header="{i18n>dashboardModuleMM}" subheader="{i18n>dashboardModuleMMSub}" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashboardKpiActivePOs}">
+                                            <NumericContent value="{dashboardView>/totalCount}" icon="sap-icon://sales-order" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileMMSuppliers" header="{i18n>dashboardKpiSuppliers}" subheader="{i18n>dashboardKpiSuppliersDesc}" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Vendors">
+                                            <NumericContent value="{dashboardView>/supplierCount}" icon="sap-icon://supplier" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="{i18n>dashboardKpiSpend}" subheader="Active Purchase Spend" press=".onNavigateToPurchaseOrders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent>
+                                            <NumericContent value="{dashboardView>/totalSpend}" scale="M $" icon="sap-icon://money-bills" valueColor="Critical" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="C_PURCHASEORDER_FS_SRV" description="Purchase Order Factsheet &amp; Management Service" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onNavigateToPurchaseOrders" />
+                                        <StandardListItem title="MM_PUR_PO_MAINT_V2_SRV" description="Purchase Order Maintenance V2 (Draft / Create / Update)" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onNavigateToCreatePO" />
+                                        <StandardListItem title="ZC_PURREQUISITION_FS_SRV" description="Purchase Requisitions Factsheet Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZC_CONTRACT_FS_SRV" description="Purchase Contract Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 5: SALES (SD) -->
+                        <IconTabFilter
+                            id="tabSD"
+                            key="sd"
+                            icon="sap-icon://sales-order"
+                            text="{i18n>tabSDTitle}"
+                            tooltip="{i18n>tabSDTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabSDHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabSDSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Open Sales Orders" subheader="Active Fulfillment" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Orders">
+                                            <NumericContent value="86" icon="sap-icon://sales-order" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Customer Inquiries" subheader="Pending Quotes" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Inquiries">
+                                            <NumericContent value="19" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Customer 360" subheader="Active Accounts" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Accounts">
+                                            <NumericContent value="54" icon="sap-icon://customer" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZSD_F1814_SO_FS_SRV" description="Sales Orders FactSheet - S4H SD FIORI" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZSD_CUSTOMER360_OVP" description="SD Customer 360: Overview Page Cards" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZSD_F1871_QUOT_FS_SRV" description="Quotation FactSheet - S4H SD FIORI" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZSD_F1815_CRT_FS_SRV" description="Customer Return FactSheet" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                        <IconTabSeparator />
+
+                        <!-- TAB 6: PRODUCTION (PP) -->
+                        <IconTabFilter
+                            id="tabPP"
+                            key="pp"
+                            icon="sap-icon://factory"
+                            text="{i18n>tabPPTitle}"
+                            tooltip="{i18n>tabPPTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabPPHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabPPSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Capacity Utilization" subheader="Plant Work Centers" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Capacity Load">
+                                            <NumericContent value="92" scale="%" icon="sap-icon://factory" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Production Orders" subheader="Active Shopfloor Runs" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Batches">
+                                            <NumericContent value="38" icon="sap-icon://product" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZPP_CFS_CAPEVAL_SRV" description="Production Planning: Capacity Evaluation App" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZPPDS_CAPA_UTIL_OBJ_SRV" description="Capacity Utilization Object Page" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="MPE_MANAGE_PRODUCTION_HOLD_SRV" description="Manage Production Hold Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="MD_C_PRODUCT_MAINTAIN_SRV" description="Product Master Maintenance Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 7: QUALITY (QM) -->
+                        <IconTabFilter
+                            id="tabQM"
+                            key="qm"
+                            icon="sap-icon://quality-issue"
+                            text="{i18n>tabQMTitle}"
+                            tooltip="{i18n>tabQMTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabQMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabQMSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Inspection Lots" subheader="Pending Results" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Lots">
+                                            <NumericContent value="14" icon="sap-icon://inspection" valueColor="Critical" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="FMEA Cases" subheader="Failure Mode Assessments" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Cases">
+                                            <NumericContent value="6" icon="sap-icon://measure" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZUI_INSPLOT_RSLTRECG" description="Service Binding for Inspection Lot Result Recording" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZQM_FMEA_MNG_SRV" description="Manage Failure Mode and Effects Analysis (FMEA)" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="API_MAINTNOTIFICATION" description="Quality &amp; Maintenance Notifications API" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 8: ASSET MANAGEMENT (EAM) -->
+                        <IconTabFilter
+                            id="tabEAM"
+                            key="eam"
+                            icon="sap-icon://machine"
+                            text="{i18n>tabEAMTitle}"
+                            tooltip="{i18n>tabEAMTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabEAMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabEAMSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Maintenance Orders" subheader="F2175: Find Orders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Orders">
+                                            <NumericContent value="27" icon="sap-icon://wrench" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Actual Cost Monitor" subheader="F3567: Cost Variance" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Variance Rate">
+                                            <NumericContent value="98" scale="%" icon="sap-icon://compare" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZEAM_OBJPG_MAINTENANCEORDER_SRV" description="F2175: Find Maintenance Order Object Page" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZEAM_ORDER_ACTUALCOST_MONITOR" description="F3567: Analyze Maintenance Order Actual Cost" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZEAM_MAINT_PLANNER_OVERVIEW_SRV" description="F5105: EAM Maintenance Planning Overview" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFAA_ASSET_MANAGE_SRV" description="Fixed Assets &amp; Company Vehicle Management" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 9: PROJECTS (PS) -->
+                        <IconTabFilter
+                            id="tabPS"
+                            key="ps"
+                            icon="sap-icon://project-definition-triangle-2"
+                            text="{i18n>tabPSTitle}"
+                            tooltip="{i18n>tabPSTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabPSHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabPSSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Active WBS Projects" subheader="Capital Delivery" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Programs">
+                                            <NumericContent value="11" icon="sap-icon://project-definition-triangle-2" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Project WIP" subheader="Work In Progress List" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Capital WIP">
+                                            <NumericContent value="1.24" scale="M $" icon="sap-icon://money-bills" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZFAC_PROJECT_WIP_DETAIL_LIST_SRV" description="Work In Progress Detail List for Capital Projects" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFINS_EBRR_MONITOR_PRO_SRV" description="Monitoring Application for Event-Based RR Projects" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFINS_TRR_PECRUN_PROJECT_SRV_01" description="Revenue Recognition Service for Customer Projects" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 10: WAREHOUSE (EWM) -->
+                        <IconTabFilter
+                            id="tabEWM"
+                            key="ewm"
+                            icon="sap-icon://inventory"
+                            text="{i18n>tabEWMTitle}"
+                            tooltip="{i18n>tabEWMTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Outbound Deliveries" subheader="ODO Orders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Shipments">
+                                            <NumericContent value="45" icon="sap-icon://shipping-status" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Picking Carts" subheader="EWM Cart Operations" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Active Carts">
+                                            <NumericContent value="8" icon="sap-icon://cart" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZUI_WAREHOUSEDOCUMENT" description="Warehouse Document Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZC_EWM_OUTBDELIVORDADJQ_2_CDS" description="Outbound Delivery Orders for Warehouse KPIs Query" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZPICKCART_SRV" description="EWM Pick Cart Mobile Operations Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="MM_IM_PHYS_INV_DOC_SRV" description="Physical Inventory Document Management" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 11: TRANSPORTATION (TM) -->
+                        <IconTabFilter
+                            id="tabTM"
+                            key="tm"
+                            icon="sap-icon://shipping-status"
+                            text="{i18n>tabTMTitle}"
+                            tooltip="{i18n>tabTMTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabTMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabTMSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Vehicle Schedules" subheader="Fleet Planning" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Routes Active">
+                                            <NumericContent value="16" icon="sap-icon://car-rental" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Carrier Logistics" subheader="Assigned Shipments" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Dispatched">
+                                            <NumericContent value="31" icon="sap-icon://flight" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZSAPTMVSSEXPLANATION" description="Transportation Management: Vehicle Scheduling Explanation" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZC_SITN2DEMOFLIGHTVH_CDS" description="Carriers and Flight Logistics Query" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZLE_SHP_RETURNS_DELIVERY_FS_SRV" description="Returns Delivery &amp; Shipping FactSheet" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                        <IconTabSeparator />
+
+                        <!-- TAB 12: SERVICE (With Car Loan Service) -->
+                        <IconTabFilter
+                            id="tabService"
+                            key="service"
+                            icon="sap-icon://customer-service"
+                            text="{i18n>tabServiceTitle}"
+                            tooltip="{i18n>tabServiceTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Title text="{i18n>tabServiceHeading}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>tabServiceSubheading}" class="textMuted" />
+                                    </VBox>
+                                    <HBox class="sapUiTinyMarginBottom">
+                                        <Button id="btnSimulateCarLoan" text="{i18n>carLoanBtnSimulate}" icon="sap-icon://simulate" type="Emphasized" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd" />
+                                        <Button id="btnNewCarLoanApp" text="{i18n>carLoanBtnNewApp}" icon="sap-icon://add-document" type="Default" press=".onNewCarLoanApp" />
+                                    </HBox>
+                                </HBox>
+
+                                <!-- Car Loan Service Feature Cards -->
+                                <Panel headerText="{i18n>carLoanSectionTitle}" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <HBox wrap="Wrap">
+                                        <GenericTile id="tileServiceCarLoans" header="{i18n>carLoanCardTitle}" subheader="Financed Portfolio" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>carLoanKpiApplications}">
+                                                <NumericContent value="{dashboardView>/carLoanActiveCount}" icon="sap-icon://loan" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="{i18n>carLoanKpiVolume}" subheader="Total Outstanding" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Portfolio">
+                                                <NumericContent value="2.14" scale="M $" icon="sap-icon://money-bills" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
+                                        <GenericTile header="{i18n>carLoanKpiApprovalRate}" subheader="Underwriting Metrics" press=".onSimulateCarLoan" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Approval Rate">
+                                                <NumericContent value="96" scale="%" icon="sap-icon://accept" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+                                    </HBox>
+                                </Panel>
+
+                                <Panel headerText="Customer &amp; Field Service S/4HANA Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="CarLoanService" description="Vehicle Loan Calculation &amp; Origination Service" info="{i18n>badgeStatusCAP}" infoState="Success" type="Detail" press=".onSimulateCarLoan" />
+                                        <StandardListItem title="ZUI_MAINTWORKREQUESTOVW_V2" description="Maintenance &amp; Work Request Super App Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZFINS_TRR_PECRUN_SRVDOC_SRV" description="Revenue Recognition for Service Documents" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZUI_MAINTENANCEJOB_MANAGE" description="Maintenance Job Management Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 13: HUMAN RESOURCES (HCM) -->
+                        <IconTabFilter
+                            id="tabHCM"
+                            key="hcm"
+                            icon="sap-icon://group"
+                            text="{i18n>tabHCMTitle}"
+                            tooltip="{i18n>tabHCMTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabHCMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabHCMSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Organization Units" subheader="Org Hierarchy" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Departments">
+                                            <NumericContent value="22" icon="sap-icon://org-chart" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Active Headcount" subheader="Full-Time Workforce" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Staff">
+                                            <NumericContent value="480" icon="sap-icon://group" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Company Loans" subheader="Employee Loans (IT 0045)" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Beneficiaries">
+                                            <NumericContent value="15" icon="sap-icon://loan" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="HRSFEC_INFOTYPE_SRV" description="Infotype Data Service (Supports IT 0045 Company Loans)" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZUI_HCMORGCHART" description="HCM Organizational Chart Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZUI_HCMACTUALACTIVITIES" description="HCM Actual Activities &amp; Time Recording" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZUI_HCMMYREPORTING" description="HCM My Reporting Team Analytics Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                        <IconTabSeparator />
+
+                        <!-- TAB 14: ANALYTICS -->
+                        <IconTabFilter
+                            id="tabAnalytics"
+                            key="analytics"
+                            icon="sap-icon://business-objects-experience"
+                            text="{i18n>tabAnalyticsTitle}"
+                            tooltip="{i18n>tabAnalyticsTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabAnalyticsHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabAnalyticsSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Actual Cash Flow" subheader="90-Day Forecast" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Projection">
+                                            <NumericContent value="4.8" scale="M $" icon="sap-icon://line-chart-time-axis" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Days Sales Out." subheader="DSO Metric" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Days">
+                                            <NumericContent value="34" icon="sap-icon://kpi-corporate-performance" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Supplier Scorecards" subheader="Performance Average" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Avg Score">
+                                            <NumericContent value="89" scale="%" icon="sap-icon://bar-chart" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZC_ACTUALCASHFLOWANALYTICS_CDS" description="Actual Cash Flow in 90 Days Analytics Query" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZC_ARDAYSSALESOUTSTDGOVW_CDS" description="Card Days Sales Outstanding (DSO) Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZC_ARDEBTORSOVW_CDS" description="Card Top 10 Debtors Overview Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZC_SUPLREVALSCORECARDDISPLAY_SRV" description="Display Supplier Evaluation Scorecards" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+
+                        <!-- TAB 15: ADMINISTRATION -->
+                        <IconTabFilter
+                            id="tabAdmin"
+                            key="admin"
+                            icon="sap-icon://action-settings"
+                            text="{i18n>tabAdminTitle}"
+                            tooltip="{i18n>tabAdminTooltip}">
+                            <VBox class="sapUiSmallMarginTop">
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabAdminHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabAdminSubheading}" class="textMuted" />
+                                </VBox>
+
+                                <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
+                                    <GenericTile header="Application Jobs" subheader="Background Processing" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Active Tasks">
+                                            <NumericContent value="12" icon="sap-icon://business-objects-mobile" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Gateway Services" subheader="OData Connectivity" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Catalog Srvs">
+                                            <NumericContent value="1345" icon="sap-icon://sys-monitor" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Workflows Active" subheader="Flexible Definitions" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Definitions">
+                                            <NumericContent value="7" icon="sap-icon://workflow-tasks" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                </HBox>
+
+                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
+                                    <List showSeparators="Inner">
+                                        <StandardListItem title="ZAPJ_JOB_MANAGEMENT_SRV" description="Application Job Management &amp; Scheduling Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZAPL_LOG_MANAGEMENT_SRV" description="Application Log Management Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZAPS_CHANGE_DOCUMENTS_SRV" description="Audit Trail &amp; Change Documents Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZSWF_FLEX_DEF_SRV" description="Flexible Workflow Definition Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                        <StandardListItem title="ZCA_FM_FEATURE_TOGGLE_STATUS_SRV" description="Feature Toggle and Configuration Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
+                                    </List>
+                                </Panel>
+                            </VBox>
+                        </IconTabFilter>
+                    </items>
+                </IconTabBar>
             </VBox>
         </content>
     </Page>

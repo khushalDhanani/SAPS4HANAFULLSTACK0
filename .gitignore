@@ -10,3 +10,4 @@ gen/
 .mbtbuild/
 *.mtar
 .DS_Store
+srv/external/all_catalog_services.json
