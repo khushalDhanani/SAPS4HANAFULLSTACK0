@@ -1,5 +1,5 @@
 const { mapToS4Payload } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
-const validPayload = require('../../fixtures/validPOPayload.json');
+const validPayload = require('../../fixtures/purchase-order/validPOPayload.json');
 
 describe('Unit: Payload Mapping', () => {
 

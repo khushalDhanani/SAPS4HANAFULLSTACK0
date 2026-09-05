@@ -1,5 +1,5 @@
 const cds = require('@sap/cds');
-const { GET } = cds.test(__dirname + '/../../');
+const { GET } = cds.test(__dirname + '/../../../');
 
 describe('Integration: Metadata', () => {
 

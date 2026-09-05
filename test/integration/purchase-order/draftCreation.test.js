@@ -1,9 +1,9 @@
 const httpClient = require('@sap-cloud-sdk/http-client');
 const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const { mapToS4Payload } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
-const validPayload = require('../../fixtures/validPOPayload.json');
-const draftResponseFixture = require('../../fixtures/draftResponse.json');
-const s4Errors = require('../../fixtures/s4ErrorResponses.json');
+const validPayload = require('../../fixtures/purchase-order/validPOPayload.json');
+const draftResponseFixture = require('../../fixtures/purchase-order/draftResponse.json');
+const s4Errors = require('../../fixtures/purchase-order/s4ErrorResponses.json');
 
 describe('Integration: S/4 Draft Creation', () => {
 

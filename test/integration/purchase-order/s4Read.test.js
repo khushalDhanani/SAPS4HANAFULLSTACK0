@@ -1,6 +1,6 @@
 const cds = require('@sap/cds');
 const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
-const purchaseOrdersFixture = require('../../fixtures/purchaseOrders.json');
+const purchaseOrdersFixture = require('../../fixtures/purchase-order/purchaseOrders.json');
 const { GET } = cds.test(__dirname + '/../../../');
 
 describe('Integration: S/4 Read', () => {

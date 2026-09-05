@@ -1,5 +1,5 @@
 const { extractS4ErrorMessage, mapS4Error } = require('../../srv/integration/s4hana/S4ErrorMapper');
-const s4Errors = require('../fixtures/s4ErrorResponses.json');
+const s4Errors = require('../fixtures/purchase-order/s4ErrorResponses.json');
 
 describe('Unit: Error Mapping', () => {
 
