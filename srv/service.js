@@ -1,12 +1,9 @@
-const cds = require('@sap/cds');
-const registerPurchaseOrderHandlers = require('./mm/purchase-order/handlers/purchaseOrder.handler');
-const registerValueHelpHandlers = require('./handlers/valueHelp.handler');
+const purchaseOrderService = require('./mm/purchase-order/service');
 
 /**
- * PurchaseOrderService Implementation
- * Serves as the central dispatcher registering decoupled domain handlers.
+ * CAP Application Bootstrap & Service Registration Entry Point
+ *
+ * Serves as the application-level bootstrap entry point, delegating to business domain
+ * service modules (SAP MM -> Purchase Order) without hosting domain business logic.
  */
-module.exports = cds.service.impl(async function() {
-    registerValueHelpHandlers(this);
-    registerPurchaseOrderHandlers(this);
-});
+module.exports = purchaseOrderService;

@@ -1,6 +1,31 @@
 
 # Changes Log
 
+## 2026-09-05 12:55 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 4 — Finalize the SAP MM → Purchase Order CAP Service Boundary:
+  1. Kept `srv/service.js` thin as the pure CAP application bootstrap/registration entry point, delegating to `srv/mm/purchase-order/service.js` without containing any Purchase Order business rules or direct handler bindings.
+  2. Refactored `srv/handlers/valueHelp.handler.js` into generic, domain-agnostic CAP infrastructure that accepts entity groups, data reader callbacks, and optional deduplication keys.
+  3. Created `srv/mm/purchase-order/handlers/valueHelp.config.js` to own MM Purchase Order specific Value Help entity lists (`FS_VALUE_HELP_ENTITIES`, `MAINT_VALUE_HELP_ENTITIES`) and data reader bindings.
+  4. Updated `srv/mm/purchase-order/service.js` to bind PO value helps via `registerValueHelpHandlers(this, poValueHelpConfig)` alongside `registerPurchaseOrderHandlers(this)`.
+  5. Inspected authorization model in `xs-security.json` (`User`, `Admin` scopes; `Viewer`, `PurchasingManager` roles) and verified CAP runtime security context.
+- **Files Created**:
+  - `srv/mm/purchase-order/handlers/valueHelp.config.js`
+- **Files Modified**:
+  - `srv/service.js` (Kept thin, delegates to MM PO service module)
+  - `srv/handlers/valueHelp.handler.js` (Refactored into generic shared value help registration engine)
+  - `srv/mm/purchase-order/service.js` (Wires PO value help configuration to shared handler)
+- **Reason**: Finalized the CAP service boundary so that PO business logic, handlers, mapping, validation, and value help configuration are strictly owned by `srv/mm/purchase-order/`, application bootstrap remains thin in `srv/service.js`, and value help mechanics remain shared infrastructure.
+- **Validation**:
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm test`: All 17 test suites (102 tests) passed with 0 failures (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 268 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. CAP service boundary cleanly finalized with zero regression.
+
+
 ## 2026-09-05 12:50 IST
 - **Agent**: Antigravity
 - **Change**: Standardized UI5 URL routing patterns in `app/fiori-app/webapp/manifest.json`:
