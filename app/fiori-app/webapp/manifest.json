@@ -119,6 +119,11 @@
           "target": "TargetCreatePurchaseOrder"
         },
         {
+          "name": "purchaseOrderDetail",
+          "pattern": "mm/purchase-orders/{PurchaseOrder}",
+          "target": "TargetPurchaseOrderDetail"
+        },
+        {
           "name": "journalEntries",
           "pattern": "fi/journal-entries",
           "target": "TargetJournalEntries"
@@ -136,6 +141,11 @@
         "TargetPurchaseOrders": {
           "id": "purchaseOrders",
           "name": "PurchaseOrders",
+          "path": "saps4hana.fiori.modules.mm.purchase-order.view"
+        },
+        "TargetPurchaseOrderDetail": {
+          "id": "purchaseOrderDetail",
+          "name": "PurchaseOrderDetail",
           "path": "saps4hana.fiori.modules.mm.purchase-order.view"
         },
         "TargetCreatePurchaseOrder": {

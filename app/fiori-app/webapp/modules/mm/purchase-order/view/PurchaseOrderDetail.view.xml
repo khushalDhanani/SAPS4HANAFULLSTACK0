@@ -1,0 +1,405 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrderDetail"
+    xmlns="sap.m"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:core="sap.ui.core"
+    xmlns:uxap="sap.uxap"
+    xmlns:f="sap.ui.layout.form">
+
+    <uxap:ObjectPageLayout
+        id="poObjectPage"
+        enableLazyLoading="false"
+        showTitleInHeaderContent="true"
+        showEditHeaderButton="false"
+        headerContentPinnable="true"
+        useIconTabBar="false">
+
+        <!-- Dynamic Header Title (SAP Fiori Best Practice) -->
+        <uxap:headerTitle>
+            <uxap:ObjectPageDynamicHeaderTitle id="poHeaderTitle">
+                <!-- 1. Breadcrumbs -->
+                <uxap:breadcrumbs>
+                    <Breadcrumbs id="poBreadcrumbs" currentLocationText="{PurchaseOrder}">
+                        <Link text="{i18n>poDetailBreadcrumb}" press=".onNavBack" />
+                    </Breadcrumbs>
+                </uxap:breadcrumbs>
+
+                <!-- 2. Unified Heading (Back Navigation + Title + Canonical ObjectStatus) -->
+                <uxap:heading>
+                    <HBox alignItems="Center" wrap="Wrap">
+                        <Button
+                            id="btnDetailBack"
+                            text="{i18n>btnBack}"
+                            icon="sap-icon://nav-back"
+                            tooltip="{i18n>btnBack}"
+                            press=".onNavBack"
+                            type="Emphasized"
+                            class="sapUiTinyMarginEnd" />
+                        <Title
+                            id="headerPoTitle"
+                            text="{= ${PurchaseOrder} ? (${i18n>poDetailTitle} + ' ' + ${PurchaseOrder}) : ${i18n>poDetailTitle} }"
+                            wrapping="true"
+                            class="sapUiTinyMarginEnd" />
+                        <ObjectStatus
+                            id="headerStatus"
+                            text="{
+                                parts: [
+                                    { path: 'PurchasingDocumentStatus' },
+                                    { path: 'PurchasingDocumentStatusName' },
+                                    { path: 'ReleaseIsNotCompleted' },
+                                    { path: 'PurchasingDocumentDeletionCode' },
+                                    { path: 'PurchasingCompletenessStatus' }
+                                ],
+                                formatter: '.formatter.displayStatus'
+                            }"
+                            state="{
+                                parts: [
+                                    { path: 'PurchasingDocumentStatus' },
+                                    { path: 'PurchasingDocumentStatusName' },
+                                    { path: 'ReleaseIsNotCompleted' },
+                                    { path: 'PurchasingDocumentDeletionCode' },
+                                    { path: 'PurchasingCompletenessStatus' }
+                                ],
+                                formatter: '.formatter.displayStatusState'
+                            }"
+                            icon="{
+                                parts: [
+                                    { path: 'PurchasingDocumentStatus' },
+                                    { path: 'PurchasingDocumentStatusName' },
+                                    { path: 'ReleaseIsNotCompleted' },
+                                    { path: 'PurchasingDocumentDeletionCode' },
+                                    { path: 'PurchasingCompletenessStatus' }
+                                ],
+                                formatter: '.formatter.displayStatusIcon'
+                            }" />
+                    </HBox>
+                </uxap:heading>
+
+                <!-- 3. Mobile Responsive Title -->
+                <uxap:snappedTitleOnMobile>
+                    <Title text="{= ${PurchaseOrder} ? (${i18n>poDetailTitle} + ' ' + ${PurchaseOrder}) : ${i18n>poDetailTitle} }" />
+                </uxap:snappedTitleOnMobile>
+
+                <!-- 4. Expanded Content: Subtitle / Semantic Metadata -->
+                <uxap:expandedContent>
+                    <Text text="{= ${PurchaseOrderType} ? (${PurchaseOrderType} + (${SupplierName} ? ' • ' + ${SupplierName} + (${Supplier} ? ' (' + ${Supplier} + ')' : '') : '')) : '' }" />
+                </uxap:expandedContent>
+
+                <!-- 5. Snapped Content: Glanceable Key Metric preserved when header facets are collapsed -->
+                <uxap:snappedContent>
+                    <HBox alignItems="Center">
+                        <Label text="{i18n>labelPoNetAmount}:" class="sapUiTinyMarginEnd" />
+                        <ObjectNumber
+                            number="{PurchaseOrderNetAmount}"
+                            unit="{DocumentCurrency}"
+                            state="Success"
+                            emphasized="true" />
+                    </HBox>
+                </uxap:snappedContent>
+
+                <!-- 6. Standard Business Actions (Right Side) -->
+                <uxap:actions>
+                    <Button
+                        id="btnDetailRefresh"
+                        text="{i18n>btnRefresh}"
+                        icon="sap-icon://refresh"
+                        press=".onRefresh"
+                        type="Emphasized" />
+                </uxap:actions>
+            </uxap:ObjectPageDynamicHeaderTitle>
+        </uxap:headerTitle>
+
+        <!-- KPI Header Content (Direct Facet Children per Fiori Guidelines) -->
+        <uxap:headerContent>
+            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>labelPoNetAmount}" design="Bold" />
+                <ObjectNumber
+                    id="headerNetAmount"
+                    number="{PurchaseOrderNetAmount}"
+                    unit="{DocumentCurrency}"
+                    state="Success"
+                    emphasized="true"
+                    class="sapMObjectNumberLarge" />
+            </FlexBox>
+            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>colSupplier}" design="Bold" />
+                <ObjectIdentifier
+                    id="headerSupplier"
+                    title="{SupplierName}"
+                    text="{Supplier}" />
+            </FlexBox>
+            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>colCompany}" design="Bold" />
+                <Text id="headerCompany" text="{= ${CompanyCode} ? (${CompanyCode} + (${CompanyCodeName} ? ' (' + ${CompanyCodeName} + ')' : '')) : '-' }" />
+            </FlexBox>
+            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>colPurchasingOrg}" design="Bold" />
+                <Text id="headerOrg" text="{= ${PurchasingOrganization} ? (${PurchasingOrganization} + (${PurchasingGroup} ? ' / ' + ${PurchasingGroup} : '')) : '-' }" />
+            </FlexBox>
+            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>colCreatedBy}" design="Bold" />
+                <ObjectIdentifier
+                    id="headerCreatedBy"
+                    title="{= ${UserFullName} || ${CreatedByUser} || '-' }"
+                    text="{= ${UserFullName} ? ${CreatedByUser} : '' }" />
+            </FlexBox>
+        </uxap:headerContent>
+
+        <!-- Unified Sections with Anchor Bar Navigation -->
+        <uxap:sections>
+
+            <!-- 1. Order Details / General Information Section (3-Column Consolidated Form) -->
+            <uxap:ObjectPageSection id="secGeneralInfo" title="{i18n>secGeneralInfo}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subsecGeneralInfo">
+                        <uxap:blocks>
+                            <f:Form
+                                id="formGeneralInfo"
+                                editable="false">
+                                <f:layout>
+                                    <f:ColumnLayout columnsM="2" columnsL="3" columnsXL="3" />
+                                </f:layout>
+                                <f:formContainers>
+                                    <f:FormContainer id="fcDocOrg" title="{i18n>subsecDocDetails}">
+                                        <f:formElements>
+                                            <f:FormElement label="{i18n>colPurchaseOrder}">
+                                                <f:fields>
+                                                    <Text text="{PurchaseOrder}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>colDocType}">
+                                                <f:fields>
+                                                    <Text text="{path: 'PurchaseOrderType', formatter: '.formatter.docTypeDisplay'}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>colCreationDate}">
+                                                <f:fields>
+                                                    <Text text="{path: 'CreationDate', formatter: '.formatter.formatDate'}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelPoDate}">
+                                                <f:fields>
+                                                    <Text text="{path: 'PurchaseOrderDate', formatter: '.formatter.formatDate'}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>colCreatedBy}">
+                                                <f:fields>
+                                                    <Text text="{parts: ['UserFullName', 'CreatedByUser'], formatter: '.formatter.createdByDisplay'}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>colCompany}">
+                                                <f:fields>
+                                                    <Text text="{parts: ['CompanyCode', 'CompanyCodeName'], formatter: '.formatter.companyDisplay'}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>colPurchasingOrg}">
+                                                <f:fields>
+                                                    <Text text="{PurchasingOrganization} {= ${PurchasingOrganizationName} ? '(' + ${PurchasingOrganizationName} + ')' : '' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>colPurchasingGroup}">
+                                                <f:fields>
+                                                    <Text text="{PurchasingGroup} {= ${PurchasingGroupName} ? '(' + ${PurchasingGroupName} + ')' : '' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                        </f:formElements>
+                                    </f:FormContainer>
+
+                                    <f:FormContainer id="fcTerms" title="{i18n>subsecTerms}">
+                                        <f:formElements>
+                                            <f:FormElement label="{i18n>colSupplier}">
+                                                <f:fields>
+                                                    <Text text="{parts: ['SupplierName', 'Supplier'], formatter: '.formatter.supplierDisplay'}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelCurrency}">
+                                                <f:fields>
+                                                    <Text text="{DocumentCurrency}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelPoNetAmount}">
+                                                <f:fields>
+                                                    <Text text="{PurchaseOrderNetAmount} {DocumentCurrency}" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelPaymentTerms}">
+                                                <f:fields>
+                                                    <Text text="{PaymentTerms} {= ${PaymentTermsDescription} ? '(' + ${PaymentTermsDescription} + ')' : '' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelIncoterms}">
+                                                <f:fields>
+                                                    <Text text="{IncotermsClassification} {= ${IncotermsTransferLocation} ? '(' + ${IncotermsTransferLocation} + ')' : '' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                        </f:formElements>
+                                    </f:FormContainer>
+
+                                    <f:FormContainer id="fcStatus" title="{i18n>subsecStatus}">
+                                        <f:formElements>
+                                            <f:FormElement label="{i18n>colStatus}">
+                                                <f:fields>
+                                                    <ObjectStatus
+                                                        text="{
+                                                            parts: [
+                                                                { path: 'PurchasingDocumentStatus' },
+                                                                { path: 'PurchasingDocumentStatusName' },
+                                                                { path: 'ReleaseIsNotCompleted' },
+                                                                { path: 'PurchasingDocumentDeletionCode' },
+                                                                { path: 'PurchasingCompletenessStatus' }
+                                                            ],
+                                                            formatter: '.formatter.displayStatus'
+                                                        }"
+                                                        state="{
+                                                            parts: [
+                                                                { path: 'PurchasingDocumentStatus' },
+                                                                { path: 'PurchasingDocumentStatusName' },
+                                                                { path: 'ReleaseIsNotCompleted' },
+                                                                { path: 'PurchasingDocumentDeletionCode' },
+                                                                { path: 'PurchasingCompletenessStatus' }
+                                                            ],
+                                                            formatter: '.formatter.displayStatusState'
+                                                        }"
+                                                        icon="{
+                                                            parts: [
+                                                                { path: 'PurchasingDocumentStatus' },
+                                                                { path: 'PurchasingDocumentStatusName' },
+                                                                { path: 'ReleaseIsNotCompleted' },
+                                                                { path: 'PurchasingDocumentDeletionCode' },
+                                                                { path: 'PurchasingCompletenessStatus' }
+                                                            ],
+                                                            formatter: '.formatter.displayStatusIcon'
+                                                        }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelCompleteness}">
+                                                <f:fields>
+                                                    <ObjectStatus
+                                                        text="{= ${PurchasingCompletenessStatus} ? 'Complete' : 'Incomplete / Draft' }"
+                                                        state="{= ${PurchasingCompletenessStatus} ? 'Success' : 'Information' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelReleaseStatus}">
+                                                <f:fields>
+                                                    <ObjectStatus
+                                                        text="{= ${ReleaseIsNotCompleted} ? 'Pending Release (Approval Required)' : 'Release Completed (Approved)' }"
+                                                        state="{= ${ReleaseIsNotCompleted} ? 'Warning' : 'Success' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelWorkflow}">
+                                                <f:fields>
+                                                    <Text text="{= ${PurgHasFlxblWorkflowApproval} ? 'Flexible Workflow Active' : 'Classic Release Strategy' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                            <f:FormElement label="{i18n>labelDeletionIndicator}">
+                                                <f:fields>
+                                                    <Text text="{= ${PurchasingDocumentDeletionCode} ? ${PurchasingDocumentDeletionCode} : 'None' }" />
+                                                </f:fields>
+                                            </f:FormElement>
+                                        </f:formElements>
+                                    </f:FormContainer>
+                                </f:formContainers>
+                            </f:Form>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <!-- 2. Line Items Section -->
+            <uxap:ObjectPageSection id="secItems" title="{detailViewModel>/itemsTabTitle}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subsecItems">
+                        <uxap:blocks>
+                            <Table
+                                id="poItemsTable"
+                                items="{
+                                    path: 'to_PurchaseOrderItem',
+                                    parameters: {
+                                        $count: true
+                                    }
+                                }"
+                                growing="true"
+                                growingThreshold="20"
+                                updateFinished=".onItemsTableUpdateFinished"
+                                noDataText="{i18n>noItemsFound}"
+                                class="sapUiResponsiveContentPadding">
+                                <headerToolbar>
+                                    <OverflowToolbar id="itemsToolbar">
+                                        <Title
+                                            id="itemsTableTitle"
+                                            text="{detailViewModel>/itemsTitle}"
+                                            level="H3" />
+                                        <ToolbarSpacer />
+                                        <SearchField
+                                            id="itemSearchField"
+                                            width="16rem"
+                                            liveChange=".onSearchItems"
+                                            placeholder="Search items..." />
+                                    </OverflowToolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column id="colItemNo" width="4.5rem" hAlign="Center">
+                                        <Text text="{i18n>colItem}" />
+                                    </Column>
+                                    <Column id="colItemMaterial" width="16rem">
+                                        <Text text="{i18n>colMaterial}" />
+                                    </Column>
+                                    <Column id="colItemPlant" width="12rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
+                                        <Text text="{i18n>colPlantLoc}" />
+                                    </Column>
+                                    <Column id="colItemMatGroup" width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
+                                        <Text text="{i18n>colMatGroup}" />
+                                    </Column>
+                                    <Column id="colItemQuantity" width="9rem" hAlign="Right">
+                                        <Text text="{i18n>colQuantity}" />
+                                    </Column>
+                                    <Column id="colItemPrice" width="9rem" hAlign="Right">
+                                        <Text text="{i18n>colNetPrice}" />
+                                    </Column>
+                                    <Column id="colItemNetAmount" width="10rem" hAlign="Right">
+                                        <Text text="{i18n>colNetAmount}" />
+                                    </Column>
+                                    <Column id="colItemDeliveryDate" width="9rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
+                                        <Text text="{i18n>colDeliveryDate}" />
+                                    </Column>
+                                    <Column id="colItemStatus" width="9rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
+                                        <Text text="{i18n>colItemStatus}" />
+                                    </Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem id="itemRow">
+                                        <cells>
+                                            <Text text="{PurchaseOrderItem}" />
+                                            <ObjectIdentifier
+                                                title="{PurchaseOrderItemText}"
+                                                text="{Material}" />
+                                            <Text text="{Plant} {= ${PlantName} ? '(' + ${PlantName} + ')' : '' } {= ${StorageLocation} ? ' / ' + ${StorageLocation} : '' }" />
+                                            <Text text="{MaterialGroup}" />
+                                            <ObjectNumber
+                                                number="{OrderQuantity}"
+                                                unit="{PurchaseOrderQuantityUnit}" />
+                                            <ObjectNumber
+                                                number="{NetPriceAmount}"
+                                                unit="{DocumentCurrency}" />
+                                            <ObjectNumber
+                                                number="{NetAmount}"
+                                                unit="{DocumentCurrency}"
+                                                state="Success"
+                                                emphasized="true" />
+                                            <Text text="{path: 'FirstDeliveryDate', formatter: '.formatter.formatDate'}" />
+                                            <ObjectStatus
+                                                text="{= ${PurchaseOrderItemStatus} ? ${PurchaseOrderItemStatus} : 'Active' }"
+                                                state="{= ${PurchaseOrderItemStatus} === 'Marked for Deletion' ? 'Error' : 'None' }" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+        </uxap:sections>
+
+    </uxap:ObjectPageLayout>
+</mvc:View>

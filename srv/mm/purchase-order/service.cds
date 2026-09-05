@@ -17,13 +17,46 @@ service PurchaseOrderService {
         Supplier,
         SupplierName,
         CreationDate,
+        PurchaseOrderDate,
         CreatedByUser,
         UserFullName,
+        PurchaseOrderNetAmount,
+        DocumentCurrency,
+        PaymentTerms,
+        PaymentTerms_Text,
+        PaymentTermsDescription,
+        IncotermsClassification,
+        IncotermsClassification_Text,
+        IncotermsTransferLocation,
         PurchasingCompletenessStatus,
         ReleaseIsNotCompleted,
         PurchasingDocumentDeletionCode,
         PurchasingDocumentStatus,
-        PurchasingDocumentStatusName
+        PurchasingDocumentStatusName,
+        PurgHasFlxblWorkflowApproval,
+        to_PurchaseOrderItem : Composition of many PurchaseOrderItems on to_PurchaseOrderItem.PurchaseOrder = PurchaseOrder
+    };
+
+    @readonly
+    @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin'])
+    entity PurchaseOrderItems as projection on external.C_PurOrdItemEnh {
+        key PurchaseOrder,
+        key PurchaseOrderItem,
+        Material,
+        PurchaseOrderItemText,
+        Plant,
+        PlantName,
+        StorageLocation,
+        MaterialGroup,
+        OrderQuantity,
+        PurchaseOrderQuantityUnit,
+        NetPriceAmount,
+        NetAmount,
+        DocumentCurrency,
+        TaxCode,
+        RequisitionerName,
+        PurchaseOrderItemStatus,
+        FirstDeliveryDate
     };
 
     // Value Help Entities (Accessible to Viewers and Purchasing Managers)

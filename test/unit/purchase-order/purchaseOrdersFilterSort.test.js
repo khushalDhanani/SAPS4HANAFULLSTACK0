@@ -580,4 +580,46 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             );
         });
     });
+
+    describe('Navigation to Purchase Order Detail', () => {
+        it('should navigate to purchaseOrderDetail route when table item is pressed', () => {
+            const mockNavTo = jest.fn();
+            controller.getOwnerComponent = () => ({
+                getRouter: () => ({
+                    navTo: mockNavTo
+                })
+            });
+
+            const mockContext = {
+                getProperty: jest.fn().mockReturnValue("300000001")
+            };
+            const oEvent = {
+                getParameter: jest.fn().mockReturnValue({
+                    getBindingContext: () => mockContext
+                })
+            };
+
+            controller.onItemPress(oEvent);
+
+            expect(mockNavTo).toHaveBeenCalledWith("purchaseOrderDetail", {
+                PurchaseOrder: "300000001"
+            });
+        });
+
+        it('should not navigate if item context is missing', () => {
+            const mockNavTo = jest.fn();
+            controller.getOwnerComponent = () => ({
+                getRouter: () => ({
+                    navTo: mockNavTo
+                })
+            });
+
+            const oEvent = {
+                getParameter: jest.fn().mockReturnValue(null)
+            };
+
+            controller.onItemPress(oEvent);
+            expect(mockNavTo).not.toHaveBeenCalled();
+        });
+    });
 });

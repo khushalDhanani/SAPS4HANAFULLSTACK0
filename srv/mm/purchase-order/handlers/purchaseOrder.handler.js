@@ -71,6 +71,11 @@ function registerPurchaseOrderHandlers(srv) {
         return await purchaseOrderAdapter.readFsData(req.query);
     });
 
+    // 2. READ PurchaseOrderItems
+    srv.on('READ', 'PurchaseOrderItems', async (req) => {
+        return await purchaseOrderAdapter.readFsData(req.query);
+    });
+
     // 2. Action createPurchaseOrder
     srv.on('createPurchaseOrder', async (req) => {
         // Step A: Business validation

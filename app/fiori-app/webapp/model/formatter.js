@@ -4,6 +4,9 @@ sap.ui.define([
     "use strict";
 
     function _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
+        if (sStatusCode == null && sStatusName == null && bReleaseNotCompleted == null && sDeletionCode == null && bCompleteness == null) {
+            return "";
+        }
         if (sDeletionCode === "L" || sStatusCode === "38" || (sStatusName && String(sStatusName).toLowerCase() === "rejected")) {
             return "Rejected";
         }

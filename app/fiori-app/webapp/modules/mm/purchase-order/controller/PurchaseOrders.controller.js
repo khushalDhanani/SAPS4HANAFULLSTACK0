@@ -361,6 +361,20 @@ sap.ui.define([
         onCreatePO: function () {
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.navTo("createPurchaseOrder");
+        },
+
+        onItemPress: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem");
+            var oContext = oItem ? oItem.getBindingContext() : null;
+            if (oContext) {
+                var sPoId = oContext.getProperty("PurchaseOrder");
+                if (sPoId) {
+                    var oRouter = this.getOwnerComponent().getRouter();
+                    oRouter.navTo("purchaseOrderDetail", {
+                        PurchaseOrder: sPoId
+                    });
+                }
+            }
         }
     });
 });
