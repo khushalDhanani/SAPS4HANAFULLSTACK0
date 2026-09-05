@@ -1,6 +1,63 @@
 
 # Changes Log
 
+## 2026-09-05 12:20 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 1 repository cleanup from approved architecture audit: removed confirmed obsolete code (`PurchaseOrderErrorMapper.js`, `PurchaseOrderApi.js`), duplicate XSUAA descriptor (`config/xsuaa/xs-security.json`), redundant `.gitkeep` files in populated directories, dead placeholder trees (`publish/`, `scripts/`, empty `srv/integration/s4hana/` subdirectories, empty `docs/` subdirectories), empty UI5 test/formatter directories, and `db/data/` (unused per ADR-0001).
+- **Files Deleted** (31 tracked files):
+  - `srv/integration/s4hana/PurchaseOrderErrorMapper.js` (Obsolete 4-line re-export of `S4ErrorMapper`)
+  - `app/fiori-app/webapp/service/PurchaseOrderApi.js` (Obsolete 11-line re-export of `PurchaseOrderService`)
+  - `config/xsuaa/xs-security.json` (Duplicate of root `xs-security.json` bound to `mta.yaml`)
+  - `config/xsuaa/.gitkeep`
+  - `config/approuter/.gitkeep` (Directory populated by `default-env.json`)
+  - `config/connectivity/.gitkeep` (Directory populated by `connectivity-service.json`)
+  - `config/destinations/.gitkeep` (Directory populated by `destination-service.json`)
+  - `docs/architecture/.gitkeep` (Directory populated by `ARCHITECTURE.md`)
+  - `docs/decisions/.gitkeep` (Directory populated by `ADR-0001-s4-centric-integration-facade.md`)
+  - `docs/deployment/.gitkeep` (Empty placeholder)
+  - `docs/integration/.gitkeep` (Empty placeholder)
+  - `docs/operations/.gitkeep` (Empty placeholder)
+  - `mta/extensions/dev/.gitkeep` (Directory populated by `dev.mtaext`)
+  - `mta/extensions/prod/.gitkeep` (Directory populated by `prod.mtaext`)
+  - `mta/extensions/test/.gitkeep` (Directory populated by `test.mtaext`)
+  - `publish/domain/.gitkeep` (Dead placeholder tree)
+  - `publish/jobs/.gitkeep` (Dead placeholder tree)
+  - `publish/service/handlers/.gitkeep` (Dead placeholder tree)
+  - `publish/test/.gitkeep` (Dead placeholder tree)
+  - `scripts/build/.gitkeep` (Dead placeholder tree)
+  - `scripts/deploy/.gitkeep` (Dead placeholder tree)
+  - `scripts/test/.gitkeep` (Dead placeholder tree)
+  - `srv/integration/s4hana/adapters/.gitkeep` (Dead placeholder tree)
+  - `srv/integration/s4hana/clients/.gitkeep` (Dead placeholder tree)
+  - `srv/integration/s4hana/configuration/.gitkeep` (Dead placeholder tree)
+  - `srv/integration/s4hana/services/.gitkeep` (Dead placeholder tree)
+  - `test/e2e/.gitkeep` (Directory populated by `createPurchaseOrderFlow.test.js`)
+  - `test/fixtures/.gitkeep` (Directory populated by 6 JSON fixtures)
+  - `test/integration/.gitkeep` (Directory populated by 6 test suites)
+  - `test/unit/.gitkeep` (Directory populated by 9 test suites)
+  - `db/data/.gitkeep` (Unused placeholder under ADR-0001 zero persistence)
+- **Directories Cleaned Up**:
+  - `publish/` (entire tree removed)
+  - `scripts/` (entire tree removed)
+  - `config/xsuaa/` (entire folder removed)
+  - `db/data/` (entire folder removed)
+  - `docs/deployment/`, `docs/integration/`, `docs/operations/` (empty folders removed)
+  - `srv/integration/s4hana/adapters/`, `clients/`, `configuration/`, `services/` (empty folders removed)
+  - `app/fiori-app/webapp/formatter/`, `app/fiori-app/webapp/test/` (empty untracked folders removed)
+- **Pre-Deletion Verification**:
+  1. `PurchaseOrderErrorMapper`: Confirmed zero source or test references (only historical log mentions).
+  2. `PurchaseOrderApi`: Confirmed zero source or test references (marked `@deprecated`).
+  3. `config/xsuaa/xs-security.json`: Confirmed `mta.yaml` binds to canonical `./xs-security.json`.
+  4. `.gitkeep` files: Confirmed zero references in code or configuration.
+  5. `publish/`, `scripts/`, `db/data/`: Confirmed zero build, runtime, or deployment references.
+- **Validation**:
+  - `npm test`: All 16 test suites (92 tests) passed (Code 0).
+  - `git diff --check`: Clean (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter clean with 0 findings (Code 0).
+  - `git status`: Working tree clean and properly tracked.
+- **Result**: Passed. Confirmed obsolete, duplicate, and empty artifacts cleanly deleted.
+
 ## 2026-09-05 12:10 IST
 - **Agent**: Antigravity
 - **Change**: Created comprehensive, production-grade `README.md` (addressing point 15) and added sanitized `.env.example` template with `.gitignore` update.
