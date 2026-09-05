@@ -136,9 +136,35 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.statusCode).toBe(502);
             expect(res.message).toContain('unexpected response (HTTP 502)');
         });
+
+        it('should execute catalog query via SAP Cloud SDK executeHttpRequest', async () => {
+            const mockExecuteHttp = jest.fn().mockResolvedValueOnce({
+                status: 200,
+                data: { d: { results: [{ ServiceUrl: '/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV' }] } }
+            });
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
+                baseUrl: 'https://s4hana-btp.corp:44300',
+                client: '100',
+                executeHttpRequest: mockExecuteHttp
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.statusCode).toBe(200);
+            expect(res.system).toBe('PRD - Client 100');
+            expect(mockExecuteHttp).toHaveBeenCalledTimes(1);
+
+            const [calledDest, calledConfig] = mockExecuteHttp.mock.calls[0];
+            expect(calledDest.url).toBe('https://s4hana-btp.corp:44300');
+            expect(calledDest.username).toBe('cb9980000001');
+            expect(calledDest.password).toBe('Welcome123!');
+            expect(calledDest.authentication).toBe('BasicAuthentication');
+            expect(calledConfig.method).toBe('get');
+            expect(calledConfig.url).toContain('sap-client=100');
+        });
     });
 
-    describe('resolveBaseUrl', () => {
+    describe('resolveBaseUrl & Destination Resolution', () => {
         it('should resolve base URL from process.env.S4_DESTINATION_URL and trim trailing slashes', async () => {
             process.env.S4_DESTINATION_URL = 'http://172.27.100.32:8000///';
             const url = await authAdapter.resolveBaseUrl();
@@ -153,6 +179,16 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
             const url = await authAdapter.resolveBaseUrl();
             expect(url).toBe('https://my-btp-destination.corp:443');
+        });
+
+        it('should prioritize BTP Destination Service over local environment variables', async () => {
+            process.env.S4_DESTINATION_URL = 'http://local-env:8000';
+            jest.spyOn(connectivity, 'getDestination').mockResolvedValueOnce({
+                url: 'https://btp-managed-destination.corp:443/'
+            });
+
+            const url = await authAdapter.resolveBaseUrl();
+            expect(url).toBe('https://btp-managed-destination.corp:443');
         });
     });
 });

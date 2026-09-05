@@ -1,6 +1,29 @@
 
 # Changes Log
 
+## 2026-09-05 13:00 IST
+- **Agent**: Antigravity
+- **Change**: Executed Step 5 — Fix S/4HANA Integration Architecture:
+  1. Hardened `srv/integration/s4hana/AuthAdapter.js` to natively use SAP Cloud SDK `@sap-cloud-sdk/http-client` (`httpClient.executeHttpRequest`) instead of direct `fetch()`, ensuring consistent HTTP client architecture across all S/4 integration adapters.
+  2. Prioritized BTP Destination Service resolution via `@sap-cloud-sdk/connectivity` (`connectivity.getDestination`) over local environment variables (`process.env.S4_DESTINATION_URL`), ensuring seamless support for SAP Cloud Connector and OnPremise proxy types in deployed environments.
+  3. Eliminated manual `Basic ` Authorization header construction by delegating credentials management directly to SAP Cloud SDK destination options (`authentication: 'BasicAuthentication'`).
+  4. Preserved backward test compatibility with private `_adaptFetch` helper and added unit tests in `test/unit/authAdapter.test.js` validating native `executeHttpRequest` execution and BTP destination priority resolution.
+  5. Verified complete isolation of technical S/4HANA communication strictly within `srv/integration/s4hana/`, with zero direct HTTP calls, axios calls, or S/4 URLs residing in frontend or business logic layers.
+- **Files Modified**:
+  - `srv/integration/s4hana/AuthAdapter.js` (Refactored to Cloud SDK `executeHttpRequest` and prioritized BTP destination resolution)
+  - `test/unit/authAdapter.test.js` (Added tests for `executeHttpRequest` execution and BTP destination resolution precedence)
+- **Reason**: Hardened S/4HANA integration architecture to eliminate raw `fetch()` calls, ensure Cloud Connector / Connectivity service compatibility in BTP, and maintain unified HTTP client discipline across the entire integration layer.
+- **Validation**:
+  - `npm test`: All 17 test suites (104 tests) passed with 0 failures (Code 0).
+  - `npx jest test/unit/authAdapter.test.js`: All 12 unit tests passed (Code 0).
+  - `npx cds compile srv/service.cds --to json`: Succeeded (Code 0).
+  - `npm run lint` (in `app/fiori-app`): UI5 linter Success! 0 findings detected (Code 0).
+  - `npm run build` (in `app/fiori-app`): UI5 build succeeded in 287 ms (Code 0).
+  - `npm run validate:mta` (`mbt validate`): Succeeded (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. S/4HANA integration architecture fully hardened and compliant with BTP Destination/Connectivity standards.
+
+
 ## 2026-09-05 12:55 IST
 - **Agent**: Antigravity
 - **Change**: Executed Step 4 — Finalize the SAP MM → Purchase Order CAP Service Boundary:
