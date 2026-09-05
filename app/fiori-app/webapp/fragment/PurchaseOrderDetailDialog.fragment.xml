@@ -33,8 +33,33 @@
                     <Text text="{path: 'CreationDate', formatter: '.formatter.formatDate'}" />
                 </HBox>
                 <HBox>
+                    <Label text="{i18n>colCreatedBy}:" width="160px" design="Bold" />
+                    <Text text="{parts: ['UserFullName', 'CreatedByUser'], formatter: '.formatter.createdByDisplay'}" />
+                </HBox>
+                <HBox>
                     <Label text="{i18n>colStatus}:" width="160px" design="Bold" />
-                    <Text text="{path: 'PurchasingCompletenessStatus', formatter: '.formatter.completenessText'}" />
+                    <ObjectStatus
+                        text="{
+                            parts: [
+                                { path: 'PurchasingCompletenessStatus' },
+                                { path: 'PurchaseOrderType' }
+                            ],
+                            formatter: '.formatter.completenessText'
+                        }"
+                        state="{
+                            parts: [
+                                { path: 'PurchasingCompletenessStatus' },
+                                { path: 'PurchaseOrderType' }
+                            ],
+                            formatter: '.formatter.completenessState'
+                        }"
+                        icon="{
+                            parts: [
+                                { path: 'PurchasingCompletenessStatus' },
+                                { path: 'PurchaseOrderType' }
+                            ],
+                            formatter: '.formatter.completenessIcon'
+                        }" />
                 </HBox>
             </VBox>
         </content>

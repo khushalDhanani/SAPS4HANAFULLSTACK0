@@ -114,6 +114,7 @@ sap.ui.define([
             var oFbPurchasingGroup = this.byId("fbPurchasingGroup");
             var oFbDocType = this.byId("fbDocType");
             var oFbDateRange = this.byId("fbDateRange");
+            var oFbCreatedBy = this.byId("fbCreatedBy");
             var oFbStatus = this.byId("fbStatus");
 
             if (oFbPO) oFbPO.setValue("");
@@ -122,6 +123,7 @@ sap.ui.define([
             if (oFbPurchasingOrg) oFbPurchasingOrg.setValue("");
             if (oFbPurchasingGroup) oFbPurchasingGroup.setValue("");
             if (oFbDocType) oFbDocType.setValue("");
+            if (oFbCreatedBy) oFbCreatedBy.setValue("");
 
             if (oFbDateRange) {
                 oFbDateRange.setValue("");
@@ -161,7 +163,9 @@ sap.ui.define([
                         new Filter("PurchaseOrder", FilterOperator.Contains, sTrimmed),
                         new Filter("Supplier", FilterOperator.Contains, sTrimmed),
                         new Filter("SupplierName", FilterOperator.Contains, sTrimmed),
-                        new Filter("CompanyCode", FilterOperator.Contains, sTrimmed)
+                        new Filter("CompanyCode", FilterOperator.Contains, sTrimmed),
+                        new Filter("CreatedByUser", FilterOperator.Contains, sTrimmed),
+                        new Filter("UserFullName", FilterOperator.Contains, sTrimmed)
                     ],
                     and: false
                 }));
@@ -229,7 +233,20 @@ sap.ui.define([
                 }
             }
 
-            // 9. FilterBar: Completeness Status
+            // 9. FilterBar: Created By (Matches Username or Full Name)
+            var oFbCreatedBy = this.byId("fbCreatedBy");
+            if (oFbCreatedBy && oFbCreatedBy.getValue().trim() !== "") {
+                var sCreatedBy = oFbCreatedBy.getValue().trim();
+                aFilters.push(new Filter({
+                    filters: [
+                        new Filter("CreatedByUser", FilterOperator.Contains, sCreatedBy),
+                        new Filter("UserFullName", FilterOperator.Contains, sCreatedBy)
+                    ],
+                    and: false
+                }));
+            }
+
+            // 10. FilterBar: Completeness Status
             var oFbStatus = this.byId("fbStatus");
             if (oFbStatus) {
                 var sStatusKey = oFbStatus.getSelectedKey();

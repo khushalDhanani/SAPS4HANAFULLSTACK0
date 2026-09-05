@@ -185,6 +185,15 @@
                                         valueFormat="yyyy-MM-dd" />
                                 </fb:control>
                             </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="CreatedByUser" label="{i18n>colCreatedBy}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbCreatedBy"
+                                        placeholder="{i18n>filterCreatedByPlaceholder}"
+                                        showClearIcon="true"
+                                        submit=".onFilterBarSearch" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
                             <fb:FilterGroupItem groupName="G1" name="PurchasingCompletenessStatus" label="{i18n>colStatus}" visibleInFilterBar="true">
                                 <fb:control>
                                     <Select id="fbStatus" selectedKey="" width="100%">
@@ -290,7 +299,16 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colStat" width="9rem" hAlign="Center" sortIndicator="None">
+                        <Column id="colCreatedBy" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                            <header>
+                                <Link id="linkColCreatedBy" text="{i18n>colCreatedBy}" press=".onSortColumn">
+                                    <customData>
+                                        <core:CustomData key="sortProperty" value="CreatedByUser" />
+                                    </customData>
+                                </Link>
+                            </header>
+                        </Column>
+                        <Column id="colStat" width="12.5rem" hAlign="Center" sortIndicator="None">
                             <header>
                                 <Link id="linkColStat" text="{i18n>colStatus}" press=".onSortColumn">
                                     <customData>
@@ -325,18 +343,31 @@
                                         path: 'CreationDate',
                                         formatter: '.formatter.formatDate'
                                     }" />
+                                <ObjectIdentifier
+                                    id="poCreatedBy"
+                                    title="{= ${UserFullName} || ${CreatedByUser} || '-' }"
+                                    text="{= ${UserFullName} ? ${CreatedByUser} : '' }" />
                                 <ObjectStatus
                                     id="poStatus"
                                     text="{
-                                        path: 'PurchasingCompletenessStatus',
+                                        parts: [
+                                            { path: 'PurchasingCompletenessStatus' },
+                                            { path: 'PurchaseOrderType' }
+                                        ],
                                         formatter: '.formatter.completenessText'
                                     }"
                                     state="{
-                                        path: 'PurchasingCompletenessStatus',
+                                        parts: [
+                                            { path: 'PurchasingCompletenessStatus' },
+                                            { path: 'PurchaseOrderType' }
+                                        ],
                                         formatter: '.formatter.completenessState'
                                     }"
                                     icon="{
-                                        path: 'PurchasingCompletenessStatus',
+                                        parts: [
+                                            { path: 'PurchasingCompletenessStatus' },
+                                            { path: 'PurchaseOrderType' }
+                                        ],
                                         formatter: '.formatter.completenessIcon'
                                     }" />
                             </cells>

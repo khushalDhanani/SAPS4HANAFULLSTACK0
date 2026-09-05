@@ -53,7 +53,11 @@ sap.ui.define([
                     Currency: "",
                     IncotermsClassification: "",
                     IncotermsLocation1: "",
-                    PaymentTerms: ""
+                    PaymentTerms: "",
+                    StatusText: "In Preparation (NB - Incomplete)",
+                    StatusState: "Information",
+                    StatusIcon: "sap-icon://edit",
+                    PurchasingCompletenessStatus: false
                 },
                 items: [
                     {
@@ -188,6 +192,79 @@ sap.ui.define([
             }
 
             return aErrors;
+        },
+
+        /**
+         * Computes the PO status based on Document Type and data completeness.
+         *
+         * @param {Object} oData
+         * @returns {{ text: string, state: string, icon: string, complete: boolean }}
+         */
+        computeStatus: function (oData) {
+            if (!oData || !oData.header) {
+                return {
+                    text: "Draft (Incomplete)",
+                    state: "Warning",
+                    icon: "sap-icon://alert",
+                    complete: false
+                };
+            }
+
+            var sDocType = (oData.header.PurchaseOrderType || "").trim();
+            var aErrors = this.validateUI(oData);
+            var bComplete = aErrors.length === 0;
+            var sTypeLabel = sDocType || "Draft";
+
+            if (bComplete) {
+                return {
+                    text: "Ready to Create (" + sTypeLabel + " - Complete)",
+                    state: "Success",
+                    icon: "sap-icon://accept",
+                    complete: true
+                };
+            }
+
+            if (sDocType) {
+                return {
+                    text: "In Preparation (" + sTypeLabel + " - Incomplete)",
+                    state: "Information",
+                    icon: "sap-icon://edit",
+                    complete: false
+                };
+            }
+
+            return {
+                text: "Incomplete (Missing Document Type)",
+                state: "Warning",
+                icon: "sap-icon://alert",
+                complete: false
+            };
+        },
+
+        /**
+         * Evaluates current model state and updates the status properties on /header.
+         *
+         * @param {sap.ui.model.json.JSONModel|Object} oModel
+         * @returns {{ text: string, state: string, icon: string, complete: boolean }}
+         */
+        updateStatus: function (oModel) {
+            if (!oModel) return null;
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var oStatus = this.computeStatus(oData);
+
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/header/StatusText", oStatus.text);
+                oModel.setProperty("/header/StatusState", oStatus.state);
+                oModel.setProperty("/header/StatusIcon", oStatus.icon);
+                oModel.setProperty("/header/PurchasingCompletenessStatus", oStatus.complete);
+            } else if (oData && oData.header) {
+                oData.header.StatusText = oStatus.text;
+                oData.header.StatusState = oStatus.state;
+                oData.header.StatusIcon = oStatus.icon;
+                oData.header.PurchasingCompletenessStatus = oStatus.complete;
+            }
+
+            return oStatus;
         }
     };
 });

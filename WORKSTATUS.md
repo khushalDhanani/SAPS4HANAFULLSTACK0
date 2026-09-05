@@ -1,6 +1,67 @@
 
 # Changes Log
 
+## 2026-09-05 16:05 IST
+- **Agent**: Antigravity
+- **Change**: Updated Status in PO Listing and Detail Dialog to Dynamically Reflect Document Type:
+  1. Formatter Layer (`app/fiori-app/webapp/model/formatter.js`):
+     - Enhanced `completenessText(bComplete, sDocType)`: when `sDocType` is provided, renders `Completed (<Type> - Complete)` (e.g. `Completed (ZDOM - Complete)`) for completed purchase orders, and `In Preparation (<Type> - Incomplete)` (e.g. `In Preparation (ZDOM - Incomplete)`) for incomplete documents. Falls back to localized base text (`Completed` / `Incomplete`) when `sDocType` is omitted.
+     - Enhanced `completenessState(bComplete, sDocType)`: returns `Success` for completed items, `Information` for incomplete items with document type (consistent with `CreatePurchaseOrder`), and `Warning` when document type is missing.
+     - Enhanced `completenessIcon(bComplete, sDocType)`: returns `sap-icon://accept` for completed items, `sap-icon://edit` for incomplete items with document type, and `sap-icon://alert` when document type is missing.
+  2. View Layer (`app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`):
+     - Updated table column `colStat` width from `9rem` to `12.5rem` to provide proper spacing for formatted status strings without wrapping or truncation.
+     - Updated row `poStatus` (`ObjectStatus`) `text`, `state`, and `icon` properties with composite bindings across `PurchasingCompletenessStatus` and `PurchaseOrderType`.
+  3. Fragment Dialog Layer (`app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml`):
+     - Replaced plain text status with `ObjectStatus` binding both `PurchasingCompletenessStatus` and `PurchaseOrderType`, giving the detail popup the same rich status, icon, and semantic state.
+  4. Unit Tests (`test/unit/purchase-order/formatter.test.js`):
+     - Added comprehensive unit test coverage for completeness status with and without document types (`NB`, `ZDOM`, `FO`, `UB`), testing text, semantic state, icon, and boolean string handling.
+- **Files Modified**:
+  - `app/fiori-app/webapp/model/formatter.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+  - `app/fiori-app/webapp/fragment/PurchaseOrderDetailDialog.fragment.xml`
+  - `test/unit/purchase-order/formatter.test.js`
+- **Reason**: User requested: "Updated Stauts in PO Listing also."
+- **Validation**:
+  - `npx jest test/unit/purchase-order/formatter.test.js`: 12 / 12 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/`: 10 test suites (98 tests) passed (Code 0).
+  - `npm test`: All 23 test suites (176 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 425 ms (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. PO Listing table and detail dialog dynamically display proper status according to document type and completeness state.
+
+## 2026-09-05 16:02 IST
+- **Agent**: Antigravity
+- **Change**: Added Dynamic Status Indicator Based on Document Type and Completeness in Create Purchase Order:
+  1. View Layer (`CreatePurchaseOrder.view.xml`):
+     - Added `<headerContent>` to `createPOPage` featuring `<ObjectStatus id="headerPOStatus" text="{newPO>/header/StatusText}" state="{newPO>/header/StatusState}" icon="{newPO>/header/StatusIcon}" />`.
+     - Added a dedicated Status row in `poHeaderForm` directly below `inDocType` with `<ObjectStatus id="formPOStatus" ... />` for clear visibility within the form fields.
+     - Attached `change=".onHeaderChange"` and `liveChange=".onHeaderChange"` to `inDocType`, and `change=".onHeaderChange"` to all remaining header fields (`CompanyCode`, `PurchasingOrganization`, `PurchasingGroup`, `Supplier`, `DocumentDate`, `Currency`, `IncotermsClassification`, `IncotermsLocation1`, and `PaymentTerms`).
+     - Attached `change=".onItemFieldChange"` to line item table cells: `Plant`, `StorageLocation`, `Material`, `UnitOfMeasure`, and `TaxCode`.
+  2. Model Layer (`PurchaseOrderModel.js`):
+     - Initialized default status properties in `createInitialModel`: `StatusText: "In Preparation (NB - Incomplete)"`, `StatusState: "Information"`, `StatusIcon: "sap-icon://edit"`, `PurchasingCompletenessStatus: false`.
+     - Implemented `computeStatus(oData)`: dynamically calculates status text, state, and icon based on the active `PurchaseOrderType` (e.g. `NB`, `ZDOM`, `FO`, `UB`) and data completeness (`validateUI(oData)`). Returns `Ready to Create (<Type> - Complete)` (Success), `In Preparation (<Type> - Incomplete)` (Information), or `Incomplete (Missing Document Type)` (Warning).
+     - Implemented `updateStatus(oModel)`: automatically synchronizes `/header/StatusText`, `/header/StatusState`, `/header/StatusIcon`, and `/header/PurchasingCompletenessStatus`.
+  3. Controller Layer (`CreatePurchaseOrder.controller.js`):
+     - Added `onHeaderChange` and `onItemFieldChange` event handlers that invoke `PurchaseOrderModel.updateStatus(oModel)`.
+     - Integrated `updateStatus` into `_onRouteMatched`, `onAddItem`, `onDeleteItem`, and `onCalculateNetAmount`.
+  4. Unit Tests (`test/unit/purchase-order/createPurchaseOrderStatus.test.js`):
+     - Added 11 comprehensive unit tests covering initial status, document type variations (`NB`, `ZDOM`, `FO`, `UB`, `EC`), empty document type warning, transition to complete state, incoterms validation, item quantity validation, and model property updates.
+- **Files Modified**:
+  - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+  - `test/unit/purchase-order/createPurchaseOrderStatus.test.js` (New)
+- **Reason**: User requested: "According to type @[app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml] Show Proper Stauts."
+- **Validation**:
+  - `npx jest test/unit/purchase-order/createPurchaseOrderStatus.test.js`: 11 / 11 tests passed (Code 0).
+  - `npx jest test/unit/purchase-order/`: All 10 test suites (97 tests) passed (Code 0).
+  - `npm test`: All 23 test suites (175 tests) passed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter Success! 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 284 ms (Code 0).
+  - `git diff --check`: Clean, zero whitespace or formatting errors (Code 0).
+- **Result**: Passed. Create Purchase Order page dynamically displays the proper status indicator according to Document Type and completeness across both header and form.
+
 ## 2026-09-05 15:42 IST
 - **Agent**: Antigravity
 - **Change**: Standardized Date Display Across the Platform to Strict DD-MM-YYYY Standard:

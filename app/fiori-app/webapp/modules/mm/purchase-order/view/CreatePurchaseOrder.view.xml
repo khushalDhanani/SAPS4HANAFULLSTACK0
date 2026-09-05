@@ -13,6 +13,13 @@
         showNavButton="true"
         navButtonPress=".onNavBack"
         backgroundDesign="Solid">
+        <headerContent>
+            <ObjectStatus
+                id="headerPOStatus"
+                text="{newPO>/header/StatusText}"
+                state="{newPO>/header/StatusState}"
+                icon="{newPO>/header/StatusIcon}" />
+        </headerContent>
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <Panel headerText="Header Details" class="sapUiSmallMarginBottom">
@@ -28,14 +35,23 @@
                         <f:content>
                             <Label text="Document Type" required="true" />
                             <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="e.g. NB" maxLength="4" 
+                                change=".onHeaderChange" liveChange=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/DocumentTypeVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
                                 </suggestionItems>
                             </Input>
+
+                            <Label text="Status" />
+                            <ObjectStatus
+                                id="formPOStatus"
+                                text="{newPO>/header/StatusText}"
+                                state="{newPO>/header/StatusState}"
+                                icon="{newPO>/header/StatusIcon}" />
                             
                             <Label text="Company Code" required="true" />
                             <Input id="inCompanyCode" value="{newPO>/header/CompanyCode}" placeholder="e.g. 1010" maxLength="4" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CompanyCodeVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{CompanyCodeName}" />
@@ -44,6 +60,7 @@
                             
                             <Label text="Purchasing Organization" required="true" />
                             <Input id="inPurchOrg" value="{newPO>/header/PurchasingOrganization}" placeholder="e.g. 1010" maxLength="4" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PurchasingOrgVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{PurchasingOrganization}" text="{PurchasingOrganization}" additionalText="{PurchasingOrganizationName}" />
@@ -52,6 +69,7 @@
                             
                             <Label text="Purchasing Group" required="true" />
                             <Input id="inPurchGrp" value="{newPO>/header/PurchasingGroup}" placeholder="e.g. 001" maxLength="3" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PurchasingGroupVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{PurchasingGroup}" text="{PurchasingGroup}" additionalText="{PurchasingGroupName}" />
@@ -60,6 +78,7 @@
                             
                             <Label text="Supplier" required="true" />
                             <Input id="inSupplier" value="{newPO>/header/Supplier}" placeholder="e.g. 10300001" maxLength="10" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/SupplierVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{SupplierName}" />
@@ -67,10 +86,11 @@
                             </Input>
 
                             <Label text="Document Date" required="true" />
-                            <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true" />
+                            <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true" change=".onHeaderChange" />
 
                             <Label text="Currency" required="true" />
                             <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="e.g. EUR" maxLength="5" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CurrencyVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{Currency}" text="{Currency}" additionalText="{Currency_Text}" />
@@ -79,6 +99,7 @@
 
                             <Label text="Incoterms" />
                             <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="e.g. EXW" maxLength="3" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/IncotermsClassificationVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{IncotermsClassification}" text="{IncotermsClassification}" additionalText="{IncotermsClassificationName}" />
@@ -86,10 +107,11 @@
                             </Input>
                             
                             <Label text="Incoterms Location 1" />
-                            <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="e.g. MUMBAI" maxLength="70" />
+                            <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="e.g. MUMBAI" maxLength="70" change=".onHeaderChange" />
 
                             <Label text="Payment Terms" />
                             <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="e.g. 0001" maxLength="4" 
+                                change=".onHeaderChange"
                                 showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PaymentTermsVH', templateShareable: false}">
                                 <suggestionItems>
                                     <core:ListItem key="{PaymentTerms}" text="{PaymentTerms}" additionalText="{PaymentTermsName}" />
@@ -129,18 +151,21 @@
                                 <cells>
                                      <Text text="{newPO>PurchaseOrderItem}" />
                                     <Input value="{newPO>Plant}" placeholder="e.g. 1010" required="true" 
+                                        change=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PlantVH', templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{Plant}" text="{Plant}" additionalText="{PlantName}" />
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newPO>StorageLocation}" placeholder="e.g. 101A" required="true" 
+                                        change=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/StorageLocationVH', templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{StorageLocationName}" />
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newPO>Material}" placeholder="e.g. TG11" required="true" 
+                                        change=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/MaterialVH', templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{Material}" text="{Material}" additionalText="{MaterialName}" />
@@ -148,6 +173,7 @@
                                     </Input>
                                     <Input value="{newPO>OrderQuantity}" type="Number" required="true" change=".onCalculateNetAmount" />
                                     <Input value="{newPO>UnitOfMeasure}" placeholder="e.g. PC" required="true" 
+                                        change=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/UnitOfMeasureVH', templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{UnitOfMeasure}" text="{UnitOfMeasure}" additionalText="{UnitOfMeasure_Text}" />
@@ -155,6 +181,7 @@
                                     </Input>
                                     <Input value="{newPO>NetPriceAmount}" type="Number" placeholder="0.00" change=".onCalculateNetAmount" />
                                     <Input value="{newPO>TaxCode}" placeholder="e.g. V1" maxLength="2" 
+                                        change=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/TaxCodeVH', templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{TaxCode}" text="{TaxCode}" additionalText="{TaxCode_Text}" />

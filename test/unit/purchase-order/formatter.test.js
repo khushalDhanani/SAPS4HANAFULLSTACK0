@@ -90,7 +90,7 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             expect(mmFormatter.formatDate("not-a-date")).toBe("not-a-date");
         });
 
-        it('should correctly format completeness status, icon, and text', () => {
+        it('should correctly format completeness status, icon, and text without document type', () => {
             expect(mmFormatter.completenessState(true)).toBe("Success");
             expect(mmFormatter.completenessState(false)).toBe("Warning");
 
@@ -101,7 +101,27 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             expect(mmFormatter.completenessText.call(oContext, false)).toBe("Incomplete");
         });
 
-        it('should format supplier, company, and purchasing org display helpers', () => {
+        it('should correctly format completeness status, icon, and text according to document type', () => {
+            // When complete with document type
+            expect(mmFormatter.completenessText.call(oContext, true, "NB")).toBe("Complete (NB - Complete)");
+            expect(mmFormatter.completenessText.call(oContext, true, "ZDOM")).toBe("Complete (ZDOM - Complete)");
+            expect(mmFormatter.completenessText.call(oContext, true, "FO")).toBe("Complete (FO - Complete)");
+            expect(mmFormatter.completenessState(true, "NB")).toBe("Success");
+            expect(mmFormatter.completenessIcon(true, "NB")).toBe("sap-icon://accept");
+
+            // When incomplete with document type (In Preparation)
+            expect(mmFormatter.completenessText.call(oContext, false, "NB")).toBe("In Preparation (NB - Incomplete)");
+            expect(mmFormatter.completenessText.call(oContext, false, "ZDOM")).toBe("In Preparation (ZDOM - Incomplete)");
+            expect(mmFormatter.completenessText.call(oContext, false, "UB")).toBe("In Preparation (UB - Incomplete)");
+            expect(mmFormatter.completenessState(false, "NB")).toBe("Information");
+            expect(mmFormatter.completenessIcon(false, "NB")).toBe("sap-icon://edit");
+
+            // String boolean handling
+            expect(mmFormatter.completenessText.call(oContext, "true", "NB")).toBe("Complete (NB - Complete)");
+            expect(mmFormatter.completenessText.call(oContext, "false", "NB")).toBe("In Preparation (NB - Incomplete)");
+        });
+
+        it('should format supplier, company, purchasing org, and created by display helpers', () => {
             expect(mmFormatter.docTypeDisplay("ZDOM")).toBe("ZDOM");
             expect(mmFormatter.docTypeDisplay("")).toBe("-");
 
@@ -114,6 +134,11 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
 
             expect(mmFormatter.purchasingOrgDisplay("AE01", "101")).toBe("AE01 / 101");
             expect(mmFormatter.purchasingOrgDisplay("", "")).toBe("-");
+
+            expect(mmFormatter.createdByDisplay("Shriram Andhale", "SANDHLE")).toBe("Shriram Andhale (SANDHLE)");
+            expect(mmFormatter.createdByDisplay("", "SANDHLE")).toBe("SANDHLE");
+            expect(mmFormatter.createdByDisplay("Shriram Andhale", "")).toBe("Shriram Andhale");
+            expect(mmFormatter.createdByDisplay("", "")).toBe("-");
         });
     });
 

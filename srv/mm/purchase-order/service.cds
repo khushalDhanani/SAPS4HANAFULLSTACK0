@@ -17,6 +17,8 @@ service PurchaseOrderService {
         Supplier,
         SupplierName,
         CreationDate,
+        CreatedByUser,
+        UserFullName,
         PurchasingCompletenessStatus
     };
 

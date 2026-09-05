@@ -155,6 +155,12 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
                 getHeader: () => ({ data: () => "CreationDate" })
             },
             {
+                id: "colCreatedBy",
+                sIndicator: "None",
+                setSortIndicator: jest.fn(function (ind) { this.sIndicator = ind; }),
+                getHeader: () => ({ data: () => "CreatedByUser" })
+            },
+            {
                 id: "colStat",
                 sIndicator: "None",
                 setSortIndicator: jest.fn(function (ind) { this.sIndicator = ind; }),
@@ -175,6 +181,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             fbPurchasingOrg: createInputMock(""),
             fbPurchasingGroup: createInputMock(""),
             fbDocType: createInputMock(""),
+            fbCreatedBy: createInputMock(""),
             fbDateRange: {
                 getValue: jest.fn(() => sRangeVal),
                 setValue: jest.fn(v => { sRangeVal = v; }),
@@ -341,20 +348,37 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(aFilters[0].sOperator).toBe(FilterOperator.EQ);
             expect(aFilters[0].oValue1).toBe(false);
         });
+
+        it('should filter by CreatedByUser (matching user ID or full name)', () => {
+            mockControls.fbCreatedBy.getValue.mockReturnValue("SANDHLE");
+            const aFilters = controller._buildFilterCriteria();
+
+            expect(aFilters.length).toBe(1);
+            expect(aFilters[0].bAnd).toBe(false);
+            expect(aFilters[0].aFilters.length).toBe(2);
+            expect(aFilters[0].aFilters[0].sPath).toBe("CreatedByUser");
+            expect(aFilters[0].aFilters[0].sOperator).toBe(FilterOperator.Contains);
+            expect(aFilters[0].aFilters[0].oValue1).toBe("SANDHLE");
+            expect(aFilters[0].aFilters[1].sPath).toBe("UserFullName");
+            expect(aFilters[0].aFilters[1].sOperator).toBe(FilterOperator.Contains);
+            expect(aFilters[0].aFilters[1].oValue1).toBe("SANDHLE");
+        });
     });
 
     describe('Global Toolbar Search & Combined Queries', () => {
-        it('should create OR filter across PO, Supplier, SupplierName, and CompanyCode for global search', () => {
+        it('should create OR filter across PO, Supplier, SupplierName, CompanyCode, CreatedByUser, and UserFullName for global search', () => {
             mockControls.searchField.getValue.mockReturnValue("SAP");
             const aFilters = controller._buildFilterCriteria();
 
             expect(aFilters.length).toBe(1);
             expect(aFilters[0].bAnd).toBe(false);
-            expect(aFilters[0].aFilters.length).toBe(4);
+            expect(aFilters[0].aFilters.length).toBe(6);
             expect(aFilters[0].aFilters[0].sPath).toBe("PurchaseOrder");
             expect(aFilters[0].aFilters[1].sPath).toBe("Supplier");
             expect(aFilters[0].aFilters[2].sPath).toBe("SupplierName");
             expect(aFilters[0].aFilters[3].sPath).toBe("CompanyCode");
+            expect(aFilters[0].aFilters[4].sPath).toBe("CreatedByUser");
+            expect(aFilters[0].aFilters[5].sPath).toBe("UserFullName");
         });
 
         it('should combine global search AND multiple FilterBar fields', () => {
@@ -387,6 +411,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             mockControls.fbPurchasingOrg.setValue("1010");
             mockControls.fbPurchasingGroup.setValue("001");
             mockControls.fbDocType.setValue("NB");
+            mockControls.fbCreatedBy.setValue("SANDHLE");
             mockControls.fbStatus.setSelectedKey("true");
 
             controller.onFilterBarClear();
@@ -397,6 +422,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(mockControls.fbPurchasingOrg.setValue).toHaveBeenCalledWith("");
             expect(mockControls.fbPurchasingGroup.setValue).toHaveBeenCalledWith("");
             expect(mockControls.fbDocType.setValue).toHaveBeenCalledWith("");
+            expect(mockControls.fbCreatedBy.setValue).toHaveBeenCalledWith("");
             expect(mockControls.fbDateRange.setValue).toHaveBeenCalledWith("");
             expect(mockControls.fbDateRange.setDateValue).toHaveBeenCalledWith(null);
             expect(mockControls.fbDateRange.setSecondDateValue).toHaveBeenCalledWith(null);
@@ -451,6 +477,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
                 "CompanyCode",
                 "PurchasingOrganization",
                 "CreationDate",
+                "CreatedByUser",
                 "PurchasingCompletenessStatus"
             ];
 
@@ -462,6 +489,8 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
                 if (prop === "CreationDate") {
                     expect(aLastCall.length).toBe(2);
                     expect(aLastCall[1].sPath).toBe("PurchaseOrder");
+                } else {
+                    expect(aLastCall.length).toBe(1);
                 }
             });
         });

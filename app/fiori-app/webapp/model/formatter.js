@@ -28,17 +28,51 @@ sap.ui.define([
             return oDateFormat.format(oDate);
         },
 
-        completenessState: function (bComplete) {
-            return bComplete ? "Success" : "Warning";
+        completenessState: function (bComplete, sDocType) {
+            var bIsComplete = bComplete === true || bComplete === "true";
+            if (bIsComplete) {
+                return "Success";
+            }
+            return (sDocType && String(sDocType).trim()) ? "Information" : "Warning";
         },
 
-        completenessIcon: function (bComplete) {
-            return bComplete ? "sap-icon://accept" : "sap-icon://alert";
+        completenessIcon: function (bComplete, sDocType) {
+            var bIsComplete = bComplete === true || bComplete === "true";
+            if (bIsComplete) {
+                return "sap-icon://accept";
+            }
+            return (sDocType && String(sDocType).trim()) ? "sap-icon://edit" : "sap-icon://alert";
         },
 
-        completenessText: function (bComplete) {
-            var oResourceBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-            return bComplete ? oResourceBundle.getText("statusComplete") : oResourceBundle.getText("statusIncomplete");
+        completenessText: function (bComplete, sDocType) {
+            var oResourceBundle = null;
+            try {
+                if (this && typeof this.getOwnerComponent === "function") {
+                    var oOwner = this.getOwnerComponent();
+                    if (oOwner && typeof oOwner.getModel === "function") {
+                        var oModel = oOwner.getModel("i18n");
+                        if (oModel && typeof oModel.getResourceBundle === "function") {
+                            oResourceBundle = oModel.getResourceBundle();
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore missing resource bundle in tests or unbound contexts
+            }
+
+            var sCompleteBase = oResourceBundle ? oResourceBundle.getText("statusComplete") : "Completed";
+            var sIncompleteBase = oResourceBundle ? oResourceBundle.getText("statusIncomplete") : "Incomplete";
+            var bIsComplete = bComplete === true || bComplete === "true";
+
+            if (sDocType && String(sDocType).trim()) {
+                var sType = String(sDocType).trim();
+                if (bIsComplete) {
+                    return sCompleteBase + " (" + sType + " - Complete)";
+                }
+                return "In Preparation (" + sType + " - Incomplete)";
+            }
+
+            return bIsComplete ? sCompleteBase : sIncompleteBase;
         },
 
         docTypeDisplay: function (sDocType) {
@@ -67,6 +101,19 @@ sap.ui.define([
                 return "-";
             }
             return (sOrg || "-") + " / " + (sGroup || "-");
+        },
+
+        createdByDisplay: function (sFullName, sUserId) {
+            if (!sFullName && !sUserId) {
+                return "-";
+            }
+            if (!sFullName) {
+                return String(sUserId);
+            }
+            if (!sUserId) {
+                return sFullName;
+            }
+            return sFullName + " (" + sUserId + ")";
         }
     };
 });

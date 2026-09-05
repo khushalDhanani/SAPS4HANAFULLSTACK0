@@ -19,6 +19,17 @@ sap.ui.define([
             var sUser = PurchaseOrderModel.getCurrentUserName(this.getOwnerComponent());
             var oModel = PurchaseOrderModel.createInitialModel(sUser);
             this.getView().setModel(oModel, "newPO");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onHeaderChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onItemFieldChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.updateStatus(oModel);
         },
 
         onValueHelpRequest: function (oEvent) {
@@ -43,6 +54,7 @@ sap.ui.define([
             var oModel = this.getView().getModel("newPO");
             var sUser = PurchaseOrderModel.getCurrentUserName(this.getOwnerComponent());
             PurchaseOrderModel.addItem(oModel, sUser);
+            PurchaseOrderModel.updateStatus(oModel);
         },
 
         onDeleteItem: function (oEvent) {
@@ -51,6 +63,7 @@ sap.ui.define([
             var iIndex = parseInt(sPath.split("/")[2], 10);
             var oModel = this.getView().getModel("newPO");
             PurchaseOrderModel.deleteItem(oModel, iIndex);
+            PurchaseOrderModel.updateStatus(oModel);
         },
 
         onCalculateNetAmount: function (oEvent) {
@@ -61,6 +74,7 @@ sap.ui.define([
             var oModel = this.getView().getModel("newPO");
 
             PurchaseOrderModel.calculateItemNetAmount(oModel, sPath);
+            PurchaseOrderModel.updateStatus(oModel);
         },
 
         _getErrorMessageConfig: function (oError) {
