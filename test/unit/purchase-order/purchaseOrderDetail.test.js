@@ -65,21 +65,24 @@ const mockMessageToast = {
     show: jest.fn()
 };
 
+const MockBaseController = {
+    prototype: {
+        onNavBack: jest.fn()
+    },
+    extend: (name, proto) => {
+        function Controller() {
+            if (proto) {
+                Object.assign(this, proto);
+            }
+        }
+        return Controller;
+    }
+};
+
 // Setup sap.ui.define mock
 global.sap = {
     ui: {
         define: (deps, factory) => {
-            const MockBaseController = {
-                extend: (name, proto) => {
-                    function Controller() {
-                        if (proto) {
-                            Object.assign(this, proto);
-                        }
-                    }
-                    return Controller;
-                }
-            };
-
             ControllerClass = factory(
                 MockBaseController,
                 MockJSONModel,
@@ -391,10 +394,10 @@ describe('PurchaseOrderDetail Controller Unit Tests', () => {
     });
 
     describe('Navigation & Refresh Actions', () => {
-        it('onNavBack should navigate to purchaseOrders route', () => {
+        it('onNavBack should delegate to BaseController', () => {
             controller.onNavBack();
 
-            expect(mockRouter.navTo).toHaveBeenCalledWith("purchaseOrders", {}, true);
+            expect(MockBaseController.prototype.onNavBack).toHaveBeenCalledWith("purchaseOrders");
         });
 
         it('onRefresh should refresh element and items binding and display toast', () => {

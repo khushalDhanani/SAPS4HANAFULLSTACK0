@@ -21,6 +21,27 @@ sap.ui.define([
             if (oRouter) {
                 oRouter.attachRouteMatched(this._onRouteMatched, this);
             }
+
+            // Immediately synchronize shell for direct load / browser refresh
+            this._syncInitialShellState();
+        },
+
+        _syncInitialShellState: function () {
+            var sHash = (typeof window !== "undefined" && window.location && window.location.hash) ? window.location.hash.replace(/^#\/?/, "") : "";
+            if (!sHash) return;
+
+            if (sHash.indexOf("mm/purchase-orders/create") === 0) {
+                this._updateShell("createPurchaseOrder");
+            } else if (sHash.indexOf("mm/purchase-orders/") === 0) {
+                var sPoId = sHash.replace("mm/purchase-orders/", "").split("/")[0];
+                this._updateShell("purchaseOrderDetail", { PurchaseOrder: sPoId });
+            } else if (sHash.indexOf("mm/purchase-orders") === 0) {
+                this._updateShell("purchaseOrders");
+            } else if (sHash.indexOf("fi/journal-entries") === 0) {
+                this._updateShell("journalEntries");
+            } else if (sHash.indexOf("dashboard") === 0) {
+                this._updateShell("dashboard");
+            }
         },
 
         /**
@@ -30,6 +51,11 @@ sap.ui.define([
          */
         _onRouteMatched: function (oEvent) {
             var sRouteName = oEvent.getParameter("name");
+            var oArgs = oEvent.getParameter("arguments");
+            this._updateShell(sRouteName, oArgs);
+        },
+
+        _updateShell: function (sRouteName, oArgs) {
             this._sCurrentRoute = sRouteName;
 
             var oBundle = this.getOwnerComponent().getModel("i18n") ? this.getOwnerComponent().getModel("i18n").getResourceBundle() : null;
@@ -50,10 +76,10 @@ sap.ui.define([
                     bShowNav = true;
                     break;
                 case "purchaseOrderDetail":
-                    var oArgs = oEvent.getParameter("arguments") || {};
-                    if (oArgs.PurchaseOrder) {
+                    var args = oArgs || {};
+                    if (args.PurchaseOrder) {
                         var sPoPrefix = oBundle ? oBundle.getText("poDetailTitle") : "Purchase Order";
-                        sTitle = sPoPrefix + " " + oArgs.PurchaseOrder;
+                        sTitle = sPoPrefix + " " + args.PurchaseOrder;
                     } else {
                         sTitle = oBundle ? oBundle.getText("poDetailShellTitle") : "Purchase Order Details";
                     }
@@ -89,21 +115,14 @@ sap.ui.define([
          * ShellBar navigation button handler — performs hierarchical or history back navigation.
          */
         onNavButtonPressed: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
             var sRoute = this._sCurrentRoute;
 
             if (sRoute === "purchaseOrderDetail" || sRoute === "createPurchaseOrder") {
-                if (oRouter) {
-                    oRouter.navTo("purchaseOrders", {}, true);
-                }
+                this.onNavBack("purchaseOrders");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries") {
-                if (oRouter) {
-                    oRouter.navTo("dashboard", {}, true);
-                }
-            } else if (window.history.length > 1) {
-                window.history.go(-1);
-            } else if (oRouter) {
-                oRouter.navTo("dashboard", {}, true);
+                this.onNavBack("dashboard");
+            } else {
+                this.onNavBack("dashboard");
             }
         }
     });

@@ -58,10 +58,23 @@ sap.ui.define([], function () {
         parseError: function (response) {
             return response.text().then(function (sText) {
                 var sMessage;
+                var aDetails = [];
+                var sCode = "";
+                var oParsedJson = null;
                 try {
                     var oJson = JSON.parse(sText);
-                    if (oJson.error && oJson.error.message) {
-                        sMessage = oJson.error.message;
+                    oParsedJson = oJson;
+                    if (oJson.error) {
+                        var oErrObj = oJson.error;
+                        sCode = oErrObj.code || "";
+                        if (oErrObj.message) {
+                            sMessage = typeof oErrObj.message === "object" ? (oErrObj.message.value || JSON.stringify(oErrObj.message)) : oErrObj.message;
+                        }
+                        if (Array.isArray(oErrObj.details)) {
+                            aDetails = oErrObj.details;
+                        } else if (oErrObj.innererror && Array.isArray(oErrObj.innererror.errordetails)) {
+                            aDetails = oErrObj.innererror.errordetails;
+                        }
                     } else if (oJson.message) {
                         sMessage = oJson.message;
                     } else {
@@ -70,8 +83,12 @@ sap.ui.define([], function () {
                 } catch (e) {
                     sMessage = sText || ("HTTP " + response.status + " " + response.statusText);
                 }
-                var oErr = new Error(sMessage);
+                var oErr = new Error(sMessage || ("HTTP " + response.status));
                 oErr.status = response.status;
+                oErr.code = sCode;
+                oErr.details = aDetails;
+                oErr.rawResponse = sText;
+                oErr.errorJson = oParsedJson;
                 return oErr;
             });
         },

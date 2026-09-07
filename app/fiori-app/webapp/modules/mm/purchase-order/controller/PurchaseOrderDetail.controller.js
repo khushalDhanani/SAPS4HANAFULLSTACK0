@@ -168,8 +168,7 @@ sap.ui.define([
          * Navigates back to the Purchase Orders master list.
          */
         onNavBack: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("purchaseOrders", {}, true);
+            BaseController.prototype.onNavBack.call(this, "purchaseOrders");
         },
 
         /**

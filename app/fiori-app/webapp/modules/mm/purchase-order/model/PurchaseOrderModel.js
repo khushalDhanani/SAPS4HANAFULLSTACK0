@@ -31,8 +31,38 @@ sap.ui.define([
                 if (oUserModel && oUserModel.getProperty && oUserModel.getProperty("/username")) {
                     return oUserModel.getProperty("/username");
                 }
+                var oAuthModel = oComponent.getModel("auth");
+                if (oAuthModel && oAuthModel.getProperty) {
+                    var sAuthUser = oAuthModel.getProperty("/user/username");
+                    if (sAuthUser) {
+                        return sAuthUser;
+                    }
+                }
             }
             return "";
+        },
+
+        HEADER_FIELD_CONFIG: {
+            PurchaseOrderType: { controlId: "inDocType", label: "Document Type", section: "General Data", example: "NB" },
+            CompanyCode: { controlId: "inCompanyCode", label: "Company Code", section: "General Data", example: "1010" },
+            PurchasingOrganization: { controlId: "inPurchOrg", label: "Purchasing Organization", section: "General Data", example: "1010" },
+            PurchasingGroup: { controlId: "inPurchGrp", label: "Purchasing Group", section: "General Data", example: "001" },
+            DocumentDate: { controlId: "inDocDate", label: "Document Date", section: "General Data", example: "DD-MM-YYYY" },
+            Supplier: { controlId: "inSupplier", label: "Supplier", section: "Supplier & Commercial Terms", example: "10300001" },
+            Currency: { controlId: "inCurrency", label: "Currency", section: "Supplier & Commercial Terms", example: "EUR" },
+            IncotermsClassification: { controlId: "inIncoterms", label: "Incoterms", section: "Supplier & Commercial Terms", example: "EXW" },
+            IncotermsLocation1: { controlId: "inIncotermsLoc", label: "Incoterms Location 1", section: "Supplier & Commercial Terms", example: "MUMBAI" },
+            PaymentTerms: { controlId: "inPaymentTerms", label: "Payment Terms", section: "Supplier & Commercial Terms", example: "0001" }
+        },
+
+        ITEM_FIELD_CONFIG: {
+            Plant: { cellIndex: 1, label: "Plant", example: "1010" },
+            StorageLocation: { cellIndex: 2, label: "Storage Location", example: "101A" },
+            Material: { cellIndex: 3, label: "Material", example: "TG11" },
+            OrderQuantity: { cellIndex: 4, label: "Quantity", example: "10" },
+            UnitOfMeasure: { cellIndex: 5, label: "Unit of Measure", example: "PC" },
+            NetPriceAmount: { cellIndex: 6, label: "Net Price", example: "100.00" },
+            TaxCode: { cellIndex: 7, label: "Tax Code", example: "V1" }
         },
 
         /**
@@ -43,6 +73,22 @@ sap.ui.define([
          */
         createInitialModel: function (sUser) {
             var oData = {
+                hasError: false,
+                errorMessage: "",
+                errorCount: 0,
+                errorList: [],
+                errors: {
+                    PurchaseOrderType: { state: "None", text: "" },
+                    CompanyCode: { state: "None", text: "" },
+                    PurchasingOrganization: { state: "None", text: "" },
+                    PurchasingGroup: { state: "None", text: "" },
+                    Supplier: { state: "None", text: "" },
+                    Currency: { state: "None", text: "" },
+                    DocumentDate: { state: "None", text: "" },
+                    IncotermsClassification: { state: "None", text: "" },
+                    IncotermsLocation1: { state: "None", text: "" },
+                    PaymentTerms: { state: "None", text: "" }
+                },
                 header: {
                     PurchaseOrderType: "NB",
                     CompanyCode: "",
@@ -73,7 +119,16 @@ sap.ui.define([
                         NetPriceAmount: "",
                         TaxCode: "",
                         NetAmount: "0.00",
-                        RequisitionerName: sUser || ""
+                        RequisitionerName: sUser || "",
+                        errors: {
+                            Plant: { state: "None", text: "" },
+                            StorageLocation: { state: "None", text: "" },
+                            Material: { state: "None", text: "" },
+                            OrderQuantity: { state: "None", text: "" },
+                            UnitOfMeasure: { state: "None", text: "" },
+                            NetPriceAmount: { state: "None", text: "" },
+                            TaxCode: { state: "None", text: "" }
+                        }
                     }
                 ]
             };
@@ -104,7 +159,16 @@ sap.ui.define([
                 NetPriceAmount: "0.00",
                 TaxCode: "",
                 NetAmount: "0.00",
-                RequisitionerName: sUser || ""
+                RequisitionerName: sUser || "",
+                errors: {
+                    Plant: { state: "None", text: "" },
+                    StorageLocation: { state: "None", text: "" },
+                    Material: { state: "None", text: "" },
+                    OrderQuantity: { state: "None", text: "" },
+                    UnitOfMeasure: { state: "None", text: "" },
+                    NetPriceAmount: { state: "None", text: "" },
+                    TaxCode: { state: "None", text: "" }
+                }
             });
             oModel.setProperty("/items", aItems);
         },
@@ -265,6 +329,685 @@ sap.ui.define([
             }
 
             return oStatus;
+        },
+
+        /**
+         * Validates a single field contextually and updates that field's state.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sField
+         * @param {any} [sValue]
+         * @param {number} [iItemIndex]
+         * @returns {{ state: string, text: string }}
+         */
+        validateSingleField: function (oModel, sField, sValue, iItemIndex) {
+            if (!oModel) return { state: "None", text: "" };
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var oState = { state: "None", text: "" };
+
+            if (iItemIndex === undefined || iItemIndex === null) {
+                // Header field validation
+                var oHeader = oData.header || {};
+                var val = sValue !== undefined ? sValue : (oHeader[sField] || "");
+                var sValTrim = String(val || "").trim();
+
+                switch (sField) {
+                    case "PurchaseOrderType":
+                        if (!sValTrim) oState = { state: "Error", text: "Document Type is required (e.g. NB)." };
+                        break;
+                    case "CompanyCode":
+                        if (!sValTrim) oState = { state: "Error", text: "Company Code is required (4-character code, e.g. 1010)." };
+                        break;
+                    case "PurchasingOrganization":
+                        if (!sValTrim) oState = { state: "Error", text: "Purchasing Organization is required (e.g. 1010)." };
+                        break;
+                    case "PurchasingGroup":
+                        if (!sValTrim) oState = { state: "Error", text: "Purchasing Group is required (3-character code, e.g. 001)." };
+                        break;
+                    case "Supplier":
+                        if (!sValTrim) oState = { state: "Error", text: "Supplier account is required (e.g. 10300001)." };
+                        break;
+                    case "Currency":
+                        if (!sValTrim) {
+                            oState = { state: "Error", text: "Currency is required (e.g. EUR, USD)." };
+                        } else if (!/^[A-Za-z]{3}$/.test(sValTrim)) {
+                            oState = { state: "Error", text: "Currency must be a 3-letter ISO code (e.g. EUR)." };
+                        }
+                        break;
+                    case "DocumentDate":
+                        if (!sValTrim) oState = { state: "Error", text: "Document Date is required." };
+                        break;
+                    case "IncotermsClassification":
+                        if (sValTrim.length > 3) oState = { state: "Error", text: "Incoterms classification must not exceed 3 characters (e.g. EXW)." };
+                        break;
+                    case "IncotermsLocation1":
+                        if (oHeader.IncotermsClassification && !sValTrim) {
+                            oState = { state: "Error", text: "Incoterms Location 1 is required when Incoterms is specified." };
+                        } else if (sValTrim.length > 70) {
+                            oState = { state: "Error", text: "Incoterms Location 1 must not exceed 70 characters." };
+                        }
+                        break;
+                    case "PaymentTerms":
+                        if (sValTrim.length > 4) oState = { state: "Error", text: "Payment Terms must not exceed 4 characters (e.g. 0001)." };
+                        break;
+                    default:
+                        break;
+                }
+
+                if (typeof oModel.setProperty === "function") {
+                    oModel.setProperty("/errors/" + sField, oState);
+                } else if (oData.errors) {
+                    oData.errors[sField] = oState;
+                }
+            } else {
+                // Item field validation
+                var aItems = oData.items || [];
+                var oItem = aItems[iItemIndex];
+                if (oItem) {
+                    var iVal = sValue !== undefined ? sValue : (oItem[sField] || "");
+                    var sItemValTrim = String(iVal || "").trim();
+                    var sItemNo = oItem.PurchaseOrderItem || "Item #" + (iItemIndex + 1);
+
+                    switch (sField) {
+                        case "Material":
+                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Material is required (e.g. TG11)." };
+                            break;
+                        case "Plant":
+                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Plant is required (e.g. 1010)." };
+                            break;
+                        case "StorageLocation":
+                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Storage Location is required (e.g. 101A)." };
+                            break;
+                        case "UnitOfMeasure":
+                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Unit of Measure is required (e.g. PC)." };
+                            break;
+                        case "OrderQuantity":
+                            var fQty = parseFloat(sItemValTrim);
+                            if (!sItemValTrim || isNaN(fQty) || fQty <= 0) {
+                                oState = { state: "Error", text: sItemNo + ": Order Quantity must be greater than 0." };
+                            }
+                            break;
+                        case "NetPriceAmount":
+                            if (sItemValTrim) {
+                                var fPrice = parseFloat(sItemValTrim);
+                                if (isNaN(fPrice) || fPrice < 0) {
+                                    oState = { state: "Error", text: sItemNo + ": Net Price must be a non-negative number." };
+                                }
+                            }
+                            break;
+                        case "TaxCode":
+                            if (sItemValTrim.length > 2) {
+                                oState = { state: "Error", text: sItemNo + ": Tax Code must not exceed 2 characters." };
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (typeof oModel.setProperty === "function") {
+                        oModel.setProperty("/items/" + iItemIndex + "/errors/" + sField, oState);
+                    } else if (oItem.errors) {
+                        oItem.errors[sField] = oState;
+                    }
+                }
+            }
+
+            // Sync aggregate error state if form has been validated
+            if (oData.hasError) {
+                this.validateForm(oModel);
+            }
+
+            return oState;
+        },
+
+        /**
+         * Validates the form data and updates field error states on the model for UI binding.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @returns {{ isValid: boolean, errorCount: number, errorList: Array<{title: string, field: string, description: string, controlId: any}>, errorMessage: string }}
+         */
+        validateForm: function (oModel) {
+            if (!oModel) return { isValid: false, errorCount: 0, errorList: [], errorMessage: "" };
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var oHeader = oData.header || {};
+            var aItems = oData.items || [];
+            var aErrorList = [];
+
+            // Header errors
+            var oHeaderErrors = {
+                PurchaseOrderType: { state: "None", text: "" },
+                CompanyCode: { state: "None", text: "" },
+                PurchasingOrganization: { state: "None", text: "" },
+                PurchasingGroup: { state: "None", text: "" },
+                Supplier: { state: "None", text: "" },
+                Currency: { state: "None", text: "" },
+                DocumentDate: { state: "None", text: "" },
+                IncotermsClassification: { state: "None", text: "" },
+                IncotermsLocation1: { state: "None", text: "" },
+                PaymentTerms: { state: "None", text: "" }
+            };
+
+            if (!oHeader.PurchaseOrderType || !String(oHeader.PurchaseOrderType).trim()) {
+                oHeaderErrors.PurchaseOrderType = { state: "Error", text: "Document Type is required (e.g. NB)." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Document Type is required.",
+                    field: "General Data / Document Type",
+                    description: "Select or enter a purchasing document type (e.g. NB for standard orders).",
+                    controlId: "inDocType"
+                });
+            }
+            if (!oHeader.CompanyCode || !String(oHeader.CompanyCode).trim()) {
+                oHeaderErrors.CompanyCode = { state: "Error", text: "Company Code is required (e.g. 1010)." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Company Code is required.",
+                    field: "General Data / Company Code",
+                    description: "Specify an active 4-character Company Code (e.g. 1010) registered in your SAP organization.",
+                    controlId: "inCompanyCode"
+                });
+            }
+            if (!oHeader.PurchasingOrganization || !String(oHeader.PurchasingOrganization).trim()) {
+                oHeaderErrors.PurchasingOrganization = { state: "Error", text: "Purchasing Organization is required (e.g. 1010)." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Purchasing Organization is required.",
+                    field: "General Data / Purchasing Org",
+                    description: "Enter a valid Purchasing Organization responsible for this procurement document.",
+                    controlId: "inPurchOrg"
+                });
+            }
+            if (!oHeader.PurchasingGroup || !String(oHeader.PurchasingGroup).trim()) {
+                oHeaderErrors.PurchasingGroup = { state: "Error", text: "Purchasing Group is required (e.g. 001)." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Purchasing Group is required.",
+                    field: "General Data / Purchasing Group",
+                    description: "Specify a 3-character buyer purchasing group (e.g. 001).",
+                    controlId: "inPurchGrp"
+                });
+            }
+            if (!oHeader.Supplier || !String(oHeader.Supplier).trim()) {
+                oHeaderErrors.Supplier = { state: "Error", text: "Supplier is required (e.g. 10300001)." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Supplier is required.",
+                    field: "Supplier & Commercial Terms / Supplier",
+                    description: "Enter or select an active SAP Business Partner / Supplier ID.",
+                    controlId: "inSupplier"
+                });
+            }
+            if (!oHeader.Currency || !String(oHeader.Currency).trim()) {
+                oHeaderErrors.Currency = { state: "Error", text: "Currency is required (e.g. EUR, USD)." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Currency is required.",
+                    field: "Supplier & Commercial Terms / Currency",
+                    description: "Enter a valid 3-letter ISO currency code (e.g. EUR, USD).",
+                    controlId: "inCurrency"
+                });
+            } else if (!/^[A-Za-z]{3}$/.test(String(oHeader.Currency).trim())) {
+                oHeaderErrors.Currency = { state: "Error", text: "Currency must be a valid 3-letter ISO code." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Currency must be a 3-letter ISO code (e.g. EUR).",
+                    field: "Supplier & Commercial Terms / Currency",
+                    description: "Use an authorized ISO currency code (e.g. EUR, USD, INR).",
+                    controlId: "inCurrency"
+                });
+            }
+            if (!oHeader.DocumentDate || !String(oHeader.DocumentDate).trim()) {
+                oHeaderErrors.DocumentDate = { state: "Error", text: "Document Date is required." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Document Date is required.",
+                    field: "General Data / Document Date",
+                    description: "Choose the creation or document date for this purchase order.",
+                    controlId: "inDocDate"
+                });
+            }
+            if (oHeader.IncotermsClassification && String(oHeader.IncotermsClassification).trim().length > 3) {
+                oHeaderErrors.IncotermsClassification = { state: "Error", text: "Incoterms must not exceed 3 characters." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Incoterms must not exceed 3 characters.",
+                    field: "Supplier & Commercial Terms / Incoterms",
+                    description: "Enter a 3-letter Incoterms classification (e.g. EXW, FOB, CIF).",
+                    controlId: "inIncoterms"
+                });
+            }
+            if (oHeader.IncotermsClassification && (!oHeader.IncotermsLocation1 || !String(oHeader.IncotermsLocation1).trim())) {
+                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: "Incoterms Location is required when Incoterms is specified." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Incoterms Location is required when Incoterms is specified.",
+                    field: "Supplier & Commercial Terms / Incoterms Location",
+                    description: "Provide the primary delivery location for Incoterms.",
+                    controlId: "inIncotermsLoc"
+                });
+            } else if (oHeader.IncotermsLocation1 && String(oHeader.IncotermsLocation1).trim().length > 70) {
+                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: "Incoterms Location 1 exceeds maximum length of 70 characters." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Incoterms Location 1 exceeds 70 characters.",
+                    field: "Supplier & Commercial Terms / Incoterms Location",
+                    description: "Shorten Incoterms Location 1 to at most 70 characters.",
+                    controlId: "inIncotermsLoc"
+                });
+            }
+            if (oHeader.PaymentTerms && String(oHeader.PaymentTerms).trim().length > 4) {
+                oHeaderErrors.PaymentTerms = { state: "Error", text: "Payment Terms exceeds maximum length of 4 characters." };
+                aErrorList.push({
+                    type: "Error",
+                    title: "Payment Terms exceeds 4 characters.",
+                    field: "Supplier & Commercial Terms / Payment Terms",
+                    description: "Enter a standard 4-character payment terms code (e.g. 0001).",
+                    controlId: "inPaymentTerms"
+                });
+            }
+
+            // Items errors
+            if (aItems.length === 0) {
+                aErrorList.push({
+                    type: "Error",
+                    title: "Please add at least one line item.",
+                    field: "Items Table",
+                    description: "Click 'Add Item' to insert at least one purchasing line item.",
+                    controlId: "poItemsTable"
+                });
+            } else {
+                aItems.forEach(function (item, idx) {
+                    var sItemNo = item.PurchaseOrderItem || "Item #" + (idx + 1);
+                    item.errors = item.errors || {};
+                    item.errors.Plant = { state: "None", text: "" };
+                    item.errors.StorageLocation = { state: "None", text: "" };
+                    item.errors.Material = { state: "None", text: "" };
+                    item.errors.OrderQuantity = { state: "None", text: "" };
+                    item.errors.UnitOfMeasure = { state: "None", text: "" };
+                    item.errors.NetPriceAmount = { state: "None", text: "" };
+                    item.errors.TaxCode = { state: "None", text: "" };
+
+                    if (!item.Material || !String(item.Material).trim()) {
+                        item.errors.Material = { state: "Error", text: "Material is required." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Material is required.",
+                            field: sItemNo + " / Material",
+                            description: "Select a valid material master number (e.g. TG11).",
+                            itemIndex: idx,
+                            cellIndex: 3,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                    if (!item.Plant || !String(item.Plant).trim()) {
+                        item.errors.Plant = { state: "Error", text: "Plant is required." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Plant is required.",
+                            field: sItemNo + " / Plant",
+                            description: "Specify an authorized plant (e.g. 1010).",
+                            itemIndex: idx,
+                            cellIndex: 1,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                    if (!item.StorageLocation || !String(item.StorageLocation).trim()) {
+                        item.errors.StorageLocation = { state: "Error", text: "Storage Location is required." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Storage Location is required.",
+                            field: sItemNo + " / Storage Location",
+                            description: "Specify the receiving storage location within the plant (e.g. 101A).",
+                            itemIndex: idx,
+                            cellIndex: 2,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                    if (!item.UnitOfMeasure || !String(item.UnitOfMeasure).trim()) {
+                        item.errors.UnitOfMeasure = { state: "Error", text: "Unit of Measure is required." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Unit of Measure is required.",
+                            field: sItemNo + " / Unit of Measure",
+                            description: "Specify the order unit of measure (e.g. PC, KG).",
+                            itemIndex: idx,
+                            cellIndex: 5,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                    var fQty = parseFloat(item.OrderQuantity);
+                    if (!item.OrderQuantity || isNaN(fQty) || fQty <= 0) {
+                        item.errors.OrderQuantity = { state: "Error", text: "Order Quantity must be greater than 0." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Order Quantity must be greater than 0.",
+                            field: sItemNo + " / Quantity",
+                            description: "Enter a positive numeric quantity.",
+                            itemIndex: idx,
+                            cellIndex: 4,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                    if (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && String(item.NetPriceAmount).trim() !== "") {
+                        var fPrice = parseFloat(item.NetPriceAmount);
+                        if (isNaN(fPrice) || fPrice < 0) {
+                            item.errors.NetPriceAmount = { state: "Error", text: "Net Price must be non-negative." };
+                            aErrorList.push({
+                                type: "Error",
+                                title: sItemNo + ": Net Price must be non-negative.",
+                                field: sItemNo + " / Net Price",
+                                description: "Enter 0.00 or a positive net price.",
+                                itemIndex: idx,
+                                cellIndex: 6,
+                                controlId: "poItemsTable"
+                            });
+                        }
+                    }
+                    if (item.TaxCode && String(item.TaxCode).trim().length > 2) {
+                        item.errors.TaxCode = { state: "Error", text: "Tax Code exceeds 2 characters." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Tax Code exceeds 2 characters.",
+                            field: sItemNo + " / Tax Code",
+                            description: "Enter a 2-character SAP tax code (e.g. V1, I0).",
+                            itemIndex: idx,
+                            cellIndex: 7,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                });
+            }
+
+            var bHasError = aErrorList.length > 0;
+            var sSummary = "";
+            if (bHasError) {
+                sSummary = aErrorList.length === 1
+                    ? aErrorList[0].title
+                    : aErrorList.length + " validation errors found. Please correct the highlighted fields.";
+            }
+
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/errors", oHeaderErrors);
+                oModel.setProperty("/items", aItems);
+                oModel.setProperty("/hasError", bHasError);
+                oModel.setProperty("/errorMessage", sSummary);
+                oModel.setProperty("/errorCount", aErrorList.length);
+                oModel.setProperty("/errorList", aErrorList);
+            } else {
+                oData.errors = oHeaderErrors;
+                oData.items = aItems;
+                oData.hasError = bHasError;
+                oData.errorMessage = sSummary;
+                oData.errorCount = aErrorList.length;
+                oData.errorList = aErrorList;
+            }
+
+            return {
+                isValid: !bHasError,
+                errorCount: aErrorList.length,
+                errorList: aErrorList,
+                errorMessage: sSummary
+            };
+        },
+
+        /**
+         * Applies backend error details from S/4HANA or CAP to the model fields and error list.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {Object} oError
+         * @returns {{ errorCount: number, errorList: Array, errorMessage: string }}
+         */
+        applyBackendErrors: function (oModel, oError) {
+            if (!oModel) return { errorCount: 0, errorList: [], errorMessage: "" };
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var aErrorList = [];
+            var sMainMessage = (oError && oError.message) || "Backend operation failed.";
+            var aDetails = (oError && oError.details) || [];
+            var iStatus = (oError && oError.status) || 500;
+
+            var mHeaderTargets = {
+                "header.purchaseordertype": "PurchaseOrderType",
+                "purchaseordertype": "PurchaseOrderType",
+                "doctype": "PurchaseOrderType",
+                "header.companycode": "CompanyCode",
+                "companycode": "CompanyCode",
+                "header.purchasingorganization": "PurchasingOrganization",
+                "purchasingorganization": "PurchasingOrganization",
+                "purchasingorg": "PurchasingOrganization",
+                "header.purchasinggroup": "PurchasingGroup",
+                "purchasinggroup": "PurchasingGroup",
+                "purchgroup": "PurchasingGroup",
+                "header.supplier": "Supplier",
+                "supplier": "Supplier",
+                "vendor": "Supplier",
+                "header.currency": "Currency",
+                "currency": "Currency",
+                "header.documentdate": "DocumentDate",
+                "documentdate": "DocumentDate",
+                "header.paymentterms": "PaymentTerms",
+                "paymentterms": "PaymentTerms",
+                "header.incotermsclassification": "IncotermsClassification",
+                "incotermsclassification": "IncotermsClassification",
+                "incoterms": "IncotermsClassification",
+                "header.incotermslocation1": "IncotermsLocation1",
+                "incotermslocation1": "IncotermsLocation1"
+            };
+
+            var mItemTargets = {
+                "material": "Material",
+                "plant": "Plant",
+                "storagelocation": "StorageLocation",
+                "orderquantity": "OrderQuantity",
+                "quantity": "OrderQuantity",
+                "unitofmeasure": "UnitOfMeasure",
+                "uom": "UnitOfMeasure",
+                "netpriceamount": "NetPriceAmount",
+                "netprice": "NetPriceAmount",
+                "taxcode": "TaxCode"
+            };
+
+            var oHeaderErrors = oData.errors || {
+                PurchaseOrderType: { state: "None", text: "" },
+                CompanyCode: { state: "None", text: "" },
+                PurchasingOrganization: { state: "None", text: "" },
+                PurchasingGroup: { state: "None", text: "" },
+                Supplier: { state: "None", text: "" },
+                Currency: { state: "None", text: "" },
+                DocumentDate: { state: "None", text: "" },
+                IncotermsClassification: { state: "None", text: "" },
+                IncotermsLocation1: { state: "None", text: "" },
+                PaymentTerms: { state: "None", text: "" }
+            };
+            var aItems = oData.items || [];
+
+            if (aDetails.length > 0) {
+                var that = this;
+                aDetails.forEach(function (detail) {
+                    var sDetailMsg = detail.message || sMainMessage;
+                    var sTarget = String(detail.target || "").toLowerCase();
+                    var sCode = detail.code || "";
+                    var sControlId = null;
+                    var iItemIdx = -1;
+                    var sItemField = null;
+
+                    // Match header target
+                    for (var k in mHeaderTargets) {
+                        if (sTarget === k || sTarget.endsWith("." + k) || sTarget.endsWith("/" + k)) {
+                            var sFieldKey = mHeaderTargets[k];
+                            oHeaderErrors[sFieldKey] = { state: "Error", text: sDetailMsg };
+                            sControlId = that.HEADER_FIELD_CONFIG[sFieldKey] ? that.HEADER_FIELD_CONFIG[sFieldKey].controlId : null;
+                            break;
+                        }
+                    }
+
+                    // Match item target (e.g. items[0].Plant or Plant)
+                    if (!sControlId) {
+                        var oItemMatch = sTarget.match(/items\[(\d+)\]\.?(\w+)?/);
+                        if (oItemMatch) {
+                            iItemIdx = parseInt(oItemMatch[1], 10);
+                            var sTargetField = (oItemMatch[2] || "").toLowerCase();
+                            sItemField = mItemTargets[sTargetField] || null;
+                        } else {
+                            for (var it in mItemTargets) {
+                                if (sTarget === it || sTarget.endsWith("." + it)) {
+                                    sItemField = mItemTargets[it];
+                                    iItemIdx = 0;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (sItemField && aItems[iItemIdx]) {
+                            aItems[iItemIdx].errors = aItems[iItemIdx].errors || {};
+                            aItems[iItemIdx].errors[sItemField] = { state: "Error", text: sDetailMsg };
+                            sControlId = "poItemsTable";
+                        }
+                    }
+
+                    aErrorList.push({
+                        type: "Error",
+                        title: sDetailMsg,
+                        field: sCode ? ("SAP (" + sCode + ")") : (detail.target || "S/4HANA Error"),
+                        description: (detail.description || sDetailMsg) + (sCode ? (" [Code: " + sCode + "]") : ""),
+                        controlId: sControlId,
+                        itemIndex: iItemIdx >= 0 ? iItemIdx : undefined,
+                        cellIndex: sItemField && that.ITEM_FIELD_CONFIG[sItemField] ? that.ITEM_FIELD_CONFIG[sItemField].cellIndex : undefined
+                    });
+                });
+            } else if (sMainMessage.indexOf(";") !== -1) {
+                var that = this;
+                var aParts = sMainMessage.split(";").map(function (s) { return s.trim(); }).filter(Boolean);
+                aParts.forEach(function (sPart) {
+                    var sLower = sPart.toLowerCase();
+                    var sControlId = null;
+
+                    for (var k in mHeaderTargets) {
+                        if (sLower.indexOf(k) !== -1) {
+                            var sFieldKey = mHeaderTargets[k];
+                            oHeaderErrors[sFieldKey] = { state: "Error", text: sPart };
+                            sControlId = that.HEADER_FIELD_CONFIG[sFieldKey] ? that.HEADER_FIELD_CONFIG[sFieldKey].controlId : null;
+                            break;
+                        }
+                    }
+
+                    if (!sControlId) {
+                        for (var it in mItemTargets) {
+                            if (sLower.indexOf(it) !== -1) {
+                                var sItemField = mItemTargets[it];
+                                if (aItems[0]) {
+                                    aItems[0].errors = aItems[0].errors || {};
+                                    aItems[0].errors[sItemField] = { state: "Error", text: sPart };
+                                    sControlId = "poItemsTable";
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    aErrorList.push({
+                        type: "Error",
+                        title: sPart,
+                        field: sControlId ? "Validation" : ("SAP Backend (HTTP " + iStatus + ")"),
+                        description: sPart,
+                        controlId: sControlId
+                    });
+                });
+            } else {
+                var sLower = sMainMessage.toLowerCase();
+                var sControlId = null;
+                for (var hk in mHeaderTargets) {
+                    if (sLower.indexOf(hk) !== -1) {
+                        var sFieldKey = mHeaderTargets[hk];
+                        oHeaderErrors[sFieldKey] = { state: "Error", text: sMainMessage };
+                        sControlId = this.HEADER_FIELD_CONFIG[sFieldKey] ? this.HEADER_FIELD_CONFIG[sFieldKey].controlId : null;
+                        break;
+                    }
+                }
+                aErrorList.push({
+                    type: "Error",
+                    title: sMainMessage,
+                    field: "SAP Backend (HTTP " + iStatus + ")",
+                    description: (oError && oError.code ? ("Error code: " + oError.code + ". ") : "") + sMainMessage,
+                    controlId: sControlId
+                });
+            }
+
+            var sSummary = aErrorList.length === 1
+                ? aErrorList[0].title
+                : aErrorList.length + " errors returned by backend. Please review and resolve.";
+
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/errors", oHeaderErrors);
+                oModel.setProperty("/items", aItems);
+                oModel.setProperty("/hasError", true);
+                oModel.setProperty("/errorMessage", sSummary);
+                oModel.setProperty("/errorCount", aErrorList.length);
+                oModel.setProperty("/errorList", aErrorList);
+            } else {
+                oData.errors = oHeaderErrors;
+                oData.items = aItems;
+                oData.hasError = true;
+                oData.errorMessage = sSummary;
+                oData.errorCount = aErrorList.length;
+                oData.errorList = aErrorList;
+            }
+
+            return {
+                errorCount: aErrorList.length,
+                errorList: aErrorList,
+                errorMessage: sSummary
+            };
+        },
+
+        /**
+         * Clears all validation error states on the model.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         */
+        clearErrors: function (oModel) {
+            if (!oModel) return;
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var oHeaderErrors = {
+                PurchaseOrderType: { state: "None", text: "" },
+                CompanyCode: { state: "None", text: "" },
+                PurchasingOrganization: { state: "None", text: "" },
+                PurchasingGroup: { state: "None", text: "" },
+                Supplier: { state: "None", text: "" },
+                Currency: { state: "None", text: "" },
+                DocumentDate: { state: "None", text: "" },
+                IncotermsClassification: { state: "None", text: "" },
+                IncotermsLocation1: { state: "None", text: "" },
+                PaymentTerms: { state: "None", text: "" }
+            };
+
+            var aItems = oData.items || [];
+            aItems.forEach(function (item) {
+                if (item.errors) {
+                    item.errors.Plant = { state: "None", text: "" };
+                    item.errors.StorageLocation = { state: "None", text: "" };
+                    item.errors.Material = { state: "None", text: "" };
+                    item.errors.OrderQuantity = { state: "None", text: "" };
+                    item.errors.UnitOfMeasure = { state: "None", text: "" };
+                    item.errors.NetPriceAmount = { state: "None", text: "" };
+                    item.errors.TaxCode = { state: "None", text: "" };
+                }
+            });
+
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/errors", oHeaderErrors);
+                oModel.setProperty("/items", aItems);
+                oModel.setProperty("/hasError", false);
+                oModel.setProperty("/errorMessage", "");
+                oModel.setProperty("/errorCount", 0);
+                oModel.setProperty("/errorList", []);
+            } else {
+                oData.errors = oHeaderErrors;
+                oData.items = aItems;
+                oData.hasError = false;
+                oData.errorMessage = "";
+                oData.errorCount = 0;
+                oData.errorList = [];
+            }
         }
     };
 });

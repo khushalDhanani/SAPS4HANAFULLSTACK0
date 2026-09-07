@@ -11,6 +11,7 @@ sap.ui.define([
     var AuthService = BaseObject.extend("saps4hana.fiori.service.AuthService", {
         constructor: function () {
             BaseObject.apply(this, arguments);
+            this._sLastSyncedAuthHeader = null;
             this._oModel = new JSONModel({
                 isAuthenticated: false,
                 user: null,
@@ -38,22 +39,41 @@ sap.ui.define([
                 return;
             }
             var sToken = this.getToken();
-            var mHeaders = {};
-            if (sToken) {
-                mHeaders["Authorization"] = "Bearer " + sToken;
-            } else {
-                mHeaders["Authorization"] = undefined;
+            var sAuthHeader = sToken ? ("Bearer " + sToken) : undefined;
+
+            // Avoid redundant and disruptive changeHttpHeaders calls if header did not change
+            if (this._sLastSyncedAuthHeader === sAuthHeader) {
+                return;
             }
+
+            var mHeaders = {
+                "Authorization": sAuthHeader
+            };
 
             var oDefaultModel = oComp.getModel();
             if (oDefaultModel && typeof oDefaultModel.changeHttpHeaders === "function") {
-                oDefaultModel.changeHttpHeaders(mHeaders);
+                try {
+                    oDefaultModel.changeHttpHeaders(mHeaders);
+                } catch (err) {
+                    // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
+                    if (typeof jQuery !== "undefined" && jQuery.sap && jQuery.sap.log) {
+                        jQuery.sap.log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
+                    }
+                }
             }
 
             var oFiModel = oComp.getModel("fiService");
             if (oFiModel && typeof oFiModel.changeHttpHeaders === "function") {
-                oFiModel.changeHttpHeaders(mHeaders);
+                try {
+                    oFiModel.changeHttpHeaders(mHeaders);
+                } catch (err) {
+                    if (typeof jQuery !== "undefined" && jQuery.sap && jQuery.sap.log) {
+                        jQuery.sap.log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
+                    }
+                }
             }
+
+            this._sLastSyncedAuthHeader = sAuthHeader;
         },
 
         getModel: function () {
@@ -167,6 +187,7 @@ sap.ui.define([
             this._oModel.setProperty("/isAuthenticated", false);
             this._oModel.setProperty("/user", null);
             this._oModel.setProperty("/savedUsername", sSaved);
+            this._sLastSyncedAuthHeader = null;
             this.syncModelHeaders();
         },
 

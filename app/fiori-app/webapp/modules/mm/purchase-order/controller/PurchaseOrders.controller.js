@@ -371,8 +371,7 @@ sap.ui.define([
         },
 
         onNavBack: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("dashboard");
+            BaseController.prototype.onNavBack.call(this, "dashboard");
         },
 
         onCreatePO: function () {

@@ -67,8 +67,6 @@ sap.ui.define([
                 }
                 MessageToast.show(sMsg);
                 oRouter.navTo("login", {}, true);
-            } else {
-                AuthService.syncModelHeaders(this);
             }
         },
 

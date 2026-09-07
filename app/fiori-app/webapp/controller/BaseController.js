@@ -3,6 +3,7 @@ sap.ui.define([
     "sap/ui/core/Fragment",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
+    "sap/ui/core/routing/History",
     "saps4hana/fiori/service/AuthService",
     "saps4hana/fiori/model/formatter"
 ], function (
@@ -10,6 +11,7 @@ sap.ui.define([
     Fragment,
     MessageBox,
     MessageToast,
+    History,
     AuthService,
     formatter
 ) {
@@ -160,6 +162,23 @@ sap.ui.define([
                 this._pPoDetailDialog.then(function (oDialog) {
                     oDialog.close();
                 });
+            }
+        },
+
+        /**
+         * Navigates back in the browser history, or to a fallback route if history is empty.
+         *
+         * @param {string} sFallbackRoute The route name to fallback to
+         */
+        onNavBack: function (sFallbackRoute) {
+            var oHistory = History.getInstance();
+            var sPreviousHash = oHistory.getPreviousHash();
+
+            if (sPreviousHash !== undefined) {
+                window.history.go(-1);
+            } else {
+                var oRouter = this.getOwnerComponent().getRouter();
+                oRouter.navTo(sFallbackRoute, {}, true /*no history*/);
             }
         }
     });
