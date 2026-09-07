@@ -85,6 +85,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                         AuthService = factory(
                             BaseObject,
                             MockJSONModel,
+                            { warning: jest.fn() },
                             { post: jest.fn() }
                         );
                     } else {
@@ -112,16 +113,20 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('AuthService.syncModelHeaders', () => {
-        it('should synchronize authorization header to default and fiService models', () => {
+        it('should synchronize authorization header to default, fiService, and salesInquiry models', () => {
             const defaultModel = {
                 changeHttpHeaders: jest.fn()
             };
             const fiModel = {
                 changeHttpHeaders: jest.fn()
             };
+            const sdModel = {
+                changeHttpHeaders: jest.fn()
+            };
             const mockComponent = {
                 getModel: jest.fn((name) => {
                     if (name === "fiService") return fiModel;
+                    if (name === "salesInquiry") return sdModel;
                     return defaultModel;
                 }),
                 setModel: jest.fn()
@@ -138,6 +143,9 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             expect(fiModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
+            expect(sdModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
         });
 
         it('should be idempotent and not call changeHttpHeaders again if token has not changed', () => {
@@ -145,7 +153,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                 changeHttpHeaders: jest.fn()
             };
             const mockComponent = {
-                getModel: jest.fn((name) => (name === "fiService" ? null : defaultModel)),
+                getModel: jest.fn((name) => (!name ? defaultModel : null)),
                 setModel: jest.fn()
             };
 

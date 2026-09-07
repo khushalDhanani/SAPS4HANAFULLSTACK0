@@ -77,6 +77,27 @@ sap.ui.define([
                 errorMessage: "",
                 errorCount: 0,
                 errorList: [],
+                userModified: {
+                    PurchaseOrderType: false,
+                    CompanyCode: false,
+                    PurchasingOrganization: false,
+                    PurchasingGroup: false,
+                    Supplier: false,
+                    DocumentDate: false,
+                    Currency: false,
+                    PaymentTerms: false,
+                    IncotermsClassification: false,
+                    IncotermsLocation1: false
+                },
+                configDerived: {
+                    PurchaseOrderType: false,
+                    CompanyCode: false,
+                    PurchasingOrganization: false,
+                    Currency: false,
+                    PaymentTerms: false,
+                    IncotermsClassification: false,
+                    IncotermsLocation1: false
+                },
                 errors: {
                     PurchaseOrderType: { state: "None", text: "" },
                     CompanyCode: { state: "None", text: "" },
@@ -1008,6 +1029,317 @@ sap.ui.define([
                 oData.errorCount = 0;
                 oData.errorList = [];
             }
+        },
+
+        /**
+         * Sets validation state and text on a specific header field.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sField
+         * @param {string} sState ("None" | "Information" | "Warning" | "Error")
+         * @param {string} sText
+         */
+        setFieldValidation: function (oModel, sField, sState, sText) {
+            if (!oModel || !sField) return;
+            var oStateObj = { state: sState || "None", text: sText || "" };
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/errors/" + sField, oStateObj);
+            } else {
+                var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+                if (oData && oData.errors) {
+                    oData.errors[sField] = oStateObj;
+                }
+            }
+        },
+
+        /**
+         * Marks a header field as manually modified by the user.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sField
+         * @param {boolean} [bModified=true]
+         */
+        markUserModified: function (oModel, sField, bModified) {
+            if (!oModel || !sField) return;
+            var bVal = bModified !== undefined ? bModified : true;
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/userModified/" + sField, bVal);
+            } else {
+                var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+                if (oData) {
+                    oData.userModified = oData.userModified || {};
+                    oData.userModified[sField] = bVal;
+                }
+            }
+        },
+
+        /**
+         * Dynamically applies configuration-driven defaults and dependencies from loaded SAP master data:
+         * 1. Document Date = Today (yyyy-MM-dd)
+         * 2. Document Type (e.g. ZDOM) drives applicable configuration
+         * 3. Company Code = 1000 and Purchasing Organization = AE01 ONLY when confirmed valid/configured
+         * 4. Strictly protects user-modified fields from unexpected overwrites
+         * 5. Shows clear validation when a default cannot be derived
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {{ documentTypes?: Array, companyCodes?: Array, purchasingOrgs?: Array, purchasingGroups?: Array }} oConfigData
+         * @returns {Object} Report of applied defaults, user preserved fields, and unconfirmed values
+         */
+        applyConfigurationDefaults: function (oModel, oConfigData) {
+            if (!oModel) return null;
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            if (!oData || !oData.header) return null;
+
+            var oHeader = oData.header;
+            var oUserModified = oData.userModified || {};
+            var oConfigDerived = oData.configDerived || {};
+            var oConfig = oConfigData || {};
+
+            var aDocTypes = oConfig.documentTypes || [];
+            var aCompanyCodes = oConfig.companyCodes || [];
+            var aPurchOrgs = oConfig.purchasingOrgs || [];
+            var aPurchGroups = oConfig.purchasingGroups || [];
+
+            var oReport = {
+                applied: {},
+                skippedDueToUser: {},
+                unconfirmed: []
+            };
+
+            // 1. Document Date = Today
+            var sToday = new Date().toISOString().split("T")[0];
+            if (!oHeader.DocumentDate) {
+                oHeader.DocumentDate = sToday;
+                oReport.applied.DocumentDate = sToday;
+            }
+
+            // 2. Document Type (e.g. ZDOM) driving applicable configuration
+            var sCurrentDocType = (oHeader.PurchaseOrderType || "").trim();
+            var bZdomAvailable = aDocTypes.some(function (dt) {
+                return dt && (dt.PurchasingDocumentType === "ZDOM");
+            });
+
+            // If Document Type is not user modified, and ZDOM is available in config, select ZDOM
+            if (!oUserModified.PurchaseOrderType && bZdomAvailable && (sCurrentDocType === "" || sCurrentDocType === "NB")) {
+                oHeader.PurchaseOrderType = "ZDOM";
+                sCurrentDocType = "ZDOM";
+                oConfigDerived.PurchaseOrderType = true;
+                oReport.applied.PurchaseOrderType = "ZDOM";
+            }
+
+            // 3. Confirm Company Code = 1000 ONLY when confirmed valid/configured in master data
+            var bCoCode1000Confirmed = aCompanyCodes.some(function (cc) {
+                return cc && (cc.CompanyCode === "1000");
+            });
+
+            if (bCoCode1000Confirmed) {
+                if (!oUserModified.CompanyCode) {
+                    oHeader.CompanyCode = "1000";
+                    oConfigDerived.CompanyCode = true;
+                    oReport.applied.CompanyCode = "1000";
+                    this.validateSingleField(oModel, "CompanyCode", "1000");
+                } else {
+                    oReport.skippedDueToUser.CompanyCode = oHeader.CompanyCode;
+                }
+            } else {
+                oReport.unconfirmed.push("CompanyCode 1000 is not configured or valid in SAP master data.");
+                // Never invent defaults - do not set 1000 if not confirmed
+            }
+
+            // 4. Confirm Purchasing Organization = AE01 ONLY when confirmed valid/configured
+            var bPurchOrgAE01Confirmed = aPurchOrgs.some(function (po) {
+                var bIdMatch = po && (po.PurchasingOrganization === "AE01");
+                var bCoMatch = !po.CompanyCode || po.CompanyCode === "1000";
+                return bIdMatch && bCoMatch;
+            });
+
+            if (bPurchOrgAE01Confirmed) {
+                if (!oUserModified.PurchasingOrganization) {
+                    oHeader.PurchasingOrganization = "AE01";
+                    oConfigDerived.PurchasingOrganization = true;
+                    oReport.applied.PurchasingOrganization = "AE01";
+                    this.validateSingleField(oModel, "PurchasingOrganization", "AE01");
+                } else {
+                    oReport.skippedDueToUser.PurchasingOrganization = oHeader.PurchasingOrganization;
+                }
+            } else {
+                oReport.unconfirmed.push("Purchasing Organization AE01 is not configured or valid for Company Code 1000.");
+                // Never invent defaults - do not set AE01 if not confirmed
+            }
+
+            // 5. Purchasing Group validation/defaulting
+            if (!oHeader.PurchasingGroup && !oUserModified.PurchasingGroup) {
+                var oDefGroup = aPurchGroups.find(function (pg) {
+                    return pg && (pg.PurchasingGroup === "101" || pg.PurchasingGroup === "001");
+                });
+                if (oDefGroup) {
+                    oHeader.PurchasingGroup = oDefGroup.PurchasingGroup;
+                    oConfigDerived.PurchasingGroup = true;
+                    oReport.applied.PurchasingGroup = oDefGroup.PurchasingGroup;
+                    this.validateSingleField(oModel, "PurchasingGroup", oDefGroup.PurchasingGroup);
+                }
+            }
+
+            // Save state back to model
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/header", oHeader);
+                oModel.setProperty("/userModified", oUserModified);
+                oModel.setProperty("/configDerived", oConfigDerived);
+            }
+
+            this.updateStatus(oModel);
+            return oReport;
+        },
+
+        /**
+         * Derives configured commercial terms (Currency, Payment Terms, Incoterms, Incoterms Location)
+         * from supplier master data when available.
+         *
+         * Rules:
+         * 1. Derives Currency, Payment Terms, Incoterms, Incoterms Location where available.
+         * 2. Never invents defaults: If not configured, field remains empty.
+         * 3. Never overwrites user-entered values unexpectedly: checks userModified map.
+         * 4. Shows clear validation when a default cannot be derived.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sSupplier
+         * @param {Object} [oDefaults]
+         * @returns {Object} Report of applied fields, preserved fields, and derivation warnings
+         */
+        deriveSupplierDefaults: function (oModel, sSupplier, oDefaults) {
+            if (!oModel) return null;
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            if (!oData || !oData.header) return null;
+
+            var oHeader = oData.header;
+            var oUserModified = oData.userModified || {};
+            var oConfigDerived = oData.configDerived || {};
+            var oDefs = oDefaults || {};
+
+            var oReport = {
+                applied: {},
+                preserved: {},
+                missing: []
+            };
+
+            if (!sSupplier || String(sSupplier).trim() === "") {
+                return oReport;
+            }
+
+            // 1. Currency Derivation
+            if (oDefs.Currency && String(oDefs.Currency).trim() !== "") {
+                if (!oUserModified.Currency || !oHeader.Currency) {
+                    var sCurr = String(oDefs.Currency).trim().toUpperCase();
+                    oHeader.Currency = sCurr;
+                    oConfigDerived.Currency = true;
+                    oReport.applied.Currency = sCurr;
+                    this.validateSingleField(oModel, "Currency", sCurr);
+                } else {
+                    oReport.preserved.Currency = oHeader.Currency;
+                }
+            } else {
+                // Default cannot be derived
+                if (!oHeader.Currency) {
+                    oReport.missing.push("Currency");
+                    this.setFieldValidation(oModel, "Currency", "Information", "Currency could not be derived from supplier master; please enter manually.");
+                }
+            }
+
+            // 2. Payment Terms Derivation
+            if (oDefs.PaymentTerms && String(oDefs.PaymentTerms).trim() !== "") {
+                if (!oUserModified.PaymentTerms || !oHeader.PaymentTerms) {
+                    var sPayTerms = String(oDefs.PaymentTerms).trim().toUpperCase();
+                    oHeader.PaymentTerms = sPayTerms;
+                    oConfigDerived.PaymentTerms = true;
+                    oReport.applied.PaymentTerms = sPayTerms;
+                    this.validateSingleField(oModel, "PaymentTerms", sPayTerms);
+                } else {
+                    oReport.preserved.PaymentTerms = oHeader.PaymentTerms;
+                }
+            } else {
+                if (!oHeader.PaymentTerms) {
+                    oReport.missing.push("PaymentTerms");
+                    this.setFieldValidation(oModel, "PaymentTerms", "Information", "No payment terms configured for this supplier; please select if required.");
+                }
+            }
+
+            // 3. Incoterms Classification Derivation
+            if (oDefs.IncotermsClassification && String(oDefs.IncotermsClassification).trim() !== "") {
+                if (!oUserModified.IncotermsClassification || !oHeader.IncotermsClassification) {
+                    var sInco = String(oDefs.IncotermsClassification).trim().toUpperCase();
+                    oHeader.IncotermsClassification = sInco;
+                    oConfigDerived.IncotermsClassification = true;
+                    oReport.applied.IncotermsClassification = sInco;
+                    this.validateSingleField(oModel, "IncotermsClassification", sInco);
+                } else {
+                    oReport.preserved.IncotermsClassification = oHeader.IncotermsClassification;
+                }
+            }
+
+            // 4. Incoterms Location 1 Derivation
+            if (oDefs.IncotermsLocation1 && String(oDefs.IncotermsLocation1).trim() !== "") {
+                if (!oUserModified.IncotermsLocation1 || !oHeader.IncotermsLocation1) {
+                    var sIncoLoc = String(oDefs.IncotermsLocation1).trim();
+                    oHeader.IncotermsLocation1 = sIncoLoc;
+                    oConfigDerived.IncotermsLocation1 = true;
+                    oReport.applied.IncotermsLocation1 = sIncoLoc;
+                    this.validateSingleField(oModel, "IncotermsLocation1", sIncoLoc);
+                } else {
+                    oReport.preserved.IncotermsLocation1 = oHeader.IncotermsLocation1;
+                }
+            } else if (oHeader.IncotermsClassification && !oHeader.IncotermsLocation1) {
+                // Incoterms present but location missing
+                oReport.missing.push("IncotermsLocation1");
+                this.setFieldValidation(oModel, "IncotermsLocation1", "Error", "Incoterms Location 1 is required when Incoterms is specified.");
+            }
+
+            // Update model
+            if (typeof oModel.setProperty === "function") {
+                oModel.setProperty("/header", oHeader);
+                oModel.setProperty("/userModified", oUserModified);
+                oModel.setProperty("/configDerived", oConfigDerived);
+            }
+
+            this.updateStatus(oModel);
+            return oReport;
+        },
+
+        /**
+         * Cross-validates Company Code and Purchasing Organization compatibility:
+         * If Purchasing Org is assigned to a different Company Code in SAP master data,
+         * flags error or clears it.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {{ purchasingOrgs?: Array }} oConfigData
+         * @returns {{ isValid: boolean, message: string }}
+         */
+        validateCompanyCodePurchasingOrg: function (oModel, oConfigData) {
+            if (!oModel) return { isValid: true, message: "" };
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var oHeader = (oData && oData.header) || {};
+            var sCoCode = (oHeader.CompanyCode || "").trim();
+            var sPurchOrg = (oHeader.PurchasingOrganization || "").trim();
+
+            if (!sCoCode || !sPurchOrg) {
+                return { isValid: true, message: "" };
+            }
+
+            var aPurchOrgs = (oConfigData && oConfigData.purchasingOrgs) || [];
+            if (aPurchOrgs.length === 0) {
+                return { isValid: true, message: "" };
+            }
+
+            var oOrgRecord = aPurchOrgs.find(function (org) {
+                return org && org.PurchasingOrganization === sPurchOrg;
+            });
+
+            if (oOrgRecord && oOrgRecord.CompanyCode && oOrgRecord.CompanyCode !== sCoCode) {
+                var sMsg = "Purchasing Organization " + sPurchOrg + " belongs to Company Code " + oOrgRecord.CompanyCode + ", not " + sCoCode + ".";
+                this.setFieldValidation(oModel, "PurchasingOrganization", "Error", sMsg);
+                return { isValid: false, message: sMsg };
+            }
+
+            return { isValid: true, message: "" };
         }
     };
 });

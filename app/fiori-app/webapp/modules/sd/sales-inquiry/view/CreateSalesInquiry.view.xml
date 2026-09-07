@@ -1,0 +1,261 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.sales-inquiry.controller.CreateSalesInquiry"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="createInquiryPage"
+        showHeader="false"
+        backgroundDesign="Solid">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Global Incompletion / Error Strip -->
+                <MessageStrip
+                    id="createInquiryMessageStrip"
+                    text="{newInquiry>/errorMessage}"
+                    type="Error"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{newInquiry>/hasError}"
+                    close=".onDismissError"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link text="View issue(s)" press=".onMessageButtonPress" />
+                    </link>
+                </MessageStrip>
+
+                <!-- Header Sections Grid (6/6 Layout) -->
+                <layout:Grid
+                    id="gridInquiryHeaderSections"
+                    defaultSpan="XL6 L6 M6 S12"
+                    hSpacing="1"
+                    vSpacing="0"
+                    class="sapUiNoMarginTop sapUiSmallMarginBottom">
+
+                    <!-- Section 1: Organizational Data -->
+                    <Panel id="panelOrgData">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="Organizational Data" level="H3" />
+                                <ToolbarSpacer />
+                                <ObjectStatus
+                                    id="headerInquiryStatus"
+                                    text="{newInquiry>/header/StatusText}"
+                                    state="{newInquiry>/header/StatusState}"
+                                    icon="{newInquiry>/header/StatusIcon}" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="inquiryOrgForm"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="Inquiry Type" required="true" />
+                                <Input id="inInquiryType" value="{newInquiry>/header/SalesInquiryType}" placeholder="e.g. ZIN" maxLength="4"
+                                    valueState="{newInquiry>/errors/SalesInquiryType/state}"
+                                    valueStateText="{newInquiry>/errors/SalesInquiryType/text}"
+                                    change=".onInquiryTypeChange" liveChange=".onInquiryTypeChange" suggestionItemSelected=".onInquiryTypeSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/SalesInquiryTypeVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>SalesDocumentType}" text="{salesInquiry>SalesDocumentType}" additionalText="{salesInquiry>SalesDocumentTypeName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="Sales Organization" required="true" />
+                                <Input id="inSalesOrg" value="{newInquiry>/header/SalesOrganization}" placeholder="e.g. 1000" maxLength="4"
+                                    valueState="{newInquiry>/errors/SalesOrganization/state}"
+                                    valueStateText="{newInquiry>/errors/SalesOrganization/text}"
+                                    change=".onSalesOrgChange" liveChange=".onSalesOrgChange" suggestionItemSelected=".onSalesOrgSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/SalesOrganizationVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>SalesOrganization}" text="{salesInquiry>SalesOrganization}" additionalText="{salesInquiry>SalesOrganization_Text}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="Distribution Channel" required="true" />
+                                <Input id="inDistChannel" value="{newInquiry>/header/DistributionChannel}" placeholder="e.g. 10" maxLength="2"
+                                    valueState="{newInquiry>/errors/DistributionChannel/state}"
+                                    valueStateText="{newInquiry>/errors/DistributionChannel/text}"
+                                    change=".onDistChannelChange" liveChange=".onDistChannelChange" suggestionItemSelected=".onDistChannelSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/DistributionChannelVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>DistributionChannel}" text="{salesInquiry>DistributionChannel}" additionalText="{salesInquiry>DistributionChannelName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="Division" required="true" />
+                                <Input id="inDivision" value="{newInquiry>/header/OrganizationDivision}" placeholder="e.g. 52" maxLength="2"
+                                    valueState="{newInquiry>/errors/OrganizationDivision/state}"
+                                    valueStateText="{newInquiry>/errors/OrganizationDivision/text}"
+                                    change=".onDivisionChange" liveChange=".onDivisionChange" suggestionItemSelected=".onDivisionSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/DivisionVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>Division}" text="{salesInquiry>Division}" additionalText="{salesInquiry>DivisionName}" />
+                                    </suggestionItems>
+                                </Input>
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 2: Customer & Partner Terms -->
+                    <Panel id="panelCustomerTerms">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="Customer &amp; Commercial Terms" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="inquiryCustomerForm"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="Sold-to Party" required="true" />
+                                <Input id="inSoldToParty" value="{newInquiry>/header/SoldToParty}" placeholder="e.g. 10135" maxLength="10"
+                                    valueState="{newInquiry>/errors/SoldToParty/state}"
+                                    valueStateText="{newInquiry>/errors/SoldToParty/text}"
+                                    change=".onSoldToPartyChange" liveChange=".onSoldToPartyLiveChange" suggestionItemSelected=".onSoldToPartySelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/SoldToPartyVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>Customer}" text="{salesInquiry>Customer}" additionalText="{salesInquiry>CustomerName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="Customer Details" />
+                                <Text id="txtCustomerName" text="{= ${newInquiry>/header/CustomerName} ? ${newInquiry>/header/CustomerName} + ' (' + ${newInquiry>/header/CustomerCity} + ', ' + ${newInquiry>/header/CustomerCountry} + ')' : 'No customer selected'}" class="textMuted" />
+
+                                <Label text="Ship-to Party" />
+                                <Input id="inShipToParty" value="{newInquiry>/header/ShipToParty}" placeholder="e.g. 10135" maxLength="10"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/CustomerVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>Customer}" text="{salesInquiry>Customer}" additionalText="{salesInquiry>CustomerName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="Customer Reference" />
+                                <Input id="inCustRef" value="{newInquiry>/header/PurchaseOrderByCustomer}" placeholder="PO or Tender Reference" maxLength="35" change=".onHeaderFieldChange" />
+
+                                <Label text="Customer PO Date" />
+                                <DatePicker id="inCustRefDate" value="{newInquiry>/header/CustomerPurchaseOrderDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" change=".onHeaderFieldChange" />
+
+                                <Label text="Requested Validity" required="true" />
+                                <HBox alignItems="Center">
+                                    <DatePicker id="inValStartDate" value="{newInquiry>/header/BindingPeriodValidityStartDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" change=".onValidityDateChange" class="sapUiTinyMarginEnd" />
+                                    <Text text="to" class="sapUiTinyMarginEnd" />
+                                    <DatePicker id="inValEndDate" value="{newInquiry>/header/BindingPeriodValidityEndDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy"
+                                        valueState="{newInquiry>/errors/BindingPeriodValidityEndDate/state}"
+                                        valueStateText="{newInquiry>/errors/BindingPeriodValidityEndDate/text}"
+                                        change=".onValidityDateChange" />
+                                </HBox>
+
+                                <Label text="Currency" required="true" />
+                                <Input id="inCurrency" value="{newInquiry>/header/TransactionCurrency}" placeholder="e.g. INR" maxLength="3"
+                                    valueState="{newInquiry>/errors/TransactionCurrency/state}"
+                                    valueStateText="{newInquiry>/errors/TransactionCurrency/text}"
+                                    change=".onCurrencyChange" liveChange=".onCurrencyChange" suggestionItemSelected=".onCurrencySelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/CurrencyVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>Currency}" text="{salesInquiry>Currency}" additionalText="{salesInquiry>Currency_Text}" />
+                                    </suggestionItems>
+                                </Input>
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+                </layout:Grid>
+
+                <!-- Section 3: Inquiry Line Items -->
+                <Panel id="panelInquiryItems" headerText="Inquiry Items">
+                    <headerToolbar>
+                        <Toolbar>
+                            <Title text="Items ({= ${newInquiry>/items}.length })" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="btnAddItem" icon="sap-icon://add" text="Add Item" press=".onAddItem" type="Transparent" />
+                        </Toolbar>
+                    </headerToolbar>
+                    <Table
+                        id="inquiryItemsTable"
+                        items="{newInquiry>/items}"
+                        noDataText="No items added yet."
+                        mode="Delete"
+                        delete=".onDeleteItem">
+                        <columns>
+                            <Column width="5rem"><Text text="Item" /></Column>
+                            <Column width="14rem"><Text text="Material / Product" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
+                            <Column width="7rem" hAlign="End"><Text text="Quantity" /></Column>
+                            <Column width="5rem"><Text text="Unit" /></Column>
+                            <Column width="8rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true"><Text text="Net Price" /></Column>
+                            <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{newInquiry>SalesInquiryItem}" />
+                                    <Input value="{newInquiry>Material}" placeholder="e.g. 4000000123" required="true"
+                                        valueState="{newInquiry>errors/Material/state}"
+                                        valueStateText="{newInquiry>errors/Material/text}"
+                                        change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/MaterialVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{salesInquiry>Material}" text="{salesInquiry>Material}" additionalText="{salesInquiry>Material_Text}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newInquiry>SalesInquiryItemText}" placeholder="Item description" change=".onItemFieldChange" />
+                                    <Input value="{newInquiry>OrderQuantity}" type="Number" required="true" textAlign="End"
+                                        valueState="{newInquiry>errors/OrderQuantity/state}"
+                                        valueStateText="{newInquiry>errors/OrderQuantity/text}"
+                                        change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
+                                    <Input value="{newInquiry>OrderQuantityUnit}" placeholder="PC" maxLength="3" required="true"
+                                        valueState="{newInquiry>errors/OrderQuantityUnit/state}"
+                                        valueStateText="{newInquiry>errors/OrderQuantityUnit/text}"
+                                        change=".onItemFieldChange" />
+                                    <Input value="{newInquiry>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End" change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
+                                    <ObjectNumber number="{newInquiry>NetAmount}" unit="{newInquiry>/header/TransactionCurrency}" state="Success" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+
+        <!-- Footer Action Bar -->
+        <footer>
+            <OverflowToolbar id="createInquiryFooter">
+                <Button
+                    id="btnInquiryMessages"
+                    icon="sap-icon://alert"
+                    text="{newInquiry>/errorCount}"
+                    type="Negative"
+                    visible="{newInquiry>/hasError}"
+                    press=".onMessageButtonPress" />
+                <ToolbarSpacer />
+                <HBox alignItems="Center" class="sapUiMediumMarginEnd">
+                    <Label text="Total Net Amount:" class="sapUiTinyMarginEnd" />
+                    <ObjectNumber number="{newInquiry>/header/TotalNetAmount}" unit="{newInquiry>/header/TransactionCurrency}" emphasized="true" state="Success" />
+                </HBox>
+                <Button id="btnCheckIncompletion" text="Check Incompletion" icon="sap-icon://survey" press=".onCheckIncompletion" type="Default" />
+                <Button id="btnCancelInquiry" text="Cancel" press=".onCancel" type="Transparent" />
+                <Button id="btnSaveInquiry" text="Create Sales Inquiry" icon="sap-icon://save" press=".onSave" type="Emphasized" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

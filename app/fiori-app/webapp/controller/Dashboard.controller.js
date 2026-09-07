@@ -135,6 +135,16 @@ sap.ui.define([
             oRouter.navTo("journalEntries");
         },
 
+        onNavigateToSalesInquiries: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("salesInquiries");
+        },
+
+        onNavigateToCreateSalesInquiry: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("createSalesInquiry");
+        },
+
         onSimulateCarLoan: function () {
             var fLoanAmount = 45000;
             var fAnnualRate = 5.5;

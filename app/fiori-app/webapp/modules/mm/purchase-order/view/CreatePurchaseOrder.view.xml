@@ -65,7 +65,7 @@
                                 <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="e.g. NB" maxLength="4"
                                     valueState="{newPO>/errors/PurchaseOrderType/state}"
                                     valueStateText="{newPO>/errors/PurchaseOrderType/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onDocTypeChange" liveChange=".onDocTypeChange" suggestionItemSelected=".onDocTypeSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/DocumentTypeVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
@@ -83,13 +83,13 @@
                                 <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true"
                                     valueState="{newPO>/errors/DocumentDate/state}"
                                     valueStateText="{newPO>/errors/DocumentDate/text}"
-                                    change=".onHeaderChange" />
+                                    change=".onDocDateChange" />
 
                                 <Label text="Company Code" required="true" />
                                 <Input id="inCompanyCode" value="{newPO>/header/CompanyCode}" placeholder="e.g. 1010" maxLength="4"
                                     valueState="{newPO>/errors/CompanyCode/state}"
                                     valueStateText="{newPO>/errors/CompanyCode/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onCompanyCodeChange" liveChange=".onCompanyCodeChange" suggestionItemSelected=".onCompanyCodeSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CompanyCodeVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{CompanyCodeName}" />
@@ -100,7 +100,7 @@
                                 <Input id="inPurchOrg" value="{newPO>/header/PurchasingOrganization}" placeholder="e.g. 1010" maxLength="4"
                                     valueState="{newPO>/errors/PurchasingOrganization/state}"
                                     valueStateText="{newPO>/errors/PurchasingOrganization/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onPurchOrgChange" liveChange=".onPurchOrgChange" suggestionItemSelected=".onPurchOrgSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PurchasingOrgVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{PurchasingOrganization}" text="{PurchasingOrganization}" additionalText="{PurchasingOrganizationName}" />
@@ -111,7 +111,7 @@
                                 <Input id="inPurchGrp" value="{newPO>/header/PurchasingGroup}" placeholder="e.g. 001" maxLength="3"
                                     valueState="{newPO>/errors/PurchasingGroup/state}"
                                     valueStateText="{newPO>/errors/PurchasingGroup/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onPurchGrpChange" liveChange=".onPurchGrpChange" suggestionItemSelected=".onPurchGrpSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PurchasingGroupVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{PurchasingGroup}" text="{PurchasingGroup}" additionalText="{PurchasingGroupName}" />
@@ -145,7 +145,7 @@
                                 <Input id="inSupplier" value="{newPO>/header/Supplier}" placeholder="e.g. 10300001" maxLength="10"
                                     valueState="{newPO>/errors/Supplier/state}"
                                     valueStateText="{newPO>/errors/Supplier/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onSupplierChange" liveChange=".onSupplierLiveChange" suggestionItemSelected=".onSupplierSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/SupplierVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{SupplierName}" />
@@ -156,7 +156,7 @@
                                 <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="e.g. EUR" maxLength="5"
                                     valueState="{newPO>/errors/Currency/state}"
                                     valueStateText="{newPO>/errors/Currency/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onCurrencyChange" liveChange=".onCurrencyChange" suggestionItemSelected=".onCurrencySelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CurrencyVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{Currency}" text="{Currency}" additionalText="{Currency_Text}" />
@@ -167,7 +167,7 @@
                                 <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="e.g. 0001" maxLength="4"
                                     valueState="{newPO>/errors/PaymentTerms/state}"
                                     valueStateText="{newPO>/errors/PaymentTerms/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onPaymentTermsChange" liveChange=".onPaymentTermsChange" suggestionItemSelected=".onPaymentTermsSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PaymentTermsVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{PaymentTerms}" text="{PaymentTerms}" additionalText="{PaymentTermsName}" />
@@ -178,7 +178,7 @@
                                 <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="e.g. EXW" maxLength="3"
                                     valueState="{newPO>/errors/IncotermsClassification/state}"
                                     valueStateText="{newPO>/errors/IncotermsClassification/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange"
+                                    change=".onIncotermsChange" liveChange=".onIncotermsChange" suggestionItemSelected=".onIncotermsSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/IncotermsClassificationVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{IncotermsClassification}" text="{IncotermsClassification}" additionalText="{IncotermsClassificationName}" />
@@ -189,10 +189,11 @@
                                 <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="e.g. MUMBAI" maxLength="70"
                                     valueState="{newPO>/errors/IncotermsLocation1/state}"
                                     valueStateText="{newPO>/errors/IncotermsLocation1/text}"
-                                    change=".onHeaderChange" liveChange=".onHeaderChange" />
+                                    change=".onIncotermsLocChange" liveChange=".onIncotermsLocChange" />
                             </f:content>
                         </f:SimpleForm>
                     </Panel>
+
                 </layout:Grid>
 
                 <Panel headerText="Items">

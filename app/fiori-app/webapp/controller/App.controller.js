@@ -39,6 +39,13 @@ sap.ui.define([
                 this._updateShell("purchaseOrders");
             } else if (sHash.indexOf("fi/journal-entries") === 0) {
                 this._updateShell("journalEntries");
+            } else if (sHash.indexOf("sd/sales-inquiries/create") === 0) {
+                this._updateShell("createSalesInquiry");
+            } else if (sHash.indexOf("sd/sales-inquiries/") === 0) {
+                var sInqId = sHash.replace("sd/sales-inquiries/", "").split("/")[0];
+                this._updateShell("salesInquiryDetail", { SalesInquiry: sInqId });
+            } else if (sHash.indexOf("sd/sales-inquiries") === 0) {
+                this._updateShell("salesInquiries");
             } else if (sHash.indexOf("dashboard") === 0) {
                 this._updateShell("dashboard");
             }
@@ -89,6 +96,23 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("fiPageTitle") : "Journal Entry Items";
                     bShowNav = true;
                     break;
+                case "salesInquiries":
+                    sTitle = oBundle ? oBundle.getText("salesInquiriesTitle") : "Manage Sales Inquiries";
+                    bShowNav = true;
+                    break;
+                case "createSalesInquiry":
+                    sTitle = oBundle ? oBundle.getText("createSalesInquiryTitle") : "Create Sales Inquiry (VA11)";
+                    bShowNav = true;
+                    break;
+                case "salesInquiryDetail":
+                    var inqArgs = oArgs || {};
+                    if (inqArgs.SalesInquiry) {
+                        sTitle = "Sales Inquiry " + inqArgs.SalesInquiry;
+                    } else {
+                        sTitle = "Sales Inquiry Details";
+                    }
+                    bShowNav = true;
+                    break;
                 case "login":
                 case "default":
                 default:
@@ -119,7 +143,9 @@ sap.ui.define([
 
             if (sRoute === "purchaseOrderDetail" || sRoute === "createPurchaseOrder") {
                 this.onNavBack("purchaseOrders");
-            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries") {
+            } else if (sRoute === "salesInquiryDetail" || sRoute === "createSalesInquiry") {
+                this.onNavBack("salesInquiries");
+            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries") {
                 this.onNavBack("dashboard");
             } else {
                 this.onNavBack("dashboard");

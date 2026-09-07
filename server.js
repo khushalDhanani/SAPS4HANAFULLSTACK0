@@ -35,7 +35,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.auth = cds.env.requires.auth || {};
     cds.env.requires.auth.users = cds.env.requires.auth.users || {};
-    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager'];
+    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager'];
     cds.env.requires.auth.users[s4User] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
@@ -72,15 +72,35 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
         headers: headers
     };
 
+    const credsSDWL = {
+        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV`,
+        authentication: 'BasicAuthentication',
+        username: process.env.S4_USERNAME,
+        password: process.env.S4_PASSWORD,
+        headers: headers
+    };
+
+    const credsSDFS = {
+        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F2369_INQY_FS_SRV`,
+        authentication: 'BasicAuthentication',
+        username: process.env.S4_USERNAME,
+        password: process.env.S4_PASSWORD,
+        headers: headers
+    };
+
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.C_PURCHASEORDER_FS_SRV = Object.assign(cds.env.requires.C_PURCHASEORDER_FS_SRV || { kind: 'odata-v2', model: 'srv/external/C_PURCHASEORDER_FS_SRV' }, { credentials: credsFS });
     cds.env.requires.MM_PUR_PO_MAINT_V2_SRV = Object.assign(cds.env.requires.MM_PUR_PO_MAINT_V2_SRV || { kind: 'odata-v2', model: 'srv/external/MM_PUR_PO_MAINT_V2_SRV' }, { credentials: credsMaint });
     cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV = Object.assign(cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV || { kind: 'odata-v2', model: 'srv/external/FAC_GL_JOURNALENTRY_VER_SRV' }, { credentials: credsFI });
+    cds.env.requires.SD_F2370_INQY_WL_SRV = Object.assign(cds.env.requires.SD_F2370_INQY_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2370_INQY_WL_SRV' }, { credentials: credsSDWL });
+    cds.env.requires.SD_F2369_INQY_FS_SRV = Object.assign(cds.env.requires.SD_F2369_INQY_FS_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2369_INQY_FS_SRV' }, { credentials: credsSDFS });
 
     if (cds.requires) {
         if (cds.requires.C_PURCHASEORDER_FS_SRV) cds.requires.C_PURCHASEORDER_FS_SRV.credentials = credsFS;
         if (cds.requires.MM_PUR_PO_MAINT_V2_SRV) cds.requires.MM_PUR_PO_MAINT_V2_SRV.credentials = credsMaint;
         if (cds.requires.FAC_GL_JOURNALENTRY_VER_SRV) cds.requires.FAC_GL_JOURNALENTRY_VER_SRV.credentials = credsFI;
+        if (cds.requires.SD_F2370_INQY_WL_SRV) cds.requires.SD_F2370_INQY_WL_SRV.credentials = credsSDWL;
+        if (cds.requires.SD_F2369_INQY_FS_SRV) cds.requires.SD_F2369_INQY_FS_SRV.credentials = credsSDFS;
     }
 
     registerDestination({

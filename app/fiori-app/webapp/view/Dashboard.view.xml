@@ -306,7 +306,7 @@
                                             press=".onSelectTabService"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                             <TileContent unit="Work Requests">
-                                                <NumericContent value="18" icon="sap-icon://customer-service" valueColor="Neutral" />
+                                                <NumericContent value="18" icon="sap-icon://customer" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
@@ -756,9 +756,14 @@
                                             <NumericContent value="86" icon="sap-icon://sales-order" valueColor="Good" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Customer Inquiries" subheader="Pending Quotes" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                    <GenericTile id="tileSDInquiries" header="Customer Inquiries" subheader="F2370 • Manage Inquiries" press=".onNavigateToSalesInquiries" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="Inquiries">
-                                            <NumericContent value="19" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
+                                            <NumericContent value="41" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileSDCreateInquiry" header="Create Inquiry" subheader="VA11 • Sales Inquiries" press=".onNavigateToCreateSalesInquiry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Action">
+                                            <NumericContent icon="sap-icon://add" valueColor="Good" />
                                         </TileContent>
                                     </GenericTile>
                                     <GenericTile header="Customer 360" subheader="Active Accounts" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
@@ -946,7 +951,7 @@
                         <IconTabFilter
                             id="tabService"
                             key="service"
-                            icon="sap-icon://customer-service"
+                            icon="sap-icon://customer"
                             text="{i18n>tabServiceTitle}"
                             tooltip="{i18n>tabServiceTooltip}">
                             <VBox class="sapUiSmallMarginTop">

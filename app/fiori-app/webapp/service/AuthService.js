@@ -1,8 +1,9 @@
 sap.ui.define([
     "sap/ui/base/Object",
     "sap/ui/model/json/JSONModel",
+    "sap/base/Log",
     "saps4hana/fiori/service/ODataClient"
-], function (BaseObject, JSONModel, ODataClient) {
+], function (BaseObject, JSONModel, Log, ODataClient) {
     "use strict";
 
     var STORAGE_KEY = "saps4hana_fiori_auth_session";
@@ -56,8 +57,8 @@ sap.ui.define([
                     oDefaultModel.changeHttpHeaders(mHeaders);
                 } catch (err) {
                     // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
-                    if (typeof jQuery !== "undefined" && jQuery.sap && jQuery.sap.log) {
-                        jQuery.sap.log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
+                    if (Log && typeof Log.warning === "function") {
+                        Log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
                     }
                 }
             }
@@ -67,8 +68,19 @@ sap.ui.define([
                 try {
                     oFiModel.changeHttpHeaders(mHeaders);
                 } catch (err) {
-                    if (typeof jQuery !== "undefined" && jQuery.sap && jQuery.sap.log) {
-                        jQuery.sap.log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
+                    if (Log && typeof Log.warning === "function") {
+                        Log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
+                    }
+                }
+            }
+
+            var oSdModel = oComp.getModel("salesInquiry");
+            if (oSdModel && typeof oSdModel.changeHttpHeaders === "function") {
+                try {
+                    oSdModel.changeHttpHeaders(mHeaders);
+                } catch (err) {
+                    if (Log && typeof Log.warning === "function") {
+                        Log.warning("AuthService: Unable to update salesInquiry headers: " + (err && err.message));
                     }
                 }
             }

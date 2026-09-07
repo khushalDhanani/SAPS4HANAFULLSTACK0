@@ -39,7 +39,9 @@
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer"
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager"
               ]
             },
             "bob": {
@@ -59,7 +61,9 @@
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer"
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager"
               ]
             },
             "bob": {
@@ -109,6 +113,14 @@
             "path": "/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV"
           }
         }
+      },
+      "SD_F2370_INQY_WL_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/SD_F2370_INQY_WL_SRV"
+      },
+      "SD_F2369_INQY_FS_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/SD_F2369_INQY_FS_SRV"
       }
     }
   }

@@ -1,0 +1,161 @@
+sap.ui.define([
+    "saps4hana/fiori/service/ODataClient"
+], function (ODataClient) {
+    "use strict";
+
+    var SERVICE_BASE = "/odata/v4/sales-inquiry";
+
+    /**
+     * SalesInquiryService
+     * Encapsulates Sales Inquiry API communication with the CAP backend.
+     */
+    return {
+        /**
+         * Dispatches createSalesInquiry action to the CAP OData service.
+         *
+         * @param {Object} oPayload
+         * @param {Object} oPayload.header
+         * @param {Array<Object>} oPayload.items
+         * @returns {Promise<string>} Resolves to created Sales Inquiry ID
+         */
+        createSalesInquiry: function (oPayload) {
+            var sUrl = SERVICE_BASE + "/createSalesInquiry";
+            return ODataClient.post(sUrl, oPayload).then(function (result) {
+                if (!result) return "";
+                return result.value || result.SalesInquiry || result;
+            });
+        },
+
+        /**
+         * Queries Sales Inquiries list from CAP OData service.
+         *
+         * @param {string} [sQuery] Optional OData query string (e.g. "?$top=10")
+         * @returns {Promise<Array<Object>>}
+         */
+        getSalesInquiries: function (sQuery) {
+            var sUrl = SERVICE_BASE + "/SalesInquiries" + (sQuery || "");
+            return ODataClient.get(sUrl).then(function (result) {
+                if (!result) return [];
+                return result.value || (result.d && result.d.results) || [];
+            });
+        },
+
+        /**
+         * Queries a single Sales Inquiry by key.
+         *
+         * @param {string} sInquiryNumber
+         * @returns {Promise<Object>}
+         */
+        getSalesInquiry: function (sInquiryNumber) {
+            var sUrl = SERVICE_BASE + "/SalesInquiries('" + encodeURIComponent(sInquiryNumber) + "')?$expand=to_Items";
+            return ODataClient.get(sUrl);
+        },
+
+        /**
+         * Loads actual configuration and master data concurrently from CAP service:
+         * Inquiry Types, Sales Organizations, Distribution Channels, and Divisions.
+         *
+         * @returns {Promise<{ inquiryTypes: Array<Object>, salesOrgs: Array<Object>, distChannels: Array<Object>, divisions: Array<Object> }>}
+         */
+        loadConfiguration: function () {
+            return Promise.all([
+                ODataClient.get(SERVICE_BASE + "/SalesInquiryTypeVH").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/SalesOrganizationVH").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/DistributionChannelVH").then(function (res) { return (res && res.value) || []; }),
+                ODataClient.get(SERVICE_BASE + "/DivisionVH").then(function (res) { return (res && res.value) || []; })
+            ]).then(function (aResults) {
+                return {
+                    inquiryTypes: aResults[0] || [],
+                    salesOrgs: aResults[1] || [],
+                    distChannels: aResults[2] || [],
+                    divisions: aResults[3] || []
+                };
+            }).catch(function (err) {
+                console.warn("[SalesInquiryService] Error loading configuration data:", err);
+                return {
+                    inquiryTypes: [],
+                    salesOrgs: [],
+                    distChannels: [],
+                    divisions: []
+                };
+            });
+        },
+
+        /**
+         * Retrieves commercial defaults for a specific customer from S/4HANA:
+         * Customer Name, City, Country, Currency, and default Ship-to Party.
+         *
+         * @param {string} sCustomer
+         * @param {string} [sSalesOrg]
+         * @param {string} [sDistChannel]
+         * @param {string} [sDivision]
+         * @returns {Promise<{ Customer: string, CustomerName: string, City: string, Country: string, Currency: string, ShipToParty: string, ShipToPartyName: string, derived: boolean }>}
+         */
+        getCustomerDefaults: function (sCustomer, sSalesOrg, sDistChannel, sDivision) {
+            if (!sCustomer || String(sCustomer).trim() === "") {
+                return Promise.resolve({
+                    Customer: "",
+                    CustomerName: "",
+                    City: "",
+                    Country: "",
+                    Currency: "INR",
+                    ShipToParty: "",
+                    ShipToPartyName: "",
+                    derived: false
+                });
+            }
+
+            var sParams = "Customer='" + encodeURIComponent(String(sCustomer).trim()) + "'";
+            if (sSalesOrg) sParams += ",SalesOrganization='" + encodeURIComponent(String(sSalesOrg).trim()) + "'";
+            if (sDistChannel) sParams += ",DistributionChannel='" + encodeURIComponent(String(sDistChannel).trim()) + "'";
+            if (sDivision) sParams += ",Division='" + encodeURIComponent(String(sDivision).trim()) + "'";
+
+            var sUrl = SERVICE_BASE + "/getCustomerDefaults(" + sParams + ")";
+            return ODataClient.get(sUrl).then(function (result) {
+                return result || {
+                    Customer: sCustomer,
+                    CustomerName: "",
+                    City: "",
+                    Country: "",
+                    Currency: "INR",
+                    ShipToParty: sCustomer,
+                    ShipToPartyName: "",
+                    derived: false
+                };
+            }).catch(function () {
+                return {
+                    Customer: sCustomer,
+                    CustomerName: "",
+                    City: "",
+                    Country: "",
+                    Currency: "INR",
+                    ShipToParty: sCustomer,
+                    ShipToPartyName: "",
+                    derived: false
+                };
+            });
+        },
+
+        /**
+         * Retrieves standard initial defaults for VA11 Sales Inquiry creation.
+         */
+        getSalesInquiryDefaults: function () {
+            var sUrl = SERVICE_BASE + "/getSalesInquiryDefaults()";
+            return ODataClient.get(sUrl).catch(function () {
+                var today = new Date().toISOString().split("T")[0];
+                var validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+                return {
+                    SalesInquiryType: "ZIN",
+                    SalesOrganization: "1000",
+                    DistributionChannel: "10",
+                    OrganizationDivision: "52",
+                    SalesInquiryDate: today,
+                    BindingPeriodValidityStartDate: today,
+                    BindingPeriodValidityEndDate: validityEnd,
+                    TransactionCurrency: "INR",
+                    derived: true
+                };
+            });
+        }
+    };
+});

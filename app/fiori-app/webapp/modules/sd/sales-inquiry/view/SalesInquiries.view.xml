@@ -1,0 +1,151 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.sales-inquiry.controller.SalesInquiries"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.f"
+    xmlns:core="sap.ui.core">
+
+    <Page
+        id="salesInquiriesPage"
+        showHeader="false"
+        backgroundDesign="Solid">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Header Toolbar & Title -->
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <Title text="Manage Sales Inquiries" level="H2" titleStyle="H3" />
+                        <Text text="SAP S/4HANA Sales &amp; Distribution • Inquiry Catalog (VA11 / F2370)" class="textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <Button
+                            id="btnCreateInquiry"
+                            text="Create Inquiry (VA11)"
+                            icon="sap-icon://add"
+                            type="Emphasized"
+                            press=".onNavigateToCreateInquiry"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnRefreshInquiries"
+                            icon="sap-icon://refresh"
+                            text="Refresh"
+                            type="Transparent"
+                            press=".onRefresh" />
+                    </HBox>
+                </HBox>
+
+                <!-- KPI Tiles Section -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile
+                        id="kpiTotalInquiries"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="Total Inquiries"
+                        subheader="Inquiry Documents">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalInquiriesVal"
+                                value="{salesInquiriesView>/totalCount}"
+                                icon="sap-icon://sales-order"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiOpenInquiries"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="Open Inquiries"
+                        subheader="Awaiting Quotation">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiOpenInquiriesVal"
+                                value="{salesInquiriesView>/openCount}"
+                                icon="sap-icon://document"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiActiveCustomers"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="Active Customers"
+                        subheader="Distinct Sold-to Parties">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiActiveCustomersVal"
+                                value="{salesInquiriesView>/customerCount}"
+                                icon="sap-icon://customer"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- Inquiries Table -->
+                <Table
+                    id="salesInquiriesTable"
+                    items="{
+                        path: 'salesInquiry>/SalesInquiries',
+                        parameters: {
+                            $count: true
+                        },
+                        sorter: [
+                            { path: 'SalesInquiry', descending: true }
+                        ]
+                    }"
+                    growing="true"
+                    growingThreshold="25"
+                    growingScrollToLoad="true"
+                    noDataText="No sales inquiries found."
+                    updateFinished=".onUpdateFinished"
+                    itemPress=".onInquiryPress"
+                    sticky="ColumnHeaders,HeaderToolbar">
+                    <headerToolbar>
+                        <OverflowToolbar id="tableToolbar">
+                            <Title
+                                id="tableTitle"
+                                text="{= 'Sales Inquiries (' + (${salesInquiriesView>/totalCount} || '0') + ')' }"
+                                level="H4" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="searchInquiries"
+                                width="18rem"
+                                search=".onSearch"
+                                liveChange=".onSearch"
+                                placeholder="Search inquiries..." />
+                            <Button
+                                id="btnRefreshInquiriesTable"
+                                icon="sap-icon://refresh"
+                                tooltip="Refresh"
+                                press=".onRefresh" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column width="8rem"><Text text="Inquiry Number" /></Column>
+                        <Column width="5rem"><Text text="Type" /></Column>
+                        <Column width="7rem"><Text text="Customer" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Customer Name" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="Sales Area (Org/Chnl/Div)" /></Column>
+                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="Doc Date" /></Column>
+                        <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
+                        <Column width="6rem" hAlign="Center"><Text text="Status" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Navigation">
+                            <cells>
+                                <ObjectIdentifier title="{salesInquiry>SalesInquiry}" text="{salesInquiry>PurchaseOrderByCustomer}" />
+                                <Text text="{salesInquiry>SalesInquiryType}" />
+                                <Text text="{salesInquiry>SoldToParty}" />
+                                <Text text="{salesInquiry>OrganizationBPName1}" />
+                                <Text text="{= (${salesInquiry>SalesOrganization} || '') + ' / ' + (${salesInquiry>DistributionChannel} || '') + ' / ' + (${salesInquiry>OrganizationDivision} || '') }" />
+                                <Text text="{salesInquiry>SalesInquiryDate}" />
+                                <ObjectNumber number="{salesInquiry>TotalNetAmount}" unit="{salesInquiry>TransactionCurrency}" state="Success" />
+                                <ObjectStatus
+                                    text="{path: 'salesInquiry>OverallSDProcessStatus', formatter: '.formatter.statusText'}"
+                                    state="{path: 'salesInquiry>OverallSDProcessStatus', formatter: '.formatter.statusState'}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

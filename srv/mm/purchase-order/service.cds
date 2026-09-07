@@ -108,4 +108,14 @@ service PurchaseOrderService {
 
     @(requires: ['PurchasingManager', 'Admin'])
     action createPurchaseOrder(header: POHeader, items: array of POItem) returns String;
+
+    @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin'])
+    function getSupplierDefaults(Supplier: String, CompanyCode: String, PurchasingOrganization: String) returns {
+        Supplier: String;
+        Currency: String;
+        PaymentTerms: String;
+        IncotermsClassification: String;
+        IncotermsLocation1: String;
+        derived: Boolean;
+    };
 }

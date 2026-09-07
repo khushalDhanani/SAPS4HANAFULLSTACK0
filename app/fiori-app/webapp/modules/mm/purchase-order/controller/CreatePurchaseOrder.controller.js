@@ -26,6 +26,27 @@ sap.ui.define([
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
             }
+            this._loadConfigurationAndDefaults();
+        },
+
+        _loadConfigurationAndDefaults: function () {
+            var that = this;
+            var oModel = this.getView().getModel("newPO");
+            if (this._oConfigData) {
+                PurchaseOrderModel.applyConfigurationDefaults(oModel, this._oConfigData);
+                return Promise.resolve(this._oConfigData);
+            }
+
+            return PurchaseOrderService.loadConfiguration().then(function (oConfigData) {
+                that._oConfigData = oConfigData;
+                var oCurrentModel = that.getView().getModel("newPO");
+                if (oCurrentModel) {
+                    PurchaseOrderModel.applyConfigurationDefaults(oCurrentModel, oConfigData);
+                }
+                return oConfigData;
+            }).catch(function (err) {
+                console.warn("[CreatePurchaseOrder] Error loading config data:", err);
+            });
         },
 
         _onRouteMatched: function () {
@@ -38,6 +59,219 @@ sap.ui.define([
             if (oModel.getProperty("/hasError")) {
                 PurchaseOrderModel.validateForm(oModel);
             }
+        },
+
+        onDocTypeChange: function (oEvent) {
+            var oModel = this.getView().getModel("newPO");
+            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
+            if (sVal !== null && sVal !== undefined) {
+                PurchaseOrderModel.markUserModified(oModel, "PurchaseOrderType", true);
+            }
+            if (this._oConfigData) {
+                PurchaseOrderModel.applyConfigurationDefaults(oModel, this._oConfigData);
+            }
+            PurchaseOrderModel.validateSingleField(oModel, "PurchaseOrderType");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onDocTypeSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/PurchaseOrderType", sKey);
+                this.onDocTypeChange();
+            }
+        },
+
+        onDocDateChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.markUserModified(oModel, "DocumentDate", true);
+            PurchaseOrderModel.validateSingleField(oModel, "DocumentDate");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onCompanyCodeChange: function (oEvent) {
+            var oModel = this.getView().getModel("newPO");
+            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
+            if (sVal !== null && sVal !== undefined) {
+                PurchaseOrderModel.markUserModified(oModel, "CompanyCode", true);
+            }
+            if (this._oConfigData) {
+                PurchaseOrderModel.validateCompanyCodePurchasingOrg(oModel, this._oConfigData);
+            }
+            PurchaseOrderModel.validateSingleField(oModel, "CompanyCode");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onCompanyCodeSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/CompanyCode", sKey);
+                this.onCompanyCodeChange();
+            }
+        },
+
+        onPurchOrgChange: function (oEvent) {
+            var oModel = this.getView().getModel("newPO");
+            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
+            if (sVal !== null && sVal !== undefined) {
+                PurchaseOrderModel.markUserModified(oModel, "PurchasingOrganization", true);
+            }
+            if (this._oConfigData) {
+                PurchaseOrderModel.validateCompanyCodePurchasingOrg(oModel, this._oConfigData);
+            }
+            PurchaseOrderModel.validateSingleField(oModel, "PurchasingOrganization");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onPurchOrgSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/PurchasingOrganization", sKey);
+                this.onPurchOrgChange();
+            }
+        },
+
+        onPurchGrpChange: function (oEvent) {
+            var oModel = this.getView().getModel("newPO");
+            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
+            if (sVal !== null && sVal !== undefined) {
+                PurchaseOrderModel.markUserModified(oModel, "PurchasingGroup", true);
+            }
+            PurchaseOrderModel.validateSingleField(oModel, "PurchasingGroup");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onPurchGrpSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/PurchasingGroup", sKey);
+                this.onPurchGrpChange();
+            }
+        },
+
+        onSupplierLiveChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.markUserModified(oModel, "Supplier", true);
+            PurchaseOrderModel.validateSingleField(oModel, "Supplier");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onSupplierChange: function (oEvent) {
+            var oModel = this.getView().getModel("newPO");
+            var sSupplier = "";
+            if (typeof oEvent === "string") {
+                sSupplier = oEvent;
+            } else if (oEvent && typeof oEvent.getParameter === "function") {
+                sSupplier = oEvent.getParameter("value");
+            } else {
+                sSupplier = oModel.getProperty("/header/Supplier");
+            }
+
+            PurchaseOrderModel.markUserModified(oModel, "Supplier", true);
+            PurchaseOrderModel.validateSingleField(oModel, "Supplier", sSupplier);
+            PurchaseOrderModel.updateStatus(oModel);
+
+            this._deriveSupplierData(sSupplier);
+        },
+
+        onSupplierSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/Supplier", sKey);
+                this.onSupplierChange(sKey);
+            }
+        },
+
+        _deriveSupplierData: function (sSupplier) {
+            if (!sSupplier || String(sSupplier).trim() === "") return;
+
+            var that = this;
+            var oModel = this.getView().getModel("newPO");
+            var sCoCode = oModel.getProperty("/header/CompanyCode") || "";
+            var sPurchOrg = oModel.getProperty("/header/PurchasingOrganization") || "";
+
+            PurchaseOrderService.getSupplierDefaults(sSupplier, sCoCode, sPurchOrg)
+                .then(function (oDefaults) {
+                    if (!oDefaults) return;
+                    var oReport = PurchaseOrderModel.deriveSupplierDefaults(oModel, sSupplier, oDefaults);
+                    if (oReport && oReport.applied && Object.keys(oReport.applied).length > 0) {
+                        var aAppliedFields = Object.keys(oReport.applied).map(function (k) {
+                            return k + ": " + oReport.applied[k];
+                        });
+                        MessageToast.show("Supplier defaults applied: " + aAppliedFields.join(", "));
+                    }
+                })
+                .catch(function (err) {
+                    console.warn("[CreatePurchaseOrder] Could not derive supplier defaults:", err);
+                });
+        },
+
+        onCurrencyChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.markUserModified(oModel, "Currency", true);
+            PurchaseOrderModel.validateSingleField(oModel, "Currency");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onCurrencySelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/Currency", sKey);
+                this.onCurrencyChange();
+            }
+        },
+
+        onPaymentTermsChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.markUserModified(oModel, "PaymentTerms", true);
+            PurchaseOrderModel.validateSingleField(oModel, "PaymentTerms");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onPaymentTermsSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/PaymentTerms", sKey);
+                this.onPaymentTermsChange();
+            }
+        },
+
+        onIncotermsChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.markUserModified(oModel, "IncotermsClassification", true);
+            PurchaseOrderModel.validateSingleField(oModel, "IncotermsClassification");
+            PurchaseOrderModel.updateStatus(oModel);
+        },
+
+        onIncotermsSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var oModel = this.getView().getModel("newPO");
+                oModel.setProperty("/header/IncotermsClassification", sKey);
+                this.onIncotermsChange();
+            }
+        },
+
+        onIncotermsLocChange: function () {
+            var oModel = this.getView().getModel("newPO");
+            PurchaseOrderModel.markUserModified(oModel, "IncotermsLocation1", true);
+            PurchaseOrderModel.validateSingleField(oModel, "IncotermsLocation1");
+            PurchaseOrderModel.updateStatus(oModel);
         },
 
         onItemFieldChange: function () {
@@ -149,7 +383,34 @@ sap.ui.define([
         },
 
         onValueHelpRequest: function (oEvent) {
-            ValueHelpService.openValueHelp(this.getView(), oEvent.getSource());
+            var oSource = oEvent.getSource();
+            var that = this;
+            ValueHelpService.openValueHelp(this.getView(), oSource, function (sKey) {
+                that._handleValueHelpSelected(oSource, sKey);
+            });
+        },
+
+        _handleValueHelpSelected: function (oSource, sKey) {
+            if (!oSource || !sKey) return;
+            var sId = oSource.getId() || "";
+
+            if (sId.indexOf("inDocType") !== -1) {
+                this.onDocTypeChange();
+            } else if (sId.indexOf("inCompanyCode") !== -1) {
+                this.onCompanyCodeChange();
+            } else if (sId.indexOf("inPurchOrg") !== -1) {
+                this.onPurchOrgChange();
+            } else if (sId.indexOf("inPurchGrp") !== -1) {
+                this.onPurchGrpChange();
+            } else if (sId.indexOf("inSupplier") !== -1) {
+                this.onSupplierChange(sKey);
+            } else if (sId.indexOf("inCurrency") !== -1) {
+                this.onCurrencyChange();
+            } else if (sId.indexOf("inPaymentTerms") !== -1) {
+                this.onPaymentTermsChange();
+            } else if (sId.indexOf("inIncoterms") !== -1) {
+                this.onIncotermsChange();
+            }
         },
 
         onSuggest: function (oEvent) {

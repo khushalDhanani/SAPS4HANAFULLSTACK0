@@ -116,6 +116,69 @@ function registerPurchaseOrderHandlers(srv) {
             req.error(sapError.status, `Failed to create Purchase Order: ${sapError.message}`);
         }
     });
+
+    // 3. Function getSupplierDefaults
+    srv.on('getSupplierDefaults', async (req) => {
+        const { Supplier, CompanyCode, PurchasingOrganization } = req.data || {};
+        if (!Supplier || String(Supplier).trim() === '') {
+            return {
+                Supplier: '',
+                Currency: '',
+                PaymentTerms: '',
+                IncotermsClassification: '',
+                IncotermsLocation1: '',
+                derived: false
+            };
+        }
+
+        const sSupplier = String(Supplier).trim();
+
+        try {
+            // Check PurchaseOrders in S/4HANA FS service for confirmed commercial defaults
+            const s4Query = SELECT.from('C_PURCHASEORDER_FS_SRV.C_PurchaseOrderFs')
+                .columns(
+                    'DocumentCurrency',
+                    'PaymentTerms',
+                    'IncotermsClassification',
+                    'IncotermsTransferLocation'
+                )
+                .where({ Supplier: sSupplier });
+
+            if (PurchasingOrganization && String(PurchasingOrganization).trim() !== '') {
+                s4Query.where({ PurchasingOrganization: String(PurchasingOrganization).trim() });
+            }
+            if (CompanyCode && String(CompanyCode).trim() !== '') {
+                s4Query.where({ CompanyCode: String(CompanyCode).trim() });
+            }
+            s4Query.limit(1);
+
+            const result = await purchaseOrderAdapter.readFsData(s4Query);
+            const aOrders = Array.isArray(result) ? result : (result?.value || []);
+            const po = aOrders.length > 0 ? aOrders[0] : null;
+
+            if (po && (po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification)) {
+                return {
+                    Supplier: sSupplier,
+                    Currency: po.DocumentCurrency || '',
+                    PaymentTerms: po.PaymentTerms || '',
+                    IncotermsClassification: po.IncotermsClassification || '',
+                    IncotermsLocation1: po.IncotermsTransferLocation || '',
+                    derived: true
+                };
+            }
+        } catch (error) {
+            console.warn('[PurchaseOrderService] getSupplierDefaults readFsData failed, falling back:', error.message);
+        }
+
+        return {
+            Supplier: sSupplier,
+            Currency: '',
+            PaymentTerms: '',
+            IncotermsClassification: '',
+            IncotermsLocation1: '',
+            derived: false
+        };
+    });
 }
 
 registerPurchaseOrderHandlers.registerPurchaseOrderHandlers = registerPurchaseOrderHandlers;

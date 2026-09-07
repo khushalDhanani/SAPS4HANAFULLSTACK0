@@ -20,7 +20,13 @@ sap.ui.define([
         "/PlantVH": { title: "Select Plant", key: "Plant", desc: "PlantName" },
         "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName" },
         "/UnitOfMeasureVH": { title: "Select Unit of Measure", key: "UnitOfMeasure", desc: "UnitOfMeasure_Text" },
-        "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" }
+        "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" },
+        "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName" },
+        "/SalesOrganizationVH": { title: "Select Sales Organization", key: "SalesOrganization", desc: "SalesOrganization_Text" },
+        "/DistributionChannelVH": { title: "Select Distribution Channel", key: "DistributionChannel", desc: "DistributionChannelName" },
+        "/DivisionVH": { title: "Select Division", key: "Division", desc: "DivisionName" },
+        "/SoldToPartyVH": { title: "Select Sold-to Party", key: "Customer", desc: "CustomerName" },
+        "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" }
     };
 
     return {

@@ -25,6 +25,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "salesInquiryService": {
+        "uri": "/odata/v4/sales-inquiry/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -70,6 +78,15 @@
       },
       "fiService": {
         "dataSource": "fiService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      },
+      "salesInquiry": {
+        "dataSource": "salesInquiryService",
         "preload": true,
         "settings": {
           "operationMode": "Server",
@@ -129,6 +146,21 @@
           "name": "journalEntries",
           "pattern": "fi/journal-entries",
           "target": "TargetJournalEntries"
+        },
+        {
+          "name": "salesInquiries",
+          "pattern": "sd/sales-inquiries",
+          "target": "TargetSalesInquiries"
+        },
+        {
+          "name": "createSalesInquiry",
+          "pattern": "sd/sales-inquiries/create",
+          "target": "TargetCreateSalesInquiry"
+        },
+        {
+          "name": "salesInquiryDetail",
+          "pattern": "sd/sales-inquiries/{SalesInquiry}",
+          "target": "TargetSalesInquiryDetail"
         }
       ],
       "targets": {
@@ -159,6 +191,21 @@
           "id": "journalEntries",
           "name": "JournalEntries",
           "path": "saps4hana.fiori.modules.fi.journal-entry.view"
+        },
+        "TargetSalesInquiries": {
+          "id": "salesInquiries",
+          "name": "SalesInquiries",
+          "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
+        },
+        "TargetCreateSalesInquiry": {
+          "id": "createSalesInquiry",
+          "name": "CreateSalesInquiry",
+          "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
+        },
+        "TargetSalesInquiryDetail": {
+          "id": "salesInquiryDetail",
+          "name": "SalesInquiryDetail",
+          "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
         }
       }
     }
