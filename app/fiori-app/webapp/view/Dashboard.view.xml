@@ -499,13 +499,6 @@
                                             </TileContent>
                                         </GenericTile>
                                     </HBox>
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="F3163 • Manage Business Partner Master Data" description="ZMD_BUSINESSPARTNER_SRV / ZAPI_GETBUPA_SRV • Central address, tax numbers &amp; roles" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F1053A • Manage Supplier Master Data" description="ZMD_SUPPLIER_MASTER_SRV • Vendor purchasing orgs, payment terms &amp; withholding tax" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F0850A • Manage Customer Master Data" description="ZC_CUSTOMER_OP_SRV / ZUI_CUSTOMER_CONTACT_MANAGE • Sales orgs, credit &amp; partner functions" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2843 • Business Partner Financial Overview" description="ZO2C_FICA_CUSTOMERFO_SRV • 360° receivables, open balances &amp; installments" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2515 • Manage Business Partner Line Items" description="ZO2C_FICA_BPLINEITEMS_SRV • Financial line-item clearing &amp; status management" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                    </List>
                                 </Panel>
 
                                 <!-- Area 2: Product Master Data (MDG-M) -->
@@ -537,13 +530,6 @@
                                             </TileContent>
                                         </GenericTile>
                                     </HBox>
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="F1602 • Manage Product Master Data" description="MD_C_PRODUCT_MAINTAIN_SRV • Basic data, plants, storage locations, sales orgs &amp; valuation" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2548 • Product Master - Quick Create" description="ZMD_QC_PRODUCT_SRV • Fast creation with mandatory attributes &amp; profile defaults" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2166 • Product Master Object Page" description="ZMD_PRODUCT_OP_SRV • 360° display of dimensions, UoM conversions &amp; MRP" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2852 • Manage Product Hierarchies" description="ZC_MDPRODUCTHIERARCHYQUERY_CDS • Classification trees &amp; category taxonomy" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3821 • Manage Substitutions &amp; Exclusions" description="ZUI_PRODSUBSTITUTION_MANAGE • Rules governance for supersessions &amp; exclusions" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                    </List>
                                 </Panel>
 
                                 <!-- Area 3: Financial Master Data (MDG-F) -->
@@ -575,17 +561,6 @@
                                             </TileContent>
                                         </GenericTile>
                                     </HBox>
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="F0731A • Manage G/L Account Master Data" description="ZFAC_MANAGE_GLACCOUNT_SRV • Chart of Accounts, company code G/L, control fields" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3516 • Manage Profit Centers" description="ZFAC_MANAGE_PROFIT_CENTERS_SRV • Standard hierarchy, segments &amp; validity ranges" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3517 • Where-Used List - Profit Centers" description="ZFAC_WHERE_USED_PROFIT_CENTERS_SRV • Dependency impact analysis on upstream objects" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3518 • Display Profit Center Change Log" description="ZFAC_PROFIT_CENTER_CHANGLOG • Historical audit trail &amp; change documents" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F1443A • Manage Cost Centers" description="FCO_MANAGE_COST_CENTERS_SRV • Responsible managers, departments &amp; profit center link" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2753 • Where-Used List - Cost Centers" description="ZFCO_WHERE_USED_COST_CENTERS_SRV • Upstream order and allocation mappings" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2752 • Display Cost Center Change Log" description="ZFCO_COST_CENTER_CHNGLOG_SRV • Cost center modification audit trails" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F1366A • Manage Bank Accounts" description="ZFCLM_BAM_SRV / ZFCLM_BAM_ACCOUNTWD_SRV • Bank lifecycle, signers &amp; house bank mappings" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F1513 • Bank Accounts Overview" description="ZFCLM_BAM_ACCOUNTOV_SRV • Global bank account overview cards &amp; balances" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                    </List>
                                 </Panel>
 
                                 <!-- Area 4: Manufacturing & Asset Master Data -->
@@ -617,13 +592,6 @@
                                             </TileContent>
                                         </GenericTile>
                                     </HBox>
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="F2489 • Manage Work Centers" description="ZUI_WORKCENTERS • Formula keys, standard values &amp; cost center assignments" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3327 • Manage Work Center Groups" description="ZPP_WORKCENTER_GROUP_SRV • Work center clusters for line leveling &amp; scheduling" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3136 • Work Center Capacity" description="ZUI_WORKCENTERCAPLIST_02 • Operating intervals, shifts &amp; available hours" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F1684 • Manage Fixed Assets" description="ZFAA_ASSET_MANAGE_SRV • Asset classes, depreciation keys, useful life &amp; capitalization" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2072 • Manage Technical Objects" description="DFS_MAINT_TECHNICALOBJECT_SRV / EAM_OBJPG_TECHNICALOBJECT_SRV • Equipment &amp; functional locations" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onShowMasterDataInfo" />
-                                    </List>
                                 </Panel>
 
                                 <!-- Area 5: Master Data Governance & Consolidation (MDG / MDC) -->
@@ -655,15 +623,6 @@
                                             </TileContent>
                                         </GenericTile>
                                     </HBox>
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="F3052 • Master Data Process Overview for Business Partner" description="ZMDG_MDPROC_BUPA_OVP_SRV • Analytical change requests, durations &amp; open work items" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F3051 • Master Data Process Overview for Product" description="ZMDG_MDPROC_PROD_OVP_SRV • Material governance processes, error handling &amp; SLAs" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2229 • Manage Master Data Imports" description="ZMDC_IMPORT_SRV • Upload &amp; validation of external master data batches (XLSX, CSV)" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2383 • Manage Source Data" description="ZMDC_MANAGE_SOURCE_DATA_SRV • Data cleansing, duplicate checks &amp; pre-consolidation" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2465 • Change Requests for Business Partner" description="ZMDG_CR_BUPA_ALP_SRV • Analytical list page for Business Partner workflow approvals" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2466 • Change Requests for Product" description="ZMDG_CR_PRODUCT_ALP_SRV • Material creation and change approval analytics" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                        <StandardListItem title="F2230 • Export Master Data" description="ZMDC_EXPORT_SRV • Extraction &amp; distribution of golden records to downstream targets" info="{i18n>badgeStatusCatalog}" infoState="Information" type="Navigation" press=".onShowMasterDataInfo" />
-                                    </List>
                                 </Panel>
                             </VBox>
                         </IconTabFilter>
@@ -702,15 +661,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="FAC_GL_JOURNALENTRY_VER_SRV" description="General Ledger Journal Entry Verification Service" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onNavigateToJournalEntries" />
-                                        <StandardListItem title="ZFAR_BALANCES_V2_SRV" description="Customer Balances V2 Fiori Elements Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFCLM_BAM_ACCOUNTOV_SRV" description="Cash Management Bank Accounts Overview Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFAP_APPROVEBANKPAYMENTS_SRV" description="Approve Bank Payments Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -744,15 +694,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZFCO_ACTUAL_COST_RATE_SRV" description="Manage Actual Cost Rate Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZUI_FCO_ACTL_SETTLEMENT_O2" description="Actual Settlement Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFCO_MANAGE_ALLOCATION_SRV" description="Manage Universal Allocations Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFCO_PA_REALIGNMENT_SRV" description="CO-PA Profitability Analysis Realignment Result" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
                         <IconTabSeparator />
@@ -793,15 +734,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="C_PURCHASEORDER_FS_SRV" description="Purchase Order Factsheet &amp; Management Service" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onNavigateToPurchaseOrders" />
-                                        <StandardListItem title="MM_PUR_PO_MAINT_V2_SRV" description="Purchase Order Maintenance V2 (Draft / Create / Update)" info="{i18n>badgeStatusLive}" infoState="Success" type="Navigation" press=".onNavigateToCreatePO" />
-                                        <StandardListItem title="ZC_PURREQUISITION_FS_SRV" description="Purchase Requisitions Factsheet Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZC_CONTRACT_FS_SRV" description="Purchase Contract Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -835,15 +767,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZSD_F1814_SO_FS_SRV" description="Sales Orders FactSheet - S4H SD FIORI" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZSD_CUSTOMER360_OVP" description="SD Customer 360: Overview Page Cards" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZSD_F1871_QUOT_FS_SRV" description="Quotation FactSheet - S4H SD FIORI" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZSD_F1815_CRT_FS_SRV" description="Customer Return FactSheet" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
                         <IconTabSeparator />
@@ -873,15 +796,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZPP_CFS_CAPEVAL_SRV" description="Production Planning: Capacity Evaluation App" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZPPDS_CAPA_UTIL_OBJ_SRV" description="Capacity Utilization Object Page" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="MPE_MANAGE_PRODUCTION_HOLD_SRV" description="Manage Production Hold Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="MD_C_PRODUCT_MAINTAIN_SRV" description="Product Master Maintenance Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -910,14 +824,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZUI_INSPLOT_RSLTRECG" description="Service Binding for Inspection Lot Result Recording" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZQM_FMEA_MNG_SRV" description="Manage Failure Mode and Effects Analysis (FMEA)" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="API_MAINTNOTIFICATION" description="Quality &amp; Maintenance Notifications API" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -946,15 +852,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZEAM_OBJPG_MAINTENANCEORDER_SRV" description="F2175: Find Maintenance Order Object Page" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZEAM_ORDER_ACTUALCOST_MONITOR" description="F3567: Analyze Maintenance Order Actual Cost" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZEAM_MAINT_PLANNER_OVERVIEW_SRV" description="F5105: EAM Maintenance Planning Overview" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFAA_ASSET_MANAGE_SRV" description="Fixed Assets &amp; Company Vehicle Management" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -983,14 +880,6 @@
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>
-
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZFAC_PROJECT_WIP_DETAIL_LIST_SRV" description="Work In Progress Detail List for Capital Projects" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFINS_EBRR_MONITOR_PRO_SRV" description="Monitoring Application for Event-Based RR Projects" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFINS_TRR_PECRUN_PROJECT_SRV_01" description="Revenue Recognition Service for Customer Projects" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -1020,14 +909,6 @@
                                     </GenericTile>
                                 </HBox>
 
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZUI_WAREHOUSEDOCUMENT" description="Warehouse Document Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZC_EWM_OUTBDELIVORDADJQ_2_CDS" description="Outbound Delivery Orders for Warehouse KPIs Query" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZPICKCART_SRV" description="EWM Pick Cart Mobile Operations Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="MM_IM_PHYS_INV_DOC_SRV" description="Physical Inventory Document Management" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -1057,13 +938,6 @@
                                     </GenericTile>
                                 </HBox>
 
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZSAPTMVSSEXPLANATION" description="Transportation Management: Vehicle Scheduling Explanation" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZC_SITN2DEMOFLIGHTVH_CDS" description="Carriers and Flight Logistics Query" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZLE_SHP_RETURNS_DELIVERY_FS_SRV" description="Returns Delivery &amp; Shipping FactSheet" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
                         <IconTabSeparator />
@@ -1108,14 +982,6 @@
                                     </HBox>
                                 </Panel>
 
-                                <Panel headerText="Customer &amp; Field Service S/4HANA Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="CarLoanService" description="Vehicle Loan Calculation &amp; Origination Service" info="{i18n>badgeStatusCAP}" infoState="Success" type="Detail" press=".onSimulateCarLoan" />
-                                        <StandardListItem title="ZUI_MAINTWORKREQUESTOVW_V2" description="Maintenance &amp; Work Request Super App Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZFINS_TRR_PECRUN_SRVDOC_SRV" description="Revenue Recognition for Service Documents" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZUI_MAINTENANCEJOB_MANAGE" description="Maintenance Job Management Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -1150,14 +1016,6 @@
                                     </GenericTile>
                                 </HBox>
 
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="HRSFEC_INFOTYPE_SRV" description="Infotype Data Service (Supports IT 0045 Company Loans)" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZUI_HCMORGCHART" description="HCM Organizational Chart Service Binding" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZUI_HCMACTUALACTIVITIES" description="HCM Actual Activities &amp; Time Recording" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZUI_HCMMYREPORTING" description="HCM My Reporting Team Analytics Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
                         <IconTabSeparator />
@@ -1193,14 +1051,6 @@
                                     </GenericTile>
                                 </HBox>
 
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZC_ACTUALCASHFLOWANALYTICS_CDS" description="Actual Cash Flow in 90 Days Analytics Query" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZC_ARDAYSSALESOUTSTDGOVW_CDS" description="Card Days Sales Outstanding (DSO) Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZC_ARDEBTORSOVW_CDS" description="Card Top 10 Debtors Overview Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZC_SUPLREVALSCORECARDDISPLAY_SRV" description="Display Supplier Evaluation Scorecards" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
 
@@ -1235,15 +1085,6 @@
                                     </GenericTile>
                                 </HBox>
 
-                                <Panel headerText="Verified S/4HANA OData Services" class="sapUiSmallMarginBottom" expandable="true" expanded="true">
-                                    <List showSeparators="Inner">
-                                        <StandardListItem title="ZAPJ_JOB_MANAGEMENT_SRV" description="Application Job Management &amp; Scheduling Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZAPL_LOG_MANAGEMENT_SRV" description="Application Log Management Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZAPS_CHANGE_DOCUMENTS_SRV" description="Audit Trail &amp; Change Documents Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZSWF_FLEX_DEF_SRV" description="Flexible Workflow Definition Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                        <StandardListItem title="ZCA_FM_FEATURE_TOGGLE_STATUS_SRV" description="Feature Toggle and Configuration Service" info="{i18n>badgeStatusCatalog}" infoState="Information" />
-                                    </List>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
                     </items>

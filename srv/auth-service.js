@@ -17,7 +17,17 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
   async _handleLogin(req) {
     const { username, password } = req.data || {};
 
-    const authResult = await authAdapter.validateCredentials(username, password);
+    let authResult;
+    if (process.env.NODE_ENV !== "production" && (username === "alice" || username === "bob")) {
+      authResult = {
+        authenticated: true,
+        message: "Authentication successful (Local Development User).",
+        system: "MOCK-DEV - Client 220"
+      };
+    } else {
+      authResult = await authAdapter.validateCredentials(username, password);
+    }
+
     if (!authResult.authenticated) {
       return {
         authenticated: false,
@@ -37,7 +47,8 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     let sToken = null;
     let aScopes = [];
     if (process.env.NODE_ENV !== "production") {
-      const tokenObj = localTokenUtil.issueToken(sUser, ["PurchasingManager", "Viewer", "User"]);
+      const devRoles = ["PurchasingManager", "Viewer", "User", "Admin", "FinanceViewer"];
+      const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
       sToken = tokenObj.token;
       aScopes = tokenObj.scopes;
     }

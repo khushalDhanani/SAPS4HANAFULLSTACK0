@@ -9,7 +9,7 @@
     <uxap:ObjectPageLayout
         id="poObjectPage"
         enableLazyLoading="false"
-        showTitleInHeaderContent="true"
+        showTitleInHeaderContent="false"
         showEditHeaderButton="false"
         headerContentPinnable="true"
         useIconTabBar="false">
@@ -26,19 +26,18 @@
 
                 <!-- 2. Unified Heading (Back Navigation + Title + Canonical ObjectStatus) -->
                 <uxap:heading>
-                    <HBox alignItems="Center" wrap="Wrap">
+                    <HBox alignItems="Center" wrap="NoWrap">
                         <Button
                             id="btnDetailBack"
                             text="{i18n>btnBack}"
                             icon="sap-icon://nav-back"
                             tooltip="{i18n>btnBack}"
                             press=".onNavBack"
-                            type="Emphasized"
+                            type="Transparent"
                             class="sapUiTinyMarginEnd" />
                         <Title
                             id="headerPoTitle"
                             text="{= ${PurchaseOrder} ? (${i18n>poDetailTitle} + ' ' + ${PurchaseOrder}) : ${i18n>poDetailTitle} }"
-                            wrapping="true"
                             class="sapUiTinyMarginEnd" />
                         <ObjectStatus
                             id="headerStatus"
@@ -111,7 +110,7 @@
 
         <!-- KPI Header Content (Direct Facet Children per Fiori Guidelines) -->
         <uxap:headerContent>
-            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
                 <Label text="{i18n>labelPoNetAmount}" design="Bold" />
                 <ObjectNumber
                     id="headerNetAmount"
@@ -121,22 +120,22 @@
                     emphasized="true"
                     class="sapMObjectNumberLarge" />
             </FlexBox>
-            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
                 <Label text="{i18n>colSupplier}" design="Bold" />
                 <ObjectIdentifier
                     id="headerSupplier"
                     title="{SupplierName}"
                     text="{Supplier}" />
             </FlexBox>
-            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
                 <Label text="{i18n>colCompany}" design="Bold" />
                 <Text id="headerCompany" text="{= ${CompanyCode} ? (${CompanyCode} + (${CompanyCodeName} ? ' (' + ${CompanyCodeName} + ')' : '')) : '-' }" />
             </FlexBox>
-            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
                 <Label text="{i18n>colPurchasingOrg}" design="Bold" />
                 <Text id="headerOrg" text="{= ${PurchasingOrganization} ? (${PurchasingOrganization} + (${PurchasingGroup} ? ' / ' + ${PurchasingGroup} : '')) : '-' }" />
             </FlexBox>
-            <FlexBox direction="Column" displayInline="true" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
                 <Label text="{i18n>colCreatedBy}" design="Bold" />
                 <ObjectIdentifier
                     id="headerCreatedBy"
@@ -157,7 +156,20 @@
                                 id="formGeneralInfo"
                                 editable="false">
                                 <f:layout>
-                                    <f:ColumnLayout columnsM="2" columnsL="3" columnsXL="3" />
+                                    <f:ResponsiveGridLayout
+                                        labelSpanXL="4"
+                                        labelSpanL="4"
+                                        labelSpanM="4"
+                                        labelSpanS="12"
+                                        adjustLabelSpan="false"
+                                        emptySpanXL="0"
+                                        emptySpanL="0"
+                                        emptySpanM="0"
+                                        emptySpanS="0"
+                                        columnsXL="3"
+                                        columnsL="3"
+                                        columnsM="1"
+                                        singleContainerFullSize="false" />
                                 </f:layout>
                                 <f:formContainers>
                                     <f:FormContainer id="fcDocOrg" title="{i18n>subsecDocDetails}">
@@ -320,9 +332,11 @@
                                 }"
                                 growing="true"
                                 growingThreshold="20"
+                                growingScrollToLoad="true"
                                 updateFinished=".onItemsTableUpdateFinished"
                                 noDataText="{i18n>noItemsFound}"
-                                class="sapUiResponsiveContentPadding">
+                                sticky="HeaderToolbar,ColumnHeaders"
+                                ariaLabelledBy="itemsTableTitle">
                                 <headerToolbar>
                                     <OverflowToolbar id="itemsToolbar">
                                         <Title
@@ -334,35 +348,66 @@
                                             id="itemSearchField"
                                             width="16rem"
                                             liveChange=".onSearchItems"
-                                            placeholder="Search items..." />
+                                            placeholder="{i18n>searchItemsPlaceholder}">
+                                            <layoutData>
+                                                <OverflowToolbarLayoutData
+                                                    priority="NeverOverflow"
+                                                    shrinkable="true"
+                                                    minWidth="10rem"
+                                                    maxWidth="18rem" />
+                                            </layoutData>
+                                        </SearchField>
+                                        <Button
+                                            id="btnRefreshItems"
+                                            icon="sap-icon://refresh"
+                                            tooltip="{i18n>btnRefresh}"
+                                            type="Transparent"
+                                            press=".onRefresh" />
                                     </OverflowToolbar>
                                 </headerToolbar>
                                 <columns>
-                                    <Column id="colItemNo" width="4.5rem" hAlign="Center">
+                                    <!-- 1. Item Number -->
+                                    <Column id="colItemNo" width="3.5rem" hAlign="Begin" importance="High">
                                         <Text text="{i18n>colItem}" />
                                     </Column>
-                                    <Column id="colItemMaterial" width="16rem">
+
+                                    <!-- 2. Material & Description (Responsive auto-width) -->
+                                    <Column id="colItemMaterial" width="auto" importance="High">
                                         <Text text="{i18n>colMaterial}" />
                                     </Column>
-                                    <Column id="colItemPlant" width="12rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
+
+                                    <!-- 3. Plant & Storage Location -->
+                                    <Column id="colItemPlant" width="10.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" importance="Low">
                                         <Text text="{i18n>colPlantLoc}" />
                                     </Column>
-                                    <Column id="colItemMatGroup" width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
+
+                                    <!-- 4. Material Group -->
+                                    <Column id="colItemMatGroup" width="6rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" importance="Low">
                                         <Text text="{i18n>colMatGroup}" />
                                     </Column>
-                                    <Column id="colItemQuantity" width="9rem" hAlign="Right">
+
+                                    <!-- 5. Order Quantity -->
+                                    <Column id="colItemQuantity" width="7.5rem" hAlign="End" importance="High">
                                         <Text text="{i18n>colQuantity}" />
                                     </Column>
-                                    <Column id="colItemPrice" width="9rem" hAlign="Right">
+
+                                    <!-- 6. Net Price -->
+                                    <Column id="colItemPrice" width="7.5rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium">
                                         <Text text="{i18n>colNetPrice}" />
                                     </Column>
-                                    <Column id="colItemNetAmount" width="10rem" hAlign="Right">
+
+                                    <!-- 7. Total Net Amount -->
+                                    <Column id="colItemNetAmount" width="8rem" hAlign="End" importance="High">
                                         <Text text="{i18n>colNetAmount}" />
                                     </Column>
-                                    <Column id="colItemDeliveryDate" width="9rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
+
+                                    <!-- 8. Delivery Date -->
+                                    <Column id="colItemDeliveryDate" width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium">
                                         <Text text="{i18n>colDeliveryDate}" />
                                     </Column>
-                                    <Column id="colItemStatus" width="9rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
+
+                                    <!-- 9. Item Status -->
+                                    <Column id="colItemStatus" width="7.5rem" hAlign="Center" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" importance="Low">
                                         <Text text="{i18n>colItemStatus}" />
                                     </Column>
                                 </columns>
@@ -371,10 +416,10 @@
                                         <cells>
                                             <Text text="{PurchaseOrderItem}" />
                                             <ObjectIdentifier
-                                                title="{PurchaseOrderItemText}"
-                                                text="{Material}" />
-                                            <Text text="{Plant} {= ${PlantName} ? '(' + ${PlantName} + ')' : '' } {= ${StorageLocation} ? ' / ' + ${StorageLocation} : '' }" />
-                                            <Text text="{MaterialGroup}" />
+                                                title="{= ${PurchaseOrderItemText} || ${Material} || '-' }"
+                                                text="{= ${PurchaseOrderItemText} ? ${Material} : '' }" />
+                                            <Text text="{= ${Plant} ? (${Plant} + (${PlantName} ? ' (' + ${PlantName} + ')' : '') + (${StorageLocation} ? ' / ' + ${StorageLocation} : '')) : '-' }" />
+                                            <Text text="{= ${MaterialGroup} || '-' }" />
                                             <ObjectNumber
                                                 number="{OrderQuantity}"
                                                 unit="{PurchaseOrderQuantityUnit}" />

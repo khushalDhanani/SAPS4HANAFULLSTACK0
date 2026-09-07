@@ -38,6 +38,23 @@ sap.ui.define([
             var oTable = this.byId("purchaseOrdersTable");
             oTable.attachEventOnce("updateFinished", this._updateKpiMetrics, this);
             oTable.attachUpdateFinished(this._updateKpiMetrics, this);
+
+            var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
+            var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
+            if (oRouter) {
+                var oRoute = oRouter.getRoute("purchaseOrders");
+                if (oRoute) {
+                    oRoute.attachPatternMatched(this._onRouteMatched, this);
+                }
+            }
+        },
+
+        _onRouteMatched: function () {
+            var oTable = this.byId("purchaseOrdersTable");
+            var oBinding = oTable ? oTable.getBinding("items") : null;
+            if (oBinding) {
+                oBinding.refresh();
+            }
         },
 
         onAfterRendering: function () {

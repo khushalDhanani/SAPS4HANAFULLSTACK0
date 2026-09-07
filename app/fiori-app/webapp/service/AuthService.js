@@ -23,6 +23,37 @@ sap.ui.define([
             this._oComponent = oComponent;
             this._oComponent.setModel(this._oModel, "auth");
             this._restoreSession();
+            this.syncModelHeaders(oComponent);
+        },
+
+        /**
+         * Synchronizes authentication Authorization header (Bearer token)
+         * to UI5 OData V4 framework models (default model and fiService).
+         *
+         * @param {sap.ui.core.UIComponent} [oComponent]
+         */
+        syncModelHeaders: function (oComponent) {
+            var oComp = oComponent || this._oComponent;
+            if (!oComp) {
+                return;
+            }
+            var sToken = this.getToken();
+            var mHeaders = {};
+            if (sToken) {
+                mHeaders["Authorization"] = "Bearer " + sToken;
+            } else {
+                mHeaders["Authorization"] = undefined;
+            }
+
+            var oDefaultModel = oComp.getModel();
+            if (oDefaultModel && typeof oDefaultModel.changeHttpHeaders === "function") {
+                oDefaultModel.changeHttpHeaders(mHeaders);
+            }
+
+            var oFiModel = oComp.getModel("fiService");
+            if (oFiModel && typeof oFiModel.changeHttpHeaders === "function") {
+                oFiModel.changeHttpHeaders(mHeaders);
+            }
         },
 
         getModel: function () {
@@ -112,6 +143,7 @@ sap.ui.define([
                         that._oModel.setProperty("/isAuthenticated", true);
                         that._oModel.setProperty("/user", oUserSession);
                         that._oModel.setProperty("/rememberMe", bRememberMe);
+                        that.syncModelHeaders();
 
                         resolve(oUserSession);
                     })
@@ -135,6 +167,7 @@ sap.ui.define([
             this._oModel.setProperty("/isAuthenticated", false);
             this._oModel.setProperty("/user", null);
             this._oModel.setProperty("/savedUsername", sSaved);
+            this.syncModelHeaders();
         },
 
         isAuthenticated: function () {

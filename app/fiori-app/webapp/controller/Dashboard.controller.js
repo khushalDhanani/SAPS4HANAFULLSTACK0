@@ -30,6 +30,19 @@ sap.ui.define([
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
+            var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
+            var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
+            if (oRouter) {
+                var oRoute = oRouter.getRoute("dashboard");
+                if (oRoute) {
+                    oRoute.attachPatternMatched(this._onDashboardMatched, this);
+                }
+            }
+
+            this._loadMetrics();
+        },
+
+        _onDashboardMatched: function () {
             this._loadMetrics();
         },
 
@@ -42,7 +55,10 @@ sap.ui.define([
                         return;
                     }
                     var aOrders = oData.value || [];
-                    var iTotal = typeof oData["@odata.count"] === "number" ? oData["@odata.count"] : aOrders.length;
+                    var iTotal = oData["@odata.count"] != null ? parseInt(oData["@odata.count"], 10) : aOrders.length;
+                    if (isNaN(iTotal)) {
+                        iTotal = aOrders.length;
+                    }
                     var oSuppliers = {};
                     var iCompleted = 0;
 
@@ -72,8 +88,11 @@ sap.ui.define([
                     return ODataClient.get("/odata/v4/journal-entry/JournalEntryItems?$top=1&$count=true");
                 })
                 .then(function (oData) {
-                    if (oData && typeof oData["@odata.count"] === "number") {
-                        oViewModel.setProperty("/fiDocCount", oData["@odata.count"]);
+                    if (oData && oData["@odata.count"] != null) {
+                        var iFiCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iFiCount) && oViewModel) {
+                            oViewModel.setProperty("/fiDocCount", iFiCount);
+                        }
                     }
                 })
                 .catch(function () {
