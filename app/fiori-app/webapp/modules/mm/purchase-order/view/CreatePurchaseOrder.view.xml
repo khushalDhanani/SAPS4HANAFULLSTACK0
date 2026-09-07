@@ -148,7 +148,7 @@
                                     change=".onSupplierChange" liveChange=".onSupplierLiveChange" suggestionItemSelected=".onSupplierSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/SupplierVH', templateShareable: false}">
                                     <suggestionItems>
-                                        <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{SupplierName}" />
+                                        <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{= ${SupplierName} + (${CompanyCode} ? ' (' + ${CompanyCode} + ')' : '') }" />
                                     </suggestionItems>
                                 </Input>
 
@@ -211,15 +211,16 @@
                         mode="Delete"
                         delete=".onDeleteItem">
                         <columns>
-                            <Column><Text text="Item" /></Column>
-                            <Column><Text text="Plant" /></Column>
-                            <Column><Text text="Storage Location" /></Column>
-                            <Column><Text text="Material Description" /></Column>
-                            <Column><Text text="Quantity" /></Column>
-                            <Column><Text text="Unit" /></Column>
-                            <Column><Text text="Net Price" /></Column>
-                            <Column><Text text="Tax Code" /></Column>
-                            <Column><Text text="Net Amount" /></Column>
+                            <Column width="4rem"><Text text="Item" /></Column>
+                            <Column width="9rem"><Text text="Plant" /></Column>
+                            <Column width="9rem"><Text text="Storage Location" /></Column>
+                            <Column width="11rem"><Text text="Material" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
+                            <Column width="7rem" hAlign="End"><Text text="Quantity" /></Column>
+                            <Column width="6rem"><Text text="Unit" /></Column>
+                            <Column width="7.5rem" hAlign="End"><Text text="Net Price" /></Column>
+                            <Column width="6.5rem"><Text text="Tax Code" /></Column>
+                            <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -231,7 +232,7 @@
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PlantVH', templateShareable: false}">
                                         <suggestionItems>
-                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{PlantName}" />
+                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newPO>StorageLocation}" placeholder="e.g. 101A" required="true"
@@ -240,7 +241,7 @@
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/StorageLocationVH', templateShareable: false}">
                                         <suggestionItems>
-                                            <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{StorageLocationName}" />
+                                            <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newPO>Material}" placeholder="e.g. TG11" required="true"
@@ -252,7 +253,8 @@
                                             <core:ListItem key="{Material}" text="{Material}" additionalText="{= (${MaterialName} || ${Material_Text} || '') + (${MaterialBaseUnit} ? ' (' + ${MaterialBaseUnit} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>OrderQuantity}" type="Number" required="true"
+                                    <Input value="{newPO>PurchaseOrderItemText}" placeholder="Material description" change=".onItemFieldChange" />
+                                    <Input value="{newPO>OrderQuantity}" type="Number" required="true" textAlign="End"
                                         valueState="{newPO>errors/OrderQuantity/state}"
                                         valueStateText="{newPO>errors/OrderQuantity/text}"
                                         change=".onCalculateNetAmount" liveChange=".onCalculateNetAmount" />
@@ -265,7 +267,7 @@
                                             <core:ListItem key="{UnitOfMeasure}" text="{UnitOfMeasure}" additionalText="{UnitOfMeasure_Text}" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>NetPriceAmount}" type="Number" placeholder="0.00"
+                                    <Input value="{newPO>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End"
                                         valueState="{newPO>errors/NetPriceAmount/state}"
                                         valueStateText="{newPO>errors/NetPriceAmount/text}"
                                         change=".onCalculateNetAmount" liveChange=".onCalculateNetAmount" />
@@ -278,7 +280,7 @@
                                             <core:ListItem key="{TaxCode}" text="{TaxCode}" additionalText="{TaxCode_Text}" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>NetAmount}" type="Number" placeholder="0.00" editable="false" />
+                                    <Input value="{newPO>NetAmount}" type="Number" placeholder="0.00" textAlign="End" editable="false" />
                                 </cells>
                             </ColumnListItem>
                         </items>

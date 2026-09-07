@@ -389,13 +389,7 @@ sap.ui.define([
             }
 
             BusyIndicator.show(0);
-            var oHeader = oModel.getProperty("/header");
-            var aItems = oModel.getProperty("/items");
-
-            var oPayload = {
-                header: oHeader,
-                items: aItems
-            };
+            var oPayload = SalesInquiryModel.buildPayload(oModel);
 
             SalesInquiryService.createSalesInquiry(oPayload).then(function (sInquiryId) {
                 BusyIndicator.hide();

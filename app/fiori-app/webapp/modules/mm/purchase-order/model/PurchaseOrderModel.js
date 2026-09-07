@@ -59,10 +59,11 @@ sap.ui.define([
             Plant: { cellIndex: 1, label: "Plant", example: "1010" },
             StorageLocation: { cellIndex: 2, label: "Storage Location", example: "101A" },
             Material: { cellIndex: 3, label: "Material", example: "TG11" },
-            OrderQuantity: { cellIndex: 4, label: "Quantity", example: "10" },
-            UnitOfMeasure: { cellIndex: 5, label: "Unit of Measure", example: "PC" },
-            NetPriceAmount: { cellIndex: 6, label: "Net Price", example: "100.00" },
-            TaxCode: { cellIndex: 7, label: "Tax Code", example: "V1" }
+            PurchaseOrderItemText: { cellIndex: 4, label: "Description", example: "Polypropylene Resin" },
+            OrderQuantity: { cellIndex: 5, label: "Quantity", example: "10" },
+            UnitOfMeasure: { cellIndex: 6, label: "Unit of Measure", example: "PC" },
+            NetPriceAmount: { cellIndex: 7, label: "Net Price", example: "100.00" },
+            TaxCode: { cellIndex: 8, label: "Tax Code", example: "V1" }
         },
 
         /**
@@ -132,6 +133,7 @@ sap.ui.define([
                         PurchaseOrderItemCategory: "0",
                         AccountAssignmentCategory: "",
                         Material: "",
+                        PurchaseOrderItemText: "",
                         MaterialGroup: "",
                         Plant: "",
                         StorageLocation: "",
@@ -172,6 +174,7 @@ sap.ui.define([
                 PurchaseOrderItemCategory: "0",
                 AccountAssignmentCategory: "",
                 Material: "",
+                PurchaseOrderItemText: "",
                 MaterialGroup: "",
                 Plant: "",
                 StorageLocation: "",
@@ -244,7 +247,7 @@ sap.ui.define([
          * @param {Object} oMaterialData Material master data object containing Material, MaterialBaseUnit, etc.
          * @returns {Object} Report of applied fields
          */
-        applyMaterialDefaults: function (oModel, vItem, oMaterialData) {
+        applyMaterialDefaults: function (oModel, vItem, oMaterialData, bForce) {
             if (!oModel || vItem === undefined || vItem === null || !oMaterialData) return {};
             var sPath = typeof vItem === "number" ? "/items/" + vItem : (String(vItem).indexOf("/") === 0 ? vItem : "/items/" + vItem);
             var oReport = {};
@@ -256,7 +259,8 @@ sap.ui.define([
             }
 
             var sDesc = oMaterialData.MaterialName || oMaterialData.Material_Text;
-            if (sDesc && !oModel.getProperty(sPath + "/PurchaseOrderItemText")) {
+            var sCurrentDesc = oModel.getProperty(sPath + "/PurchaseOrderItemText");
+            if (sDesc && (bForce || !sCurrentDesc)) {
                 oModel.setProperty(sPath + "/PurchaseOrderItemText", sDesc);
                 oReport.PurchaseOrderItemText = sDesc;
             }
@@ -266,6 +270,17 @@ sap.ui.define([
                 oModel.setProperty(sPath + "/UnitOfMeasure", sUnit);
                 oModel.setProperty(sPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
                 oReport.UnitOfMeasure = sUnit;
+            }
+
+            if (oMaterialData.MaterialGroup) {
+                oModel.setProperty(sPath + "/MaterialGroup", oMaterialData.MaterialGroup);
+                oReport.MaterialGroup = oMaterialData.MaterialGroup;
+            }
+
+            if (oMaterialData.Plant && !oModel.getProperty(sPath + "/Plant")) {
+                oModel.setProperty(sPath + "/Plant", oMaterialData.Plant);
+                oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+                oReport.Plant = oMaterialData.Plant;
             }
 
             return oReport;

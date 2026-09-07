@@ -1,6 +1,155 @@
 
 # Changes Log
 
+## 2026-09-07 15:55 IST
+- **Agent**: Antigravity
+- **Change**: Resolved Sales Inquiry Creation HTTP 400 (`CustomerCity` property error) and Completed Full VA11 Flow Verification via Chrome DevTools MCP:
+  1. Root Cause Analysis:
+     - The Fiori UI `newInquiry` JSONModel holds rich display properties derived when a customer is chosen, including `CustomerCity`, `CustomerCountry`, `StatusText`, `CreatedByName`, etc., so that the UI can render friendly descriptions in `<Text>` elements.
+     - When `onSave` was invoked in `CreateSalesInquiry.controller.js`, `oPayload` was extracted directly from `oModel.getData()`, sending these UI-only attributes in the POST body to `/odata/v4/sales-inquiry/InquiryHeader`.
+     - Because CAP OData V4 enforces schema validation against the CDS entity definition (`InquiryHeader`), unexpected properties like `CustomerCity` trigger an immediate HTTP 400 Bad Request: "Property 'CustomerCity' does not exist in type 'SalesInquiryService.InquiryHeader'".
+  2. Frontend Architecture & Payload Sanitization (`app/fiori-app/`):
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js`: Implemented `buildPayload(oData)` to construct clean, contract-compliant payloads strictly matching `InquiryHeader` and `InquiryItem` CDS entities (`InquiryType`, `SalesOrganization`, `DistributionChannel`, `OrganizationDivision`, `SoldToParty`, `ShipToParty`, `CustomerPurchaseOrderSuplmnt`, `CustomerPurchaseOrderDate`, `BindingPeriodValidityStartDate`, `BindingPeriodValidityEndDate`, `TotalNetAmount`, `TransactionCurrency`, and items with `Material`, `MaterialByCustomer`, `RequestedQuantity`, `RequestedQuantityUnit`, `NetPriceAmount`).
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js`: Updated `onSave` to utilize `SalesInquiryModel.buildPayload(oData)` when preparing the POST body, ensuring UI display properties are pruned while preserving all user-selected data.
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js`: Added defense-in-depth sanitization utility `_sanitizePayload(oPayload)` in the client service layer before dispatching the HTTP request.
+  3. Backend Integration Adapter Fix (`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`):
+     - Fixed `ShipToParty` assignment in S/4HANA OData mapping: when `ShipToParty` is not explicitly distinct, safely default to `SoldToParty` to avoid empty partner payloads.
+  4. Automated Unit & Contract Testing:
+     - `test/unit/sales-inquiry/salesInquiryCreationPayload.test.js` [NEW]: Added automated contract tests validating that `SalesInquiryService._sanitizePayload` strips `CustomerCity` and non-contract fields and passes server-side business validation cleanly.
+     - `test/unit/sales-inquiry/salesInquiryModel.test.js`: Added unit tests verifying `buildPayload` produces clean contract objects.
+  5. Live Chrome DevTools MCP End-to-End UI Verification (`http://localhost:4004/saps4hana-fiori-app/index.html#/sd/sales-inquiries/create`):
+     - Navigated to Create Sales Inquiry (VA11) page.
+     - Selected Sold-to Party `10135` (Divi's Laboratories Limited) using the Value Help dialog and SearchField (`10135`).
+     - Verified customer derivation: Sold-to Party `10135`, Customer Details `"Divi's Laboratories Limited (Hyderabad, IN)"`, Ship-to Party `10135`, Currency `INR`.
+     - Filled Customer Reference `PO-E2E-TEST`.
+     - Selected Material `4000000091` (BPAO88063) via Material Value Help search.
+     - Set Quantity to `2 KG`, Net Price to `600 INR` -> Total Net Amount dynamically updated to `1200.00 INR`.
+     - Clicked "Create Sales Inquiry" button.
+     - Successfully received 200 OK and SAP Fiori Success Dialog: "Sales Inquiry Created - Sales Inquiry 1000091 has been successfully created."
+     - Clicked "Display Inquiry" -> navigated smoothly to `/sd/sales-inquiries/1000091`.
+     - Verified Sales Inquiry Detail Page: Header details, Organizational structure, Commercial partners (`10135 - Divi's Laboratories Limited`), and Line Items (`000010`, `4000000091`, `BPAO88063`, `2.000 KG`, `600.00`, `1200.00 INR`) displayed accurately with zero console errors.
+- **Files Modified / Created**:
+  - `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js`
+  - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js`
+  - `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js`
+  - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`
+  - `test/unit/sales-inquiry/salesInquiryCreationPayload.test.js` [NEW]
+  - `test/unit/sales-inquiry/salesInquiryModel.test.js`
+  - `WORKSTATUS.md`
+- **Reason**: User request: "Fix the Sales Inquiry creation error. CustomerCity is being sent in the header payload, but the backend does not support this property. Trace the frontend payload, service/API contract, and backend schema, then remove or correctly map the invalid field. Do not hardcode or bypass validation. Verify the complete VA11 creation flow works successfully after the fix." and "Continue and Use Dev Tool Mcp."
+- **Validation**:
+  - `npx jest test/unit/sales-inquiry/salesInquiryCreationPayload.test.js`: 2 passed, 0 failed (Code 0).
+  - `npx jest test/unit/sales-inquiry/salesInquiryModel.test.js`: 18 passed, 0 failed (Code 0).
+  - `npm test`: 36 passed, 36 total test suites, 308 passed, 0 failed (Code 0).
+  - `git diff --check`: Clean, 0 whitespace issues (Code 0).
+  - DevTools MCP Live UI E2E verification: Completed complete VA11 creation flow, verified Sales Inquiry `1000091` creation modal and detail view navigation with zero console errors.
+- **Current Status**: Complete. Sales Inquiry VA11 creation error resolved at source; end-to-end flow verified via Chrome DevTools MCP; all 308 tests passing.
+- **Next Steps**: None. Ready for user review and commit.
+
+## 2026-09-07 15:28 IST
+- **Agent**: Antigravity
+- **Change**: Root Cause Resolution for Duplicate Supplier Value-Help Results in PO Creation and Project-Wide Value-Help Audit:
+  1. Root Cause Analysis:
+     - SupplierVH: S/4HANA `C_MM_SupplierValueHelp` has composite keys `(Supplier, CompanyCode)` representing vendor-to-company code assignments (`LFB1`). When a supplier account is extended to multiple company codes (e.g., 1000 and 2000), querying without `CompanyCode` returns duplicate rows for the same supplier ID. In PO Creation, the header defaulted to `CompanyCode: 1000`, but `CreatePurchaseOrder.controller.js` never passed `CompanyCode` to the OData query or suggestions.
+     - DocumentTypeVH: S/4HANA `I_PurchasingDocumentType` contains Requisitions (`B`), Orders (`F`), and Contracts (`K`). Types `FO` and `NB` appeared multiple times because one was Requisition and one was Order.
+     - PaymentTermsVH: S/4HANA `C_MM_PaymentTermValueHelp` splits records by payment baseline days (`PaymentTermsValidityMonthDay`).
+     - TaxCodeVH: S/4HANA `I_TaxCode` returns codes across multiple tax calculation procedures (`TAXIN`, `TAXUS`).
+     - CurrencyVH in SD: `sdValueHelpConfig` was missing `Currency` deduplication.
+     - PlantVH & StorageLocationVH: `C_MM_PlantValueHelp` key is `(Plant, PurchasingOrganization)` and `C_MM_StorLocValueHelp` key is `(StorageLocation, Plant)`. Missing contextual filters (`PurchasingOrganization` and row `Plant`) caused multi-context records.
+  2. Backend Value Help Service Enhancements (`srv/`):
+     - `srv/handlers/valueHelp.handler.js`: Extended generic value help handler with `entityDeduplicateBy: { EntityName: 'KeyField' }` support for per-entity deduplication (in addition to group-level `deduplicateBy`). Added category filtering for `DocumentTypeVH` to restrict results to `PurchasingDocumentCategory === 'F'` (Purchase Orders only).
+     - `srv/mm/purchase-order/handlers/valueHelp.config.js`: Configured `entityDeduplicateBy` for `DocumentTypeVH: 'PurchasingDocumentType'`, `CurrencyVH: 'Currency'`, `TaxCodeVH: 'TaxCode'` in `FS` group, and `PaymentTermsVH: 'PaymentTerms'` in `MAINT` group.
+     - `srv/sd/sales-inquiry/handlers/valueHelp.config.js`: Configured `entityDeduplicateBy` for `CurrencyVH: 'Currency'` in `WL` group.
+     - `srv/mm/purchase-order/service.cds`: Scoped `DocumentTypeVH` projection with `where PurchasingDocumentCategory = 'F'`.
+  3. Frontend Contextual Scoping & Presentation (`app/fiori-app/`):
+     - `app/fiori-app/webapp/service/ValueHelpService.js`: Configured info fields (`SupplierVH: "CompanyCode"`, `PlantVH: "PurchasingOrganization"`, `StorageLocationVH: "Plant"`). Formatted template info displays (`CoCode 1000`, `PurchOrg AE01`, `Plant 1110`) preserving distinct master-data context.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`: Updated `inSupplier` suggestion list item `additionalText="{= ${SupplierName} + (${CompanyCode} ? ' (' + ${CompanyCode} + ')' : '') }"` and added plant/purchasing org context to Plant and Storage Location suggestions.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`: Implemented `_buildContextFilters(oSource)` to extract `CompanyCode` for `Supplier`, `PurchasingOrganization` for `Plant`, and row `Plant` for `StorageLocation` and `Material`. Applied contextual filters to `onValueHelpRequest` and `onSuggest`. Added default of header `CompanyCode` if selected from unconstrained supplier value help.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`: Added `_buildFilterBarContextFilters(oSource)` to pass `CompanyCode` filter to `fbSupplier` and `fbPurchasingOrg` when filter bar `CompanyCode` is set.
+  4. Test Fixtures & Unit Tests:
+     - `test/fixtures/purchase-order/valueHelps.json`: Updated `DocumentTypeVH` items with `PurchasingDocumentCategory: "F"` and `SupplierVH` items with `CompanyCode: "1000"`.
+     - `test/unit/purchase-order/valueHelpAudit.test.js` [NEW]: Added 5 unit tests validating backend entity deduplication, config registration, and ValueHelpService info column bindings.
+- **Files Modified / Created**:
+  - `srv/handlers/valueHelp.handler.js`
+  - `srv/mm/purchase-order/handlers/valueHelp.config.js`
+  - `srv/sd/sales-inquiry/handlers/valueHelp.config.js`
+  - `srv/mm/purchase-order/service.cds`
+  - `app/fiori-app/webapp/service/ValueHelpService.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+  - `test/fixtures/purchase-order/valueHelps.json`
+  - `test/unit/purchase-order/valueHelpAudit.test.js` [NEW]
+  - `WORKSTATUS.md`
+- **Reason**: User request: "Fix the duplicate Supplier value-help results shown in PO Creation. The same supplier/account is appearing multiple times. Find the root cause—OData/API query, joins/expansion, duplicate master-data records, binding, or frontend aggregation—and fix it at the correct source. Then audit all value helps across the project for the same duplicate-data issue and apply a consistent solution. Do not hide duplicates with CSS or arbitrary frontend filtering; preserve genuinely distinct master-data records. Validate Supplier and all other value helps after the fix."
+- **Validation**:
+  - `npx jest test/unit/purchase-order/valueHelpAudit.test.js`: 5 passed, 0 failed (Code 0).
+  - `npm test`: 35 passed, 35 total test suites, 303 passed, 0 failed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 493 ms (Code 0).
+  - `npx cds compile srv --to csn`: Succeeded with valid CSN AST (Code 0).
+  - `git diff --check`: Clean, 0 whitespace issues (Code 0).
+  - `audit_value_helps.js`: 0 duplicate keys across DocumentTypeVH, PaymentTermsVH, CurrencyVH, TaxCodeVH, and 0 duplicate keys for contextual queries (SupplierVH with CompanyCode 1000, PlantVH with PurchasingOrg AE01, StorageLocationVH with Plant 1110, MaterialVH with Plant 1110, DistributionChannelVH with SalesOrg 1000, DivisionVH with SalesOrg 1000 & DistChannel 10).
+  - Live Browser Verification on `http://localhost:4004/saps4hana-fiori-app/index.html#/mm/purchase-orders/create`:
+    - Supplier Value Help opened: 10 suppliers displayed (`1110`, `1120`, `1130`, `1140`, `1150`, `1160`, `1600`, `2100`, `2500`, `100002`), each with `CoCode 1000`. Zero duplicate accounts.
+    - Supplier `1110` selected -> Form populated `Supplier` ("1110"), auto-derived `Currency` ("INR"), and auto-derived `PaymentTerms` ("AT01") from supplier master data.
+- **Current Status**: Complete. Supplier value help duplication in PO Creation resolved at source, and project-wide value help audit completed with zero duplicates and genuine master-data context preserved.
+- **Next Steps**: None. Ready for user review and commit.
+
+## 2026-09-07 15:05 IST
+- **Agent**: Antigravity
+- **Change**: Comprehensive Fix for Purchase Order Material Selection Flow (`/mm/purchase-orders/create`):
+  1. Data Model & CDS Projections (`srv/mm/purchase-order/service.cds`):
+     - Extended `MaterialVH` projection on `maint.C_MM_MaterialValueHelp` with explicit master data elements: `Material`, `MaterialName as Material_Text : String(40)` (aliasing to match SAP OData field naming and UI expectations), `MaterialGroup`, `Plant`, `MaterialBaseUnit`, `PlantName`, `MaterialType`, `MaterialTypeName`.
+     - Extended `type POItem` with `PurchaseOrderItemText: String;` so the item description persists across CAP service boundary.
+  2. S/4HANA OData Mapper (`srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper.js`):
+     - Mapped `PurchaseOrderItemText` from CAP POItem to S/4HANA OData V2 `to_PurchaseOrderItemTP.PurchaseOrderItemText`.
+  3. Value Help Service (`app/fiori-app/webapp/service/ValueHelpService.js`):
+     - Updated `/MaterialVH` configuration with primary description `MaterialName` and alternative description `Material_Text`.
+     - Configured `SelectDialog` template to bind title `{Material}`, description `{= ${MaterialName} || ${Material_Text} || '' }`, and info `{= ${MaterialBaseUnit} ? (${MaterialBaseUnit} + (${Plant} ? ' / Plant ' + ${Plant} : '')) : (${Plant} ? 'Plant ' + ${Plant} : '') }`.
+     - Enhanced `confirm` handler with resilient property extraction (`oContext.getProperty("Material")`, etc.) when `getObject()` is not available.
+  4. Purchase Order Service (`app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`):
+     - Enhanced `getMaterialDetails(sMaterial, sPlant)` and `getMaterialUnit(sMaterial, sPlant)` to accept optional `sPlant`, querying plant-specific records first with automatic fallback to generic material query.
+  5. Purchase Order Model (`app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`):
+     - Updated `applyMaterialDefaults(oModel, vItem, oMaterialData, bForce)` to populate `Material`, overwrite `PurchaseOrderItemText` when `bForce` is true, populate `UnitOfMeasure` and clear error states, populate `MaterialGroup`, and default row `Plant` if empty.
+     - Updated `createInitialModel` and `addItem` to initialize `PurchaseOrderItemText: ""`.
+     - Updated `ITEM_FIELD_CONFIG` with `PurchaseOrderItemText` at index 4 and shifted subsequent indices.
+  6. Create Purchase Order View (`app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`):
+     - Split single mislabeled "Material Description" column into two separate columns: "Material" (11rem) and "Description" (responsive auto-width bound to `{newPO>PurchaseOrderItemText}`).
+     - Added `PurchaseOrderItemText` input cell.
+  7. Create Purchase Order Controller (`app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`):
+     - Updated `onItemMaterialChange` and `onItemMaterialSelect` to pass row `sPlant` to `getMaterialDetails`, invoke `applyMaterialDefaults(..., true)`, and derive all master data.
+     - Updated `onValueHelpRequest` and `onSuggest` to extract row `Plant` and pass as context filter.
+  8. Test Fixtures & Unit Tests (`test/fixtures/purchase-order/valueHelps.json`, `test/unit/purchase-order/materialSelection.test.js`):
+     - Added complete master data attributes to `MaterialVH` fixture.
+     - Added comprehensive unit test suite covering `applyMaterialDefaults`, `ValueHelpService` configuration and contextual filtering, `PurchaseOrderService.getMaterialDetails` plant queries & fallbacks, and `PurchaseOrderMapper` mapping to S/4HANA payload.
+- **Files Modified / Created**:
+  - `srv/mm/purchase-order/service.cds`
+  - `srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper.js`
+  - `app/fiori-app/webapp/service/ValueHelpService.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+  - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+  - `test/fixtures/purchase-order/valueHelps.json`
+  - `test/unit/purchase-order/materialSelection.test.js` [NEW]
+  - `WORKSTATUS.md`
+- **Reason**: User request: "Fix the PO Material selection issue. When creating a Purchase Order, selecting a Material currently returns incorrect data. Trace the complete flow—Material value help/search → master data → OData/API → field binding—and identify the root cause. Ensure the selected Material always maps to the correct SAP master-data record and related fields. Do not hardcode or mock data. Fix it consistently across PO creation and validate the complete selection flow."
+- **Validation**:
+  - `npx jest test/unit/purchase-order/materialSelection.test.js`: 1 passed, 10 tests passed (Code 0).
+  - `npm test`: 34 passed, 34 total test suites, 298 passed, 0 failed (Code 0).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected (Code 0).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 453 ms (Code 0).
+  - `npx cds compile srv --to csn`: Succeeded with valid CSN AST (Code 0).
+  - `git diff --check`: Clean, 0 whitespace issues (Code 0).
+  - Browser E2E Live Verification on `http://localhost:4004/saps4hana-fiori-app/index.html#/mm/purchase-orders/create`:
+    - Material Value Help button clicked -> SelectDialog opened displaying Material, Description (`MaterialName`), and Unit/Plant (`KG / Plant 1110`, etc.).
+    - Search field typed `1000000003` -> filtered list without OData 400 errors or console errors.
+    - Material `1000000003` selected -> `Material` ("1000000003"), `Description` ("test material"), `Unit` ("KG"), and `Plant` ("1110") populated into the row.
+    - Material changed to `1000000007` -> `Description` immediately updated to `"Meso-erythritol"` and `Unit` to `"KG"`.
+- **Current Status**: Complete. Purchase Order material selection, search, value help, and auto-derivation are fully functional and validated end-to-end.
+- **Next Steps**: None. Ready for user review and commit.
+
 ## 2026-09-07 14:08 IST
 - **Agent**: Antigravity
 - **Change**: Comprehensive end-to-end resolution for Sales Inquiry Detail view (`/sd/sales-inquiries/:SalesInquiry`):

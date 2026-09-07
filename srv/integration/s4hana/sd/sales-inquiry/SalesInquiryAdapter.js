@@ -365,6 +365,8 @@ class SalesInquiryAdapter {
       DistributionChannel: header.DistributionChannel || '10',
       OrganizationDivision: header.OrganizationDivision || '52',
       SoldToParty: header.SoldToParty || '',
+      ShipToParty: header.ShipToParty || header.SoldToParty || '',
+      ShipToPartyName: header.ShipToPartyName || sCustomerName,
       PurchaseOrderByCustomer: header.PurchaseOrderByCustomer || '',
       CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate || today,
       SalesInquiryDate: header.SalesInquiryDate || today,

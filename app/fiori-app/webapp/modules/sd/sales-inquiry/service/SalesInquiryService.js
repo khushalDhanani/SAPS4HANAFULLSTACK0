@@ -11,6 +11,70 @@ sap.ui.define([
      */
     return {
         /**
+         * Sanitizes payload against CAP InquiryHeader and InquiryItem schema.
+         * Strips UI-only and unmapped client-state properties such as CustomerCity.
+         *
+         * @private
+         * @param {Object} oPayload
+         * @returns {Object}
+         */
+        _sanitizePayload: function (oPayload) {
+            if (!oPayload || typeof oPayload !== "object") return oPayload;
+            var rawHeader = oPayload.header || {};
+            var rawItems = Array.isArray(oPayload.items) ? oPayload.items : [];
+
+            var ALLOWED_HEADER_FIELDS = [
+                "SalesInquiryType",
+                "SalesOrganization",
+                "DistributionChannel",
+                "OrganizationDivision",
+                "SoldToParty",
+                "CustomerName",
+                "ShipToParty",
+                "PurchaseOrderByCustomer",
+                "CustomerPurchaseOrderDate",
+                "SalesInquiryDate",
+                "BindingPeriodValidityStartDate",
+                "BindingPeriodValidityEndDate",
+                "TransactionCurrency",
+                "TotalNetAmount"
+            ];
+
+            var ALLOWED_ITEM_FIELDS = [
+                "SalesInquiryItem",
+                "Material",
+                "SalesInquiryItemText",
+                "OrderQuantity",
+                "OrderQuantityUnit",
+                "NetPriceAmount",
+                "NetAmount",
+                "TransactionCurrency"
+            ];
+
+            var cleanHeader = {};
+            ALLOWED_HEADER_FIELDS.forEach(function (field) {
+                if (rawHeader[field] !== undefined && rawHeader[field] !== null) {
+                    cleanHeader[field] = rawHeader[field];
+                }
+            });
+
+            var cleanItems = rawItems.map(function (item) {
+                var cleanItem = {};
+                ALLOWED_ITEM_FIELDS.forEach(function (field) {
+                    if (item[field] !== undefined && item[field] !== null) {
+                        cleanItem[field] = item[field];
+                    }
+                });
+                return cleanItem;
+            });
+
+            return {
+                header: cleanHeader,
+                items: cleanItems
+            };
+        },
+
+        /**
          * Dispatches createSalesInquiry action to the CAP OData service.
          *
          * @param {Object} oPayload
@@ -20,7 +84,8 @@ sap.ui.define([
          */
         createSalesInquiry: function (oPayload) {
             var sUrl = SERVICE_BASE + "/createSalesInquiry";
-            return ODataClient.post(sUrl, oPayload).then(function (result) {
+            var oCleanPayload = this._sanitizePayload(oPayload);
+            return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
                 if (!result) return "";
                 return result.value || result.SalesInquiry || result;
             });

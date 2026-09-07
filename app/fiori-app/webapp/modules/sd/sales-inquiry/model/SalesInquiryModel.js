@@ -441,6 +441,68 @@ sap.ui.define([
                 item.errors = {};
             });
             oModel.setProperty("/items", aItems);
+        },
+
+        /**
+         * Builds a clean API-compliant payload conforming strictly to the CAP InquiryHeader and InquiryItem contract.
+         * Strips UI-only and unmapped client-state properties (such as CustomerCity, CustomerCountry, ShipToPartyName, StatusText, StatusState, StatusIcon, CreatedByUser, and item errors).
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @returns {{ header: Object, items: Array<Object> }}
+         */
+        buildPayload: function (oModel) {
+            if (!oModel) return { header: {}, items: [] };
+            var oHeader = oModel.getProperty("/header") || {};
+            var aItems = oModel.getProperty("/items") || [];
+
+            var oCleanHeader = {
+                SalesInquiryType: oHeader.SalesInquiryType ? String(oHeader.SalesInquiryType).trim() : "ZIN",
+                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "1000",
+                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "10",
+                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "52",
+                SoldToParty: oHeader.SoldToParty ? String(oHeader.SoldToParty).trim() : "",
+                PurchaseOrderByCustomer: oHeader.PurchaseOrderByCustomer ? String(oHeader.PurchaseOrderByCustomer).trim() : "",
+                CustomerPurchaseOrderDate: oHeader.CustomerPurchaseOrderDate || null,
+                SalesInquiryDate: oHeader.SalesInquiryDate || null,
+                BindingPeriodValidityStartDate: oHeader.BindingPeriodValidityStartDate || null,
+                BindingPeriodValidityEndDate: oHeader.BindingPeriodValidityEndDate || null,
+                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "INR",
+                TotalNetAmount: oHeader.TotalNetAmount !== undefined && oHeader.TotalNetAmount !== null ? Number(oHeader.TotalNetAmount) : 0
+            };
+
+            if (oHeader.CustomerName) {
+                oCleanHeader.CustomerName = String(oHeader.CustomerName).trim();
+            }
+            if (oHeader.ShipToParty) {
+                oCleanHeader.ShipToParty = String(oHeader.ShipToParty).trim();
+            }
+
+            var aCleanItems = aItems.map(function (item, idx) {
+                var sItemNum = item.SalesInquiryItem && String(item.SalesInquiryItem).trim() !== ""
+                    ? String(item.SalesInquiryItem).padStart(6, "0")
+                    : String((idx + 1) * 10).padStart(6, "0");
+
+                var cleanItem = {
+                    SalesInquiryItem: sItemNum,
+                    Material: item.Material ? String(item.Material).trim() : "",
+                    SalesInquiryItemText: item.SalesInquiryItemText ? String(item.SalesInquiryItemText).trim() : "",
+                    OrderQuantity: parseFloat(item.OrderQuantity) || 0,
+                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "PC",
+                    NetAmount: parseFloat(item.NetAmount) || 0,
+                    TransactionCurrency: oCleanHeader.TransactionCurrency
+                };
+
+                if (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && item.NetPriceAmount !== "") {
+                    cleanItem.NetPriceAmount = parseFloat(item.NetPriceAmount);
+                }
+
+                return cleanItem;
+            });
+
+            return {
+                header: oCleanHeader,
+                items: aCleanItems
+            };
         }
     };
 });

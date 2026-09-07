@@ -173,16 +173,37 @@ sap.ui.define([
 
         /**
          * Looks up Material master data details including MaterialBaseUnit from S/4HANA.
+         * Optionally filters by Plant to retrieve the plant-specific master record.
          *
          * @param {string} sMaterial
+         * @param {string} [sPlant]
          * @returns {Promise<Object|null>}
          */
-        getMaterialDetails: function (sMaterial) {
+        getMaterialDetails: function (sMaterial, sPlant) {
             if (!sMaterial || String(sMaterial).trim() === "") {
                 return Promise.resolve(null);
             }
-            var sFilter = "?$filter=Material eq '" + encodeURIComponent(String(sMaterial).trim()) + "'&$top=1";
-            return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter).then(function (res) {
+            var sMatClean = encodeURIComponent(String(sMaterial).trim());
+            var sFilter = "?$filter=Material eq '" + sMatClean + "'";
+            if (sPlant && String(sPlant).trim() !== "") {
+                var sPlantFilter = sFilter + " and Plant eq '" + encodeURIComponent(String(sPlant).trim()) + "'&$top=1";
+                return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sPlantFilter).then(function (res) {
+                    var aItems = (res && (res.value || (res.d && res.d.results))) || [];
+                    if (aItems.length > 0) {
+                        return aItems[0];
+                    }
+                    // Fallback to query without Plant if not found for specific plant
+                    return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter + "&$top=1").then(function (resFallback) {
+                        var aFallbackItems = (resFallback && (resFallback.value || (resFallback.d && resFallback.d.results))) || [];
+                        return (aFallbackItems.length > 0) ? aFallbackItems[0] : null;
+                    });
+                }).catch(function (err) {
+                    console.warn("[PurchaseOrderService] Error fetching material details for " + sMaterial + ":", err);
+                    return null;
+                });
+            }
+
+            return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter + "&$top=1").then(function (res) {
                 var aItems = (res && (res.value || (res.d && res.d.results))) || [];
                 return (aItems.length > 0) ? aItems[0] : null;
             }).catch(function (err) {
@@ -195,10 +216,11 @@ sap.ui.define([
          * Directly retrieves the configured Base Unit of Measure for a Material.
          *
          * @param {string} sMaterial
+         * @param {string} [sPlant]
          * @returns {Promise<string|null>}
          */
-        getMaterialUnit: function (sMaterial) {
-            return this.getMaterialDetails(sMaterial).then(function (oMaterial) {
+        getMaterialUnit: function (sMaterial, sPlant) {
+            return this.getMaterialDetails(sMaterial, sPlant).then(function (oMaterial) {
                 return (oMaterial && (oMaterial.MaterialBaseUnit || oMaterial.BaseUnit || oMaterial.UnitOfMeasure)) || null;
             });
         }

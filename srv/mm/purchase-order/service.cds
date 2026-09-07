@@ -60,12 +60,26 @@ service PurchaseOrderService {
     };
 
     // Value Help Entities (Accessible to Viewers and Purchasing Managers)
-    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity DocumentTypeVH as projection on external.I_PurchasingDocumentType;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity DocumentTypeVH as projection on external.I_PurchasingDocumentType where PurchasingDocumentCategory = 'F';
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity SupplierVH as projection on maint.C_MM_SupplierValueHelp;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity CompanyCodeVH as projection on maint.C_MM_CompanyCodeValueHelp;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PurchasingOrgVH as projection on maint.C_PurchasingOrgValueHelp;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PurchasingGroupVH as projection on maint.C_PurchasingGroupValueHelp;
-    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity MaterialVH as projection on maint.C_MM_MaterialValueHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity MaterialVH as projection on maint.C_MM_MaterialValueHelp {
+        key Material,
+        key Plant,
+        ProductExternalID,
+        MaterialName,
+        MaterialName as Material_Text : String(40),
+        PlantName,
+        MaterialGroup,
+        MaterialGroupName,
+        MaterialType,
+        MaterialTypeName,
+        MaterialBaseUnit,
+        ProductTypeCode,
+        ProductTypeName
+    };
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PlantVH as projection on maint.C_MM_PlantValueHelp;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity StorageLocationVH as projection on maint.C_MM_StorLocValueHelp;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity MaterialGroupVH as projection on maint.C_MM_MaterialGroupValueHelp;
@@ -80,6 +94,7 @@ service PurchaseOrderService {
     type POItem {
         PurchaseOrderItem: String;
         Material: String;
+        PurchaseOrderItemText: String;
         Plant: String;
         StorageLocation: String;
         MaterialGroup: String;

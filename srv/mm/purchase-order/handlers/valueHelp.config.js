@@ -33,11 +33,18 @@ const poValueHelpConfig = [
     {
         entities: FS_VALUE_HELP_ENTITIES,
         read: (query) => purchaseOrderAdapter.readFsData(query),
-        deduplicateBy: 'Currency'
+        entityDeduplicateBy: {
+            DocumentTypeVH: 'PurchasingDocumentType',
+            CurrencyVH: 'Currency',
+            TaxCodeVH: 'TaxCode'
+        }
     },
     {
         entities: MAINT_VALUE_HELP_ENTITIES,
-        read: (query) => purchaseOrderAdapter.readMaintData(query)
+        read: (query) => purchaseOrderAdapter.readMaintData(query),
+        entityDeduplicateBy: {
+            PaymentTermsVH: 'PaymentTerms'
+        }
     }
 ];
 

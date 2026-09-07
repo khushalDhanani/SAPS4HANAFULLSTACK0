@@ -332,4 +332,76 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         expect(oModel.getProperty("/items/0/errors/Material/state")).toBe("None");
         expect(oModel.getProperty("/items/0/errors/OrderQuantityUnit/state")).toBe("None");
     });
+
+    describe("SalesInquiryModel - API Payload Builder (buildPayload)", () => {
+        test("buildPayload strips CustomerCity, CustomerCountry, and other non-contract UI properties from header", () => {
+            const oModel = SalesInquiryModel.createInitialModel("alice");
+            oModel.setProperty("/header/SoldToParty", "10135");
+            SalesInquiryModel.deriveCustomerDefaults(oModel, "10135", {
+                CustomerName: "Divi's Laboratories Limited",
+                City: "Hyderabad",
+                Country: "IN",
+                Currency: "INR",
+                ShipToParty: "10135",
+                ShipToPartyName: "Divi's Laboratories Limited",
+                derived: true
+            });
+
+            // Model has UI properties
+            expect(oModel.getProperty("/header/CustomerCity")).toBe("Hyderabad");
+            expect(oModel.getProperty("/header/CustomerCountry")).toBe("IN");
+            expect(oModel.getProperty("/header/StatusText")).toBe("Draft");
+
+            const payload = SalesInquiryModel.buildPayload(oModel);
+
+            // Crucial: CustomerCity and other UI-only properties must NOT exist in the API payload header
+            expect(payload.header.CustomerCity).toBeUndefined();
+            expect(payload.header.CustomerCountry).toBeUndefined();
+            expect(payload.header.ShipToPartyName).toBeUndefined();
+            expect(payload.header.StatusText).toBeUndefined();
+            expect(payload.header.StatusState).toBeUndefined();
+            expect(payload.header.StatusIcon).toBeUndefined();
+            expect(payload.header.CreatedByUser).toBeUndefined();
+
+            // Contract-valid properties must be preserved
+            expect(payload.header.SalesInquiryType).toBe("ZIN");
+            expect(payload.header.SalesOrganization).toBe("1000");
+            expect(payload.header.DistributionChannel).toBe("10");
+            expect(payload.header.OrganizationDivision).toBe("52");
+            expect(payload.header.SoldToParty).toBe("10135");
+            expect(payload.header.CustomerName).toBe("Divi's Laboratories Limited");
+            expect(payload.header.ShipToParty).toBe("10135");
+            expect(payload.header.TransactionCurrency).toBe("INR");
+        });
+
+        test("buildPayload strips item errors object while preserving all item contract fields", () => {
+            const oModel = SalesInquiryModel.createInitialModel("alice");
+            oModel.setProperty("/items/0/Material", "4000000091");
+            oModel.setProperty("/items/0/SalesInquiryItemText", "BPAO88063");
+            oModel.setProperty("/items/0/OrderQuantity", 5);
+            oModel.setProperty("/items/0/OrderQuantityUnit", "PC");
+            oModel.setProperty("/items/0/NetPriceAmount", 120);
+            oModel.setProperty("/items/0/NetAmount", 600);
+            oModel.setProperty("/items/0/errors", { Material: { state: "None" } });
+
+            const payload = SalesInquiryModel.buildPayload(oModel);
+
+            expect(payload.items).toHaveLength(1);
+            const item = payload.items[0];
+            expect(item.errors).toBeUndefined();
+            expect(item.SalesInquiryItem).toBe("000010");
+            expect(item.Material).toBe("4000000091");
+            expect(item.SalesInquiryItemText).toBe("BPAO88063");
+            expect(item.OrderQuantity).toBe(5);
+            expect(item.OrderQuantityUnit).toBe("PC");
+            expect(item.NetPriceAmount).toBe(120);
+            expect(item.NetAmount).toBe(600);
+            expect(item.TransactionCurrency).toBe("INR");
+        });
+
+        test("buildPayload returns empty header and items for falsy model", () => {
+            const payload = SalesInquiryModel.buildPayload(null);
+            expect(payload).toEqual({ header: {}, items: [] });
+        });
+    });
 });

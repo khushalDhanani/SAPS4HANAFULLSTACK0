@@ -18,14 +18,23 @@ function registerValueHelpHandlers(srv, groups) {
         if (!entities || entities.length === 0 || typeof read !== 'function') continue;
 
         srv.on('READ', entities, async (req) => {
-            const results = await read(req.query);
+            let results = await read(req.query);
 
-            if (deduplicateBy && Array.isArray(results)) {
+            const entityName = req.target ? req.target.name.split('.').pop() : '';
+
+            // For Purchase Order DocumentTypeVH, restrict to category 'F' (Purchase Orders)
+            if (entityName === 'DocumentTypeVH' && Array.isArray(results)) {
+                results = results.filter(item => !item || !item.PurchasingDocumentCategory || item.PurchasingDocumentCategory === 'F');
+            }
+
+            const dedupeKey = (group.entityDeduplicateBy && group.entityDeduplicateBy[entityName]) || deduplicateBy;
+
+            if (dedupeKey && Array.isArray(results)) {
                 const seen = new Set();
                 const filtered = results.filter(item => {
-                    if (!item || !item[deduplicateBy]) return true;
-                    if (seen.has(item[deduplicateBy])) return false;
-                    seen.add(item[deduplicateBy]);
+                    if (!item || item[dedupeKey] === undefined || item[dedupeKey] === null) return true;
+                    if (seen.has(item[dedupeKey])) return false;
+                    seen.add(item[dedupeKey]);
                     return true;
                 });
                 if (results.$count !== undefined) {

@@ -5,10 +5,12 @@ sap.ui.define([
     "sap/m/MessagePopover",
     "sap/m/MessageItem",
     "sap/ui/core/BusyIndicator",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator",
     "saps4hana/fiori/modules/mm/purchase-order/model/PurchaseOrderModel",
     "saps4hana/fiori/service/ValueHelpService",
     "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService"
-], function (BaseController, MessageBox, MessageToast, MessagePopover, MessageItem, BusyIndicator, PurchaseOrderModel, ValueHelpService, PurchaseOrderService) {
+], function (BaseController, MessageBox, MessageToast, MessagePopover, MessageItem, BusyIndicator, Filter, FilterOperator, PurchaseOrderModel, ValueHelpService, PurchaseOrderService) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.CreatePurchaseOrder", {
@@ -282,16 +284,17 @@ sap.ui.define([
             var sVal = oSource.getValue();
             var oModel = this.getView().getModel("newPO");
             var sPath = oContext.getPath();
+            var sPlant = oModel.getProperty(sPath + "/Plant") || "";
 
             if (!sVal || sVal.trim() === "") {
                 oModel.setProperty(sPath + "/errors/Material", { state: "Error", text: "Material is required" });
             } else {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
-                // Directly retrieve and set Unit from S/4HANA material configuration on manual input
+                // Directly retrieve and set Unit and master data from S/4HANA material configuration on manual input
                 var that = this;
-                PurchaseOrderService.getMaterialDetails(sVal).then(function (oMaterial) {
+                PurchaseOrderService.getMaterialDetails(sVal, sPlant).then(function (oMaterial) {
                     if (oMaterial) {
-                        PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterial);
+                        PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterial, true);
                         that.onItemFieldChange();
                     }
                 });
@@ -308,29 +311,40 @@ sap.ui.define([
             var sKey = oItem.getKey() || oItem.getText();
             var oModel = this.getView().getModel("newPO");
             var sPath = oContext.getPath();
+            var sPlant = oModel.getProperty(sPath + "/Plant") || "";
 
             var oBindingCtx = oItem.getBindingContext();
-            var oMaterialData = oBindingCtx ? oBindingCtx.getObject() : null;
+            var oMaterialData = null;
+            if (oBindingCtx) {
+                try {
+                    oMaterialData = oBindingCtx.getObject();
+                } catch (e) {
+                    oMaterialData = null;
+                }
+                if (!oMaterialData || typeof oMaterialData !== "object") {
+                    oMaterialData = {
+                        Material: oBindingCtx.getProperty("Material") || sKey,
+                        MaterialName: oBindingCtx.getProperty("MaterialName") || oBindingCtx.getProperty("Material_Text") || "",
+                        MaterialBaseUnit: oBindingCtx.getProperty("MaterialBaseUnit"),
+                        Plant: oBindingCtx.getProperty("Plant"),
+                        MaterialGroup: oBindingCtx.getProperty("MaterialGroup")
+                    };
+                }
+            }
 
-            if (oMaterialData) {
-                PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterialData);
+            if (oMaterialData && oMaterialData.Material) {
+                PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterialData, true);
             } else {
                 oModel.setProperty(sPath + "/Material", sKey);
-                var sDesc = oItem.getAdditionalText() || "";
-                if (sDesc && !oModel.getProperty(sPath + "/PurchaseOrderItemText")) {
-                    oModel.setProperty(sPath + "/PurchaseOrderItemText", sDesc);
-                }
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
             }
 
-            // Ensure Unit is derived from S/4HANA if not already present in suggestion context
-            var sCurrentUnit = oModel.getProperty(sPath + "/UnitOfMeasure");
+            // Ensure Unit and master data is derived from S/4HANA if not already present
             var that = this;
-            if (!sCurrentUnit || sCurrentUnit === "PC") {
-                PurchaseOrderService.getMaterialUnit(sKey).then(function (sUnit) {
-                    if (sUnit) {
-                        oModel.setProperty(sPath + "/UnitOfMeasure", sUnit);
-                        oModel.setProperty(sPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
+            if (!oMaterialData || !oMaterialData.MaterialBaseUnit || !oMaterialData.MaterialGroup) {
+                PurchaseOrderService.getMaterialDetails(sKey, sPlant).then(function (oMat) {
+                    if (oMat) {
+                        PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMat, true);
                         that.onItemFieldChange();
                     }
                 });
@@ -447,12 +461,59 @@ sap.ui.define([
             this._oMessagePopover.toggle(oSource);
         },
 
+        _buildContextFilters: function (oSource) {
+            var aFilters = [];
+            var oModel = this.getView().getModel("newPO");
+            if (!oModel || !oSource) return aFilters;
+
+            var oRowContext = oSource.getBindingContext("newPO");
+            var sValPath = oSource.getBindingPath("value");
+            var sId = oSource.getId() || "";
+
+            if (oRowContext) {
+                // Line item row context
+                if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
+                    var sPlant = oRowContext.getProperty("Plant");
+                    if (sPlant && String(sPlant).trim() !== "") {
+                        aFilters.push(new Filter("Plant", FilterOperator.EQ, String(sPlant).trim()));
+                    }
+                } else if (sValPath === "StorageLocation" || sId.indexOf("StorageLocation") !== -1) {
+                    var sRowPlant = oRowContext.getProperty("Plant");
+                    if (sRowPlant && String(sRowPlant).trim() !== "") {
+                        aFilters.push(new Filter("Plant", FilterOperator.EQ, String(sRowPlant).trim()));
+                    }
+                } else if (sValPath === "Plant" || sId.indexOf("Plant") !== -1) {
+                    var sPurchOrg = oModel.getProperty("/header/PurchasingOrganization");
+                    if (sPurchOrg && String(sPurchOrg).trim() !== "") {
+                        aFilters.push(new Filter("PurchasingOrganization", FilterOperator.EQ, String(sPurchOrg).trim()));
+                    }
+                }
+            } else {
+                // Header fields
+                if (sValPath === "Supplier" || sId.indexOf("inSupplier") !== -1) {
+                    var sCompanyCode = oModel.getProperty("/header/CompanyCode");
+                    if (sCompanyCode && String(sCompanyCode).trim() !== "") {
+                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
+                    }
+                } else if (sValPath === "PurchasingOrganization" || sId.indexOf("inPurchOrg") !== -1) {
+                    var sCoCode = oModel.getProperty("/header/CompanyCode");
+                    if (sCoCode && String(sCoCode).trim() !== "") {
+                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCoCode).trim()));
+                    }
+                }
+            }
+
+            return aFilters;
+        },
+
         onValueHelpRequest: function (oEvent) {
             var oSource = oEvent.getSource();
             var that = this;
+            var aInitialFilters = this._buildContextFilters(oSource);
+
             ValueHelpService.openValueHelp(this.getView(), oSource, function (sKey, oSelectedItem, oData) {
                 that._handleValueHelpSelected(oSource, sKey, oSelectedItem, oData);
-            });
+            }, aInitialFilters);
         },
 
         _handleValueHelpSelected: function (oSource, sKey, oSelectedItem, oData) {
@@ -467,17 +528,17 @@ sap.ui.define([
                 var sValPath = oSource.getBindingPath("value");
 
                 if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
+                    var sPlant = oModel.getProperty(sRowPath + "/Plant") || "";
                     var oMatData = oData || {
                         Material: sKey,
                         MaterialName: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
                     };
-                    PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMatData);
+                    PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
                     var that = this;
-                    if (!oData || !oData.MaterialBaseUnit) {
-                        PurchaseOrderService.getMaterialUnit(sKey).then(function (sUnit) {
-                            if (sUnit) {
-                                oModel.setProperty(sRowPath + "/UnitOfMeasure", sUnit);
-                                oModel.setProperty(sRowPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
+                    if (!oData || !oData.MaterialBaseUnit || !oData.MaterialGroup) {
+                        PurchaseOrderService.getMaterialDetails(sKey, sPlant).then(function (oMat) {
+                            if (oMat) {
+                                PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMat, true);
                                 that.onItemFieldChange();
                             }
                         });
@@ -513,6 +574,9 @@ sap.ui.define([
             } else if (sId.indexOf("inPurchGrp") !== -1) {
                 this.onPurchGrpChange();
             } else if (sId.indexOf("inSupplier") !== -1) {
+                if (oData && oData.CompanyCode && !oModel.getProperty("/header/CompanyCode")) {
+                    oModel.setProperty("/header/CompanyCode", oData.CompanyCode);
+                }
                 this.onSupplierChange(sKey);
             } else if (sId.indexOf("inCurrency") !== -1) {
                 this.onCurrencyChange();
@@ -524,8 +588,11 @@ sap.ui.define([
         },
 
         onSuggest: function (oEvent) {
+            var oSource = oEvent.getSource();
             var sValue = oEvent.getParameter("suggestValue");
-            ValueHelpService.applySuggestionFilter(oEvent.getSource(), sValue);
+            var aContextFilters = this._buildContextFilters(oSource);
+
+            ValueHelpService.applySuggestionFilter(oSource, sValue, aContextFilters);
         },
 
         onNavBack: function () {

@@ -2,11 +2,13 @@
   "DocumentTypeVH": [
     {
       "PurchasingDocumentType": "NB",
-      "PurchasingDocumentType_Text": "Standard PO"
+      "PurchasingDocumentType_Text": "Standard PO",
+      "PurchasingDocumentCategory": "F"
     },
     {
       "PurchasingDocumentType": "FO",
-      "PurchasingDocumentType_Text": "Framework Order"
+      "PurchasingDocumentType_Text": "Framework Order",
+      "PurchasingDocumentCategory": "F"
     }
   ],
   "CompanyCodeVH": [
@@ -31,22 +33,32 @@
     {
       "Supplier": "10300001",
       "SupplierName": "Domestic Supplier 1",
-      "CityName": "Walldorf"
+      "CityName": "Walldorf",
+      "CompanyCode": "1000"
     },
     {
       "Supplier": "10300002",
       "SupplierName": "Domestic Supplier 2",
-      "CityName": "Berlin"
+      "CityName": "Berlin",
+      "CompanyCode": "1000"
     }
   ],
   "MaterialVH": [
     {
       "Material": "TG11",
-      "MaterialName": "Trading Goods 11"
+      "Plant": "1010",
+      "MaterialName": "Trading Goods 11",
+      "Material_Text": "Trading Goods 11",
+      "MaterialBaseUnit": "PC",
+      "MaterialGroup": "L001"
     },
     {
       "Material": "MZ-FG-M500",
-      "MaterialName": "Finished Good M500"
+      "Plant": "1010",
+      "MaterialName": "Finished Good M500",
+      "Material_Text": "Finished Good M500",
+      "MaterialBaseUnit": "PC",
+      "MaterialGroup": "L002"
     }
   ],
   "CurrencyVH": [

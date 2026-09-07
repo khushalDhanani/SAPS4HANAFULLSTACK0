@@ -11,14 +11,14 @@ sap.ui.define([
         "/CompanyCodeVH": { title: "Select Company Code", key: "CompanyCode", desc: "CompanyCodeName" },
         "/PurchasingOrgVH": { title: "Select Purchasing Org", key: "PurchasingOrganization", desc: "PurchasingOrganizationName" },
         "/PurchasingGroupVH": { title: "Select Purchasing Group", key: "PurchasingGroup", desc: "PurchasingGroupName" },
-        "/SupplierVH": { title: "Select Supplier", key: "Supplier", desc: "SupplierName" },
+        "/SupplierVH": { title: "Select Supplier", key: "Supplier", desc: "SupplierName", info: "CompanyCode" },
         "/CurrencyVH": { title: "Select Currency", key: "Currency", desc: "Currency_Text" },
         "/IncotermsClassificationVH": { title: "Select Incoterms", key: "IncotermsClassification", desc: "IncotermsClassificationName" },
         "/PaymentTermsVH": { title: "Select Payment Terms", key: "PaymentTerms", desc: "PaymentTermsName" },
-        "/MaterialVH": { title: "Select Material", key: "Material", desc: "Material_Text", descAlt: "MaterialName", info: "MaterialBaseUnit" },
+        "/MaterialVH": { title: "Select Material", key: "Material", desc: "MaterialName", descAlt: "Material_Text", info: "MaterialBaseUnit" },
         "/MaterialGroupVH": { title: "Select Material Group", key: "MaterialGroup", desc: "MaterialGroupName" },
-        "/PlantVH": { title: "Select Plant", key: "Plant", desc: "PlantName" },
-        "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName" },
+        "/PlantVH": { title: "Select Plant", key: "Plant", desc: "PlantName", info: "PurchasingOrganization" },
+        "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName", info: "Plant" },
         "/UnitOfMeasureVH": { title: "Select Unit of Measure", key: "UnitOfMeasure", desc: "UnitOfMeasure_Text" },
         "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" },
         "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName" },
@@ -46,7 +46,7 @@ sap.ui.define([
          * @param {sap.ui.core.mvc.View} oView
          * @param {sap.m.Input} oInput
          * @param {Function} [fnCallback] - Called with (sKey, oSelectedItem, oSelectedData)
-         * @param {Array<sap.ui.model.Filter>} [aInitialFilters] - Optional contextual filters (e.g. SalesOrg, DistChannel)
+         * @param {Array<sap.ui.model.Filter>} [aInitialFilters] - Optional contextual filters (e.g. SalesOrg, DistChannel, Plant)
          */
         openValueHelp: function (oView, oInput, fnCallback, aInitialFilters) {
             var oBinding = oInput.getBinding("suggestionItems");
@@ -91,7 +91,24 @@ sap.ui.define([
                         }
 
                         var oBindingContext = oSelectedItem.getBindingContext();
-                        var oSelectedData = oBindingContext ? oBindingContext.getObject() : null;
+                        var oSelectedData = null;
+                        if (oBindingContext) {
+                            try {
+                                oSelectedData = oBindingContext.getObject();
+                            } catch (e) {
+                                oSelectedData = null;
+                            }
+                            if (!oSelectedData || typeof oSelectedData !== "object") {
+                                oSelectedData = {
+                                    Material: oBindingContext.getProperty("Material") || sKey,
+                                    MaterialName: oBindingContext.getProperty("MaterialName") || oBindingContext.getProperty("Material_Text") || oSelectedItem.getDescription() || "",
+                                    Material_Text: oBindingContext.getProperty("Material_Text") || oBindingContext.getProperty("MaterialName") || oSelectedItem.getDescription() || "",
+                                    MaterialBaseUnit: oBindingContext.getProperty("MaterialBaseUnit"),
+                                    Plant: oBindingContext.getProperty("Plant"),
+                                    MaterialGroup: oBindingContext.getProperty("MaterialGroup")
+                                };
+                            }
+                        }
 
                         if (typeof fnCallback === "function") {
                             fnCallback(sKey, oSelectedItem, oSelectedData);
@@ -106,10 +123,20 @@ sap.ui.define([
 
             var oTemplateConfig = {
                 title: "{" + oConf.key + "}",
-                description: "{" + oConf.desc + "}"
+                description: oConf.descAlt ? "{= ${" + oConf.desc + "} || ${" + oConf.descAlt + "} || '' }" : "{" + oConf.desc + "}"
             };
             if (oConf.info) {
-                oTemplateConfig.info = "{" + oConf.info + "}";
+                if (sPath === "/MaterialVH") {
+                    oTemplateConfig.info = "{= ${MaterialBaseUnit} ? (${MaterialBaseUnit} + (${Plant} ? ' / Plant ' + ${Plant} : '')) : (${Plant} ? 'Plant ' + ${Plant} : '') }";
+                } else if (sPath === "/SupplierVH") {
+                    oTemplateConfig.info = "{= ${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '' }";
+                } else if (sPath === "/PlantVH") {
+                    oTemplateConfig.info = "{= ${PurchasingOrganization} ? 'PurchOrg ' + ${PurchasingOrganization} : '' }";
+                } else if (sPath === "/StorageLocationVH") {
+                    oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
+                } else {
+                    oTemplateConfig.info = "{" + oConf.info + "}";
+                }
             }
 
             oSelectDialog.bindAggregation("items", {

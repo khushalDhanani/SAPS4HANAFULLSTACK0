@@ -26,7 +26,10 @@ const sdValueHelpConfig = [
             'CustomerVH',
             'CurrencyVH'
         ],
-        read: (query) => salesInquiryAdapter.readWlData(query)
+        read: (query) => salesInquiryAdapter.readWlData(query),
+        entityDeduplicateBy: {
+            CurrencyVH: 'Currency'
+        }
     },
     {
         entities: ['MaterialVH'],

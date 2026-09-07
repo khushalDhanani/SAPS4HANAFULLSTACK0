@@ -106,13 +106,47 @@ sap.ui.define([
             }
         },
 
+        _buildFilterBarContextFilters: function (oSource) {
+            var aFilters = [];
+            if (!oSource) return aFilters;
+            var sId = typeof oSource.getId === "function" ? oSource.getId() : (oSource.id || "");
+
+            if (sId.indexOf("fbSupplier") !== -1) {
+                var oFbCompanyCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
+                var sCoCode = oFbCompanyCode && typeof oFbCompanyCode.getValue === "function" ? oFbCompanyCode.getValue().trim() : "";
+                if (sCoCode) {
+                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode));
+                }
+            } else if (sId.indexOf("fbPurchasingOrg") !== -1) {
+                var oFbCoCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
+                var sCoCode2 = oFbCoCode && typeof oFbCoCode.getValue === "function" ? oFbCoCode.getValue().trim() : "";
+                if (sCoCode2) {
+                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode2));
+                }
+            }
+
+            return aFilters;
+        },
+
         onValueHelpRequest: function (oEvent) {
-            ValueHelpService.openValueHelp(this.getView(), oEvent.getSource());
+            var oSource = oEvent.getSource();
+            var aInitialFilters = this._buildFilterBarContextFilters(oSource);
+            if (aInitialFilters.length > 0) {
+                ValueHelpService.openValueHelp(this.getView(), oSource, null, aInitialFilters);
+            } else {
+                ValueHelpService.openValueHelp(this.getView(), oSource);
+            }
         },
 
         onSuggest: function (oEvent) {
+            var oSource = oEvent.getSource();
             var sValue = oEvent.getParameter("suggestValue");
-            ValueHelpService.applySuggestionFilter(oEvent.getSource(), sValue);
+            var aContextFilters = this._buildFilterBarContextFilters(oSource);
+            if (aContextFilters.length > 0) {
+                ValueHelpService.applySuggestionFilter(oSource, sValue, aContextFilters);
+            } else {
+                ValueHelpService.applySuggestionFilter(oSource, sValue);
+            }
         },
 
         onSearch: function () {
