@@ -246,10 +246,10 @@
                                     <Input value="{newPO>Material}" placeholder="e.g. TG11" required="true"
                                         valueState="{newPO>errors/Material/state}"
                                         valueStateText="{newPO>errors/Material/text}"
-                                        change=".onItemFieldChange" liveChange=".onItemFieldChange"
+                                        change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/MaterialVH', templateShareable: false}">
                                         <suggestionItems>
-                                            <core:ListItem key="{Material}" text="{Material}" additionalText="{MaterialName}" />
+                                            <core:ListItem key="{Material}" text="{Material}" additionalText="{= (${MaterialName} || ${Material_Text} || '') + (${MaterialBaseUnit} ? ' (' + ${MaterialBaseUnit} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newPO>OrderQuantity}" type="Number" required="true"

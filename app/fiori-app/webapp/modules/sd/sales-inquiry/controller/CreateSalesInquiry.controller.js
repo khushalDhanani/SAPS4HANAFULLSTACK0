@@ -47,6 +47,7 @@ sap.ui.define([
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel) {
                     SalesInquiryModel.applyConfigurationDefaults(oCurrentModel, oConfigData);
+                    that._updateOrganizationalFilters();
                 }
                 return oConfigData;
             }).catch(function (err) {
@@ -84,6 +85,7 @@ sap.ui.define([
             if (sVal !== null && sVal !== undefined) {
                 SalesInquiryModel.markUserModified(oModel, "SalesOrganization", true);
             }
+            this._updateOrganizationalFilters();
             SalesInquiryModel.validateSingleField(oModel, "SalesOrganization");
             SalesInquiryModel.updateStatus(oModel);
         },
@@ -104,6 +106,7 @@ sap.ui.define([
             if (sVal !== null && sVal !== undefined) {
                 SalesInquiryModel.markUserModified(oModel, "DistributionChannel", true);
             }
+            this._updateOrganizationalFilters();
             SalesInquiryModel.validateSingleField(oModel, "DistributionChannel");
             SalesInquiryModel.updateStatus(oModel);
         },
@@ -138,6 +141,33 @@ sap.ui.define([
             }
         },
 
+        _updateOrganizationalFilters: function () {
+            var oModel = this.getView().getModel("newInquiry");
+            if (!oModel) return;
+            var sOrg = oModel.getProperty("/header/SalesOrganization");
+            var sChannel = oModel.getProperty("/header/DistributionChannel");
+
+            var oDistInput = this.byId("inDistChannel");
+            if (oDistInput) {
+                var oDistBinding = oDistInput.getBinding("suggestionItems");
+                if (oDistBinding) {
+                    var aDistFilters = sOrg ? [new Filter("SalesOrganization", FilterOperator.EQ, sOrg)] : [];
+                    oDistBinding.filter(aDistFilters);
+                }
+            }
+
+            var oDivInput = this.byId("inDivision");
+            if (oDivInput) {
+                var oDivBinding = oDivInput.getBinding("suggestionItems");
+                if (oDivBinding) {
+                    var aDivFilters = [];
+                    if (sOrg) aDivFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
+                    if (sChannel) aDivFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
+                    oDivBinding.filter(aDivFilters);
+                }
+            }
+        },
+
         onSoldToPartyChange: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
             var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : oModel.getProperty("/header/SoldToParty");
@@ -163,12 +193,30 @@ sap.ui.define([
             var oItem = oEvent.getParameter("selectedItem");
             if (oItem) {
                 var sKey = oItem.getKey() || oItem.getText();
+                var sDesc = oItem.getAdditionalText() || "";
                 var oModel = this.getView().getModel("newInquiry");
                 oModel.setProperty("/header/SoldToParty", sKey);
+                if (sDesc) {
+                    oModel.setProperty("/header/CustomerName", sDesc);
+                }
                 SalesInquiryModel.markUserModified(oModel, "SoldToParty", true);
                 this._deriveCustomerData(sKey);
                 SalesInquiryModel.validateSingleField(oModel, "SoldToParty");
                 SalesInquiryModel.updateStatus(oModel);
+            }
+        },
+
+        onShipToPartySelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (oItem) {
+                var sKey = oItem.getKey() || oItem.getText();
+                var sDesc = oItem.getAdditionalText() || "";
+                var oModel = this.getView().getModel("newInquiry");
+                oModel.setProperty("/header/ShipToParty", sKey);
+                if (sDesc) {
+                    oModel.setProperty("/header/ShipToPartyName", sDesc);
+                }
+                this.onHeaderFieldChange();
             }
         },
 
@@ -259,6 +307,13 @@ sap.ui.define([
                 oModel.setProperty(sPath + "/errors/Material", { state: "Error", text: "Material is required" });
             } else {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
+                // Directly retrieve and set Unit from S/4HANA material configuration on manual input
+                SalesInquiryService.getMaterialDetails(sVal).then(function (oMaterial) {
+                    if (oMaterial) {
+                        SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterial);
+                        SalesInquiryModel.updateStatus(oModel);
+                    }
+                });
             }
             SalesInquiryModel.updateStatus(oModel);
         },
@@ -270,15 +325,35 @@ sap.ui.define([
             if (!oContext || !oItem) return;
 
             var sKey = oItem.getKey() || oItem.getText();
-            var sDesc = oItem.getAdditionalText() || "";
             var oModel = this.getView().getModel("newInquiry");
             var sPath = oContext.getPath();
 
-            oModel.setProperty(sPath + "/Material", sKey);
-            if (sDesc && !oModel.getProperty(sPath + "/SalesInquiryItemText")) {
-                oModel.setProperty(sPath + "/SalesInquiryItemText", sDesc);
+            var oBindingCtx = oItem.getBindingContext("salesInquiry") || oItem.getBindingContext();
+            var oMaterialData = oBindingCtx ? oBindingCtx.getObject() : null;
+
+            if (oMaterialData) {
+                SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterialData);
+            } else {
+                oModel.setProperty(sPath + "/Material", sKey);
+                var sDesc = oItem.getAdditionalText() || "";
+                if (sDesc && !oModel.getProperty(sPath + "/SalesInquiryItemText")) {
+                    oModel.setProperty(sPath + "/SalesInquiryItemText", sDesc);
+                }
+                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
             }
-            oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
+
+            // Ensure Unit is derived from S/4HANA if not already present in suggestion context
+            var sCurrentUnit = oModel.getProperty(sPath + "/OrderQuantityUnit");
+            if (!sCurrentUnit || sCurrentUnit === "PC") {
+                SalesInquiryService.getMaterialUnit(sKey).then(function (sUnit) {
+                    if (sUnit) {
+                        oModel.setProperty(sPath + "/OrderQuantityUnit", sUnit);
+                        oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+                        SalesInquiryModel.updateStatus(oModel);
+                    }
+                });
+            }
+
             SalesInquiryModel.updateStatus(oModel);
         },
 
@@ -362,46 +437,128 @@ sap.ui.define([
             });
         },
 
+        onItemUnitSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext || !oItem) return;
+
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/OrderQuantityUnit", sKey);
+            oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+            this.onItemFieldChange();
+        },
+
         onSuggest: function (oEvent) {
             var sValue = oEvent.getParameter("suggestValue");
-            var oSource = oEvent.getSource();
-            var oBinding = oSource.getBinding("suggestionItems");
-            if (oBinding) {
-                oBinding.filter(new Filter({
-                    path: oSource.getBindingInfo("suggestionItems").template.getBindingInfo("text").parts[0].path,
-                    operator: FilterOperator.Contains,
-                    value1: sValue
-                }));
+            var oInput = oEvent.getSource();
+            var oModel = this.getView().getModel("newInquiry");
+            var aContextFilters = [];
+            var sId = oInput.getId();
+
+            if (sId.indexOf("inDistChannel") !== -1) {
+                var sOrg = oModel.getProperty("/header/SalesOrganization");
+                if (sOrg) {
+                    aContextFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
+                }
+            } else if (sId.indexOf("inDivision") !== -1) {
+                var sOrg = oModel.getProperty("/header/SalesOrganization");
+                var sChannel = oModel.getProperty("/header/DistributionChannel");
+                if (sOrg) {
+                    aContextFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
+                }
+                if (sChannel) {
+                    aContextFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
+                }
             }
+
+            ValueHelpService.applySuggestionFilter(oInput, sValue, aContextFilters);
         },
 
         onValueHelpRequest: function (oEvent) {
             var oInput = oEvent.getSource();
             var oView = this.getView();
             var that = this;
+            var oModel = oView.getModel("newInquiry");
 
-            ValueHelpService.openValueHelp(oView, oInput, function (oSelectedItem) {
-                if (oSelectedItem) {
-                    var sKey = oSelectedItem.getTitle();
-                    oInput.setValue(sKey);
+            var aInitialFilters = [];
+            var sId = oInput.getId();
 
-                    // Fire relevant change handler based on input ID
-                    var sId = oInput.getId();
-                    if (sId.indexOf("inInquiryType") !== -1) {
-                        that.onInquiryTypeChange();
-                    } else if (sId.indexOf("inSalesOrg") !== -1) {
-                        that.onSalesOrgChange();
-                    } else if (sId.indexOf("inDistChannel") !== -1) {
-                        that.onDistChannelChange();
-                    } else if (sId.indexOf("inDivision") !== -1) {
-                        that.onDivisionChange();
-                    } else if (sId.indexOf("inSoldToParty") !== -1) {
-                        that.onSoldToPartyChange();
-                    } else if (sId.indexOf("inCurrency") !== -1) {
-                        that.onCurrencyChange();
-                    }
+            if (sId.indexOf("inDistChannel") !== -1) {
+                var sOrg = oModel.getProperty("/header/SalesOrganization");
+                if (sOrg) {
+                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
                 }
-            });
+            } else if (sId.indexOf("inDivision") !== -1) {
+                var sOrg = oModel.getProperty("/header/SalesOrganization");
+                var sChannel = oModel.getProperty("/header/DistributionChannel");
+                if (sOrg) {
+                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrg));
+                }
+                if (sChannel) {
+                    aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
+                }
+            }
+
+            ValueHelpService.openValueHelp(oView, oInput, function (sKey, oSelectedItem, oData) {
+                // Check if this input is in the line items table
+                var oRowContext = oInput.getBindingContext("newInquiry");
+                if (oRowContext) {
+                    var sRowPath = oRowContext.getPath();
+                    var sValPath = oInput.getBindingPath("value");
+
+                    if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
+                        var oMatData = oData || {
+                            Material: sKey,
+                            Material_Text: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
+                        };
+                        SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMatData);
+                        if (!oData || !oData.MaterialBaseUnit) {
+                            SalesInquiryService.getMaterialUnit(sKey).then(function (sUnit) {
+                                if (sUnit) {
+                                    oModel.setProperty(sRowPath + "/OrderQuantityUnit", sUnit);
+                                    oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+                                    SalesInquiryModel.updateStatus(oModel);
+                                }
+                            });
+                        }
+                        SalesInquiryModel.updateStatus(oModel);
+                    } else if (sValPath === "OrderQuantityUnit") {
+                        oModel.setProperty(sRowPath + "/OrderQuantityUnit", sKey);
+                        oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+                        SalesInquiryModel.updateStatus(oModel);
+                    }
+                    return;
+                }
+
+                // Header fields
+                if (sId.indexOf("inInquiryType") !== -1) {
+                    that.onInquiryTypeChange();
+                } else if (sId.indexOf("inSalesOrg") !== -1) {
+                    that.onSalesOrgChange();
+                } else if (sId.indexOf("inDistChannel") !== -1) {
+                    that.onDistChannelChange();
+                } else if (sId.indexOf("inDivision") !== -1) {
+                    that.onDivisionChange();
+                } else if (sId.indexOf("inSoldToParty") !== -1) {
+                    if (oData && (oData.CustomerName || oData.CityName)) {
+                        oModel.setProperty("/header/CustomerName", oData.CustomerName || oData.OrganizationBPName1 || "");
+                        oModel.setProperty("/header/CustomerCity", oData.CityName || "");
+                        oModel.setProperty("/header/CustomerCountry", oData.Country || "");
+                    }
+                    that.onSoldToPartyChange();
+                } else if (sId.indexOf("inShipToParty") !== -1) {
+                    if (oData && oData.CustomerName) {
+                        oModel.setProperty("/header/ShipToPartyName", oData.CustomerName);
+                    }
+                    that.onHeaderFieldChange();
+                } else if (sId.indexOf("inCurrency") !== -1) {
+                    that.onCurrencyChange();
+                }
+            }, aInitialFilters);
         },
 
         onMessageButtonPress: function () {

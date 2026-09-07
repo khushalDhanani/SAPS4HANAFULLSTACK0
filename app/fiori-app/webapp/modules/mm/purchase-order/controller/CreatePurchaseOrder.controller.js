@@ -274,6 +274,71 @@ sap.ui.define([
             PurchaseOrderModel.updateStatus(oModel);
         },
 
+        onItemMaterialChange: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newPO");
+            if (!oContext) return;
+
+            var sVal = oSource.getValue();
+            var oModel = this.getView().getModel("newPO");
+            var sPath = oContext.getPath();
+
+            if (!sVal || sVal.trim() === "") {
+                oModel.setProperty(sPath + "/errors/Material", { state: "Error", text: "Material is required" });
+            } else {
+                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
+                // Directly retrieve and set Unit from S/4HANA material configuration on manual input
+                var that = this;
+                PurchaseOrderService.getMaterialDetails(sVal).then(function (oMaterial) {
+                    if (oMaterial) {
+                        PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterial);
+                        that.onItemFieldChange();
+                    }
+                });
+            }
+            this.onItemFieldChange();
+        },
+
+        onItemMaterialSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newPO");
+            if (!oContext || !oItem) return;
+
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newPO");
+            var sPath = oContext.getPath();
+
+            var oBindingCtx = oItem.getBindingContext();
+            var oMaterialData = oBindingCtx ? oBindingCtx.getObject() : null;
+
+            if (oMaterialData) {
+                PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterialData);
+            } else {
+                oModel.setProperty(sPath + "/Material", sKey);
+                var sDesc = oItem.getAdditionalText() || "";
+                if (sDesc && !oModel.getProperty(sPath + "/PurchaseOrderItemText")) {
+                    oModel.setProperty(sPath + "/PurchaseOrderItemText", sDesc);
+                }
+                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
+            }
+
+            // Ensure Unit is derived from S/4HANA if not already present in suggestion context
+            var sCurrentUnit = oModel.getProperty(sPath + "/UnitOfMeasure");
+            var that = this;
+            if (!sCurrentUnit || sCurrentUnit === "PC") {
+                PurchaseOrderService.getMaterialUnit(sKey).then(function (sUnit) {
+                    if (sUnit) {
+                        oModel.setProperty(sPath + "/UnitOfMeasure", sUnit);
+                        oModel.setProperty(sPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
+                        that.onItemFieldChange();
+                    }
+                });
+            }
+
+            this.onItemFieldChange();
+        },
+
         onItemFieldChange: function () {
             var oModel = this.getView().getModel("newPO");
             PurchaseOrderModel.updateStatus(oModel);
@@ -385,15 +450,60 @@ sap.ui.define([
         onValueHelpRequest: function (oEvent) {
             var oSource = oEvent.getSource();
             var that = this;
-            ValueHelpService.openValueHelp(this.getView(), oSource, function (sKey) {
-                that._handleValueHelpSelected(oSource, sKey);
+            ValueHelpService.openValueHelp(this.getView(), oSource, function (sKey, oSelectedItem, oData) {
+                that._handleValueHelpSelected(oSource, sKey, oSelectedItem, oData);
             });
         },
 
-        _handleValueHelpSelected: function (oSource, sKey) {
+        _handleValueHelpSelected: function (oSource, sKey, oSelectedItem, oData) {
             if (!oSource || !sKey) return;
             var sId = oSource.getId() || "";
+            var oRowContext = oSource.getBindingContext("newPO");
+            var oModel = this.getView().getModel("newPO");
 
+            // Line items table fields
+            if (oRowContext) {
+                var sRowPath = oRowContext.getPath();
+                var sValPath = oSource.getBindingPath("value");
+
+                if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
+                    var oMatData = oData || {
+                        Material: sKey,
+                        MaterialName: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
+                    };
+                    PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMatData);
+                    var that = this;
+                    if (!oData || !oData.MaterialBaseUnit) {
+                        PurchaseOrderService.getMaterialUnit(sKey).then(function (sUnit) {
+                            if (sUnit) {
+                                oModel.setProperty(sRowPath + "/UnitOfMeasure", sUnit);
+                                oModel.setProperty(sRowPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
+                                that.onItemFieldChange();
+                            }
+                        });
+                    }
+                    this.onItemFieldChange();
+                } else if (sValPath === "UnitOfMeasure" || sId.indexOf("UnitOfMeasure") !== -1) {
+                    oModel.setProperty(sRowPath + "/UnitOfMeasure", sKey);
+                    oModel.setProperty(sRowPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
+                    this.onItemFieldChange();
+                } else if (sValPath === "Plant" || sId.indexOf("Plant") !== -1) {
+                    oModel.setProperty(sRowPath + "/Plant", sKey);
+                    oModel.setProperty(sRowPath + "/errors/Plant", { state: "None", text: "" });
+                    this.onItemFieldChange();
+                } else if (sValPath === "StorageLocation" || sId.indexOf("StorageLocation") !== -1) {
+                    oModel.setProperty(sRowPath + "/StorageLocation", sKey);
+                    oModel.setProperty(sRowPath + "/errors/StorageLocation", { state: "None", text: "" });
+                    this.onItemFieldChange();
+                } else if (sValPath === "TaxCode" || sId.indexOf("TaxCode") !== -1) {
+                    oModel.setProperty(sRowPath + "/TaxCode", sKey);
+                    oModel.setProperty(sRowPath + "/errors/TaxCode", { state: "None", text: "" });
+                    this.onItemFieldChange();
+                }
+                return;
+            }
+
+            // Header fields
             if (sId.indexOf("inDocType") !== -1) {
                 this.onDocTypeChange();
             } else if (sId.indexOf("inCompanyCode") !== -1) {

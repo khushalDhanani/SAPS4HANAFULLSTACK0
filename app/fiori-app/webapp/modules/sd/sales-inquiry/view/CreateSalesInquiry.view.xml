@@ -144,7 +144,7 @@
 
                                 <Label text="Ship-to Party" />
                                 <Input id="inShipToParty" value="{newInquiry>/header/ShipToParty}" placeholder="e.g. 10135" maxLength="10"
-                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/CustomerVH', templateShareable: false}">
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItemSelected=".onShipToPartySelect" suggestionItems="{path: 'salesInquiry>/CustomerVH', templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{salesInquiry>Customer}" text="{salesInquiry>Customer}" additionalText="{salesInquiry>CustomerName}" />
                                     </suggestionItems>
@@ -215,7 +215,7 @@
                                         change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/MaterialVH', templateShareable: false}">
                                         <suggestionItems>
-                                            <core:ListItem key="{salesInquiry>Material}" text="{salesInquiry>Material}" additionalText="{salesInquiry>Material_Text}" />
+                                            <core:ListItem key="{salesInquiry>Material}" text="{salesInquiry>Material}" additionalText="{= (${salesInquiry>Material_Text} || ${salesInquiry>MaterialName} || '') + (${salesInquiry>MaterialBaseUnit} ? ' (' + ${salesInquiry>MaterialBaseUnit} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newInquiry>SalesInquiryItemText}" placeholder="Item description" change=".onItemFieldChange" />
@@ -226,7 +226,14 @@
                                     <Input value="{newInquiry>OrderQuantityUnit}" placeholder="PC" maxLength="3" required="true"
                                         valueState="{newInquiry>errors/OrderQuantityUnit/state}"
                                         valueStateText="{newInquiry>errors/OrderQuantityUnit/text}"
-                                        change=".onItemFieldChange" />
+                                        change=".onItemFieldChange"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false"
+                                        suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItemSelected=".onItemUnitSelect"
+                                        suggestionItems="{path: 'salesInquiry>/UnitOfMeasureVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{salesInquiry>UnitOfMeasure}" text="{salesInquiry>UnitOfMeasure}" additionalText="{salesInquiry>UnitOfMeasure_Text}" />
+                                        </suggestionItems>
+                                    </Input>
                                     <Input value="{newInquiry>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End" change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
                                     <ObjectNumber number="{newInquiry>NetAmount}" unit="{newInquiry>/header/TransactionCurrency}" state="Success" />
                                 </cells>

@@ -307,4 +307,29 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         expect(oModel.getProperty("/errorCount")).toBe(0);
         expect(Object.keys(oModel.getProperty("/errors")).length).toBe(0);
     });
+
+    test("applyMaterialDefaults sets Material, description and direct UNIT based on Material master data configuration", () => {
+        const oModel = SalesInquiryModel.createInitialModel("alice");
+        // Pre-set an error state on OrderQuantityUnit
+        oModel.setProperty("/items/0/errors/OrderQuantityUnit", { state: "Error", text: "Unit is required" });
+        oModel.setProperty("/items/0/errors/Material", { state: "Error", text: "Material is required" });
+
+        const materialMasterData = {
+            Material: "1000000003",
+            MaterialName: "Test Chemical Compound",
+            MaterialBaseUnit: "KG"
+        };
+
+        const report = SalesInquiryModel.applyMaterialDefaults(oModel, "/items/0", materialMasterData);
+
+        expect(report.Material).toBe("1000000003");
+        expect(report.SalesInquiryItemText).toBe("Test Chemical Compound");
+        expect(report.OrderQuantityUnit).toBe("KG");
+
+        expect(oModel.getProperty("/items/0/Material")).toBe("1000000003");
+        expect(oModel.getProperty("/items/0/SalesInquiryItemText")).toBe("Test Chemical Compound");
+        expect(oModel.getProperty("/items/0/OrderQuantityUnit")).toBe("KG");
+        expect(oModel.getProperty("/items/0/errors/Material/state")).toBe("None");
+        expect(oModel.getProperty("/items/0/errors/OrderQuantityUnit/state")).toBe("None");
+    });
 });

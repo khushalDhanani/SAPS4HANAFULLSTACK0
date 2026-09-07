@@ -1,5 +1,6 @@
 using { SD_F2370_INQY_WL_SRV as externalWL } from '../../external/SD_F2370_INQY_WL_SRV';
 using { SD_F2369_INQY_FS_SRV as externalFS } from '../../external/SD_F2369_INQY_FS_SRV';
+using { C_PURCHASEORDER_FS_SRV as externalPO } from '../../external/C_PURCHASEORDER_FS_SRV';
 
 @(requires: 'authenticated-user')
 service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
@@ -10,6 +11,14 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesInquiryType,
         SoldToParty,
         PurchaseOrderByCustomer,
+        null as CustomerPurchaseOrderDate : Date,
+        null as BindingPeriodValidityStartDate : Date,
+        null as BindingPeriodValidityEndDate : Date,
+        null as ShipToParty : String(10),
+        null as ShipToPartyName : String(80),
+        null as SalesAreaDesc : String(64),
+        null as ContactPersonName : String(80),
+        null as SalesEmployeeName : String(80),
         OverallSDProcessStatus,
         OverallSDDocumentRejectionSts,
         SalesDocumentRjcnReason,
@@ -41,6 +50,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesDocumentRjcnReasonName,
         OrderQuantity,
         OrderQuantityUnit,
+        null as NetPriceAmount : Decimal(16, 3),
         NetAmount,
         TransactionCurrency,
         Material,
@@ -56,8 +66,14 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity DivisionVH as projection on externalWL.C_OrgDivisionValueHelp;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity SoldToPartyVH as projection on externalWL.C_SoldToValueHelp;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity CustomerVH as projection on externalWL.I_Customer_VH;
-    @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity MaterialVH as projection on externalWL.I_MaterialStdVH;
+    @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity MaterialVH as projection on externalFS.I_Material {
+        key Material,
+        Material_Text,
+        Material_Text as MaterialName : String(40),
+        MaterialBaseUnit
+    };
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity CurrencyVH as projection on externalWL.I_CurrencyStdVH;
+    @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin']) entity UnitOfMeasureVH as projection on externalPO.I_UnitOfMeasure;
 
     type InquiryItem {
         SalesInquiryItem: String;

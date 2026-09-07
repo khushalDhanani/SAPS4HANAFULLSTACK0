@@ -24,17 +24,9 @@
                     </Breadcrumbs>
                 </uxap:breadcrumbs>
 
-                <!-- 2. Unified Heading (Back Navigation + Title + Canonical ObjectStatus) -->
+                <!-- 2. Unified Heading (Title + Canonical ObjectStatus) -->
                 <uxap:heading>
                     <HBox alignItems="Center" wrap="NoWrap">
-                        <Button
-                            id="btnDetailBack"
-                            text="{i18n>btnBack}"
-                            icon="sap-icon://nav-back"
-                            tooltip="{i18n>btnBack}"
-                            press=".onNavBack"
-                            type="Transparent"
-                            class="sapUiTinyMarginEnd" />
                         <Title
                             id="headerPoTitle"
                             text="{= ${PurchaseOrder} ? (${i18n>poDetailTitle} + ' ' + ${PurchaseOrder}) : ${i18n>poDetailTitle} }"

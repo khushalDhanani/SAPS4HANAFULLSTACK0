@@ -107,24 +107,84 @@ class SalesInquiryAdapter {
     }
 
     await this.init();
+    let header = null;
+    let items = [];
+
+    // 1. Fetch worklist header record (contains OrganizationBPName1, CreationDate, CreatedByUser, etc.)
     if (this.s4hanaWL) {
       try {
         const res = await this.s4hanaWL.run(
           SELECT.one.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370').where({ SalesInquiry: sKey })
         );
         if (res) {
-          let items = [];
-          if (this.s4hanaFS) {
-            try {
-              const itemRes = await this.s4hanaFS.run(
-                SELECT.from('SD_F2369_INQY_FS_SRV.C_Inquiryitemfs').where({ SalesInquiry: sKey })
-              );
-              items = Array.isArray(itemRes) ? itemRes : (itemRes?.value || itemRes?.d?.results || []);
-            } catch (ie) {}
-          }
-          return { header: res, items: items };
+          header = { ...res };
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[SalesInquiryAdapter] Error fetching WL record for inquiry:', e.message);
+      }
+    }
+
+    // 2. Fetch factsheet header record and partner cards (contains CustomerPurchaseOrderDate, Validity Dates, Partners)
+    if (this.s4hanaFS) {
+      try {
+        const fsDoc = await this.s4hanaFS.run(
+          SELECT.one.from('SD_F2369_INQY_FS_SRV.C_Inquiryfs', doc => {
+            doc('*');
+            doc.to_SDDocumentPartnerCard('*');
+          }).where({ SalesInquiry: sKey })
+        );
+        if (fsDoc) {
+          header = Object.assign({}, fsDoc, header || {});
+          if (fsDoc.CustomerPurchaseOrderDate) header.CustomerPurchaseOrderDate = fsDoc.CustomerPurchaseOrderDate;
+          if (fsDoc.BindingPeriodValidityStartDate) header.BindingPeriodValidityStartDate = fsDoc.BindingPeriodValidityStartDate;
+          if (fsDoc.BindingPeriodValidityEndDate) header.BindingPeriodValidityEndDate = fsDoc.BindingPeriodValidityEndDate;
+          if (fsDoc.SalesAreaDesc) header.SalesAreaDesc = fsDoc.SalesAreaDesc;
+
+          const partners = Array.isArray(fsDoc.to_SDDocumentPartnerCard) ? fsDoc.to_SDDocumentPartnerCard : [];
+          const shipTo = partners.find(p => p.PartnerFunction === 'WE');
+          if (shipTo) {
+            header.ShipToParty = shipTo.Customer || shipTo.BusinessPartner;
+            header.ShipToPartyName = shipTo.FullName;
+          }
+          const contact = partners.find(p => p.PartnerFunction === 'ZP');
+          if (contact) {
+            header.ContactPersonName = contact.FullName;
+          }
+          const salesEmp = partners.find(p => p.PartnerFunction === 'ZE');
+          if (salesEmp) {
+            header.SalesEmployeeName = salesEmp.FullName;
+          }
+        }
+      } catch (fse) {
+        console.warn('[SalesInquiryAdapter] Error fetching FS record for inquiry:', fse.message);
+      }
+
+      // 3. Fetch items with computed NetPriceAmount
+      try {
+        const itemRes = await this.s4hanaFS.run(
+          SELECT.from('SD_F2369_INQY_FS_SRV.C_Inquiryitemfs').where({ SalesInquiry: sKey })
+        );
+        const rawItems = Array.isArray(itemRes) ? itemRes : (itemRes?.value || itemRes?.d?.results || []);
+        items = rawItems.map(item => {
+          const qty = Number(item.OrderQuantity) || 0;
+          const net = Number(item.NetAmount) || 0;
+          const price = item.NetPriceAmount || (qty > 0 ? (net / qty).toFixed(2) : '0.00');
+          return {
+            ...item,
+            NetPriceAmount: price
+          };
+        });
+      } catch (ie) {
+        console.warn('[SalesInquiryAdapter] Error fetching items for inquiry:', ie.message);
+      }
+    }
+
+    if (header) {
+      if (!header.ShipToParty && header.SoldToParty) {
+        header.ShipToParty = header.SoldToParty;
+        header.ShipToPartyName = header.OrganizationBPName1 || '';
+      }
+      return { header, items };
     }
 
     return null;

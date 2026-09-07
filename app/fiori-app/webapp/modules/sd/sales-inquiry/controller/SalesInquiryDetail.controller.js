@@ -15,6 +15,7 @@ sap.ui.define([
         _onRouteMatched: function (oEvent) {
             var sInquiryId = oEvent.getParameter("arguments").SalesInquiry;
             if (sInquiryId) {
+                this._sInquiryId = sInquiryId;
                 this._loadInquiry(sInquiryId);
             }
         },
@@ -41,7 +42,13 @@ sap.ui.define([
         },
 
         onNavBack: function () {
-            this.getOwnerComponent().getRouter().navTo("salesInquiries");
+            BaseController.prototype.onNavBack.call(this, "salesInquiries");
+        },
+
+        onRefresh: function () {
+            if (this._sInquiryId) {
+                this._loadInquiry(this._sInquiryId);
+            }
         },
 
         onCreateAnother: function () {

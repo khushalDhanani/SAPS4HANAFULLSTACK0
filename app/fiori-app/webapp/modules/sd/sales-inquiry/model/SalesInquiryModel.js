@@ -240,6 +240,43 @@ sap.ui.define([
         },
 
         /**
+         * Applies Material master data configuration to a specific line item:
+         * Sets Material, Description (if not already entered), and directly sets OrderQuantityUnit
+         * from the Material's master data Base Unit of Measure configuration (MaterialBaseUnit).
+         * Clears any validation errors on Material and OrderQuantityUnit.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sItemPath Item binding path (e.g. "/items/0")
+         * @param {Object} oMaterialData Material master data object containing Material, MaterialBaseUnit, etc.
+         * @returns {Object} Report of applied fields
+         */
+        applyMaterialDefaults: function (oModel, sItemPath, oMaterialData) {
+            if (!oModel || !sItemPath || !oMaterialData) return {};
+            var oReport = {};
+
+            if (oMaterialData.Material) {
+                oModel.setProperty(sItemPath + "/Material", oMaterialData.Material);
+                oModel.setProperty(sItemPath + "/errors/Material", { state: "None", text: "" });
+                oReport.Material = oMaterialData.Material;
+            }
+
+            var sDesc = oMaterialData.Material_Text || oMaterialData.MaterialName;
+            if (sDesc && !oModel.getProperty(sItemPath + "/SalesInquiryItemText")) {
+                oModel.setProperty(sItemPath + "/SalesInquiryItemText", sDesc);
+                oReport.SalesInquiryItemText = sDesc;
+            }
+
+            var sUnit = oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit || oMaterialData.OrderQuantityUnit;
+            if (sUnit) {
+                oModel.setProperty(sItemPath + "/OrderQuantityUnit", sUnit);
+                oModel.setProperty(sItemPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+                oReport.OrderQuantityUnit = sUnit;
+            }
+
+            return oReport;
+        },
+
+        /**
          * Calculates line net amount and header total net amount.
          */
         calculateTotals: function (oModel) {

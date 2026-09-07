@@ -234,6 +234,44 @@ sap.ui.define([
         },
 
         /**
+         * Applies Material master data configuration to a specific line item:
+         * Sets Material, Description (if not already entered), and directly sets UnitOfMeasure
+         * from the Material's master data Base Unit of Measure configuration (MaterialBaseUnit).
+         * Clears any validation errors on Material and UnitOfMeasure.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string|number} vItem Item index or binding path
+         * @param {Object} oMaterialData Material master data object containing Material, MaterialBaseUnit, etc.
+         * @returns {Object} Report of applied fields
+         */
+        applyMaterialDefaults: function (oModel, vItem, oMaterialData) {
+            if (!oModel || vItem === undefined || vItem === null || !oMaterialData) return {};
+            var sPath = typeof vItem === "number" ? "/items/" + vItem : (String(vItem).indexOf("/") === 0 ? vItem : "/items/" + vItem);
+            var oReport = {};
+
+            if (oMaterialData.Material) {
+                oModel.setProperty(sPath + "/Material", oMaterialData.Material);
+                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
+                oReport.Material = oMaterialData.Material;
+            }
+
+            var sDesc = oMaterialData.MaterialName || oMaterialData.Material_Text;
+            if (sDesc && !oModel.getProperty(sPath + "/PurchaseOrderItemText")) {
+                oModel.setProperty(sPath + "/PurchaseOrderItemText", sDesc);
+                oReport.PurchaseOrderItemText = sDesc;
+            }
+
+            var sUnit = oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit || oMaterialData.UnitOfMeasure;
+            if (sUnit) {
+                oModel.setProperty(sPath + "/UnitOfMeasure", sUnit);
+                oModel.setProperty(sPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
+                oReport.UnitOfMeasure = sUnit;
+            }
+
+            return oReport;
+        },
+
+        /**
          * Validates the PO form data at the client-side UI level for immediate UX feedback.
          *
          * @param {Object} oData

@@ -169,6 +169,38 @@ sap.ui.define([
                     };
                 });
             });
+        },
+
+        /**
+         * Looks up Material master data details including MaterialBaseUnit from S/4HANA.
+         *
+         * @param {string} sMaterial
+         * @returns {Promise<Object|null>}
+         */
+        getMaterialDetails: function (sMaterial) {
+            if (!sMaterial || String(sMaterial).trim() === "") {
+                return Promise.resolve(null);
+            }
+            var sFilter = "?$filter=Material eq '" + encodeURIComponent(String(sMaterial).trim()) + "'&$top=1";
+            return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter).then(function (res) {
+                var aItems = (res && (res.value || (res.d && res.d.results))) || [];
+                return (aItems.length > 0) ? aItems[0] : null;
+            }).catch(function (err) {
+                console.warn("[PurchaseOrderService] Error fetching material details for " + sMaterial + ":", err);
+                return null;
+            });
+        },
+
+        /**
+         * Directly retrieves the configured Base Unit of Measure for a Material.
+         *
+         * @param {string} sMaterial
+         * @returns {Promise<string|null>}
+         */
+        getMaterialUnit: function (sMaterial) {
+            return this.getMaterialDetails(sMaterial).then(function (oMaterial) {
+                return (oMaterial && (oMaterial.MaterialBaseUnit || oMaterial.BaseUnit || oMaterial.UnitOfMeasure)) || null;
+            });
         }
     };
 });

@@ -15,7 +15,7 @@ sap.ui.define([
         "/CurrencyVH": { title: "Select Currency", key: "Currency", desc: "Currency_Text" },
         "/IncotermsClassificationVH": { title: "Select Incoterms", key: "IncotermsClassification", desc: "IncotermsClassificationName" },
         "/PaymentTermsVH": { title: "Select Payment Terms", key: "PaymentTerms", desc: "PaymentTermsName" },
-        "/MaterialVH": { title: "Select Material", key: "Material", desc: "MaterialName" },
+        "/MaterialVH": { title: "Select Material", key: "Material", desc: "Material_Text", descAlt: "MaterialName", info: "MaterialBaseUnit" },
         "/MaterialGroupVH": { title: "Select Material Group", key: "MaterialGroup", desc: "MaterialGroupName" },
         "/PlantVH": { title: "Select Plant", key: "Plant", desc: "PlantName" },
         "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName" },
@@ -34,7 +34,7 @@ sap.ui.define([
          * Returns configuration metadata for a given value-help OData path.
          *
          * @param {string} sPath
-         * @returns {{ title: string, key: string, desc: string }|undefined}
+         * @returns {{ title: string, key: string, desc: string, descAlt?: string }|undefined}
          */
         getConfig: function (sPath) {
             return oValueHelpConfig[sPath];
@@ -45,9 +45,10 @@ sap.ui.define([
          *
          * @param {sap.ui.core.mvc.View} oView
          * @param {sap.m.Input} oInput
-         * @param {Function} [fnCallback]
+         * @param {Function} [fnCallback] - Called with (sKey, oSelectedItem, oSelectedData)
+         * @param {Array<sap.ui.model.Filter>} [aInitialFilters] - Optional contextual filters (e.g. SalesOrg, DistChannel)
          */
-        openValueHelp: function (oView, oInput, fnCallback) {
+        openValueHelp: function (oView, oInput, fnCallback, aInitialFilters) {
             var oBinding = oInput.getBinding("suggestionItems");
             if (!oBinding) return;
 
@@ -55,18 +56,29 @@ sap.ui.define([
             var oConf = this.getConfig(sPath);
             if (!oConf) return;
 
+            var oModel = oBinding.getModel() || (oView && oView.getModel("salesInquiry")) || oInput.getModel();
+
+            var aActiveContextFilters = Array.isArray(aInitialFilters) ? aInitialFilters.slice() : [];
+
             var oSelectDialog = new SelectDialog({
                 title: oConf.title,
                 search: function (oSearchEvent) {
                     var sValue = oSearchEvent.getParameter("value");
-                    var oFilter = new Filter({
-                        filters: [
+                    var aSearchFilters = [];
+
+                    if (sValue && String(sValue).trim() !== "") {
+                        var aOrFilters = [
                             new Filter(oConf.key, FilterOperator.Contains, sValue),
                             new Filter(oConf.desc, FilterOperator.Contains, sValue)
-                        ],
-                        and: false
-                    });
-                    oSearchEvent.getSource().getBinding("items").filter([oFilter]);
+                        ];
+                        if (oConf.descAlt) {
+                            aOrFilters.push(new Filter(oConf.descAlt, FilterOperator.Contains, sValue));
+                        }
+                        aSearchFilters.push(new Filter({ filters: aOrFilters, and: false }));
+                    }
+
+                    var aAllFilters = aSearchFilters.concat(aActiveContextFilters);
+                    oSearchEvent.getSource().getBinding("items").filter(aAllFilters);
                 },
                 confirm: function (oConfirmEvent) {
                     var oSelectedItem = oConfirmEvent.getParameter("selectedItem");
@@ -77,19 +89,33 @@ sap.ui.define([
                         if (oValBinding) {
                             oValBinding.setValue(sKey);
                         }
+
+                        var oBindingContext = oSelectedItem.getBindingContext();
+                        var oSelectedData = oBindingContext ? oBindingContext.getObject() : null;
+
                         if (typeof fnCallback === "function") {
-                            fnCallback(sKey, oSelectedItem);
+                            fnCallback(sKey, oSelectedItem, oSelectedData);
                         }
                     }
                 }
             });
 
+            if (oModel) {
+                oSelectDialog.setModel(oModel);
+            }
+
+            var oTemplateConfig = {
+                title: "{" + oConf.key + "}",
+                description: "{" + oConf.desc + "}"
+            };
+            if (oConf.info) {
+                oTemplateConfig.info = "{" + oConf.info + "}";
+            }
+
             oSelectDialog.bindAggregation("items", {
                 path: sPath,
-                template: new StandardListItem({
-                    title: "{" + oConf.key + "}",
-                    description: "{" + oConf.desc + "}"
-                })
+                filters: aActiveContextFilters,
+                template: new StandardListItem(oTemplateConfig)
             });
 
             if (oView && oView.addDependent) {
@@ -100,11 +126,13 @@ sap.ui.define([
 
         /**
          * Applies filter to autocomplete suggestion items as the user types.
+         * Filters both technical key and description, and merges contextual filters.
          *
          * @param {sap.m.Input} oInput
          * @param {string} sValue
+         * @param {Array<sap.ui.model.Filter>} [aContextFilters] - Optional contextual filters (e.g. SalesOrg, DistChannel)
          */
-        applySuggestionFilter: function (oInput, sValue) {
+        applySuggestionFilter: function (oInput, sValue, aContextFilters) {
             var oBinding = oInput.getBinding("suggestionItems");
             if (!oBinding) return;
 
@@ -113,14 +141,22 @@ sap.ui.define([
             if (!oConf) return;
 
             var aFilters = [];
-            if (sValue) {
+            if (sValue && String(sValue).trim() !== "") {
+                var aOrFilters = [
+                    new Filter(oConf.key, FilterOperator.Contains, sValue),
+                    new Filter(oConf.desc, FilterOperator.Contains, sValue)
+                ];
+                if (oConf.descAlt) {
+                    aOrFilters.push(new Filter(oConf.descAlt, FilterOperator.Contains, sValue));
+                }
                 aFilters.push(new Filter({
-                    filters: [
-                        new Filter(oConf.key, FilterOperator.Contains, sValue),
-                        new Filter(oConf.desc, FilterOperator.Contains, sValue)
-                    ],
+                    filters: aOrFilters,
                     and: false
                 }));
+            }
+
+            if (Array.isArray(aContextFilters) && aContextFilters.length > 0) {
+                aFilters = aFilters.concat(aContextFilters);
             }
 
             oBinding.filter(aFilters);

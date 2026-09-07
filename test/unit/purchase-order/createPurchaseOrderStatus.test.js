@@ -463,4 +463,49 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             expect(oModel.getProperty('/errorList/0/title')).toBe('SAP S/4HANA Gateway is unreachable');
         });
     });
+
+    describe('applyMaterialDefaults for master-data configured direct UNIT', () => {
+        it('should set Material, description and direct UnitOfMeasure based on S/4HANA master data', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
+            oModel.setProperty('/items/0/errors/UnitOfMeasure', { state: 'Error', text: 'Unit is required' });
+            oModel.setProperty('/items/0/errors/Material', { state: 'Error', text: 'Material is required' });
+
+            const materialData = {
+                Material: '1000000003',
+                MaterialName: 'test material',
+                MaterialBaseUnit: 'KG'
+            };
+
+            const report = PurchaseOrderModel.applyMaterialDefaults(oModel, 0, materialData);
+
+            expect(report.Material).toBe('1000000003');
+            expect(report.PurchaseOrderItemText).toBe('test material');
+            expect(report.UnitOfMeasure).toBe('KG');
+
+            expect(oModel.getProperty('/items/0/Material')).toBe('1000000003');
+            expect(oModel.getProperty('/items/0/PurchaseOrderItemText')).toBe('test material');
+            expect(oModel.getProperty('/items/0/UnitOfMeasure')).toBe('KG');
+            expect(oModel.getProperty('/items/0/errors/Material/state')).toBe('None');
+            expect(oModel.getProperty('/items/0/errors/UnitOfMeasure/state')).toBe('None');
+        });
+
+        it('should accept item path as string and not overwrite existing description', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
+            oModel.setProperty('/items/0/PurchaseOrderItemText', 'Custom User Description');
+
+            const materialData = {
+                Material: 'TG11',
+                MaterialName: 'Standard Component',
+                MaterialBaseUnit: 'L'
+            };
+
+            const report = PurchaseOrderModel.applyMaterialDefaults(oModel, '/items/0', materialData);
+
+            expect(report.Material).toBe('TG11');
+            expect(report.UnitOfMeasure).toBe('L');
+            expect(report.PurchaseOrderItemText).toBeUndefined();
+            expect(oModel.getProperty('/items/0/PurchaseOrderItemText')).toBe('Custom User Description');
+            expect(oModel.getProperty('/items/0/UnitOfMeasure')).toBe('L');
+        });
+    });
 });
