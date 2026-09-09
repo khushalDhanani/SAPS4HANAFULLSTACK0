@@ -150,8 +150,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Customer Reference" />
-                                <Input id="inCustRef" value="{newInquiry>/header/PurchaseOrderByCustomer}" placeholder="PO or Tender Reference" maxLength="35" change=".onHeaderFieldChange" />
+                                <Label text="Description / Reference" />
+                                <Input id="inCustRef" value="{newInquiry>/header/PurchaseOrderByCustomer}" placeholder="e.g. Industrial Grade Chemical Inquiry or PO Reference" maxLength="35" change=".onHeaderFieldChange" />
 
                                 <Label text="Customer PO Date" />
                                 <DatePicker id="inCustRefDate" value="{newInquiry>/header/CustomerPurchaseOrderDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" change=".onHeaderFieldChange" />

@@ -2,7 +2,7 @@ sap.ui.define([], function () {
     "use strict";
 
     var sCsrfToken = null;
-    var CSRF_TOKEN_URL = "/odata/v4/purchase-order/";
+    var CSRF_TOKEN_URL = "/odata/v4/auth/";
 
     /**
      * Centralized OData/CAP HTTP Client handling:
@@ -70,6 +70,9 @@ sap.ui.define([], function () {
                         if (oErrObj.message) {
                             sMessage = typeof oErrObj.message === "object" ? (oErrObj.message.value || JSON.stringify(oErrObj.message)) : oErrObj.message;
                         }
+                        if (oErrObj.target && (!sMessage || sMessage === sCode || oErrObj.target.length > (sMessage || "").length)) {
+                            sMessage = oErrObj.target;
+                        }
                         if (Array.isArray(oErrObj.details)) {
                             aDetails = oErrObj.details;
                         } else if (oErrObj.innererror && Array.isArray(oErrObj.innererror.errordetails)) {
@@ -134,8 +137,9 @@ sap.ui.define([], function () {
                             var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
                             if (sSession) {
                                 var oParsed = JSON.parse(sSession);
-                                if (oParsed && oParsed.user && oParsed.user.token) {
-                                    mHeaders["Authorization"] = "Bearer " + oParsed.user.token;
+                                var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;
+                                if (sAuthToken) {
+                                    mHeaders["Authorization"] = "Bearer " + sAuthToken;
                                 }
                             }
                         } catch (e) {}
@@ -150,7 +154,8 @@ sap.ui.define([], function () {
                     return fetch(sUrl, {
                         method: sMethod,
                         headers: mHeaders,
-                        body: bodyData
+                        body: bodyData,
+                        credentials: "same-origin"
                     });
                 })
                     .then(function (response) {
@@ -172,6 +177,12 @@ sap.ui.define([], function () {
                         }
 
                         if (!response.ok) {
+                            if (response.status === 401) {
+                                try {
+                                    sessionStorage.removeItem("saps4hana_fiori_auth_session");
+                                    localStorage.removeItem("saps4hana_fiori_auth_session");
+                                } catch (e) {}
+                            }
                             return that.parseError(response).then(function (err) {
                                 throw err;
                             });

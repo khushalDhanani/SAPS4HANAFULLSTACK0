@@ -24,16 +24,21 @@ function mapToS4InquiryPayload(header, items, options = {}) {
         DistributionChannel: String(header.DistributionChannel || '10').trim(),
         OrganizationDivision: String(header.OrganizationDivision || '52').trim(),
         SoldToParty: String(header.SoldToParty || '').trim(),
+        CustomerName: header.CustomerName ? String(header.CustomerName).trim() : '',
         PurchaseOrderByCustomer: header.PurchaseOrderByCustomer ? String(header.PurchaseOrderByCustomer).trim() : '',
         CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate || today,
         SalesInquiryDate: header.SalesInquiryDate || today,
         BindingPeriodValidityStartDate: header.BindingPeriodValidityStartDate || today,
         BindingPeriodValidityEndDate: header.BindingPeriodValidityEndDate || today,
-        TransactionCurrency: String(header.TransactionCurrency || 'INR').trim().toUpperCase()
+        TransactionCurrency: String(header.TransactionCurrency || 'INR').trim().toUpperCase(),
+        TotalNetAmount: header.TotalNetAmount !== undefined ? String(header.TotalNetAmount) : '0.00'
     };
 
     if (header.ShipToParty) {
         s4Header.ShipToParty = String(header.ShipToParty).trim();
+    }
+    if (header.ShipToPartyName) {
+        s4Header.ShipToPartyName = String(header.ShipToPartyName).trim();
     }
 
     const s4Items = (items || []).map((item, index) => {

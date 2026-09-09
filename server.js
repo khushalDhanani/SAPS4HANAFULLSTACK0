@@ -35,7 +35,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.auth = cds.env.requires.auth || {};
     cds.env.requires.auth.users = cds.env.requires.auth.users || {};
-    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager'];
+    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'];
     cds.env.requires.auth.users[s4User] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
@@ -120,6 +120,17 @@ cds.on('bootstrap', (app) => {
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
     app.use((req, res, next) => {
         res.setHeader('Permissions-Policy', 'unload=*');
+        // Intercept WWW-Authenticate header to prevent native browser modal basic auth popups
+        const originalSetHeader = res.setHeader;
+        res.setHeader = function (name, value) {
+            if (typeof name === 'string' && name.toLowerCase() === 'www-authenticate') {
+                if (typeof value === 'string' && value.toLowerCase().startsWith('basic')) {
+                    // Suppress Basic auth challenge so browsers never show native modal login dialogs
+                    return originalSetHeader.call(this, name, 'Bearer realm="SAPS4HANA", error="invalid_token"');
+                }
+            }
+            return originalSetHeader.apply(this, arguments);
+        };
         next();
     });
 
@@ -174,6 +185,24 @@ cds.on('serving', (srv) => {
         });
     }
 });
+
+// Register local development Bearer token verification into CAP OData middleware chain
+if (process.env.NODE_ENV !== 'production') {
+    cds.middlewares.add((req, res, next) => {
+        const auth = req.headers.authorization;
+        if (auth && auth.match(/^bearer\s+/i)) {
+            const token = auth.replace(/^bearer\s+/i, '').trim();
+            const u = localTokenUtil.verifyToken(token);
+            if (u) {
+                req.user = u;
+                if (cds.context) {
+                    cds.context.user = u;
+                }
+            }
+        }
+        next();
+    }, { after: 'auth' });
+}
 
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;

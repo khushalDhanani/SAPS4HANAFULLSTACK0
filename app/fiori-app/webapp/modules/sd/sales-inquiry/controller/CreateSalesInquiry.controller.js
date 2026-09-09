@@ -15,12 +15,12 @@ sap.ui.define([
 
     return BaseController.extend("saps4hana.fiori.modules.sd.sales-inquiry.controller.CreateSalesInquiry", {
         onInit: function () {
-            this._resetModel();
+            this._resetModel(false);
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.getRoute("createSalesInquiry").attachPatternMatched(this._onRouteMatched, this);
         },
 
-        _resetModel: function () {
+        _resetModel: function (bLoadConfig) {
             var sUser = SalesInquiryModel.getCurrentUserName(this.getOwnerComponent());
             var oModel = SalesInquiryModel.createInitialModel(sUser);
             this.getView().setModel(oModel, "newInquiry");
@@ -30,7 +30,9 @@ sap.ui.define([
                 this._oMessagePopover.close();
             }
 
-            this._loadConfigurationAndDefaults();
+            if (bLoadConfig) {
+                this._loadConfigurationAndDefaults();
+            }
         },
 
         _loadConfigurationAndDefaults: function () {
@@ -56,15 +58,12 @@ sap.ui.define([
         },
 
         _onRouteMatched: function () {
-            this._resetModel();
+            this._resetModel(true);
         },
 
         onInquiryTypeChange: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
-            }
+            SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
             SalesInquiryModel.validateSingleField(oModel, "SalesInquiryType");
             SalesInquiryModel.updateStatus(oModel);
         },
@@ -75,16 +74,14 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newInquiry");
                 oModel.setProperty("/header/SalesInquiryType", sKey);
+                SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
                 this.onInquiryTypeChange();
             }
         },
 
         onSalesOrgChange: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                SalesInquiryModel.markUserModified(oModel, "SalesOrganization", true);
-            }
+            SalesInquiryModel.markUserModified(oModel, "SalesOrganization", true);
             this._updateOrganizationalFilters();
             SalesInquiryModel.validateSingleField(oModel, "SalesOrganization");
             SalesInquiryModel.updateStatus(oModel);
@@ -96,16 +93,14 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newInquiry");
                 oModel.setProperty("/header/SalesOrganization", sKey);
+                SalesInquiryModel.markUserModified(oModel, "SalesOrganization", true);
                 this.onSalesOrgChange();
             }
         },
 
         onDistChannelChange: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                SalesInquiryModel.markUserModified(oModel, "DistributionChannel", true);
-            }
+            SalesInquiryModel.markUserModified(oModel, "DistributionChannel", true);
             this._updateOrganizationalFilters();
             SalesInquiryModel.validateSingleField(oModel, "DistributionChannel");
             SalesInquiryModel.updateStatus(oModel);
@@ -117,16 +112,14 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newInquiry");
                 oModel.setProperty("/header/DistributionChannel", sKey);
+                SalesInquiryModel.markUserModified(oModel, "DistributionChannel", true);
                 this.onDistChannelChange();
             }
         },
 
         onDivisionChange: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                SalesInquiryModel.markUserModified(oModel, "OrganizationDivision", true);
-            }
+            SalesInquiryModel.markUserModified(oModel, "OrganizationDivision", true);
             SalesInquiryModel.validateSingleField(oModel, "OrganizationDivision");
             SalesInquiryModel.updateStatus(oModel);
         },
@@ -137,6 +130,7 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newInquiry");
                 oModel.setProperty("/header/OrganizationDivision", sKey);
+                SalesInquiryModel.markUserModified(oModel, "OrganizationDivision", true);
                 this.onDivisionChange();
             }
         },
@@ -257,10 +251,7 @@ sap.ui.define([
 
         onCurrencyChange: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                SalesInquiryModel.markUserModified(oModel, "TransactionCurrency", true);
-            }
+            SalesInquiryModel.markUserModified(oModel, "TransactionCurrency", true);
             SalesInquiryModel.validateSingleField(oModel, "TransactionCurrency");
             SalesInquiryModel.updateStatus(oModel);
         },
@@ -271,6 +262,7 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newInquiry");
                 oModel.setProperty("/header/TransactionCurrency", sKey);
+                SalesInquiryModel.markUserModified(oModel, "TransactionCurrency", true);
                 this.onCurrencyChange();
             }
         },

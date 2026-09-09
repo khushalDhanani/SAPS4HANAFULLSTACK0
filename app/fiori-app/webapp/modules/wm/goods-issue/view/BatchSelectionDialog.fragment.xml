@@ -1,0 +1,86 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="dlgBatchSelection"
+        title="{i18n>giBatchSelectionDialogTitle}"
+        icon="sap-icon://batch-payments"
+        contentWidth="58rem"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip
+                    text="{i18n>giBatchFefoInfo}"
+                    type="Information"
+                    showIcon="true"
+                    class="sapUiTinyMarginBottom" />
+
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginEnd">
+                        <Title text="{giBatchSelection>/material} - {giBatchSelection>/materialDesc}" level="H4" />
+                        <HBox alignItems="Center" class="sapUiTinyMarginTop">
+                            <Text text="{i18n>giColPlant}: " class="textMuted sapUiTinyMarginEnd" />
+                            <Label text="{giBatchSelection>/plant}" design="Bold" class="sapUiSmallMarginEnd" />
+                            <Text text="{i18n>giColStorageLocation}: " class="textMuted sapUiTinyMarginEnd" />
+                            <Label text="{= ${giBatchSelection>/storageLocation} || '-' }" design="Bold" />
+                        </HBox>
+                    </VBox>
+                </HBox>
+
+                <!-- Searchable Filter Bar -->
+                <SearchField
+                    id="searchBatches"
+                    width="100%"
+                    placeholder="{i18n>giSearchBatchesPlaceholder}"
+                    liveChange=".onSearchBatches"
+                    search=".onSearchBatches"
+                    class="sapUiSmallMarginBottom" />
+
+                <Table
+                    id="tblBatches"
+                    items="{giBatchSelection>/batches}"
+                    noDataText="{giBatchSelection>/noDataReason}"
+                    class="sapUiSizeCompact">
+                    <columns>
+                        <Column width="8rem"><Text text="{i18n>giColBatch}" /></Column>
+                        <Column width="9rem"><Text text="{i18n>giColExpiryDate}" /></Column>
+                        <Column width="8rem"><Text text="{i18n>giColSledStatus}" /></Column>
+                        <Column width="5rem"><Text text="{i18n>giColPlant}" /></Column>
+                        <Column width="5rem"><Text text="{i18n>giColStorageLocation}" /></Column>
+                        <Column width="6rem"><Text text="{i18n>giColStorageBin}" /></Column>
+                        <Column hAlign="End" width="8rem"><Text text="{i18n>giColAvailableStock}" /></Column>
+                        <Column width="6rem" hAlign="Center"><Text text="Action" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{giBatchSelection>Batch}" />
+                                <Text text="{= ${giBatchSelection>ExpiryDate} || '(No SLED)' }" />
+                                <ObjectStatus
+                                    text="{giBatchSelection>StatusText}"
+                                    state="{giBatchSelection>StatusState}" />
+                                <Text text="{giBatchSelection>Plant}" />
+                                <Text text="{= ${giBatchSelection>StorageLocation} || '-' }" />
+                                <ObjectStatus
+                                    text="{= ${giBatchSelection>StorageBin} || '-' }"
+                                    state="{= ${giBatchSelection>StorageBin} &amp;&amp; ${giBatchSelection>StorageBin} !== '-' ? 'Warning' : 'None' }" />
+                                <Text text="{= ${giBatchSelection>AvailableStock} !== null &amp;&amp; ${giBatchSelection>AvailableStock} !== undefined ? (${giBatchSelection>AvailableStock} + ' ' + ${giBatchSelection>Unit}) : '-' }" />
+                                <Button
+                                    text="Select"
+                                    icon="sap-icon://accept"
+                                    type="{= ${giBatchSelection>StatusState} === 'Error' ? 'Reject' : 'Emphasized' }"
+                                    press=".onSelectBatch" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+        <endButton>
+            <Button
+                id="btnCloseBatchSelectionDialog"
+                text="{i18n>btnClose}"
+                press=".onCloseBatchSelectionDialog" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

@@ -53,6 +53,15 @@ function extractS4ErrorMessage(error) {
                 // Ignore parse errors, proceed to fallback
             }
         }
+        // 3. Embedded XML within error.message (e.g. Gateway ABAP dumps / ST22)
+        const xmlMsgMatch = error.message.match(/<message(?:[^>]*)>([\s\S]*?)<\/message>/i);
+        if (xmlMsgMatch && xmlMsgMatch[1]) {
+            const cleanMsg = xmlMsgMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
+            if (cleanMsg) {
+                return cleanMsg;
+            }
+        }
+
         return error.message;
     }
 
@@ -82,6 +91,11 @@ function _extractErrorCode(error) {
             } catch (e) {
                 // Ignore
             }
+        }
+
+        const xmlCodeMatch = error.message.match(/<code(?:[^>]*)>([\s\S]*?)<\/code>/i);
+        if (xmlCodeMatch && xmlCodeMatch[1]) {
+            return xmlCodeMatch[1].trim();
         }
     }
 
@@ -198,9 +212,20 @@ function mapS4Error(error) {
         status = httpStatus;
     }
 
+    let finalMessage = message;
+    if (sCodeUpper === 'OBJECTS_OBJREF_NOT_ASSIGNED_NO' || sMessageLower.includes('objects_objref_not_assigned_no') || sMessageLower.includes('cx_sy_ref_is_initial')) {
+        finalMessage = "SAP S/4HANA Backend Runtime Error: 'OBJECTS_OBJREF_NOT_ASSIGNED_NO' (CX_SY_REF_IS_INITIAL). The backend OData service API_WAREHOUSE_ORDER_TASK terminated abnormally during task creation. In this SAP S/4HANA instance, the service release status is DEPRECATED and transactional creation is not supported on this software stack.";
+    } else if (sCodeUpper === 'CX_SADL_ENTITY_CUD_DISABLED' || sMessageLower.includes('cx_sadl_entity_cud_disabled')) {
+        finalMessage = "SAP S/4HANA Backend Operation Disabled: Creating operations are disabled for this entity in the backend software stack (CX_SADL_ENTITY_CUD_DISABLED).";
+    } else if (sMessageLower.includes('all sap strategies exhausted')) {
+        // Multi-strategy error — preserve the detailed breakdown
+        finalMessage = message;
+        status = 422;
+    }
+
     return {
         status,
-        message,
+        message: finalMessage,
         code,
         details: rawDetails
     };

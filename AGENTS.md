@@ -97,6 +97,106 @@ Before changing S/4 integration code or its configuration, verify and document:
 
 Do not implement integration code from assumed entity names or payloads. Do not expose destination credentials to the browser. Do not introduce a second S/4 client outside `srv/integration/s4hana/`.
 
+## SAP API Discovery — Non-Negotiable Protocol
+
+Before implementing or modifying ANY SAP create/update/post transaction, the agent MUST first discover and prove the real SAP backend capability.
+
+### Required Workflow
+
+```text
+Inspect SAP → Verify Metadata → Verify Operation → Test Live SAP → Implement → Validate
+```
+
+1. **NEVER assume from service names**
+   Do NOT assume that a service such as `*_FS_SRV`, `*_WL_SRV`, Object Page service, List Report service, or Catalog service supports CREATE/POST simply because it supports READ/GET. A read service is NOT automatically a transactional/create API.
+
+2. **Inspect the actual SAP service**
+   Before writing frontend/backend application code:
+   - Identify the exact OData service.
+   - Inspect its `$metadata`.
+   - Identify the actual EntitySet, EntityType, and NavigationProperty.
+   - Determine whether CREATE/UPDATE/DELETE is actually supported.
+   - Do not invent entity names or navigation properties.
+   - Do not copy a GET `$expand` structure and assume it is valid for POST/deep insert.
+
+3. **Search for the real SAP business API**
+   If the requested operation is not supported by the initially discovered service:
+   - Search the actual SAP system for an appropriate API/service.
+   - Check the relevant SAP business object/API, `/IWFND/MAINT_SERVICE`, and service implementation.
+   - Check SAP Gateway metadata and backend implementation.
+   - Check whether the API is read-only or transactional.
+   - Do NOT randomly enable services until the correct API is identified.
+
+4. **Prove CREATE directly against SAP**
+   Before implementing the UI Create flow, perform a minimal real SAP POST:
+   ```text
+   POST Header → Verify HTTP success → Verify SAP-generated document number → Read document back from SAP
+   ```
+   A successful HTTP response alone is not sufficient. The document MUST actually exist in SAP.
+
+5. **Multi-step SAP transactions**
+   If the SAP business object requires sequential creation, implement the actual proven sequence:
+   ```text
+   Header CREATE → Confirm SAP document number → Item CREATE → Confirm item persistence → Pricing CREATE → Confirm pricing persistence → Read back complete document
+   ```
+   Do not report the operation as successfully completed until all required SAP operations succeed.
+
+6. **NEVER use local/mock persistence as a substitute**
+   For SAP transactional features: Frontend/local state ≠ SAP persistence.
+   Do NOT:
+   - fake a successful creation;
+   - insert a local record and call it SAP-created;
+   - generate a fake document number;
+   - store the document only in frontend/backend local state;
+   - return success when SAP did not persist the document.
+   The final validation MUST read the created document back from SAP.
+
+7. **Error classification**
+   When SAP rejects a request, identify the actual layer before changing code:
+   - `404 / URI_NOT_MATCHING` → Wrong service/entity/navigation path or metadata mismatch.
+   - `405` → Operation may not be supported (e.g. `CX_SADL_ENTITY_CUD_DISABLED`).
+   - `501 CREATE_ENTITY not implemented` → Backend DPC CREATE implementation is missing.
+   - `403` → Authorization / CSRF / permission issue.
+   - `500` → Backend/business/configuration/application error.
+   Do not respond to every failure with "activate the service."
+
+8. **Protect existing working functionality**
+   If listing, Object Page, item, pricing, or other READ functionality already works:
+   - DO NOT replace or modify it unnecessarily.
+   - Separate READ capability from CREATE capability.
+   - Investigate the failing operation independently.
+
+9. **No assumptions**
+   The agent MUST NOT assume:
+   - an Object Page service supports POST;
+   - a navigation property supports deep insert;
+   - GET and POST use the same URL;
+   - a Catalog Service is a transactional API;
+   - an SAP business object has a single OData POST;
+   - local success means SAP success;
+   - a service being active means CREATE is implemented.
+   Every such capability must be verified from the actual SAP metadata, implementation, or live SAP test.
+
+### Definition of Done
+
+A SAP Create feature is NOT complete until:
+1. Actual SAP API/service identified.
+2. `$metadata` inspected.
+3. EntitySet verified.
+4. Navigation properties verified.
+5. CREATE capability verified.
+6. Real SAP POST tested.
+7. SAP-generated document number confirmed.
+8. Required items persisted in SAP.
+9. Required pricing persisted in SAP.
+10. Document read back directly from SAP.
+11. Frontend displays the SAP-persisted result.
+12. No mock/local-only persistence is used.
+13. Existing READ/list/detail functionality remains working.
+14. Tests and validation pass.
+
+If the agent cannot prove the SAP backend capability, STOP implementation and report exactly what SAP capability is missing. Do not invent an API, payload, endpoint, navigation property, or local workaround.
+
 ## Change and test rules
 
 - Prefer a focused, reviewable diff. Avoid unnecessary renames, formatting churn, generated files, and unrelated refactors.

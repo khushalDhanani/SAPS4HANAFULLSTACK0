@@ -225,6 +225,28 @@
                                         </GenericTile>
 
                                         <GenericTile
+                                            id="tileOverviewGoodsIssue"
+                                            header="Goods Issue (261)"
+                                            subheader="Order / Reservation Pick"
+                                            press=".onNavigateToGoodsIssue"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Movement 261">
+                                                <NumericContent value="261" icon="sap-icon://shipping-status" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewGoodsReceipt"
+                                            header="Goods Receipt (101)"
+                                            subheader="Storage Unit / Inbound Ingestion"
+                                            press=".onNavigateToGoodsReceipt"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="Movement 101">
+                                                <NumericContent value="101" icon="sap-icon://inbox" valueColor="Good" />
+                                            </TileContent>
+                                        </GenericTile>
+
+                                        <GenericTile
                                             id="tileOverviewTM"
                                             header="{i18n>tabTMTitle}"
                                             subheader="Vehicle Scheduling &amp; Freight"
@@ -896,20 +918,43 @@
                             text="{i18n>tabEWMTitle}"
                             tooltip="{i18n>tabEWMTooltip}">
                             <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
-                                </VBox>
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <VBox>
+                                        <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
+                                    </VBox>
+                                    <Button
+                                        id="btnOpenEwmCockpit"
+                                        text="{i18n>ewmLaunchCockpitBtn}"
+                                        icon="sap-icon://inventory"
+                                        type="Emphasized"
+                                        press=".onNavigateToEwmCockpit" />
+                                </HBox>
 
                                 <HBox wrap="Wrap" class="sapUiTinyMarginBottom">
-                                    <GenericTile header="Outbound Deliveries" subheader="ODO Orders" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                    <GenericTile header="Warehouse Cockpit" subheader="Central Whse 0001" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Operations">
+                                            <NumericContent value="100" scale="%" icon="sap-icon://database" valueColor="Good" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Outbound Deliveries" subheader="ODO Orders" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="Shipments">
                                             <NumericContent value="45" icon="sap-icon://shipping-status" valueColor="Good" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile header="Picking Carts" subheader="EWM Cart Operations" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Active Carts">
-                                            <NumericContent value="8" icon="sap-icon://cart" valueColor="Neutral" />
+                                    <GenericTile header="Storage Infrastructure" subheader="34 Storage Types" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Types">
+                                            <NumericContent value="34" icon="sap-icon://dimension" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile header="Warehouse Tasks" subheader="Putaway &amp; Picking" press=".onNavigateToEwmCockpit" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Tasks">
+                                            <NumericContent value="12" icon="sap-icon://task" valueColor="Critical" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileGoodsIssue" header="Goods Issue (261)" subheader="Order / Reservation" press=".onNavigateToGoodsIssue" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="Movement 261">
+                                            <NumericContent value="261" icon="sap-icon://shipping-status" valueColor="Good" />
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>

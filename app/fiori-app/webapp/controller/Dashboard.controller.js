@@ -38,11 +38,13 @@ sap.ui.define([
                     oRoute.attachPatternMatched(this._onDashboardMatched, this);
                 }
             }
-
-            this._loadMetrics();
         },
 
         _onDashboardMatched: function () {
+            var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return;
+            }
             this._loadMetrics();
         },
 
@@ -143,6 +145,21 @@ sap.ui.define([
         onNavigateToCreateSalesInquiry: function () {
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.navTo("createSalesInquiry");
+        },
+
+        onNavigateToEwmCockpit: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("ewmWarehouseCockpit");
+        },
+
+        onNavigateToGoodsIssue: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("wmGoodsIssue");
+        },
+
+        onNavigateToGoodsReceipt: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("wmGoodsReceipt");
         },
 
         onSimulateCarLoan: function () {

@@ -11,6 +11,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesInquiryType,
         SoldToParty,
         PurchaseOrderByCustomer,
+        null as CustomerName : String(80),
         null as CustomerPurchaseOrderDate : Date,
         null as BindingPeriodValidityStartDate : Date,
         null as BindingPeriodValidityEndDate : Date,

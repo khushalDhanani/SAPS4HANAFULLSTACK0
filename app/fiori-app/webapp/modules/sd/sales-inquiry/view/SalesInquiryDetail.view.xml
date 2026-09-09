@@ -29,7 +29,7 @@
                     <HBox alignItems="Center" wrap="NoWrap">
                         <Title
                             id="headerInquiryTitle"
-                            text="{= ${detail>/header/SalesInquiry} ? (${i18n>salesInquiryHeadingTitle} + ' ' + ${detail>/header/SalesInquiry}) : ${i18n>salesInquiryHeadingTitle} }"
+                            text="{= ${detail>/header/SalesInquiry} ? (${i18n>salesInquiryHeadingTitle} + ' ' + ${detail>/header/SalesInquiry} + (${detail>/header/PurchaseOrderByCustomer} ? ' - ' + ${detail>/header/PurchaseOrderByCustomer} : '')) : ${i18n>salesInquiryHeadingTitle} }"
                             class="sapUiTinyMarginEnd" />
                         <ObjectStatus
                             id="headerStatus"
@@ -41,7 +41,7 @@
 
                 <!-- 3. Mobile Responsive Title -->
                 <uxap:snappedTitleOnMobile>
-                    <Title text="{= ${detail>/header/SalesInquiry} ? (${i18n>salesInquiryHeadingTitle} + ' ' + ${detail>/header/SalesInquiry}) : ${i18n>salesInquiryHeadingTitle} }" />
+                    <Title text="{= ${detail>/header/SalesInquiry} ? (${i18n>salesInquiryHeadingTitle} + ' ' + ${detail>/header/SalesInquiry} + (${detail>/header/PurchaseOrderByCustomer} ? ' - ' + ${detail>/header/PurchaseOrderByCustomer} : '')) : ${i18n>salesInquiryHeadingTitle} }" />
                 </uxap:snappedTitleOnMobile>
 
                 <!-- 4. Snapped Content: Glanceable Key Metric preserved when header facets are collapsed -->
@@ -126,6 +126,8 @@
                                 <Text text="{detail>/header/SalesInquiry}" />
                                 <Label text="{i18n>salesInquiryLabelInquiryType}" />
                                 <Text text="{detail>/header/SalesInquiryType}" />
+                                <Label text="{i18n>salesInquiryLabelDescription}" />
+                                <Text text="{detail>/header/PurchaseOrderByCustomer}" />
                                 <Label text="{i18n>salesInquiryLabelDocDate}" />
                                 <Text text="{detail>/header/SalesInquiryDate}" />
                                 <Label text="{i18n>salesInquiryLabelCreatedOn}" />

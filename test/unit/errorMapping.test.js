@@ -162,6 +162,34 @@ describe('Unit: Error Mapping', () => {
             expect(nullMapped.status).toBe(500);
             expect(nullMapped.message).toContain('Unknown error');
         });
+
+        it('should format informative explanation for OBJECTS_OBJREF_NOT_ASSIGNED_NO ABAP dumps', () => {
+            const dumpError = {
+                message: "<?xml version=\"1.0\" encoding=\"utf-8\"?><error><code>OBJECTS_OBJREF_NOT_ASSIGNED_NO</code><message>Runtime Error: 'OBJECTS_OBJREF_NOT_ASSIGNED_NO'</message></error>"
+            };
+            const mapped = mapS4Error(dumpError);
+            expect(mapped.status).toBe(500);
+            expect(mapped.code).toBe('OBJECTS_OBJREF_NOT_ASSIGNED_NO');
+            expect(mapped.message).toContain('CX_SY_REF_IS_INITIAL');
+            expect(mapped.message).toContain('DEPRECATED');
+        });
+
+        it('should format informative explanation for CX_SADL_ENTITY_CUD_DISABLED', () => {
+            const cudError = {
+                response: {
+                    status: 405,
+                    data: {
+                        error: {
+                            code: 'CX_SADL_ENTITY_CUD_DISABLED',
+                            message: { value: 'Creating operations are disabled' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(cudError);
+            expect(mapped.code).toBe('CX_SADL_ENTITY_CUD_DISABLED');
+            expect(mapped.message).toContain('Creating operations are disabled');
+        });
     });
 
 });

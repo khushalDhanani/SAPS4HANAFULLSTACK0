@@ -49,14 +49,23 @@ function normalizeSalesInquiryData(data, options = {}) {
         };
     });
 
+    const firstItemDesc = normalizedItems.length > 0 && normalizedItems[0].SalesInquiryItemText
+        ? normalizedItems[0].SalesInquiryItemText
+        : '';
+    const description = rawHeader.PurchaseOrderByCustomer
+        ? String(rawHeader.PurchaseOrderByCustomer).trim()
+        : firstItemDesc;
+
     const normalizedHeader = {
         SalesInquiryType: rawHeader.SalesInquiryType ? String(rawHeader.SalesInquiryType).trim() : 'ZIN',
         SalesOrganization: rawHeader.SalesOrganization ? String(rawHeader.SalesOrganization).trim() : '1000',
         DistributionChannel: rawHeader.DistributionChannel ? String(rawHeader.DistributionChannel).trim() : '10',
         OrganizationDivision: rawHeader.OrganizationDivision ? String(rawHeader.OrganizationDivision).trim() : '52',
         SoldToParty: rawHeader.SoldToParty ? String(rawHeader.SoldToParty).trim() : '',
+        CustomerName: rawHeader.CustomerName ? String(rawHeader.CustomerName).trim() : '',
         ShipToParty: rawHeader.ShipToParty ? String(rawHeader.ShipToParty).trim() : (rawHeader.SoldToParty ? String(rawHeader.SoldToParty).trim() : ''),
-        PurchaseOrderByCustomer: rawHeader.PurchaseOrderByCustomer ? String(rawHeader.PurchaseOrderByCustomer).trim() : '',
+        ShipToPartyName: rawHeader.ShipToPartyName ? String(rawHeader.ShipToPartyName).trim() : '',
+        PurchaseOrderByCustomer: description,
         CustomerPurchaseOrderDate: rawHeader.CustomerPurchaseOrderDate || today,
         SalesInquiryDate: rawHeader.SalesInquiryDate || today,
         BindingPeriodValidityStartDate: rawHeader.BindingPeriodValidityStartDate || today,

@@ -41,7 +41,9 @@
                 "PurchasingManager",
                 "FinanceViewer",
                 "SalesRepresentative",
-                "SalesManager"
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
               ]
             },
             "bob": {
@@ -63,7 +65,9 @@
                 "PurchasingManager",
                 "FinanceViewer",
                 "SalesRepresentative",
-                "SalesManager"
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
               ]
             },
             "bob": {
@@ -121,6 +125,10 @@
       "SD_F2369_INQY_FS_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/SD_F2369_INQY_FS_SRV"
+      },
+      "LORD_ODATA_ORDER_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/LORD_ODATA_ORDER_SRV"
       }
     }
   }

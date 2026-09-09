@@ -92,6 +92,28 @@ sap.ui.define([
             return this._oModel;
         },
 
+        _isTokenExpired: function (sToken) {
+            if (!sToken || typeof sToken !== "string") {
+                return false;
+            }
+            try {
+                var aParts = sToken.split(".");
+                if (aParts.length !== 3) {
+                    return false;
+                }
+                var sPayload = aParts[1].replace(/-/g, "+").replace(/_/g, "/");
+                var sDecoded = atob(sPayload);
+                var oPayload = JSON.parse(sDecoded);
+                if (oPayload && typeof oPayload.exp === "number") {
+                    var iNow = Math.floor(Date.now() / 1000);
+                    return iNow >= oPayload.exp;
+                }
+            } catch (e) {
+                // Ignore decoding errors
+            }
+            return false;
+        },
+
         _restoreSession: function () {
             // Restore saved username for remember me
             var sSavedUser = localStorage.getItem(REMEMBER_KEY);
@@ -106,6 +128,17 @@ sap.ui.define([
                 try {
                     var oSession = JSON.parse(sRawSession);
                     if (oSession && oSession.user && oSession.user.username) {
+                        if (!oSession.user.token && oSession.token) {
+                            oSession.user.token = oSession.token;
+                        }
+
+                        // Validate token expiration before restoring session
+                        if (oSession.user.token && this._isTokenExpired(oSession.user.token)) {
+                            sessionStorage.removeItem(STORAGE_KEY);
+                            localStorage.removeItem(STORAGE_KEY);
+                            return false;
+                        }
+
                         this._oModel.setProperty("/isAuthenticated", true);
                         this._oModel.setProperty("/user", oSession.user);
                         return true;
@@ -161,7 +194,8 @@ sap.ui.define([
                         };
 
                         var oStorageData = {
-                            user: oUserSession
+                            user: oUserSession,
+                            token: oUserSession.token
                         };
 
                         if (bRememberMe) {
@@ -220,7 +254,7 @@ sap.ui.define([
                 var sRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
                 if (sRaw) {
                     var parsed = JSON.parse(sRaw);
-                    return (parsed && parsed.user && parsed.user.token) || null;
+                    return (parsed && parsed.user && parsed.user.token) || (parsed && parsed.token) || null;
                 }
             } catch (e) {}
             return null;

@@ -117,8 +117,49 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.items[0].TransactionCurrency).toBe('INR');
         });
 
+        test('should preserve CustomerName and ShipToPartyName and fallback description from item text', () => {
+            const raw = {
+                header: {
+                    SoldToParty: '10135',
+                    CustomerName: "Divi's Laboratories Limited",
+                    ShipToParty: '10135',
+                    ShipToPartyName: "Divi's Laboratories Limited",
+                    PurchaseOrderByCustomer: '' // Empty description
+                },
+                items: [
+                    {
+                        Material: '4000000091',
+                        SalesInquiryItemText: 'Industrial Grade Chemical Inquiry',
+                        OrderQuantity: 10,
+                        NetPriceAmount: 100
+                    }
+                ]
+            };
+
+            const result = normalizeSalesInquiryData(raw);
+            expect(result.header.CustomerName).toBe("Divi's Laboratories Limited");
+            expect(result.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
+            expect(result.header.PurchaseOrderByCustomer).toBe('Industrial Grade Chemical Inquiry');
+        });
+
         test('should throw error if header is null or missing', () => {
             expect(() => mapToS4InquiryPayload(null, [])).toThrow();
+        });
+
+        test('should preserve CustomerName, ShipToPartyName, and TotalNetAmount in mapToS4InquiryPayload', () => {
+            const header = {
+                SalesInquiryType: 'ZIN',
+                SoldToParty: '10135',
+                CustomerName: "Divi's Laboratories Limited",
+                ShipToParty: '10135',
+                ShipToPartyName: "Divi's Laboratories Limited",
+                PurchaseOrderByCustomer: 'Chemical Inquiry',
+                TotalNetAmount: 1500
+            };
+            const s4 = mapToS4InquiryPayload(header, []);
+            expect(s4.header.CustomerName).toBe("Divi's Laboratories Limited");
+            expect(s4.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
+            expect(s4.header.TotalNetAmount).toBe('1500');
         });
     });
 });

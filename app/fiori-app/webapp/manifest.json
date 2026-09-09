@@ -69,29 +69,23 @@
       },
       "": {
         "dataSource": "mainService",
-        "preload": true,
         "settings": {
           "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
+          "autoExpandSelect": true
         }
       },
       "fiService": {
         "dataSource": "fiService",
-        "preload": true,
         "settings": {
           "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
+          "autoExpandSelect": true
         }
       },
       "salesInquiry": {
         "dataSource": "salesInquiryService",
-        "preload": true,
         "settings": {
           "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
+          "autoExpandSelect": true
         }
       }
     },
@@ -161,6 +155,31 @@
           "name": "salesInquiryDetail",
           "pattern": "sd/sales-inquiries/{SalesInquiry}",
           "target": "TargetSalesInquiryDetail"
+        },
+        {
+          "name": "ewmWarehouseCockpit",
+          "pattern": "ewm/cockpit",
+          "target": "TargetWarehouseCockpit"
+        },
+        {
+          "name": "ewmRfTerminal",
+          "pattern": "ewm/rf-terminal",
+          "target": "TargetRfTerminal"
+        },
+        {
+          "name": "createWarehouseTask",
+          "pattern": "ewm/tasks/create",
+          "target": "TargetCreateWarehouseTask"
+        },
+        {
+          "name": "wmGoodsIssue",
+          "pattern": "wm/goods-issue",
+          "target": "TargetGoodsIssue"
+        },
+        {
+          "name": "wmGoodsReceipt",
+          "pattern": "wm/goods-receipt",
+          "target": "TargetGoodsReceipt"
         }
       ],
       "targets": {
@@ -206,6 +225,31 @@
           "id": "salesInquiryDetail",
           "name": "SalesInquiryDetail",
           "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
+        },
+        "TargetWarehouseCockpit": {
+          "id": "warehouseCockpit",
+          "name": "WarehouseCockpit",
+          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        },
+        "TargetRfTerminal": {
+          "id": "rfTerminal",
+          "name": "RfTerminal",
+          "path": "saps4hana.fiori.modules.ewm.rf-terminal.view"
+        },
+        "TargetCreateWarehouseTask": {
+          "id": "createWarehouseTask",
+          "name": "CreateWarehouseTask",
+          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        },
+        "TargetGoodsIssue": {
+          "id": "goodsIssue",
+          "name": "GoodsIssue",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsReceipt": {
+          "id": "goodsReceipt",
+          "name": "GoodsReceipt",
+          "path": "saps4hana.fiori.modules.wm.goods-receipt.view"
         }
       }
     }

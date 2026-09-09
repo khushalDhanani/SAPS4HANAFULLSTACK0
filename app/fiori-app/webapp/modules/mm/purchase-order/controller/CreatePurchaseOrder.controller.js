@@ -15,12 +15,12 @@ sap.ui.define([
 
     return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.CreatePurchaseOrder", {
         onInit: function () {
-            this._resetModel();
+            this._resetModel(false);
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.getRoute("createPurchaseOrder").attachPatternMatched(this._onRouteMatched, this);
         },
 
-        _resetModel: function () {
+        _resetModel: function (bLoadConfig) {
             var sUser = PurchaseOrderModel.getCurrentUserName(this.getOwnerComponent());
             var oModel = PurchaseOrderModel.createInitialModel(sUser);
             this.getView().setModel(oModel, "newPO");
@@ -28,7 +28,9 @@ sap.ui.define([
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
             }
-            this._loadConfigurationAndDefaults();
+            if (bLoadConfig) {
+                this._loadConfigurationAndDefaults();
+            }
         },
 
         _loadConfigurationAndDefaults: function () {
@@ -52,7 +54,7 @@ sap.ui.define([
         },
 
         _onRouteMatched: function () {
-            this._resetModel();
+            this._resetModel(true);
         },
 
         onHeaderChange: function () {

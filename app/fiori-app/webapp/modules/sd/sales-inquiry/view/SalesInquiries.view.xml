@@ -88,6 +88,7 @@
                             $count: true
                         },
                         sorter: [
+                            { path: 'CreationDate', descending: true },
                             { path: 'SalesInquiry', descending: true }
                         ]
                     }"
@@ -121,6 +122,7 @@
                     <columns>
                         <Column width="8rem"><Text text="Inquiry Number" /></Column>
                         <Column width="5rem"><Text text="Type" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
                         <Column width="7rem"><Text text="Customer" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Customer Name" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="Sales Area (Org/Chnl/Div)" /></Column>
@@ -131,10 +133,11 @@
                     <items>
                         <ColumnListItem type="Navigation">
                             <cells>
-                                <ObjectIdentifier title="{salesInquiry>SalesInquiry}" text="{salesInquiry>PurchaseOrderByCustomer}" />
+                                <ObjectIdentifier title="{salesInquiry>SalesInquiry}" />
                                 <Text text="{salesInquiry>SalesInquiryType}" />
+                                <Text text="{salesInquiry>PurchaseOrderByCustomer}" />
                                 <Text text="{salesInquiry>SoldToParty}" />
-                                <Text text="{salesInquiry>OrganizationBPName1}" />
+                                <Text text="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>CustomerName} || '' }" />
                                 <Text text="{= (${salesInquiry>SalesOrganization} || '') + ' / ' + (${salesInquiry>DistributionChannel} || '') + ' / ' + (${salesInquiry>OrganizationDivision} || '') }" />
                                 <Text text="{salesInquiry>SalesInquiryDate}" />
                                 <ObjectNumber number="{salesInquiry>TotalNetAmount}" unit="{salesInquiry>TransactionCurrency}" state="Success" />

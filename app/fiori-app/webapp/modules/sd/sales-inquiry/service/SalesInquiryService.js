@@ -233,7 +233,8 @@ sap.ui.define([
             if (!sMaterial || String(sMaterial).trim() === "") {
                 return Promise.resolve(null);
             }
-            var sFilter = "?$filter=Material eq '" + encodeURIComponent(String(sMaterial).trim()) + "'&$top=1";
+            var sClean = encodeURIComponent(String(sMaterial).trim());
+            var sFilter = "?$filter=Material eq '" + sClean + "' or MaterialName eq '" + sClean + "' or contains(MaterialName,'" + sClean + "')&$top=1";
             return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter).then(function (res) {
                 var aItems = (res && (res.value || (res.d && res.d.results))) || [];
                 return (aItems.length > 0) ? aItems[0] : null;

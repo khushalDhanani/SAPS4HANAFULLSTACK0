@@ -1,0 +1,606 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page
+        id="goodsIssuePage"
+        showHeader="true"
+        title="{i18n>giPageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        showFooter="true"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center">
+                <Button
+                    id="btnToggleAudio"
+                    icon="{= ${giView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
+                    tooltip="{i18n>giToggleAudioTooltip}"
+                    type="Transparent"
+                    press=".onToggleAudio"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnOpenQueueTray"
+                    text="{i18n>wmGIQueueTrayBtn} ({giView>/queuedCount})"
+                    icon="sap-icon://inbox"
+                    type="Transparent"
+                    press=".onOpenQueueTray"
+                    visible="{= (${giView>/queuedCount} || 0) > 0 }"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnResetWorkflow"
+                    icon="sap-icon://refresh"
+                    tooltip="{i18n>btnRefresh}"
+                    type="Transparent"
+                    press=".onResetWorkflow" />
+            </HBox>
+        </headerContent>
+
+        <content>
+            <!-- WIZARD GUIDED PROCESS (Steps 1 - 3) -->
+            <Wizard
+                id="giWizard"
+                showNextButton="false"
+                renderMode="Page"
+                stepActivate=".onWizardStepActivate"
+                complete=".onWizardCompleted"
+                visible="{= ${giView>/currentStep} &lt; 4 }"
+                class="sapUiResponsivePadding--header sapUiResponsivePadding--content">
+
+                <!-- STEP 1: SELECT RESERVATION -> SELECT COMPONENT -->
+                <WizardStep
+                    id="stepResvComponent"
+                    title="{i18n>giWizardStepSelectResvCompTitle}"
+                    icon="sap-icon://activity-items"
+                    validated="{= !!${giView>/activeItem} }">
+                    <VBox class="sapUiSmallMargin">
+                        <!-- Section 1: Select Reference Reservation from Live SAP Data -->
+                        <form:SimpleForm
+                            id="formSelectReservation"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="3"
+                            labelSpanL="3"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="1"
+                            emptySpanL="1"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="1"
+                            columnsL="1"
+                            columnsM="1"
+                            singleContainerFullSize="false"
+                            class="sapUiSmallMarginBottom">
+                            <form:content>
+                                <core:Title text="{i18n>giStep1ResvFormTitle}" />
+
+                                <Label text="{i18n>giSelectReservationLabel}" labelFor="comboReservation" required="true" />
+                                <HBox width="100%" alignItems="Center">
+                                    <ComboBox
+                                        id="comboReservation"
+                                        width="100%"
+                                        items="{giView>/openReservations}"
+                                        selectedKey="{giView>/selectedReservation}"
+                                        selectionChange=".onReservationSelected"
+                                        change=".onReservationSelected"
+                                        placeholder="{i18n>giSelectReservationPlaceholder}"
+                                        class="sapUiTinyMarginEnd">
+                                        <core:ListItem
+                                            key="{giView>ReservationNo}"
+                                            text="{giView>DisplayText}"
+                                            additionalText="{= ${giView>OrderNo} ? 'Order ' + ${giView>OrderNo} : '' }" />
+                                    </ComboBox>
+                                    <Button
+                                        id="btnOpenReservationVH"
+                                        icon="sap-icon://value-help"
+                                        tooltip="{i18n>giOpenValueHelpTooltip}"
+                                        press=".onOpenReservationValueHelp"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Button
+                                        id="btnRefreshReservations"
+                                        icon="sap-icon://refresh"
+                                        tooltip="{i18n>giRefreshReservationsTooltip}"
+                                        press=".onRefreshReservations" />
+                                </HBox>
+
+                                <!-- Document Context Header (visible when reservation selected) -->
+                                <Label text="{i18n>giReservationLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
+                                <Text text="{giView>/resolved/ReservationNo}" class="fontBold" visible="{= !!${giView>/resolved/ReservationNo} }" />
+
+                                <Label text="{i18n>giOrderLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
+                                <Text text="{= ${giView>/resolved/OrderNo} || '-' }" class="fontBold" visible="{= !!${giView>/resolved/ReservationNo} }" />
+
+                                <Label text="{i18n>giMovementTypeLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
+                                <Text text="{giView>/resolved/MovementType} ({giView>/resolved/MovementTypeName})" visible="{= !!${giView>/resolved/ReservationNo} }" />
+
+                                <Label text="{i18n>giPlantLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
+                                <Text text="{giView>/resolved/Plant}" visible="{= !!${giView>/resolved/ReservationNo} }" />
+                            </form:content>
+                        </form:SimpleForm>
+
+                        <!-- Section 2: Open Components for Selected Reservation (from SAP S/4HANA) -->
+                        <VBox visible="{= !!${giView>/resolved/ReservationNo} }" class="sapUiSmallMarginTop">
+                            <MessageStrip
+                                text="{i18n>giSelectComponentInstruction}"
+                                type="Information"
+                                showIcon="true"
+                                class="sapUiSmallMarginBottom" />
+
+                            <Table
+                                id="tblComponentItems"
+                                items="{giView>/resolved/Items}"
+                                noDataText="{i18n>giNoOpenItemsText}"
+                                class="sapUiSizeCompact">
+                                <headerToolbar>
+                                    <OverflowToolbar>
+                                        <Title text="{= ${i18n>giComponentsTableTitle} + ' (' + (${giView>/resolved/Items} || []).length + ')' }" level="H4" />
+                                        <ToolbarSpacer />
+                                        <SearchField
+                                            id="searchComponents"
+                                            width="18rem"
+                                            placeholder="{i18n>giSearchComponentsPlaceholder}"
+                                            liveChange=".onSearchComponents" />
+                                    </OverflowToolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column width="4rem"><Text text="{i18n>giColItem}" /></Column>
+                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giColMaterial}" /></Column>
+                                    <Column width="7rem"><Text text="{i18n>giColStorageBin}" /></Column>
+                                    <Column hAlign="End" width="6rem"><Text text="{i18n>giColRequiredQty}" /></Column>
+                                    <Column hAlign="End" width="6rem"><Text text="{i18n>giColWithdrawnQty}" /></Column>
+                                    <Column hAlign="End" width="6rem"><Text text="{i18n>giColOpenQty}" /></Column>
+                                    <Column width="10rem" hAlign="Center"><Text text="{i18n>giColAction}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem type="Active" press=".onSelectComponentForValidation">
+                                        <cells>
+                                            <Text text="{giView>ReservationItem}" />
+                                            <ObjectIdentifier title="{giView>Material}" text="{giView>MaterialDesc}" />
+                                            <ObjectStatus text="{= ${giView>StorageBin} || '-' }" state="{= ${giView>StorageBin} ? 'Warning' : 'None' }" />
+                                            <ObjectNumber number="{giView>RequiredQty}" unit="{giView>Unit}" />
+                                            <ObjectNumber number="{giView>WithdrawnQty}" unit="{giView>Unit}" />
+                                            <ObjectNumber number="{giView>OpenQty}" unit="{giView>Unit}" state="{= ${giView>OpenQty} > 0 ? 'Information' : 'Success' }" />
+                                            <Button
+                                                text="{= ${giView>OpenQty} > 0 ? (${giView>/activeItem/ReservationItem} === ${giView>ReservationItem} ? ${i18n>giSelectedLineBadge} : ${i18n>giBtnSelectLine}) : ${i18n>giStatusCompleted} }"
+                                                type="{= ${giView>/activeItem/ReservationItem} === ${giView>ReservationItem} ? 'Emphasized' : (${giView>OpenQty} > 0 ? 'Default' : 'Transparent') }"
+                                                enabled="{= ${giView>OpenQty} > 0 }"
+                                                icon="{= ${giView>/activeItem/ReservationItem} === ${giView>ReservationItem} ? 'sap-icon://accept' : 'sap-icon://action' }"
+                                                press=".onSelectComponentForValidation" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </VBox>
+                    </VBox>
+                </WizardStep>
+
+                <!-- STEP 2: CONFIGURE & VALIDATE -->
+                <WizardStep
+                    id="stepConfigure"
+                    title="{i18n>giWizardStepConfigureTitle}"
+                    icon="sap-icon://validate"
+                    validated="{giView>/isValid}">
+                    <VBox class="sapUiSmallMargin">
+                        <form:SimpleForm
+                            id="formConfiguration"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            columnsXL="2"
+                            columnsL="2"
+                            columnsM="1"
+                            class="sapUiSmallMarginBottom">
+                            <form:content>
+                                <!-- Group 1: Component & Stock Parameters -->
+                                <core:Title text="{i18n>giStep3ActiveComponentTitle}" />
+
+                                <Label text="{i18n>giReservationLabel}" />
+                                <Text text="{giView>/resolved/ReservationNo} (Item {giView>/activeItem/ReservationItem} • Order {= ${giView>/resolved/OrderNo} || '-' })" class="fontBold" />
+
+                                <Label text="{i18n>giColMaterial}" />
+                                <ObjectIdentifier
+                                    title="{giView>/activeItem/Material}"
+                                    text="{giView>/activeItem/MaterialDesc}" />
+
+                                <Label text="Plant / Location" />
+                                <Text text="{giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation} (Bin: {= ${giView>/activeItem/StorageBin} || '-' })" />
+
+                                <Label text="{i18n>giConfirmedStockLabel}" />
+                                <ObjectNumber
+                                    number="{giView>/availableStock}"
+                                    unit="{giView>/activeItem/Unit}"
+                                    state="Information" />
+
+                                <Label text="{i18n>giRemainingOpenQtyLabel}" />
+                                <ObjectNumber
+                                    number="{giView>/activeItem/OpenQty}"
+                                    unit="{giView>/activeItem/Unit}"
+                                    state="Warning" />
+
+                                <!-- Group 2: Issue Quantity -->
+                                <core:Title text="{i18n>giStep3QuantityTitle}" />
+
+                                <Label text="{i18n>giIssueQuantityLabel}" required="true" labelFor="inputIssueQty" />
+                                <HBox alignItems="Center">
+                                    <Input
+                                        id="inputIssueQty"
+                                        value="{giView>/issueQty}"
+                                        type="Number"
+                                        placeholder="{i18n>giIssueQtyPlaceholder}"
+                                        liveChange=".onIssueQtyChange"
+                                        valueState="{giView>/issueQtyState}"
+                                        valueStateText="{giView>/issueQtyStateText}"
+                                        width="12rem"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Label text="{giView>/activeItem/Unit}" class="sapUiTinyMarginEnd" />
+                                    <Button
+                                        id="btnFillOpenQty"
+                                        text="{i18n>giBtnFillOpenQty}"
+                                        icon="sap-icon://accept"
+                                        type="Transparent"
+                                        press=".onFillOpenQty" />
+                                </HBox>
+
+                                <!-- Group 3: Batch & Shelf Life (SLED) -->
+                                <core:Title text="{i18n>giStep3BatchTitle}" />
+
+                                <Label text="{i18n>giBatchLabel}" />
+                                <HBox alignItems="Center" wrap="Wrap">
+                                    <ObjectStatus
+                                        text="{= ${giView>/activeItem/Batch} || '(None)' }"
+                                        state="None"
+                                        class="sapUiTinyMarginEnd fontBold" />
+                                    <ObjectStatus
+                                        id="statusValidateSled"
+                                        text="{giView>/activeItem/BatchStatusText}"
+                                        state="{giView>/activeItem/BatchStatusState}"
+                                        visible="{= !!${giView>/activeItem/Batch} }"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Button
+                                        id="btnSelectBatch"
+                                        text="{i18n>giBtnSelectBatch}"
+                                        icon="sap-icon://batch-payments"
+                                        type="Default"
+                                        press=".onOpenBatchSelectionDialog" />
+                                </HBox>
+
+                                <Label text="{i18n>giExpirationDateLabel}" />
+                                <Text text="{= ${giView>/activeItem/ExpiryDate} ? ${giView>/activeItem/ExpiryDate} : 'No expiration date recorded' }" />
+
+                                <Label text="" />
+                                <MessageStrip
+                                    text="{i18n>giBatchExpiredBlockMsg}"
+                                    type="Error"
+                                    showIcon="true"
+                                    visible="{= ${giView>/activeItem/BatchStatusState} === 'Error' }"
+                                    class="sapUiTinyMarginTop" />
+
+                                <!-- Group 4: Difference / Short Pick -->
+                                <core:Title text="{i18n>giStep3DifferenceTitle}" />
+
+                                <Label text="{i18n>giDifferenceQtyLabel}" />
+                                <Input
+                                    id="inputDifferenceQty"
+                                    value="{giView>/differenceQty}"
+                                    type="Number"
+                                    width="10rem"
+                                    liveChange=".onDifferenceQtyChange" />
+
+                                <Label text="{i18n>giDifferenceReasonLabel}" />
+                                <Select
+                                    id="selectDiffReason"
+                                    selectedKey="{giView>/differenceReason}"
+                                    width="14rem">
+                                    <core:Item key="01" text="01 - Short Pick" />
+                                    <core:Item key="02" text="02 - Damage" />
+                                    <core:Item key="03" text="03 - Quality Issue" />
+                                    <core:Item key="04" text="04 - Other" />
+                                </Select>
+
+                                <Label text="{i18n>giStorageType999Label}" />
+                                <Text text="999 (Differences)" />
+
+                                <Label text="" />
+                                <CheckBox
+                                    id="chkFinalIssue"
+                                    text="{i18n>giFinalIssueLabel}"
+                                    selected="{giView>/finalIssue}" />
+                            </form:content>
+                        </form:SimpleForm>
+
+                        <!-- Validation Checklist Panel -->
+                        <Panel
+                            id="panelValidationChecklist"
+                            headerText="{i18n>giStep3ValidationTitle}"
+                            class="sapUiSmallMarginBottom">
+                            <VBox>
+                                <List id="listValidationChecks" items="{giView>/validationChecks}" showSeparators="None">
+                                    <CustomListItem>
+                                        <HBox alignItems="Center" class="sapUiTinyMargin">
+                                            <core:Icon
+                                                src="{= ${giView>passed} ? 'sap-icon://accept' : 'sap-icon://decline' }"
+                                                color="{= ${giView>passed} ? '#107E3E' : '#BB0000' }"
+                                                class="sapUiTinyMarginEnd" />
+                                            <Text text="{giView>label}" />
+                                        </HBox>
+                                    </CustomListItem>
+                                </List>
+                            </VBox>
+                        </Panel>
+                    </VBox>
+                </WizardStep>
+
+                <!-- STEP 4: REVIEW & CONFIRM -->
+                <WizardStep
+                    id="stepReview"
+                    title="{i18n>giWizardStepReviewTitle}"
+                    icon="sap-icon://inspection"
+                    validated="true">
+                    <VBox class="sapUiSmallMargin">
+                        <MessageStrip
+                            text="{i18n>giReviewConfirmMsg}"
+                            type="Warning"
+                            showIcon="true"
+                            class="sapUiSmallMarginBottom" />
+
+                        <form:SimpleForm
+                            id="formReviewSummary"
+                            editable="false"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            columnsXL="2"
+                            columnsL="2"
+                            columnsM="1"
+                            class="sapUiSmallMarginBottom">
+                            <form:content>
+                                <!-- Section 1: Reference Document -->
+                                <core:Title text="{i18n>giReviewReferenceTitle}" />
+
+                                <Label text="{i18n>giReservationLabel}" />
+                                <Text text="{giView>/resolved/ReservationNo} (Item {giView>/activeItem/ReservationItem})" class="fontBold" />
+
+                                <Label text="{i18n>giOrderLabel}" />
+                                <Text text="{giView>/resolved/OrderNo}" class="fontBold" />
+
+                                <Label text="{i18n>giMovementTypeLabel}" />
+                                <Text text="{giView>/resolved/MovementType} ({giView>/resolved/MovementTypeName})" />
+
+                                <Label text="{i18n>giPlantLabel}" />
+                                <Text text="{giView>/resolved/Plant}" />
+
+                                <!-- Section 2: Material & Location -->
+                                <core:Title text="{i18n>giReviewMaterialTitle}" />
+
+                                <Label text="{i18n>giColMaterial}" />
+                                <ObjectIdentifier
+                                    title="{giView>/activeItem/Material}"
+                                    text="{giView>/activeItem/MaterialDesc}" />
+
+                                <Label text="Location &amp; Bin" />
+                                <Text text="{giView>/activeItem/StorageLocation} / Bin {= ${giView>/activeItem/StorageBin} || '-' }" />
+
+                                <Label text="{i18n>giBatchLabel}" />
+                                <HBox alignItems="Center">
+                                    <Text text="{= ${giView>/activeItem/Batch} || '-' }" class="fontBold sapUiTinyMarginEnd" />
+                                    <ObjectStatus
+                                        text="{giView>/activeItem/BatchStatusText}"
+                                        state="{giView>/activeItem/BatchStatusState}"
+                                        visible="{= !!${giView>/activeItem/Batch} }" />
+                                </HBox>
+
+                                <Label text="{i18n>giExpirationDateLabel}" />
+                                <Text text="{= ${giView>/activeItem/ExpiryDate} || '-' }" />
+
+                                <!-- Section 3: Quantities -->
+                                <core:Title text="{i18n>giReviewQuantitiesTitle}" />
+
+                                <Label text="{i18n>giConfirmedStockLabel}" />
+                                <ObjectNumber
+                                    number="{giView>/availableStock}"
+                                    unit="{giView>/activeItem/Unit}"
+                                    state="Information" />
+
+                                <Label text="{i18n>giColOpenQty}" />
+                                <ObjectNumber
+                                    number="{giView>/activeItem/OpenQty}"
+                                    unit="{giView>/activeItem/Unit}" />
+
+                                <Label text="{i18n>giIssueQuantityLabel}" />
+                                <ObjectNumber
+                                    number="{giView>/issueQty}"
+                                    unit="{giView>/activeItem/Unit}"
+                                    state="Success"
+                                    emphasized="true" />
+
+                                <Label text="{i18n>giBalanceRemainingLabel}" />
+                                <ObjectNumber
+                                    number="{= ${giView>/activeItem/OpenQty} - ${giView>/issueQty} }"
+                                    unit="{giView>/activeItem/Unit}"
+                                    state="{= (${giView>/activeItem/OpenQty} - ${giView>/issueQty}) > 0 ? 'Warning' : 'Success' }" />
+
+                                <!-- Section 4: Difference (if applicable) -->
+                                <core:Title text="{i18n>giReviewDifferenceTitle}" />
+
+                                <Label text="{i18n>giDifferenceQtyLabel}" />
+                                <ObjectNumber
+                                    number="{giView>/differenceQty}"
+                                    unit="{giView>/activeItem/Unit}"
+                                    state="Warning" />
+
+                                <Label text="{i18n>giDifferenceReasonLabel}" />
+                                <Text text="{= ${giView>/differenceReason} || 'None' }" />
+
+                                <Label text="{i18n>giStorageType999Label}" />
+                                <Text text="999" />
+                            </form:content>
+                        </form:SimpleForm>
+                    </VBox>
+                </WizardStep>
+            </Wizard>
+
+            <!-- ============================================ -->
+            <!-- OUTCOME / EXECUTION SCREEN (Step 4 Results)  -->
+            <!-- ============================================ -->
+            <VBox visible="{= ${giView>/currentStep} === 4 }" class="sapUiResponsiveMargin">
+                <!-- SUCCESS: Posted in SAP S/4HANA -->
+                <IllustratedMessage
+                    id="illusMsgSuccess"
+                    illustrationType="sapIllus-SuccessScreen"
+                    title="{i18n>giPostSuccessMsg}"
+                    description="{= 'Material Document: ' + ${giView>/postResult/MaterialDocument} + ' | Year: ' + ${giView>/postResult/MaterialDocYear} + (${giView>/postResult/TransferOrder} ? ' | TO: ' + ${giView>/postResult/TransferOrder} : '') }"
+                    visible="{= ${giView>/postResult/Success} === true &amp;&amp; !${giView>/postResult/Queued} }"
+                    class="sapUiMediumMargin">
+                    <additionalContent>
+                        <Button
+                            id="btnStartNewGISuccess"
+                            text="{i18n>giBtnStartNewGI}"
+                            icon="sap-icon://refresh"
+                            type="Emphasized"
+                            press=".onResetWorkflow" />
+                    </additionalContent>
+                </IllustratedMessage>
+
+                <!-- QUEUED: Recorded in Offline Outbox Dispatch Queue -->
+                <IllustratedMessage
+                    id="illusMsgQueued"
+                    illustrationType="sapIllus-Connection"
+                    title="{i18n>wmGIQueuedTitle}"
+                    description="{i18n>wmGIQueuePendingMsg}"
+                    visible="{= ${giView>/postResult/Queued} === true }"
+                    class="sapUiMediumMargin">
+                    <additionalContent>
+                        <VBox alignItems="Center" width="100%">
+                            <form:SimpleForm
+                                editable="false"
+                                layout="ResponsiveGridLayout"
+                                labelSpanXL="4"
+                                labelSpanL="4"
+                                labelSpanM="4"
+                                labelSpanS="12"
+                                columnsXL="1"
+                                columnsL="1"
+                                columnsM="1"
+                                class="sapUiSmallMarginBottom"
+                                width="32rem">
+                                <form:content>
+                                    <core:Title text="Dispatch Queue Record Details" />
+                                    <Label text="{i18n>wmGIQueueRefLabel}" />
+                                    <Text text="{giView>/postResult/QueueReference}" class="fontBold" />
+
+                                    <Label text="{i18n>giReservationLabel}" />
+                                    <Text text="{giView>/postResult/ReservationNo}" />
+
+                                    <Label text="{i18n>wmGIQueueColStatus}" />
+                                    <ObjectStatus text="{giView>/postResult/SyncStatus}" state="Warning" icon="sap-icon://pending" />
+                                </form:content>
+                            </form:SimpleForm>
+
+                            <Panel
+                                headerText="{i18n>giSapDiagnosticsTitle}"
+                                expandable="true"
+                                expanded="false"
+                                width="32rem"
+                                class="sapUiSmallMarginBottom">
+                                <Text text="{giView>/postResult/Message}" class="sapUiSmallMargin" />
+                            </Panel>
+
+                            <HBox class="sapUiSmallMarginTop">
+                                <Button
+                                    id="btnRetrySync"
+                                    text="{i18n>wmGIBtnRetrySync}"
+                                    icon="sap-icon://synchronize"
+                                    type="Emphasized"
+                                    press=".onRetrySync"
+                                    class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnViewOutbox"
+                                    text="{i18n>wmGIQueueTrayBtn}"
+                                    icon="sap-icon://inbox"
+                                    type="Default"
+                                    press=".onOpenQueueTray"
+                                    class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnStartNewGIQueued"
+                                    text="{i18n>giBtnStartNewGI}"
+                                    icon="sap-icon://refresh"
+                                    type="Transparent"
+                                    press=".onResetWorkflow" />
+                            </HBox>
+                        </VBox>
+                    </additionalContent>
+                </IllustratedMessage>
+
+                <!-- ERROR: Unrecoverable Gateway / Validation Failure -->
+                <IllustratedMessage
+                    id="illusMsgError"
+                    illustrationType="sapIllus-ErrorScreen"
+                    title="{i18n>giPostFailedMsg}"
+                    description="{giView>/postResult/Message}"
+                    visible="{= ${giView>/postResult/Success} === false &amp;&amp; !${giView>/postResult/Queued} }"
+                    class="sapUiMediumMargin">
+                    <additionalContent>
+                        <Button
+                            id="btnStartNewGIError"
+                            text="{i18n>giBtnStartNewGI}"
+                            icon="sap-icon://refresh"
+                            type="Emphasized"
+                            press=".onResetWorkflow" />
+                    </additionalContent>
+                </IllustratedMessage>
+            </VBox>
+        </content>
+
+        <!-- ============================================ -->
+        <!-- STANDARD PAGE FOOTER (Action Placement)     -->
+        <!-- ============================================ -->
+        <footer>
+            <OverflowToolbar id="otbFooter">
+                <ToolbarSpacer />
+                <Button
+                    id="btnFooterPrevious"
+                    text="{i18n>giBtnPreviousStep}"
+                    icon="sap-icon://nav-back"
+                    type="Default"
+                    press=".onWizardPreviousStep"
+                    visible="{= ${giView>/currentStep} > 1 &amp;&amp; ${giView>/currentStep} &lt; 4 }" />
+                <Button
+                    id="btnFooterNext"
+                    text="{i18n>giBtnNextStep}"
+                    icon="sap-icon://navigation-right-arrow"
+                    type="Emphasized"
+                    press=".onWizardNextStep"
+                    visible="{= ${giView>/currentStep} &lt; 3 }"
+                    enabled="{giView>/canProceedNext}" />
+                <Button
+                    id="btnFooterPost"
+                    text="{i18n>giBtnConfirmPost}"
+                    icon="sap-icon://paper-plane"
+                    type="Emphasized"
+                    press=".onPostGoodsIssue"
+                    visible="{= ${giView>/currentStep} === 3 }" />
+                <Button
+                    id="btnFooterReset"
+                    text="{i18n>btnRefresh}"
+                    type="Transparent"
+                    press=".onResetWorkflow"
+                    visible="{= ${giView>/currentStep} &lt; 4 }" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

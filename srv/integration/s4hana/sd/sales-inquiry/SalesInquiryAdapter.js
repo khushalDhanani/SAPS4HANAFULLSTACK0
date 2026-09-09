@@ -1,19 +1,20 @@
 const cds = require('@sap/cds');
+const connectivity = require('@sap-cloud-sdk/connectivity');
+const httpClient = require('@sap-cloud-sdk/http-client');
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA Sales Inquiry services:
  * - SD_F2370_INQY_WL_SRV (Manage Sales Inquiries Worklist & Configuration Value Helps)
  * - SD_F2369_INQY_FS_SRV (Sales Inquiry Factsheet & Line Items)
+ * - LORD_ODATA_ORDER_SRV (Lean Order OData Service for Sales Document Creation)
  */
 class SalesInquiryAdapter {
   constructor() {
     this.s4hanaWL = null;
     this.s4hanaFS = null;
-    // Local session cache for newly created sales inquiries to ensure immediate display and navigation
-    this._createdInquiries = new Map();
   }
 
-  /** Initialize the remote S/4HANA services */
+  /** Initialize the remote S/4HANA read services */
   async init() {
     if (!this.s4hanaWL) {
       try {
@@ -29,6 +30,43 @@ class SalesInquiryAdapter {
         console.warn('[SalesInquiryAdapter] Could not connect to SD_F2369_INQY_FS_SRV:', err.message);
       }
     }
+  }
+
+  /**
+   * Resolve destination for S/4HANA communication using SAP Cloud SDK.
+   */
+  async _getDestination() {
+    const destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
+    try {
+      const dest = await connectivity.getDestination({ destinationName });
+      if (dest) return dest;
+    } catch (err) {
+      // In local development without BTP Destination Service, fallback to credentials
+    }
+
+    if (process.env.S4_DESTINATION_URL) {
+      return {
+        url: process.env.S4_DESTINATION_URL,
+        username: process.env.S4_USERNAME,
+        password: process.env.S4_PASSWORD,
+        headers: {
+          'sap-client': process.env.S4_CLIENT || '220'
+        }
+      };
+    }
+
+    const creds = cds.env.requires?.SD_F2370_INQY_WL_SRV?.credentials;
+    if (creds && creds.url) {
+      const baseUrl = new URL(creds.url).origin;
+      return {
+        url: baseUrl,
+        username: creds.username,
+        password: creds.password,
+        headers: creds.headers || {}
+      };
+    }
+
+    throw new Error(`[SalesInquiryAdapter] Destination '${destinationName}' not found and no local credentials configured.`);
   }
 
   /** Read data from SD Worklist & Value Help service */
@@ -47,23 +85,6 @@ class SalesInquiryAdapter {
 
   /** Read data from SD Factsheet & Item service */
   async readFsData(query) {
-    // Check if query is looking for items of a locally created inquiry
-    let sInquiryId = null;
-    const where = query?.SELECT?.where;
-    if (Array.isArray(where)) {
-      for (let i = 0; i < where.length; i++) {
-        if (where[i]?.ref?.[0] === 'SalesInquiry' && where[i + 2]?.val) {
-          sInquiryId = String(where[i + 2].val);
-          break;
-        } else if (where[i]?.val && /^\d+$/.test(String(where[i].val))) {
-          sInquiryId = String(where[i].val);
-        }
-      }
-    }
-    if (sInquiryId && this._createdInquiries.has(sInquiryId)) {
-      return this._createdInquiries.get(sInquiryId).items;
-    }
-
     await this.init();
     if (!this.s4hanaFS) {
       return [];
@@ -77,35 +98,38 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Retrieves Sales Inquiries list combining S/4HANA live records and local created records.
+   * Retrieves Sales Inquiries list from S/4HANA worklist service.
    */
   async getInquiries(query) {
     await this.init();
-    let remoteRecords = [];
-    if (this.s4hanaWL) {
-      try {
-        const res = await this.s4hanaWL.run(query || SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370').limit(50));
-        remoteRecords = Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
-      } catch (err) {
-        console.warn('[SalesInquiryAdapter] Error fetching remote inquiries, falling back to cached:', err.message);
-      }
+    if (!this.s4hanaWL) {
+      return [];
     }
-
-    const localRecords = Array.from(this._createdInquiries.values()).map(entry => entry.header);
-    // Combine local created records (at the top) with remote records
-    const all = [...localRecords, ...remoteRecords.filter(r => !this._createdInquiries.has(r.SalesInquiry))];
-    return all;
+    try {
+      const defaultQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
+        .orderBy('CreationDate desc', 'SalesInquiry desc')
+        .limit(50);
+      let execQuery = query || defaultQuery;
+      if (query && query.SELECT && (!query.SELECT.orderBy || query.SELECT.orderBy.length === 0)) {
+        execQuery = SELECT.from(query.SELECT.from || 'SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
+          .orderBy('CreationDate desc', 'SalesInquiry desc');
+        if (query.SELECT.where) execQuery.where(query.SELECT.where);
+        if (query.SELECT.columns) execQuery.columns(query.SELECT.columns);
+        if (query.SELECT.limit) execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
+      }
+      const res = await this.s4hanaWL.run(execQuery);
+      return Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+    } catch (err) {
+      console.error('[SalesInquiryAdapter] Error fetching inquiries from SD_F2370_INQY_WL_SRV:', err.message);
+      throw err;
+    }
   }
 
   /**
-   * Retrieves single Sales Inquiry details by ID.
+   * Retrieves single Sales Inquiry details by ID directly from S/4HANA.
    */
   async getInquiry(sId) {
     const sKey = String(sId).trim();
-    if (this._createdInquiries.has(sKey)) {
-      return this._createdInquiries.get(sKey);
-    }
-
     await this.init();
     let header = null;
     let items = [];
@@ -191,42 +215,6 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Generates the next sequential Sales Inquiry number following standard SAP numbering (1000xxx).
-   */
-  async getNextInquiryNumber() {
-    await this.init();
-    let maxNum = 1000040;
-
-    // Check newly created local records first
-    for (const id of this._createdInquiries.keys()) {
-      const n = parseInt(id, 10);
-      if (!isNaN(n) && n > maxNum) {
-        maxNum = n;
-      }
-    }
-
-    // Check remote S/4HANA records
-    if (this.s4hanaWL) {
-      try {
-        const list = await this.s4hanaWL.run(
-          SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370').columns('SalesInquiry').limit(100)
-        );
-        const rows = Array.isArray(list) ? list : (list?.value || []);
-        for (const row of rows) {
-          const n = parseInt(row.SalesInquiry, 10);
-          if (!isNaN(n) && n > maxNum) {
-            maxNum = n;
-          }
-        }
-      } catch (e) {
-        console.warn('[SalesInquiryAdapter] Could not determine max remote inquiry ID:', e.message);
-      }
-    }
-
-    return String(maxNum + 1);
-  }
-
-  /**
    * Derives default organizational and commercial values for a customer.
    */
   async getCustomerDefaults(sCustomer, sOrg, sChannel, sDivision) {
@@ -285,7 +273,7 @@ class SalesInquiryAdapter {
       City: sCity,
       Country: sCountry,
       Currency: sCurrency,
-      ShipToParty: sCust, // In standard SAP SD, Sold-to defaults as Ship-to if not specified
+      ShipToParty: sCust,
       ShipToPartyName: sName,
       derived: Boolean(sName || sCity)
     };
@@ -312,95 +300,163 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Creates a Sales Inquiry in S/4HANA, generating the official sequential number
-   * and caching the document for immediate multi-screen workflow and display.
-   *
-   * @param {Object} header - Normalized inquiry header
-   * @param {Array<Object>} items - Normalized line items
-   * @param {Object} options - User and context options
-   * @returns {Promise<{ SalesInquiry: string }>}
+   * Resolves a material input string to a valid SAP numeric Material ID.
+   * If the input is already a material number, returns it directly.
+   * If it matches Material_Text in I_Material, resolves to the technical ID.
    */
-  async createSalesInquiry(header, items, options = {}) {
-    const sNewInquiryId = await this.getNextInquiryNumber();
-    const today = new Date().toISOString().split('T')[0];
-    const user = options.user || 'SYSTEM';
-
-    // Calculate total net amount
-    let totalNet = 0;
-    const mappedItems = (items || []).map((itm, idx) => {
-      const lineNum = itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
-      const qty = parseFloat(itm.OrderQuantity) || 0;
-      const price = parseFloat(itm.NetPriceAmount) || 0;
-      const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
-      totalNet += net;
-
-      return {
-        SalesInquiry: sNewInquiryId,
-        SalesInquiryItem: lineNum,
-        Material: itm.Material || '',
-        SalesInquiryItemText: itm.SalesInquiryItemText || '',
-        MaterialName: itm.SalesInquiryItemText || '',
-        SoldToParty: header.SoldToParty || '',
-        OrderQuantity: String(qty.toFixed(3)),
-        OrderQuantityUnit: itm.OrderQuantityUnit || 'PC',
-        NetAmount: String(net.toFixed(2)),
-        NetPriceAmount: String(price.toFixed(2)),
-        TransactionCurrency: header.TransactionCurrency || 'INR',
-        SDProcessStatus: 'Open'
-      };
-    });
-
-    let sCustomerName = header.CustomerName || '';
-    if (!sCustomerName && header.SoldToParty) {
-      try {
-        const custDef = await this.getCustomerDefaults(header.SoldToParty);
-        sCustomerName = custDef.CustomerName || '';
-      } catch (e) {}
+  async resolveMaterial(matInput) {
+    if (!matInput || String(matInput).trim() === '') return '';
+    const raw = String(matInput).trim();
+    if (/^\d{6,18}$/.test(raw)) {
+      return raw;
     }
-
-    const createdHeader = {
-      SalesInquiry: sNewInquiryId,
-      SalesInquiryType: header.SalesInquiryType || 'ZIN',
-      SalesOrganization: header.SalesOrganization || '1000',
-      DistributionChannel: header.DistributionChannel || '10',
-      OrganizationDivision: header.OrganizationDivision || '52',
-      SoldToParty: header.SoldToParty || '',
-      ShipToParty: header.ShipToParty || header.SoldToParty || '',
-      ShipToPartyName: header.ShipToPartyName || sCustomerName,
-      PurchaseOrderByCustomer: header.PurchaseOrderByCustomer || '',
-      CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate || today,
-      SalesInquiryDate: header.SalesInquiryDate || today,
-      BindingPeriodValidityStartDate: header.BindingPeriodValidityStartDate || today,
-      BindingPeriodValidityEndDate: header.BindingPeriodValidityEndDate || today,
-      TotalNetAmount: String(totalNet.toFixed(2)),
-      TransactionCurrency: header.TransactionCurrency || 'INR',
-      OverallSDProcessStatus: 'Open',
-      OverallSDDocumentRejectionSts: '',
-      SalesDocumentRjcnReason: '',
-      CreationDate: today,
-      CreatedByUser: user,
-      LastChangedByUser: user,
-      OrganizationBPName1: sCustomerName
-    };
-
-    // Store in active session registry
-    this._createdInquiries.set(sNewInquiryId, {
-      header: createdHeader,
-      items: mappedItems
-    });
-
-    return {
-      SalesInquiry: sNewInquiryId,
-      TotalNetAmount: createdHeader.TotalNetAmount,
-      TransactionCurrency: createdHeader.TransactionCurrency
-    };
+    await this.init();
+    if (this.s4hanaFS) {
+      try {
+        const rows = await this.s4hanaFS.run(
+          SELECT.from('SD_F2369_INQY_FS_SRV.I_Material').where({ Material_Text: raw }).limit(1)
+        );
+        if (rows && rows[0]?.Material) {
+          return rows[0].Material;
+        }
+      } catch (e) {
+        console.warn('[SalesInquiryAdapter] Could not resolve material description:', raw, e.message);
+      }
+    }
+    return raw;
   }
 
   /**
-   * Resets local created cache (useful for testing).
+   * Creates a Sales Inquiry directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV.
+   * SAP S/4HANA generates the official sequential inquiry number (e.g. 1000521, 1000522).
+   *
+   * @param {Object} header - Normalized inquiry header
+   * @param {Array<Object>} items - Normalized line items
+   * @param {Object} options - User and execution options
+   * @returns {Promise<{ SalesInquiry: string, TotalNetAmount: string, TransactionCurrency: string }>}
    */
-  resetCache() {
-    this._createdInquiries.clear();
+  async createSalesInquiry(header, items, options = {}) {
+    const destination = options.destination || await this._getDestination();
+    const servicePath = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
+    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+
+    const firstItemText = (items && items[0] && (items[0].SalesInquiryItemText || items[0].MaterialName)) || '';
+    const custRef = header.PurchaseOrderByCustomer || firstItemText || 'SALES INQUIRY';
+
+    // 1. Post Header to LORD_ODATA_ORDER_SRV/HeaderSet
+    const headerPayload = {
+      SalesOrderTypeCode: header.SalesInquiryType || 'ZIN',
+      SalesOrganization: header.SalesOrganization || '1000',
+      DistributionChannel: header.DistributionChannel || '10',
+      Division: header.OrganizationDivision || '52',
+      SoldToPartyID: header.SoldToParty || '',
+      PurchaseOrderNumber: custRef
+    };
+
+    let headerResp;
+    try {
+      headerResp = await executeFn(destination, {
+        method: 'post',
+        url: `${servicePath}/HeaderSet`,
+        data: headerPayload,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
+    } catch (headerErr) {
+      const sapMsg = headerErr.response?.data?.error?.message?.value ||
+                     headerErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+                     headerErr.message;
+      console.error('[SalesInquiryAdapter] Failed to create Sales Inquiry header in S/4HANA:', sapMsg);
+      throw new Error(sapMsg);
+    }
+
+    const sNewInquiryId = headerResp.data?.d?.SalesOrderID || headerResp.data?.SalesOrderID;
+    if (!sNewInquiryId) {
+      throw new Error('Sales Inquiry number not returned from SAP S/4HANA');
+    }
+
+    let totalNet = 0;
+
+    // 2. Post line items sequentially to LORD_ODATA_ORDER_SRV/HeaderSet('<SalesOrderID>')/ItemSet
+    if (Array.isArray(items) && items.length > 0) {
+      for (let idx = 0; idx < items.length; idx++) {
+        const itm = items[idx];
+        const qty = parseFloat(itm.OrderQuantity) || 1;
+        const price = parseFloat(itm.NetPriceAmount) || 0;
+        const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
+        totalNet += net;
+
+        const lineNum = itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
+        const resolvedMaterial = await this.resolveMaterial(itm.Material);
+        const itemPayload = {
+          SalesOrderID: sNewInquiryId,
+          ItemID: lineNum,
+          MaterialID: resolvedMaterial || itm.Material || '',
+          OrderQty: String(qty.toFixed(3)),
+          SalesUnit: itm.OrderQuantityUnit || 'PC'
+        };
+
+        try {
+          await executeFn(destination, {
+            method: 'post',
+            url: `${servicePath}/HeaderSet(%27${sNewInquiryId}%27)/ItemSet`,
+            data: itemPayload,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              ...(options.headers || {})
+            }
+          }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
+        } catch (itemErr) {
+          const itemSapMsg = itemErr.response?.data?.error?.message?.value ||
+                             itemErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+                             itemErr.message;
+          console.error(`[SalesInquiryAdapter] Failed to create item ${itemPayload.ItemID} for inquiry ${sNewInquiryId}:`, itemSapMsg);
+          throw new Error(itemSapMsg);
+        }
+
+        // 3. Post price condition (ZPR1) so S/4HANA pricing engine computes and stores Net Amount
+        const effectivePrice = price > 0 ? price : (qty > 0 && net > 0 ? (net / qty) : 0);
+        if (effectivePrice > 0) {
+          const condPayload = {
+            SalesOrderID: sNewInquiryId,
+            ItemID: lineNum,
+            CondTypeCode: 'ZPR1',
+            AmountInternal: String(effectivePrice.toFixed(2)),
+            RateUnitExternal: header.TransactionCurrency || 'INR',
+            PriceUnit: '1.000',
+            UnitOfMeasure: itm.OrderQuantityUnit || 'PC'
+          };
+          try {
+            await executeFn(destination, {
+              method: 'post',
+              url: `${servicePath}/HeaderSet(%27${sNewInquiryId}%27)/PriceCondSet`,
+              data: condPayload,
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                ...(options.headers || {})
+              }
+            }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
+          } catch (condErr) {
+            const condSapMsg = condErr.response?.data?.error?.message?.value ||
+                               condErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+                               condErr.message;
+            console.error(`[SalesInquiryAdapter] Failed to set price condition for item ${lineNum}:`, condSapMsg);
+            throw new Error(condSapMsg);
+          }
+        }
+      }
+    }
+
+    return {
+      SalesInquiry: sNewInquiryId,
+      TotalNetAmount: totalNet > 0 ? String(totalNet.toFixed(2)) : (headerResp.data?.d?.NetValue || '0.00'),
+      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || 'INR'
+    };
   }
 }
 

@@ -4,6 +4,7 @@ sap.ui.define([
     "sap/m/MessageBox",
     "sap/m/MessageToast",
     "sap/ui/core/routing/History",
+    "sap/ui/core/UIComponent",
     "saps4hana/fiori/service/AuthService",
     "saps4hana/fiori/model/formatter"
 ], function (
@@ -12,6 +13,7 @@ sap.ui.define([
     MessageBox,
     MessageToast,
     History,
+    UIComponent,
     AuthService,
     formatter
 ) {
@@ -19,6 +21,38 @@ sap.ui.define([
 
     return Controller.extend("saps4hana.fiori.controller.BaseController", {
         formatter: formatter,
+
+        /**
+         * Convenience method for accessing the router in every controller of the application.
+         * @returns {sap.ui.core.routing.Router} the router for this component
+         */
+        getRouter: function () {
+            var oComp = this.getOwnerComponent();
+            return oComp ? oComp.getRouter() : (UIComponent ? UIComponent.getRouterFor(this) : null);
+        },
+
+        /**
+         * Convenience method for getting the resource bundle text.
+         * @param {string} sKey the key of the text
+         * @param {string[]} [aArgs] optional arguments
+         * @returns {string} the localized text or key fallback
+         */
+        getText: function (sKey, aArgs) {
+            var oResourceModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("i18n") : (this.getView() ? this.getView().getModel("i18n") : null);
+            var oBundle = oResourceModel ? oResourceModel.getResourceBundle() : null;
+            return oBundle ? oBundle.getText(sKey, aArgs) : sKey;
+        },
+
+        /**
+         * Convenience method to set the view busy state.
+         * @param {boolean} bBusy whether the view is busy
+         */
+        setBusy: function (bBusy) {
+            var oView = this.getView();
+            if (oView) {
+                oView.setBusy(bBusy);
+            }
+        },
 
         /**
          * Computes procurement KPI metrics (totalCount, supplierCount, completeRate)
