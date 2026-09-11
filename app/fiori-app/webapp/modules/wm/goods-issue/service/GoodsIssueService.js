@@ -209,6 +209,63 @@ sap.ui.define([
             return ODataClient.post(BASE_PATH + "/clearQueuedGoodsIssue", {
                 QueueReference: sQueueReference
             });
+        },
+
+        // ──────────────────────────────────────────────────────────
+        // Stock Unit (SU) Barcode → Batch Determination
+        // ──────────────────────────────────────────────────────────
+
+        /**
+         * Resolve Stock Unit barcode against SAP:
+         * SU → Delivery → Material → Stock → Batch → Reservation Validation
+         *
+         * @param {string} sSuBarcode - Scanned SU barcode (Delivery Document Number)
+         * @param {string} sReservationNo - Current reservation number
+         * @param {string} sReservationItem - Current reservation item
+         * @returns {Promise<Object>} StockUnitResolution
+         */
+        resolveStockUnit: function (sSuBarcode, sReservationNo, sReservationItem) {
+            if (!sSuBarcode || !sSuBarcode.trim()) {
+                return Promise.reject(new Error("SU barcode is required"));
+            }
+            if (!sReservationNo || !sReservationItem) {
+                return Promise.reject(new Error("Reservation number and item are required for SU resolution"));
+            }
+
+            var sQuery = "?suBarcode=" + encodeURIComponent(sSuBarcode.trim()) +
+                         "&reservationNo=" + encodeURIComponent(String(sReservationNo).trim()) +
+                         "&reservationItem=" + encodeURIComponent(String(sReservationItem).trim());
+
+            return ODataClient.get(BASE_PATH + "/resolveStockUnit(" +
+                "suBarcode='" + encodeURIComponent(sSuBarcode.trim()) + "'," +
+                "reservationNo='" + encodeURIComponent(String(sReservationNo).trim()) + "'," +
+                "reservationItem='" + encodeURIComponent(String(sReservationItem).trim()) + "'" +
+                ")");
+        },
+
+        /**
+         * Revalidate SAP stock immediately before Goods Issue posting.
+         * Prevents posting with stale data.
+         *
+         * @param {string} sMaterial
+         * @param {string} sPlant
+         * @param {string} sStorageLocation
+         * @param {string} sBatch
+         * @param {number} nRequiredQty
+         * @returns {Promise<Object>} StockRevalidationResult
+         */
+        revalidateStock: function (sMaterial, sPlant, sStorageLocation, sBatch, nRequiredQty) {
+            if (!sMaterial) {
+                return Promise.reject(new Error("Material is required for stock revalidation"));
+            }
+
+            return ODataClient.get(BASE_PATH + "/revalidateStock(" +
+                "material='" + encodeURIComponent(String(sMaterial).trim()) + "'," +
+                "plant='" + encodeURIComponent(String(sPlant || '').trim()) + "'," +
+                "storageLocation='" + encodeURIComponent(String(sStorageLocation || '').trim()) + "'," +
+                "batch='" + encodeURIComponent(String(sBatch || '').trim()) + "'," +
+                "requiredQty=" + (Number(nRequiredQty) || 0) +
+                ")");
         }
     };
 

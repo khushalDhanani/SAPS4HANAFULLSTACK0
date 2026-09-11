@@ -439,4 +439,292 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(retryRes.QueueReference).toBe(item.QueueReference);
     });
   });
+
+  describe('Real SU/HU (SSCC / Handling Unit) Resolution — Wired via Discovered SAP EWM (/SCWM/) HU Service', () => {
+    const {
+      scwmHuMetadataXml,
+      scwmPackMetadataXml,
+      scwmPicklistMetadataXml,
+      scwmWarehouseContextError,
+      warehouseRows,
+      warehouseRowsMultiple,
+      ewmWarehouseVhRows,
+      ewmWarehouseVhRowsMultiple,
+      huHeaderRows,
+      huItemRows,
+      huItemRowsMultipleBatches,
+      huItemRowsBadBatch,
+      huItemRowsWrongMaterial,
+      pickHuRows,
+      pickHuContentRows,
+      productBaseRows,
+      reservationItemRow,
+      stockRow
+    } = require('./fixtures/suResolution.fixture');
+
+    const SIMPLE_INB = '/sap/opu/odata/scwm/SIMPLE_INB_DLV_SRV';
+    const PACK = '/sap/opu/odata/scwm/PACK_OUTBDLV_SRV';
+    const PICKLIST = '/sap/opu/odata/scwm/PICKLIST_PAPER_SRV';
+
+    const usableBatch = [{
+      Material: '1000000355',
+      Plant: '1120',
+      Batch: 'BATCH001',
+      ExpiryDate: '2027-12-31',
+      StatusState: 'Success',
+      StatusText: 'VALID',
+      DaysToExpiry: 478,
+      AvailableStock: 1200,
+      Unit: 'KG',
+      StorageLocation: 'CS01'
+    }];
+
+    // Live $metadata per candidate service (all three are registered on client 220)
+    const mockMetadata = () => jest.spyOn(GoodsIssueAdapter, '_getMetadataXml').mockImplementation(async (base) => {
+      if (base === SIMPLE_INB) return scwmHuMetadataXml;
+      if (base === PACK) return scwmPackMetadataXml;
+      if (base === PICKLIST) return scwmPicklistMetadataXml;
+      const err = new Error(`S/4HANA GET ${base}/$metadata failed: HTTP 404 - not found`);
+      err.status = 404;
+      throw err;
+    });
+
+    const mockHuGet = (items, overrides = {}) => async (path, query) => {
+      if (overrides[path] !== undefined) {
+        const v = overrides[path];
+        return typeof v === 'function' ? v(query) : v;
+      }
+      if (path.includes('VL_SH_xSCWMxSH_LGNUM')) return warehouseRows;
+      if (path.includes('EWMWarehouseVH_Set') || path.includes('EWMWarehouse_Set')) return ewmWarehouseVhRows;
+      if (path.includes('HUHeadSet')) return huHeaderRows;
+      if (path.includes('HUItemSet')) return items;
+      if (path.includes('ReservationDocumentItem')) return [reservationItemRow];
+      if (path.includes('MaterialStorLocHelps')) return stockRow;
+      return [];
+    };
+
+    const decodedQueries = (spy, pathPart) => spy.mock.calls
+      .filter(([p]) => p.includes(pathPart))
+      .map(([, q]) => decodeURIComponent(q || ''));
+
+    beforeEach(() => {
+      GoodsIssueAdapter._resetHuModelCache();
+      delete process.env.EWM_WAREHOUSE_NUMBER;
+    });
+
+    afterEach(() => {
+      delete process.env.EWM_WAREHOUSE_NUMBER;
+    });
+
+    it('resolves a warehouse-scoped SCWM Handling Unit and auto-determines the batch physically inside the SU', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(usableBatch);
+      const getSpy = jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet(huItemRows));
+
+      const req = {
+        data: { suBarcode: '180000001', reservationNo: '100001', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(true);
+      expect(result.ResolvedType).toBe('HANDLING_UNIT');
+      expect(result.HuService).toBe(SIMPLE_INB);
+      expect(result.HuInternalNumber).toBe('005056a5-09b1-1ee0-8f5c-1a2b3c4d5e6f');
+      expect(result.HuExternalId).toBe('180000001');
+      expect(result.Material).toBe('1000000355');
+      expect(result.DeterminedBatch).toBe('BATCH001');
+      expect(result.DeterminedBatchStatusText).toBe('VALID');
+      // Live HUItem carries no plant / SLoc / bin: reservation values apply, bin stays empty
+      expect(result.Plant).toBe('1120');
+      expect(result.StorageLocation).toBe('CS01');
+      expect(result.StorageBin).toBe('');
+      expect(result.SuStockQty).toBe(1200);
+      expect(result.CurrentStock).toBe(1200);
+      expect(result.PlantMatch).toBe(true);
+      expect(result.SLocMatch).toBe(true);
+      expect(result.MultipleBatches).toBe(false);
+      expect(result.MaxIssueQty).toBe(500);
+      expect(req.error).not.toHaveBeenCalled();
+
+      // Warehouse session: every SCWM read is scoped to the discovered warehouse 0001
+      const headQueries = decodedQueries(getSpy, 'HUHeadSet');
+      expect(headQueries.length).toBeGreaterThanOrEqual(2);
+      headQueries.forEach((q) => expect(q).toContain("WarehouseNumber eq '0001'"));
+      expect(headQueries.some((q) => q.includes("HandlingUnitID eq '180000001'"))).toBe(true);
+      const itemQueries = decodedQueries(getSpy, 'HUItemSet');
+      expect(itemQueries).toHaveLength(1);
+      expect(itemQueries[0]).toContain("HandlingUnitID eq '180000001'");
+    });
+
+    it('uses EWM_WAREHOUSE_NUMBER for the warehouse session instead of the value help when configured', async () => {
+      process.env.EWM_WAREHOUSE_NUMBER = 'w001';
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(usableBatch);
+      const getSpy = jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet(huItemRows));
+
+      const result = await GoodsIssueAdapter.resolveStockUnitForGoodsIssue('180000001', '100001', '0001');
+      expect(result.SuExists).toBe(true);
+      expect(getSpy.mock.calls.some(([p]) => p.includes('VL_SH_xSCWMxSH_LGNUM'))).toBe(false);
+      decodedQueries(getSpy, 'HUHeadSet').forEach((q) => expect(q).toContain("WarehouseNumber eq 'W001'"));
+    });
+
+    it('returns SuExists:false with a precise diagnostic when the barcode is not a real HU/SSCC object', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet([], { [`${SIMPLE_INB}/HUHeadSet`]: [] }));
+
+      const req = {
+        data: { suBarcode: '1000028860', reservationNo: '18025', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(false);
+      expect(result.SuNotFoundReason).toContain('NOT found in SAP as a real Handling Unit / SSCC object');
+      expect(result.SuNotFoundReason).toContain('SIMPLE_INB_DLV_SRV');
+      expect(result.SuNotFoundReason).toContain('HUHeadSet');
+      expect(result.SuNotFoundReason).toContain('warehouse 0001');
+      expect(result.SuNotFoundReason).toContain('HandlingUnitID');
+      expect(result.ReservationNo).toBe('18025');
+      expect(result.ReservationItem).toBe('0001');
+    });
+
+    it('returns SuExists:false with the exact missing SAP capability when no SU/HU service is activated', async () => {
+      jest.spyOn(GoodsIssueAdapter, '_getMetadataXml').mockImplementation(async (base) => {
+        const notFound = new Error(`S/4HANA GET ${base}/$metadata failed: HTTP 404 - not found`);
+        notFound.status = 404;
+        throw notFound;
+      });
+
+      const req = {
+        data: { suBarcode: '1000028860', reservationNo: '18025', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(false);
+      expect(result.SuNotFoundReason).toContain('capability is not activated');
+      expect(result.SuNotFoundReason).toContain('SIMPLE_INB_DLV_SRV -> HTTP 404');
+      expect(result.SuNotFoundReason).toContain('PACK_OUTBDLV_SRV -> HTTP 404');
+      expect(result.SuNotFoundReason).toContain('PICKLIST_PAPER_SRV -> HTTP 404');
+    });
+
+    it('falls back to the next SCWM service when SAP rejects the warehouse context, skipping the work-center-bound PACK HUSet', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue([]);
+      const getSpy = jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet([], {
+        [`${SIMPLE_INB}/HUHeadSet`]: () => { throw scwmWarehouseContextError(); },
+        [`${PICKLIST}/VL_SH_xSCWMxSH_HU`]: pickHuRows,
+        [`${PICKLIST}/VL_SH_xSCWMxSH_TO_CONF_HU_COMP`]: pickHuContentRows,
+        [`${PICKLIST}/VL_SH_xSCMBxMDL_PROD_BASE`]: productBaseRows
+      }));
+
+      const result = await GoodsIssueAdapter.resolveStockUnitForGoodsIssue('180000001', '100001', '0001');
+      expect(result.SuExists).toBe(true);
+      expect(result.HuService).toBe(PICKLIST);
+      expect(result.HuExternalId).toBe('180000001');
+      expect(result.HuInternalNumber).toBe('180000001');
+      expect(result.Material).toBe('1000000355');      // MATID GUID resolved via product-base value help
+      expect(result.StorageBin).toBe('A1-01-02');      // VLPLA from the HU contents value help
+      expect(result.SuStockQty).toBe(1200);
+      expect(result.NoBatchAvailable).toBe(true);      // TO_CONF_HU_COMP exposes no batch
+      expect(result.DeterminedBatch).toBe('');
+
+      // PACK_OUTBDLV_SRV/HUSet must never be queried (requires an EWM work center)
+      expect(getSpy.mock.calls.some(([p]) => p.startsWith(PACK))).toBe(false);
+      const huQueries = decodedQueries(getSpy, 'VL_SH_xSCWMxSH_HU');
+      expect(huQueries.some((q) => q.includes("LGNUM eq '0001' and HUIDENT eq '180000001'"))).toBe(true);
+      const contentQueries = decodedQueries(getSpy, 'VL_SH_xSCWMxSH_TO_CONF_HU_COMP');
+      expect(contentQueries[0]).toContain("LGNUM eq '0001' and VLENR eq '180000001'");
+    });
+
+    it('returns SuExists:false naming every attempted service and the SAP warehouse rejection when no service accepts the warehouse', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet([], {
+        [`${SIMPLE_INB}/HUHeadSet`]: () => { throw scwmWarehouseContextError(); },
+        [`${PICKLIST}/VL_SH_xSCWMxSH_HU`]: () => { throw scwmWarehouseContextError(); }
+      }));
+
+      const req = {
+        data: { suBarcode: '1000028860', reservationNo: '18025', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(false);
+      expect(result.SuNotFoundReason).toContain('capability is not activated');
+      expect(result.SuNotFoundReason).toContain("SIMPLE_INB_DLV_SRV/HUHeadSet with WarehouseNumber='0001'");
+      expect(result.SuNotFoundReason).toContain('/SCWM/ODATA_COMMON/008');
+      expect(result.SuNotFoundReason).toContain('Warehouse number "0001" is incorrect.');
+      expect(result.SuNotFoundReason).toContain('EWM warehouse context rejected');
+      expect(result.SuNotFoundReason).toContain('PACK_OUTBDLV_SRV -> metadata OK but no HU entity set');
+      expect(result.SuNotFoundReason).toContain("PICKLIST_PAPER_SRV/VL_SH_xSCWMxSH_HU with LGNUM='0001'");
+    });
+
+    it('returns SuExists:false asking for EWM_WAREHOUSE_NUMBER when the warehouse value help is ambiguous', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet([], {
+        [`${SIMPLE_INB}/VL_SH_xSCWMxSH_LGNUM`]: warehouseRowsMultiple,
+        [`${PICKLIST}/EWMWarehouseVH_Set`]: ewmWarehouseVhRowsMultiple
+      }));
+
+      const req = {
+        data: { suBarcode: '180000001', reservationNo: '100001', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(false);
+      expect(result.SuNotFoundReason).toContain('returned 2 EWM warehouses (0001, 0002)');
+      expect(result.SuNotFoundReason).toContain('EWM_WAREHOUSE_NUMBER');
+    });
+
+    it('blocks Goods Issue when the batch inside the SU is not a valid usable batch for the reservation', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(usableBatch);
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet(huItemRowsBadBatch));
+
+      const req = {
+        data: { suBarcode: '180000001', reservationNo: '100001', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(false);
+      expect(result.SuNotFoundReason).toContain('Batch mismatch');
+      expect(result.SuNotFoundReason).toContain('BADBATCH99');
+      expect(result.SuNotFoundReason).toContain('HU 180000001');
+    });
+
+    it('marks MultipleBatches when the SU physically contains more than one batch', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(usableBatch);
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet(huItemRowsMultipleBatches));
+
+      const result = await GoodsIssueAdapter.resolveStockUnitForGoodsIssue('180000001', '100001', '0001');
+      expect(result.SuExists).toBe(true);
+      expect(result.MultipleBatches).toBe(true);
+      expect(result.DeterminedBatch).toBe('');
+    });
+
+    it('blocks Goods Issue when the product inside the SU differs from the reservation material', async () => {
+      mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(usableBatch);
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet(huItemRowsWrongMaterial));
+
+      const req = {
+        data: { suBarcode: '180000001', reservationNo: '100001', reservationItem: '0001' },
+        error: jest.fn()
+      };
+      const result = await handlers['resolveStockUnit'](req);
+      expect(result.SuExists).toBe(false);
+      expect(result.SuNotFoundReason).toContain('Material mismatch');
+      expect(result.SuNotFoundReason).toContain('1000000999');
+      expect(result.SuNotFoundReason).toContain('1000000355');
+    });
+
+    it('reuses the discovered HU model within a session instead of re-reading $metadata on every scan', async () => {
+      const metaSpy = mockMetadata();
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(usableBatch);
+      jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(mockHuGet(huItemRows));
+
+      await GoodsIssueAdapter.resolveStockUnitForGoodsIssue('180000001', '100001', '0001');
+      await GoodsIssueAdapter.resolveStockUnitForGoodsIssue('180000001', '100001', '0001');
+      expect(metaSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

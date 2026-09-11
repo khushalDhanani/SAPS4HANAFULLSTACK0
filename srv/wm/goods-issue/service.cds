@@ -243,5 +243,98 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     action clearQueuedGoodsIssue(
         QueueReference : String(40)
     ) returns Boolean;
+
+    // ──────────────────────────────────────────────────────────
+    // Stock Unit (SU) Barcode → Batch Determination
+    // ──────────────────────────────────────────────────────────
+
+    type StockUnitBatchItem {
+        Material            : String(40);
+        Plant               : String(4);
+        Batch               : String(10);
+        ExpiryDate          : Date;
+        ManufactDate        : Date;
+        AvailableStock      : Decimal(13, 3);
+        Unit                : String(3);
+        StorageBin          : String(18);
+        StorageLocation     : String(4);
+        StorageLocationName : String(40);
+        StatusState         : String(10);
+        StatusText          : String(20);
+        DaysToExpiry        : Integer;
+    };
+
+    type StockUnitResolution {
+        SuBarcode                   : String(40);
+        SuExists                    : Boolean;
+        SuNotFoundReason            : String(255);
+        ResolvedType                : String(30);
+        HuService                   : String(120);
+        HuInternalNumber            : String(40);
+        HuExternalId                : String(40);
+        DeliveryDocument            : String(10);
+        DeliveryDocumentItem        : String(6);
+        Material                    : String(40);
+        MaterialDesc                : String(80);
+        Plant                       : String(4);
+        StorageLocation             : String(4);
+        StorageBin                  : String(18);
+        CurrentStock                : Decimal(13, 3);
+        SuStockQty                  : Decimal(13, 3);
+        BaseUnit                    : String(3);
+        Batches                     : array of StockUnitBatchItem;
+        DeterminedBatch             : String(10);
+        DeterminedBatchExpiry       : Date;
+        DeterminedBatchStatusState  : String(10);
+        DeterminedBatchStatusText   : String(20);
+        DeterminedBatchDaysToExpiry : Integer;
+        MultipleBatches             : Boolean;
+        NoBatchAvailable            : Boolean;
+        ReservationNo               : String(10);
+        ReservationItem             : String(4);
+        OrderNo                     : String(12);
+        MaterialMatch               : Boolean;
+        PlantMatch                  : Boolean;
+        SLocMatch                   : Boolean;
+        ReservationRemainingQty     : Decimal(13, 3);
+        ReservationRequiredQty      : Decimal(13, 3);
+        ReservationWithdrawnQty     : Decimal(13, 3);
+        MaxIssueQty                 : Decimal(13, 3);
+        Unit                        : String(3);
+    };
+
+    type StockRevalidationResult {
+        Material         : String(40);
+        Plant            : String(4);
+        StorageLocation  : String(4);
+        Batch            : String(10);
+        CurrentStock     : Decimal(13, 3);
+        BaseUnit         : String(3);
+        StockReadSuccess : Boolean;
+        StockSufficient  : Boolean;
+        RequestedQty     : Decimal(13, 3);
+        BatchValid       : Boolean;
+        BatchStatusState : String(10);
+        BatchStatusText  : String(255);
+        BatchExpiry      : Date;
+        Valid            : Boolean;
+        Message          : String(500);
+    };
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    function resolveStockUnit(
+        suBarcode       : String(40),
+        reservationNo   : String(10),
+        reservationItem : String(4)
+    ) returns StockUnitResolution;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    function revalidateStock(
+        material        : String(40),
+        plant           : String(4),
+        storageLocation : String(4),
+        batch           : String(10),
+        requiredQty     : Decimal(13, 3)
+    ) returns StockRevalidationResult;
 }
 

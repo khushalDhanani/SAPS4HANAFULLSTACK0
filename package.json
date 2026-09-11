@@ -4,8 +4,8 @@
   "description": "SAP S/4HANA Enterprise Full-Stack Platform",
   "main": "server.js",
   "scripts": {
-    "start": "cds watch",
-    "watch": "cds watch",
+    "start": "cds watch --exclude data",
+    "watch": "cds watch --exclude data",
     "test": "jest --runInBand",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",

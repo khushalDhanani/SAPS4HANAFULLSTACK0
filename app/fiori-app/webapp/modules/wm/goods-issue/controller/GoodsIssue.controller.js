@@ -35,7 +35,20 @@ sap.ui.define([
                 isValid: false,
                 validationChecks: [],
                 postResult: null,
-                queuedCount: 0
+                queuedCount: 0,
+                // Stock Unit (SU) Barcode → Batch Determination
+                suBarcode: "",
+                suResolution: null,
+                suLoading: false,
+                suError: false,
+                suErrorMessage: "",
+                suSuccess: false,
+                suSuccessMessage: "",
+                suWarning: false,
+                suWarningMessage: "",
+                batchLockedBySu: false,
+                suBatchLockText: "",
+                lastScannedSu: ""
             });
             this.getView().setModel(oViewModel, "giView");
 
@@ -115,6 +128,19 @@ sap.ui.define([
             oModel.setProperty("/isValid", false);
             oModel.setProperty("/validationChecks", []);
             oModel.setProperty("/postResult", null);
+            // Reset SU state
+            oModel.setProperty("/suBarcode", "");
+            oModel.setProperty("/suResolution", null);
+            oModel.setProperty("/suLoading", false);
+            oModel.setProperty("/suError", false);
+            oModel.setProperty("/suErrorMessage", "");
+            oModel.setProperty("/suSuccess", false);
+            oModel.setProperty("/suSuccessMessage", "");
+            oModel.setProperty("/suWarning", false);
+            oModel.setProperty("/suWarningMessage", "");
+            oModel.setProperty("/batchLockedBySu", false);
+            oModel.setProperty("/suBatchLockText", "");
+            oModel.setProperty("/lastScannedSu", "");
 
             var oWizard = this.byId("giWizard");
             if (oWizard) {
@@ -398,6 +424,201 @@ sap.ui.define([
         },
 
         // =============================================================
+        // STOCK UNIT (SU) BARCODE → BATCH DETERMINATION
+        // =============================================================
+
+        /**
+         * Handler for SU barcode input submit (scanner fires Enter key)
+         */
+        onSuBarcodeSubmit: function () {
+            this._resolveSuBarcode();
+        },
+
+        /**
+         * Handler for "Resolve SU" button press
+         */
+        onResolveSuBarcode: function () {
+            this._resolveSuBarcode();
+        },
+
+        /**
+         * Clear SU barcode state and unlock batch field
+         */
+        onClearSuBarcode: function () {
+            var oModel = this.getView().getModel("giView");
+            oModel.setProperty("/suBarcode", "");
+            oModel.setProperty("/suResolution", null);
+            oModel.setProperty("/suLoading", false);
+            oModel.setProperty("/suError", false);
+            oModel.setProperty("/suErrorMessage", "");
+            oModel.setProperty("/suSuccess", false);
+            oModel.setProperty("/suSuccessMessage", "");
+            oModel.setProperty("/suWarning", false);
+            oModel.setProperty("/suWarningMessage", "");
+            oModel.setProperty("/batchLockedBySu", false);
+            oModel.setProperty("/suBatchLockText", "");
+            oModel.setProperty("/lastScannedSu", "");
+
+            // Revert batch to reservation default (if any)
+            var oActive = oModel.getProperty("/activeItem");
+            if (oActive && oActive._originalBatch !== undefined) {
+                var oUpdated = Object.assign({}, oActive, {
+                    Batch: oActive._originalBatch || "",
+                    ExpiryDate: oActive._originalExpiryDate || "",
+                    BatchStatusState: oActive._originalBatchStatusState || "None",
+                    BatchStatusText: oActive._originalBatchStatusText || ""
+                });
+                oModel.setProperty("/activeItem", oUpdated);
+            }
+
+            this._validateInputs();
+            MessageToast.show("SU barcode cleared. Batch field unlocked.");
+        },
+
+        /**
+         * Core SU resolution logic — calls backend resolveStockUnit()
+         * Follows the authoritative chain:
+         * SU barcode → SAP Delivery → Material → Stock → Batch → Reservation Validation
+         */
+        _resolveSuBarcode: function () {
+            var oModel = this.getView().getModel("giView");
+            var sSuBarcode = (oModel.getProperty("/suBarcode") || "").trim();
+            var oActive = oModel.getProperty("/activeItem");
+            var oResolved = oModel.getProperty("/resolved");
+            var that = this;
+
+            if (!sSuBarcode) {
+                MessageToast.show("Please scan or enter a Stock Unit barcode.");
+                return;
+            }
+
+            if (!oActive || !oResolved || !oResolved.ReservationNo) {
+                MessageBox.error("Please select a reservation and component before scanning an SU barcode.");
+                return;
+            }
+
+            // Duplicate scan prevention
+            var sLastSu = oModel.getProperty("/lastScannedSu");
+            if (sLastSu && sLastSu === sSuBarcode && oModel.getProperty("/batchLockedBySu")) {
+                this._playBeep(false);
+                MessageToast.show("SU " + sSuBarcode + " was already scanned. Clear the current SU first to re-scan.");
+                return;
+            }
+
+            // Reset SU state
+            oModel.setProperty("/suLoading", true);
+            oModel.setProperty("/suError", false);
+            oModel.setProperty("/suErrorMessage", "");
+            oModel.setProperty("/suSuccess", false);
+            oModel.setProperty("/suSuccessMessage", "");
+            oModel.setProperty("/suWarning", false);
+            oModel.setProperty("/suWarningMessage", "");
+            oModel.setProperty("/batchLockedBySu", false);
+            oModel.setProperty("/suBatchLockText", "");
+
+            // Save original batch values for revert on clear
+            if (oActive._originalBatch === undefined) {
+                var oWithOriginals = Object.assign({}, oActive, {
+                    _originalBatch: oActive.Batch || "",
+                    _originalExpiryDate: oActive.ExpiryDate || "",
+                    _originalBatchStatusState: oActive.BatchStatusState || "None",
+                    _originalBatchStatusText: oActive.BatchStatusText || ""
+                });
+                oModel.setProperty("/activeItem", oWithOriginals);
+            }
+
+            var sReservationNo = oResolved.ReservationNo;
+            var sReservationItem = oActive.ReservationItem;
+
+            GoodsIssueService.resolveStockUnit(sSuBarcode, sReservationNo, sReservationItem)
+                .then(function (oResult) {
+                    oModel.setProperty("/suLoading", false);
+                    oModel.setProperty("/suResolution", oResult);
+                    oModel.setProperty("/suSuccess", false);
+                    oModel.setProperty("/suWarning", false);
+
+                    // SU was not resolved in SAP — show the reason, do NOT treat as success
+                    if (oResult && oResult.SuExists === false) {
+                        oModel.setProperty("/suError", true);
+                        oModel.setProperty("/suErrorMessage",
+                            oResult.SuNotFoundReason || ("Stock Unit " + sSuBarcode + " was not found in SAP."));
+                        oModel.setProperty("/batchLockedBySu", false);
+                        that._playBeep(false);
+                        that._validateInputs();
+                        return;
+                    }
+
+                    oModel.setProperty("/lastScannedSu", sSuBarcode);
+
+                    // Update available stock from SU
+                    if (oResult.CurrentStock !== undefined) {
+                        oModel.setProperty("/availableStock", Number(oResult.CurrentStock));
+                    }
+
+                    // Update max issue qty
+                    if (oResult.MaxIssueQty !== undefined && oResult.MaxIssueQty < Number(oModel.getProperty("/issueQty"))) {
+                        oModel.setProperty("/issueQty", Number(oResult.MaxIssueQty));
+                    }
+
+                    // Handle batch determination
+                    if (oResult.DeterminedBatch) {
+                        // Single batch auto-determined — lock it
+                        var oActiveNow = oModel.getProperty("/activeItem");
+                        var oUpdated = Object.assign({}, oActiveNow, {
+                            Batch: oResult.DeterminedBatch,
+                            ExpiryDate: oResult.DeterminedBatchExpiry || "",
+                            BatchStatusState: oResult.DeterminedBatchStatusState || "Success",
+                            BatchStatusText: oResult.DeterminedBatchStatusText || "VALID"
+                        });
+                        oModel.setProperty("/activeItem", oUpdated);
+                        oModel.setProperty("/batchLockedBySu", true);
+                        oModel.setProperty("/suBatchLockText", "\uD83D\uDD12 Auto-detected from Stock Unit " + sSuBarcode);
+
+                        oModel.setProperty("/suSuccess", true);
+                        oModel.setProperty("/suSuccessMessage",
+                            "Stock Unit " + sSuBarcode + " resolved: Material " + oResult.Material +
+                            ", Batch " + oResult.DeterminedBatch +
+                            ", Stock " + oResult.CurrentStock + " " + oResult.BaseUnit);
+
+                        that._playBeep(true);
+                    } else if (oResult.MultipleBatches) {
+                        // Multiple batches — user must pick manually
+                        oModel.setProperty("/suWarning", true);
+                        oModel.setProperty("/suWarningMessage",
+                            "Multiple batches found for SU " + sSuBarcode +
+                            ". Manual batch selection required \u2014 automatic determination is not possible.");
+
+                        oModel.setProperty("/suSuccess", true);
+                        oModel.setProperty("/suSuccessMessage",
+                            "Stock Unit " + sSuBarcode + " resolved: Material " + oResult.Material +
+                            ", Stock " + oResult.CurrentStock + " " + oResult.BaseUnit +
+                            ". Please select batch manually.");
+
+                        that._playBeep(true);
+                    } else if (oResult.NoBatchAvailable) {
+                        // No batch — material may not be batch-managed
+                        oModel.setProperty("/suSuccess", true);
+                        oModel.setProperty("/suSuccessMessage",
+                            "Stock Unit " + sSuBarcode + " resolved but no batch found. Material may not be batch-managed.");
+
+                        that._playBeep(true);
+                    }
+
+                    that._validateInputs();
+                })
+                .catch(function (err) {
+                    oModel.setProperty("/suLoading", false);
+                    oModel.setProperty("/suResolution", null);
+                    oModel.setProperty("/suError", true);
+                    oModel.setProperty("/suErrorMessage", err.message || "Failed to resolve Stock Unit in SAP.");
+                    oModel.setProperty("/batchLockedBySu", false);
+
+                    that._playBeep(false);
+                    that._validateInputs();
+                });
+        },
+
+        // =============================================================
         // STEP 2: CONFIGURE & VALIDATE
         // =============================================================
 
@@ -450,6 +671,8 @@ sap.ui.define([
             var sBatch = oActive.Batch || "";
             var sBatchState = oActive.BatchStatusState || "None";
             var nDiffQty = Number(oModel.getProperty("/differenceQty")) || 0;
+            var oSuResolution = oModel.getProperty("/suResolution");
+            var bBatchLockedBySu = oModel.getProperty("/batchLockedBySu");
 
             var aChecks = [];
             var bAllPassed = true;
@@ -460,43 +683,62 @@ sap.ui.define([
             aChecks.push({ label: "Document verified in SAP S/4HANA", passed: bDocVerified });
             if (!bDocVerified) bAllPassed = false;
 
-            // Check 2: Issue Qty > 0
+            // Check 2: SU resolved and validated (if SU was scanned)
+            if (oSuResolution) {
+                var bSuValid = !!(oSuResolution.SuExists && oSuResolution.MaterialMatch);
+                aChecks.push({ label: "SU Stock Unit resolved and validated against reservation", passed: bSuValid });
+                if (!bSuValid) bAllPassed = false;
+            }
+
+            // Check 3: Issue Qty > 0
             var bQtyPositive = nIssueQty > 0;
             aChecks.push({ label: "Issue quantity is greater than zero (" + nIssueQty + " " + (oActive.Unit || "") + ")", passed: bQtyPositive });
             if (!bQtyPositive) bAllPassed = false;
 
-            // Check 3: Issue Qty <= Open Qty
+            // Check 4: Issue Qty <= Open Qty
             var bQtyWithinOpen = nIssueQty <= nOpenQty;
-            aChecks.push({ label: "Issue quantity does not exceed open requirement (" + nIssueQty + " ≤ " + nOpenQty + ")", passed: bQtyWithinOpen });
+            aChecks.push({ label: "Issue quantity does not exceed open requirement (" + nIssueQty + " \u2264 " + nOpenQty + ")", passed: bQtyWithinOpen });
             if (!bQtyWithinOpen) bAllPassed = false;
 
-            // Check 4: Issue Qty <= Available Stock (if stock is known and > 0)
+            // Check 5: Issue Qty <= Available Stock (if stock is known and > 0)
             var bQtyWithinStock = true;
             if (nStock > 0) {
                 bQtyWithinStock = nIssueQty <= nStock;
-                aChecks.push({ label: "Issue quantity does not exceed confirmed SAP stock (" + nIssueQty + " ≤ " + nStock + ")", passed: bQtyWithinStock });
+                aChecks.push({ label: "Issue quantity does not exceed confirmed SAP stock (" + nIssueQty + " \u2264 " + nStock + ")", passed: bQtyWithinStock });
                 if (!bQtyWithinStock) bAllPassed = false;
             }
 
-            // Check 5: Batch validity (if batch is assigned)
+            // Check 6: SU stock sufficiency (if SU scanned)
+            if (oSuResolution && oSuResolution.CurrentStock !== undefined) {
+                var nSuStock = Number(oSuResolution.CurrentStock);
+                var bSuStockOk = nIssueQty <= nSuStock;
+                aChecks.push({ label: "Issue quantity does not exceed SU stock (" + nIssueQty + " \u2264 " + nSuStock + " " + (oSuResolution.BaseUnit || "") + ")", passed: bSuStockOk });
+                if (!bSuStockOk) bAllPassed = false;
+            }
+
+            // Check 7: Batch validity (if batch is assigned)
             var bBatchValid = true;
             if (sBatch) {
                 bBatchValid = sBatchState !== "Error";
-                aChecks.push({ label: "Batch " + sBatch + " is valid and unexpired (SLED verified)", passed: bBatchValid });
+                var sBatchLabel = "Batch " + sBatch + " is valid and unexpired (SLED verified)";
+                if (bBatchLockedBySu) {
+                    sBatchLabel = "Batch " + sBatch + " auto-detected from Stock Unit and SLED verified";
+                }
+                aChecks.push({ label: sBatchLabel, passed: bBatchValid });
                 if (!bBatchValid) bAllPassed = false;
             } else {
-                aChecks.push({ label: "Batch selection (optional — no batch assigned)", passed: true });
+                aChecks.push({ label: "Batch selection (optional \u2014 no batch assigned)", passed: true });
             }
 
-            // Check 6: Required fields populated
+            // Check 8: Required fields populated
             var bFieldsOk = !!(oActive.Material && oActive.Plant);
             aChecks.push({ label: "Required fields populated (Material, Plant)", passed: bFieldsOk });
             if (!bFieldsOk) bAllPassed = false;
 
-            // Check 7: Difference validation (if difference > 0, issue + diff should equal open)
+            // Check 9: Difference validation (if difference > 0, issue + diff should equal open)
             if (nDiffQty > 0) {
                 var bDiffValid = (nIssueQty + nDiffQty) <= nOpenQty;
-                aChecks.push({ label: "Issue + Difference does not exceed open quantity (" + nIssueQty + " + " + nDiffQty + " ≤ " + nOpenQty + ")", passed: bDiffValid });
+                aChecks.push({ label: "Issue + Difference does not exceed open quantity (" + nIssueQty + " + " + nDiffQty + " \u2264 " + nOpenQty + ")", passed: bDiffValid });
                 if (!bDiffValid) bAllPassed = false;
             }
 
@@ -842,11 +1084,60 @@ sap.ui.define([
                 FinalIssue: Boolean(oModel.getProperty("/finalIssue"))
             };
 
-            // Move to Step 4 with busy indicator
-            oModel.setProperty("/currentStep", 4);
-            oModel.setProperty("/canProceedNext", false);
-            oModel.setProperty("/postResult", null);
-            this.setBusy(true);
+            // ── Pre-posting SAP stock revalidation ──
+            // If SU was scanned, revalidate stock immediately before posting
+            var bSuScanned = oModel.getProperty("/batchLockedBySu");
+            var fnPost = function () {
+                // Move to Step 4 with busy indicator
+                oModel.setProperty("/currentStep", 4);
+                oModel.setProperty("/canProceedNext", false);
+                oModel.setProperty("/postResult", null);
+                that.setBusy(true);
+                return that._executePost(oPayload, nIssueQty);
+            };
+
+            if (bSuScanned && oActive.Batch) {
+                this.setBusy(true);
+                return GoodsIssueService.revalidateStock(
+                    oActive.Material,
+                    oActive.Plant,
+                    oActive.StorageLocation,
+                    oActive.Batch,
+                    nIssueQty
+                ).then(function (oResult) {
+                    that.setBusy(false);
+                    if (oResult && !oResult.Valid) {
+                        that._playBeep(false);
+                        MessageBox.error(
+                            "Pre-posting revalidation failed: " + (oResult.Message || "Stock or batch changed in SAP.") +
+                            "\n\nGoods Issue is blocked. Please clear the SU and re-scan.",
+                            { title: "SAP Revalidation Failed" }
+                        );
+                        return;
+                    }
+                    // Revalidation passed — proceed to post
+                    return fnPost();
+                }).catch(function (err) {
+                    that.setBusy(false);
+                    that._playBeep(false);
+                    MessageBox.error(
+                        "Pre-posting revalidation failed: " + (err.message || "SAP connection error.") +
+                        "\n\nGoods Issue is blocked.",
+                        { title: "SAP Revalidation Error" }
+                    );
+                });
+            } else {
+                return fnPost();
+            }
+
+        },
+
+        /**
+         * Execute the actual GI posting after revalidation (or directly if no SU)
+         */
+        _executePost: function (oPayload, nIssueQty) {
+            var oModel = this.getView().getModel("giView");
+            var that = this;
 
             return GoodsIssueService.postGoodsIssue(oPayload)
                 .then(function (oResult) {

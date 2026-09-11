@@ -229,7 +229,76 @@
                                     unit="{giView>/activeItem/Unit}"
                                     state="Warning" />
 
-                                <!-- Group 2: Issue Quantity -->
+                                <!-- Group 2: Stock Unit (SU) Barcode Scan -->
+                                <core:Title text="{i18n>giSuSectionTitle}" />
+
+                                <Label text="{i18n>giSuBarcodeLabel}" labelFor="inputSuBarcode" />
+                                <HBox alignItems="Center" wrap="Wrap">
+                                    <Input
+                                        id="inputSuBarcode"
+                                        value="{giView>/suBarcode}"
+                                        type="Text"
+                                        placeholder="{i18n>giSuBarcodePlaceholder}"
+                                        tooltip="{i18n>giSuBarcodeTooltip}"
+                                        submit=".onSuBarcodeSubmit"
+                                        enabled="{= !${giView>/batchLockedBySu} }"
+                                        width="16rem"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Button
+                                        id="btnResolveSu"
+                                        text="{i18n>giSuResolveBtn}"
+                                        icon="sap-icon://bar-code"
+                                        type="Emphasized"
+                                        press=".onResolveSuBarcode"
+                                        enabled="{= !${giView>/batchLockedBySu} &amp;&amp; !!${giView>/suBarcode} }"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Button
+                                        id="btnClearSu"
+                                        text="{i18n>giSuClearBtn}"
+                                        icon="sap-icon://sys-cancel"
+                                        type="Transparent"
+                                        press=".onClearSuBarcode"
+                                        visible="{= !!${giView>/batchLockedBySu} }" />
+                                </HBox>
+
+                                <Label text="" />
+                                <VBox visible="{= !!${giView>/suLoading} }">
+                                    <BusyIndicator size="1rem" class="sapUiTinyMarginEnd" />
+                                    <Text text="{i18n>giSuLoading}" class="sapUiTinyMarginBegin" />
+                                </VBox>
+
+                                <Label text="" />
+                                <MessageStrip
+                                    text="{giView>/suSuccessMessage}"
+                                    type="Success"
+                                    showIcon="true"
+                                    visible="{= !!${giView>/suSuccess} &amp;&amp; !${giView>/suLoading} }"
+                                    class="sapUiTinyMarginTop" />
+
+                                <Label text="" />
+                                <MessageStrip
+                                    text="{giView>/suErrorMessage}"
+                                    type="Error"
+                                    showIcon="true"
+                                    visible="{= !!${giView>/suError} &amp;&amp; !${giView>/suLoading} }"
+                                    class="sapUiTinyMarginTop" />
+
+                                <Label text="" />
+                                <MessageStrip
+                                    text="{giView>/suWarningMessage}"
+                                    type="Warning"
+                                    showIcon="true"
+                                    visible="{= !!${giView>/suWarning} &amp;&amp; !${giView>/suLoading} }"
+                                    class="sapUiTinyMarginTop" />
+
+                                <Label text="{i18n>giSuAvailableStock}" visible="{= !!${giView>/suResolution} }" />
+                                <ObjectNumber
+                                    number="{giView>/suResolution/CurrentStock}"
+                                    unit="{giView>/suResolution/BaseUnit}"
+                                    state="Information"
+                                    visible="{= !!${giView>/suResolution} }" />
+
+                                <!-- Group 3: Issue Quantity -->
                                 <core:Title text="{i18n>giStep3QuantityTitle}" />
 
                                 <Label text="{i18n>giIssueQuantityLabel}" required="true" labelFor="inputIssueQty" />
@@ -253,7 +322,7 @@
                                         press=".onFillOpenQty" />
                                 </HBox>
 
-                                <!-- Group 3: Batch & Shelf Life (SLED) -->
+                                <!-- Group 4: Batch & Shelf Life (SLED) -->
                                 <core:Title text="{i18n>giStep3BatchTitle}" />
 
                                 <Label text="{i18n>giBatchLabel}" />
@@ -263,17 +332,25 @@
                                         state="None"
                                         class="sapUiTinyMarginEnd fontBold" />
                                     <ObjectStatus
+                                        id="statusSuBatchLock"
+                                        text="{giView>/suBatchLockText}"
+                                        state="Success"
+                                        icon="sap-icon://locked"
+                                        visible="{= !!${giView>/batchLockedBySu} }"
+                                        class="sapUiTinyMarginEnd" />
+                                    <ObjectStatus
                                         id="statusValidateSled"
                                         text="{giView>/activeItem/BatchStatusText}"
                                         state="{giView>/activeItem/BatchStatusState}"
-                                        visible="{= !!${giView>/activeItem/Batch} }"
+                                        visible="{= !!${giView>/activeItem/Batch} &amp;&amp; !${giView>/batchLockedBySu} }"
                                         class="sapUiTinyMarginEnd" />
                                     <Button
                                         id="btnSelectBatch"
                                         text="{i18n>giBtnSelectBatch}"
                                         icon="sap-icon://batch-payments"
                                         type="Default"
-                                        press=".onOpenBatchSelectionDialog" />
+                                        press=".onOpenBatchSelectionDialog"
+                                        enabled="{= !${giView>/batchLockedBySu} }" />
                                 </HBox>
 
                                 <Label text="{i18n>giExpirationDateLabel}" />

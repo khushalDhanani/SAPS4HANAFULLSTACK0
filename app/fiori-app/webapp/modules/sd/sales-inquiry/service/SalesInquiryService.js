@@ -233,15 +233,28 @@ sap.ui.define([
             if (!sMaterial || String(sMaterial).trim() === "") {
                 return Promise.resolve(null);
             }
+
             var sClean = encodeURIComponent(String(sMaterial).trim());
-            var sFilter = "?$filter=Material eq '" + sClean + "' or MaterialName eq '" + sClean + "' or contains(MaterialName,'" + sClean + "')&$top=1";
-            return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter).then(function (res) {
-                var aItems = (res && (res.value || (res.d && res.d.results))) || [];
-                return (aItems.length > 0) ? aItems[0] : null;
-            }).catch(function (err) {
-                console.warn("[SalesInquiryService] Error fetching material details for " + sMaterial + ":", err);
-                return null;
-            });
+
+            var sFilter =
+                "?$filter=MaterialType eq 'ZFRT' and (" +
+                "Material eq '" + sClean + "' or " +
+                "MaterialName eq '" + sClean + "' or " +
+                "contains(MaterialName,'" + sClean + "')" +
+                ")&$top=1";
+
+            return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter)
+                .then(function (res) {
+                    var aItems = (res && (res.value || (res.d && res.d.results))) || [];
+                    return aItems.length > 0 ? aItems[0] : null;
+                })
+                .catch(function (err) {
+                    console.warn(
+                        "[SalesInquiryService] Error fetching FG material for " + sMaterial + ":",
+                        err
+                    );
+                    return null;
+                });
         },
 
         /**

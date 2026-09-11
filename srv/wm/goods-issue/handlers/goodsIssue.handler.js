@@ -284,6 +284,114 @@ class GoodsIssueHandler {
       }
       return GoodsIssueQueueManager.remove(QueueReference);
     });
+
+    // ──────────────────────────────────────────────────────────
+    // FUNCTION: resolveStockUnit — SU Barcode → Stock → Batch
+    // Returns StockUnitResolution with SuExists:false for business-level
+    // "not found" instead of HTTP 404, so the OData endpoint itself never
+    // returns 404 for a valid barcode query.
+    // ──────────────────────────────────────────────────────────
+    srv.on('resolveStockUnit', async (req) => {
+      const suBarcode = req.data?.suBarcode || '';
+      const reservationNo = req.data?.reservationNo || '';
+      const reservationItem = req.data?.reservationItem || '';
+
+      if (!suBarcode) {
+        return req.error(400, 'suBarcode parameter is required');
+      }
+      if (!reservationNo || !reservationItem) {
+        return req.error(400, 'reservationNo and reservationItem parameters are required');
+      }
+
+      try {
+        const result = await GoodsIssueAdapter.resolveStockUnitForGoodsIssue(
+          suBarcode,
+          reservationNo,
+          reservationItem
+        );
+        return result;
+      } catch (err) {
+        // Business-level "not found in SAP" — return a valid StockUnitResolution
+        // with SuExists:false so the OData function always returns 200 with a
+        // typed response. Only true infrastructure errors (502, 500) become HTTP errors.
+        const httpStatus = err.status || err.statusCode || 500;
+        if (httpStatus === 404 || httpStatus === 422 || httpStatus === 409) {
+          return {
+            SuBarcode: suBarcode,
+            SuExists: false,
+            SuNotFoundReason: err.message || 'Stock Unit not found in SAP',
+            ResolvedType: '',
+            HuService: '',
+            HuInternalNumber: '',
+            HuExternalId: '',
+            DeliveryDocument: '',
+            DeliveryDocumentItem: '',
+            Material: err.details?.material || '',
+            MaterialDesc: err.details?.materialDesc || '',
+            Plant: err.details?.plant || '',
+            StorageLocation: err.details?.storageLocation || '',
+            StorageBin: '',
+            CurrentStock: err.details?.currentStock || 0,
+            SuStockQty: err.details?.currentStock || 0,
+            BaseUnit: err.details?.baseUnit || '',
+            Batches: err.details?.availableBatches || [],
+            DeterminedBatch: '',
+            DeterminedBatchExpiry: null,
+            DeterminedBatchStatusState: 'None',
+            DeterminedBatchStatusText: 'NOT_FOUND',
+            DeterminedBatchDaysToExpiry: 0,
+            MultipleBatches: false,
+            NoBatchAvailable: Array.isArray(err.details?.availableBatches) && err.details.availableBatches.length === 0,
+            ReservationNo: reservationNo,
+            ReservationItem: reservationItem,
+            OrderNo: '',
+            MaterialMatch: false,
+            PlantMatch: false,
+            SLocMatch: false,
+            ReservationRemainingQty: 0,
+            ReservationRequiredQty: 0,
+            ReservationWithdrawnQty: 0,
+            MaxIssueQty: 0,
+            Unit: err.details?.baseUnit || ''
+          };
+        }
+        return req.error(
+          httpStatus,
+          err.message || 'Failed to resolve Stock Unit in S/4HANA'
+        );
+      }
+    });
+
+    // ──────────────────────────────────────────────────────────
+    // FUNCTION: revalidateStock — Pre-posting SAP stock check
+    // ──────────────────────────────────────────────────────────
+    srv.on('revalidateStock', async (req) => {
+      const material = req.data?.material || '';
+      const plant = req.data?.plant || '';
+      const storageLocation = req.data?.storageLocation || '';
+      const batch = req.data?.batch || '';
+      const requiredQty = req.data?.requiredQty || 0;
+
+      if (!material) {
+        return req.error(400, 'material parameter is required');
+      }
+
+      try {
+        const result = await GoodsIssueAdapter.revalidateStockBeforePosting(
+          material,
+          plant,
+          storageLocation,
+          batch,
+          requiredQty
+        );
+        return result;
+      } catch (err) {
+        return req.error(
+          err.status || err.statusCode || 500,
+          err.message || 'Failed to revalidate stock in S/4HANA'
+        );
+      }
+    });
   }
 }
 

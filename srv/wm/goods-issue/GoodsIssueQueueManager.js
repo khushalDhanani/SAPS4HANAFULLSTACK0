@@ -1,6 +1,11 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+
+const STORAGE_DIR_NAME = '.saps4hana';
+const STORAGE_FILE_NAME = 'goods-issue-queue.json';
+const USER_HOME = os.homedir() || os.tmpdir();
 
 /**
  * GoodsIssueQueueManager
@@ -12,11 +17,38 @@ const crypto = require('crypto');
  * In accordance with AGENTS.md, items in this queue are explicitly marked as:
  * SyncStatus: 'QUEUED' / 'QUEUED_PENDING_SAP_SYNC'
  * and never claim fake SAP persistence.
+ *
+ * Storage location contract:
+ * The queue store MUST live OUTSIDE the project tree. Writing the queue inside the
+ * repository directory (e.g. ./data) makes `cds watch` treat every enqueue as a source
+ * change and restart the dev server, which drops the connection for in-flight UI requests
+ * (the "localhost refused to connect" failure on the Goods Issue last step). The default
+ * store is therefore resolved under the user's home directory and can be overridden via
+ * the GI_QUEUE_STORAGE_FILE environment variable (used by deployments and tests).
  */
 class GoodsIssueQueueManager {
-  constructor() {
-    this.storageFile = path.resolve(process.cwd(), 'data', 'goods-issue-queue.json');
+  constructor(options = {}) {
+    this.storageFile = options.storageFile || GoodsIssueQueueManager.resolveStorageFile();
+    this.legacyStorageFile = GoodsIssueQueueManager.resolveLegacyStorageFile();
     this._ensureStorageDir();
+    // Only migrate the legacy in-tree store for the default/production store. Instances
+    // constructed with an explicit storageFile (e.g. isolated unit-test stores) are
+    // intentionally not migrated so they never absorb unrelated production records.
+    if (!options.storageFile) {
+      this._migrateLegacyStore();
+    }
+  }
+
+  static resolveStorageFile() {
+    const override = process.env.GI_QUEUE_STORAGE_FILE;
+    if (override && override.trim()) {
+      return path.resolve(override.trim());
+    }
+    return path.join(USER_HOME, STORAGE_DIR_NAME, STORAGE_FILE_NAME);
+  }
+
+  static resolveLegacyStorageFile() {
+    return path.resolve(process.cwd(), 'data', 'goods-issue-queue.json');
   }
 
   _ensureStorageDir() {
@@ -37,6 +69,37 @@ class GoodsIssueQueueManager {
     }
   }
 
+  /**
+   * One-time, idempotent migration of records previously persisted in the legacy
+   * ./data/goods-issue-queue.json (inside the watched project tree). Existing records
+   * are merged by QueueReference/ID so no queued transaction is lost and nothing is
+   * duplicated if the migration runs more than once. The legacy file itself is left
+   * untouched so no live session data is disturbed.
+   */
+  _migrateLegacyStore() {
+    if (this.legacyStorageFile === this.storageFile) return;
+    if (!fs.existsSync(this.legacyStorageFile)) return;
+
+    let legacyItems = [];
+    try {
+      const parsed = JSON.parse(fs.readFileSync(this.legacyStorageFile, 'utf8'));
+      legacyItems = Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      legacyItems = [];
+    }
+    if (legacyItems.length === 0) return;
+
+    const current = this._readAll();
+    const known = new Set(current.map(i => i && (i.QueueReference || i.ID)));
+    const missing = legacyItems.filter(i => i && !known.has(i.QueueReference || i.ID));
+    if (missing.length === 0) return;
+
+    this._writeAll(missing.concat(current));
+    console.info(
+      `[GoodsIssueQueueManager] Migrated ${missing.length} queued transaction(s) from legacy store to ${this.storageFile}`
+    );
+  }
+
   _readAll() {
     this._ensureStorageDir();
     try {
@@ -52,11 +115,18 @@ class GoodsIssueQueueManager {
 
   _writeAll(items) {
     this._ensureStorageDir();
+    const tmpFile = `${this.storageFile}.${process.pid}.tmp`;
     try {
-      fs.writeFileSync(this.storageFile, JSON.stringify(items, null, 2), 'utf8');
+      fs.writeFileSync(tmpFile, JSON.stringify(items, null, 2), 'utf8');
+      fs.renameSync(tmpFile, this.storageFile);
       return true;
     } catch (err) {
       console.error('[GoodsIssueQueueManager] Failed to write queue storage:', err.message);
+      try {
+        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+      } catch (_) {
+        // Ignore
+      }
       return false;
     }
   }
@@ -165,3 +235,4 @@ class GoodsIssueQueueManager {
 }
 
 module.exports = new GoodsIssueQueueManager();
+module.exports.GoodsIssueQueueManager = GoodsIssueQueueManager;
