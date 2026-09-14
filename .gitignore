@@ -1,6 +1,7 @@
 node_modules/
 .env
 .env.*
+!.env.example
 *.log
 .DS_Store
 coverage/
@@ -9,3 +10,4 @@ gen/
 .mbtbuild/
 *.mtar
 .DS_Store
+srv/external/all_catalog_services.json

@@ -1,0 +1,231 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.sales-inquiry.controller.SalesInquiryDetail"
+    xmlns="sap.m"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:core="sap.ui.core"
+    xmlns:uxap="sap.uxap"
+    xmlns:f="sap.ui.layout.form">
+
+    <uxap:ObjectPageLayout
+        id="salesInquiryObjectPage"
+        enableLazyLoading="false"
+        showTitleInHeaderContent="false"
+        showEditHeaderButton="false"
+        headerContentPinnable="true"
+        useIconTabBar="false">
+
+        <!-- Dynamic Header Title (SAP Fiori Best Practice) -->
+        <uxap:headerTitle>
+            <uxap:ObjectPageDynamicHeaderTitle id="inquiryHeaderTitle">
+                <!-- 1. Breadcrumbs -->
+                <uxap:breadcrumbs>
+                    <Breadcrumbs id="inquiryBreadcrumbs" currentLocationText="{detail>/header/SalesInquiry}">
+                        <Link text="{i18n>salesInquiryDetailBreadcrumb}" press=".onNavBack" />
+                    </Breadcrumbs>
+                </uxap:breadcrumbs>
+
+                <!-- 2. Unified Heading (Title + Canonical ObjectStatus) -->
+                <uxap:heading>
+                    <HBox alignItems="Center" wrap="NoWrap">
+                        <Title
+                            id="headerInquiryTitle"
+                            text="{= ${detail>/header/SalesInquiry} ? (${i18n>salesInquiryHeadingTitle} + ' ' + ${detail>/header/SalesInquiry} + (${detail>/header/PurchaseOrderByCustomer} ? ' - ' + ${detail>/header/PurchaseOrderByCustomer} : '')) : ${i18n>salesInquiryHeadingTitle} }"
+                            class="sapUiTinyMarginEnd" />
+                        <ObjectStatus
+                            id="headerStatus"
+                            text="{= ${detail>/header/OverallSDProcessStatus} === 'C' ? 'Completed' : (${detail>/header/OverallSDProcessStatus} === 'B' ? 'In Process' : 'Open') }"
+                            state="{= ${detail>/header/OverallSDProcessStatus} === 'C' ? 'Success' : (${detail>/header/OverallSDProcessStatus} === 'B' ? 'Warning' : 'Information') }"
+                            inverted="true" />
+                    </HBox>
+                </uxap:heading>
+
+                <!-- 3. Mobile Responsive Title -->
+                <uxap:snappedTitleOnMobile>
+                    <Title text="{= ${detail>/header/SalesInquiry} ? (${i18n>salesInquiryHeadingTitle} + ' ' + ${detail>/header/SalesInquiry} + (${detail>/header/PurchaseOrderByCustomer} ? ' - ' + ${detail>/header/PurchaseOrderByCustomer} : '')) : ${i18n>salesInquiryHeadingTitle} }" />
+                </uxap:snappedTitleOnMobile>
+
+                <!-- 4. Snapped Content: Glanceable Key Metric preserved when header facets are collapsed -->
+                <uxap:snappedContent>
+                    <HBox alignItems="Center">
+                        <Label text="{i18n>salesInquiryLabelTotalNetValue}:" class="sapUiTinyMarginEnd" />
+                        <ObjectNumber
+                            number="{detail>/header/TotalNetAmount}"
+                            unit="{detail>/header/TransactionCurrency}"
+                            state="Success"
+                            emphasized="true" />
+                    </HBox>
+                </uxap:snappedContent>
+
+                <!-- 5. Standard Business Actions (Right Side) -->
+                <uxap:actions>
+                    <Button
+                        id="btnDetailRefresh"
+                        text="{i18n>btnRefresh}"
+                        icon="sap-icon://refresh"
+                        press=".onRefresh"
+                        type="Transparent" />
+                    <Button
+                        id="btnCreateAnother"
+                        text="{i18n>salesInquiryBtnCreate}"
+                        icon="sap-icon://add"
+                        type="Emphasized"
+                        press=".onCreateAnother" />
+                </uxap:actions>
+            </uxap:ObjectPageDynamicHeaderTitle>
+        </uxap:headerTitle>
+
+        <!-- Header Content: KPIs and Key Information -->
+        <uxap:headerContent>
+            <HBox wrap="Wrap" class="sapUiSmallMarginBottom">
+                <!-- Sold-to Customer -->
+                <VBox class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                    <Label text="{i18n>salesInquiryLabelCustomer}" design="Bold" />
+                    <ObjectIdentifier
+                        title="{detail>/header/SoldToParty}"
+                        text="{detail>/header/OrganizationBPName1}" />
+                </VBox>
+
+                <!-- Sales Area -->
+                <VBox class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                    <Label text="{i18n>salesInquiryLabelSalesArea}" design="Bold" />
+                    <Text text="{= ${detail>/header/SalesAreaDesc} || ((${detail>/header/SalesOrganization} || '') + ' / ' + (${detail>/header/DistributionChannel} || '') + ' / ' + (${detail>/header/OrganizationDivision} || '')) }" />
+                </VBox>
+
+                <!-- Document Date & Validity -->
+                <VBox class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                    <Label text="{i18n>salesInquiryLabelValidityPeriod}" design="Bold" />
+                    <Text text="{= (${detail>/header/BindingPeriodValidityStartDate} &amp;&amp; ${detail>/header/BindingPeriodValidityEndDate}) ? (${detail>/header/BindingPeriodValidityStartDate} + ' to ' + ${detail>/header/BindingPeriodValidityEndDate}) : (${detail>/header/BindingPeriodValidityStartDate} || ${detail>/header/BindingPeriodValidityEndDate} || '-') }" />
+                </VBox>
+
+                <!-- Net Value -->
+                <VBox class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                    <Label text="{i18n>salesInquiryLabelTotalNetValue}" design="Bold" />
+                    <ObjectNumber
+                        number="{detail>/header/TotalNetAmount}"
+                        unit="{detail>/header/TransactionCurrency}"
+                        state="Success"
+                        emphasized="true" />
+                </VBox>
+            </HBox>
+        </uxap:headerContent>
+
+        <!-- Sections -->
+        <uxap:sections>
+            <!-- Section 1: General & Organizational Data -->
+            <uxap:ObjectPageSection id="secGeneral" title="{i18n>salesInquirySecGeneral}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subSecGeneral" title="{i18n>salesInquirySubSecDocDetails}">
+                        <uxap:blocks>
+                            <f:SimpleForm
+                                layout="ResponsiveGridLayout"
+                                columnsM="2"
+                                columnsL="2"
+                                editable="false">
+                                <core:Title text="{i18n>salesInquiryGroupDocHeader}" />
+                                <Label text="{i18n>salesInquiryLabelInquiryNumber}" />
+                                <Text text="{detail>/header/SalesInquiry}" />
+                                <Label text="{i18n>salesInquiryLabelInquiryType}" />
+                                <Text text="{detail>/header/SalesInquiryType}" />
+                                <Label text="{i18n>salesInquiryLabelDescription}" />
+                                <Text text="{detail>/header/PurchaseOrderByCustomer}" />
+                                <Label text="{i18n>salesInquiryLabelDocDate}" />
+                                <Text text="{detail>/header/SalesInquiryDate}" />
+                                <Label text="{i18n>salesInquiryLabelCreatedOn}" />
+                                <Text text="{detail>/header/CreationDate}" />
+                                <Label text="{i18n>salesInquiryLabelCreatedBy}" />
+                                <Text text="{detail>/header/CreatedByUser}" />
+
+                                <core:Title text="{i18n>salesInquiryGroupOrgStructure}" />
+                                <Label text="{i18n>salesInquiryLabelSalesOrg}" />
+                                <Text text="{detail>/header/SalesOrganization}" />
+                                <Label text="{i18n>salesInquiryLabelDistChannel}" />
+                                <Text text="{detail>/header/DistributionChannel}" />
+                                <Label text="{i18n>salesInquiryLabelDivision}" />
+                                <Text text="{detail>/header/OrganizationDivision}" />
+                                <Label text="{i18n>salesInquiryLabelSalesOffice}" />
+                                <Text text="{detail>/header/SalesOffice}" />
+                                <Label text="{i18n>salesInquiryLabelSalesGroup}" />
+                                <Text text="{detail>/header/SalesGroup}" />
+                            </f:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <!-- Section 2: Partner & Customer Reference -->
+            <uxap:ObjectPageSection id="secPartners" title="{i18n>salesInquirySecPartners}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subSecPartners" title="{i18n>salesInquirySubSecCommercialPartners}">
+                        <uxap:blocks>
+                            <f:SimpleForm
+                                layout="ResponsiveGridLayout"
+                                columnsM="2"
+                                columnsL="2"
+                                editable="false">
+                                <core:Title text="{i18n>salesInquiryGroupCustomerRef}" />
+                                <Label text="{i18n>salesInquiryLabelCustRef}" />
+                                <Text text="{detail>/header/PurchaseOrderByCustomer}" />
+                                <Label text="{i18n>salesInquiryLabelCustPODate}" />
+                                <Text text="{detail>/header/CustomerPurchaseOrderDate}" />
+                                <Label text="{i18n>salesInquiryLabelDocCurrency}" />
+                                <Text text="{detail>/header/TransactionCurrency}" />
+
+                                <core:Title text="{i18n>salesInquiryGroupPartnerRoles}" />
+                                <Label text="{i18n>salesInquiryLabelSoldToParty}" />
+                                <Text text="{= (${detail>/header/SoldToParty} || '') + (${detail>/header/OrganizationBPName1} ? ' - ' + ${detail>/header/OrganizationBPName1} : '') }" />
+                                <Label text="{i18n>salesInquiryLabelShipToParty}" />
+                                <Text text="{= (${detail>/header/ShipToParty} || '') + (${detail>/header/ShipToPartyName} ? ' - ' + ${detail>/header/ShipToPartyName} : '') }" />
+                                <Label text="{i18n>salesInquiryLabelContactPerson}" visible="{= !!${detail>/header/ContactPersonName} }" />
+                                <Text text="{detail>/header/ContactPersonName}" visible="{= !!${detail>/header/ContactPersonName} }" />
+                                <Label text="{i18n>salesInquiryLabelSalesEmployee}" visible="{= !!${detail>/header/SalesEmployeeName} }" />
+                                <Text text="{detail>/header/SalesEmployeeName}" visible="{= !!${detail>/header/SalesEmployeeName} }" />
+                            </f:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <!-- Section 3: Line Items Table -->
+            <uxap:ObjectPageSection id="secItems" title="{i18n>salesInquirySecItems}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subSecItems" title="{i18n>salesInquirySubSecLineItems}">
+                        <uxap:blocks>
+                            <Table
+                                id="detailItemsTable"
+                                items="{detail>/items}"
+                                growing="true"
+                                growingThreshold="20"
+                                noDataText="{i18n>salesInquiryTableNoData}">
+                                <columns>
+                                    <Column width="5rem"><Text text="{i18n>salesInquiryColItem}" /></Column>
+                                    <Column width="10rem"><Text text="{i18n>salesInquiryColMaterial}" /></Column>
+                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesInquiryColDescription}" /></Column>
+                                    <Column width="7rem" hAlign="End"><Text text="{i18n>salesInquiryColQuantity}" /></Column>
+                                    <Column width="5rem"><Text text="{i18n>salesInquiryColUnit}" /></Column>
+                                    <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiryColNetPrice}" /></Column>
+                                    <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiryColNetAmount}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <Text text="{detail>SalesInquiryItem}" />
+                                            <Text text="{detail>Material}" />
+                                            <Text text="{= ${detail>MaterialName} || ${detail>SalesInquiryItemText} }" />
+                                            <Text text="{detail>OrderQuantity}" />
+                                            <Text text="{detail>OrderQuantityUnit}" />
+                                            <Text text="{detail>NetPriceAmount}" />
+                                            <ObjectNumber
+                                                number="{detail>NetAmount}"
+                                                unit="{detail>/header/TransactionCurrency}"
+                                                state="Success" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+        </uxap:sections>
+    </uxap:ObjectPageLayout>
+</mvc:View>

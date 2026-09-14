@@ -17,6 +17,22 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "fiService": {
+        "uri": "/odata/v4/journal-entry/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "salesInquiryService": {
+        "uri": "/odata/v4/sales-inquiry/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -39,7 +55,9 @@
       "libs": {
         "sap.ui.core": {},
         "sap.m": {},
-        "sap.ui.comp": {}
+        "sap.ui.comp": {},
+        "sap.f": {},
+        "sap.uxap": {}
       }
     },
     "models": {
@@ -51,11 +69,23 @@
       },
       "": {
         "dataSource": "mainService",
-        "preload": true,
         "settings": {
           "operationMode": "Server",
-          "autoExpandSelect": true,
-          "earlyRequests": true
+          "autoExpandSelect": true
+        }
+      },
+      "fiService": {
+        "dataSource": "fiService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "salesInquiry": {
+        "dataSource": "salesInquiryService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
         }
       }
     },
@@ -93,13 +123,63 @@
         },
         {
           "name": "purchaseOrders",
-          "pattern": "purchase-orders",
+          "pattern": "mm/purchase-orders",
           "target": "TargetPurchaseOrders"
         },
         {
           "name": "createPurchaseOrder",
-          "pattern": "create-purchase-order",
+          "pattern": "mm/purchase-orders/create",
           "target": "TargetCreatePurchaseOrder"
+        },
+        {
+          "name": "purchaseOrderDetail",
+          "pattern": "mm/purchase-orders/{PurchaseOrder}",
+          "target": "TargetPurchaseOrderDetail"
+        },
+        {
+          "name": "journalEntries",
+          "pattern": "fi/journal-entries",
+          "target": "TargetJournalEntries"
+        },
+        {
+          "name": "salesInquiries",
+          "pattern": "sd/sales-inquiries",
+          "target": "TargetSalesInquiries"
+        },
+        {
+          "name": "createSalesInquiry",
+          "pattern": "sd/sales-inquiries/create",
+          "target": "TargetCreateSalesInquiry"
+        },
+        {
+          "name": "salesInquiryDetail",
+          "pattern": "sd/sales-inquiries/{SalesInquiry}",
+          "target": "TargetSalesInquiryDetail"
+        },
+        {
+          "name": "ewmWarehouseCockpit",
+          "pattern": "ewm/cockpit",
+          "target": "TargetWarehouseCockpit"
+        },
+        {
+          "name": "ewmRfTerminal",
+          "pattern": "ewm/rf-terminal",
+          "target": "TargetRfTerminal"
+        },
+        {
+          "name": "createWarehouseTask",
+          "pattern": "ewm/tasks/create",
+          "target": "TargetCreateWarehouseTask"
+        },
+        {
+          "name": "wmGoodsIssue",
+          "pattern": "wm/goods-issue",
+          "target": "TargetGoodsIssue"
+        },
+        {
+          "name": "wmGoodsReceipt",
+          "pattern": "wm/goods-receipt",
+          "target": "TargetGoodsReceipt"
         }
       ],
       "targets": {
@@ -113,11 +193,63 @@
         },
         "TargetPurchaseOrders": {
           "id": "purchaseOrders",
-          "name": "PurchaseOrders"
+          "name": "PurchaseOrders",
+          "path": "saps4hana.fiori.modules.mm.purchase-order.view"
+        },
+        "TargetPurchaseOrderDetail": {
+          "id": "purchaseOrderDetail",
+          "name": "PurchaseOrderDetail",
+          "path": "saps4hana.fiori.modules.mm.purchase-order.view"
         },
         "TargetCreatePurchaseOrder": {
           "id": "createPurchaseOrder",
-          "name": "CreatePurchaseOrder"
+          "name": "CreatePurchaseOrder",
+          "path": "saps4hana.fiori.modules.mm.purchase-order.view"
+        },
+        "TargetJournalEntries": {
+          "id": "journalEntries",
+          "name": "JournalEntries",
+          "path": "saps4hana.fiori.modules.fi.journal-entry.view"
+        },
+        "TargetSalesInquiries": {
+          "id": "salesInquiries",
+          "name": "SalesInquiries",
+          "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
+        },
+        "TargetCreateSalesInquiry": {
+          "id": "createSalesInquiry",
+          "name": "CreateSalesInquiry",
+          "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
+        },
+        "TargetSalesInquiryDetail": {
+          "id": "salesInquiryDetail",
+          "name": "SalesInquiryDetail",
+          "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
+        },
+        "TargetWarehouseCockpit": {
+          "id": "warehouseCockpit",
+          "name": "WarehouseCockpit",
+          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        },
+        "TargetRfTerminal": {
+          "id": "rfTerminal",
+          "name": "RfTerminal",
+          "path": "saps4hana.fiori.modules.ewm.rf-terminal.view"
+        },
+        "TargetCreateWarehouseTask": {
+          "id": "createWarehouseTask",
+          "name": "CreateWarehouseTask",
+          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        },
+        "TargetGoodsIssue": {
+          "id": "goodsIssue",
+          "name": "GoodsIssue",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsReceipt": {
+          "id": "goodsReceipt",
+          "name": "GoodsReceipt",
+          "path": "saps4hana.fiori.modules.wm.goods-receipt.view"
         }
       }
     }

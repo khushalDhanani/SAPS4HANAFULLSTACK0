@@ -1,0 +1,19 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <SelectDialog
+        id="dlgReservationValueHelp"
+        title="{i18n>giReservationValueHelpTitle}"
+        noDataText="{i18n>giReservationValueHelpNoData}"
+        search=".onSearchReservationValueHelp"
+        confirm=".onConfirmReservationValueHelp"
+        cancel=".onCancelReservationValueHelp"
+        items="{giView>/openReservations}">
+        <StandardListItem
+            title="{giView>DisplayText}"
+            description="{= 'Order: ' + ${giView>OrderNo} + ' | Plant: ' + ${giView>Plant} + ' | ' + ${giView>ItemCount} + ' items' }"
+            info="{= ${giView>SampleMaterial} ? 'Material: ' + ${giView>SampleMaterial} : '' }"
+            icon="sap-icon://document"
+            type="Active" />
+    </SelectDialog>
+</core:FragmentDefinition>

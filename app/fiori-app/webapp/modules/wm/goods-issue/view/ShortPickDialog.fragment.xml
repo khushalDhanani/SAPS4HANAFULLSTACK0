@@ -1,0 +1,93 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog
+        id="dlgShortPick"
+        title="{i18n>giShortPickDialogTitle}"
+        type="Message"
+        state="Warning"
+        contentWidth="30rem">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <form:SimpleForm
+                    layout="ResponsiveGridLayout"
+                    labelSpanXL="5"
+                    labelSpanL="5"
+                    labelSpanM="5"
+                    labelSpanS="12"
+                    adjustLabelSpan="false"
+                    emptySpanXL="0"
+                    emptySpanL="0"
+                    emptySpanM="0"
+                    emptySpanS="0"
+                    columnsXL="1"
+                    columnsL="1"
+                    columnsM="1"
+                    singleContainerFullSize="false">
+                    <form:content>
+                        <Label text="{i18n>giActiveItemHeader}" design="Bold" />
+                        <Text text="{giView>/activeItem/Material} - {giView>/activeItem/MaterialDesc}" />
+
+                        <Label text="Storage Bin / Plant" />
+                        <Text text="{giView>/activeItem/StorageBin} • Plant {giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation}" />
+
+                        <Label text="{i18n>giShortPickExpectedQty}" />
+                        <Text text="{giView>/activeItem/OpenQty} {giView>/activeItem/Unit}" />
+
+                        <Label text="{i18n>giShortPickActualQty}" required="true" />
+                        <Input
+                            id="inputShortPickActualQty"
+                            type="Number"
+                            value="{giShortPick>/actualQty}"
+                            liveChange=".onShortPickQtyChange"
+                            description="{giView>/activeItem/Unit}" />
+
+                        <Label text="{i18n>giShortPickDiffQty}" design="Bold" />
+                        <ObjectNumber
+                            number="{giShortPick>/diffQty}"
+                            unit="{giView>/activeItem/Unit}"
+                            state="Error" />
+
+                        <Label text="{i18n>giShortPickReasonLabel}" required="true" />
+                        <Select id="selectShortPickReason" selectedKey="{giShortPick>/reasonCode}">
+                            <core:Item key="01" text="{i18n>giShortPickReason01}" />
+                            <core:Item key="02" text="{i18n>giShortPickReason02}" />
+                            <core:Item key="03" text="{i18n>giShortPickReason03}" />
+                            <core:Item key="04" text="{i18n>giShortPickReason04}" />
+                        </Select>
+
+                        <Label text="{i18n>giShortPickStorageTypeLabel}" />
+                        <Text text="{i18n>giShortPickStorageTypeDesc}" />
+
+                        <Label text="" />
+                        <CheckBox
+                            id="chkShortPickFinalIssue"
+                            text="{i18n>giShortPickFinalIssueLabel}"
+                            selected="{giShortPick>/finalIssue}" />
+                    </form:content>
+                </form:SimpleForm>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnConfirmPostDifference"
+                text="{i18n>giBtnPostDifference}"
+                type="Emphasized"
+                press=".onConfirmShortPickPost" />
+        </beginButton>
+        <endButton>
+            <Button
+                id="btnConfirmBatchDifference"
+                text="{i18n>giBtnBatchDifference}"
+                type="Default"
+                press=".onConfirmShortPickBatch" />
+        </endButton>
+        <buttons>
+            <Button
+                text="{i18n>btnCancel}"
+                type="Transparent"
+                press=".onCloseShortPickDialog" />
+        </buttons>
+    </Dialog>
+</core:FragmentDefinition>

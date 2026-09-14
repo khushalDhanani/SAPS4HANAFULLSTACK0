@@ -1,0 +1,234 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-receipt.controller.GoodsReceipt"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page
+        id="goodsReceiptPage"
+        title="{i18n>grTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center">
+                <ObjectStatus
+                    id="grStatusBadge"
+                    text="{= ${grView>/hasActiveSU} ? (${grView>/activeSU/ScannedTypeLabel} ? ${grView>/activeSU/ScannedTypeLabel} + ': ' + ${grView>/activeSU/ScannedBarcode} : 'SU: ' + ${grView>/activeSU/StorageUnit}) : 'AWAITING SCAN' }"
+                    state="{= ${grView>/hasActiveSU} ? 'Success' : 'None' }"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnGrToggleAudio"
+                    icon="{= ${grView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
+                    tooltip="Toggle Audio Feedback"
+                    type="Transparent"
+                    press=".onToggleAudio"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnGrReset"
+                    icon="sap-icon://refresh"
+                    tooltip="Reset Workflow"
+                    type="Transparent"
+                    press=".onResetWorkflow" />
+            </HBox>
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <!-- PANEL 1: STORAGE UNIT SCANNING & DOCUMENT LOOKUP -->
+                <Panel
+                    id="panelStorageUnitScan"
+                    headerText="{i18n>grScanPanelHeader}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <Label
+                            text="{i18n>grScanLabel}"
+                            labelFor="inputScanStorageUnit"
+                            design="Bold"
+                            required="true" />
+                        <HBox width="100%" alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Input
+                                id="inputScanStorageUnit"
+                                value="{grView>/storageUnitBarcode}"
+                                placeholder="{i18n>grScanPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onStorageUnitValueHelp"
+                                submit=".onScanStorageUnit"
+                                width="100%"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnGrCameraScan"
+                                icon="sap-icon://camera"
+                                tooltip="Scan with Camera"
+                                press=".onCameraScanStorageUnit"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnGrLookupSU"
+                                text="{i18n>btnLookup}"
+                                icon="sap-icon://search"
+                                type="Emphasized"
+                                press=".onScanStorageUnit" />
+                        </HBox>
+
+                        <HBox alignItems="Center" class="sapUiSmallMarginTop">
+                            <Label text="{i18n>grOrSelectDelivery}:" class="sapUiTinyMarginEnd textMuted" />
+                            <Select
+                                id="selectInboundDelivery"
+                                forceSelection="false"
+                                items="{
+                                    path: 'grView>/openDeliveries',
+                                    sorter: { path: 'DeliveryDocument' }
+                                }"
+                                change=".onSelectInboundDelivery"
+                                width="340px">
+                                <core:Item
+                                    key="{grView>DeliveryDocument}"
+                                    text="{grView>DeliveryDocument} - {grView>MaterialName} ({grView>SupplierName})" />
+                            </Select>
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- PANEL 2: AUTO-POPULATED SAP STORAGE UNIT DETAILS -->
+                <Panel
+                    id="panelStorageUnitDetails"
+                    headerText="{i18n>grDetailsPanelHeader}"
+                    visible="{grView>/hasActiveSU}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <MessageStrip
+                            text="{i18n>grAutoPopulatedNotice}"
+                            type="Information"
+                            showIcon="true"
+                            class="sapUiSmallMarginBottom" />
+
+                        <form:SimpleForm
+                            id="formStorageUnitDetails"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="3"
+                            labelSpanL="3"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="1"
+                            emptySpanL="1"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="2"
+                            columnsL="2"
+                            columnsM="1"
+                            singleContainerFullSize="false">
+
+                            <form:content>
+                                <!-- Core Identifiers -->
+                                <core:Title text="{i18n>grGroupDocumentInfo}" />
+
+                                <Label text="{i18n>grColScannedObject}" />
+                                <Text id="txtScannedObject" text="{grView>/activeSU/ScannedBarcode} ({grView>/activeSU/ScannedTypeLabel})" class="fontBold" />
+
+                                <Label text="{i18n>grColStorageUnit}" />
+                                <Text id="txtStorageUnit" text="{grView>/activeSU/StorageUnit}" class="fontBold" />
+
+                                <Label text="{i18n>grColDeliveryDoc}" />
+                                <Text id="txtDeliveryDoc" text="{grView>/activeSU/DeliveryDocument} (Item {grView>/activeSU/DeliveryDocumentItem})" />
+
+                                <Label text="{i18n>grColPurchaseOrder}" />
+                                <Text id="txtPurchaseOrder" text="{grView>/activeSU/PurchaseOrder} (Item {grView>/activeSU/PurchaseOrderItem})" />
+
+                                <Label text="{i18n>grColSupplier}" />
+                                <Text id="txtSupplier" text="{grView>/activeSU/SupplierName} {= ${grView>/activeSU/SupplierCityName} ? '(' + ${grView>/activeSU/SupplierCityName} + ')' : '' }" />
+
+                                <!-- Material & Stock Parameters -->
+                                <core:Title text="{i18n>grGroupMaterialStock}" />
+
+                                <Label text="{i18n>grColMaterial}" />
+                                <VBox>
+                                    <Text id="txtMaterial" text="{grView>/activeSU/Material}" class="fontBold" />
+                                    <Text id="txtMaterialDesc" text="{grView>/activeSU/MaterialName}" class="textMuted" />
+                                </VBox>
+
+                                <Label text="{i18n>grColPlant}" />
+                                <Text id="txtPlant" text="{grView>/activeSU/Plant} - {grView>/activeSU/PlantName}" />
+
+                                <Label text="{i18n>grColStorageLocation}" required="true" />
+                                <Select
+                                    id="selectStorageLocation"
+                                    selectedKey="{grView>/activeSU/StorageLocation}"
+                                    items="{grView>/availableStorageLocations}"
+                                    change=".onStorageLocationChange"
+                                    width="100%">
+                                    <core:Item
+                                        key="{grView>StorageLocation}"
+                                        text="{grView>StorageLocation} - {grView>StorageLocationName} {= ${grView>WarehouseStorageBin} ? '(Bin: ' + ${grView>WarehouseStorageBin} + ')' : '' }" />
+                                </Select>
+
+                                <Label text="{i18n>grColBatch}" required="true" />
+                                <Select
+                                    id="selectBatch"
+                                    selectedKey="{grView>/activeSU/Batch}"
+                                    items="{grView>/availableBatches}"
+                                    change=".onBatchChange"
+                                    width="100%">
+                                    <core:Item
+                                        key="{grView>Batch}"
+                                        text="{grView>Batch} {= ${grView>ExpiryDate} ? '(SLED: ' + ${grView>ExpiryDate} + ' - ' + ${grView>StatusText} + ')' : '' }" />
+                                </Select>
+
+                                <Label text="{i18n>grColSLED}" />
+                                <HBox alignItems="Center">
+                                    <ObjectStatus
+                                        id="statusBatchSled"
+                                        text="{= ${grView>/activeSU/ExpiryDate} ? ${grView>/activeSU/ExpiryDate} + ' (' + ${grView>/activeSU/BatchStatusText} + ')' : 'No Expiry Date' }"
+                                        state="{grView>/activeSU/BatchStatusState}"
+                                        class="sapUiTinyMarginEnd" />
+                                </HBox>
+
+                                <Label text="{i18n>grColQuantity}" required="true" />
+                                <HBox alignItems="Center">
+                                    <Input
+                                        id="inputReceiptQty"
+                                        type="Number"
+                                        value="{grView>/activeSU/Quantity}"
+                                        width="140px"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold" />
+                                </HBox>
+
+                            </form:content>
+                        </form:SimpleForm>
+
+                        <!-- Action Bar -->
+                        <HBox justifyContent="End" class="sapUiMediumMarginTop">
+                            <Button
+                                id="btnResetSU"
+                                text="{i18n>btnResetForm}"
+                                type="Transparent"
+                                press=".onResetWorkflow"
+                                class="sapUiSmallMarginEnd" />
+                            <Button
+                                id="btnPostGoodsReceipt"
+                                text="{i18n>btnPostGoodsReceipt}"
+                                type="Emphasized"
+                                icon="sap-icon://accept"
+                                enabled="{= ${grView>/hasActiveSU} &amp;&amp; !${grView>/isPosting} }"
+                                press=".onPostGoodsReceipt" />
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

@@ -1,0 +1,124 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="queueTrayDialog"
+        title="{i18n>wmGIQueueTrayTitle}"
+        contentWidth="850px"
+        contentHeight="550px"
+        resizable="true"
+        draggable="true">
+        <customHeader>
+            <Bar>
+                <contentLeft>
+                    <core:Icon src="sap-icon://inbox" color="#d32f2f" class="sapUiSmallMarginBegin" />
+                    <Title text="{i18n>wmGIQueueTrayTitle}" />
+                </contentLeft>
+                <contentRight>
+                    <Button
+                        icon="sap-icon://refresh"
+                        tooltip="{i18n>wmGIRefreshQueueTooltip}"
+                        press=".onRefreshQueueTray" />
+                </contentRight>
+            </Bar>
+        </customHeader>
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip
+                    text="{i18n>wmGIQueueTrayInfoMsg}"
+                    type="Information"
+                    showIcon="true"
+                    class="sapUiSmallMarginBottom" />
+
+                <Table
+                    id="queueTrayTable"
+                    items="{giQueue>/items}"
+                    noDataText="{i18n>wmGIQueueEmptyText}">
+                    <columns>
+                        <Column width="180px">
+                            <Text text="{i18n>wmGIQueueColRef}" />
+                        </Column>
+                        <Column width="110px">
+                            <Text text="{i18n>wmGIQueueColResv}" />
+                        </Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>wmGIQueueColMaterial}" />
+                        </Column>
+                        <Column width="100px" hAlign="End">
+                            <Text text="{i18n>wmGIQueueColQty}" />
+                        </Column>
+                        <Column width="100px" minScreenWidth="Desktop" demandPopin="true">
+                            <Text text="{i18n>wmGIQueueColBatch}" />
+                        </Column>
+                        <Column width="110px" hAlign="Center">
+                            <Text text="{i18n>wmGIQueueColStatus}" />
+                        </Column>
+                        <Column width="120px" hAlign="Center">
+                            <Text text="{i18n>wmGIQueueColActions}" />
+                        </Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <VBox>
+                                    <ObjectIdentifier
+                                        title="{giQueue>QueueReference}" />
+                                    <Text
+                                        text="{giQueue>QueuedAt}"
+                                        class="sapUiTinyMarginTop sapThemeLightText" />
+                                </VBox>
+                                <VBox>
+                                    <Text text="Res: {giQueue>ReservationNo}/{giQueue>ReservationItem}" />
+                                    <Text
+                                        text="Ord: {giQueue>OrderNo}"
+                                        visible="{= !!${giQueue>OrderNo}}"
+                                        class="sapThemeLightText" />
+                                </VBox>
+                                <VBox>
+                                    <Text text="{giQueue>Material}" />
+                                    <Text
+                                        text="{giQueue>MaterialDesc}"
+                                        class="sapThemeLightText"
+                                        maxLines="1" />
+                                </VBox>
+                                <ObjectNumber
+                                    number="{giQueue>IssueQty}"
+                                    unit="{giQueue>Unit}" />
+                                <Text text="{= ${giQueue>Batch} || 'N/A'}" />
+                                <ObjectStatus
+                                    text="{giQueue>SyncStatus}"
+                                    state="{= ${giQueue>SyncStatus} === 'POSTED_IN_SAP' ? 'Success' : (${giQueue>SyncStatus} === 'FAILED' ? 'Error' : 'Warning')}"
+                                    icon="{= ${giQueue>SyncStatus} === 'POSTED_IN_SAP' ? 'sap-icon://sys-enter-2' : (${giQueue>SyncStatus} === 'FAILED' ? 'sap-icon://error' : 'sap-icon://pending')}" />
+                                <HBox justifyContent="Center">
+                                    <Button
+                                        icon="sap-icon://refresh"
+                                        type="Transparent"
+                                        tooltip="{i18n>wmGIRetrySyncTooltip}"
+                                        press=".onRetryQueueItem" />
+                                    <Button
+                                        icon="sap-icon://delete"
+                                        type="Transparent"
+                                        tooltip="{i18n>wmGIDismissQueueTooltip}"
+                                        press=".onClearQueueItem" />
+                                </HBox>
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                text="{i18n>wmGISyncAllBtn}"
+                type="Emphasized"
+                icon="sap-icon://synchronize"
+                press=".onSyncAllQueued"
+                enabled="{= (${giQueue>/queuedCount} || 0) > 0}" />
+        </beginButton>
+        <endButton>
+            <Button
+                text="{i18n>wmGICloseBtn}"
+                press=".onCloseQueueTray" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

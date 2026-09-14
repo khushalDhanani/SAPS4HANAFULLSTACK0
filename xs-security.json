@@ -1,0 +1,65 @@
+{
+  "xsappname": "SAPS4HANAFULLSTACK",
+  "tenant-mode": "dedicated",
+  "description": "Security profile for SAP S/4HANA Full-Stack Fiori and CAP application",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.Viewer",
+      "description": "View business data"
+    },
+    {
+      "name": "$XSAPPNAME.Admin",
+      "description": "Administer business data"
+    },
+    {
+      "name": "$XSAPPNAME.PurchasingManager",
+      "description": "Create and manage purchase orders"
+    },
+    {
+      "name": "$XSAPPNAME.FinanceViewer",
+      "description": "View financial accounting journal entry data"
+    }
+  ],
+  "attributes": [],
+  "role-templates": [
+    {
+      "name": "Viewer",
+      "description": "Read-only access",
+      "scope-references": [
+        "$XSAPPNAME.Viewer"
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Full access",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.PurchasingManager",
+        "$XSAPPNAME.FinanceViewer"
+      ]
+    },
+    {
+      "name": "PurchasingManager",
+      "description": "Purchasing operations",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.PurchasingManager"
+      ]
+    },
+    {
+      "name": "FinanceViewer",
+      "description": "Financial accounting viewer",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.FinanceViewer"
+      ]
+    }
+  ],
+  "oauth2-configuration": {
+    "credential-types": [
+      "binding-secret",
+      "x509"
+    ]
+  }
+}

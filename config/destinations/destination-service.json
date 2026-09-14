@@ -1,0 +1,23 @@
+{
+  "init_data": {
+    "subaccount": {
+      "existing_destinations_policy": "update",
+      "destinations": [
+        {
+          "Name": "S4HANA_PO_API",
+          "Type": "HTTP",
+          "Description": "S/4HANA Gateway Service for Purchase Orders",
+          "URL": "https://s4hana.example.com:44300",
+          "ProxyType": "OnPremise",
+          "Authentication": "BasicAuthentication",
+          "User": "${S4HANA_USER}",
+          "Password": "${S4HANA_PASSWORD}",
+          "HTML5.DynamicDestination": "true",
+          "WebIDEUsage": "true",
+          "WebIDESystem": "S4HANA",
+          "sap-client": "220"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,377 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.ewm.warehouse-cockpit.controller.WarehouseCockpit"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.f"
+    displayBlock="true">
+
+    <Page
+        id="warehouseCockpitPage"
+        showHeader="true"
+        title="{i18n>ewmCockpitTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center">
+                <Label text="{i18n>ewmSelectWarehouse}:" class="sapUiTinyMarginEnd" />
+                <Select
+                    id="whseSelector"
+                    selectedKey="{ewmView>/selectedWarehouse}"
+                    items="{
+                        path: 'ewmView>/warehouses',
+                        sorter: { path: 'Warehouse' }
+                    }"
+                    change=".onWarehouseChange"
+                    class="sapUiTinyMarginEnd">
+                    <core:Item key="{ewmView>Warehouse}" text="{ewmView>Warehouse} - {ewmView>WarehouseName}" />
+                </Select>
+                <ObjectStatus text="{i18n>ewmBackendActive}" state="Success" class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnCreateTask"
+                    text="{i18n>ewmCreateTaskBtn}"
+                    icon="sap-icon://add"
+                    type="Emphasized"
+                    press=".onOpenCreateTaskDialog"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnOpenRfTerminal"
+                    text="{i18n>ewmOpenRfTerminalBtn}"
+                    icon="sap-icon://bar-code"
+                    type="Default"
+                    press=".onNavigateToRfTerminal"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnRefreshEwm"
+                    icon="sap-icon://refresh"
+                    tooltip="{i18n>btnRefresh}"
+                    type="Transparent"
+                    press=".onRefreshData" />
+            </HBox>
+        </headerContent>
+
+
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- KPI Header Bar -->
+                <HBox wrap="Wrap" class="sapUiSmallMarginBottom">
+                    <GenericTile
+                        id="kpiOpenTasks"
+                        header="{i18n>ewmKpiOpenTasks}"
+                        subheader="{i18n>ewmKpiOpenTasksSub}"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        press=".onSelectTasksTab">
+                        <TileContent>
+                            <NumericContent
+                                value="{ewmView>/kpis/OpenTasksCount}"
+                                icon="sap-icon://task"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiPendingInbound"
+                        header="{i18n>ewmKpiPendingInbound}"
+                        subheader="{i18n>ewmKpiPendingInboundSub}"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        press=".onSelectInboundTab">
+                        <TileContent>
+                            <NumericContent
+                                value="{ewmView>/kpis/PendingInbound}"
+                                icon="sap-icon://inbox"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiPendingOutbound"
+                        header="{i18n>ewmKpiPendingOutbound}"
+                        subheader="{i18n>ewmKpiPendingOutboundSub}"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        press=".onSelectOutboundTab">
+                        <TileContent>
+                            <NumericContent
+                                value="{ewmView>/kpis/PendingOutbound}"
+                                icon="sap-icon://shipping-status"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiStorageTypes"
+                        header="{i18n>ewmKpiStorageTypes}"
+                        subheader="{i18n>ewmKpiStorageTypesSub}"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        press=".onSelectStorageTab">
+                        <TileContent>
+                            <NumericContent
+                                value="{ewmView>/storageTypeCount}"
+                                icon="sap-icon://dimension"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- IconTabBar for Warehouse Domains -->
+                <IconTabBar
+                    id="ewmTabBar"
+                    selectedKey="{ewmView>/selectedTab}"
+                    headerMode="Inline"
+                    expandable="false"
+                    applyContentPadding="false">
+                    <items>
+                        <!-- TAB 1: Warehouse Tasks & Orders -->
+                        <IconTabFilter
+                            id="tabTasks"
+                            key="tasks"
+                            icon="sap-icon://task"
+                            text="{i18n>ewmTabTasksTitle}">
+                            <Table
+                                id="tasksTable"
+                                items="{ewmView>/tasks}"
+                                noDataText="{i18n>ewmNoTasksText}"
+                                growing="true"
+                                growingThreshold="25"
+                                class="sapUiResponsiveMargin">
+                                <headerToolbar>
+                                    <Toolbar>
+                                        <Title text="{i18n>ewmTasksTableTitle} ({= ${ewmView>/tasks}.length })" level="H4" />
+                                        <ToolbarSpacer />
+                                        <SearchField
+                                            id="searchTasks"
+                                            width="250px"
+                                            placeholder="{i18n>ewmSearchTasksPlaceholder}"
+                                            search=".onSearchTasks" />
+                                    </Toolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column><Text text="{i18n>ewmColTaskNo}" /></Column>
+                                    <Column><Text text="{i18n>ewmColOrderNo}" /></Column>
+                                    <Column><Text text="{i18n>ewmColProduct}" /></Column>
+                                    <Column><Text text="{i18n>ewmColTargetQty}" /></Column>
+                                    <Column><Text text="{i18n>ewmColConfirmedQty}" /></Column>
+                                    <Column><Text text="{i18n>ewmColSourceBin}" /></Column>
+                                    <Column><Text text="{i18n>ewmColTargetBin}" /></Column>
+                                    <Column><Text text="{i18n>ewmColStatus}" /></Column>
+                                    <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <ObjectIdentifier
+                                                title="{ewmView>WarehouseTask}"
+                                                text="{= ${ewmView>_isLocalStaging} ? 'Local Staging' : '' }" />
+                                            <Text text="{ewmView>WarehouseOrder}" />
+                                            <VBox>
+                                                <Text text="{ewmView>Product}" />
+                                                <Text text="{ewmView>ProductName}" class="textMuted" />
+                                            </VBox>
+                                            <Text text="{ewmView>TargetQuantity} {ewmView>BaseUnit}" />
+                                            <Text text="{ewmView>ConfirmedQuantity} {ewmView>BaseUnit}" />
+                                            <Text text="{ewmView>SourceStorageBin}" />
+                                            <Text text="{ewmView>TargetStorageBin}" />
+                                            <ObjectStatus
+                                                text="{= ${ewmView>WarehouseTaskStatus} === 'C' ? 'Confirmed' : (${ewmView>WarehouseTaskStatus} === 'X' ? 'Cancelled' : 'Open') }"
+                                                state="{= ${ewmView>WarehouseTaskStatus} === 'C' ? 'Success' : (${ewmView>WarehouseTaskStatus} === 'X' ? 'Error' : 'Warning') }" />
+                                            <HBox justifyContent="End">
+                                                <Button
+                                                    text="{i18n>ewmBtnConfirm}"
+                                                    type="Emphasized"
+                                                    enabled="{= ${ewmView>WarehouseTaskStatus} === 'O' }"
+                                                    press=".onConfirmTaskPress"
+                                                    class="sapUiTinyMarginEnd" />
+                                                <Button
+                                                    text="{i18n>ewmBtnCancel}"
+                                                    type="Reject"
+                                                    enabled="{= ${ewmView>WarehouseTaskStatus} === 'O' }"
+                                                    press=".onCancelTaskPress" />
+                                            </HBox>
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </IconTabFilter>
+
+                        <!-- TAB 2: Inbound Deliveries -->
+                        <IconTabFilter
+                            id="tabInbound"
+                            key="inbound"
+                            icon="sap-icon://inbox"
+                            text="{i18n>ewmTabInboundTitle}">
+                            <Table
+                                id="inboundTable"
+                                items="{ewmView>/inboundDeliveries}"
+                                noDataText="{i18n>ewmNoInboundText}"
+                                growing="true"
+                                growingThreshold="25"
+                                class="sapUiResponsiveMargin">
+                                <headerToolbar>
+                                    <Toolbar>
+                                        <Title text="{i18n>ewmInboundTableTitle} ({= ${ewmView>/inboundDeliveries}.length })" level="H4" />
+                                        <ToolbarSpacer />
+                                        <SearchField
+                                            id="searchInbound"
+                                            width="250px"
+                                            placeholder="{i18n>ewmSearchInboundPlaceholder}"
+                                            search=".onSearchInbound" />
+                                    </Toolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column><Text text="{i18n>ewmColDeliveryDoc}" /></Column>
+                                    <Column><Text text="{i18n>ewmColSupplier}" /></Column>
+                                    <Column><Text text="{i18n>ewmColDeliveryDate}" /></Column>
+                                    <Column><Text text="{i18n>ewmColGRStatus}" /></Column>
+                                    <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <ObjectIdentifier title="{ewmView>DeliveryDocument}" text="{ewmView>DeliveryDocumentType}" />
+                                            <VBox>
+                                                <Text text="{ewmView>SupplierName}" />
+                                                <Text text="ID: {ewmView>Supplier}" class="textMuted" />
+                                            </VBox>
+                                            <Text text="{ewmView>DeliveryDate}" />
+                                            <ObjectStatus
+                                                text="{= ${ewmView>OverallGoodsReceiptStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsReceiptStatus} === 'B' ? 'Partially Posted' : 'Not Posted') }"
+                                                state="{= ${ewmView>OverallGoodsReceiptStatus} === 'C' ? 'Success' : (${ewmView>OverallGoodsReceiptStatus} === 'B' ? 'Information' : 'Warning') }" />
+                                            <Button
+                                                text="{i18n>ewmBtnPostGR}"
+                                                type="Emphasized"
+                                                enabled="{= ${ewmView>OverallGoodsReceiptStatus} !== 'C' }"
+                                                press=".onPostGoodsReceiptPress" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </IconTabFilter>
+
+                        <!-- TAB 3: Outbound Delivery Orders -->
+                        <IconTabFilter
+                            id="tabOutbound"
+                            key="outbound"
+                            icon="sap-icon://shipping-status"
+                            text="{i18n>ewmTabOutboundTitle}">
+                            <Table
+                                id="outboundTable"
+                                items="{ewmView>/outboundDeliveries}"
+                                noDataText="{i18n>ewmNoOutboundText}"
+                                growing="true"
+                                growingThreshold="25"
+                                class="sapUiResponsiveMargin">
+                                <headerToolbar>
+                                    <Toolbar>
+                                        <Title text="{i18n>ewmOutboundTableTitle} ({= ${ewmView>/outboundDeliveries}.length })" level="H4" />
+                                        <ToolbarSpacer />
+                                        <SearchField
+                                            id="searchOutbound"
+                                            width="250px"
+                                            placeholder="{i18n>ewmSearchOutboundPlaceholder}"
+                                            search=".onSearchOutbound" />
+                                    </Toolbar>
+                                </headerToolbar>
+                                <columns>
+                                    <Column><Text text="{i18n>ewmColOutboundOrder}" /></Column>
+                                    <Column><Text text="{i18n>ewmColShipToParty}" /></Column>
+                                    <Column><Text text="{i18n>ewmColGIStatus}" /></Column>
+                                    <Column><Text text="{i18n>ewmColPickStatus}" /></Column>
+                                    <Column><Text text="{i18n>ewmColPlannedGIDate}" /></Column>
+                                    <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <ObjectIdentifier title="{ewmView>OutboundDeliveryOrder}" text="{ewmView>OutboundDeliveryOrderType}" />
+                                            <VBox>
+                                                <Text text="{ewmView>ShipToPartyName}" />
+                                                <Text text="ID: {ewmView>ShipToParty}" class="textMuted" />
+                                            </VBox>
+                                            <ObjectStatus
+                                                text="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsIssueStatus} === 'B' ? 'Partial' : 'Not Issued') }"
+                                                state="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Success' : 'Warning' }" />
+                                            <ObjectStatus
+                                                text="{= ${ewmView>OverallPickingStatus} === 'C' ? 'Picked' : (${ewmView>OverallPickingStatus} === 'B' ? 'Partially Picked' : 'Not Picked') }"
+                                                state="{= ${ewmView>OverallPickingStatus} === 'C' ? 'Success' : 'Information' }" />
+                                            <Text text="{ewmView>PlannedGoodsIssueDate}" />
+                                            <Button
+                                                text="{i18n>ewmBtnPostGI}"
+                                                type="Emphasized"
+                                                enabled="{= ${ewmView>OverallGoodsIssueStatus} !== 'C' }"
+                                                press=".onPostGoodsIssuePress" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </IconTabFilter>
+
+                        <!-- TAB 4: Storage Infrastructure -->
+                        <IconTabFilter
+                            id="tabStorage"
+                            key="storage"
+                            icon="sap-icon://dimension"
+                            text="{i18n>ewmTabStorageTitle}">
+                            <VBox class="sapUiResponsiveMargin">
+                                <Table
+                                    id="storageTypesTable"
+                                    items="{ewmView>/storageTypes}"
+                                    headerText="{i18n>ewmStorageTypesHeading} ({= ${ewmView>/storageTypes}.length })"
+                                    growing="true"
+                                    growingThreshold="25"
+                                    class="sapUiSmallMarginBottom">
+                                    <columns>
+                                        <Column width="150px"><Text text="{i18n>ewmColStorageType}" /></Column>
+                                        <Column><Text text="{i18n>ewmColStorageTypeName}" /></Column>
+                                        <Column width="120px"><Text text="{i18n>ewmColWhse}" /></Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem>
+                                            <cells>
+                                                <ObjectIdentifier title="{ewmView>StorageType}" />
+                                                <Text text="{ewmView>StorageTypeName}" />
+                                                <Text text="{ewmView>Warehouse}" />
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
+
+                                <Table
+                                    id="storageBinsTable"
+                                    items="{ewmView>/storageBins}"
+                                    headerText="{i18n>ewmStorageBinsHeading} ({= ${ewmView>/storageBins}.length })"
+                                    growing="true"
+                                    growingThreshold="25">
+                                    <columns>
+                                        <Column><Text text="{i18n>ewmColStorageBin}" /></Column>
+                                        <Column><Text text="{i18n>ewmColStorageType}" /></Column>
+                                        <Column><Text text="{i18n>ewmColSection}" /></Column>
+                                        <Column><Text text="{i18n>ewmColMaxWeight}" /></Column>
+                                        <Column><Text text="{i18n>ewmColPutawayBlocked}" /></Column>
+                                        <Column><Text text="{i18n>ewmColRemovalBlocked}" /></Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem>
+                                            <cells>
+                                                <ObjectIdentifier title="{ewmView>StorageBin}" />
+                                                <Text text="{ewmView>StorageType}" />
+                                                <Text text="{ewmView>StorageSection}" />
+                                                <Text text="{ewmView>MaxWeight} {ewmView>WeightUnit}" />
+                                                <ObjectStatus
+                                                    text="{= ${ewmView>IsBlockedForPutaway} ? 'Blocked' : 'Active' }"
+                                                    state="{= ${ewmView>IsBlockedForPutaway} ? 'Error' : 'Success' }" />
+                                                <ObjectStatus
+                                                    text="{= ${ewmView>IsBlockedForRemoval} ? 'Blocked' : 'Active' }"
+                                                    state="{= ${ewmView>IsBlockedForRemoval} ? 'Error' : 'Success' }" />
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
+                            </VBox>
+                        </IconTabFilter>
+                    </items>
+                </IconTabBar>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>
