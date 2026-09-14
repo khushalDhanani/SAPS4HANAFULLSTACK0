@@ -1,6 +1,20 @@
 
 # Changes Log
 
+## 2026-09-14 10:25 IST
+- **Agent**: Antigravity
+- **Change**: Resolved `git push` HTTP 400 RPC Failed Error by Configuring `http.postBuffer` (`.git/config`, `WORKSTATUS.md`).
+  1. **Root Cause Analysis**:
+     - The previous commit `bcc075b` contained 7.50 MiB of pack data (including UI responsiveness proof screenshots and SAP metadata files).
+     - Git's default HTTP post buffer is 1 MiB (`1048576` bytes).
+     - Because the packfile exceeded the buffer size, Git switched to HTTP chunked transfer encoding (`Transfer-Encoding: chunked`), which was rejected by GitHub's edge proxy with `error: RPC failed; HTTP 400 curl 22 The requested URL returned error: 400` / `send-pack: unexpected disconnect while reading sideband packet`.
+  2. **Resolution**:
+     - Configured Git buffer via `git config http.postBuffer 524288000` (500 MB).
+     - Allows Git to buffer the entire payload in memory and send it in a single HTTP POST request with a known `Content-Length` header rather than chunked streaming.
+  3. **Verification**:
+     - Executed `git push`: Succeeded immediately (`92680b6..bcc075b  feature/PO -> feature/PO`).
+     - Executed `git status`: Working tree clean and up to date with `origin/feature/PO`.
+
 ## 2026-09-14 10:20 IST
 - **Agent**: Antigravity
 - **Change**: Reference Sales Quotation (VA21) Creation from Sales Inquiry (VA11) with Authentic Pre-filling, Prompt Dialog, and Document Flow Linking (`service.cds`, `salesInquiry.handler.js`, `SalesInquiryAdapter.js`, `SalesInquiryService.js`, `CreateQuoteFromInquiryDialog.fragment.xml`, `SalesInquiries.controller.js`, `salesInquiriesController.test.js`, `salesInquiryAdapter.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
@@ -1442,6 +1456,10 @@
      - `git diff --check`: ✅ Pass (no whitespace errors).
 
 ## Current Status
+- **2026-09-14 10:25 IST (Antigravity)**: **Resolved Git Push HTTP 400 RPC Failed Error & Synced Remote `feature/PO`.**
+  - Diagnosed HTTP 400 error caused by default 1MB `http.postBuffer` when pushing 7.50 MiB packfile containing screenshots and metadata.
+  - Configured `http.postBuffer` to 500 MB (`524288000`).
+  - Successfully pushed commit `bcc075b` to `origin/feature/PO`. Working tree clean and branch in sync with remote.
 - **2026-09-14 10:20 IST (Antigravity)**: **Reference Sales Quotation (VA21) Creation from Sales Inquiry (VA11) Complete & Fully Verified.**
   - Implemented row-level "Create Sales Quote" user interaction with dedicated dialog prompt (`CreateQuoteFromInquiryDialog.fragment.xml`).
   - Pre-fills all source inquiry data: Sold-To Party, Ship-To Party, Sales Area (`1000`/`10`/`52`), Total Net Amount, and Line Items.
