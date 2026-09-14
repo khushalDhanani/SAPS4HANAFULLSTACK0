@@ -1,0 +1,18 @@
+{
+  "d": {
+    "__metadata": {
+      "id": "http://172.27.100.32:8000/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchaseOrderTP(PurchaseOrder='4500001001',DraftUUID=guid'0050569a-7c9b-1edb-8fa4-d01c06834abc',IsActiveEntity=false)",
+      "uri": "http://172.27.100.32:8000/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchaseOrderTP(PurchaseOrder='4500001001',DraftUUID=guid'0050569a-7c9b-1edb-8fa4-d01c06834abc',IsActiveEntity=false)",
+      "type": "MM_PUR_PO_MAINT_V2_SRV.C_PurchaseOrderTPType"
+    },
+    "PurchaseOrder": "4500001001",
+    "DraftUUID": "0050569a-7c9b-1edb-8fa4-d01c06834abc",
+    "IsActiveEntity": false,
+    "PurchaseOrderType": "NB",
+    "CompanyCode": "1010",
+    "PurchasingOrganization": "1010",
+    "PurchasingGroup": "001",
+    "Supplier": "10300001",
+    "DocumentCurrency": "EUR"
+  }
+}

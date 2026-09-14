@@ -1,0 +1,365 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.ewm.warehouse-cockpit.controller.CreateWarehouseTask"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="createTaskPage"
+        showHeader="false"
+        backgroundDesign="Solid">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Page Header Bar -->
+                <OverflowToolbar class="sapUiNoMarginBottom">
+                    <Button
+                        id="btnNavBack"
+                        icon="sap-icon://nav-back"
+                        tooltip="Back"
+                        type="Transparent"
+                        press=".onNavBack" />
+                    <Title text="{i18n>ewmCreateTaskPageTitle}" level="H2" />
+                    <ToolbarSpacer />
+                    <ObjectStatus
+                        id="taskDraftStatus"
+                        text="Draft / New"
+                        state="Warning"
+                        icon="sap-icon://status-in-process"
+                        class="sapUiSmallMarginEnd" />
+                </OverflowToolbar>
+
+                <Text
+                    text="{i18n>ewmCreateTaskSubtitle}"
+                    class="sapUiSmallMarginBottom textMuted" />
+
+                <!-- Global In-Page Validation Message Banner -->
+                <MessageStrip
+                    id="createTaskMessageStrip"
+                    text="{taskModel>/errorMessage}"
+                    type="Error"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{taskModel>/hasError}"
+                    close=".onDismissError"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link text="View all {taskModel>/errorCount} issue(s)" press=".onMessageButtonPress" />
+                    </link>
+                </MessageStrip>
+
+                <!-- Sections Grid (6/6 Responsive Layout) -->
+                <layout:Grid
+                    id="gridTaskSections"
+                    defaultSpan="XL6 L6 M6 S12"
+                    hSpacing="1"
+                    vSpacing="0"
+                    class="sapUiNoMarginTop sapUiSmallMarginBottom">
+
+                    <!-- Section 1: General & Warehouse Data -->
+                    <Panel id="panelGeneralData">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>ewmSectionGeneral}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formGeneralData"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>ewmFieldWarehouse}" required="true" />
+                                <Select
+                                    id="selWarehouse"
+                                    selectedKey="{taskModel>/task/Warehouse}"
+                                    items="{
+                                        path: 'taskModel>/warehouses',
+                                        sorter: { path: 'Warehouse' }
+                                    }"
+                                    change=".onWarehouseChange"
+                                    width="100%">
+                                    <core:Item key="{taskModel>Warehouse}" text="{taskModel>Warehouse} - {taskModel>WarehouseName}" />
+                                </Select>
+
+                                <MessageStrip
+                                    id="stripNonEwmWarehouseWarning"
+                                    text="{taskModel>/nonEwmWarningText}"
+                                    type="Information"
+                                    showIcon="true"
+                                    visible="{taskModel>/isNonEwmWarehouse}"
+                                    class="sapUiTinyMarginTopBottom">
+                                    <layoutData>
+                                        <layout:GridData span="XL12 L12 M12 S12" />
+                                    </layoutData>
+                                </MessageStrip>
+
+                                <Label text="{i18n>ewmFieldProcessType}" required="true" />
+                                <Input
+                                    id="inProcessType"
+                                    value="{taskModel>/task/WarehouseProcessType}"
+                                    placeholder="{i18n>ewmFieldProcessTypePlaceholder}"
+                                    maxLength="4"
+                                    required="true"
+                                    showSuggestion="true"
+                                    filterSuggests="true"
+                                    valueState="{taskModel>/errors/WarehouseProcessType/state}"
+                                    valueStateText="{taskModel>/errors/WarehouseProcessType/text}"
+                                    change=".onFieldChange"
+                                    liveChange=".onFieldChange"
+                                    suggestionItems="{
+                                        path: 'taskModel>/processTypes',
+                                        sorter: { path: 'WarehouseProcessType' }
+                                    }">
+                                    <suggestionItems>
+                                        <core:ListItem key="{taskModel>WarehouseProcessType}" text="{taskModel>WarehouseProcessType}" additionalText="{taskModel>WarehouseProcessTypeName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="Task Status" />
+                                <ObjectStatus text="Open (Unassigned)" state="None" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 2: Product & Quantity Data -->
+                    <Panel id="panelProductData">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>ewmSectionProduct}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formProductData"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>ewmFieldProduct}" required="true" />
+                                <Input
+                                    id="inProduct"
+                                    value="{taskModel>/task/Product}"
+                                    placeholder="{i18n>ewmFieldProductPlaceholder}"
+                                    maxLength="40"
+                                    required="true"
+                                    showValueHelp="true"
+                                    showSuggestion="true"
+                                    filterSuggests="false"
+                                    valueState="{taskModel>/errors/Product/state}"
+                                    valueStateText="{taskModel>/errors/Product/text}"
+                                    suggest=".onSuggest"
+                                    suggestionItemSelected=".onProductSelect"
+                                    valueHelpRequest=".onValueHelpRequest"
+                                    change=".onFieldChange"
+                                    liveChange=".onFieldChange"
+                                    suggestionItems="{path: '/MaterialVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{Material}" text="{Material}" additionalText="{MaterialName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>ewmFieldProductDesc}" />
+                                <Input
+                                    id="inProductDesc"
+                                    value="{taskModel>/task/ProductDescription}"
+                                    editable="false" />
+
+                                <Label text="{i18n>ewmFieldQuantity}" required="true" />
+                                <Input
+                                    id="inQuantity"
+                                    value="{taskModel>/task/Quantity}"
+                                    type="Number"
+                                    placeholder="{i18n>ewmFieldQuantityPlaceholder}"
+                                    required="true"
+                                    valueState="{taskModel>/errors/Quantity/state}"
+                                    valueStateText="{taskModel>/errors/Quantity/text}"
+                                    change=".onFieldChange"
+                                    liveChange=".onFieldChange" />
+
+                                <Label text="{i18n>ewmFieldUom}" required="true" />
+                                <Input
+                                    id="inUom"
+                                    value="{taskModel>/task/UnitOfMeasure}"
+                                    placeholder="{i18n>ewmFieldUomPlaceholder}"
+                                    maxLength="3"
+                                    required="true"
+                                    showValueHelp="true"
+                                    showSuggestion="true"
+                                    filterSuggests="false"
+                                    valueState="{taskModel>/errors/UnitOfMeasure/state}"
+                                    valueStateText="{taskModel>/errors/UnitOfMeasure/text}"
+                                    suggest=".onSuggest"
+                                    valueHelpRequest=".onValueHelpRequest"
+                                    change=".onFieldChange"
+                                    liveChange=".onFieldChange"
+                                    suggestionItems="{path: '/UnitOfMeasureVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{UnitOfMeasure}" text="{UnitOfMeasure}" additionalText="{UnitOfMeasure_Text}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>ewmFieldBatch}" />
+                                <Input
+                                    id="inBatch"
+                                    value="{taskModel>/task/Batch}"
+                                    placeholder="{i18n>ewmFieldBatchPlaceholder}"
+                                    maxLength="10" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 3: Source Location -->
+                    <Panel id="panelSourceLocation">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>ewmSectionSource}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formSourceLocation"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>ewmFieldSourceStorageType}" />
+                                <ComboBox
+                                    id="selSourceStorageType"
+                                    selectedKey="{taskModel>/task/SourceStorageType}"
+                                    placeholder="{i18n>ewmFieldSourceStorageTypePlaceholder}"
+                                    items="{
+                                        path: 'taskModel>/storageTypes',
+                                        sorter: { path: 'StorageType' }
+                                    }"
+                                    width="100%">
+                                    <core:Item key="{taskModel>StorageType}" text="{taskModel>StorageType} - {taskModel>StorageTypeName}" />
+                                </ComboBox>
+
+                                <Label text="{i18n>ewmFieldSourceStorageBin}" />
+                                <ComboBox
+                                    id="selSourceStorageBin"
+                                    selectedKey="{taskModel>/task/SourceStorageBin}"
+                                    placeholder="{i18n>ewmFieldSourceStorageBinPlaceholder}"
+                                    items="{
+                                        path: 'taskModel>/storageBins',
+                                        sorter: { path: 'StorageBin' }
+                                    }"
+                                    change=".onSourceBinChange"
+                                    width="100%">
+                                    <core:Item key="{taskModel>StorageBin}" text="{taskModel>StorageBin}" />
+                                </ComboBox>
+
+                                <Label text="{i18n>ewmFieldSourceHU}" />
+                                <Input
+                                    id="inSourceHU"
+                                    value="{taskModel>/task/SourceHandlingUnit}"
+                                    placeholder="{i18n>ewmFieldSourceHUPlaceholder}"
+                                    maxLength="20" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 4: Target / Destination Location -->
+                    <Panel id="panelTargetLocation">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>ewmSectionDestination}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formTargetLocation"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>ewmFieldDestStorageType}" />
+                                <ComboBox
+                                    id="selDestStorageType"
+                                    selectedKey="{taskModel>/task/DestinationStorageType}"
+                                    placeholder="{i18n>ewmFieldDestStorageTypePlaceholder}"
+                                    items="{
+                                        path: 'taskModel>/storageTypes',
+                                        sorter: { path: 'StorageType' }
+                                    }"
+                                    width="100%">
+                                    <core:Item key="{taskModel>StorageType}" text="{taskModel>StorageType} - {taskModel>StorageTypeName}" />
+                                </ComboBox>
+
+                                <Label text="{i18n>ewmFieldDestStorageBin}" />
+                                <ComboBox
+                                    id="selDestStorageBin"
+                                    selectedKey="{taskModel>/task/DestinationStorageBin}"
+                                    placeholder="{i18n>ewmFieldDestStorageBinPlaceholder}"
+                                    items="{
+                                        path: 'taskModel>/storageBins',
+                                        sorter: { path: 'StorageBin' }
+                                    }"
+                                    change=".onDestBinChange"
+                                    width="100%">
+                                    <core:Item key="{taskModel>StorageBin}" text="{taskModel>StorageBin}" />
+                                </ComboBox>
+
+                                <Label text="{i18n>ewmFieldDestHU}" />
+                                <Input
+                                    id="inDestHU"
+                                    value="{taskModel>/task/DestinationHandlingUnit}"
+                                    placeholder="{i18n>ewmFieldDestHUPlaceholder}"
+                                    maxLength="20" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+                </layout:Grid>
+            </VBox>
+        </content>
+        <footer>
+            <OverflowToolbar>
+                <Button
+                    id="btnMessages"
+                    icon="sap-icon://alert"
+                    text="{taskModel>/errorCount}"
+                    type="Negative"
+                    visible="{taskModel>/hasError}"
+                    press=".onMessageButtonPress" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnSave"
+                    text="{i18n>ewmBtnSubmitCreateTask}"
+                    type="Emphasized"
+                    icon="sap-icon://save"
+                    press=".onCreatePress" />
+                <Button
+                    id="btnCancel"
+                    text="{i18n>ewmBtnCancelTask}"
+                    press=".onCancelPress" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

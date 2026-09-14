@@ -1,21 +1,24 @@
 {
   "name": "saps4hanafullstack",
   "version": "1.0.0",
-  "description": "",
+  "description": "SAP S/4HANA Enterprise Full-Stack Platform",
   "main": "server.js",
   "scripts": {
-    "start": "cds watch",
-    "watch": "cds watch",
-    "test": "jest"
+    "start": "cds watch --exclude data",
+    "watch": "cds watch --exclude data",
+    "test": "jest --runInBand",
+    "test:unit": "jest test/unit",
+    "test:integration": "jest test/integration --runInBand",
+    "test:e2e": "jest test/e2e --runInBand",
+    "validate:mta": "mbt validate",
+    "build:mta": "mbt build"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
   "dependencies": {
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
-    "@sap-cloud-sdk/resilience": "^4",
-    "@sap/cds": "^10.0.6"
+    "@sap/cds": "^10.0.6",
+    "@sap-cloud-sdk/resilience": "^4"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
@@ -26,13 +29,106 @@
   },
   "cds": {
     "requires": {
+      "auth": {
+        "[development]": {
+          "kind": "mocked",
+          "users": {
+            "alice": {
+              "roles": [
+                "User",
+                "Admin",
+                "Viewer",
+                "PurchasingManager",
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
+              ]
+            },
+            "bob": {
+              "roles": [
+                "User",
+                "Viewer"
+              ]
+            }
+          }
+        },
+        "[test]": {
+          "kind": "mocked",
+          "users": {
+            "alice": {
+              "roles": [
+                "User",
+                "Admin",
+                "Viewer",
+                "PurchasingManager",
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
+              ]
+            },
+            "bob": {
+              "roles": [
+                "User",
+                "Viewer"
+              ]
+            }
+          }
+        },
+        "[production]": {
+          "kind": "jwt",
+          "vcap": {
+            "label": "xsuaa"
+          }
+        }
+      },
       "C_PURCHASEORDER_FS_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/C_PURCHASEORDER_FS_SRV"
+        "model": "srv/external/C_PURCHASEORDER_FS_SRV",
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV"
+          }
+        }
       },
       "MM_PUR_PO_MAINT_V2_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/MM_PUR_PO_MAINT_V2_SRV"
+        "model": "srv/external/MM_PUR_PO_MAINT_V2_SRV",
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV"
+          }
+        }
+      },
+      "FAC_GL_JOURNALENTRY_VER_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
+        "credentials": {
+          "url": "http://localhost:5000"
+        },
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV"
+          }
+        }
+      },
+      "SD_F2370_INQY_WL_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/SD_F2370_INQY_WL_SRV"
+      },
+      "SD_F2369_INQY_FS_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/SD_F2369_INQY_FS_SRV"
+      },
+      "LORD_ODATA_ORDER_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/LORD_ODATA_ORDER_SRV"
       }
     }
   }

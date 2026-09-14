@@ -1,7 +1,9 @@
 sap.ui.define([
     "sap/ui/base/Object",
-    "sap/ui/model/json/JSONModel"
-], function (BaseObject, JSONModel) {
+    "sap/ui/model/json/JSONModel",
+    "sap/base/Log",
+    "saps4hana/fiori/service/ODataClient"
+], function (BaseObject, JSONModel, Log, ODataClient) {
     "use strict";
 
     var STORAGE_KEY = "saps4hana_fiori_auth_session";
@@ -10,6 +12,7 @@ sap.ui.define([
     var AuthService = BaseObject.extend("saps4hana.fiori.service.AuthService", {
         constructor: function () {
             BaseObject.apply(this, arguments);
+            this._sLastSyncedAuthHeader = null;
             this._oModel = new JSONModel({
                 isAuthenticated: false,
                 user: null,
@@ -22,10 +25,93 @@ sap.ui.define([
             this._oComponent = oComponent;
             this._oComponent.setModel(this._oModel, "auth");
             this._restoreSession();
+            this.syncModelHeaders(oComponent);
+        },
+
+        /**
+         * Synchronizes authentication Authorization header (Bearer token)
+         * to UI5 OData V4 framework models (default model and fiService).
+         *
+         * @param {sap.ui.core.UIComponent} [oComponent]
+         */
+        syncModelHeaders: function (oComponent) {
+            var oComp = oComponent || this._oComponent;
+            if (!oComp) {
+                return;
+            }
+            var sToken = this.getToken();
+            var sAuthHeader = sToken ? ("Bearer " + sToken) : undefined;
+
+            // Avoid redundant and disruptive changeHttpHeaders calls if header did not change
+            if (this._sLastSyncedAuthHeader === sAuthHeader) {
+                return;
+            }
+
+            var mHeaders = {
+                "Authorization": sAuthHeader
+            };
+
+            var oDefaultModel = oComp.getModel();
+            if (oDefaultModel && typeof oDefaultModel.changeHttpHeaders === "function") {
+                try {
+                    oDefaultModel.changeHttpHeaders(mHeaders);
+                } catch (err) {
+                    // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
+                    if (Log && typeof Log.warning === "function") {
+                        Log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
+                    }
+                }
+            }
+
+            var oFiModel = oComp.getModel("fiService");
+            if (oFiModel && typeof oFiModel.changeHttpHeaders === "function") {
+                try {
+                    oFiModel.changeHttpHeaders(mHeaders);
+                } catch (err) {
+                    if (Log && typeof Log.warning === "function") {
+                        Log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
+                    }
+                }
+            }
+
+            var oSdModel = oComp.getModel("salesInquiry");
+            if (oSdModel && typeof oSdModel.changeHttpHeaders === "function") {
+                try {
+                    oSdModel.changeHttpHeaders(mHeaders);
+                } catch (err) {
+                    if (Log && typeof Log.warning === "function") {
+                        Log.warning("AuthService: Unable to update salesInquiry headers: " + (err && err.message));
+                    }
+                }
+            }
+
+            this._sLastSyncedAuthHeader = sAuthHeader;
         },
 
         getModel: function () {
             return this._oModel;
+        },
+
+        _isTokenExpired: function (sToken) {
+            if (!sToken || typeof sToken !== "string") {
+                return false;
+            }
+            try {
+                var aParts = sToken.split(".");
+                if (aParts.length !== 3) {
+                    return false;
+                }
+                var sPayload = aParts[1].replace(/-/g, "+").replace(/_/g, "/");
+                var sDecoded = atob(sPayload);
+                var oPayload = JSON.parse(sDecoded);
+                if (oPayload && typeof oPayload.exp === "number") {
+                    var iNow = Math.floor(Date.now() / 1000);
+                    return iNow >= oPayload.exp;
+                }
+            } catch (e) {
+                // Ignore decoding errors
+            }
+            return false;
         },
 
         _restoreSession: function () {
@@ -41,7 +127,18 @@ sap.ui.define([
             if (sRawSession) {
                 try {
                     var oSession = JSON.parse(sRawSession);
-                    if (oSession && oSession.user && oSession.token) {
+                    if (oSession && oSession.user && oSession.user.username) {
+                        if (!oSession.user.token && oSession.token) {
+                            oSession.user.token = oSession.token;
+                        }
+
+                        // Validate token expiration before restoring session
+                        if (oSession.user.token && this._isTokenExpired(oSession.user.token)) {
+                            sessionStorage.removeItem(STORAGE_KEY);
+                            localStorage.removeItem(STORAGE_KEY);
+                            return false;
+                        }
+
                         this._oModel.setProperty("/isAuthenticated", true);
                         this._oModel.setProperty("/user", oSession.user);
                         return true;
@@ -56,8 +153,7 @@ sap.ui.define([
 
         /**
          * Authenticate against the actual S/4HANA system via CAP AuthService backend.
-         * No credentials are validated on the client — they are sent to the CAP server
-         * which forwards them to the S/4HANA Gateway for verification.
+         * Uses centralized ODataClient for CSRF, retries, and error handling.
          */
         login: function (sUsername, sPassword, bRememberMe) {
             var that = this;
@@ -73,71 +169,58 @@ sap.ui.define([
                     return;
                 }
 
-                // Call CAP AuthService login action
-                fetch("/odata/v4/auth/login", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-                    body: JSON.stringify({
-                        username: sTrimmedUser,
-                        password: sTrimmedPass
-                    })
+                // Call CAP AuthService login action via centralized ODataClient
+                ODataClient.post("/odata/v4/auth/login", {
+                    username: sTrimmedUser,
+                    password: sTrimmedPass
                 })
-                .then(function (response) {
-                    return response.json().then(function (data) {
-                        return { status: response.status, ok: response.ok, data: data };
-                    });
-                })
-                .then(function (result) {
-                    if (!result.ok) {
-                        var sErrorMsg = "Authentication failed. Please check your credentials.";
-                        if (result.data && result.data.error && result.data.error.message) {
-                            sErrorMsg = result.data.error.message;
+                    .then(function (oServerUser) {
+                        // If server returned authenticated: false, reject cleanly with message
+                        if (!oServerUser || oServerUser.authenticated === false) {
+                            reject({
+                                code: "AUTH_FAILED",
+                                message: (oServerUser && oServerUser.message) || "Invalid username or password. Please verify your S/4HANA credentials."
+                            });
+                            return;
                         }
+
+                        var oUserSession = {
+                            username: oServerUser.username || sTrimmedUser,
+                            avatarInitials: oServerUser.avatarInitials || sTrimmedUser.substring(0, 2).toUpperCase(),
+                            system: oServerUser.system || "PRD",
+                            loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                            token: oServerUser.token || null,
+                            scopes: oServerUser.scopes || []
+                        };
+
+                        var oStorageData = {
+                            user: oUserSession,
+                            token: oUserSession.token
+                        };
+
+                        if (bRememberMe) {
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
+                            localStorage.setItem(REMEMBER_KEY, oUserSession.username);
+                        } else {
+                            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
+                            localStorage.removeItem(REMEMBER_KEY);
+                        }
+
+                        that._oModel.setProperty("/isAuthenticated", true);
+                        that._oModel.setProperty("/user", oUserSession);
+                        that._oModel.setProperty("/rememberMe", bRememberMe);
+                        that.syncModelHeaders();
+
+                        resolve(oUserSession);
+                    })
+                    .catch(function (err) {
                         reject({
                             code: "AUTH_FAILED",
-                            message: sErrorMsg
+                            message: (err && err.message)
+                                ? err.message
+                                : "Cannot connect to the authentication service. Please check your network connection and try again."
                         });
-                        return;
-                    }
-
-                    var oServerUser = result.data;
-
-                    var oUserSession = {
-                        username: oServerUser.username || sTrimmedUser,
-                        avatarInitials: oServerUser.avatarInitials || sTrimmedUser.substring(0, 2).toUpperCase(),
-                        system: oServerUser.system || "PRD",
-                        loginTimestamp: oServerUser.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    };
-
-                    var sToken = "S4_TOKEN_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-                    var oStorageData = {
-                        user: oUserSession,
-                        token: sToken
-                    };
-
-                    if (bRememberMe) {
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                        localStorage.setItem(REMEMBER_KEY, oUserSession.username);
-                    } else {
-                        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(oStorageData));
-                        localStorage.removeItem(REMEMBER_KEY);
-                    }
-
-                    that._oModel.setProperty("/isAuthenticated", true);
-                    that._oModel.setProperty("/user", oUserSession);
-                    that._oModel.setProperty("/rememberMe", bRememberMe);
-
-                    resolve(oUserSession);
-                })
-                .catch(function (err) {
-                    reject({
-                        code: "NETWORK_ERROR",
-                        message: "Cannot connect to the authentication service. Please check your network connection and try again."
                     });
-                });
             });
         },
 
@@ -150,6 +233,8 @@ sap.ui.define([
             this._oModel.setProperty("/isAuthenticated", false);
             this._oModel.setProperty("/user", null);
             this._oModel.setProperty("/savedUsername", sSaved);
+            this._sLastSyncedAuthHeader = null;
+            this.syncModelHeaders();
         },
 
         isAuthenticated: function () {
@@ -158,6 +243,21 @@ sap.ui.define([
 
         getCurrentUser: function () {
             return this._oModel.getProperty("/user");
+        },
+
+        getToken: function () {
+            var oUser = this._oModel.getProperty("/user");
+            if (oUser && oUser.token) {
+                return oUser.token;
+            }
+            try {
+                var sRaw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+                if (sRaw) {
+                    var parsed = JSON.parse(sRaw);
+                    return (parsed && parsed.user && parsed.user.token) || (parsed && parsed.token) || null;
+                }
+            } catch (e) {}
+            return null;
         }
     });
 

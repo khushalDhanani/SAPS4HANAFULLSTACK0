@@ -1,0 +1,389 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.ewm.rf-terminal.controller.RfTerminal"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <Page
+        id="rfTerminalPage"
+        showHeader="true"
+        title="{i18n>rfTerminalTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center">
+                <ObjectStatus
+                    id="rfLogonBadge"
+                    text="{= ${rfView>/isLoggedIn} ? 'ONLINE • ' + ${rfView>/resource} : 'OFFLINE' }"
+                    state="{= ${rfView>/isLoggedIn} ? 'Success' : 'Error' }"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnToggleAudio"
+                    icon="{= ${rfView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
+                    tooltip="{i18n>rfToggleAudioTooltip}"
+                    type="Transparent"
+                    press=".onToggleAudio"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnResetRf"
+                    icon="sap-icon://refresh"
+                    tooltip="{i18n>btnRefresh}"
+                    type="Transparent"
+                    press=".onResetWorkflow" />
+            </HBox>
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin" alignItems="Center">
+                <!-- Terminal Shell Container -->
+                <Panel
+                    id="rfDeviceShell"
+                    width="100%"
+                    class="sapUiSmallMarginBottom"
+                    accessibleRole="Region">
+
+                    <!-- Status Header Strip -->
+                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                        <HBox alignItems="Center">
+                            <core:Icon src="sap-icon://inventory" class="sapUiTinyMarginEnd" />
+                            <Title text="{i18n>rfWarehouseLabel}: {= ${rfView>/warehouse} || '-' }" level="H4" />
+                        </HBox>
+                        <HBox alignItems="Center">
+                            <Text text="{= ${rfView>/queue} ? 'Q: ' + ${rfView>/queue} : '' }" class="sapUiTinyMarginEnd textMuted" visible="{= !!${rfView>/queue} }" />
+                            <core:Icon src="sap-icon://connected" color="{= ${rfView>/isLoggedIn} ? 'Positive' : 'Neutral' }" />
+                        </HBox>
+                    </HBox>
+
+                    <!-- STEP 1: LOGON / STANDBY SCREEN -->
+                    <VBox visible="{= ${rfView>/currentStep} === 1 }" class="sapUiSmallMarginTop">
+                        <!-- Offline Logon Form -->
+                        <VBox visible="{= !${rfView>/isLoggedIn} }">
+                            <Title text="{i18n>rfLogonTitle}" level="H3" class="sapUiTinyMarginBottom" />
+                            <Text text="{i18n>rfLogonSubtitle}" class="sapUiSmallMarginBottom textMuted" />
+
+                            <Label text="{i18n>rfWarehouseLabel}:" required="true" />
+                            <Select
+                                id="rfWarehouseSelect"
+                                selectedKey="{rfView>/warehouse}"
+                                items="{
+                                    path: 'rfView>/availableWarehouses',
+                                    sorter: { path: 'Warehouse' }
+                                }"
+                                change=".onWarehouseChange"
+                                width="100%"
+                                class="sapUiTinyMarginBottom">
+                                <core:Item key="{rfView>Warehouse}" text="{rfView>Warehouse} - {rfView>WarehouseName}" />
+                            </Select>
+
+                            <Label text="{i18n>rfOperatorLabel}:" />
+                            <Input id="rfOperatorInput" value="{rfView>/operator}" editable="false" class="sapUiTinyMarginBottom" />
+
+                            <Label text="{i18n>rfResourceLabel}:" required="true" />
+                            <ComboBox
+                                id="rfResourceSelect"
+                                selectedKey="{rfView>/resource}"
+                                items="{rfView>/availableResources}"
+                                selectionChange=".onResourceChange"
+                                change=".onResourceInputChange"
+                                placeholder="{i18n>rfResourcePlaceholder}"
+                                width="100%"
+                                class="sapUiTinyMarginBottom">
+                                <core:Item key="{rfView>Resource}" text="{rfView>Resource} ({rfView>ResourceType})" />
+                            </ComboBox>
+
+                            <Label text="{i18n>rfQueueLabel}:" required="true" />
+                            <ComboBox
+                                id="rfQueueSelect"
+                                selectedKey="{rfView>/queue}"
+                                items="{rfView>/availableQueues}"
+                                change=".onQueueInputChange"
+                                placeholder="{i18n>rfQueuePlaceholder}"
+                                width="100%"
+                                class="sapUiSmallMarginBottom">
+                                <core:Item key="{rfView>Queue}" text="{rfView>Queue}" />
+                            </ComboBox>
+
+                            <Button
+                                id="btnRfLogon"
+                                text="{i18n>rfBtnLogon}"
+                                type="Emphasized"
+                                icon="sap-icon://log-in"
+                                press=".onLogon"
+                                width="100%" />
+                        </VBox>
+
+                        <!-- Online Active Resource Standby -->
+                        <VBox visible="{= ${rfView>/isLoggedIn} }">
+                            <Title text="{i18n>rfWaitingForTasksTitle}" level="H3" class="sapUiTinyMarginBottom" />
+                            <MessageStrip
+                                text="{= 'Logged on to Resource ' + ${rfView>/resource} + ' (Warehouse ' + ${rfView>/warehouse} + '). Live SAP S/4HANA EWM integration active.' }"
+                                type="Success"
+                                showIcon="true"
+                                class="sapUiSmallMarginBottom" />
+
+                            <VBox class="sapUiSmallMarginBottom">
+                                <HBox justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
+                                    <Text text="Operator:" class="textMuted" />
+                                    <Label text="{rfView>/operator}" design="Bold" />
+                                </HBox>
+                                <HBox justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
+                                    <Text text="Resource / Cart:" class="textMuted" />
+                                    <Label text="{rfView>/resource}" design="Bold" />
+                                </HBox>
+                                <HBox justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
+                                    <Text text="Assigned Queue:" class="textMuted" />
+                                    <Label text="{= ${rfView>/queue} || '(Default)' }" design="Bold" />
+                                </HBox>
+                            </VBox>
+
+                            <Button
+                                id="btnCheckSapTasks"
+                                text="{i18n>rfBtnCheckTasks}"
+                                type="Emphasized"
+                                icon="sap-icon://refresh"
+                                press=".onCheckForTasks"
+                                width="100%"
+                                class="sapUiSmallMarginBottom" />
+
+                            <VBox visible="{= !${rfView>/activeTask} }" class="sapUiSmallMarginBottom">
+                                <MessageStrip
+                                    id="stripNoOpenTasks"
+                                    text="No open warehouse tasks in the queue. Check for newly created tasks or create one in the Warehouse Cockpit."
+                                    type="Information"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
+                                <Button
+                                    id="btnCreateTaskFromRf"
+                                    text="Create Warehouse Task in Cockpit"
+                                    icon="sap-icon://add"
+                                    type="Ghost"
+                                    press=".onNavigateToCreateTask"
+                                    width="100%"
+                                    class="sapUiSmallMarginBottom" />
+                            </VBox>
+
+                            <Label text="{i18n>rfManualTaskLabel}:" class="sapUiTinyMarginTop" />
+                            <HBox width="100%" class="sapUiSmallMarginBottom">
+                                <Input
+                                    id="inputManualTask"
+                                    value="{rfView>/manualTaskId}"
+                                    placeholder="{i18n>rfManualTaskPlaceholder}"
+                                    submit=".onFetchTaskById"
+                                    width="100%"
+                                    class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnFetchTaskById"
+                                    text="{i18n>rfBtnFetchTask}"
+                                    icon="sap-icon://search"
+                                    press=".onFetchTaskById" />
+                            </HBox>
+
+                            <Button
+                                id="btnLogoffResource"
+                                text="{i18n>rfBtnLogoff}"
+                                type="Transparent"
+                                icon="sap-icon://log-out"
+                                press=".onLogoff"
+                                width="100%" />
+                        </VBox>
+                    </VBox>
+
+                    <!-- STEP 2: SCAN SOURCE STORAGE BIN -->
+                    <VBox visible="{= ${rfView>/currentStep} === 2 }" class="sapUiSmallMarginTop">
+                        <MessageStrip
+                            text="{i18n>rfStepBinInstructions}"
+                            type="Information"
+                            showIcon="true"
+                            class="sapUiTinyMarginBottom" />
+
+                        <VBox class="sapUiTinyMarginBottom">
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfTaskNumber}:" class="textMuted" />
+                                <Label text="{rfView>/activeTask/WarehouseTask}" design="Bold" />
+                            </HBox>
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfTargetProduct}:" class="textMuted" />
+                                <Label text="{rfView>/activeTask/Product} - {rfView>/activeTask/ProductName}" design="Bold" />
+                            </HBox>
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfRequiredBin}:" class="textMuted" />
+                                <ObjectStatus text="{rfView>/activeTask/SourceStorageBin}" state="Warning" />
+                            </HBox>
+                        </VBox>
+
+                        <Label text="{i18n>rfScanSourceBinLabel}:" required="true" class="sapUiTinyMarginTop" />
+                        <HBox width="100%" class="sapUiTinyMarginBottom" alignItems="Center">
+                            <Input
+                                id="inputScanBin"
+                                value="{rfView>/scannedBin}"
+                                placeholder="{i18n>rfScanBinPlaceholder}"
+                                submit=".onScanSourceBin"
+                                width="100%"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnSimulateScanBin"
+                                icon="sap-icon://bar-code"
+                                tooltip="Simulate Scan Required Bin"
+                                text="Scan"
+                                press=".onSimulateScanBin" />
+                        </HBox>
+
+                        <Button
+                            id="btnVerifyBin"
+                            text="{i18n>rfBtnVerifyBin}"
+                            type="Emphasized"
+                            press=".onScanSourceBin"
+                            width="100%" />
+                        <Button
+                            id="btnCancelStep2"
+                            text="{i18n>rfBtnCancel}"
+                            type="Transparent"
+                            press=".onCancelTask"
+                            width="100%"
+                            class="sapUiTinyMarginTop" />
+                    </VBox>
+
+                    <!-- STEP 3: SCAN PRODUCT BARCODE -->
+                    <VBox visible="{= ${rfView>/currentStep} === 3 }" class="sapUiSmallMarginTop">
+                        <MessageStrip
+                            text="{i18n>rfStepProductInstructions}"
+                            type="Information"
+                            showIcon="true"
+                            class="sapUiTinyMarginBottom" />
+
+                        <VBox class="sapUiTinyMarginBottom">
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfVerifiedBin}:" class="textMuted" />
+                                <ObjectStatus text="{rfView>/verifiedBin}" state="Success" />
+                            </HBox>
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfExpectedProduct}:" class="textMuted" />
+                                <ObjectStatus text="{rfView>/activeTask/Product}" state="Warning" />
+                            </HBox>
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfPickQuantity}:" class="textMuted" />
+                                <Label text="{rfView>/activeTask/TargetQuantity} {rfView>/activeTask/BaseUnit}" design="Bold" />
+                            </HBox>
+                        </VBox>
+
+                        <Label text="{i18n>rfScanProductLabel}:" required="true" class="sapUiTinyMarginTop" />
+                        <HBox width="100%" class="sapUiTinyMarginBottom" alignItems="Center">
+                            <Input
+                                id="inputScanProduct"
+                                value="{rfView>/scannedProduct}"
+                                placeholder="{i18n>rfScanProductPlaceholder}"
+                                submit=".onScanProduct"
+                                width="100%"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnSimulateScanProduct"
+                                icon="sap-icon://bar-code"
+                                tooltip="Simulate Scan Expected Product"
+                                text="Scan"
+                                press=".onSimulateScanProduct" />
+                        </HBox>
+
+                        <Button
+                            id="btnVerifyProduct"
+                            text="{i18n>rfBtnVerifyProduct}"
+                            type="Emphasized"
+                            press=".onScanProduct"
+                            width="100%" />
+                        <Button
+                            id="btnCancelStep3"
+                            text="{i18n>rfBtnCancel}"
+                            type="Transparent"
+                            press=".onCancelTask"
+                            width="100%"
+                            class="sapUiTinyMarginTop" />
+                    </VBox>
+
+                    <!-- STEP 4: SCAN DESTINATION HU & CONFIRM -->
+                    <VBox visible="{= ${rfView>/currentStep} === 4 }" class="sapUiSmallMarginTop">
+                        <MessageStrip
+                            text="{i18n>rfStepHuInstructions}"
+                            type="Success"
+                            showIcon="true"
+                            class="sapUiTinyMarginBottom" />
+
+                        <VBox class="sapUiTinyMarginBottom">
+                            <HBox justifyContent="SpaceBetween">
+                                <Text text="{i18n>rfVerifiedProduct}:" class="textMuted" />
+                                <ObjectStatus text="{rfView>/verifiedProduct}" state="Success" />
+                            </HBox>
+                            <HBox justifyContent="SpaceBetween" visible="{= !!${rfView>/suggestedHU} }">
+                                <Text text="{i18n>rfSuggestedHU}:" class="textMuted" />
+                                <ObjectStatus text="{rfView>/suggestedHU}" state="Information" />
+                            </HBox>
+                        </VBox>
+
+                        <Label text="{i18n>rfScanTargetHULabel}:" required="true" />
+                        <HBox width="100%" class="sapUiTinyMarginBottom" alignItems="Center">
+                            <Input
+                                id="inputScanHU"
+                                value="{rfView>/scannedHU}"
+                                placeholder="{i18n>rfScanHUPlaceholder}"
+                                submit=".onConfirmPick"
+                                width="100%"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnSimulateScanHU"
+                                icon="sap-icon://bar-code"
+                                tooltip="Use Suggested / Default HU"
+                                text="Scan"
+                                press=".onSimulateScanHU" />
+                        </HBox>
+
+                        <Label text="{i18n>rfConfirmedQtyLabel}:" />
+                        <Input
+                            id="inputConfirmQty"
+                            type="Number"
+                            value="{rfView>/confirmedQty}"
+                            class="sapUiSmallMarginBottom" />
+
+                        <Button
+                            id="btnCompletePick"
+                            text="{i18n>rfBtnCompletePick}"
+                            type="Accept"
+                            icon="sap-icon://accept"
+                            press=".onConfirmPick"
+                            width="100%" />
+                        <Button
+                            id="btnCancelStep4"
+                            text="{i18n>rfBtnCancel}"
+                            type="Transparent"
+                            press=".onCancelTask"
+                            width="100%"
+                            class="sapUiTinyMarginTop" />
+                    </VBox>
+
+                    <!-- STEP 5: SUCCESS & NEXT TASK -->
+                    <VBox visible="{= ${rfView>/currentStep} === 5 }" class="sapUiSmallMarginTop" alignItems="Center">
+                        <core:Icon src="sap-icon://message-success" size="3rem" color="Positive" class="sapUiMediumMarginBottom" />
+                        <Title text="{i18n>rfPickSuccessTitle}" level="H3" class="sapUiTinyMarginBottom" />
+                        <Text text="{rfView>/successMessage}" class="sapUiMediumMarginBottom textMuted" />
+
+                        <Button
+                            id="btnNextTask"
+                            text="{i18n>rfBtnNextTask}"
+                            type="Emphasized"
+                            icon="sap-icon://navigation-right-arrow"
+                            press=".onNextTask"
+                            width="100%" />
+                        <Button
+                            id="btnReturnStep5"
+                            text="Return to Queue"
+                            type="Transparent"
+                            press=".onCancelTask"
+                            width="100%"
+                            class="sapUiTinyMarginTop" />
+                    </VBox>
+
+                </Panel>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

@@ -1,0 +1,13 @@
+_schema-version: "3.3.0"
+ID: SAPS4HANAFULLSTACK.prod
+extends: SAPS4HANAFULLSTACK
+
+modules:
+  - name: saps4hana-srv
+    parameters:
+      memory: 1024M
+      instances: 2
+  - name: saps4hana-approuter
+    parameters:
+      memory: 512M
+      instances: 2

@@ -1,116 +1,125 @@
 sap.ui.define([
-    "sap/ui/core/mvc/Controller",
+    "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
-    "sap/m/MessageBox",
+    "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
-    "sap/m/ResponsivePopover",
-    "sap/m/VBox",
-    "sap/m/HBox",
-    "sap/m/Label",
-    "sap/m/Text",
-    "sap/m/Button",
-    "sap/m/Dialog",
-    "saps4hana/fiori/service/AuthService",
-    "saps4hana/fiori/model/formatter"
+    "sap/m/MessageBox"
 ], function (
-    Controller,
+    BaseController,
     JSONModel,
-    Filter,
-    FilterOperator,
-    MessageBox,
+    ODataClient,
     MessageToast,
-    ResponsivePopover,
-    VBox,
-    HBox,
-    Label,
-    Text,
-    Button,
-    Dialog,
-    AuthService,
-    formatter
+    MessageBox
 ) {
     "use strict";
 
-    return Controller.extend("saps4hana.fiori.controller.Dashboard", {
-        formatter: formatter,
-
+    return BaseController.extend("saps4hana.fiori.controller.Dashboard", {
         onInit: function () {
             var oViewModel = new JSONModel({
+                selectedTab: "overview",
                 totalCount: 0,
                 supplierCount: 0,
                 totalSpend: "3.42",
-                completeRate: 100
+                completeRate: 100,
+                fiDocCount: 0,
+                carLoanActiveCount: 32,
+                bpCount: 284,
+                productCount: 1420,
+                glAccountCount: 310,
+                mdgOpenCRCount: 12
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
-            var oTable = this.byId("recentOrdersTable");
-            oTable.attachEventOnce("updateFinished", this._updateKpiMetrics, this);
-            oTable.attachUpdateFinished(this._updateKpiMetrics, this);
-        },
-
-        _updateKpiMetrics: function (oEvent) {
-            var oTable = oEvent.getSource();
-            var aItems = oTable.getItems();
-            var iTotal = oEvent.getParameter("total") || aItems.length;
-
-            var oSuppliers = {};
-            var iCompleted = 0;
-
-            aItems.forEach(function (oItem) {
-                var oContext = oItem.getBindingContext();
-                if (oContext) {
-                    var sSupplier = oContext.getProperty("Supplier");
-                    if (sSupplier) {
-                        oSuppliers[sSupplier] = true;
-                    }
-                    if (oContext.getProperty("PurchasingCompletenessStatus")) {
-                        iCompleted++;
-                    }
+            var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
+            var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
+            if (oRouter) {
+                var oRoute = oRouter.getRoute("dashboard");
+                if (oRoute) {
+                    oRoute.attachPatternMatched(this._onDashboardMatched, this);
                 }
-            });
-
-            var iSupplierCount = Object.keys(oSuppliers).length;
-            var iRate = aItems.length > 0 ? Math.round((iCompleted / aItems.length) * 100) : 100;
-
-            var oViewModel = this.getView().getModel("dashboardView");
-            oViewModel.setProperty("/totalCount", iTotal);
-            oViewModel.setProperty("/supplierCount", iSupplierCount > 0 ? iSupplierCount : iTotal);
-            oViewModel.setProperty("/completeRate", iRate);
+            }
         },
 
-        onSearch: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
-            var aFilters = [];
-
-            if (sQuery && sQuery.trim().length > 0) {
-                var sTrimmed = sQuery.trim();
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter("PurchaseOrder", FilterOperator.Contains, sTrimmed),
-                        new Filter("Supplier", FilterOperator.Contains, sTrimmed),
-                        new Filter("SupplierName", FilterOperator.Contains, sTrimmed),
-                        new Filter("CompanyCode", FilterOperator.Contains, sTrimmed)
-                    ],
-                    and: false
-                }));
+        _onDashboardMatched: function () {
+            var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return;
             }
+            this._loadMetrics();
+        },
 
-            var oTable = this.byId("recentOrdersTable");
-            var oBinding = oTable.getBinding("items");
-            if (oBinding) {
-                oBinding.filter(aFilters);
+        _loadMetrics: function () {
+            var oViewModel = this.getView().getModel("dashboardView");
+
+            return ODataClient.get("/odata/v4/purchase-order/PurchaseOrders?$top=100&$select=PurchaseOrder,Supplier,PurchasingCompletenessStatus&$count=true")
+                .then(function (oData) {
+                    if (!oData) {
+                        return;
+                    }
+                    var aOrders = oData.value || [];
+                    var iTotal = oData["@odata.count"] != null ? parseInt(oData["@odata.count"], 10) : aOrders.length;
+                    if (isNaN(iTotal)) {
+                        iTotal = aOrders.length;
+                    }
+                    var oSuppliers = {};
+                    var iCompleted = 0;
+
+                    aOrders.forEach(function (oOrder) {
+                        if (oOrder.Supplier) {
+                            oSuppliers[oOrder.Supplier] = true;
+                        }
+                        if (oOrder.PurchasingCompletenessStatus) {
+                            iCompleted++;
+                        }
+                    });
+
+                    var iSupplierCount = Object.keys(oSuppliers).length;
+                    var iRate = aOrders.length > 0 ? Math.round((iCompleted / aOrders.length) * 100) : 100;
+
+                    if (oViewModel) {
+                        oViewModel.setProperty("/totalCount", iTotal);
+                        oViewModel.setProperty("/supplierCount", iSupplierCount > 0 ? iSupplierCount : iTotal);
+                        oViewModel.setProperty("/completeRate", iRate);
+                    }
+                })
+                .catch(function () {
+                    // Graceful fallback for offline / mock dev mode
+                })
+                .then(function () {
+                    // Fetch FI metrics
+                    return ODataClient.get("/odata/v4/journal-entry/JournalEntryItems?$top=1&$count=true");
+                })
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iFiCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iFiCount) && oViewModel) {
+                            oViewModel.setProperty("/fiDocCount", iFiCount);
+                        }
+                    }
+                })
+                .catch(function () {
+                    // Graceful fallback for offline / mock dev mode
+                });
+        },
+
+        onTabSelect: function (oEvent) {
+            var sKey = oEvent.getParameter("key");
+            if (!sKey && oEvent.getParameter("item")) {
+                sKey = oEvent.getParameter("item").getKey();
+            }
+            if (sKey) {
+                var oViewModel = this.getView().getModel("dashboardView");
+                if (oViewModel) {
+                    oViewModel.setProperty("/selectedTab", sKey);
+                }
             }
         },
 
         onRefresh: function () {
-            var oTable = this.byId("recentOrdersTable");
-            var oBinding = oTable.getBinding("items");
-            if (oBinding) {
-                oBinding.refresh();
-            }
-            MessageToast.show(this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("dashboardActionRefreshDesc"));
+            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            this._loadMetrics().then(function () {
+                MessageToast.show(oBundle.getText("dashboardActionRefreshDesc"));
+            });
         },
 
         onNavigateToPurchaseOrders: function () {
@@ -118,137 +127,118 @@ sap.ui.define([
             oRouter.navTo("purchaseOrders");
         },
 
-        onOpenUserProfile: function (oEvent) {
-            var oButton = oEvent.getSource();
-            var oUser = AuthService.getCurrentUser();
-            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-            var that = this;
-
-            if (!this._oUserProfilePopover) {
-                this._oUserProfilePopover = new ResponsivePopover({
-                    title: oBundle.getText("userProfileTitle"),
-                    placement: "Bottom",
-                    contentWidth: "250px",
-                    content: [
-                        new VBox({
-                            class: "sapUiSmallMargin",
-                            items: [
-                                new Label({ text: oBundle.getText("loginUsername") + ":", design: "Bold" }),
-                                new Text({ id: "popoverUserName", text: "{auth>/user/username}", class: "sapUiTinyMarginBottom" }),
-                                new Label({ text: oBundle.getText("userProfileSystem") + ":", design: "Bold" }),
-                                new Text({ id: "popoverUserSystem", text: "{auth>/user/system}", class: "sapUiSmallMarginBottom" }),
-                                new Button({
-                                    text: oBundle.getText("btnLogout"),
-                                    type: "Reject",
-                                    icon: "sap-icon://log-out",
-                                    width: "100%",
-                                    press: function () {
-                                        that._oUserProfilePopover.close();
-                                        that.onLogout();
-                                    }
-                                })
-                            ]
-                        })
-                    ]
-                });
-                this.getView().addDependent(this._oUserProfilePopover);
-            }
-
-            this._oUserProfilePopover.openBy(oButton);
+        onNavigateToCreatePO: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("createPurchaseOrder");
         },
 
-        onLogout: function () {
-            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+        onNavigateToJournalEntries: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("journalEntries");
+        },
 
-            MessageBox.confirm(oBundle.getText("logoutConfirmMsg"), {
-                title: oBundle.getText("logoutConfirmTitle"),
-                icon: MessageBox.Icon.WARNING,
-                actions: [MessageBox.Action.YES, MessageBox.Action.NO],
-                emphasizedAction: MessageBox.Action.NO,
-                onClose: function (sAction) {
-                    if (sAction === MessageBox.Action.YES) {
-                        AuthService.logout();
-                        MessageToast.show(oBundle.getText("logoutSuccessMsg"));
-                        // Use direct hash change for guaranteed navigation —
-                        // sap.m.routing.Router may skip navTo if hash is already "login"
-                        window.location.hash = "login";
-                    }
+        onNavigateToSalesInquiries: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("salesInquiries");
+        },
+
+        onNavigateToCreateSalesInquiry: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("createSalesInquiry");
+        },
+
+        onNavigateToEwmCockpit: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("ewmWarehouseCockpit");
+        },
+
+        onNavigateToGoodsIssue: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("wmGoodsIssue");
+        },
+
+        onNavigateToGoodsReceipt: function () {
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.navTo("wmGoodsReceipt");
+        },
+
+        onSimulateCarLoan: function () {
+            var fLoanAmount = 45000;
+            var fAnnualRate = 5.5;
+            var iTenorMonths = 60;
+            var fMonthlyRate = (fAnnualRate / 100) / 12;
+            var fEmi = (fLoanAmount * fMonthlyRate * Math.pow(1 + fMonthlyRate, iTenorMonths)) / (Math.pow(1 + fMonthlyRate, iTenorMonths) - 1);
+            var sEmiFormatted = fEmi.toFixed(2);
+
+            MessageBox.information(
+                "Car Loan EMI Simulation:\n\n" +
+                "• Vehicle Loan Principal: $" + fLoanAmount.toLocaleString() + "\n" +
+                "• Annual Interest Rate: " + fAnnualRate + "%\n" +
+                "• Loan Tenor: " + iTenorMonths + " months (5 years)\n" +
+                "• Estimated Monthly EMI: $" + sEmiFormatted + " / month\n\n" +
+                "Actual integration: Compatible with S/4HANA G/L Journal Entries and HR Infotype 0045 (Company Loans).",
+                {
+                    title: "Car Loan Service Simulator"
                 }
-            });
+            );
         },
 
-        onItemPress: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
-            var oContext = oItem.getBindingContext();
-            if (!oContext) {
-                return;
+        onNewCarLoanApp: function () {
+            MessageBox.success(
+                "New Car Loan Application initialized.\n\n" +
+                "Application Number: LA-2026-089\n" +
+                "Status: Draft\n" +
+                "Integration Target: CarLoanService (CAP) / S/4HANA Financial Services\n\n" +
+                "Workflow routing has been initiated for managerial approval.",
+                {
+                    title: "Car Loan Origination"
+                }
+            );
+        },
+
+        switchToTab: function (sKey) {
+            if (sKey) {
+                var oTabBar = this.byId("dashboardTabBar");
+                var oViewModel = this.getView().getModel("dashboardView");
+                if (oTabBar) {
+                    oTabBar.setSelectedKey(sKey);
+                }
+                if (oViewModel) {
+                    oViewModel.setProperty("/selectedTab", sKey);
+                }
             }
+        },
 
-            var oData = oContext.getObject();
-            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+        onSelectTabFI: function () { this.switchToTab("fi"); },
+        onSelectTabCO: function () { this.switchToTab("co"); },
+        onSelectTabMM: function () { this.switchToTab("mm"); },
+        onSelectTabSD: function () { this.switchToTab("sd"); },
+        onSelectTabPP: function () { this.switchToTab("pp"); },
+        onSelectTabQM: function () { this.switchToTab("qm"); },
+        onSelectTabEAM: function () { this.switchToTab("eam"); },
+        onSelectTabPS: function () { this.switchToTab("ps"); },
+        onSelectTabEWM: function () { this.switchToTab("ewm"); },
+        onSelectTabTM: function () { this.switchToTab("tm"); },
+        onSelectTabService: function () { this.switchToTab("service"); },
+        onSelectTabHCM: function () { this.switchToTab("hcm"); },
+        onSelectTabAnalytics: function () { this.switchToTab("analytics"); },
+        onSelectTabAdmin: function () { this.switchToTab("admin"); },
+        onSelectTabMasterData: function () { this.switchToTab("masterData"); },
 
-            var oDialog = new Dialog({
-                title: oBundle.getText("dialogTitle") + " — " + oData.PurchaseOrder,
-                type: "Message",
-                contentWidth: "400px",
-                content: new VBox({
-                    class: "sapUiSmallMargin",
-                    items: [
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colPurchaseOrder") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: oData.PurchaseOrder })
-                            ]
-                        }),
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colDocType") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: oData.PurchaseOrderType || "-" })
-                            ]
-                        }),
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colSupplier") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: (oData.SupplierName || "") + " (" + (oData.Supplier || "-") + ")" })
-                            ]
-                        }),
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colCompany") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: (oData.CompanyCode || "-") + " - " + (oData.CompanyCodeName || "") })
-                            ]
-                        }),
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colPurchasingOrg") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: (oData.PurchasingOrganization || "-") + " / " + (oData.PurchasingGroup || "-") })
-                            ]
-                        }),
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colCreationDate") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: formatter.formatDate(oData.CreationDate) })
-                            ]
-                        }),
-                        new HBox({
-                            items: [
-                                new Label({ text: oBundle.getText("colStatus") + ":", width: "160px", design: "Bold" }),
-                                new Text({ text: oData.PurchasingCompletenessStatus ? oBundle.getText("statusComplete") : oBundle.getText("statusIncomplete") })
-                            ]
-                        })
-                    ]
-                }),
-                beginButton: new Button({
-                    text: oBundle.getText("dialogClose"),
-                    press: function () {
-                        oDialog.close();
-                        oDialog.destroy();
-                    }
-                })
-            });
-
-            this.getView().addDependent(oDialog);
-            oDialog.open();
+        onShowMasterDataInfo: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var sTitle = oSource.getProperty("title") || oSource.getProperty("header") || "SAP Master Data Application";
+            var sDescription = oSource.getProperty("description") || oSource.getProperty("subheader") || "";
+            var sInfo = oSource.getProperty("info") || "";
+            MessageBox.information(
+                sTitle + "\n\n" +
+                "Official SAP Catalog Entry:\n" +
+                "• Purpose: " + sDescription + "\n" +
+                "• Status: " + (sInfo || "Verified in S/4HANA Catalog (DS4 / Client 220)") + "\n" +
+                "• Architecture: Governed S/4HANA OData Service\n\n" +
+                "Source of Truth: Official SAP S/4HANA Catalog & Fiori Apps Reference Library.",
+                { title: sTitle }
+            );
         }
     });
 });

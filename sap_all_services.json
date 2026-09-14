@@ -1,0 +1,5382 @@
+[
+  {
+    "id": "ADT_SRV",
+    "title": "Gateway service for ADT"
+  },
+  {
+    "id": "HRSFEC_INFOTYPE_SRV",
+    "title": "Infotype data"
+  },
+  {
+    "id": "PYC_CFG_SRV",
+    "title": "Payroll Control Center - Configuration"
+  },
+  {
+    "id": "GFD_CONFIG_SRV",
+    "title": "Generic Form Designer Configuration details"
+  },
+  {
+    "id": "PIQ_LPD_ADVISOR_SRV",
+    "title": "Service for Launchpad for Advisor"
+  },
+  {
+    "id": "PIQ_LPD_DEG_REQ_SRV",
+    "title": "Launchpad service for Degree Requirement"
+  },
+  {
+    "id": "PIQ_REQUEST_SRV",
+    "title": "Project for request application"
+  },
+  {
+    "id": "PYC_ALERT_MANAGER_SRV",
+    "title": "Payroll Controll Center Alert Management"
+  },
+  {
+    "id": "PYC_CONF_SRV",
+    "title": "Payroll Control Center Configuration"
+  },
+  {
+    "id": "PYC_CONT_002_SRV",
+    "title": "Payroll Control Center Business Logic Version 002"
+  },
+  {
+    "id": "PYC_CONT_003_SRV",
+    "title": "Payroll Control Center 003"
+  },
+  {
+    "id": "PYC_CONT_PEM_002_SRV",
+    "title": "Pyaroll Control Center Error Management"
+  },
+  {
+    "id": "PYC_CONT_SRV",
+    "title": "Payroll Control Center Content"
+  },
+  {
+    "id": "PYC_FRW_SRV",
+    "title": "Payroll Control Center Framework"
+  },
+  {
+    "id": "PYC_PROCESS_MANAGER_SRV",
+    "title": "Payroll Control Center - Process Manager"
+  },
+  {
+    "id": "PYC_TEAM_ALERTS_SRV",
+    "title": "Payroll Control Center Team Alerts"
+  },
+  {
+    "id": "PYD_CONT_SRV",
+    "title": "Payroll Data Source Content International"
+  },
+  {
+    "id": "PYD_FRW_SRV",
+    "title": "CL_PYD_FRW_DPC_EXT"
+  },
+  {
+    "id": "PYC_CFG_VR_SRV",
+    "title": "Payroll Control Center - Validation Rule Configuration"
+  },
+  {
+    "id": "TSW_MYEVENTS_SRV",
+    "title": "MyEvents Service"
+  },
+  {
+    "id": "TSW_MYNOMINATIONS_SRV_01",
+    "title": "Service for my nominations"
+  },
+  {
+    "id": "PYC_KPI_CONFIG_1_SRV",
+    "title": "PCC KPI Configuration"
+  },
+  {
+    "id": "TSW_REGIONAL_INVENTORY_SRV_01",
+    "title": "TSW: Service for Regional Inventory Fiori App"
+  },
+  {
+    "id": "PYC_OFF_CYCLE_SRV",
+    "title": "Payroll Control Center - Manage Off-Cycle Payrolls"
+  },
+  {
+    "id": "HRSFEC_PAYCTRL_REC_SRV",
+    "title": "Service for payroll control record"
+  },
+  {
+    "id": "HRSFEC_PAY_OVERVIEW_SRV",
+    "title": "Pay Overview"
+  },
+  {
+    "id": "PYC_TEAM_MAINT_SRV",
+    "title": "Payroll Control Center Team Management"
+  },
+  {
+    "id": "PYC_TEAM_MANAGER_SRV",
+    "title": "Payroll Control Center - Team Manager"
+  },
+  {
+    "id": "HRSFEC_ECP_INFO_SRV",
+    "title": "Get ECP Information"
+  },
+  {
+    "id": "ZESH_SEARCH_SRV",
+    "title": "ESH Search"
+  },
+  {
+    "id": "ZRSAO_ODATA_SRV",
+    "title": "Tlogo and Bookmark access via Odata"
+  },
+  {
+    "id": "ZSUI_FLP_APP_SUP_SRV",
+    "title": "FLP App Support Tool"
+  },
+  {
+    "id": "ZFAR_MANAGE_BS_SRV",
+    "title": "Manage Bank Statement - Fiori App"
+  },
+  {
+    "id": "ZFCLM_BAM_SRV",
+    "title": "Cash: Bank Account Master Data"
+  },
+  {
+    "id": "ZLO_MASS_UPLOAD_UTILITY_SRV_01",
+    "title": "Gateway Service for Mass Upload Utility"
+  },
+  {
+    "id": "ZFINS_TRR_PECRUN_SALES_SRV",
+    "title": "Odata service for Manage Revenue Recognition - sales"
+  },
+  {
+    "id": "ZFINS_TRR_PECRUN_SRVDOC_SRV",
+    "title": "service for Manage Revenue Recognition - Service Documents"
+  },
+  {
+    "id": "ZFINS_TRR_PECRUN_PROJECT_SRV_01",
+    "title": "service for Manage Revenue Recognition - Projects"
+  },
+  {
+    "id": "ZFAP_APPROVEBANKPAYMENTS_SRV",
+    "title": "Approve Bank Payments"
+  },
+  {
+    "id": "ZFINS_TRR_PECRUN_REALTIME_SRV",
+    "title": "oData service for Manage Realtime issues"
+  },
+  {
+    "id": "ZC_BKACCTTWOPERSONWL_SRV",
+    "title": "Bank Acct Two Person Worklist"
+  },
+  {
+    "id": "ZFAR_BS_ITM_REPROC_SRV",
+    "title": "Reprocess Bank Statement Items Service"
+  },
+  {
+    "id": "ZFCLM_CP_PAYMENTDETAIL_SRV",
+    "title": "Payment Detail"
+  },
+  {
+    "id": "ZC_BALANCECARRYFWDSTATUS_CDS",
+    "title": "Status of Balance Carry Forward"
+  },
+  {
+    "id": "ZAPL_LOG_MANAGEMENT_SRV",
+    "title": "Application Log management"
+  },
+  {
+    "id": "ZFCLM_BRM_FBAR_SRV",
+    "title": "FBAR Report in Bank Relationship Management"
+  },
+  {
+    "id": "ZBANKACCOUNTOPENINGREQWL",
+    "title": "Approve Bank Account Applications"
+  },
+  {
+    "id": "ZFCLM_CASH_BANKTRANSFER_SRV",
+    "title": "Bank Transfer"
+  },
+  {
+    "id": "ZCA_FM_FEATURE_TOGGLE_STATUS_SRV",
+    "title": "OData Service for UI Library"
+  },
+  {
+    "id": "ZCV_ATTACHMENT_SRV",
+    "title": "Gateway : ODATA model for CV - attachments"
+  },
+  {
+    "id": "ZFAA_DISPLAY_WORKLIST_SRV",
+    "title": "OData service for Asset Master List application"
+  },
+  {
+    "id": "ZFAC_MONITORING_PRA_SRV",
+    "title": "oData Service Predictive Accounting Monitoring"
+  },
+  {
+    "id": "ZE2EIE_CC_SOLBUILDER",
+    "title": "Core configurator"
+  },
+  {
+    "id": "ZFAA_ASSET_VALUES_OVERVIEW_SRV",
+    "title": "Fixed Asset Values Overview"
+  },
+  {
+    "id": "ZC_SITNINSTCEACTYMONITORING_CDS",
+    "title": "Monitor Situations"
+  },
+  {
+    "id": "ZFAA_ASSET_MANAGE_SRV",
+    "title": "OData Service for create asset app"
+  },
+  {
+    "id": "ZCA_OC_OUTPUT_REQUEST_SRV",
+    "title": "Output Request"
+  },
+  {
+    "id": "ZUI_JOURNALENTRY_OTA_O2",
+    "title": "Journal Entry One Time Account"
+  },
+  {
+    "id": "ZFAC_FINANCIAL_DOCUMENT_SRV_01",
+    "title": "oData Financial Document (Display and Reversal)"
+  },
+  {
+    "id": "ZAPJ_JOB_MANAGEMENT_SRV",
+    "title": "Application job management"
+  },
+  {
+    "id": "ZSWF_FLEX_DEF_SRV",
+    "title": "Flexible Workflow Definition Service"
+  },
+  {
+    "id": "ZFAR_BALANCES_V2_SRV",
+    "title": "Customer Balances V2 Fiori Elements"
+  },
+  {
+    "id": "ZAPS_CHANGE_DOCUMENTS_SRV",
+    "title": "OData Service for Change Documents"
+  },
+  {
+    "id": "ZUI_BANKPOWEROFATTORNEY_IMP",
+    "title": "Implement Powers of Attorney"
+  },
+  {
+    "id": "ZFINS_TRR_SO_MONITOR_SRV",
+    "title": "oData Service for TRR Sales Order"
+  },
+  {
+    "id": "ZC_SITNINSTANCETP_CDS",
+    "title": "RAP: C_SITNINSTANCETP_CDS generated at 20190515"
+  },
+  {
+    "id": "ZCA_RSM_TEAM_ACTION_SRV",
+    "title": "Project for Manage Teams And Responsibilities"
+  },
+  {
+    "id": "ZCA_RSM_TEAM_SRV",
+    "title": "Project for Maintain Teams as Responsible"
+  },
+  {
+    "id": "ZFIN_USER_DEFAULTPARAMETER_SRV",
+    "title": "User Default Parameter"
+  },
+  {
+    "id": "ZFINS_EBRR_MONITOR_PRO_SRV",
+    "title": "Monitoring app for projects"
+  },
+  {
+    "id": "ZCA_SIT2_MST_SRV",
+    "title": "Manage Situation Types"
+  },
+  {
+    "id": "ZFAC_UNIVERSAL_HIERARCHY_SRV",
+    "title": "Universal Hierarchy"
+  },
+  {
+    "id": "ZBANKCASHBALANCE_MONITOR_O2",
+    "title": "Bank Account Balance Monitor"
+  },
+  {
+    "id": "ZUI_FINS_TRR_SVD_MON",
+    "title": "EBRR Service Document Monitor"
+  },
+  {
+    "id": "ZBANKSTATEMENTPROCCONF_O2",
+    "title": "Bank Statement Process Config"
+  },
+  {
+    "id": "ZBANKACCOUNTOPENINGREQOVW",
+    "title": "Bank Account Applications"
+  },
+  {
+    "id": "ZBANKACCTOPENINGREQDRFTTP",
+    "title": "Submit Bank Account Applications"
+  },
+  {
+    "id": "ZMANAGE_OUTGOING_FORMAT_SRV",
+    "title": "Manage Outgoing Format"
+  },
+  {
+    "id": "ZMANAGE_INCOMING_FORMAT_SRV",
+    "title": "Service for Map Incoming Format Data"
+  },
+  {
+    "id": "ZMAP_FORMAT_DATA_SRV",
+    "title": "Service for Map Format Data"
+  },
+  {
+    "id": "ZUI_BANKPOWEROFATTORNEY_MNG",
+    "title": "Service Binding for Bank PoA"
+  },
+  {
+    "id": "ZFCLM_BM_SRV",
+    "title": "Bank managment"
+  },
+  {
+    "id": "ZFAA_MD_MANAGE_SRV",
+    "title": "Manage Fixed Asset Master"
+  },
+  {
+    "id": "ZUI_FIXEDASSETUSAGEOBJ_MNTN",
+    "title": "Maintain Number of Units for UoP Depreciation"
+  },
+  {
+    "id": "ZFAC_GLV_GL_ACCOUNT_LINE_ITEMS_SRV",
+    "title": "GL Line Item Browser GLV"
+  },
+  {
+    "id": "ZBANKCASHBALANCE_O2",
+    "title": "Bank Cash Balance"
+  },
+  {
+    "id": "ZFAC_EV_GL_ACCOUNT_LINE_ITEMS_SRV",
+    "title": "GL Line Item Browser EV"
+  },
+  {
+    "id": "ZFCLM_BRM_BANK_FEE_ANALYSIS_SRV",
+    "title": "Bank Fee Analysis"
+  },
+  {
+    "id": "ZFCLM_BRM_BANK_FEE_CONDITION_SRV",
+    "title": "Bank Fee Condition"
+  },
+  {
+    "id": "ZFCLM_BRM_BANK_FEE_IMPORT_SRV",
+    "title": "Import Bank Fee"
+  },
+  {
+    "id": "ZFCLM_CASH_MEMORECORDWD_SRV",
+    "title": "Gateway Service with draft for Memo Record"
+  },
+  {
+    "id": "ZCOGS_SPLIT_EXPLAIN_BINDING",
+    "title": "Service Binding for the Cogs Split Explain Component"
+  },
+  {
+    "id": "ZC_SITN2DEMOFLIGHTVH_CDS",
+    "title": "Carriers for Situation Demo"
+  },
+  {
+    "id": "ZC_SUPLREVALSCRHISTJOBMNTR_CDS",
+    "title": "Supplier Score History failed jobs"
+  },
+  {
+    "id": "ZC_POCNTRLANLYTSFAILEDJOB_CDS",
+    "title": "Extracted PO for Central Purchasing Aalytics"
+  },
+  {
+    "id": "ZFCO_ALLOCATION_TAG_V2_SRV",
+    "title": "Allocation Tag"
+  },
+  {
+    "id": "ZFCLM_MBTS_WITHTMPL_SRV",
+    "title": "Make Bank Transfers with Template"
+  },
+  {
+    "id": "ZFCLM_CASH_BANKTRANSFERTEM_SRV",
+    "title": "Make Bank Transfer with Template"
+  },
+  {
+    "id": "ZUI_SHORTTERMCASHPOS_DISP",
+    "title": "Short Term Cash Position"
+  },
+  {
+    "id": "ZUI_CASHPOOL_MANAGE",
+    "title": "Manage cash pools"
+  },
+  {
+    "id": "ZUI_CSHPOOLASSGMTHIER_DISP",
+    "title": "Display Cash Pool Hierarchies"
+  },
+  {
+    "id": "ZFCLM_CASH_MMRD_RECNCL_SRV",
+    "title": "Reconcile Cash Flows - Memo Records"
+  },
+  {
+    "id": "ZFCLM_BRM_INTRABNKSTAT_MONITOR_SRV",
+    "title": "Intraday Bank Statement Monitor"
+  },
+  {
+    "id": "ZMM_PUR_SCHEDG_AGRMT_SRV",
+    "title": "Scheduling Agreement"
+  },
+  {
+    "id": "ZSGBT_NTE_CDS_API_D_SRV",
+    "title": "Notes for Application Object - Draft"
+  },
+  {
+    "id": "ZUI_PROCESSRECEIVABLES_MAN",
+    "title": "Process receivables"
+  },
+  {
+    "id": "ZSD_SA_PROCFLOW",
+    "title": "SD Process Flow for Sales Scheduling Agreement"
+  },
+  {
+    "id": "ZSD_SALESSCHEDGAGRMT_OBJPG",
+    "title": "for manage sales schedule agreement object page"
+  },
+  {
+    "id": "ZLO_VCHCLF",
+    "title": "Variant Configuration and Classification Service"
+  },
+  {
+    "id": "ZSD_SO_PROCFLOW_SRV",
+    "title": "SD Process Flow for Sales Order"
+  },
+  {
+    "id": "ZSD_F1814_SO_FS_SRV",
+    "title": "Sales Orders FactSheets - S4H SD FIORI"
+  },
+  {
+    "id": "ZMDC_CUSTMIZING",
+    "title": "MDC CUSTOMIZING"
+  },
+  {
+    "id": "ZFINS_TRR_MONITOR_SRV",
+    "title": "Revenue Recognition Monitor"
+  },
+  {
+    "id": "ZFAC_PROJECT_WIP_DETAIL_LIST_SRV",
+    "title": "WIP detail list for projects"
+  },
+  {
+    "id": "ZFCO_PA_REALIGNMENT_SRV",
+    "title": "CO-PA Realignment Result"
+  },
+  {
+    "id": "ZFINS_ACDOC_PLAN_IMPORT_SRV",
+    "title": "CL_FINS_ACDOC_PLAN_IMP_DPC_EXT"
+  },
+  {
+    "id": "ZFCLM_BAM_FS_HOUSEBANKACCT_SRV",
+    "title": "Factsheet House Bank Account"
+  },
+  {
+    "id": "ZFCLM_BAM_FS_BANK_SRV",
+    "title": "Factsheet Bank"
+  },
+  {
+    "id": "ZFCLM_BAM_FS_HOUSEBANK_SRV_01",
+    "title": "Factsheet House Bank"
+  },
+  {
+    "id": "ZFCLM_BAM_ACCOUNTWD_SRV",
+    "title": "Manage Bank Account with Draft"
+  },
+  {
+    "id": "ZFCLM_CASH_FLOW_ANALYZER_SRV",
+    "title": "Gateway project of Cash Flow and Balance Analyzer"
+  },
+  {
+    "id": "ZFAR_MANAGE_INCOMING_PAYT_FILES_SRV",
+    "title": "Manage Incoming Payment Files"
+  },
+  {
+    "id": "ZFAC_INCOMINGORDERS_SRV",
+    "title": "Incoming Orders"
+  },
+  {
+    "id": "ZFAC_REVENUE_VARIANCE_SRV",
+    "title": "Revenue Variance"
+  },
+  {
+    "id": "ZFCLM_CASH_CPLMGMT_MDL_SRV",
+    "title": "Manage Cash Pools"
+  },
+  {
+    "id": "ZFCLM_CASH_CONCN_SRV",
+    "title": "Gateway project for cash concentration"
+  },
+  {
+    "id": "ZOCI_ITEM_PROPOSAL_SRV",
+    "title": "Service for OCI Item Proposal"
+  },
+  {
+    "id": "ZMM_PUR_CATALOGITEMS_MNG_SRV",
+    "title": "Manage Catalog Items"
+  },
+  {
+    "id": "ZFCLM_CASH_RCF_SRV",
+    "title": "Release Cash Flow"
+  },
+  {
+    "id": "ZFARP_VALUE_HELPS_SRV",
+    "title": "Service containing value helps for FIN AP/AR"
+  },
+  {
+    "id": "ZFAR_CUSTOMER_LINE_ITEMS",
+    "title": "customer line items (aka fbl5n)"
+  },
+  {
+    "id": "ZFAR_CUST_BALANCE_SRV",
+    "title": "Customer Balance"
+  },
+  {
+    "id": "ZFAR_CUSTOMER_LIST_V2",
+    "title": "Display Customer List V2 (OData V2)"
+  },
+  {
+    "id": "ZFCLM_BAM_ACCOUNTOV_SRV",
+    "title": "Bank Accounts Overview"
+  },
+  {
+    "id": "ZFCLM_BAM_BANKGROUPOV_SRV",
+    "title": "Bank Groups Overview"
+  },
+  {
+    "id": "ZFCLM_BRM_BANKFEEOV_SRV",
+    "title": "Bank Relationship Overview - Bank Fee"
+  },
+  {
+    "id": "ZFCLM_BAM_REQUESTOV_SRV",
+    "title": "Change Requests Overview"
+  },
+  {
+    "id": "ZFCLM_BAM_REVISIONOV_SRV",
+    "title": "Bank Account Revision Status Overview"
+  },
+  {
+    "id": "ZFCLM_BAM_PAYMENTBYBANKACCOV_SRV",
+    "title": "Payment Transaction by Bank Account Overview"
+  },
+  {
+    "id": "ZC_CASHPOSITIONANLYSWTHFLW_CDS",
+    "title": "Cash Position Analysis"
+  },
+  {
+    "id": "ZC_BANKSTATEMENTMONITOR_CDS",
+    "title": "Monitor Bank Statement"
+  },
+  {
+    "id": "ZC_CASHPOSITIONANALYTICS_CDS",
+    "title": "Cash Position Analytics"
+  },
+  {
+    "id": "ZFCLM_BAM_SENTITEMS_SRV",
+    "title": "Bank account sent items"
+  },
+  {
+    "id": "ZFAP_MANAGE_PAYMENT_MEDIA",
+    "title": "Manage Payment Media"
+  },
+  {
+    "id": "ZFINS_TRR_QUICKCRTTMPADJ_SRV",
+    "title": "Qucick Create for Temporary Adjustments"
+  },
+  {
+    "id": "ZFCLM_BAM_MONIREVIEW_SRV",
+    "title": "Bank Account Monitor Review"
+  },
+  {
+    "id": "ZFAA_ASSET_OVERVIEWPAGE_SRV",
+    "title": "Asset Accountant Overview Page"
+  },
+  {
+    "id": "ZCA_SIT_PUWB_SRV",
+    "title": "Situations Handling - Define Situation Types"
+  },
+  {
+    "id": "ZFCLM_CASH_RECNCLN_SRV",
+    "title": "Cash Reconciliation"
+  },
+  {
+    "id": "ZFAC_GROSSMARGIN_SRV",
+    "title": "Gross Margin - Presumed/Actuals"
+  },
+  {
+    "id": "ZFAP_PROCESS_FF_PAYMENTS_SRV",
+    "title": "Process Free Form Payments"
+  },
+  {
+    "id": "ZC_RESPYMGMTTEAMHIERARCHY_CDS",
+    "title": "Team Hierarchy"
+  },
+  {
+    "id": "ZFAR_MANAGE_PR_SRV",
+    "title": "Manage Posting Rules"
+  },
+  {
+    "id": "ZFCLM_CASH_ALI_SRV",
+    "title": "Detect Abnormal Liquidity Items"
+  },
+  {
+    "id": "ZMM_PUR_CPROC_ADMIN_MNTR_SRV",
+    "title": "Admin Monior Overview Page"
+  },
+  {
+    "id": "ZMM_PUR_PROCMT_HUB_ITF_MONITOR_SRV",
+    "title": "Procurement Hub Interface Monitor"
+  },
+  {
+    "id": "ZMM_PUR_CNTRLPROCMT_JOB_MNTR_SRV",
+    "title": "Central Procurement Job Monitor"
+  },
+  {
+    "id": "ZPLMI_REQ_ASSIGNMENT_SRV",
+    "title": "OData service for requirement assignment"
+  },
+  {
+    "id": "ZCV_DOCUMENT_MANAGE",
+    "title": "Document Manage"
+  },
+  {
+    "id": "ZC_PAYMENTSTATISTICS_CDS",
+    "title": "Payment Statistics"
+  },
+  {
+    "id": "ZC_BANKRISKANALYTICS_CDS",
+    "title": "Bank Risk Analytics"
+  },
+  {
+    "id": "ZC_DEFICITCASHPOOLANALYTICS_CDS",
+    "title": "Deficit Cash Pool"
+  },
+  {
+    "id": "ZC_ACTUALCASHFLOWANALYTICS_CDS",
+    "title": "Actual Cash Flow in 90 days"
+  },
+  {
+    "id": "ZC_LFCASTANALYTICS_CDS",
+    "title": "Liquidity Forecast 90 Days"
+  },
+  {
+    "id": "ZFAA_ASSET_DEPRECIATION_LIST_SRV",
+    "title": "Depreciation Lists"
+  },
+  {
+    "id": "ZFAA_ASSET_TRANSACTIONS_SRV",
+    "title": "Asset Transactions"
+  },
+  {
+    "id": "ZCMD_QLTY_MANAGE_IMPORTS",
+    "title": "Master Data Quality - oData Service for Manage Imports"
+  },
+  {
+    "id": "ZMDC_CUSTOM_OBJECT_SRV",
+    "title": "MDC Custom Object"
+  },
+  {
+    "id": "ZFAC_EDITING_OPTIONS_SRV",
+    "title": "Odata for Fiori FB00"
+  },
+  {
+    "id": "ZUSERDEFAULTS",
+    "title": "User Default Settings"
+  },
+  {
+    "id": "ZMMPUR_PROC_CAT_MAINT_SRV",
+    "title": "Maintian procurement catalog call structure"
+  },
+  {
+    "id": "ZMM_PUR_REL_STRATEGY_SRV",
+    "title": "Release Strategy"
+  },
+  {
+    "id": "ZMMPUR_REL_STRAT_CLASS_SRV",
+    "title": "Gateway project for Manage Class"
+  },
+  {
+    "id": "ZSWF_FLEX_TEMPLATE_SRV",
+    "title": "Flexible Workflow Templates"
+  },
+  {
+    "id": "ZFCO_RUN_ALLOCATION_SRV",
+    "title": "Run Allocation"
+  },
+  {
+    "id": "ZFAP_MONPAYBATCHS_SRV",
+    "title": "Monitor Payment Batches"
+  },
+  {
+    "id": "ZFCO_SALES_ACCTG_OVERVIEW_SRV",
+    "title": "Sales Accounting Overview"
+  },
+  {
+    "id": "ZMD_BUSINESSPARTNER_SRV",
+    "title": "OData service for Business Partner Master Data"
+  },
+  {
+    "id": "ZFCO_REVN_RECGN_INSPECTION_SRV",
+    "title": "Inspect Revenue Recognition Postings"
+  },
+  {
+    "id": "ZFCO_MANAGE_ALLOCATION_SRV",
+    "title": "Manage Allocations"
+  },
+  {
+    "id": "ZMM_PUR_MANAGE_BUS_AUTOMN_RULES_SRV",
+    "title": "Manage Business rules for Process automation"
+  },
+  {
+    "id": "ZFAC_CUSTOM_HIERARCHY_SRV",
+    "title": "Configure Custom Hierarchy"
+  },
+  {
+    "id": "ZMM_PUR_MNTR_ANA_OPS_SRV",
+    "title": "Monitor Procurement Analytics Operations"
+  },
+  {
+    "id": "ZMM_PUR_CTRITEMACCT_MNTR_SRV",
+    "title": "Purchase Contract Items by Account Assignment"
+  },
+  {
+    "id": "ZMM_PUR_MNTN_CRCY_EXCH_SRV",
+    "title": "Maintain Currency Exhange"
+  },
+  {
+    "id": "ZC_MONITORMISSINGEXCHRATE_CDS",
+    "title": "Analyze Missing Exchange Rates"
+  },
+  {
+    "id": "ZMM_PUR_BE_SYS_CMPTBLTY_MONITOR_SRV",
+    "title": "Monitor Compatibility of Central Procurement Operations"
+  },
+  {
+    "id": "FAC_MAINT_CHART_OF_ACCOUNTS_SRV",
+    "title": "chart of account smaintainance"
+  },
+  {
+    "id": "FTR_MATURITY_PROFILE_SRV",
+    "title": "Debt and Investment Maturity Profile"
+  },
+  {
+    "id": "C_EVTBSDMFGORDTOBEPOSTDOVW_CDS",
+    "title": "Event-Based Solution Monitor"
+  },
+  {
+    "id": "C_EVTBSDPRODNCOSTERROROVW_CDS",
+    "title": "Overview page for Event-Based Posting Errors"
+  },
+  {
+    "id": "FCO_EBW_ORDER_INSPECTOR_SRV",
+    "title": "Inspect WIP/Variance Posting"
+  },
+  {
+    "id": "FCO_EB_PRODN_COST_ERROR_SRV",
+    "title": "Manage Event-Based Posting Errors"
+  },
+  {
+    "id": "C_CASHPOSITIONOVERVIEW_CDS",
+    "title": "Cash Position Overview"
+  },
+  {
+    "id": "C_FTR_CL_KEYDATE_UTIL_Q_CDS",
+    "title": "C_FTR_CL_KEYDATE_UTIL_Q_CDS"
+  },
+  {
+    "id": "C_FXFORWARDNOMINAL_CDS",
+    "title": "Nominal Of FX Forward Transactions"
+  },
+  {
+    "id": "C_FXOPTIONNOMINAL_CDS",
+    "title": "Nominal of a FX Option"
+  },
+  {
+    "id": "C_LQDYFORECASTOVERVIEW_CDS",
+    "title": "Liquidity Forecast Overview"
+  },
+  {
+    "id": "C_NONDELIVERABLEFWDNOMINAL_CDS",
+    "title": "Nominal of a Non-Deliverable Fwd Trans"
+  },
+  {
+    "id": "C_TREASURYFINANCIALSTATUS_CDS",
+    "title": "Financial Status"
+  },
+  {
+    "id": "FXM_EXCHANGE_RATE_SRV",
+    "title": "Exchange Rate"
+  },
+  {
+    "id": "C_DEBTINVESTMENTNOMINAL_CDS",
+    "title": "IR OVP Debt and Investment Nominal"
+  },
+  {
+    "id": "C_DEBTINVMTREFINTEREST_CDS",
+    "title": "Debt/Invest in Reference Interest Rate"
+  },
+  {
+    "id": "C_REFINTERESTRATEHISTORY_CDS",
+    "title": "Reference Interest Rate History"
+  },
+  {
+    "id": "C_REFINTERESTRATERANK_CDS",
+    "title": "Reference Interest Rate Ranking List"
+  },
+  {
+    "id": "FTR_DEBTINVMT_INTEREST_SRV",
+    "title": "Fixed and Viable Interest for Debt/Invmt"
+  },
+  {
+    "id": "FTR_YIELD_CURVE_RATE_SRV",
+    "title": "Yield Curve Rate Service"
+  },
+  {
+    "id": "SLL_CTRLCL_MANAGE",
+    "title": "Manage Control Classes"
+  },
+  {
+    "id": "UI_CRDTMGMTACCOUNT_MANAGE",
+    "title": "App Manage Credit Accounts"
+  },
+  {
+    "id": "UI_BSESNAPSHOT_PROCESS",
+    "title": "Service binding for BSE snapshot process"
+  },
+  {
+    "id": "FAC_GRIR_RECONCILIATION_SRV",
+    "title": "oData Service GR/IR Clearing Reconciliation"
+  },
+  {
+    "id": "ODATA_GRIR_ML_INFERE_SRV",
+    "title": "Service for GRIR UI Inference"
+  },
+  {
+    "id": "ODATA_GRIR_WRITEOFF_SRV",
+    "title": "GR/IR Account Reconciliation Write Off"
+  },
+  {
+    "id": "BSANLY_APF_RUNTIME_SRV",
+    "title": "Analysis Path Framework Runtime"
+  },
+  {
+    "id": "C_CHEMICALAMOUNTSQUERY_CDS",
+    "title": "Chemical Amounts Query"
+  },
+  {
+    "id": "C_FILTERFORCHMLINVTRYRPTG_CDS",
+    "title": "Filter for Chemical Inventory Reporting"
+  },
+  {
+    "id": "SLL_PROD_CMDTYCD_CLASSIFY",
+    "title": "Classify Products with Commodity Codes"
+  },
+  {
+    "id": "SLL_PROD_CMDTYCD_RECLASSIFY",
+    "title": "Reclassify Products with Commodity Codes"
+  },
+  {
+    "id": "C_PROFITMARGINBYMONTHQUERY_CDS",
+    "title": "Profit Margin By Month"
+  },
+  {
+    "id": "SD_OVP_SM",
+    "title": "OData Service for Sales Manager Overview Page"
+  },
+  {
+    "id": "SD_SOFI",
+    "title": "Sales Order Fulfillment Issues"
+  },
+  {
+    "id": "SD_SALESPERF",
+    "title": "OData Service for Sales Performance"
+  },
+  {
+    "id": "SD_PREDICTEDDELIVERY",
+    "title": "Sales Order Fulfillment - Predicted Delivery Delay"
+  },
+  {
+    "id": "RSH_EAM_ANALYZE_SRV",
+    "title": "Resource Scheduling for EAM"
+  },
+  {
+    "id": "MM_PUR_PO_MAINT_V2_SRV",
+    "title": "Manage Purchase Orders (SmartTemplate)"
+  },
+  {
+    "id": "MM_PUR_PR_PROCESS_SRV",
+    "title": "Purchase Requisition Processing"
+  },
+  {
+    "id": "MM_PUR_PR_PROFNL_MAINTAIN_SRV",
+    "title": "Profnl Purchase Requisition maintan"
+  },
+  {
+    "id": "MM_PUR_CNTRL_CTR_MAINTAIN_SRV",
+    "title": "Manage Central Purchase Contracts"
+  },
+  {
+    "id": "MM_PUR_OA_MAINTAIN_SRV",
+    "title": "Maintain Outline Agreements"
+  },
+  {
+    "id": "MM_PUR_RFQ_MAINTAIN_SRV",
+    "title": "Maintain RFQ Project"
+  },
+  {
+    "id": "MM_PUR_PRITEM_MNTR_SRV",
+    "title": "Monitor PR Items"
+  },
+  {
+    "id": "MM_PUR_POITEMS_MONI_SRV",
+    "title": "Monitor Purchase Order Items"
+  },
+  {
+    "id": "MMPUR_ANA_CNTRL_CTR_MNTR_SRV",
+    "title": "Monitor Central Contract Items"
+  },
+  {
+    "id": "C_NONMNGDPURGSPEND_CDS",
+    "title": "Non Managed Purchasing Spend"
+  },
+  {
+    "id": "C_PURGSPENDOFFCONTRACT_CDS",
+    "title": "Off Contract Spend"
+  },
+  {
+    "id": "C_REQUISITIONNOTOUCHRATE_CDS",
+    "title": "Requisition No Touch Rate"
+  },
+  {
+    "id": "MM_PRC_OVP",
+    "title": "Overview for Procurement"
+  },
+  {
+    "id": "ZFAP_OUTGOING_CHECKS_SRV",
+    "title": "Fiori: Outgoing Check service"
+  },
+  {
+    "id": "ZFAP_CHECK_BOOKS_SRV",
+    "title": "Fiori: Checkbook management service"
+  },
+  {
+    "id": "ZC_APDAYSPYBLOUTSTDGINDRCT_CDS",
+    "title": "Overview Page: DPO Ind"
+  },
+  {
+    "id": "ZC_APDAYSPYBLOUTSTDGDIRECT_CDS",
+    "title": "Overview page DPO Dir"
+  },
+  {
+    "id": "ZFAP_APOVERVIEWPAGE_SRV",
+    "title": "Accounts Payable Overview"
+  },
+  {
+    "id": "ZFAR_INSPECT_ITEMS_CHNGLOG_SRV",
+    "title": "Inspect Items Changelog"
+  },
+  {
+    "id": "ZC_APFUTUREACCOUNTSPAYABLE_CDS",
+    "title": "Future Accounts Payables Smart Business App"
+  },
+  {
+    "id": "ZC_APDAYSPAYOUTST_CDS",
+    "title": "Days Payable Outstanding Smart Business App"
+  },
+  {
+    "id": "ZC_APMANUALPAYMENTS_CDS",
+    "title": "Vendor Payment Analysis: manual and automatic payments"
+  },
+  {
+    "id": "ZC_APVENDOROPENITEMS_CDS",
+    "title": "Accounts Payable. Vendor Open Items"
+  },
+  {
+    "id": "ZC_APCSHDISCUTILIZATION_CDS",
+    "title": "Account Payable Cash Discount Utilization"
+  },
+  {
+    "id": "ZC_APCASHDISCOUNTFORECAST_CDS",
+    "title": "Cash discount forecast"
+  },
+  {
+    "id": "ZC_APINVOICEPROCESSINGTIME_CDS",
+    "title": "Accounts Payable. Invoice Processing Time"
+  },
+  {
+    "id": "ZC_APINVOICEPROCGANALYSIS_CDS",
+    "title": "Invoice Processing Analysis"
+  },
+  {
+    "id": "ZFIN_ACCOUNTING_IMPACT_SRV",
+    "title": "Display Accounting Impact"
+  },
+  {
+    "id": "ZSD_MCC_DOC_CAT_AUTH_SRV",
+    "title": "Authorization for Document Categories in Mass Change Cockpit"
+  },
+  {
+    "id": "ZUI_SLSDOCMASSCHANGEREQUEST",
+    "title": "Service Binding for Mass Change Request"
+  },
+  {
+    "id": "ZSD_F1852_QUOT_WL_SRV",
+    "title": "Odata for Work list for Sales Quotation"
+  },
+  {
+    "id": "ZSD_QTAN_PROCFLOW_SRV",
+    "title": "SD Process Flow for Sales Quotation"
+  },
+  {
+    "id": "MM_PUR_CTRITEM_MNTR_SRV_01",
+    "title": "Monitor Purchase Contract Items"
+  },
+  {
+    "id": "MM_PUR_RFQITEM_MNTR_SRV",
+    "title": "Monitor Request For Quotation Item"
+  },
+  {
+    "id": "S_MMPURWORKFLOWVH_CDS",
+    "title": "Value Helps for Manage Workflow Apps"
+  },
+  {
+    "id": "SD_F3014_CMR_WORKFLOW_SRV",
+    "title": "Credit Memo Request Workflow"
+  },
+  {
+    "id": "SD_F3014_SALESORDER_WORKFLOW_SRV",
+    "title": "Sales Order Workflow"
+  },
+  {
+    "id": "SD_F2370_INQY_WL_SRV",
+    "title": "OData - Sales Inquiry Work list"
+  },
+  {
+    "id": "SD_F1873_SO_WL_SRV",
+    "title": "Odata for Work list for Sales Order"
+  },
+  {
+    "id": "C_SALESANALYTICSQRY_1_CDS",
+    "title": "Sales Volume and Open Sales - Query"
+  },
+  {
+    "id": "LORD_ODATA_ORDER_SRV",
+    "title": "OData Service for Sales Order"
+  },
+  {
+    "id": "SD_SOFM_CREDIT_BLOCK_SRV",
+    "title": "Resolve Credit Block in Sales Orders"
+  },
+  {
+    "id": "SD_SOFM_DELIVERY_SRV_01",
+    "title": "Fiori Wave2 SOFM Delivery"
+  },
+  {
+    "id": "SD_SOFM_INVOICE_SRV",
+    "title": "Fiori Wave2 SOFM Issue Invoice not Transferred to Accounting"
+  },
+  {
+    "id": "SD_SOFM_SRV",
+    "title": "Service for Sales Order Fulfillment Monitor"
+  },
+  {
+    "id": "LCM_LEGALTR_MANAGE",
+    "title": "Manage Legal Transaction"
+  },
+  {
+    "id": "MM_PUR_CNTRL_POI_MNTR_SRV",
+    "title": "Monitor Central Purchase Contract Items"
+  },
+  {
+    "id": "C_SUPPLIEREVALOVERALLQRY_CDS",
+    "title": "Supplier Evaluation Overall"
+  },
+  {
+    "id": "MM_PUR_SUPLRCONF_MNTR_SRV",
+    "title": "Monitor Supplier Confirmations"
+  },
+  {
+    "id": "FCO_RTOHC_OBJECT_REPROCESS_SRV",
+    "title": "Event-based overhead errors to reprocess"
+  },
+  {
+    "id": "FXM_BAL_EXP_SRV",
+    "title": "Balance Sheet Exposure"
+  },
+  {
+    "id": "MM_PUR_CNTRL_PO_MAINTAIN_SRV",
+    "title": "Manage Central Purchase Order"
+  },
+  {
+    "id": "C_INTRSTRATESWAPNOMINAL_CDS",
+    "title": "Nominal on the IRS out/in. legs"
+  },
+  {
+    "id": "MM_PUR_CNTRL_PR_MNTR_SRV",
+    "title": "Monitor Purchase Requisition Item Centrally"
+  },
+  {
+    "id": "MM_PUR_QTN_MAINTAIN_SRV",
+    "title": "Supplier Quotation"
+  },
+  {
+    "id": "C_SALESVOLUMEANALYTICSQRY_CDS",
+    "title": "Sales Volume - Query"
+  },
+  {
+    "id": "C_SLSORDCONFANLYTSQRY_CDS",
+    "title": "Confirmation of Sales Orders - Query"
+  },
+  {
+    "id": "C_SLSORDDELIVPERFANLYTSQRY_CDS",
+    "title": "Delivery Performance - Query"
+  },
+  {
+    "id": "C_SALESVOLUMEBYYEARQUERY_CDS",
+    "title": "C_SALESVOLUMEBYYEARQUERY_CDS"
+  },
+  {
+    "id": "C_SALESCONTRACTITMFLFMTQ_CDS",
+    "title": "Sales Contract Fulfillment Rate - Query"
+  },
+  {
+    "id": "C_SLSQTANCONVERSIONRATEQ_CDS",
+    "title": "Sales Quotation Conversion Rate - Query"
+  },
+  {
+    "id": "C_CHEMICALRISKREPORTQ_CDS",
+    "title": "Chemical Risk Report Query"
+  },
+  {
+    "id": "C_APPROVEDCHEMICALSQ_CDS",
+    "title": "Approved Chemicals Query"
+  },
+  {
+    "id": "C_MYCHEMICALAPPROVALSQ_CDS",
+    "title": "Chemical Approvals Query"
+  },
+  {
+    "id": "EHFND_FIORI_TILE_SRV",
+    "title": "Generic Tile Service for Dynamic Fiori Tiles"
+  },
+  {
+    "id": "SD_F2430_INCOMP_SRV",
+    "title": "OData for Incomplete Sales Documents"
+  },
+  {
+    "id": "MM_PUR_SCHAGMT_MNTR",
+    "title": "Monitor Scheduling Agreement Item"
+  },
+  {
+    "id": "MM_PUR_SUBCONTRACTING_COCKPIT_SRV",
+    "title": "Subcontracting Cockpit"
+  },
+  {
+    "id": "C_GDSMVTTHROUGHPUTQUERY_CDS",
+    "title": "Goods Movement Throughput Query"
+  },
+  {
+    "id": "C_STOCKQUANTITYVALUEBYTYPE_CDS",
+    "title": "Stock Quantity and Value by Type"
+  },
+  {
+    "id": "MMIM_MATDOC_OV_SRV",
+    "title": "Odata Service: Material Documents Overview"
+  },
+  {
+    "id": "MMIM_MATERIAL_OVERDUE_SIT_SRV",
+    "title": "Material Overdue Stock in Transit"
+  },
+  {
+    "id": "MMIM_MULTIPLE_MATERIAL_SRV",
+    "title": "Retrieve multiple Material Data"
+  },
+  {
+    "id": "MMIM_OVERDUE_GRBLOCKED_SRV",
+    "title": "Material Overdue GR Blocked STock"
+  },
+  {
+    "id": "MM_IM_INV_TURNOVR_ANLYS_SRV",
+    "title": "Inventory Turnover Analysis"
+  },
+  {
+    "id": "MM_IM_MANAGER_OVP_FILTER_SRV",
+    "title": "Filter bar in Manager Over View Page"
+  },
+  {
+    "id": "MM_IM_PHYS_INV_DOC_SRV",
+    "title": "Physical Inventory Document"
+  },
+  {
+    "id": "LO_BM_BATCH_SRV",
+    "title": "Batch: Object Page, List Report"
+  },
+  {
+    "id": "MM_PUR_INFO_RECORDS_MANAGE_SRV",
+    "title": "Manage Purchasing Info Records"
+  },
+  {
+    "id": "LE_SHP_OD_CREATE_SRV",
+    "title": "Create Outbound Delivery"
+  },
+  {
+    "id": "MMIM_GR4PO_DL_SRV",
+    "title": "oData Service Goods receipt Purchase Order/Del."
+  },
+  {
+    "id": "MMIM_MATERIAL_DATA_SRV",
+    "title": "Retrieve Material Master Data"
+  },
+  {
+    "id": "LE_SHP_INBOUND_DELIVERY_OBJPG_SRV",
+    "title": "Inbound Delivery Object Page"
+  },
+  {
+    "id": "LE_SHP_OUTBOUND_DELIVERY_FS",
+    "title": "Outbound Delivery Fact sheet"
+  },
+  {
+    "id": "MM_SUPPLIER_INVOICE_MANAGE",
+    "title": "Manage Supplier Invoice"
+  },
+  {
+    "id": "UI_RESERVATION_HDR_MNG_V2",
+    "title": "Manage Manual Reservations Service"
+  },
+  {
+    "id": "UI_RESERVATION_ITM_MNG_V2",
+    "title": "Reservation Items"
+  },
+  {
+    "id": "C_PURCHASEORDER_FS_SRV",
+    "title": "Purchase Order"
+  },
+  {
+    "id": "CPD_MASTERPROJECT_OVERVIEW_SRV",
+    "title": "Master Project Overview"
+  },
+  {
+    "id": "EHHSS_HSM_HSI_SRV",
+    "title": "Hazardous Substance Inventory Management"
+  },
+  {
+    "id": "UDMO_COLLECTION_WORKLIST",
+    "title": "FIORI Receivables Worklist"
+  },
+  {
+    "id": "FCLM_CP_TRACK_SRV",
+    "title": "Track bank transfer service for fiori cash management"
+  },
+  {
+    "id": "MM_SUPPLIER_INVOICE_LIST_ACC_SRV",
+    "title": "ODate service 'Supplier Invoice Items by Account Assignment'"
+  },
+  {
+    "id": "SD_F2713_SOCUSTEXPDPRICE_SRV",
+    "title": "Manage Sales Orders with Customer Expected Price"
+  },
+  {
+    "id": "MM_SUPPLIER_INVOICE_LIST_ENH_SRV",
+    "title": "Supplier Invoices List Enhanced"
+  },
+  {
+    "id": "SLL_PROD_LEGCTRL_CLASSIFY",
+    "title": "Classify Products -  Legal Control"
+  },
+  {
+    "id": "MPE_MANAGE_PRODUCTION_HOLD_SRV",
+    "title": "Manage Production Hold"
+  },
+  {
+    "id": "LE_SHP_OD_LIST_SRV",
+    "title": "Outbound Delivery List"
+  },
+  {
+    "id": "MM_PUR_REQUIREMENT_TRACKING_SRV",
+    "title": "Purchasing Documents by Requirement Tracking"
+  },
+  {
+    "id": "LE_SHP_OD_LOGS_SRV",
+    "title": "Outbound Delivery Collective Processing Logs"
+  },
+  {
+    "id": "LE_SHP_DELIVERY_PICK",
+    "title": "Delivery Pick"
+  },
+  {
+    "id": "UI_SRCGPROJQTN_MANAGE",
+    "title": "Service for Sourcing Project Quotation"
+  },
+  {
+    "id": "MMPUR_REQ_SSP_MAINTAIN_SRV",
+    "title": "SSP Requisition"
+  },
+  {
+    "id": "MM_PUR_REQ_EXT_MANAGE_SRV",
+    "title": "Manage Central Purchase Requisitions"
+  },
+  {
+    "id": "UI_SOURCINGPROJECT_MANAGE",
+    "title": "Service for Sourcing Project"
+  },
+  {
+    "id": "ZZSALES_SRV",
+    "title": "Monthly sales details"
+  },
+  {
+    "id": "ZZSALES1_SRV",
+    "title": "Monedrtr"
+  },
+  {
+    "id": "FCO_MANAGE_COST_CENTERS_SRV",
+    "title": "Manage Cost Centers"
+  },
+  {
+    "id": "ODATA_BUDGET_TRANSFER_MANAGE_SRV",
+    "title": "Manage Budget transfers"
+  },
+  {
+    "id": "FCO_COST_CENTER_BUDGET_SRV",
+    "title": "Cost Center Budget Report"
+  },
+  {
+    "id": "MD_C_PRODUCT_MAINTAIN_SRV",
+    "title": "Product Master - Odata based on Consumption views"
+  },
+  {
+    "id": "MD_CUSTOMER_MASTER_SRV_01",
+    "title": "Customer Master Data Maintain"
+  },
+  {
+    "id": "UI_MAINTWORKREQUESTOVW_V2",
+    "title": "SB for Maint Work Request Super App"
+  },
+  {
+    "id": "EAM_OBJPG_MAINTNOTIFICATION_SRV",
+    "title": "Maintenance Notification for Object Page"
+  },
+  {
+    "id": "EAM_OBJPG_TECHNICALOBJECT_SRV",
+    "title": "OData service for EAM Technical Object Object Page"
+  },
+  {
+    "id": "EAM_MALFUNCTION_MANAGE",
+    "title": "F2023 \"Respond to Breakdown\" FIORI app"
+  },
+  {
+    "id": "EAM_OBJPG_MAINTORDANDOPER_SRV",
+    "title": "F2173: Find Maintenance Orders and Operations"
+  },
+  {
+    "id": "EAM_OBJPG_ORDERCONFIRMATION_SRV",
+    "title": "oData service for EAM Maintenance Order Confirmation"
+  },
+  {
+    "id": "EAM_OBJPG_MAINTENANCEORDER_SRV",
+    "title": "F2175: Find Maintenance Order"
+  },
+  {
+    "id": "C_MAINTOBJBREAKDOWNQUERY_CDS",
+    "title": "Maintenance Object Breakdown Query"
+  },
+  {
+    "id": "EAM_ORDER_ACTUALCOST_MONITOR",
+    "title": "F3567 Analyze Actual Cost"
+  },
+  {
+    "id": "UI_MAINTORD_PLNACTCOST",
+    "title": "F4603: Planned / Actual Cost Analysis"
+  },
+  {
+    "id": "UI_MAINTWRKREQ_ORD_MANAGE",
+    "title": "SB for Maint Work Requests and Orders"
+  },
+  {
+    "id": "UI_MAINTJOBPCKGBUILD_MNG",
+    "title": "Maintenance Job Package Build Service OData v2"
+  },
+  {
+    "id": "DFS_MAINT_TECHNICALOBJECT_SRV",
+    "title": "Extension project for EAM_OBJPG_TECHNICALOBJECT"
+  },
+  {
+    "id": "DFS_MAINT_ORDANDOPERATION_SRV",
+    "title": "Extention of EAM_OBJPG_MAINTORDANDOPERATION"
+  },
+  {
+    "id": "DFS_MAINT_ORDER_SRV",
+    "title": "Extension for EAM_OBJPG_MAINTENANCEORDER"
+  },
+  {
+    "id": "DFS_MAINT_NOTIFICATION_SRV",
+    "title": "Extension for EAM_OBJPG_MAINTNOTIFICATION"
+  },
+  {
+    "id": "APS_CUSTOM_FIELD_MAINTENANCE_SRV",
+    "title": "Custom Field Maintenance"
+  },
+  {
+    "id": "APS_DATA_SOURCE_EXTENSION_SRV",
+    "title": "Custom Fields: Data Source Extension"
+  },
+  {
+    "id": "SBLE_BADI_CTX_REGISTRY_SRV",
+    "title": "BAdI Context Registry Access"
+  },
+  {
+    "id": "C_SALESDOCUMENTWORKFLOWVH_CDS",
+    "title": "Sales Document Workflow Value Help"
+  },
+  {
+    "id": "SD_CUSTRET_WORKFLOW_SRV",
+    "title": "Customer Return Workflow"
+  },
+  {
+    "id": "SD_SLSORDWTHOUTCHRG_WORKFLOW_SRV",
+    "title": "OData for Sales Order Without Charge Workflow"
+  },
+  {
+    "id": "SD_DEBITMEMOREQ_WORKFLOW_SRV",
+    "title": "OData for Debit Memo Request Workflow"
+  },
+  {
+    "id": "C_SALESQUOTATIONWORKFLOWVH_CDS",
+    "title": "Sales Quotation Workflow Value Help"
+  },
+  {
+    "id": "SD_SALESCONTRACT_WORKFLOW",
+    "title": "Odata for Sales Contract Workflow"
+  },
+  {
+    "id": "APS_EXT_DEP_INVENTORY_SRV",
+    "title": "ODATA-Service for Extensibility Inventory"
+  },
+  {
+    "id": "ZVKR_PO_SRV",
+    "title": "Purchase Order"
+  },
+  {
+    "id": "SD_CUSTOMER360_OVP",
+    "title": "SD Customer 360: OVP Cards"
+  },
+  {
+    "id": "SD_F2200_OVP_ISR_SRV",
+    "title": "OData Sales Overview Page for Internal Sales Representative"
+  },
+  {
+    "id": "C_BILLGPROCDOCWORKFLOWVH_CDS",
+    "title": "Billg Proc. Document Workflow Value Help"
+  },
+  {
+    "id": "SD_PRE_BIL_DOC_MANAGE",
+    "title": "Manage preliminary billing documents"
+  },
+  {
+    "id": "API_SALES_ORDER_SRV",
+    "title": "Sales Order (A2X)"
+  },
+  {
+    "id": "API_SALES_QUOTATION_SRV",
+    "title": "Sales Quotation (A2X)"
+  },
+  {
+    "id": "FAC_GL_JOURNALENTRY_VER_SRV",
+    "title": "G/L Journal Entry Verification"
+  },
+  {
+    "id": "APS_OM_EMAIL_TMPL_SRV",
+    "title": "Email Template"
+  },
+  {
+    "id": "UI_MAINTENANCEITEM",
+    "title": "Maintenance Item UI"
+  },
+  {
+    "id": "EAM_OBJPG_MAINTPLAN_SRV",
+    "title": "Maintenance Plan for Object Page"
+  },
+  {
+    "id": "EAM_MAINT_PLANNER_OVERVIEW_SRV",
+    "title": "F5105: EAM Maintenance Planning Overview"
+  },
+  {
+    "id": "EAM_ORDER_MONITOR",
+    "title": "F2828 \"EAM Overview Page for Maintenance Planner\""
+  },
+  {
+    "id": "EAM_OBJPG_TASKLIST_SRV",
+    "title": "Maintenance Task List for Object Page"
+  },
+  {
+    "id": "EAM_NTF_CREATE",
+    "title": "EAM Notification Creation"
+  },
+  {
+    "id": "API_MAINTORDERCONFIRMATION",
+    "title": "Service Binding for Maint. Order Confirmation"
+  },
+  {
+    "id": "API_MAINTNOTIFICATION",
+    "title": "Maintenance Notification"
+  },
+  {
+    "id": "UI_MAINTENANCEJOB_MANAGE",
+    "title": "Service binding of Maintenance Job"
+  },
+  {
+    "id": "RSH_EAM_MAINT_SCHED_SIMULATION_SRV",
+    "title": "Maintenance Scheduling Simulation"
+  },
+  {
+    "id": "EAM_PLNGBUCKET_MANAGE",
+    "title": "F3888: Manage Maintenance Planning Buckets"
+  },
+  {
+    "id": "EAM_OBJPG_PURCH_SRV",
+    "title": "F3065: Procurement for Maintenance Planner (Purchase Reqn)"
+  },
+  {
+    "id": "UI_MAINTENANCE_PLAN",
+    "title": "Maintenance Plan UI"
+  },
+  {
+    "id": "EAM_ORD_MASS_CONFIRMATION_SRV",
+    "title": "Mass Confirmation services"
+  },
+  {
+    "id": "EAM_BACKLOG_MANAGE",
+    "title": "F4073: Manage Maintenance Backlog"
+  },
+  {
+    "id": "MM_PUR_CRFQ_MAINTAIN_SRV",
+    "title": "Central Request For Quotation"
+  },
+  {
+    "id": "SD_SOFA",
+    "title": "Sales Order Fulfillment Analyzer"
+  },
+  {
+    "id": "UI_SRCGPROJNEGTTN_MANAGE",
+    "title": "Service Binding for Sourcing project Negotiation Manage"
+  },
+  {
+    "id": "ZFCO_MU_SRV",
+    "title": "Unusual items odata service"
+  },
+  {
+    "id": "ZFCO_MS_SPEND_SRV",
+    "title": "Service for My Spend II"
+  },
+  {
+    "id": "ZFCO_CORE_SRV",
+    "title": "Correction Request Service"
+  },
+  {
+    "id": "ZPP_MRP_COCKPIT_SRV",
+    "title": "MRP Cockpit"
+  },
+  {
+    "id": "ZFAP_REVISE_PAYMENT_PROPOSAL",
+    "title": "Revise Payment Proposal"
+  },
+  {
+    "id": "ZLO_GST_INB_INV_CREATE_SRV",
+    "title": "Create GST Inbound Invoice"
+  },
+  {
+    "id": "ZSD_F1708_CRT_WL_SRV",
+    "title": "OData for Customer Returns Worklist"
+  },
+  {
+    "id": "ZLO_SETMAN_CCCUST_MAN",
+    "title": "Manage Customer Condition Contracts"
+  },
+  {
+    "id": "ZLO_SETMAN_CCSUPL_MAN",
+    "title": "Manage Supplier Condition Contracts"
+  },
+  {
+    "id": "ZC_MNTRDOCWTHGRIRFLAGNOTSET_CDS",
+    "title": "Monitor Purchasing Documents with GR IR Flag Not Set"
+  },
+  {
+    "id": "ZFCO_WORKCENTER_COST_SRV",
+    "title": "Analyze Cost by Work Center/Operation"
+  },
+  {
+    "id": "ZFCO_PRODUCTION_COST_ANALYSIS_SRV",
+    "title": "Production Cost Analysis"
+  },
+  {
+    "id": "ZFCO_REALTIME_PROD_COSTS_SRV",
+    "title": "Real Time Production Costs"
+  },
+  {
+    "id": "ZPP_DD_REPLENISHMENT_SRV",
+    "title": "Demand Driven Replenishment"
+  },
+  {
+    "id": "ZO2C_FICA_MYWORKLIST",
+    "title": "Fiori: Manage My Worklist"
+  },
+  {
+    "id": "ZTRV_UI_SB_MTR_MANAGE",
+    "title": "Service Binding for My Travel Request"
+  },
+  {
+    "id": "ZUI_TRAVELEXPENSEMANAGEV2",
+    "title": "Binding for My Travel Expense"
+  },
+  {
+    "id": "ZUI_RFM_MONITOR_ASM_ERRORS",
+    "title": "Monitor Assortment Postprocessing Errors"
+  },
+  {
+    "id": "ZUI_CFINPNDGTRANSACT_F5482",
+    "title": "Pending Posting"
+  },
+  {
+    "id": "ZFCO_VIA_AAR_OVERVIEW_V2_SRV",
+    "title": "Analyze allocation Results V2"
+  },
+  {
+    "id": "ZFCO_VIA_AAR_OVERVIEW_SRV",
+    "title": "Analyze allocation Results"
+  },
+  {
+    "id": "ZSRF_REPORTING_TASK",
+    "title": "Service for a Reporting Task"
+  },
+  {
+    "id": "ZAPI_DISPUTECASEASCOORDTR",
+    "title": "Dispute Case As Coordinator"
+  },
+  {
+    "id": "ZAPI_DISPUTECASEASPROCESSOR",
+    "title": "Dispute Case As Processor"
+  },
+  {
+    "id": "ZAPI_DISPUTECASEASPERSNRESP",
+    "title": "Dispute Case As Person Responsible"
+  },
+  {
+    "id": "ZFAC_RECURRING_ACCOUNTING_DOC_SRV",
+    "title": "Recurring Journal Entry Template Service"
+  },
+  {
+    "id": "ZFAP_MANUAL_CLEARING_SRV",
+    "title": "Manual clearing of outgoing payments"
+  },
+  {
+    "id": "ZPP_DD_STLM_SRV",
+    "title": "Odata DDR: Manage Buffer Levels"
+  },
+  {
+    "id": "ZMPEGOODSMOVEMENTEXCEPTION_SRV",
+    "title": "Maintain Goods Movement Exception"
+  },
+  {
+    "id": "ZO2C_FICA_ANALYZE_RETURNS_SRV",
+    "title": "Fiori: Analyze Returns"
+  },
+  {
+    "id": "ZO2C_FICA_WRITEOFF_ANALYSIS_SRV",
+    "title": "SADL Generated Service"
+  },
+  {
+    "id": "ZO2C_FICA_OVERDUEITEM_ANALYSIS",
+    "title": "Fiori: Overdue Item Analysis"
+  },
+  {
+    "id": "ZO2C_FICA_LOCK_ANALYSIS_SRV",
+    "title": "Fiori: Analyze Processing Locks"
+  },
+  {
+    "id": "ZO2C_FICA_POSTINGLOCK_ANALYSIS",
+    "title": "Fiori: Posting Lock Analysis"
+  },
+  {
+    "id": "ZO2C_FICA_DUNNING_VOLUME",
+    "title": "Fiori: Analysis of Dunning Volume"
+  },
+  {
+    "id": "ZO2C_FICA_DUNNING_SUCCESS",
+    "title": "Fiori: Analysis of Dunning Success"
+  },
+  {
+    "id": "ZO2C_FICA_DUNNINGRUN_EXCEPTION_SRV",
+    "title": "Fiori: Analyze Dunning Run Exceptions"
+  },
+  {
+    "id": "ZO2C_FICA_CREDITITEM_ANALYSIS_SRV",
+    "title": "Fiori: Analyse Due Credit"
+  },
+  {
+    "id": "ZO2C_FICA_PAYMENTRUN_SRV",
+    "title": "Fiori: Analyse Payment Run Exceptions"
+  },
+  {
+    "id": "ZO2C_FICA_INSTPLAN_SRV",
+    "title": "Fiori: Analyze Installment Plan"
+  },
+  {
+    "id": "ZO2C_FICA_EXTCOLLVOLUME_SRV",
+    "title": "Fiori: Analyze External Collection Agencies"
+  },
+  {
+    "id": "ZPP_CFS_CAPEVAL_SRV",
+    "title": "Production Planning: Capacity Evaluation App"
+  },
+  {
+    "id": "ZPPH_MRP_MASTER_DATA_ISSUE_SRV",
+    "title": "MRP Master Data Issue"
+  },
+  {
+    "id": "ZFML_ESTDCOSTRUN_MANAGE_SRV",
+    "title": "Estimated Costing Run List Page"
+  },
+  {
+    "id": "ZEHS_CI_CRV_ACTIVATION_SRV",
+    "title": "CRV Activation"
+  },
+  {
+    "id": "ZFAC_RVW_APPRV_ACCRUALS_SRV",
+    "title": "OData Review and Approve Accruals"
+  },
+  {
+    "id": "ZC_SUPPLIERACTIVITYTASKPROCESS_SRV",
+    "title": "Process Tasks"
+  },
+  {
+    "id": "ZFTR_ALERTS_SRV",
+    "title": "Odata project for FTR_ALERT"
+  },
+  {
+    "id": "ZSD_F1851_CONTR_WL_SRV",
+    "title": "Odata service for work list for sales contracts"
+  },
+  {
+    "id": "ZC_SUPPLIERACTIVITY_FS_SRV",
+    "title": "Manage Activities"
+  },
+  {
+    "id": "ZSD_F2305_SOWOC_WL_SRV",
+    "title": "Odata for Work list Sales Order without Charge"
+  },
+  {
+    "id": "ZLO_EXCISE_INVOICE_CREATE_SRV_01",
+    "title": "Gateway Service for Excise Invoice creation"
+  },
+  {
+    "id": "ZLO_EXCISE_INVOICE_MANAGE_SRV",
+    "title": "Gateway Service for Outgoing Excise Invoice Manage"
+  },
+  {
+    "id": "ZSD_F1988_DMR_WL_SRV",
+    "title": "OData for Debit Memo Requests Work List"
+  },
+  {
+    "id": "ZSD_F1989_CMR_WL_SRV",
+    "title": "Odata for Credit Memo Request Worklist"
+  },
+  {
+    "id": "ZSD_CUSTOMER_INVOICES_CREATE",
+    "title": "Create Customer Invoices"
+  },
+  {
+    "id": "ZC_ENGRECORDHEADER_CDS",
+    "title": "Addtional"
+  },
+  {
+    "id": "ZATP_RELEASE_FOR_DELIVERY",
+    "title": "ATP Release for Delivery"
+  },
+  {
+    "id": "ZFAR_MANUAL_CLEARING_SRV",
+    "title": "Manual clearing of incoming payments"
+  },
+  {
+    "id": "ZSD_F3245_SDOC_DUPLICATE_SRV",
+    "title": "Manage Duplicate Sales Documents"
+  },
+  {
+    "id": "ZC_SITNMYSITUATION_CDS",
+    "title": "RAP: C_SITNMYSITUATION_CDS generated at 20190509"
+  },
+  {
+    "id": "ZSD_SALESSCHEDGAGRMT_WL",
+    "title": "ODate service for Manage Scheduling Agreements"
+  },
+  {
+    "id": "ZEHHSS_HSM_SI_SRV",
+    "title": "Manage Safety Instruction"
+  },
+  {
+    "id": "ZEHHSS_HSM_SRC_SRV",
+    "title": "Monitor Safety Relevant Changes"
+  },
+  {
+    "id": "ZLO_GST_SUBCONCHLN_COCKPIT_SRV",
+    "title": "GST - India Subcontracting Challan Cockpit"
+  },
+  {
+    "id": "ZEHHSS_HSM_SI_EQUIP_SRV",
+    "title": "Safety Instruction for Equipment"
+  },
+  {
+    "id": "ZEHHSS_HSM_SI_GNRC_SRV",
+    "title": "Safety Instructionfor Generic Objects"
+  },
+  {
+    "id": "ZC_CUSTOMER_OP_SRV",
+    "title": "Customer Object Pages"
+  },
+  {
+    "id": "ZMD_PRODUCT_OP_SRV",
+    "title": "OData Service for Product Object Page"
+  },
+  {
+    "id": "ZC_SUPPLIER_FS_SRV",
+    "title": "Supplier"
+  },
+  {
+    "id": "ZVDM_CDSVIEW_BROWSER",
+    "title": "VDM CDSView Browser Gateway Project"
+  },
+  {
+    "id": "ZMM_SUPPLIER_INV_SITUATION_PAGE_SRV",
+    "title": "Supplier Invoice Situation Page"
+  },
+  {
+    "id": "ZFITAXCN_INVC_BND_SRV",
+    "title": "China Tax Invoice Binding Management"
+  },
+  {
+    "id": "ZFAP_SCHEDULE_PAYMENT_PROPOSAL",
+    "title": "Schedule Payment Proposal"
+  },
+  {
+    "id": "ZCA_BPF_LAYOUT_METADATA_SRV",
+    "title": "Layout Metadata for Business Process Flow"
+  },
+  {
+    "id": "ZMMIM_GR_CANCELLATION_SRV",
+    "title": "Cancellation of Goods Receipt"
+  },
+  {
+    "id": "ZMMIM_MATDOC_SRV",
+    "title": "oData Service Material Document"
+  },
+  {
+    "id": "ZFAP_PAYMENT_POST_SRV",
+    "title": "Post Outgoing Supplier Payment"
+  },
+  {
+    "id": "ZFAR_PAYMENT_POST_SRV",
+    "title": "Post Incoming Customer Payment (aka f-28)"
+  },
+  {
+    "id": "ZC_SUPLREVALRESPST_CDS",
+    "title": "Monitor Responses"
+  },
+  {
+    "id": "ZC_PURCHASINGCAT_FS_SRV",
+    "title": "Purchasing Category"
+  },
+  {
+    "id": "ZFAC_MANAGE_GLACCOUNT_SRV",
+    "title": "Manage G/L Account Master Draft 2"
+  },
+  {
+    "id": "ZPPH_MRP_PERF_LOG_SRV",
+    "title": "MRP Key Figures"
+  },
+  {
+    "id": "ZC_PURREQUISITION_FS_SRV",
+    "title": "Purchase Requisition"
+  },
+  {
+    "id": "ZC_PURREQUISITIONITEM_FS_SRV",
+    "title": "Purchase Requisition Item"
+  },
+  {
+    "id": "ZC_PURGINFORECORD_FS_SRV",
+    "title": "Purchasing Info Record Object Page"
+  },
+  {
+    "id": "ZC_CONTRACT_FS_SRV",
+    "title": "Purchase Contract"
+  },
+  {
+    "id": "ZC_CONTRACTITEM_FS_SRV",
+    "title": "Purchase Contract Item"
+  },
+  {
+    "id": "ZC_SUPLREVALRSPEVALUATEST_CDS",
+    "title": "Supplier Evaluation Response ST"
+  },
+  {
+    "id": "ZSLC_QUESTIONNAIRE_RESPONSE_SRV",
+    "title": "Questionnaire Response"
+  },
+  {
+    "id": "ZC_IN_GSTTAXSUMMARY_CDS",
+    "title": "GST Tax Summary Association"
+  },
+  {
+    "id": "ZLO_JOURNAL_VOUCHER_CREATE_SRV",
+    "title": "Gateway Service for Create Journal Voucher"
+  },
+  {
+    "id": "ZEDOC_DCC_SRV",
+    "title": "Document Compliance Cockpit Service"
+  },
+  {
+    "id": "ZBOM_EXPLOSION_V2",
+    "title": "Service for BOMExplosion"
+  },
+  {
+    "id": "ZRFM_MANAGE_PRODUCT_LISTING_SRV",
+    "title": "oData Manage product listing"
+  },
+  {
+    "id": "ZC_CUSTOMERRETURNRATEQRY_CDS",
+    "title": "Customer Return Rate - Query"
+  },
+  {
+    "id": "ZLO_VCHCLF_CFE_KEYUSERAPP_SRV",
+    "title": "Project for Key User Application"
+  },
+  {
+    "id": "ZO2C_FICA_BPLINEITEMS_SRV",
+    "title": "Fiori: Manage Business Partner Items"
+  },
+  {
+    "id": "ZISLM_REPOSITORY_SRV",
+    "title": "Intelligent Scenario Repository"
+  },
+  {
+    "id": "ZISLM_IS_SRV",
+    "title": "Intelligent Life Cycle Management - IS Review"
+  },
+  {
+    "id": "ZSD_MCC_CMR_MASS_UPDATE_SRV",
+    "title": "Mass Change Credit Memo Request"
+  },
+  {
+    "id": "ZSD_MCC_INCOTERMS_READ_SRV",
+    "title": "Read location values based on Incoterms"
+  },
+  {
+    "id": "ZSD_MCC_CR_MASS_UPDATE_SRV",
+    "title": "Mass change for Customer Return"
+  },
+  {
+    "id": "ZSD_MCC_DMR_MASS_UPDATE_SRV",
+    "title": "Debit Memo Requests OData Service"
+  },
+  {
+    "id": "ZSD_MCC_CCO_MASS_UPDATE_SRV",
+    "title": "OData for Mass Change Sales Contract"
+  },
+  {
+    "id": "ZSD_MCC_SO_MASS_UPDATE_SRV",
+    "title": "Change cockpit for mass update sales order"
+  },
+  {
+    "id": "ZSD_MCC_SOW_MASS_UPDATE_SRV",
+    "title": "Sales Order Without Charge"
+  },
+  {
+    "id": "ZSD_MCC_SQ_MASS_UPDATE_SRV",
+    "title": "Mass Change Sales Quotations"
+  },
+  {
+    "id": "ZSD_MCC_SCH_MASS_UPDATE_SRV",
+    "title": "Sales Order Scheduling Agreement"
+  },
+  {
+    "id": "ZICA_MATCHING_ITEM_SRV",
+    "title": "ICA MATCHING ITEM REPORT"
+  },
+  {
+    "id": "ZPP_MPE_AOR",
+    "title": "SFC Area of responsibility"
+  },
+  {
+    "id": "ZPP_PROCORD_OPERATIONS_MANAGE_SRV",
+    "title": "Manage Process Order Operations"
+  },
+  {
+    "id": "ZPP_MRP_CHANGE_REQUEST_SRV",
+    "title": "API for MRP Change Requests"
+  },
+  {
+    "id": "ZPP_MRP_AOR_SRV",
+    "title": "AoR Service for MRP Apps"
+  },
+  {
+    "id": "ZUI_INTERNALORDER_MANAGE",
+    "title": "Manage Internal Orders"
+  },
+  {
+    "id": "ZUI_RFM_USR_ASSIGN_EXPL_ASM",
+    "title": "Service Binding for UI_RFM_USR_ASSIGN_EXPL_ASM"
+  },
+  {
+    "id": "ZEAM_OBJPG_TASKLISTANDOP_SRV",
+    "title": "Maintenance Task List and Operation Object Page"
+  },
+  {
+    "id": "ZQM_FMEA_MNG_SRV",
+    "title": "Manage FMEA"
+  },
+  {
+    "id": "ZUI_DFS_RELOCATIONPLANNING",
+    "title": "Service for Defense Relocation Planning"
+  },
+  {
+    "id": "ZUI_IMPCTMGMTSCENARIOMANAGE",
+    "title": "Impact Management Scenario - Manage"
+  },
+  {
+    "id": "ZFCO_PROF_SEGMENT_SRV",
+    "title": "Assign Profitability Segment"
+  },
+  {
+    "id": "ZUI_RESERVATION_OBJPG",
+    "title": "Service Binding for Object Page"
+  },
+  {
+    "id": "ZUI_SCM_ADVNCD_SCHEDG_BOARD",
+    "title": "Service for Advanced Scheduling Board"
+  },
+  {
+    "id": "ZC_PFMCARBONFPRNTANLYTSQRY_CDS",
+    "title": "Avergae Cabon Product - Query"
+  },
+  {
+    "id": "ZUI_SRCGPROJAWDSCEN_MANAGE",
+    "title": "Awarding Scenario"
+  },
+  {
+    "id": "ZSD_MCC_SD_MASS_UPDATE_SRV",
+    "title": "Mass Change of Sales Document"
+  },
+  {
+    "id": "ZUI_CFINTEMPORARYPOSTING_V2",
+    "title": "Central Finance Temporary Posting F6062"
+  },
+  {
+    "id": "ZUI_WORKCENTERS",
+    "title": "Work Centers - Manage"
+  },
+  {
+    "id": "ZUI_IHBACCOUNTLIMITWORKFLOW",
+    "title": "IHB Account Limit Workflow"
+  },
+  {
+    "id": "ZUI_IHBACCTLIMITOBJECTTP",
+    "title": "IHB Account Limit OData v2"
+  },
+  {
+    "id": "ZFAC_GL_DOCUMENT_POST_SRV",
+    "title": "Post GL Document Service"
+  },
+  {
+    "id": "ZUI_IHBACCOUNTTEMPLATETP_02",
+    "title": "IHB Account Template"
+  },
+  {
+    "id": "ZUI_PRODUCTIONVERSION",
+    "title": "Odata Service for Production Version"
+  },
+  {
+    "id": "ZUI_VALUECHAINMONITOR",
+    "title": "Monitor Value Chains"
+  },
+  {
+    "id": "ZFCO_EVENTBASED_POSTING_RULES_SRV",
+    "title": "Event-Based Posting Rules"
+  },
+  {
+    "id": "ZLO_SETMAN_CC_OPG",
+    "title": "Condition Contract (Object Page)"
+  },
+  {
+    "id": "ZSD_SALES_DOC_IMPORT",
+    "title": "Import Sales Documents"
+  },
+  {
+    "id": "ZUI_LO_SETMAN_SDOC_MON",
+    "title": "RAP: UI_LO_SETMAN_SDOC_MON generated at 20190429"
+  },
+  {
+    "id": "ZUI_STOCKREPSUBS_O2",
+    "title": "UI_STOCKREPSUBS_O2"
+  },
+  {
+    "id": "ZUI_STOCKREPPROC_O2",
+    "title": "0"
+  },
+  {
+    "id": "ZUI_LOCSUBSTITUTION_MANAGE",
+    "title": "Manage Substitutions - Locations"
+  },
+  {
+    "id": "ZUI_LOCSUBSTN_EXCLN_MANAGE",
+    "title": "Manage Exclusions - Locations"
+  },
+  {
+    "id": "ZC_MDGOVCLSDWRKFLWBPQRY_CDS",
+    "title": "Analytics on Closed CR Work Item for Business Partners"
+  },
+  {
+    "id": "ZUI_INVOICEPRIOZNRULE_MAN",
+    "title": "Invoice Prioritization Rules Manage"
+  },
+  {
+    "id": "ZC_CHGMGMTACTIVITYDUEDATEQ_CDS",
+    "title": "Change Management Activity Due Date Query"
+  },
+  {
+    "id": "ZC_CHGMGMTOPLSTARTDATEQ_CDS",
+    "title": "Change Management Operational Date Query"
+  },
+  {
+    "id": "ZC_CHGMGMTEXECSTARTDATEQ_CDS",
+    "title": "Change Management Execution Start Date Query"
+  },
+  {
+    "id": "ZC_CHGMGMTREQPERSONINVLDQ_CDS",
+    "title": "Change Request Person Involved Query"
+  },
+  {
+    "id": "ZC_CHGMGMTACTIVITYQ_CDS",
+    "title": "Change Management Activity Query"
+  },
+  {
+    "id": "ZC_CHGMGMTACTYPERSONINVLDQ_CDS",
+    "title": "Change Activities Person Involved Query"
+  },
+  {
+    "id": "ZC_CHGMGMTREQUESTQ_CDS",
+    "title": "Change Management Request Query"
+  },
+  {
+    "id": "ZC_CHGMGMTREQRELTDOBJQRY_CDS",
+    "title": "Change Request Related Objects Query"
+  },
+  {
+    "id": "ZC_CHGMGMTREVERSALDATEQ_CDS",
+    "title": "Change Management Reversal Date Query"
+  },
+  {
+    "id": "ZC_CHGMGMTAPPROVALDATEQ_CDS",
+    "title": "Change Management Approval Date Query"
+  },
+  {
+    "id": "ZUI_RFM_POCNSLDTNRULE",
+    "title": "Purchase Order Consolidation Rule"
+  },
+  {
+    "id": "ZUI_RFM_PO_MNG",
+    "title": "Service Binding for UI_RFM_PO_MNG"
+  },
+  {
+    "id": "ZUI_INSPLOT_RSLTRECG",
+    "title": "Service Binding for inspection lot Result Recording"
+  },
+  {
+    "id": "ZC_EWM_OUTBDELIVORDADJQ_2_CDS",
+    "title": "ODOs for Warehouse KPIs Navig. - Query"
+  },
+  {
+    "id": "ZPP_MRP_MATERIAL_COVERAGE_POVER_SRV",
+    "title": "Popover Service for Manage Material Coverage App"
+  },
+  {
+    "id": "ZUI_PI_MANAGE_COUNT_V2",
+    "title": "OData V2 Ui Service for app manage PI count"
+  },
+  {
+    "id": "ZUI_GCO_DASHBOARD",
+    "title": "Service Binding for GCO Dashboard"
+  },
+  {
+    "id": "ZUI_WAREHOUSEDOCUMENT",
+    "title": "Warehouse Document Service Binding"
+  },
+  {
+    "id": "ZFCO_REALTIME_ORD_COSTS_DETAIL_SRV",
+    "title": "Real Time Order Costs Details"
+  },
+  {
+    "id": "ZUI_DFS_RELOCATIONPROJECT",
+    "title": "Service Binding for Relocation Project"
+  },
+  {
+    "id": "ZUI_MANAGEPAYMENTPLAN_O2",
+    "title": "Manage Payment Plan"
+  },
+  {
+    "id": "ZDATEFUNCTION",
+    "title": "Date Function Service"
+  },
+  {
+    "id": "ZFIN_ML_ACR_DISP",
+    "title": "F6073 Display Actual Costing Result"
+  },
+  {
+    "id": "ZUI_DFS_RELOCATIONSTOCKPLNG",
+    "title": "Service Binding for Reloc Stock Plng"
+  },
+  {
+    "id": "ZUI_IHBACCOUNTMASSCREATP_02",
+    "title": "IHB Account Mass Create"
+  },
+  {
+    "id": "ZUI_MAINTORDMATLANDSRVC_MNG",
+    "title": "F6178 Manage Components and Services"
+  },
+  {
+    "id": "ZUI_IHBCONDITIONOBJECTTP",
+    "title": "IHB Financial Conditions OData v2"
+  },
+  {
+    "id": "ZUI_IHBCONDITIONWORKFLOW",
+    "title": "IHB Condition Workflow"
+  },
+  {
+    "id": "ZUI_IHBEODPROCESSLOGTP_02",
+    "title": "EOD Process Log"
+  },
+  {
+    "id": "ZUI_IHBPAYMENTMONITORTP",
+    "title": "Payment Monitor"
+  },
+  {
+    "id": "ZUI_IHBACCOUNTBALANCETP_02",
+    "title": "IHB Account Balance"
+  },
+  {
+    "id": "ZFCO_REALTIME_WIP_REPORTING_SRV",
+    "title": "Real Time Work In Process Reporting"
+  },
+  {
+    "id": "ZFCO_EB_PRODN_ACCTG_OVW_SRV",
+    "title": "Event-Based Production Accounting Overview"
+  },
+  {
+    "id": "ZUI_IHBOVERDRAFTTP",
+    "title": "IHB Overdraft"
+  },
+  {
+    "id": "ZFBV_INV_BALSHEET_VALUATION_SRV",
+    "title": "Inventory Balance Sheet Valuations"
+  },
+  {
+    "id": "ZUI_PRODUCTLIST",
+    "title": "UI for ProductList"
+  },
+  {
+    "id": "ZUI_MODPRODSPEC_MANAGE",
+    "title": "Model Product Specification - UI Service Binding"
+  },
+  {
+    "id": "ZUI_HCMORGCHART",
+    "title": "Org Chart"
+  },
+  {
+    "id": "ZUI_HCMPROCESS",
+    "title": "UI_HCMPROCESS"
+  },
+  {
+    "id": "ZUI_HCMACTUALACTIVITIES",
+    "title": "UI_HCMACTUALACTIVITIES"
+  },
+  {
+    "id": "ZUI_HCMMYREPORTING",
+    "title": "My Reporting oData V2"
+  },
+  {
+    "id": "ZMANAGE_SEPA_MANDATE",
+    "title": "Service Binding for Manage SEPA Mandate"
+  },
+  {
+    "id": "ZFAP_VENDOR_BALANCE_SRV",
+    "title": "Vendor Balances"
+  },
+  {
+    "id": "ZFAP_MANAGE_PAYMENT_BLOCKS_SRV",
+    "title": "OData Manage Payment Blocks"
+  },
+  {
+    "id": "ZMMPUR_ANA_PARTSPERMILLION_SRV",
+    "title": "Parts Per Million"
+  },
+  {
+    "id": "ZICA_RECON_CLOSE_SRV",
+    "title": "Inter-Company Reconciliation Close"
+  },
+  {
+    "id": "ZC_MRPCTRLRBYAOR_SRV",
+    "title": "Service Binding C_MRPCtrlrByAreaOfRespy"
+  },
+  {
+    "id": "ZDFS_ASSGMT_PLATFORM_SRV",
+    "title": "Platform Code Assignment"
+  },
+  {
+    "id": "ZUI_C_DFS_MAINTSTSBRD",
+    "title": "Service Binding for Status Binding"
+  },
+  {
+    "id": "ZUI_FCO_ACTL_SETTLEMENT_O2",
+    "title": "Actual Settlement"
+  },
+  {
+    "id": "ZC_SUPLREVALBYQLTYNOTIFQRY_CDS",
+    "title": "By Quality Notification"
+  },
+  {
+    "id": "ZEHHSS_SMR_REP_TP_SRV",
+    "title": "Incident Summary Report transactional processing"
+  },
+  {
+    "id": "ZUI_PRODSUBSTN_CTRL_MANAGE",
+    "title": "Manage Controls - Products"
+  },
+  {
+    "id": "ZUI_PRODSUBSTN_RSN_MANAGE",
+    "title": "Manage Reasons - Products"
+  },
+  {
+    "id": "ZFARR_SDB_REV_CATCHUP",
+    "title": "Servie Binding of Revenue Catch-up"
+  },
+  {
+    "id": "ZEHHSS_SMR_REP_SRV",
+    "title": "Summary Report"
+  },
+  {
+    "id": "ZFAC_DSP_DOC_FLW_SRV",
+    "title": "oData Display Document Flow"
+  },
+  {
+    "id": "ZFAP_DISP_PROCESS_FLOW_SRV",
+    "title": "Display Process Flow AP"
+  },
+  {
+    "id": "ZC_EWM_OUTBDELIVORDADJQ_CDS",
+    "title": "ODOs for Warehouse KPIs Navig. - Query"
+  },
+  {
+    "id": "ZFIN_RE_LOG_DETAIL_SRV",
+    "title": "Substitution and Validation Log"
+  },
+  {
+    "id": "ZUI_SUBSTNVALDTNLOGSETTINGS",
+    "title": "Substitution and Validation Log Settings"
+  },
+  {
+    "id": "ZUI_FINPLNGITEMSETTOZERO",
+    "title": "Service Binding for setting Plan Data to Zero"
+  },
+  {
+    "id": "ZPP_DD_ORD_DET_SRV",
+    "title": "OData for Order details"
+  },
+  {
+    "id": "ZC_PRICEVARIANCEQUERY_CDS",
+    "title": "Price Variance"
+  },
+  {
+    "id": "ZC_OPERATIONALSUPLREVALQRY_CDS",
+    "title": "Operational Supplier Evaluation Score"
+  },
+  {
+    "id": "ZO2C_FICA_MYWORKLIST_DISP_SRV",
+    "title": "Fiori: Manage My Worklists"
+  },
+  {
+    "id": "ZUI_OVD_CHARC_COMBN_MNG",
+    "title": "Manage Characteristic Combinations"
+  },
+  {
+    "id": "ZUI_O2C_FICA_DSPSTVALADJ_O2",
+    "title": "Service Binding: Display Posted Value Adjustments"
+  },
+  {
+    "id": "ZUI_LOCSUBSTN_CTRL_MANAGE",
+    "title": "Manage Controls - Location"
+  },
+  {
+    "id": "ZUI_LOCSUBSTN_RSN_MANAGE",
+    "title": "Managed Reasons - Location"
+  },
+  {
+    "id": "ZUI_HOBRECEIVABLES_DISPLAY",
+    "title": "Head Office Receivables"
+  },
+  {
+    "id": "ZUI_COLL_MD_MANAGE",
+    "title": "Collection Management Master Data"
+  },
+  {
+    "id": "ZUI_FRTAGREEMENTRFQMASTER",
+    "title": "Service Binding for UI_FrtAgreementRFQMaster"
+  },
+  {
+    "id": "ZUI_MANUALACCRS_MNG",
+    "title": "Manage Manual Accruals"
+  },
+  {
+    "id": "ZUI_OVD_SUBSTN_CVC_MNG",
+    "title": "Manage Characteristic Value Combinations - Substitutions"
+  },
+  {
+    "id": "ZFCO_INTERNAL_ORDER_CHNGLOG",
+    "title": "Change Log - Internal Order UI service"
+  },
+  {
+    "id": "ZFCO_WHERE_USD_INT_ORD",
+    "title": "Where-Used List - Internal Orders"
+  },
+  {
+    "id": "ZUI_SUPPLIERLIST_MANAGE",
+    "title": "Service Binding for UI_SupplierList_Manage"
+  },
+  {
+    "id": "ZC_EWM_WAREHOUSEORDERQ_2_CDS",
+    "title": "Warehouse Order - Query"
+  },
+  {
+    "id": "ZC_EWM_WAREHOUSETASKQ_2_CDS",
+    "title": "Warehouse Task - Query"
+  },
+  {
+    "id": "ZEAM_OBJPG_PURCHORDER_SRV",
+    "title": "F2827: Procurement for Maintenance Planner (Purchase Order)"
+  },
+  {
+    "id": "ZC_DAMAGEANALYSISQUERY_CDS",
+    "title": "Damage Analysis Query"
+  },
+  {
+    "id": "ZUI_GRIR_BPI",
+    "title": "OData Service for GR/IR Reconciliation BPI App"
+  },
+  {
+    "id": "ZFAC_HIERARCHY_MIGRTN_SRVB",
+    "title": "Service binding for Hierarchy Migration"
+  },
+  {
+    "id": "ZUI_FCO_SET_REPORT_RELEV_O2",
+    "title": "Set Report Relevancy"
+  },
+  {
+    "id": "ZUI_WORKCENTERCAPLIST_02",
+    "title": "Odata Service for Work Center Capacity"
+  },
+  {
+    "id": "ZC_WORKCNTRGRPBYAOR_SRV",
+    "title": "Service Binding for WorkCenter Groups AOR"
+  },
+  {
+    "id": "ZUI_CAPAYMENTLOT_ANALYSIS",
+    "title": "Binding for Analyze Incoming Payments"
+  },
+  {
+    "id": "ZUI_IHBACCOUNTWORKFLOW",
+    "title": "IHB Account Workflow Layout"
+  },
+  {
+    "id": "ZUI_IHBACCOUNTTP_02",
+    "title": "IHB Account Odata v2"
+  },
+  {
+    "id": "ZPP_MRP_TIMEDPNDNT_STK_SRV",
+    "title": "Maintain Material Time Dependent Stock Levels"
+  },
+  {
+    "id": "ZUI_LO_SETMAN_FCADOC_MON",
+    "title": "Monitor Freight Cost Allocation Doc Itms"
+  },
+  {
+    "id": "ZUI_ALTVDETN_CONFIGURE",
+    "title": "Alternative Determination - Configure"
+  },
+  {
+    "id": "ZUI_RETURNPROCESSING",
+    "title": "Return Processing Service"
+  },
+  {
+    "id": "ZFLRETSUPLRITEMDOCFLOW_SRV",
+    "title": "FL Return Supplier Item Document Flow"
+  },
+  {
+    "id": "ZI_FLDLOGSUSERSETTING_CDS",
+    "title": "Field Logistics:Return Count summary"
+  },
+  {
+    "id": "ZUI_RETURNSINITIATION",
+    "title": "service binding for Return Initiation app"
+  },
+  {
+    "id": "ZFLRETURNDOCFLOW_SRV",
+    "title": "Field Logistics Return Document Flow"
+  },
+  {
+    "id": "ZUI_RETURNSWORKORDERVIEW",
+    "title": "Service Binding for Work Order View"
+  },
+  {
+    "id": "ZUI_SHIPMENTCONTAINERPACKG",
+    "title": "Shipment Container Packing"
+  },
+  {
+    "id": "ZUI_OVD_ACTY_ATTRIB_CONF",
+    "title": "Configure Activity Attributes"
+  },
+  {
+    "id": "ZMDC_PROCESS_SRV__194",
+    "title": "MDC Process Object For Material"
+  },
+  {
+    "id": "ZMDC_PROCESS_SRV__986",
+    "title": "Service for MDC business partner and relationships"
+  },
+  {
+    "id": "ZMDC_PROCESS_SRV__1405",
+    "title": "Service for MDC business partner relationships"
+  },
+  {
+    "id": "ZSIMDQ_SERVICES_SRV",
+    "title": "Data Quality related services"
+  },
+  {
+    "id": "ZMDC_PROCESS_SRV__147",
+    "title": "MDC Process Object For BP"
+  },
+  {
+    "id": "ZFAR_MANAGE_PAYMENT_ADVICES_SRV",
+    "title": "Manage Payment Advices"
+  },
+  {
+    "id": "ZUI_FINPLANDATACOMPRESS",
+    "title": "Financial Plan Data Compression"
+  },
+  {
+    "id": "ZMMIM_STOCKINDATERANGE_SRV",
+    "title": "Service for Analyze Stock in Date Range"
+  },
+  {
+    "id": "ZUI_GLACCOUNT_BALANCES",
+    "title": "OData Service for G/L Account Balances"
+  },
+  {
+    "id": "ZMM_PUR_SES_MAINTAIN_SRV",
+    "title": "Maintain Service Entry Sheet"
+  },
+  {
+    "id": "ZSD_SALES_SA_IMPORT",
+    "title": "Import Sales Scheduling Agreements"
+  },
+  {
+    "id": "ZSD_SALES_QTN_IMPORT",
+    "title": "Import Sales Quotations"
+  },
+  {
+    "id": "ZFCO_MNG_COST_ELEMENT_GROUP",
+    "title": "Manage Cost Element Groups"
+  },
+  {
+    "id": "ZC_MAINTPLANACTVSYSTSTATUSQ_CDS",
+    "title": "Maintenance Plan System Status - Qry"
+  },
+  {
+    "id": "ZUI_WASTETRANSFERREQUEST",
+    "title": "My Waste Transfer Request"
+  },
+  {
+    "id": "ZSD_SALES_ORDER_FOC_IMPORT",
+    "title": "Import Sales Orders Without Charge"
+  },
+  {
+    "id": "ZUI_STOCKREPORTING_O2",
+    "title": "0"
+  },
+  {
+    "id": "ZSD_ORD_PAYTCARDAUTHZN",
+    "title": "Reauthorize Payment Card"
+  },
+  {
+    "id": "ZFAR_CORRESPONDENCE_HISTORY_SRV",
+    "title": "Display Correspondence History"
+  },
+  {
+    "id": "ZFI_CORRESPONDENCE_V2_SRV",
+    "title": "Finance Correspondence v2"
+  },
+  {
+    "id": "ZJITOUTBGOODSPOSTING_SRV",
+    "title": "JIT Outbound goods posting"
+  },
+  {
+    "id": "ZC_MDGOVOPENWRKFLWPRODQRY_CDS",
+    "title": "Analytics on Open WI for Products"
+  },
+  {
+    "id": "ZO2C_FICA_RECOKEY_MANAGE_SRV",
+    "title": "Manage Reconciliation Key"
+  },
+  {
+    "id": "ZC_MDGOVOPENWRKFLWBPQRY_CDS",
+    "title": "Analytics on Open WI for BP"
+  },
+  {
+    "id": "ZPP_MRP_PR_HANDOVER_SRV",
+    "title": "Hand over Purchase Requisition"
+  },
+  {
+    "id": "ZFAC_ACE_DSP_ACCR_OBJ_ITM_SRV",
+    "title": "Display Accrual Object Items"
+  },
+  {
+    "id": "ZEHS_FND_CCI_ADDLPRPTY_SRV",
+    "title": "Chemical Compliance Additional Properties"
+  },
+  {
+    "id": "ZEHS_FND_CCI_CMBND_SRV",
+    "title": "Chemical Data"
+  },
+  {
+    "id": "ZEHS_FND_CCI_WASTECODE_SRV",
+    "title": "Waste Codes associated with CCI"
+  },
+  {
+    "id": "ZUI_FINPLANNINGITEMDELETE",
+    "title": "Service Binding for Delete Plan Data"
+  },
+  {
+    "id": "ZUI_CADISPUTECASE",
+    "title": "Dispute case"
+  },
+  {
+    "id": "ZSGBT_NTE_CDS_API_SRV",
+    "title": "OData Service for Notes for Application Object"
+  },
+  {
+    "id": "ZC_SUPLREVALBYQNAIREQRY_CDS",
+    "title": "Supplier Evaluation by Questionnaire Query"
+  },
+  {
+    "id": "ZUI_LOCSUBSTN_GRP_MANAGE",
+    "title": "Manage Groups - Locations"
+  },
+  {
+    "id": "ZC_TIMEVARIANCEQUERY_CDS",
+    "title": "Time Variance"
+  },
+  {
+    "id": "ZC_SUPLREVALBYQUANTITYQRY_CDS",
+    "title": "Supplier Evaluation by Quantity"
+  },
+  {
+    "id": "ZC_SUPLREVALBYQUALITYQRY_CDS",
+    "title": "Supplier Evaluation by Quality"
+  },
+  {
+    "id": "ZMM_PUR_REQ_APPROVAL_COMPLETION_SRV",
+    "title": "PR Completion"
+  },
+  {
+    "id": "ZUI_RFM_ASSIGN_PROD_TO_DCS",
+    "title": "Assign Product to Distribution Centers"
+  },
+  {
+    "id": "ZUI_RFM_MNG_ASSTMT_MODULES",
+    "title": "Manage Assortment Modules"
+  },
+  {
+    "id": "ZUI_RFM_PROD_ASSGN_EXPL_ASM",
+    "title": "Service Binding for UI_RFM_PROD_ASSIGN_EXPL_ASM"
+  },
+  {
+    "id": "ZC_MDGOVCLSDWRKFLWPRODQRY_CDS",
+    "title": "Analytics on Closed CR Work Item for Products"
+  },
+  {
+    "id": "ZUI_CONTRACTACCOUNT_MANAGE",
+    "title": "Service Binding for Contract Account"
+  },
+  {
+    "id": "ZUI_SUBSTNVALDNRULE_MANAGE",
+    "title": "Manage Subsitution and Validation Rule"
+  },
+  {
+    "id": "ZMMPUR_A_CTR_PRC_HIST_SRV",
+    "title": "Centrel Purchase Contract Price History"
+  },
+  {
+    "id": "ZMMPUR_ANA_USRDFNDCRITRAQRY_SRV",
+    "title": "Supplier Evaluation by User-Defined Criteria"
+  },
+  {
+    "id": "ZUI_CAINSTLMNTPLAN_MANAGE",
+    "title": "Service Binding for Installment Plans"
+  },
+  {
+    "id": "ZC_CHGMGMTREQUESTOVERVIEWQ_CDS",
+    "title": "Change Request Overview - Query"
+  },
+  {
+    "id": "ZC_CHGMGMTACTYOVERVIEWQUERY_CDS",
+    "title": "Change Activities Overview - Query"
+  },
+  {
+    "id": "ZUI_PGGNGASSIGNMENTWITHCOST",
+    "title": "Pegging assignment with cost."
+  },
+  {
+    "id": "ZPP_MRP_MATERIAL_COV_INDSEG_SRV",
+    "title": "Monitor Material Coverage Individual Segment Service"
+  },
+  {
+    "id": "ZO2C_FICA_REPAYMENTREQUEST_MAN_SRV",
+    "title": "Manage Repayment Requests"
+  },
+  {
+    "id": "ZUI_MANAGEINHREPAIRS",
+    "title": "RAP: UI_MANAGEINHREPAIRS generated at 20190313"
+  },
+  {
+    "id": "ZEHS_FND_SUBSTANCE_SRV",
+    "title": "Company Substance"
+  },
+  {
+    "id": "ZUI_CUSTOMER_CONTACT_MANAGE",
+    "title": "Manage Customer Contacts"
+  },
+  {
+    "id": "ZUI_PROMISETOPAY_MANAGE",
+    "title": "Manage Promise To Pay"
+  },
+  {
+    "id": "ZUI_COLL_CONTACT_MANAGE",
+    "title": "Manage Collection Contacts"
+  },
+  {
+    "id": "ZUI_RECONTRACT",
+    "title": "Real Estate Contract"
+  },
+  {
+    "id": "ZUI_MATERIALSERIALNUMBER",
+    "title": "F5147: Display Serial Numbers"
+  },
+  {
+    "id": "ZUI_COLLECTIONS_EMAIL",
+    "title": "Collections Email"
+  },
+  {
+    "id": "ZFAP_BALANCES_V2_SRV",
+    "title": "Supplier Balances V2 Fiori Elements"
+  },
+  {
+    "id": "ZUI_COSTACCTGLINEITM_REPOST",
+    "title": "Repost of Cost Accounting Line Item"
+  },
+  {
+    "id": "ZUI_PROCESSFLOWRESOURCES",
+    "title": "Resources - Manage"
+  },
+  {
+    "id": "ZUI_DISPUTE_PROPOSAL_ASSGMT",
+    "title": "DIspute Case Proposal Assignment"
+  },
+  {
+    "id": "ZUI_INTORDSETTLRULE_MANAGE",
+    "title": "Manage Settlement Rules Internal Order"
+  },
+  {
+    "id": "ZMM_PUR_REQ_SSP_V2_MAINTAIN_SRV",
+    "title": "Odata for SSP modernization"
+  },
+  {
+    "id": "ZMM_PUR_CATALOG_SEARCH_SRV",
+    "title": "Cross Catalog Search Reuse Odata"
+  },
+  {
+    "id": "ZFCO_ACTUAL_COST_RATE_SRV",
+    "title": "Manage Actual Cost Rate"
+  },
+  {
+    "id": "ZFCO_PLAN_COST_RATE_SRV",
+    "title": "Manage Plan Cost Rate"
+  },
+  {
+    "id": "ZFCO_SERVICE_COST_RATE_SRV",
+    "title": "Service Cost Rate"
+  },
+  {
+    "id": "ZFCO_VIA_AAR_DISPLAY_SRV",
+    "title": "Odata For Graph Display"
+  },
+  {
+    "id": "ZFCO_ALLOCATION_FLOW_SRV",
+    "title": "Allocation flow"
+  },
+  {
+    "id": "ZFCO_COST_CTR_COMMITMENT_2",
+    "title": "Service Binding for Commitment Reporting"
+  },
+  {
+    "id": "ZFCO_DISPLAY_COST_RATE",
+    "title": "Service binding for Display Cost Rate"
+  },
+  {
+    "id": "ZFCO_ACTIVITY_TYPE_CHNGLOG_SRV",
+    "title": "Activity Types Change Log"
+  },
+  {
+    "id": "ZFCO_MANAGE_ACTIVITY_TYPE_SRV",
+    "title": "Manage Activity Type"
+  },
+  {
+    "id": "ZFCO_WHERE_USED_ACTIVITY_TYPE_SRV",
+    "title": "Where-used list for Activity Types"
+  },
+  {
+    "id": "ZFCO_COST_CENTER_CHNGLOG_SRV",
+    "title": "Display Cost Center Change Log"
+  },
+  {
+    "id": "ZFCO_WHERE_USED_COST_CENTERS_SRV",
+    "title": "Where used list for cost centers"
+  },
+  {
+    "id": "ZFCO_STATISTICAL_KEY_FIGURE_V2_SRV",
+    "title": "Manage Statistical Key Figures"
+  },
+  {
+    "id": "ZFCO_WHERE_USED_STAT_KEY_FIG_SRV",
+    "title": "Where-used list for Statistical Key Figures"
+  },
+  {
+    "id": "ZSUPPLIERPAYMENTBLOCK",
+    "title": "Service Binding for Supplier Payment Block"
+  },
+  {
+    "id": "ZFARP_JE_ITEM_NOTES_SRV",
+    "title": "Service for Journal Entry Item Notes"
+  },
+  {
+    "id": "ZAPI_WAREHOUSE",
+    "title": "Service for Warehouse"
+  },
+  {
+    "id": "ZAPI_WAREHOUSE_STORAGE_BIN",
+    "title": "Service for Warehouse Storage Bin"
+  },
+  {
+    "id": "ZAPI_WAREHOUSE_RESOURCE",
+    "title": "RAP: API_WAREHOUSE_RESOURCE generated at 20190214"
+  },
+  {
+    "id": "ZAPI_WAREHOUSE_ORDER_TASK",
+    "title": "RAP: API_WAREHOUSE_ORDER_TASK generated at 20190206"
+  },
+  {
+    "id": "ZAPI_WHSE_OUTB_DLV_ORDER",
+    "title": "Service WarehouseOutboundDeliveryOrder"
+  },
+  {
+    "id": "ZAPI_WHSE_PHYSINVENTORYITEM",
+    "title": "Service for WHSE Physical Inventory Item"
+  },
+  {
+    "id": "ZUI_SHIPMENTCONTAINER",
+    "title": "Shipment container service binding"
+  },
+  {
+    "id": "ZSD_SLSSCHEDGAGRMTANLYTSWTRFLL",
+    "title": "Sales Scheduling Agreement Analytics Waterfall"
+  },
+  {
+    "id": "ZUI_PRODSUBSTITUTION_MANAGE",
+    "title": "Manage Substitutions - Products"
+  },
+  {
+    "id": "ZUI_PRODSUBSTN_EXCLN_MANAGE",
+    "title": "Manage Exclusions - Products"
+  },
+  {
+    "id": "ZUI_PRODSUBSTN_GRP_MANAGE",
+    "title": "Manage Groups - Products"
+  },
+  {
+    "id": "ZMMPUR_AUTOMATION_PROCESS_SRV",
+    "title": "Automation Process"
+  },
+  {
+    "id": "ZUI_SUPPLYPROTECTION_REVIEW",
+    "title": "UI_SUPPLYPROTECTION_REVIEW"
+  },
+  {
+    "id": "ZUI_REV_PROD_ALLOC_CHK_RSLT",
+    "title": "Review Product Allocation Check Result"
+  },
+  {
+    "id": "ZUI_REV_AVAILY_CHECK_RESULT",
+    "title": "UI Service Review Availability Check Result"
+  },
+  {
+    "id": "ZFAP_BANK_CHAIN_SRV",
+    "title": "Manage Bank Chains"
+  },
+  {
+    "id": "ZQM_INSP_PLAN_SRV",
+    "title": "Inspection Plan"
+  },
+  {
+    "id": "ZQM_INFOREC_PROC_MANAGE_SRV",
+    "title": "OData QM: Manage Quality Info Records"
+  },
+  {
+    "id": "ZSD_PRE_BIL_DOC_OP_SRV",
+    "title": "Preliminary Billing Document Object Page"
+  },
+  {
+    "id": "ZMM_PUR_ANA_SUPLR_SCOREOUTPUT_SRV",
+    "title": "Supplier Score Output Management"
+  },
+  {
+    "id": "ZFML_DMVC_ESTIMATED_COSTS",
+    "title": "Service Binding - F4898 DMVC - Estimated Costs"
+  },
+  {
+    "id": "ZUI_RESUBMISSIONS_MANAGE",
+    "title": "Manage Resubmissions"
+  },
+  {
+    "id": "ZAPI_WHSE_INBOUND_DELIVERY",
+    "title": "Service Warehouse Inbound Delivery"
+  },
+  {
+    "id": "ZFARR_BUSINESS_RECNCLN",
+    "title": "Biz Recon Service Binding"
+  },
+  {
+    "id": "ZC_EWM_WAREHOUSETASKQ_CDS",
+    "title": "Warehouse Task - Query"
+  },
+  {
+    "id": "ZUI_CFINRPLDPURCHASEORDER",
+    "title": "Accounting View of Purchase Order"
+  },
+  {
+    "id": "ZICA_DOC_CONVERTER_SRV",
+    "title": "Inter-Company Documenter Converter Maintenance"
+  },
+  {
+    "id": "ZSAPTMVSSEXPLANATION",
+    "title": "Vehicle Scheduling Explanation"
+  },
+  {
+    "id": "ZFAC_ACE_DSP_PERDC_AMT_SRV",
+    "title": "Display Periodic Accrual Amounts"
+  },
+  {
+    "id": "ZUI_CURRENTASSIGNMENTS",
+    "title": "PMMO current Assignments"
+  },
+  {
+    "id": "ZUI_PEGGINGASSIGNMNTHISTORY",
+    "title": "Pegging Assignment History"
+  },
+  {
+    "id": "ZFAC_FOREIGN_VAL_POST_SRV",
+    "title": "Post Foreign Valuation Service"
+  },
+  {
+    "id": "ZFCO_COST_CTR_CLASSIC_CMTMT",
+    "title": "Service Binding for Commitment Reporting Classic"
+  },
+  {
+    "id": "ZUI_SRVCENTRSHTACCRS_DSP",
+    "title": "Display Service Entry Sheet Accruals"
+  },
+  {
+    "id": "ZUI_SSACPERDCAMOUNTS_REVIEW",
+    "title": "SSAC Periodic Amounts - Review"
+  },
+  {
+    "id": "ZUI_DISPUTECASE_MANAGE",
+    "title": "Manage Dispute Case"
+  },
+  {
+    "id": "ZFML_MATLVCA_DISP_SRV",
+    "title": "Display Material Value Chain"
+  },
+  {
+    "id": "ZFTR_TRL_POS_HIST_SRV",
+    "title": "Treasury Position History"
+  },
+  {
+    "id": "ZUI_MANUALFULFILLMENT",
+    "title": "App Manual Fulfillment"
+  },
+  {
+    "id": "ZFARR_DOCUMENT_FLOW_SRV",
+    "title": "Document Flow"
+  },
+  {
+    "id": "ZFARR_REVENUE_EXPLANATION_SRV",
+    "title": "Revenue Explanation"
+  },
+  {
+    "id": "ZFARR_ALLOC_AMT_EXPLAIN_SRV",
+    "title": "Allocated Amount Explanation"
+  },
+  {
+    "id": "ZFARR_COMBINE_CONTRACTS_SRV",
+    "title": "Combine Revenue Contracts"
+  },
+  {
+    "id": "ZFARR_CHANGE_HISTORY",
+    "title": "Change History"
+  },
+  {
+    "id": "ZFARR_CONTRACT_OVERVIEW",
+    "title": "Contract Overview"
+  },
+  {
+    "id": "ZFARR_REVENUE_SCHEDULE",
+    "title": "Revenue Schedule"
+  },
+  {
+    "id": "ZUI_VARCNFCHARCEXCLMAN",
+    "title": "Manage Cstic Exclusion App V2"
+  },
+  {
+    "id": "ZBILLOFMATERIALV2_SRV",
+    "title": "BOM Service for Draft 2.0"
+  },
+  {
+    "id": "ZBOM_COMPARISON",
+    "title": "Service for BOMComparison"
+  },
+  {
+    "id": "ZBOMWHEREUSED_SRV",
+    "title": "BOM where used"
+  },
+  {
+    "id": "ZJ_1BNFE_MONITOR_SRV",
+    "title": "Gateway for Monitor NF-e Fiori App"
+  },
+  {
+    "id": "ZANA_QUERY_DESIGNER",
+    "title": "Analytical Query Designer"
+  },
+  {
+    "id": "ZMDC_IMPORT_SRV",
+    "title": "Masterdata Import"
+  },
+  {
+    "id": "ZMDC_MANAGE_SOURCE_DATA_SRV",
+    "title": "Master Data Manage Source Data"
+  },
+  {
+    "id": "ZMM_PUR_POMASS_UPDATE_SRV",
+    "title": "Service for Mass Update"
+  },
+  {
+    "id": "ZMM_PUR_PRMASS_UPDATE_SRV",
+    "title": "Mass Update of Purchase Requisition"
+  },
+  {
+    "id": "ZMDIF_UPLOAD_SRV",
+    "title": "Fx rate"
+  },
+  {
+    "id": "ZFAC_TAX_PAYABLE_POST_SRV",
+    "title": "Post Tax Payable Service"
+  },
+  {
+    "id": "ZFI_TAX_RECONCILIATION_SRV",
+    "title": "GW Service for Tax Reconciliation APP"
+  },
+  {
+    "id": "ZFI_TAX_DECL_RECONCILIATION_SRV",
+    "title": "GW Service for Tax Reconciliation on Tax Code Level APP"
+  },
+  {
+    "id": "ZFAC_GL_MANUAL_CLEARING_SRV",
+    "title": "GL Open Items Manual Clearing"
+  },
+  {
+    "id": "ZFCO_ACTIVITY_TYPE_SRV",
+    "title": "Activity Type Master Data"
+  },
+  {
+    "id": "ZFIN_CLRG_RSET_SRV",
+    "title": "Manage Clearing Documents"
+  },
+  {
+    "id": "ZFI_CORRESPONDENCE_SRV",
+    "title": "Finance Correspondence"
+  },
+  {
+    "id": "ZFAR_BAD_DEBT_RESERVE_SRV",
+    "title": "OData Service - Bad Debt Reserve Adequacy"
+  },
+  {
+    "id": "ZPLMI_RECIPE_FINDER",
+    "title": "Recipe Finder"
+  },
+  {
+    "id": "ZQM_QLTYENGINEER_OVP_SRV",
+    "title": "OData QM: Quality Engineer Overview Page"
+  },
+  {
+    "id": "ZQM_QLTYTECHNICIAN_OVP_SRV",
+    "title": "OData QM: Quality Technician Overview Page"
+  },
+  {
+    "id": "ZPLMI_PROCESS_ROUTE",
+    "title": "Service for Process Route"
+  },
+  {
+    "id": "ZUI_ENGINEERING_REDLINE",
+    "title": "Engineering Redlining Service"
+  },
+  {
+    "id": "ZUI_IMPCTMGMTANALYZER",
+    "title": "Impact Management Analyzer"
+  },
+  {
+    "id": "ZPLMI_CHANGE_RECORD_MANAGEMENT",
+    "title": "Manage Change Records"
+  },
+  {
+    "id": "ZPLMI_CR_MY_INBOX_SRV",
+    "title": "Change Record My Inbox OData Service"
+  },
+  {
+    "id": "ZPLMI_CHGRECD_MY_INBOX_ADDLATTR_SRV",
+    "title": "Change Record My Inbox OData Service Additional Attribute"
+  },
+  {
+    "id": "ZFAP_VENDOR_LINE_ITEMS_SRV",
+    "title": "vendor line items (aka fbl1n)"
+  },
+  {
+    "id": "ZFAP_DISPLAY_SUPPLIER_LIST",
+    "title": "Display Supplier List"
+  },
+  {
+    "id": "ZFAP_DOWN_PAYMENT_REQUEST_MANAGE_SR",
+    "title": "Manage Down Payment Requests (AP)"
+  },
+  {
+    "id": "ZFAP_CREATE_SINGLE_PAYMENT",
+    "title": "Create Single Payment"
+  },
+  {
+    "id": "ZLE_SHP_WHSE_CLERK_OVP_SRV",
+    "title": "Warehouse Clerk Overview Page"
+  },
+  {
+    "id": "ZEHHSS_RAS_PROFILE",
+    "title": "Risk Assessment Profiles"
+  },
+  {
+    "id": "ZMPEACTIONREASONCODE_SRV",
+    "title": "MPE Action Reason Code"
+  },
+  {
+    "id": "ZMPEACTIONREASONCODEGROUP_SRV",
+    "title": "MPE Action Reason Code Group"
+  },
+  {
+    "id": "ZMPEACTIONSETTING_SRV",
+    "title": "MPE Action Setting"
+  },
+  {
+    "id": "ZMMIM_SLOWORNONMOVINGMATERIAL_SRV",
+    "title": "Service for Slow or Non-Moving Material Query"
+  },
+  {
+    "id": "ZPPDS_CAPA_UTIL_OBJ_SRV",
+    "title": "Capacity Utilization Object Page"
+  },
+  {
+    "id": "ZFIN_SSC_SR_SRV",
+    "title": "Shared Service Center OData Service"
+  },
+  {
+    "id": "ZMM_PUR_INFO_RECORD_UPDATE_SRV",
+    "title": "Mass Changes to Purchasing Info Records"
+  },
+  {
+    "id": "ZMM_PUR_SCH_AGMT_MASS_UPDATE_SRV",
+    "title": "mass changes to scheduling agreement"
+  },
+  {
+    "id": "ZMM_PUR_CTRMASS_UPDATE_SRV",
+    "title": "Mass Changes to Purchase Contracts"
+  },
+  {
+    "id": "ZMM_PRC_SEV_CONFIG",
+    "title": "Suplier Evaluation Weighting and Scoring"
+  },
+  {
+    "id": "ZSD_F2714_SDOCBYOBJSTS_SRV",
+    "title": "OData Service for Sales Documents by Object Status"
+  },
+  {
+    "id": "ZPP_MRP_MATERIAL_COVERAGE_SRV",
+    "title": "Manage Material Coverage"
+  },
+  {
+    "id": "ZMM_SUPPLIER_INVOICE_UPLOAD_SRV",
+    "title": "Supplier Invoice Upload"
+  },
+  {
+    "id": "ZC_DAYSPAYABLESOUTSTANDING_CDS",
+    "title": "Days Payable Outstanding - Indirect"
+  },
+  {
+    "id": "ZFAR_DISP_PAYMENT_CARD_DATA_SRV",
+    "title": "Display Payment Card Data"
+  },
+  {
+    "id": "ZLO_VCHCLF_OVP_MODELER_SRV",
+    "title": "VCH Modeler Overview"
+  },
+  {
+    "id": "ZPP_PLANNER_OVP_SRV",
+    "title": "ODATA PP: Planner Overview Page"
+  },
+  {
+    "id": "ZSD_SOF",
+    "title": "Sales Order Fulfillment Reuse Component"
+  },
+  {
+    "id": "ZSD_DMR_PROCFLOW_SRV",
+    "title": "SD Process Flow for Debit Memo Request"
+  },
+  {
+    "id": "ZATP_BOP_CUSTOMSORT_SETUP",
+    "title": "Setup for ATP BOP Custom Sort Sequences"
+  },
+  {
+    "id": "ZFML_MATVAL_MANAGE_SRV",
+    "title": "Manage Material Valuations"
+  },
+  {
+    "id": "ZQM_INSPOPERATION_OBJECTPAGE_SRV",
+    "title": "OData QM: Inspection Operation Object Page OData Service"
+  },
+  {
+    "id": "ZQM_INSPSPEC_OBJECTPAGE_SRV",
+    "title": "OData QM: Inspection Specification Object Page OData Service"
+  },
+  {
+    "id": "ZQM_INSPMETHOD_OBJECTPAGE_SRV",
+    "title": "OData QM: Inspection Specification Object Page OData Service"
+  },
+  {
+    "id": "ZQM_INSPSUBSET_MANAGE_SRV",
+    "title": "Odata QM: Inspection Point Manage"
+  },
+  {
+    "id": "ZC_RBLSITMFORKEYDTEDUEPERD_CDS",
+    "title": "Receivables for Key Date"
+  },
+  {
+    "id": "ZEHHSS_RISK_TEMPLATE_SRV",
+    "title": "Manage Risk Identification Templates"
+  },
+  {
+    "id": "ZUI_OVD_ALTV_CTRL_CONFIGURE",
+    "title": "Configure Alternative Control"
+  },
+  {
+    "id": "ZEHHSS_IM_TASK_LIST_SRV",
+    "title": "Incident Task Instance List"
+  },
+  {
+    "id": "ZO2C_FICA_RETURNS_LIST_DISPLAY",
+    "title": "Fiori: Display Returns List"
+  },
+  {
+    "id": "ZO2C_FICA_WRITEOFF_LIST_DISPLAY",
+    "title": "Fiori: Write-Off History Display"
+  },
+  {
+    "id": "ZPLMI_RECIPE_ANALYSIS",
+    "title": "Recipe Analysis"
+  },
+  {
+    "id": "ZPLMI_RECIPE_OVP",
+    "title": "Recipe Overview Page"
+  },
+  {
+    "id": "ZC_SCHEDGAGRMTITMCNSMPN_CDS",
+    "title": "Scheduling Agreement Item Consumption"
+  },
+  {
+    "id": "ZC_FRTORDEXECUTIONQUERY_CDS",
+    "title": "Freight Order Execution Event Query"
+  },
+  {
+    "id": "ZC_FRTORDEXECUTIONSTSQ_CDS",
+    "title": "Freight Order Execution Status Query"
+  },
+  {
+    "id": "ZC_FRTBKGQUANTITYQUERY_CDS",
+    "title": "Freight Booking Quantity Query"
+  },
+  {
+    "id": "ZC_FRTORDQUANTITYQUERY_CDS",
+    "title": "Freight Order Quantity Query"
+  },
+  {
+    "id": "ZC_FRTBKGEXECUTIONSTSQ_CDS",
+    "title": "Freight Booking Execution Status Query"
+  },
+  {
+    "id": "ZC_FRTBKGEXECUTIONQUERY_CDS",
+    "title": "Freight Booking Execution Event Query"
+  },
+  {
+    "id": "ZC_TENDERINGQUERY_CDS",
+    "title": "Tendering Query"
+  },
+  {
+    "id": "ZFIGL_MANAGE_TAX_ITEMS_SRV",
+    "title": "Service For Manage Tax Items For Legal Reporting"
+  },
+  {
+    "id": "ZEHHSS_RAS_TASK_LIST",
+    "title": "Risk Assessment Task List"
+  },
+  {
+    "id": "ZEHHSS_CIM_TASK_LIST",
+    "title": "Control Implementation Task List"
+  },
+  {
+    "id": "ZMDG_CR_BUPA_ALP_SRV",
+    "title": "Analytical List Page: Change Requests for Business Partner"
+  },
+  {
+    "id": "ZMDG_MDPROC_BUPA_OVP_SRV",
+    "title": "Overview Page: Master Data Processes for Business Partner"
+  },
+  {
+    "id": "ZMDC_EXPORT_SRV",
+    "title": "Masterdata Export"
+  },
+  {
+    "id": "ZMDC_PROC_BP_ALP_SRV",
+    "title": "Analytical List Page: Change Processes for Business Partner"
+  },
+  {
+    "id": "ZFAC_AUDIT_JOURNAL_SRV",
+    "title": "Audit Journal"
+  },
+  {
+    "id": "ZPP_DD_REPLMNT_DETAILS_SRV",
+    "title": "Replenishment Details"
+  },
+  {
+    "id": "ZEHHSS_SAFETY_INSIGHTS",
+    "title": "EHS Safety Insights"
+  },
+  {
+    "id": "ZEHS_INC_REPORTINCIDENT_SRV",
+    "title": "Report Incident"
+  },
+  {
+    "id": "ZMDC_PROC_PRODUCT_ALP_SRV",
+    "title": "Analytical List Page: Change Processes for Product"
+  },
+  {
+    "id": "ZMM_PUR_PODWNPAYT_MNTR_SRV",
+    "title": "Monitor PO Downpayments"
+  },
+  {
+    "id": "ZC_COLLMGMTRBLSITMFORKEYDTE_CDS",
+    "title": "AR for Key Date - Collections Management"
+  },
+  {
+    "id": "ZEHFND_TDEF_MNTF_SRV",
+    "title": "Task Definition: Maintenance notification"
+  },
+  {
+    "id": "ZMDG_CR_PRODUCT_ALP_SRV",
+    "title": "Analytical List Page: Change Requests for Product"
+  },
+  {
+    "id": "ZMDG_MDPROC_PROD_OVP_SRV",
+    "title": "Overview Page: Master Data Process Overview for Product"
+  },
+  {
+    "id": "ZEHHSS_HOURS_WORKED_SRV",
+    "title": "EHS - Manage Hours Worked"
+  },
+  {
+    "id": "ZEHFND_TDEF_MOC_SRV",
+    "title": "Task Definition: Management Of Change"
+  },
+  {
+    "id": "ZEHS_MOC_MANCHGREQ_SRV",
+    "title": "Manage Change Requests"
+  },
+  {
+    "id": "ZEHS_MOC_MANACTY_SRV",
+    "title": "Manage Change Activities"
+  },
+  {
+    "id": "ZMDC_TRACK_CHANGES_SRV__1405",
+    "title": "MDC Service for Track Changes - Business Partner Relations"
+  },
+  {
+    "id": "ZMDC_TRACK_CHANGES_SRV__147",
+    "title": "MDC Service for Track Changes - Business Partner"
+  },
+  {
+    "id": "ZMDC_TRACK_CHANGES_SRV__194",
+    "title": "MDC Service for Track Changes - Material"
+  },
+  {
+    "id": "ZO2C_FICA_GENTOOLS",
+    "title": "FI-CA Generic Data Accesses"
+  },
+  {
+    "id": "ZO2C_FICA_WORKLIST",
+    "title": "Fiori: Worklist"
+  },
+  {
+    "id": "ZC_ARDAYSSALESOUTSTDGOVW_CDS",
+    "title": "Card Days Sales Outstanding"
+  },
+  {
+    "id": "ZC_ARDEBTORSOVW_CDS",
+    "title": "Card Top 10 Debtors"
+  },
+  {
+    "id": "ZC_ARAGINGANALYSISOVW_CDS",
+    "title": "Card AR Aging Analysis"
+  },
+  {
+    "id": "ZFAR_AR_OVP_SRV",
+    "title": "Account Receivable Overview"
+  },
+  {
+    "id": "ZC_ARBREAKDOWNOVW_CDS",
+    "title": "Card AR Breakdown"
+  },
+  {
+    "id": "ZC_ARCASHCOLLTRACKEROVW_CDS",
+    "title": "AR Cash Collection Tracker Card"
+  },
+  {
+    "id": "ZC_SLCMGMTSUPPLIERPORTFOLIOST_SRV",
+    "title": "SLCMgmt Supplier Portfolio"
+  },
+  {
+    "id": "ZMPE_QUALIFICATIONS_SRV",
+    "title": "oData for HR Qualification Assignment"
+  },
+  {
+    "id": "ZEHFND_TDEF_MON_SRV",
+    "title": "EHS Task Instances Monitoring"
+  },
+  {
+    "id": "ZC_INCIDENTDARTRATEQUERY_CDS",
+    "title": "Incident Dart Rate"
+  },
+  {
+    "id": "ZC_INCIDENTRATEQUERY_CDS",
+    "title": "Incident Rate"
+  },
+  {
+    "id": "ZMM_PUR_CREATE_FOD_FROM_PR_SRV",
+    "title": "Create Follow on Document from the PR"
+  },
+  {
+    "id": "ZFTR_DEBTINVMT_ANALYSIS_SRV",
+    "title": "Debt Investment Analysis"
+  },
+  {
+    "id": "ZLO_VCHCLF_PROFILE_ASSIGN_GROUP_SRV",
+    "title": "Variant Configuration Assign Characteristic Group to Profile"
+  },
+  {
+    "id": "ZATP_ABC_STRATEGY",
+    "title": "Substitution Strategy Service"
+  },
+  {
+    "id": "ZMM_PUR_MATL_PRC_VARIANCE",
+    "title": "Material Price Variance"
+  },
+  {
+    "id": "ZMM_PUR_MASSUPDT_SIMLN_SRV",
+    "title": "Mass Changes: Job Simulation"
+  },
+  {
+    "id": "ZLO_VCHCLF_INTEGRATION_LEGACY_SRV",
+    "title": "Legacy appl. integration helper service for VCHCLF"
+  },
+  {
+    "id": "ZMM_PUR_MAT_PROPOSE_CTR_SRV",
+    "title": "Propose Materials for Contract"
+  },
+  {
+    "id": "ZC_BUSINESSSHARECOMPLIANCEQ_CDS",
+    "title": "Business Share Compliance Query"
+  },
+  {
+    "id": "ZC_TRANSPALLOCCOMPLIANCEQ_CDS",
+    "title": "Transp Allocation Compliance Query"
+  },
+  {
+    "id": "ZDFPS_GET_STORAGE_FACILITY_SRV_01",
+    "title": "Storage Facility Visualization"
+  },
+  {
+    "id": "ZO2C_FICA_RECEIVABLES_SRV",
+    "title": "Fiori: Analysis of Receivables"
+  },
+  {
+    "id": "ZQM_QTASK_PROC_SRV",
+    "title": "Process Quality Tasks"
+  },
+  {
+    "id": "ZQM_DEFECT_RECORD_SRV",
+    "title": "Record Defects"
+  },
+  {
+    "id": "ZQM_QUALITYLEVEL_MANAGE_SRV",
+    "title": "OData QM: Manage Quality Level"
+  },
+  {
+    "id": "ZC_QUALITYLEVELANALYSIS_CDS",
+    "title": "Quality Level History"
+  },
+  {
+    "id": "ZQM_CHARTS_SRV",
+    "title": "QM Chart Data Provider"
+  },
+  {
+    "id": "ZMM_PUR_INFORECPRICEH_MNTR_SRV",
+    "title": "Monitor Purchasing Info Record Price History"
+  },
+  {
+    "id": "ZC_CNTRLCONTRCNSMPNQRY_CDS",
+    "title": "Query view for central contract consumption"
+  },
+  {
+    "id": "ZO2C_FICA_DUNNNOTICE_MAINTAIN_SRV",
+    "title": "Fiori: Maintain Dunning Notices"
+  },
+  {
+    "id": "ZO2C_FICA_BUSTRANS_DISP_SRV",
+    "title": "Fiori: Display Business Transactions"
+  },
+  {
+    "id": "ZPP_DD_MASSADJBUF_SRV",
+    "title": "OData PP: Mass Adjust Buffers"
+  },
+  {
+    "id": "ZFINS_ACDOC_PLAN_MANAGE_COPY_SRV",
+    "title": "Copy Financial Plan Data"
+  },
+  {
+    "id": "ZFAC_GRIR_ANALYSIS_SRV",
+    "title": "oData Service GR/IR Clearing Analysis"
+  },
+  {
+    "id": "ZFAR_MANAGE_COLL_STRATEGIES_SRV",
+    "title": "Manage Collection Strategies"
+  },
+  {
+    "id": "ZPP_SCHEDULEPRODUCTION_SRV",
+    "title": "Schedule Production"
+  },
+  {
+    "id": "ZFCO_SKF_PLANDATA_UPLOAD_SRV",
+    "title": "Statistical Key Figure Plan Data Upload"
+  },
+  {
+    "id": "ZC_POITEMCHANGECOUNT_CDS",
+    "title": "Purchase Order Item Changes"
+  },
+  {
+    "id": "ZO2C_FICA_PAYMENT_LIST_DISPLAY_SRV",
+    "title": "Fiori: Payment List Display"
+  },
+  {
+    "id": "ZC_MFGORDOPERATIONSCRAPQRY_CDS",
+    "title": "Manufacturing Order Operation Scrap - Query"
+  },
+  {
+    "id": "ZC_MFGORDCOMPEXCSCONSMPTQRY_CDS",
+    "title": "Mfg Order Operation Component Excess Consumption - Query"
+  },
+  {
+    "id": "ZC_MFGORDEROPEXECDURNQRY_CDS",
+    "title": "Mfg Order Operation Execution Duration - Query"
+  },
+  {
+    "id": "ZC_MFGORDITEMMATERIALSCRAPQ_CDS",
+    "title": "Manufacturing Order Item Material Scrap - Query"
+  },
+  {
+    "id": "ZC_MFGORDOPCONFSCRAPREASONQ_CDS",
+    "title": "Mfg Order Operation Confirmation Scrap Reason - Query"
+  },
+  {
+    "id": "ZPMRP_SIMUL_SERVICE",
+    "title": "RAP: PMRP_SIMUL_SERVICE generated at 20181129"
+  },
+  {
+    "id": "ZPMRP_SIMURES_SERVICE",
+    "title": "RAP: PMRP_SIMURES_SERVICE generated at 20190417"
+  },
+  {
+    "id": "ZPMRP_SIMULTLD_SERVICE",
+    "title": "RAP: PMRP_SIMULTLD_SERVICE generated at 20181210"
+  },
+  {
+    "id": "ZPMRP_SIMULATION_SERVICE",
+    "title": "RAP: PMRP_SIMULATION_SERVICE generated at 20181203"
+  },
+  {
+    "id": "ZPMRP_CAPACITY_SERVICE",
+    "title": "RAP: PMRP_CAPACITY_SERVICE generated at 20190405"
+  },
+  {
+    "id": "ZPMRP_SIMUTLD_SERVICE",
+    "title": "RAP: PMRP_SIMUTLD_SERVICE generated at 20181122"
+  },
+  {
+    "id": "ZFCO_MANAGE_DRCT_ACTY_ALLOC_SRV",
+    "title": "Manage Direct Activity Allocation"
+  },
+  {
+    "id": "ZC_CNTRLPURREQNITEMTYPES_CDS",
+    "title": "Central Purchase Requisition Item Types"
+  },
+  {
+    "id": "ZUI_LO_SETMAN_PSDOC_MAN",
+    "title": "RAP: UI_LO_SETMAN_PSDOC_MAN generated at 20181114"
+  },
+  {
+    "id": "ZLCM_CONTEXT_MANAGE_SRV",
+    "title": "Context Manage"
+  },
+  {
+    "id": "ZUI_ATPSELECTOPTIONTOOL",
+    "title": "Service Binding for SOT data"
+  },
+  {
+    "id": "ZATP_MANCHARCCATALOG",
+    "title": "Odata Services for ATP: Manage Characteristic Catalogs"
+  },
+  {
+    "id": "ZC_SHPDASPLNDDELIVITEMSQRY_CDS",
+    "title": "Delivery Items Shipped as Planned"
+  },
+  {
+    "id": "ZC_DELIVITMPERFANLYTSQRY_CDS",
+    "title": "Query for Dlv Perf - Shipped as Planned"
+  },
+  {
+    "id": "ZFAC_FINANCIAL_STATEMENT_SRV",
+    "title": "Financial Statement"
+  },
+  {
+    "id": "ZEHHSS_ASSIGN_RISKS_SRV",
+    "title": "Assign Risks"
+  },
+  {
+    "id": "ZFAR_DISP_PROCESS_FLOW_SRV",
+    "title": "Display Process Flow for AR"
+  },
+  {
+    "id": "ZSD_SALESPLAN",
+    "title": "Odata Service for C_SalesPlanTP"
+  },
+  {
+    "id": "ZFCO_INTERNAL_ORDER_SRV",
+    "title": "Internal Order Master Data"
+  },
+  {
+    "id": "ZLCM_DOCUMENT_MANAGE",
+    "title": "Manage Legal Content Documents"
+  },
+  {
+    "id": "ZMD_QC_PRODUCT_SRV",
+    "title": "Product Master - Odata for Quick Create"
+  },
+  {
+    "id": "ZQM_INSPLOTMNG_SRV",
+    "title": "OData QM: Manage Inspection Lot Object Page Odata Service"
+  },
+  {
+    "id": "ZFAR_ASSIGN_OPEN_ITEMS_SRV",
+    "title": "Assign Open Items"
+  },
+  {
+    "id": "ZMM_PUR_WRKLOAD_REDIST_SRV",
+    "title": "work load redistribution"
+  },
+  {
+    "id": "ZQM_INSPUSGDSC_MANAGE_SRV",
+    "title": "OData QM: Manage Usage Decision"
+  },
+  {
+    "id": "ZATP_MANPRODALLOCPLNGDATA",
+    "title": "Odata Services for ATP: Manage Prod Allocation Planning Data"
+  },
+  {
+    "id": "ZLO_VCHCLF_SIMULATION_SRV",
+    "title": "VCH Simulation Environment"
+  },
+  {
+    "id": "ZC_INCIDENTQUERY_CDS",
+    "title": "Incident Query"
+  },
+  {
+    "id": "ZC_INCIDENTSTATUSEXCLVOID_CDS",
+    "title": "Incident Status Excluding Void"
+  },
+  {
+    "id": "ZC_INJURYILLNESSCASEQUERY_CDS",
+    "title": "Injury/Illness Case Query"
+  },
+  {
+    "id": "ZC_INCIDENTASSETCASEQUERY_CDS",
+    "title": "Incident Asset Case Query"
+  },
+  {
+    "id": "ZC_SAFETYOBSERVATIONGROUPQ_CDS",
+    "title": "Safety Observation Group Query"
+  },
+  {
+    "id": "ZC_INCIDENTTASKQUERY_CDS",
+    "title": "Incident/Investigation step tasks cube."
+  },
+  {
+    "id": "ZC_INCIDENTCASEQUERY_CDS",
+    "title": "Incident Case Query"
+  },
+  {
+    "id": "ZC_INCIDENTGROUPQUERY_CDS",
+    "title": "Incident Group Query"
+  },
+  {
+    "id": "ZC_INCIDENTRELEASECASEQUERY_CDS",
+    "title": "Incident Release Case Query"
+  },
+  {
+    "id": "ZC_INCIDENTDAMAGECASEQUERY_CDS",
+    "title": "Incident Damage Case Query"
+  },
+  {
+    "id": "ZC_INCIDENTNTCOFVIOLTNCASEQ_CDS",
+    "title": "Incident Notice Of Violation Case Query"
+  },
+  {
+    "id": "ZFAC_FLEXIBLE_HIERARCHY_SRV",
+    "title": "Flexible Hierarchy"
+  },
+  {
+    "id": "ZSD_F2337_EBDR_FS_SRV",
+    "title": "External Billing Document Request Fact Sheet"
+  },
+  {
+    "id": "ZMPE_MATERIAL_POVER",
+    "title": "Service for Material Pop Over"
+  },
+  {
+    "id": "ZMPE_MANAGE_PRODVER_SRV",
+    "title": "Manage Production Version"
+  },
+  {
+    "id": "ZO2C_FICA_PAYMENT_SEARCH",
+    "title": "Fiori: Payment Search"
+  },
+  {
+    "id": "ZMM_PUR_QTN_COMPARE_SRV",
+    "title": "Supplier Quotation Compare"
+  },
+  {
+    "id": "ZANA_PAI_REPOSITORY_SRV",
+    "title": "Predictive Analytics Integrator (PAI) Repository"
+  },
+  {
+    "id": "ZC_PURGSPENDCOMPRN_CDS",
+    "title": "Purchasing Spend Comparison"
+  },
+  {
+    "id": "ZRFM_SITE_OP_SRV",
+    "title": "Site Object Page"
+  },
+  {
+    "id": "ZO2C_FICA_CUSTOMERFO_SRV",
+    "title": "Fiori: Business Partner Financial Overview"
+  },
+  {
+    "id": "ZMMIM_DEADSTOCKMATERIAL_SRV",
+    "title": "Dead stock material"
+  },
+  {
+    "id": "ZQM_INSPLOT_OBJECTPAGE_SRV",
+    "title": "OData QM: Inspection Lot Object Page OData Service"
+  },
+  {
+    "id": "ZEHFND_TASK_INSTANCE_SRV",
+    "title": "EHS Task Instance Service"
+  },
+  {
+    "id": "ZEHFND_SIMPLE_TDEF_SRV",
+    "title": "Simple Task Definition"
+  },
+  {
+    "id": "ZSD_EBDR_MANAGE_SRV",
+    "title": "Manage External Billing Document Requests"
+  },
+  {
+    "id": "ZQM_SUBSET_RR_SRV",
+    "title": "Record Results for Inspection Points"
+  },
+  {
+    "id": "ZEHHSS_IM_INV_TASK_LIST_SRV",
+    "title": "Incident Investigation Task List"
+  },
+  {
+    "id": "ZPP_DD_MASSMAINTPROD_SRV",
+    "title": "Odata DDR: Mass Maintenance: Products (DD)"
+  },
+  {
+    "id": "ZSD_BIL_DOC_LIST_MANAGE_SRV",
+    "title": "Manage billing documents lists / invoice lists"
+  },
+  {
+    "id": "ZSD_BIL_DOC_LIST_OBJPG_SRV",
+    "title": "Billing Document list / invoice list object page"
+  },
+  {
+    "id": "ZMM_PUR_PO_SPEND_ANALYSIS",
+    "title": "Purchase Order Spend"
+  },
+  {
+    "id": "ZC_NEARMISSGROUPQUERY_CDS",
+    "title": "Near Miss Group Query"
+  },
+  {
+    "id": "ZFAR_DOUBTFUL_ACCTS_VALUATION_SRV",
+    "title": "OData Service - Doubtful Accounts Valuation"
+  },
+  {
+    "id": "ZMM_IM_PHYS_INV_MASS_CREATE_SRV_01",
+    "title": "OData Service for Mass Creation UI"
+  },
+  {
+    "id": "ZPLMI_RECIPE_ANALYSIS_HEADER",
+    "title": "Recipe Analysis - Header Data"
+  },
+  {
+    "id": "ZPLMI_RECIPE_ANALYSIS_SIQTY",
+    "title": "Recipe Analysis - Search Item Quantity"
+  },
+  {
+    "id": "ZC_FREIGHTSETTLEMENTCOSTQ_CDS",
+    "title": "Freight Settlement Cost Query"
+  },
+  {
+    "id": "ZC_TRANSPORDINVCGBLOCKSTSQ_CDS",
+    "title": "Transportation Order Invoicing Block Status Query"
+  },
+  {
+    "id": "ZPLMI_CHANGEMASTER_MANAGE",
+    "title": "Manage Change Masters"
+  },
+  {
+    "id": "ZSD_F2651_CRT_CREATE_SRV",
+    "title": "OData for Create Customer Returns"
+  },
+  {
+    "id": "ZSD_CRT_PROCFLOW_SRV",
+    "title": "SD Process Flow for Customer Return"
+  },
+  {
+    "id": "ZSD_F2650_CRT_EDIT_SRV",
+    "title": "OData for Customer Returns Edit"
+  },
+  {
+    "id": "ZSD_F2652_CRT_REFUND_SRV",
+    "title": "OData for Customer Returns Refund"
+  },
+  {
+    "id": "ZC_GLDAYSPYBLOUTSTDGINDRCT_CDS",
+    "title": "GL DPO Indirect Ovw"
+  },
+  {
+    "id": "ZFAC_GL_OVP_SRV",
+    "title": "G/L Overview"
+  },
+  {
+    "id": "ZC_GLREVENUEEXPENSESOVW_CDS",
+    "title": "GL Revenue and Expenses Overview"
+  },
+  {
+    "id": "ZFAC_GL_MAINT_POSTING_PERIOD_SRV",
+    "title": "Maintain Posting Period"
+  },
+  {
+    "id": "ZFAC_GL_PPV_SRV",
+    "title": "Manage Posting Period Variant"
+  },
+  {
+    "id": "ZATP_PRODALLOCOVERVIEW",
+    "title": "Odata Services for ATP: Product Allocation Overview"
+  },
+  {
+    "id": "ZATP_MONPRODALLOCPERDS",
+    "title": "Odata Services for ATP: Monitor Product Allocation Periods"
+  },
+  {
+    "id": "ZATP_MONCHARCVALCOMBN",
+    "title": "Odata Services for ATP: Monitor Charc Value Combinations"
+  },
+  {
+    "id": "ZATP_MONPRODALLOCORDITM",
+    "title": "Odata Services for ATP: Monitor Product Allocation Order Ite"
+  },
+  {
+    "id": "ZPP_DD_BUFPOS_SRV",
+    "title": "OData DDR: Buffer Positioning"
+  },
+  {
+    "id": "ZLO_VCHCLF_GROUP_MAINTAIN_SRV",
+    "title": "Variant Configuration Characteristic Group Maintenance"
+  },
+  {
+    "id": "ZSD_F2583_SLSITMPRPSL_SRV",
+    "title": "OData Service for Sales Item Proposals"
+  },
+  {
+    "id": "ZQM_MLTPLRR_SRV",
+    "title": "Record Multiple Results"
+  },
+  {
+    "id": "ZLE_SHP_QC_DLVREF_SRV",
+    "title": "Quick Create: Delivery with ref."
+  },
+  {
+    "id": "ZLE_SHP_QC_DLVNOREF_SRV",
+    "title": "Quick Create: Delivery without ref"
+  },
+  {
+    "id": "ZMMIM_BATRMNGSLORPRDTE_SRV",
+    "title": "Determine Remaining Shelf Life or Prodcution Date"
+  },
+  {
+    "id": "ZMMIM_INVANALYST_OVP_SRV",
+    "title": "Inventory Analyst OVP"
+  },
+  {
+    "id": "ZQM_QLTYTASK_MANAGE_SRV",
+    "title": "OData QM: Manage Quality Tasks"
+  },
+  {
+    "id": "ZQM_INSPLOTDEF_ANALYZE_SRV",
+    "title": "OData QM: Quality Mgmt. Information System - Inspection Lots"
+  },
+  {
+    "id": "ZQM_INSPCHARCS_ANALYZE_SRV",
+    "title": "OData QM: Inspection Characteristics Analytics"
+  },
+  {
+    "id": "ZMM_PUR_SUBCONTRGORD_MNTR_SRV",
+    "title": "Monitor Subcontracting Orders"
+  },
+  {
+    "id": "ZC_CNTRLPURCHASINGSPEND_CDS",
+    "title": "Central Purchasing Spend"
+  },
+  {
+    "id": "ZEHS_PMA_MKT_INFO_SRV",
+    "title": "Marketability Info of Product"
+  },
+  {
+    "id": "ZFAC_POAC_RVW_WF_SRV",
+    "title": "oData Purchase Order Accruals for Review via WF"
+  },
+  {
+    "id": "ZO2C_FICA_CORR_DISPLAY_SRV",
+    "title": "Fiori: Display Correspondences"
+  },
+  {
+    "id": "ZO2C_FICA_PAYMENTRUN_SRCH_SRV",
+    "title": "Payment Run Search App"
+  },
+  {
+    "id": "ZO2C_FICA_PAYMENTLOT_SRCH_SRV",
+    "title": "Payment Lot Search App"
+  },
+  {
+    "id": "ZFAC_CURRENCY_EXCHANGE_RATE_SRV",
+    "title": "Currency Exchange Rate"
+  },
+  {
+    "id": "ZMMIM_STKKPITIMESERIESCOMPRN_SRV",
+    "title": "Stock KPI Time Series Comparison"
+  },
+  {
+    "id": "ZFAC_GL_ACCOUNT_BALANCE_SRV",
+    "title": "oData Service for GL Account Balance"
+  },
+  {
+    "id": "ZFAC_MANAGE_PROFIT_CENTERS_SRV",
+    "title": "Manage Profit Centers"
+  },
+  {
+    "id": "ZFAC_WHERE_USED_PROFIT_CENTERS_SRV",
+    "title": "Where-Used-List For Profit Center Master Data"
+  },
+  {
+    "id": "ZMM_PUR_SE_SCORE_HIS_SRV",
+    "title": "Supplier Evaluation Score History"
+  },
+  {
+    "id": "ZANA_PAI_PS_SRV",
+    "title": "Predictive Analytics Integrator (PAI) - PS Review"
+  },
+  {
+    "id": "ZFAC_PROFIT_CENTER_CHANGLOG",
+    "title": "Change Log - Profit Centers"
+  },
+  {
+    "id": "ZRSH_EAM_RES_ASSIGNMENT_SRV",
+    "title": "Resource Assignment"
+  },
+  {
+    "id": "ZRSH_SB_MAINTENANCE_ORDER",
+    "title": "Service Binding for Maintenance Order"
+  },
+  {
+    "id": "ZRSH_EAM_ORDER_GANTT_SRV",
+    "title": "Maintenance Order Operation Gantt"
+  },
+  {
+    "id": "ZLCM_TASK_MANAGE",
+    "title": "Manage LCM Tasks"
+  },
+  {
+    "id": "ZFAC_MANAGE_POSTING_TMPL_SRV",
+    "title": "Manage Posting Apps Templates"
+  },
+  {
+    "id": "ZC_WRKFLWREQNAVGAPPRVLTIME_CDS",
+    "title": "Purchase Requisition Avg Approval Time"
+  },
+  {
+    "id": "ZC_EWM_WHSEORDEROVPGQ_2_CDS",
+    "title": "Warehouse Order for OVP UI - Query"
+  },
+  {
+    "id": "ZC_EWM_WAREHOUSETASKOVPGQ_2_CDS",
+    "title": "Warehouse Task for OVP UI - Query"
+  },
+  {
+    "id": "ZC_EWM_ODOOVPGQ_2_CDS",
+    "title": "Outb Deliv Order for OVP UI - Query"
+  },
+  {
+    "id": "ZMD_SUPPLIER_MASTER_SRV",
+    "title": "OData service for Supplier Master"
+  },
+  {
+    "id": "ZPPDS_RES_SCHEDULE",
+    "title": "OData for PPDS"
+  },
+  {
+    "id": "ZC_SUPPLIERACTIVITYTASKMONITOR_SRV",
+    "title": "Monitor Tasks"
+  },
+  {
+    "id": "ZC_PURCHASINGCATEGORYTRANST_SRV",
+    "title": "Translate Purchasing Categories"
+  },
+  {
+    "id": "ZC_BR_VERIFYNOTAFISCAL_CDS",
+    "title": "Brazil Verify Nota Fiscal"
+  },
+  {
+    "id": "ZJ_1BNFE_CONTINGENCY_SRV",
+    "title": "Service for Fiori Contingency APP"
+  },
+  {
+    "id": "ZC_BR_VERIFYCTE_CDS",
+    "title": "Brazil Verify CT-e"
+  },
+  {
+    "id": "ZC_BR_VERIFYNFS_CDS",
+    "title": "Brazil Verify Service Nota Fiscal"
+  },
+  {
+    "id": "ZC_RECORDABLEINJRYILLNCASEQ_CDS",
+    "title": "Recordable Injury/Illness Case Query"
+  },
+  {
+    "id": "ZC_ARBANKSTMTREPROCESSING_CDS",
+    "title": "Reprocessing Rate of Incoming Payments"
+  },
+  {
+    "id": "ZC_SUPLREVALQNAIREMANAGEST_SRV",
+    "title": "Manage Evaluation Questionnaires"
+  },
+  {
+    "id": "ZC_SUPLREVALTEMPLATEMANAGEST_SRV",
+    "title": "Manage Templates"
+  },
+  {
+    "id": "ZC_SUPLREVALSCORECARDDISPLAY_SRV",
+    "title": "Display Scorecards"
+  },
+  {
+    "id": "ZC_EHSRISKOVERVIEWQ_CDS",
+    "title": "Risk Overview Query"
+  },
+  {
+    "id": "ZLE_SHP_RETURNS_DELIVERY_FS_SRV",
+    "title": "Returns Delivery Fact sheet"
+  },
+  {
+    "id": "ZC_PURCHASECONTRACTEXPIRY_CDS",
+    "title": "Purchase Contract Expiry"
+  },
+  {
+    "id": "ZC_SUPLRCOMPRNVIAPURVALS_CDS",
+    "title": "Supplier Comparison Via Purchase Values"
+  },
+  {
+    "id": "ZC_REQUISITIONTYPEANALYSIS_CDS",
+    "title": "Purchase Requisition Type Analysis"
+  },
+  {
+    "id": "ZC_VALUECONTRACTCNSMPN_CDS",
+    "title": "Value Contract Consumption"
+  },
+  {
+    "id": "ZC_QUANTITYCONTRACTCNSMPN_CDS",
+    "title": "Quantity Contract Consumption"
+  },
+  {
+    "id": "ZC_REQUISITIONCHANGE_CDS",
+    "title": "Change Purchase Requisition"
+  },
+  {
+    "id": "ZC_REQNAVGAPPROVALTIME_CDS",
+    "title": "Requisition Average Approval Time"
+  },
+  {
+    "id": "ZC_PURCHASINGGROUPANALYSIS_CDS",
+    "title": "Purchasing Group Analysis Query"
+  },
+  {
+    "id": "ZC_PURORDAVGDELIVTIME_CDS",
+    "title": "Purchase Order Average Delivery Time"
+  },
+  {
+    "id": "ZC_OVERDUEPO_CDS",
+    "title": "Overdue Purchase Order"
+  },
+  {
+    "id": "ZSD_F2369_INQY_FS_SRV",
+    "title": "S4H SD - Odata for Inquiry Object Page"
+  },
+  {
+    "id": "ZC_PURCHASECONTRACTLEAKAGE_CDS",
+    "title": "Purchase Contract Leakage"
+  },
+  {
+    "id": "ZC_UNUSEDPURCHASECONTRACTQ_CDS",
+    "title": "Unused Purchase Contract"
+  },
+  {
+    "id": "ZC_PURGMATLPRICECHANGE_CDS",
+    "title": "Material Price Change"
+  },
+  {
+    "id": "ZC_REQNTOORDERCYCLETIME_CDS",
+    "title": "Requisition To Order Cycle Time"
+  },
+  {
+    "id": "ZC_OPENDISPPROCESSINGDAYS_CDS",
+    "title": "Open Dispute Processing Days"
+  },
+  {
+    "id": "ZC_OVERDUEACCTRBLS_CDS",
+    "title": "Overdue Accounts Receivables Smart Business App"
+  },
+  {
+    "id": "ZATP_RESPONSIBILITY_CONFIG",
+    "title": "ATP Order Fulfillment Responsibility Configuration"
+  },
+  {
+    "id": "ZPPDS_MRP_COCKPIT_SRV",
+    "title": "Odata Service for Capacity MRP Cockpit"
+  },
+  {
+    "id": "ZFTR_POSTING_JOURNAL_SRV",
+    "title": "Odata project for TPM20"
+  },
+  {
+    "id": "ZQM_SAMPLINGPROC_OBJECTPAGE_SRV",
+    "title": "ODATA QM: Sampling Procedure Object Page OData Service"
+  },
+  {
+    "id": "ZLO_MONTHLY_UTILIZATION_SRV",
+    "title": "Monthly Utilization of Excise Duty and Service Tax"
+  },
+  {
+    "id": "ZMM_PUR_OCI_SRV",
+    "title": "OCI reuse"
+  },
+  {
+    "id": "ZMM_PUR_QA_MAINTAIN",
+    "title": "Service Quota Arrangements"
+  },
+  {
+    "id": "ZSLC_ACTIVITY_COPILOT_SRV",
+    "title": "SLC Activity in Copilot"
+  },
+  {
+    "id": "ZC_APOVRD_CDS",
+    "title": "Accounts Payable. Overdue Payables"
+  },
+  {
+    "id": "ZC_APFLEXIBLEAGING_CDS",
+    "title": "Aging Analysis Smart Business App"
+  },
+  {
+    "id": "ZPLMI_SPC_PACK_MANAGE",
+    "title": "Manage Package Gateway Service"
+  },
+  {
+    "id": "ZPLMI_SPC_STRM_MANAGE",
+    "title": "Manage Stream Substance Gateway Service"
+  },
+  {
+    "id": "ZPLMI_SPC_REAL_MANAGE",
+    "title": "Manage Real Substance Gateway Service"
+  },
+  {
+    "id": "ZPLMI_SPC_RAW_MANAGE",
+    "title": "Manage Raw Substance Gateway Service"
+  },
+  {
+    "id": "ZATP_MANPRODALLOCSEQUENCE",
+    "title": "Odata Services for ATP: Manage Product Allocation Sequences"
+  },
+  {
+    "id": "ZATP_ASSGPRODTOPRODALLOC",
+    "title": "Odata Services for ATP: Assign Product To Product Allocation"
+  },
+  {
+    "id": "ZC_MDPRODUCTHIERARCHYQUERY_CDS",
+    "title": "Master Data Product Hierarchy Query"
+  },
+  {
+    "id": "ZCMD_HPC_NODE_CONTEXT_INFO",
+    "title": "Structural context info of a hierarchy node"
+  },
+  {
+    "id": "ZFTR_POS_FLOWS_SRV",
+    "title": "Odata project for TPM13"
+  },
+  {
+    "id": "ZMMIM_STO_SRV",
+    "title": "Stock Transfer Orders"
+  },
+  {
+    "id": "ZC_EHSRISKATMYLOCATION_CDS",
+    "title": "EHS Risk"
+  },
+  {
+    "id": "ZMM_SSP_RET_DELIVERY_SRV",
+    "title": "SSP Requisition Return Delivery"
+  },
+  {
+    "id": "ZQM_RR_SRV",
+    "title": "OData QM: Inspection Results Recording OData Service"
+  },
+  {
+    "id": "ZFAR_DOWN_PAYMENT_REQUEST_MANAGE_SR",
+    "title": "Manage Down Payment Requests (AR)"
+  },
+  {
+    "id": "ZCDSALLVIEWS",
+    "title": "View Browser Service"
+  },
+  {
+    "id": "ZPLMI_SPECIFICATION_MANAGE",
+    "title": "Manage Specification"
+  },
+  {
+    "id": "ZC_PROCMONKPIO2C_CDS",
+    "title": "Order-to-Cash Performance KPI"
+  },
+  {
+    "id": "ZEHHSS_MY_OPEN_CTRL_IMPLEM_SRV",
+    "title": "My Open Control Implementations"
+  },
+  {
+    "id": "ZMM_PUR_SEV_ADJSC",
+    "title": "Supplier Evaluation Adjust Score"
+  },
+  {
+    "id": "ZLCM_CONTENT_REQUEST",
+    "title": "Legal Transaction Management Content Request"
+  },
+  {
+    "id": "ZC_TOTALACCOUNTSRECEIVABLES_CDS",
+    "title": "Total Accounts Receivables Smart Business App"
+  },
+  {
+    "id": "ZC_DAYSBEYONDTERMS_CDS",
+    "title": "Days Beyond Terms for Smart Business Apps"
+  },
+  {
+    "id": "ZC_DAYSSALESOUTSTANDING_CDS",
+    "title": "Days Sales Outstanding Smart Business App"
+  },
+  {
+    "id": "ZC_FUTUREACCTRBLS_CDS",
+    "title": "Future Accounts Receivables Smart Business App"
+  },
+  {
+    "id": "ZC_DUNNINGLEVELDISTRIBUTION_CDS",
+    "title": "Dunning Level Distribution Smart Business App"
+  },
+  {
+    "id": "ZC_MYEHSRISKASSESSMENT_CDS",
+    "title": "My Active Risk Assessments"
+  },
+  {
+    "id": "ZC_PROCMONFLOW_CDS",
+    "title": "Process Observer: Process Flow"
+  },
+  {
+    "id": "ZACCDET",
+    "title": "ACCDET"
+  },
+  {
+    "id": "ZFAC_ACC_DETERMINATION_SRV",
+    "title": "Account Determination"
+  },
+  {
+    "id": "ZMM_PUR_SOS_SRV",
+    "title": "Manage SOS"
+  },
+  {
+    "id": "ZSD_CMR_PROCFLOW_SRV",
+    "title": "SD Process Flow for Credit Memo Request"
+  },
+  {
+    "id": "ZSD_F1815_CRT_FS_SRV",
+    "title": "Customer Return FactSheet - S4H SD FIORI"
+  },
+  {
+    "id": "ZSD_F1846_CMR_FS_SRV",
+    "title": "Credit Memo Request FactSheet"
+  },
+  {
+    "id": "ZSD_F1848_DMR_FS_SRV",
+    "title": "Debit Memo Request Factsheet"
+  },
+  {
+    "id": "ZSD_F1871_QUOT_FS_SRV",
+    "title": "Quotation FactSheet - S4H SD FIORI"
+  },
+  {
+    "id": "ZSD_F2026_CONTR_FS_SRV",
+    "title": "Contract Fact Sheet"
+  },
+  {
+    "id": "ZC_PROCMONAGGPRC_CDS",
+    "title": "Process Observer: Aggregated Processes"
+  },
+  {
+    "id": "ZATP_CONFIGUREPRODALLOC",
+    "title": "Odata Services for ATP: Configure Product Allocation"
+  },
+  {
+    "id": "ZQM_SAMPLE_OBJPAG_SRV",
+    "title": "OData QM: 'Sample' Object Page OData Service"
+  },
+  {
+    "id": "ZQM_INFOREC_PROC_OBJECTPAGE_SRV",
+    "title": "ODATA QM: Inforecord in Procurement Object Page"
+  },
+  {
+    "id": "ZATP_BOP_SEGMENT_SETUP",
+    "title": "Setup for ATP BOP Segment"
+  },
+  {
+    "id": "ZATP_BOP_VARIANT_SETUP",
+    "title": "Setup for ATP BOP Variant"
+  },
+  {
+    "id": "ZATP_MONITOR_BOP_RUN",
+    "title": "ATP Monitor BOP Run"
+  },
+  {
+    "id": "ZSD_BILLINGDOC_PROCFLOW_SRV",
+    "title": "SD Process Flow for Biilling Document"
+  },
+  {
+    "id": "ZSD_CUSTOMER_INVOICES_MANAGE",
+    "title": "Manage Customer Invoices"
+  },
+  {
+    "id": "ZUI_BILLINGDOCUMENTFS",
+    "title": "Billing Document Fact Sheet"
+  },
+  {
+    "id": "ZPLMI_RECIPE_MANAGE",
+    "title": "Manage Recipes"
+  },
+  {
+    "id": "ZPLMI_LABEL_MANAGE",
+    "title": "Manage Label Sets"
+  },
+  {
+    "id": "ZPLMI_PRODUCT_STRUCTURE_SRV",
+    "title": "Product Structure Management Service"
+  },
+  {
+    "id": "ZC_MYCHEMICALAPPROVALSLIST_CDS",
+    "title": "My Chemical Approvals"
+  },
+  {
+    "id": "ZEHS_APPROVEDCHEMICALSLIST_SRV",
+    "title": "List of Approved Chemicals"
+  },
+  {
+    "id": "ZSD_F2187_CUST360_SRV",
+    "title": "Customer 360"
+  },
+  {
+    "id": "ZMPE_PRODORDER_OBJPG_SRV",
+    "title": "Production Order Object Page SEGW Project"
+  },
+  {
+    "id": "ZMPE_PLANNEDORDER_OBJPG_SRV",
+    "title": "Planned Order Object Page SEGW Gateway Project"
+  },
+  {
+    "id": "ZMPE_PROCESSORDER_OBJPG_SRV",
+    "title": "Process Order Object Page"
+  },
+  {
+    "id": "ZMPE_WORKCENTER_OBJPG_SRV",
+    "title": "WorkCenter Object Page"
+  },
+  {
+    "id": "ZMPE_PPPIWORKCENTER_OBJPG_SRV",
+    "title": "Resource Object Page"
+  },
+  {
+    "id": "ZMPE_PROCORDERCNF_OBJPG_SRV",
+    "title": "Process Order Confirmation Object Page"
+  },
+  {
+    "id": "ZMPE_PRODORDERCNF_OBJPG_SRV",
+    "title": "Production Order Confirmation Object Page"
+  },
+  {
+    "id": "ZMATPLANTPURSOURCELIST_SRV",
+    "title": "Maintain Source List Application"
+  },
+  {
+    "id": "ZC_SUPLREVALQNAIRETRANST_SRV",
+    "title": "Translate Questionnaire Names"
+  },
+  {
+    "id": "ZC_SUPLREVALTEMPLATETRANST_SRV",
+    "title": "Translate Evaluation Template"
+  },
+  {
+    "id": "ZMPE_CHANGE_RECORD_EXEC_SRV",
+    "title": "Change Records for Execution"
+  },
+  {
+    "id": "ZMPE_PRODOPER_POVER",
+    "title": "Production Operation Popover"
+  },
+  {
+    "id": "ZMPE_WORKCENTER_POVER",
+    "title": "Popover for workcenter"
+  },
+  {
+    "id": "ZMPE_DOCUMENT_LIST_SRV",
+    "title": "Read Originals of a document via DIR info"
+  },
+  {
+    "id": "ZMPE_ORDER_SPECIFIC_ROUTING_SRV",
+    "title": "Order Speific Routing"
+  },
+  {
+    "id": "ZMPE_PRODNORD_POVER",
+    "title": "Service for Production Order Popover"
+  },
+  {
+    "id": "ZMPE_BUYOFFCYCLE_SRV",
+    "title": "oData service for Buy Off Cycle"
+  },
+  {
+    "id": "ZMPE_OA_EXECUTION_SRV",
+    "title": "Operation Activity Execution"
+  },
+  {
+    "id": "ZPP_MPE_OPER_MANAGE",
+    "title": "Manage Operations"
+  },
+  {
+    "id": "ZMPE_EXEC_RR_SRV",
+    "title": "Odata Service for Result Recording"
+  },
+  {
+    "id": "ZMPE_EXEC_NON_CONFORMANCE_SRV",
+    "title": "oData service for defect recording"
+  },
+  {
+    "id": "ZMPE_HOLD_SRV",
+    "title": "MPE Hold"
+  },
+  {
+    "id": "ZPP_MPE_ORDER_MANAGE",
+    "title": "Manage Orders"
+  },
+  {
+    "id": "ZQM_RESULT_HISTORY_SRV",
+    "title": "Result History"
+  },
+  {
+    "id": "ZSD_F2303_SOWOC_FS_SRV",
+    "title": "Sales Order Without Charge Factsheet"
+  },
+  {
+    "id": "ZEHHSS_IDENTIFY_RISKS_SRV",
+    "title": "Identify Risks"
+  },
+  {
+    "id": "ZPLMI_SYNCUNITR2B_MANAGE",
+    "title": "Manage R2B Synchronization Units"
+  },
+  {
+    "id": "ZC_RESOLVEDDISPUTECASE_CDS",
+    "title": "Resolved Dispute Case"
+  },
+  {
+    "id": "ZC_OPENCLOSEDDISPUTECASE_CDS",
+    "title": "Open and Closed Dispute Cases"
+  },
+  {
+    "id": "ZC_OPENDISPUTECASE_CDS",
+    "title": "Open Dispute Case"
+  },
+  {
+    "id": "ZFAR_DUNNING_HISTORY_SRV",
+    "title": "Display Dunning History"
+  },
+  {
+    "id": "ZFAR_MY_DUNNING_PROPOSAL_SRV",
+    "title": "Dunning proposals belonging to an accounting clerk"
+  },
+  {
+    "id": "ZC_COLLECTIONPROGRESSQ_CDS",
+    "title": "Collection Progress Query"
+  },
+  {
+    "id": "ZC_PROMISETOPAYOVERVIEW_CDS",
+    "title": "Promise To Pay Overview"
+  },
+  {
+    "id": "ZC_OVERDUEINDISPUTE_CDS",
+    "title": "C_OVERDUEINDISPUTE_CDS"
+  },
+  {
+    "id": "ZSD_F2499_CUSTOMER_MATERIAL_SRV",
+    "title": "Customer Material"
+  },
+  {
+    "id": "ZPMRP_RECEIPT_SERVICE",
+    "title": "RAP: PMRP_RECEIPT_SERVICE generated at 20190415"
+  },
+  {
+    "id": "ZPMRP_SUPPLYCHAIN_SERVICE",
+    "title": "RAP: PMRP_SUPPLYCHAIN_SERVICE generated at 20190404"
+  },
+  {
+    "id": "ZICA_MATCH_METHOD_SRV",
+    "title": "Inter-Company Match Method Maintenance"
+  },
+  {
+    "id": "ZICA_ASSIGNMENT_SRV",
+    "title": "Matching Method Assignment Service"
+  },
+  {
+    "id": "ZICA_MATCHING_DOC_SRV",
+    "title": "ica Matching Doc List"
+  },
+  {
+    "id": "ZICA_RECON_CASE_SRV",
+    "title": "Reconciliation Case"
+  },
+  {
+    "id": "ZICA_RECON_REPORT_SRV",
+    "title": "Inter-Company Reconciliation Report"
+  },
+  {
+    "id": "ZC_PLANNEDORDERS_CDS",
+    "title": "Manage Planned Orders"
+  },
+  {
+    "id": "ZC_CONVERTPLANNEDORDER_CDS",
+    "title": "Convert Planned Orders"
+  },
+  {
+    "id": "ZUI_SUPLRUSRDFNDCRITRA",
+    "title": "Supplier Evaluation By User-Defined Criteria"
+  },
+  {
+    "id": "ZPMRP_SIM_COMPONENT_SERVICE",
+    "title": "Service for Components in the Simulation"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTPOSSTRUC_SRV",
+    "title": "Force Element to Position Organization Relationships"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTPOSPEACETME_SRV",
+    "title": "Force Element to Position Peacetime Relationship"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTPOSWARTME_SRV",
+    "title": "Force Element to Position Wartime Relationship"
+  },
+  {
+    "id": "ZMMIM_PI_CYC_MAINT_SRV",
+    "title": "OData Service of app Cycle Counting - Classification"
+  },
+  {
+    "id": "ZPP_WORKCENTER_GROUP_SRV",
+    "title": "Manage Work Center Groups"
+  },
+  {
+    "id": "ZUI_SUPPLYPROTECTION",
+    "title": "UI_SUPPLYPROTECTION"
+  },
+  {
+    "id": "ZUI_C_DFS_ALLWNCPLAN",
+    "title": "Service binding for Allowance Plan"
+  },
+  {
+    "id": "ZSD_SALES_ORDER_IMPORT",
+    "title": "Import Sales Order Service Project"
+  },
+  {
+    "id": "ZSD_SADEMAND",
+    "title": "Sales Scheduling Agreement Demand Analysis"
+  },
+  {
+    "id": "ZQM_PROBSOLVPROC_EXECT_SRV",
+    "title": "Resolve Internal Problems"
+  },
+  {
+    "id": "ZQM_DEFECT_MANAGE_SRV",
+    "title": "Odata:QM Defect"
+  },
+  {
+    "id": "ZMM_PUR_MYPURGDOCITEMS_SRV",
+    "title": "My Purchasing Document Items"
+  },
+  {
+    "id": "ZFINS_ACDOC_PLAN_MANAGE_REVERSL_SRV",
+    "title": "Revert Financial Planning Transaction"
+  },
+  {
+    "id": "ZDFS_FMPO_FLXMTPLOBJ_SRV",
+    "title": "Flexible Material Planning Object for Defense"
+  },
+  {
+    "id": "ZC_FLXMTPLOBJHIERARCHY_CDS",
+    "title": "FMPO Hierarchy View"
+  },
+  {
+    "id": "ZDFS_FMPO_HIERARCHY_SRV",
+    "title": "Hierarchy Application for FMPO"
+  },
+  {
+    "id": "ZUI_PURCHASEORDERACCRS_DSP",
+    "title": "Display Purchase Order Accruals"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTORGNTWKGRAPH_SRV",
+    "title": "Network Graph for Force Element"
+  },
+  {
+    "id": "ZDFS_ASSGMT_FETOFMPO_SRV",
+    "title": "Assignment for FMPO Assignment in DFS"
+  },
+  {
+    "id": "ZDFS_ASSGMT_FETOPROD_SRV",
+    "title": "Assignment for Force Element to Product Master"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTORGWARTME_SRV",
+    "title": "Force Element War Time Relationship"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTORGSTRUC_SRV",
+    "title": "Force Element Organization Structures"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTORGPEACETME_SRV",
+    "title": "Force Element Peacetime Relationships"
+  },
+  {
+    "id": "ZQM_DEFECT_ANALYZE_SRV",
+    "title": "OData QM: Defect Analytics OData Service"
+  },
+  {
+    "id": "ZRE_CN_CONTRACT_ODATA_SRV",
+    "title": "Services for RE-FX Contract"
+  },
+  {
+    "id": "ZMM_PUR_ANA_SUPPLEVALOVERALL_SRV",
+    "title": "Overall Supplier Evaluation"
+  },
+  {
+    "id": "ZFCO_REASSIGN_COSTS_REVENUES_SRV",
+    "title": "Reassign Costs and Revenues"
+  },
+  {
+    "id": "ZPP_PROCESS_ORDER_MANAGE_SRV",
+    "title": "Manage Process Orders"
+  },
+  {
+    "id": "ZUI_C_DFS_ALLWNCREQ",
+    "title": "Service binding for Allowance Request"
+  },
+  {
+    "id": "ZPP_MNTR_WRKCTR_SRV",
+    "title": "Monitor Work Center Schedules"
+  },
+  {
+    "id": "ZSLL_PRODCLSFCTN_DSP",
+    "title": "Product Classification - International Trade"
+  },
+  {
+    "id": "ZSD_SA_EDIPROCGOPTN_WL",
+    "title": "Manage EDI Processing Options"
+  },
+  {
+    "id": "ZSD_SA_SOLDTOPARTYDETN_WL",
+    "title": "Assign Sold-to Parties for Delivery Schedules"
+  },
+  {
+    "id": "ZPP_FCDM_MASS_MAINT",
+    "title": "Demand Forecast Keyfigures and Mass Maintenance"
+  },
+  {
+    "id": "ZFML_UPLMATINVPR_SRV",
+    "title": "Upload Material Inventory Prices"
+  },
+  {
+    "id": "ZC_RFQSOURCINGEVENTTYPES_CDS",
+    "title": "RFQ Document Types"
+  },
+  {
+    "id": "ZDFS_POS_DEFENSEPOSITION_SRV",
+    "title": "Position for Defense"
+  },
+  {
+    "id": "ZDFS_FE_FRCELMNTORG_SRV",
+    "title": "Force Element for Defense"
+  },
+  {
+    "id": "ZDFS_FE_REFFRCELMNTORG_SRV",
+    "title": "Reference Force Element For Defence"
+  },
+  {
+    "id": "ZC_SECURITYPRICEREPORTING_CDS",
+    "title": "Security Price on Reporting Period"
+  },
+  {
+    "id": "ZC_FXSPOTRATEHISTORY_CDS",
+    "title": "FX Spot Rates With Different Periods"
+  },
+  {
+    "id": "ZC_FXSPOTRATEDEVIATION_CDS",
+    "title": "FX Spot Rate Deviation on Key Date"
+  },
+  {
+    "id": "ZC_MKTDATAREFINTRSTRATERPTG_CDS",
+    "title": "Ref. Interest Rate in Reporting Period"
+  },
+  {
+    "id": "ZFTR_MD_GLOBAL_SRV_SRV",
+    "title": "Market Data Overview Global"
+  },
+  {
+    "id": "ZC_FXSWAPRATEKEYDATE_CDS",
+    "title": "FX swap rate"
+  },
+  {
+    "id": "ZFTR_MD_SECPRICE_DEVIATION_SRV",
+    "title": "Security Price Deviation"
+  },
+  {
+    "id": "ZEHHSS_HSM_HSI_INFO_SRV",
+    "title": "Hazardous Substance Inventory Info"
+  },
+  {
+    "id": "ZEHHSS_HSM_FSI_TEXT_SRV",
+    "title": "Manage Safety Instruction Text Blocks"
+  },
+  {
+    "id": "ZEHFND_TASK_CALENDAR_SRV",
+    "title": "Task Calendar App"
+  },
+  {
+    "id": "ZUI_LO_SETMAN_PSDOC_MON",
+    "title": "RAP: UI_LO_SETMAN_PSDOC_MON generated at 20190212"
+  },
+  {
+    "id": "ZFCO_STSTCL_KEY_FIG_VALUES_SRV",
+    "title": "Statistical Key Figure Values"
+  },
+  {
+    "id": "ZFARR_CONFLICTED_CONTRACT_WL_SRV",
+    "title": "Conflicted Revenue Contracts Worklist"
+  },
+  {
+    "id": "ZO2C_FICA_BPITEMS_TRANSFER_SRV",
+    "title": "Transfer Business Partner Items"
+  },
+  {
+    "id": "ZUI_RFM_SUPPLY_SORTRULE",
+    "title": "RAP: UI_RFM_SUPPLY_SORTRULE generated at 20190314"
+  },
+  {
+    "id": "ZC_PURORDOUTPUTAUTOMNRATE_CDS",
+    "title": "PO Output Automn & non Automn percentage"
+  },
+  {
+    "id": "ZC_EWM_WAREHOUSEORDERQ_CDS",
+    "title": "Warehouse Order - Query"
+  },
+  {
+    "id": "ZC_INVOICEINBOUNDAUTOMNRATE_CDS",
+    "title": "Invoice Inbound Automnation Rate"
+  },
+  {
+    "id": "ZUI_CADISCONNCNRECONNCN_MNT",
+    "title": "Monitor Disconnections and Reconnections"
+  },
+  {
+    "id": "ZRFM_ALIGNMENT_COMPARE_SRV",
+    "title": "Compare alignment runs"
+  },
+  {
+    "id": "ZRFM_ALIGNMENT_DETAIL_SRV",
+    "title": "Detail Analysis for Alignment Run"
+  },
+  {
+    "id": "ZFIGL_EXT_RECON_SRV",
+    "title": "External Reconcilation"
+  },
+  {
+    "id": "ZEHFND_LOCATION_ROLES_SRV",
+    "title": "EHS Location Roles Assigned to Persons"
+  },
+  {
+    "id": "ZUI_C_DFS_MAINT_PLATFORM",
+    "title": "Service Binding for Platform Code"
+  },
+  {
+    "id": "ZFAC_MANAGE_POSTING_PERIOD",
+    "title": "Serv. Binding for Manage Posting Period"
+  },
+  {
+    "id": "ZUI_FCO_OVERHEAD_CALC_O2",
+    "title": "Overhead Calculation"
+  },
+  {
+    "id": "ZEHS_EM_IMPORTENVDATA_SRV",
+    "title": "Import Environmental Data"
+  },
+  {
+    "id": "ZEM_MONITORDATA_SRV",
+    "title": "Monitor Environmental Amount Data"
+  },
+  {
+    "id": "ZEHS_EM_MYDATACOLL_SRV",
+    "title": "My Data Colletions"
+  },
+  {
+    "id": "ZFARR_MANAGE_POSTPONED_RAI_SRV",
+    "title": "Manage Revenue Accounting Postponed RAI"
+  },
+  {
+    "id": "ZMM_PUR_CNTRLCTRMASS_UPDT_SRV",
+    "title": "Mass Changes to Central Purchase Contracts"
+  },
+  {
+    "id": "ZUI_O2C_FICA_DSPINTRST_O2",
+    "title": "Display Interest Calculations"
+  },
+  {
+    "id": "ZEHHSS_MANAGE_INCIDENT_SRV",
+    "title": "Manage Incidents"
+  },
+  {
+    "id": "ZEHFND_IMAGE",
+    "title": "Provider for Image Files"
+  },
+  {
+    "id": "ZC_INJURYILLNLOGGROUPQUERY_CDS",
+    "title": "Injury/Illness Log Group Query"
+  },
+  {
+    "id": "ZC_INJURYILLNLOGCASEQUERY_CDS",
+    "title": "Injury/Illness Log Case Query"
+  },
+  {
+    "id": "ZEHHSS_INJ_ILL_LOG_SRV",
+    "title": "Injury Illness Log"
+  },
+  {
+    "id": "ZFAC_ACE_POSTG_SRV",
+    "title": "Analyze Accrual Postings"
+  },
+  {
+    "id": "ZMM_PUR_CQTN_MAINTAIN_SRV",
+    "title": "Central Supplier Quotation"
+  },
+  {
+    "id": "ZMM_PUR_CREATE_FOD_FROM_CQTN_SRV",
+    "title": "Create purchase orders from central quotation"
+  },
+  {
+    "id": "ZC_RAGLOBALFILTEROVW_CDS",
+    "title": "RA Overview Page Filter Bar"
+  },
+  {
+    "id": "ZFARR_OVERVIEW_PAGE_SRV",
+    "title": "Revenue Accounting Overview Page"
+  },
+  {
+    "id": "ZC_RARECGDREVNTRENDOVW_CDS",
+    "title": "RA Recognized Revenue Trend Ovw"
+  },
+  {
+    "id": "ZC_RARECGDREVNBYQUARTEROVW_CDS",
+    "title": "RA Recognized Revn By Quarter Overview"
+  },
+  {
+    "id": "ZC_NMBROFRACONTRACTSBYSTS_CDS",
+    "title": "Number Of RA Contract By Status"
+  },
+  {
+    "id": "ZC_RARECGDREVNBYFLFMTTYPE_CDS",
+    "title": "RA Recognized Revenue by Flfmt Type"
+  },
+  {
+    "id": "ZLE_JIT_POST_STOCK_TRANSFER_SRV",
+    "title": "Post stocks for summarized JIT Calls"
+  },
+  {
+    "id": "ZUI_RFM_ALIGNMENT_MONITOR",
+    "title": "RAP: UI_RFM_ALIGNMENT_MONITOR generated at 20190308"
+  },
+  {
+    "id": "ZC_US_EPCRATIERONEQUERY_CDS",
+    "title": "EPCRA: Inventory Query Reporting Tier 1"
+  },
+  {
+    "id": "ZC_US_EPCRASTKDETQUERY_CDS",
+    "title": "EPCRA: Inv. Rep. Stock Details Query"
+  },
+  {
+    "id": "ZO2C_FICA_DOC_REVERSE_SRV",
+    "title": "Reverse Document"
+  },
+  {
+    "id": "ZUI_CASECURITYDEPMGMTTP",
+    "title": "Manage Security Deposit"
+  },
+  {
+    "id": "ZFARP_MANAGE_INTEREST_RUNS_SRV",
+    "title": "oData Service for Manage Interest Runs App"
+  },
+  {
+    "id": "ZPMRP_FLXBLCSTRT_UI_SERVICE",
+    "title": "Service for Flexible Constraint"
+  },
+  {
+    "id": "ZRSH_EAM_MAINT_ASSET_BOARD_SRV",
+    "title": "Maintenance Asset Board"
+  },
+  {
+    "id": "ZMM_PUR_REQ_CONF_GR_SRV",
+    "title": "SSP Requisition Goods Receipt Confirmation"
+  },
+  {
+    "id": "ZUI_CACREDITWORTHINESS_MNG",
+    "title": "Creditworthiness"
+  },
+  {
+    "id": "ZSD_PRE_BIL_DUE_LIST_ITEM_SRV",
+    "title": "Preliminary Billing Due List Item"
+  },
+  {
+    "id": "ZUI_C_DFS_AUTHZDACTLCOMPRN",
+    "title": "Service Binding For AAC Report"
+  },
+  {
+    "id": "ZSD_MANAGE_SADVTNPRFL",
+    "title": "Manage Deviation Profile"
+  },
+  {
+    "id": "ZFTR_POSITION_VALUES_SRV",
+    "title": "OData Object for TPM12"
+  },
+  {
+    "id": "ZFINS_BALANCE_AUDIT_TRAIL_ITEMS_SRV",
+    "title": "OData Service Account Balance Audit Trail"
+  },
+  {
+    "id": "SD_F3014_SALESQUOT_WORKFLOW_SRV",
+    "title": "Sales Quotation Workflow"
+  },
+  {
+    "id": "ZTARGET_TV_CDS",
+    "title": "Target table view"
+  },
+  {
+    "id": "ZSD_CDS_050_CDS",
+    "title": "Invoice Details with PRCD Elements"
+  },
+  {
+    "id": "ZCREATE_SO_SRV",
+    "title": "Sales Order Creation"
+  },
+  {
+    "id": "ZAPI_GETBUPA_SRV",
+    "title": "Get Business Partner List"
+  },
+  {
+    "id": "ZSD_CDS_050_Q_CDS",
+    "title": "Invoice Analytics Query"
+  },
+  {
+    "id": "HRSFEC_PAYSLIP_PDF_SRV",
+    "title": "Pay Statement PDF"
+  },
+  {
+    "id": "HRSFEC_PAY_RESULT_SRV",
+    "title": "Wage types of a peyroll result"
+  },
+  {
+    "id": "SAP_BW_INA_SRV",
+    "title": "Gateway Service for BW InA"
+  },
+  {
+    "id": "SR_APS_FLP_SETTINGS_ODATA_SRV",
+    "title": "FLP Config UI Settings"
+  },
+  {
+    "id": "SSB_UIAD_DESIGNTIME_SRV",
+    "title": "Service for handling applications as UIAD object"
+  },
+  {
+    "id": "C_FTR_CL_UTIL_ANALYTICS_CDS",
+    "title": "Facility Utilization Analytics"
+  },
+  {
+    "id": "PP_EVALUATECAPACITY_SRV",
+    "title": "Evaluate Capacity"
+  },
+  {
+    "id": "EAM_OBJPG_MAINTITEM_SRV",
+    "title": "Maintenance Item for Object Page"
+  },
+  {
+    "id": "/BDTS/COMMAND_SRV",
+    "title": "/BDTS/CL_ODATA_CMD_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/INSTALLED_SAP_NOTE_SRV",
+    "title": "/BDTS/CL_ODATA_INST_SN_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/PRESEL_TAB_DATA_SRV",
+    "title": "/BDTS/CL_ODATA_TAB_EXT_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/PRESEL_TAB_READ_NAME_SRV",
+    "title": "/BDTS/CL_ODATA_TAB_NAM_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/PRESEL_TASK_IS_CREATED_SRV",
+    "title": "/BDTS/CL_ODATA_TASK_CR_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/PRESEL_TASK_PORTION_SRV",
+    "title": "/BDTS/CL_ODATA_PT_PORT_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/PRESEL_TASK_READ_STATUS_SRV",
+    "title": "/BDTS/CL_ODATA_TASK_ST_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/SOFTWARE_COMPONENT_SRV",
+    "title": "/BDTS/CL_ODATA_SW_COMP_DPC_EXT"
+  },
+  {
+    "id": "/BDTS/TABLE_FIELD_STRUCTUR_SRV",
+    "title": "/BDTS/CL_ODATA_TAB_FLD_DPC_EXT"
+  },
+  {
+    "id": "/IWFND/GWDEMO_SP2",
+    "title": "ZCL_ZTEST_GWDEMO_DPC_EXT"
+  },
+  {
+    "id": "/IWBEP/BATCH_AT_ONCE_TEST",
+    "title": "Test implementation for batch@once option"
+  },
+  {
+    "id": "/IWBEP/TEA_TEST_COMP_APP",
+    "title": "Test Application Service Composition TEA"
+  },
+  {
+    "id": "/IWBEP/TEA_TEST_REUSE_APP",
+    "title": "Test Application Service TEA Reused by Composition TEA Serv"
+  },
+  {
+    "id": "/IWBEP/MESSAGE_TEXT",
+    "title": "Message Text Service - Exposes T100 message longtexts"
+  },
+  {
+    "id": "/IWFND/SUBSCRIPTIONMANAGEMENT",
+    "title": "MOC enabled Subscription Management Service"
+  },
+  {
+    "id": "/IWFND/SG_MED_CATALOG",
+    "title": "Catalog Service"
+  },
+  {
+    "id": "/IWFND/SG_MED_CATALOG",
+    "title": "Catalog Service Version 2"
+  },
+  {
+    "id": "/IWFND/SG_MGW_NOTIF_STORE",
+    "title": "ODATA Channel: Notification Store"
+  },
+  {
+    "id": "/IWFND/SG_USER_SERVICE",
+    "title": "Information Worker - User Service"
+  },
+  {
+    "id": "/IWFND/USAGEEXTRACTOR",
+    "title": "Metering Usage Extractor"
+  },
+  {
+    "id": "/IWPGW/TASKPROCESSING",
+    "title": "Task Gateway Service version 2.0"
+  },
+  {
+    "id": "/IWPGW/TASKPROCESSING",
+    "title": "Task Gateway Service"
+  },
+  {
+    "id": "/LTB/MIG_MC_ODATA_SRV",
+    "title": "Migration Cockpit OData Service"
+  },
+  {
+    "id": "ZFIORI_ANALYZER_SRV",
+    "title": "oData Service for Payment Analyzer"
+  },
+  {
+    "id": "ZFIORI_MANAGE_SRV",
+    "title": "oData Service for Manage Payments"
+  },
+  {
+    "id": "ZIHB_ACC_UPLOAD_SRV",
+    "title": "IHB Account Upload Service"
+  },
+  {
+    "id": "ZUI_SLAWORKFLOW",
+    "title": "Service Level Agreement Inbox Layout"
+  },
+  {
+    "id": "ZSB_MANAGE_SLA",
+    "title": "Manage Service Level Agreements"
+  },
+  {
+    "id": "ZFIORI_CREATE_SRV",
+    "title": "Create Payments"
+  },
+  {
+    "id": "ZFIORI_REPAIR_SRV",
+    "title": "oData Service for Repair Payments"
+  },
+  {
+    "id": "ZFIORI_PAYBLOCK_SRV",
+    "title": "oData Service for Maintain Payment Blocks"
+  },
+  {
+    "id": "ZFIORI_CORR_SRV",
+    "title": "oData Service for Manage Correction Rules"
+  },
+  {
+    "id": "ZFIORI_PAYBATCH_SRV",
+    "title": "oData Service for Manage Payment Batches"
+  },
+  {
+    "id": "ZFIORI_INBOX_SRV",
+    "title": "oData Service for Release Payments"
+  },
+  {
+    "id": "ZUI_PAYMENTAGRMTWRKFLW",
+    "title": "Payment Agreement Inbox Layout"
+  },
+  {
+    "id": "ZFIORI_PAYRULE_SRV",
+    "title": "OData Service for Manage Payment Rules"
+  },
+  {
+    "id": "ZSCENARIO_BUILDER_SRV",
+    "title": "Scenario Builder"
+  },
+  {
+    "id": "/SCWM/SIMPLE_INB_PO_SRV",
+    "title": "Basic Inbound process based on purchase orders"
+  },
+  {
+    "id": "/SCWM/USER_DEFAULTPARAMETER_SRV",
+    "title": "Basic User default parameters"
+  },
+  {
+    "id": "/SCWM/SIMPLE_INB_DLV_SRV",
+    "title": "Basic Inbound process based on deliveries"
+  },
+  {
+    "id": "ZPICKCART_SRV",
+    "title": "EWM: PICK CART"
+  },
+  {
+    "id": "ZSIMPLE_OUTB_DLV_SRV",
+    "title": "Basic Outbound process based on deliveries"
+  },
+  {
+    "id": "ZPICKLIST_PAPER_SRV",
+    "title": "EWM: Pick List Confirmation"
+  },
+  {
+    "id": "ZPACK_OUTBDLV_SRV",
+    "title": "EWM: Pack Outbound Delivery Fiori App"
+  },
+  {
+    "id": "ZSIMPLE_OUTB_TU_SRV",
+    "title": "Basic Outbound process based on TU"
+  },
+  {
+    "id": "ZRECORD_INVENTORY_SRV",
+    "title": "Paper-driven Physical Inventory Counting"
+  },
+  {
+    "id": "ZCUSTOMER_RETURNS_SRV",
+    "title": "EWM: Customer Returns"
+  },
+  {
+    "id": "ZWAREHOUSE_KPIS_SRV",
+    "title": "EWM: Warehouse KPIs"
+  },
+  {
+    "id": "/SOMO/MA_ODATA_SRV",
+    "title": "/SOMO/CL_MA_ODATA_DPC_EXT"
+  },
+  {
+    "id": "ZSMART_BUSINESS_RUNTIME_SRV",
+    "title": "OData for Smart Business Runtime"
+  },
+  {
+    "id": "ZSMART_BUSINESS_DESIGNTIME_SRV",
+    "title": "SSB : Designtime Apps Services"
+  },
+  {
+    "id": "/UCOM/MDX_DATA_CONT_SRV",
+    "title": "MDX data container"
+  },
+  {
+    "id": "/UI2/FDM_PAGE_RUNTIME_SRV",
+    "title": "SAP Fiori Data Model: Page Runtime Service"
+  },
+  {
+    "id": "/UI2/FDM_PAGE_REPOSITORY_CUST_SRV",
+    "title": "Fiori Data Model: Page Repository Customizing Service"
+  },
+  {
+    "id": "/UI2/FDM_PAGE_REPOSITORY_SRV",
+    "title": "Fiori Data Model: Page Repository Service"
+  },
+  {
+    "id": "/UI2/FDM_SPACE_REPOSITORY_CUST_SRV",
+    "title": "SAP Fiori Data Model: Space Repository Customizing Service"
+  },
+  {
+    "id": "/UI2/FDM_TRANSPORT_SRV",
+    "title": "SAP Fiori Data Model: Transport Service"
+  },
+  {
+    "id": "/UI2/FDM_VALUE_HELP_SRV",
+    "title": "Fiori Data Model: Value Help Service"
+  },
+  {
+    "id": "ZINTEROP",
+    "title": "Gateway Service of Interaperability"
+  },
+  {
+    "id": "ZPAGE_BUILDER_CONF",
+    "title": "Pagebuilder - Configuration level"
+  },
+  {
+    "id": "ZPAGE_BUILDER_CUST",
+    "title": "Pagebuilder - Customizing level"
+  },
+  {
+    "id": "ZPAGE_BUILDER_PERS",
+    "title": "Pagebuilder - Personalization level"
+  },
+  {
+    "id": "ZTRANSPORT",
+    "title": "UI2: Transport Service"
+  },
+  {
+    "id": "ZEASY_ACCESS_MENU",
+    "title": "Easy Access Menu service"
+  },
+  {
+    "id": "ZUSER_MENU",
+    "title": "User Menu service"
+  }
+]
