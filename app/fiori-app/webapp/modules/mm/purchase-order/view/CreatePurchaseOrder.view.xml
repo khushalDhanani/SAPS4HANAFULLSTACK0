@@ -10,7 +10,8 @@
     <Page
         id="createPOPage"
         showHeader="false"
-        backgroundDesign="Solid">
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- Global In-Page Validation Message Banner -->

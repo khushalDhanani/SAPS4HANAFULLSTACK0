@@ -23,6 +23,8 @@ function mapToS4InquiryPayload(header, items, options = {}) {
         SalesOrganization: String(header.SalesOrganization || '1000').trim(),
         DistributionChannel: String(header.DistributionChannel || '10').trim(),
         OrganizationDivision: String(header.OrganizationDivision || '52').trim(),
+        SalesOffice: String(header.SalesOffice || '').trim(),
+        SalesGroup: String(header.SalesGroup || '').trim(),
         SoldToParty: String(header.SoldToParty || '').trim(),
         CustomerName: header.CustomerName ? String(header.CustomerName).trim() : '',
         PurchaseOrderByCustomer: header.PurchaseOrderByCustomer ? String(header.PurchaseOrderByCustomer).trim() : '',

@@ -17,16 +17,69 @@ sap.ui.define([
         onInit: function () {
             var oViewModel = new JSONModel({
                 selectedTab: "overview",
+                systemHealth: 100,
                 totalCount: 0,
                 supplierCount: 0,
-                totalSpend: "3.42",
-                completeRate: 100,
+                totalSpend: "0.00",
+                completeRate: 0,
                 fiDocCount: 0,
-                carLoanActiveCount: 32,
-                bpCount: 284,
-                productCount: 1420,
-                glAccountCount: 310,
-                mdgOpenCRCount: 12
+                openSalesOrderCount: 0,
+                totalSalesOrderCount: 0,
+                salesInquiryCount: 0,
+                customerCount: 0,
+                bpCount: 0,
+                productCount: 0,
+                glAccountCount: 0,
+                costCenterCount: 0,
+                profitCenterCount: 0,
+                fixedAssetCount: 0,
+                wbsElementCount: 0,
+                internalOrderCount: 0,
+                purchaseContractCount: 0,
+                companyCodeCount: 0,
+                plantCount: 0,
+                storageLocationCount: 0,
+                materialGroupCount: 0,
+                purchasingOrgCount: 0,
+                purchasingGroupCount: 0,
+                warehouseCount: 0,
+                openReservationCount: 0,
+                inboundDeliveryCount: 0,
+                gatewayCatalogCount: 0,
+                carLoanActiveCount: 0,
+                mdgOpenCRCount: 0,
+                bankAccountCount: 0,
+                workCenterCount: 0,
+                workCenterCapacityRate: 0,
+                technicalObjectCount: 0,
+                bpProcessWorkflowCount: 0,
+                productProcessWorkflowCount: 0,
+                masterDataImportBatchCount: 0,
+                masterDataExportBatchCount: 0,
+                costSettlementRate: 0,
+                costAllocationCyclesCount: 0,
+                ppCapacityUtilization: 0,
+                productionOrderCount: 0,
+                inspectionLotCount: 0,
+                fmeaCaseCount: 0,
+                maintenanceOrderCount: 0,
+                eamCostVarianceRate: 0,
+                projectWipAmount: "0.00",
+                ewmOperationsRate: 0,
+                ewmStorageTypeCount: 0,
+                ewmTaskCount: 0,
+                tmRouteCount: 0,
+                tmDispatchedCount: 0,
+                carLoanVolume: "0.00",
+                carLoanApprovalRate: 0,
+                hcmOrgUnitCount: 0,
+                hcmHeadcount: 0,
+                hcmLoanCount: 0,
+                analyticsCashFlow: "0.00",
+                analyticsDso: 0,
+                supplierScorecardAvg: 0,
+                adminJobsCount: 0,
+                adminWorkflowCount: 0
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
@@ -50,56 +103,277 @@ sap.ui.define([
 
         _loadMetrics: function () {
             var oViewModel = this.getView().getModel("dashboardView");
+            if (!oViewModel) {
+                return Promise.resolve();
+            }
 
-            return ODataClient.get("/odata/v4/purchase-order/PurchaseOrders?$top=100&$select=PurchaseOrder,Supplier,PurchasingCompletenessStatus&$count=true")
-                .then(function (oData) {
-                    if (!oData) {
-                        return;
+            var that = this;
+            return ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
+                .then(function (res) {
+                    if (!res) return;
+                    var oMetrics = res;
+                    if (typeof oMetrics === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics);
+                        } catch (_) {}
                     }
+                    if (oMetrics && oMetrics.value && typeof oMetrics.value === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics.value);
+                        } catch (_) {}
+                    }
+                    if (oMetrics && typeof oMetrics === "object") {
+                        Object.keys(oMetrics).forEach(function (sKey) {
+                            oViewModel.setProperty("/" + sKey, oMetrics[sKey]);
+                        });
+                    }
+                })
+                .catch(function (err) {
+                    console.warn("[DashboardController] Unified metrics load warning, falling back to individual queries:", err && err.message);
+                    return that._loadIndividualMetrics();
+                });
+        },
+
+        _loadIndividualMetrics: function () {
+            var oViewModel = this.getView().getModel("dashboardView");
+            if (!oViewModel) {
+                return Promise.resolve();
+            }
+
+            var pPurchaseOrders = ODataClient.get("/odata/v4/purchase-order/PurchaseOrders?$top=100&$select=PurchaseOrder,Supplier,PurchaseOrderNetAmount,PurchasingCompletenessStatus&$count=true")
+                .then(function (oData) {
+                    if (!oData) return;
                     var aOrders = oData.value || [];
                     var iTotal = oData["@odata.count"] != null ? parseInt(oData["@odata.count"], 10) : aOrders.length;
-                    if (isNaN(iTotal)) {
-                        iTotal = aOrders.length;
-                    }
-                    var oSuppliers = {};
-                    var iCompleted = 0;
+                    if (isNaN(iTotal)) iTotal = aOrders.length;
 
+                    var iCompleted = 0;
+                    var fSpendSum = 0;
                     aOrders.forEach(function (oOrder) {
-                        if (oOrder.Supplier) {
-                            oSuppliers[oOrder.Supplier] = true;
-                        }
                         if (oOrder.PurchasingCompletenessStatus) {
                             iCompleted++;
                         }
+                        fSpendSum += parseFloat(oOrder.PurchaseOrderNetAmount) || 0;
                     });
 
-                    var iSupplierCount = Object.keys(oSuppliers).length;
                     var iRate = aOrders.length > 0 ? Math.round((iCompleted / aOrders.length) * 100) : 100;
+                    var fAvg = aOrders.length > 0 ? (fSpendSum / aOrders.length) : 0;
+                    var fTotalSpend = iTotal > aOrders.length ? (fAvg * iTotal) : fSpendSum;
+                    var sSpendMillions = (fTotalSpend / 1000000).toFixed(2);
 
-                    if (oViewModel) {
-                        oViewModel.setProperty("/totalCount", iTotal);
-                        oViewModel.setProperty("/supplierCount", iSupplierCount > 0 ? iSupplierCount : iTotal);
-                        oViewModel.setProperty("/completeRate", iRate);
+                    oViewModel.setProperty("/totalCount", iTotal);
+                    oViewModel.setProperty("/completeRate", iRate);
+                    oViewModel.setProperty("/totalSpend", sSpendMillions);
+                })
+                .catch(function () {});
+
+            var pSuppliers = ODataClient.get("/odata/v4/purchase-order/SupplierVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iSuppliers = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iSuppliers) && iSuppliers > 0) {
+                            oViewModel.setProperty("/supplierCount", iSuppliers);
+                        }
                     }
                 })
-                .catch(function () {
-                    // Graceful fallback for offline / mock dev mode
+                .catch(function () {});
+
+            var pMaterials = ODataClient.get("/odata/v4/purchase-order/MaterialVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iMaterials = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iMaterials) && iMaterials > 0) {
+                            oViewModel.setProperty("/productCount", iMaterials);
+                        }
+                    }
                 })
-                .then(function () {
-                    // Fetch FI metrics
-                    return ODataClient.get("/odata/v4/journal-entry/JournalEntryItems?$top=1&$count=true");
-                })
+                .catch(function () {});
+
+            var pFiDocs = ODataClient.get("/odata/v4/journal-entry/JournalEntryItems?$top=1&$count=true")
                 .then(function (oData) {
                     if (oData && oData["@odata.count"] != null) {
                         var iFiCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iFiCount) && oViewModel) {
+                        if (!isNaN(iFiCount)) {
                             oViewModel.setProperty("/fiDocCount", iFiCount);
                         }
                     }
                 })
-                .catch(function () {
-                    // Graceful fallback for offline / mock dev mode
-                });
+                .catch(function () {});
+
+            var pSalesInquiries = ODataClient.get("/odata/v4/sales-inquiry/SalesInquiries?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iInqCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iInqCount)) {
+                            oViewModel.setProperty("/salesInquiryCount", iInqCount);
+                        }
+                    }
+                })
+                .catch(function () {});
+
+            var pCustomers = ODataClient.get("/odata/v4/sales-inquiry/CustomerVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCustCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCustCount)) {
+                            oViewModel.setProperty("/customerCount", iCustCount);
+                        }
+                    }
+                })
+                .catch(function () {});
+
+            var pSalesOrders = ODataClient.get("/odata/v4/sales-inquiry/getSalesOrderMetrics()")
+                .then(function (oData) {
+                    if (oData) {
+                        var iOpen = oData.openOrdersCount != null ? parseInt(oData.openOrdersCount, 10) : 0;
+                        var iTotal = oData.totalOrdersCount != null ? parseInt(oData.totalOrdersCount, 10) : 0;
+                        if (!isNaN(iOpen)) {
+                            oViewModel.setProperty("/openSalesOrderCount", iOpen);
+                        }
+                        if (!isNaN(iTotal)) {
+                            oViewModel.setProperty("/totalSalesOrderCount", iTotal);
+                        }
+                    }
+                })
+                .catch(function () {});
+
+            var pReservations = ODataClient.get("/odata/v4/goods-issue/OpenReservations?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iResCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iResCount)) {
+                            oViewModel.setProperty("/openReservationCount", iResCount);
+                        }
+                    } else if (oData && oData.value) {
+                        oViewModel.setProperty("/openReservationCount", oData.value.length);
+                    }
+                })
+                .catch(function () {});
+
+            var pInboundDeliveries = ODataClient.get("/odata/v4/goods-receipt/OpenInboundDeliveries?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iInbCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iInbCount)) {
+                            oViewModel.setProperty("/inboundDeliveryCount", iInbCount);
+                        }
+                    } else if (oData && oData.value) {
+                        oViewModel.setProperty("/inboundDeliveryCount", oData.value.length);
+                    }
+                })
+                .catch(function () {});
+
+            var pGL = ODataClient.get("/odata/v4/purchase-order/GLAccountVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/glAccountCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pCostCenter = ODataClient.get("/odata/v4/purchase-order/CostCenterVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/costCenterCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pProfitCenter = ODataClient.get("/odata/v4/purchase-order/ProfitCenterVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/profitCenterCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pFixedAsset = ODataClient.get("/odata/v4/purchase-order/FixedAssetVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/fixedAssetCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pWBS = ODataClient.get("/odata/v4/purchase-order/WBSElementVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/wbsElementCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pInternalOrder = ODataClient.get("/odata/v4/purchase-order/InternalOrderVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/internalOrderCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pContract = ODataClient.get("/odata/v4/purchase-order/PurchaseContractVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/purchaseContractCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pCompanyCode = ODataClient.get("/odata/v4/purchase-order/CompanyCodeVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/companyCodeCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pPlant = ODataClient.get("/odata/v4/purchase-order/PlantVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/plantCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pStorageLoc = ODataClient.get("/odata/v4/purchase-order/StorageLocationVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/storageLocationCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pMaterialGroup = ODataClient.get("/odata/v4/purchase-order/MaterialGroupVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/materialGroupCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pPurchasingOrg = ODataClient.get("/odata/v4/purchase-order/PurchasingOrgVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/purchasingOrgCount", iCount);
+                    }
+                }).catch(function () {});
+
+            var pPurchasingGroup = ODataClient.get("/odata/v4/purchase-order/PurchasingGroupVH?$top=1&$count=true")
+                .then(function (oData) {
+                    if (oData && oData["@odata.count"] != null) {
+                        var iCount = parseInt(oData["@odata.count"], 10);
+                        if (!isNaN(iCount)) oViewModel.setProperty("/purchasingGroupCount", iCount);
+                    }
+                }).catch(function () {});
+
+            return Promise.all([
+                pPurchaseOrders, pSuppliers, pMaterials, pFiDocs, pSalesInquiries,
+                pCustomers, pSalesOrders, pReservations, pInboundDeliveries,
+                pGL, pCostCenter, pProfitCenter, pFixedAsset, pWBS, pInternalOrder,
+                pContract, pCompanyCode, pPlant, pStorageLoc, pMaterialGroup,
+                pPurchasingOrg, pPurchasingGroup
+            ]);
         },
 
         onTabSelect: function (oEvent) {

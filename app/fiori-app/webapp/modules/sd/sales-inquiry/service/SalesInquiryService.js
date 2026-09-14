@@ -28,6 +28,8 @@ sap.ui.define([
                 "SalesOrganization",
                 "DistributionChannel",
                 "OrganizationDivision",
+                "SalesOffice",
+                "SalesGroup",
                 "SoldToParty",
                 "CustomerName",
                 "ShipToParty",
@@ -88,6 +90,34 @@ sap.ui.define([
             return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
                 if (!result) return "";
                 return result.value || result.SalesInquiry || result;
+            });
+        },
+
+        /**
+         * Dispatches createSalesQuote action to the CAP OData service for a given Inquiry.
+         * Accepts either an inquiry ID string or a configuration object with prompted quotation parameters.
+         *
+         * @param {string|Object} vInput Inquiry ID string or payload object
+         * @returns {Promise<string>} Resolves to created Sales Quote ID
+         */
+        createSalesQuote: function (vInput) {
+            var sUrl = SERVICE_BASE + "/createSalesQuote";
+            var oPayload;
+            if (vInput && typeof vInput === "object") {
+                oPayload = {
+                    SalesInquiry: String(vInput.SalesInquiry || "").trim(),
+                    SalesQuotationType: vInput.SalesQuotationType || "ZQT",
+                    SalesQuotationDate: vInput.SalesQuotationDate || undefined,
+                    BindingPeriodValidityEndDate: vInput.BindingPeriodValidityEndDate || undefined,
+                    PurchaseOrderByCustomer: vInput.PurchaseOrderByCustomer !== undefined ? String(vInput.PurchaseOrderByCustomer).trim() : undefined,
+                    CustomerPurchaseOrderDate: vInput.CustomerPurchaseOrderDate || undefined
+                };
+            } else {
+                oPayload = { SalesInquiry: String(vInput || "").trim() };
+            }
+            return ODataClient.post(sUrl, oPayload).then(function (result) {
+                if (!result) return "";
+                return result.value || result.SalesQuote || result.SalesQuotation || result;
             });
         },
 
@@ -237,11 +267,9 @@ sap.ui.define([
             var sClean = encodeURIComponent(String(sMaterial).trim());
 
             var sFilter =
-                "?$filter=MaterialType eq 'ZFRT' and (" +
-                "Material eq '" + sClean + "' or " +
+                "?$filter=Material eq '" + sClean + "' or " +
                 "MaterialName eq '" + sClean + "' or " +
-                "contains(MaterialName,'" + sClean + "')" +
-                ")&$top=1";
+                "contains(MaterialName,'" + sClean + "')&$top=1";
 
             return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sFilter)
                 .then(function (res) {

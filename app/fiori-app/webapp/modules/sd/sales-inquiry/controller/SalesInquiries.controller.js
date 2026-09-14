@@ -3,8 +3,13 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
-    "sap/ui/model/FilterType"
-], function (BaseController, JSONModel, Filter, FilterOperator, FilterType) {
+    "sap/ui/model/FilterType",
+    "sap/m/MessageBox",
+    "sap/m/MessageToast",
+    "sap/ui/core/BusyIndicator",
+    "sap/ui/core/Fragment",
+    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService"
+], function (BaseController, JSONModel, Filter, FilterOperator, FilterType, MessageBox, MessageToast, BusyIndicator, Fragment, SalesInquiryService) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.modules.sd.sales-inquiry.controller.SalesInquiries", {
@@ -141,6 +146,176 @@ sap.ui.define([
                         // Ignore refresh if already pending
                     }
                 }
+            }
+        },
+
+        _formatDateYMD: function (oDate) {
+            if (!oDate) return "";
+            var d = new Date(oDate);
+            if (isNaN(d.getTime())) return "";
+            var month = "" + (d.getMonth() + 1);
+            var day = "" + d.getDate();
+            var year = d.getFullYear();
+            if (month.length < 2) month = "0" + month;
+            if (day.length < 2) day = "0" + day;
+            return [year, month, day].join("-");
+        },
+
+        onCreateSalesQuote: function (oEvent) {
+            var that = this;
+            var oSource = oEvent ? oEvent.getSource() : null;
+            var oCtx = oSource ? oSource.getBindingContext("salesInquiry") : null;
+
+            // Fallback to table selection if invoked without direct row button context
+            if (!oCtx) {
+                var oTable = this.byId("salesInquiriesTable");
+                var oSelectedItem = oTable ? oTable.getSelectedItem() : null;
+                if (oSelectedItem) {
+                    oCtx = oSelectedItem.getBindingContext("salesInquiry");
+                }
+            }
+
+            if (!oCtx) {
+                MessageToast.show("Please select or click 'Create Sales Quote' on an inquiry row.");
+                return;
+            }
+
+            var oInquiry = oCtx.getObject() || {};
+            var sInquiryId = oInquiry.SalesInquiry || oCtx.getProperty("SalesInquiry");
+            var sCustomerName = oInquiry.OrganizationBPName1 || oInquiry.CustomerName || oInquiry.SoldToParty || "Customer";
+            var sCustomer = oInquiry.SoldToParty || "";
+            var sNetAmount = oInquiry.TotalNetAmount || "0.00";
+            var sCurrency = oInquiry.TransactionCurrency || "INR";
+
+            if (!sInquiryId) {
+                MessageToast.show("Unable to identify Sales Inquiry number.");
+                return;
+            }
+
+            var dToday = new Date();
+            var dValidTo = new Date();
+            dValidTo.setDate(dToday.getDate() + 30);
+            var sTodayStr = this._formatDateYMD(dToday);
+            var sValidToStr = this._formatDateYMD(dValidTo);
+
+            var aItems = Array.isArray(oInquiry.to_Items) ? oInquiry.to_Items : [];
+
+            var oDialogData = {
+                SalesInquiry: sInquiryId,
+                SalesInquiryType: oInquiry.SalesInquiryType || "ZIN",
+                SoldToParty: sCustomer,
+                OrganizationBPName1: sCustomerName,
+                ShipToParty: oInquiry.ShipToParty || sCustomer,
+                ShipToPartyName: oInquiry.ShipToPartyName || sCustomerName,
+                SalesOrganization: oInquiry.SalesOrganization || "",
+                DistributionChannel: oInquiry.DistributionChannel || "",
+                OrganizationDivision: oInquiry.OrganizationDivision || "",
+                TotalNetAmount: sNetAmount,
+                TransactionCurrency: sCurrency,
+                SalesQuotationType: "ZQT",
+                SalesQuotationDate: sTodayStr,
+                BindingPeriodValidityEndDate: sValidToStr,
+                PurchaseOrderByCustomer: oInquiry.PurchaseOrderByCustomer || ("Ref Inquiry " + sInquiryId),
+                CustomerPurchaseOrderDate: oInquiry.CustomerPurchaseOrderDate || sTodayStr,
+                items: aItems
+            };
+
+            var oView = this.getView();
+            var oDialogModel = new JSONModel(oDialogData);
+            oView.setModel(oDialogModel, "quoteDialog");
+
+            // If line items not loaded in worklist row, fetch full inquiry detail
+            if (aItems.length === 0) {
+                SalesInquiryService.getSalesInquiry(sInquiryId).then(function (fullInq) {
+                    if (fullInq) {
+                        var h = fullInq.header || fullInq;
+                        var itms = fullInq.items || fullInq.to_Items || [];
+                        if (itms.length > 0) {
+                            oDialogModel.setProperty("/items", itms);
+                        }
+                        if (h.ShipToParty) oDialogModel.setProperty("/ShipToParty", h.ShipToParty);
+                        if (h.ShipToPartyName) oDialogModel.setProperty("/ShipToPartyName", h.ShipToPartyName);
+                    }
+                }).catch(function () {
+                    // Fallback gracefully to header info
+                });
+            }
+
+            if (!this._oCreateQuoteDialog) {
+                Fragment.load({
+                    id: oView.getId(),
+                    name: "saps4hana.fiori.modules.sd.sales-inquiry.view.CreateQuoteFromInquiryDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    that._oCreateQuoteDialog = oDialog;
+                    oView.addDependent(oDialog);
+                    oDialog.open();
+                });
+            } else {
+                this._oCreateQuoteDialog.open();
+            }
+        },
+
+        onConfirmCreateSalesQuote: function () {
+            var that = this;
+            var oModel = this.getView().getModel("quoteDialog");
+            if (!oModel) return;
+            var oData = oModel.getData();
+
+            if (!oData.SalesQuotationType) {
+                MessageBox.error("Please select a Quotation Type.");
+                return;
+            }
+            if (!oData.SalesQuotationDate) {
+                MessageBox.error("Please specify a Quotation Date.");
+                return;
+            }
+            if (!oData.BindingPeriodValidityEndDate) {
+                MessageBox.error("Please specify a Valid-To Date.");
+                return;
+            }
+            if (oData.BindingPeriodValidityEndDate < oData.SalesQuotationDate) {
+                MessageBox.error("Valid-To Date cannot be earlier than Quotation Date.");
+                return;
+            }
+
+            if (this._oCreateQuoteDialog) {
+                this._oCreateQuoteDialog.close();
+            }
+
+            BusyIndicator.show(0);
+            return SalesInquiryService.createSalesQuote({
+                SalesInquiry: oData.SalesInquiry,
+                SalesQuotationType: oData.SalesQuotationType,
+                SalesQuotationDate: oData.SalesQuotationDate,
+                BindingPeriodValidityEndDate: oData.BindingPeriodValidityEndDate,
+                PurchaseOrderByCustomer: oData.PurchaseOrderByCustomer,
+                CustomerPurchaseOrderDate: oData.CustomerPurchaseOrderDate
+            })
+                .then(function (sQuoteId) {
+                    BusyIndicator.hide();
+                    var sSuccessMsg = "Sales Quotation " + (sQuoteId || "") +
+                        " created successfully with reference to Sales Inquiry " + oData.SalesInquiry + ".";
+                    MessageBox.success(sSuccessMsg, {
+                        title: "Sales Quotation Created",
+                        onClose: function () {
+                            that.onRefresh();
+                        }
+                    });
+                    return sQuoteId;
+                })
+                .catch(function (err) {
+                    BusyIndicator.hide();
+                    var sErrorMsg = (err && (err.message || err.error || err)) || "Unknown error occurred";
+                    MessageBox.error("Failed to create Sales Quotation against Inquiry " + oData.SalesInquiry + ":\n\n" + sErrorMsg, {
+                        title: "SAP S/4HANA Error"
+                    });
+                });
+        },
+
+        onCancelCreateSalesQuote: function () {
+            if (this._oCreateQuoteDialog) {
+                this._oCreateQuoteDialog.close();
             }
         }
     });

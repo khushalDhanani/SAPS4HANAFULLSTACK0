@@ -97,6 +97,31 @@ function registerSalesInquiryHandlers(srv) {
         }
     });
 
+    // 3b. Action createSalesQuote
+    srv.on('createSalesQuote', async (req) => {
+        const sInquiryId = req.data?.SalesInquiry;
+        if (!sInquiryId || String(sInquiryId).trim() === '') {
+            req.error(400, 'Sales Inquiry number is required to create a Sales Quote');
+            return;
+        }
+
+        const authenticatedUser = resolveUserIdentity(req);
+        try {
+            const result = await salesInquiryAdapter.createSalesQuoteFromInquiry(String(sInquiryId).trim(), {
+                user: authenticatedUser,
+                SalesQuotationType: req.data?.SalesQuotationType,
+                SalesQuotationDate: req.data?.SalesQuotationDate,
+                BindingPeriodValidityEndDate: req.data?.BindingPeriodValidityEndDate,
+                PurchaseOrderByCustomer: req.data?.PurchaseOrderByCustomer,
+                CustomerPurchaseOrderDate: req.data?.CustomerPurchaseOrderDate
+            });
+            return result.SalesQuote || result.SalesQuotation || result;
+        } catch (error) {
+            console.error('[SalesInquiryService] Error creating Sales Quote from Inquiry:', error.message);
+            req.error(500, `Failed to create Sales Quote: ${error.message}`);
+        }
+    });
+
     // 4. Function getCustomerDefaults
     srv.on('getCustomerDefaults', async (req) => {
         const { Customer, SalesOrganization, DistributionChannel, Division } = req.data || {};
@@ -106,6 +131,11 @@ function registerSalesInquiryHandlers(srv) {
     // 5. Function getSalesInquiryDefaults
     srv.on('getSalesInquiryDefaults', async () => {
         return await salesInquiryAdapter.getSalesInquiryDefaults();
+    });
+
+    // 6. Function getSalesOrderMetrics
+    srv.on('getSalesOrderMetrics', async () => {
+        return await salesInquiryAdapter.getSalesMetrics();
     });
 }
 

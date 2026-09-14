@@ -10,7 +10,14 @@ const FS_VALUE_HELP_ENTITIES = [
     'CurrencyVH',
     'UnitOfMeasureVH',
     'DocumentTypeVH',
-    'TaxCodeVH'
+    'TaxCodeVH',
+    'GLAccountVH',
+    'CostCenterVH',
+    'ProfitCenterVH',
+    'FixedAssetVH',
+    'WBSElementVH',
+    'InternalOrderVH',
+    'PurchaseContractVH'
 ];
 
 const MAINT_VALUE_HELP_ENTITIES = [

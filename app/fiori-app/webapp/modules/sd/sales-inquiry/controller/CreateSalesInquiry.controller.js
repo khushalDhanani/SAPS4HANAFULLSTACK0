@@ -1,5 +1,6 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
+    "sap/ui/model/json/JSONModel",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
     "sap/m/MessagePopover",
@@ -10,7 +11,7 @@ sap.ui.define([
     "saps4hana/fiori/modules/sd/sales-inquiry/model/SalesInquiryModel",
     "saps4hana/fiori/service/ValueHelpService",
     "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService"
-], function (BaseController, MessageBox, MessageToast, MessagePopover, MessageItem, BusyIndicator, Filter, FilterOperator, SalesInquiryModel, ValueHelpService, SalesInquiryService) {
+], function (BaseController, JSONModel, MessageBox, MessageToast, MessagePopover, MessageItem, BusyIndicator, Filter, FilterOperator, SalesInquiryModel, ValueHelpService, SalesInquiryService) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.modules.sd.sales-inquiry.controller.CreateSalesInquiry", {
@@ -41,6 +42,7 @@ sap.ui.define([
 
             if (this._oConfigData) {
                 SalesInquiryModel.applyConfigurationDefaults(oModel, this._oConfigData);
+                this._updateOrganizationalFilters();
                 return Promise.resolve(this._oConfigData);
             }
 
@@ -295,64 +297,130 @@ sap.ui.define([
             var oModel = this.getView().getModel("newInquiry");
             var sPath = oContext.getPath();
 
+            oModel.setProperty(sPath + "/Material", sVal);
+
             if (!sVal || sVal.trim() === "") {
                 oModel.setProperty(sPath + "/errors/Material", { state: "Error", text: "Material is required" });
             } else {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
                 // Directly retrieve and set Unit from S/4HANA material configuration on manual input
-                SalesInquiryService.getMaterialDetails(sVal).then(function (oMaterial) {
-                    if (oMaterial) {
-                        SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterial);
-                        SalesInquiryModel.updateStatus(oModel);
-                    }
-                });
+                var oChangePromise = SalesInquiryService.getMaterialDetails(sVal);
+                if (oChangePromise && typeof oChangePromise.then === "function") {
+                    oChangePromise.then(function (oMaterial) {
+                        if (oMaterial) {
+                            SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterial, true);
+                            SalesInquiryModel.updateStatus(oModel);
+                        }
+                    });
+                }
             }
             SalesInquiryModel.updateStatus(oModel);
         },
 
-        onItemMaterialSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
+        onItemMaterialLiveChange: function (oEvent) {
             var oSource = oEvent.getSource();
             var oContext = oSource.getBindingContext("newInquiry");
-            if (!oContext || !oItem) return;
+            if (!oContext) return;
 
-            var sKey = oItem.getKey() || oItem.getText();
+            var sVal = oEvent.getParameter("value");
             var oModel = this.getView().getModel("newInquiry");
             var sPath = oContext.getPath();
 
-            var oBindingCtx = oItem.getBindingContext("salesInquiry") || oItem.getBindingContext();
-            var oMaterialData = oBindingCtx ? oBindingCtx.getObject() : null;
+            oModel.setProperty(sPath + "/Material", sVal);
+            if (sVal && sVal.trim() !== "") {
+                oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
+            }
+        },
 
-            if (oMaterialData) {
-                SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterialData);
+        onItemMaterialSelect: function (oEvent) {
+            var oRow = oEvent.getParameter("selectedRow") || oEvent.getParameter("selectedItem");
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext || !oRow) return;
+
+            var oBindingCtx = oRow.getBindingContext("salesInquiry") || oRow.getBindingContext();
+            var sKey = "";
+            if (oBindingCtx && typeof oBindingCtx.getProperty === "function") {
+                sKey = oBindingCtx.getProperty("Material") || "";
+            }
+            if (!sKey) {
+                var aCells = oRow.getCells ? oRow.getCells() : [];
+                sKey = aCells[0] && aCells[0].getTitle ? aCells[0].getTitle() : (aCells[0] && aCells[0].getText ? aCells[0].getText() : (oRow.getKey ? oRow.getKey() : (oRow.getText ? oRow.getText() : "")));
+            }
+
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            var oMaterialData = null;
+            if (oBindingCtx) {
+                try {
+                    oMaterialData = typeof oBindingCtx.getObject === "function" ? oBindingCtx.getObject() : null;
+                } catch (e) {
+                    oMaterialData = null;
+                }
+                if (!oMaterialData || typeof oMaterialData !== "object") {
+                    var fnGetProp = typeof oBindingCtx.getProperty === "function" ? oBindingCtx.getProperty.bind(oBindingCtx) : function () { return ""; };
+                    oMaterialData = {
+                        Material: fnGetProp("Material") || sKey,
+                        MaterialName: fnGetProp("MaterialName") || fnGetProp("Material_Text") || "",
+                        Material_Text: fnGetProp("Material_Text") || fnGetProp("MaterialName") || "",
+                        MaterialBaseUnit: fnGetProp("MaterialBaseUnit") || "",
+                        MaterialType: fnGetProp("MaterialType") || "",
+                        MaterialGroup: fnGetProp("MaterialGroup") || ""
+                    };
+                }
+            }
+
+            if (oMaterialData && oMaterialData.Material) {
+                SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMaterialData, true);
             } else {
                 oModel.setProperty(sPath + "/Material", sKey);
-                var sDesc = oItem.getAdditionalText() || "";
-                if (sDesc && !oModel.getProperty(sPath + "/SalesInquiryItemText")) {
+                var sDesc = (oRow.getAdditionalText && oRow.getAdditionalText()) || "";
+                if (!sDesc && oRow.getCells) {
+                    var aCellsDesc = oRow.getCells();
+                    sDesc = (aCellsDesc[1] && aCellsDesc[1].getText && aCellsDesc[1].getText()) || "";
+                }
+                if (sDesc) {
                     oModel.setProperty(sPath + "/SalesInquiryItemText", sDesc);
                 }
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
             }
 
-            // Ensure Unit is derived from S/4HANA if not already present in suggestion context
-            var sCurrentUnit = oModel.getProperty(sPath + "/OrderQuantityUnit");
-            if (!sCurrentUnit || sCurrentUnit === "PC") {
-                SalesInquiryService.getMaterialUnit(sKey).then(function (sUnit) {
-                    if (sUnit) {
-                        oModel.setProperty(sPath + "/OrderQuantityUnit", sUnit);
-                        oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
-                        SalesInquiryModel.updateStatus(oModel);
-                    }
-                });
+            // Ensure Unit and material details are derived from S/4HANA if not already present
+            var sMatUnit = oMaterialData && (oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit);
+            var sMatDesc = oMaterialData && (oMaterialData.MaterialName || oMaterialData.Material_Text);
+            if (!sMatUnit || !sMatDesc) {
+                var oDetailsPromise = SalesInquiryService.getMaterialDetails(sKey);
+                if (oDetailsPromise && typeof oDetailsPromise.then === "function") {
+                    oDetailsPromise.then(function (oMat) {
+                        if (oMat) {
+                            SalesInquiryModel.applyMaterialDefaults(oModel, sPath, oMat, true);
+                            SalesInquiryModel.updateStatus(oModel);
+                        }
+                    });
+                }
             }
 
             SalesInquiryModel.updateStatus(oModel);
         },
 
-        onItemCalculationChange: function () {
-            var oModel = this.getView().getModel("newInquiry");
-            SalesInquiryModel.calculateTotals(oModel);
-            SalesInquiryModel.updateStatus(oModel);
+        onItemCalculationChange: function (oEvent) {
+            var oSource = oEvent && typeof oEvent.getSource === "function" ? oEvent.getSource() : null;
+            if (oSource) {
+                var oContext = oSource.getBindingContext("newInquiry");
+                if (oContext) {
+                    var sPath = oContext.getPath();
+                    var sVal = oSource.getValue();
+                    var sProp = oSource.getBindingPath("value");
+                    if (sProp) {
+                        var oModel = this.getView().getModel("newInquiry");
+                        oModel.setProperty(sPath + "/" + sProp, sVal);
+                    }
+                }
+            }
+            var oCurrentModel = this.getView().getModel("newInquiry");
+            SalesInquiryModel.calculateTotals(oCurrentModel);
+            SalesInquiryModel.updateStatus(oCurrentModel);
         },
 
         onItemFieldChange: function () {
@@ -395,7 +463,7 @@ sap.ui.define([
                                 SalesInquiry: sInquiryId
                             });
                         } else if (sAction === "Create Another") {
-                            that._resetModel();
+                            that._resetModel(true);
                         } else {
                             that.getOwnerComponent().getRouter().navTo("salesInquiries");
                         }
@@ -499,17 +567,25 @@ sap.ui.define([
                     if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
                         var oMatData = oData || {
                             Material: sKey,
+                            MaterialName: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || "",
                             Material_Text: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
                         };
-                        SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMatData);
-                        if (!oData || !oData.MaterialBaseUnit) {
-                            SalesInquiryService.getMaterialUnit(sKey).then(function (sUnit) {
-                                if (sUnit) {
-                                    oModel.setProperty(sRowPath + "/OrderQuantityUnit", sUnit);
-                                    oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
-                                    SalesInquiryModel.updateStatus(oModel);
-                                }
-                            });
+                        if (!oMatData.Material_Text && oSelectedItem && oSelectedItem.getCells) {
+                            var aCellsVh = oSelectedItem.getCells();
+                            oMatData.Material_Text = (aCellsVh[1] && aCellsVh[1].getText && aCellsVh[1].getText()) || "";
+                            oMatData.MaterialName = oMatData.Material_Text;
+                        }
+                        SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
+                        if (!oData || !oData.MaterialBaseUnit || !(oData.MaterialName || oData.Material_Text)) {
+                            var oVhPromise = SalesInquiryService.getMaterialDetails(sKey);
+                            if (oVhPromise && typeof oVhPromise.then === "function") {
+                                oVhPromise.then(function (oMat) {
+                                    if (oMat) {
+                                        SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMat, true);
+                                        SalesInquiryModel.updateStatus(oModel);
+                                    }
+                                });
+                            }
                         }
                         SalesInquiryModel.updateStatus(oModel);
                     } else if (sValPath === "OrderQuantityUnit") {
@@ -547,14 +623,14 @@ sap.ui.define([
             }, aInitialFilters);
         },
 
-        onMessageButtonPress: function () {
+        onMessageButtonPress: function (oEvent) {
             var oModel = this.getView().getModel("newInquiry");
             var oErrors = oModel.getProperty("/errors") || {};
             var aItems = oModel.getProperty("/items") || [];
             var aMessages = [];
 
             Object.keys(oErrors).forEach(function (field) {
-                if (oErrors[field].state === "Error") {
+                if (oErrors[field] && oErrors[field].state === "Error") {
                     aMessages.push({
                         type: "Error",
                         title: oErrors[field].text,
@@ -564,9 +640,9 @@ sap.ui.define([
             });
 
             aItems.forEach(function (item, idx) {
-                if (item.errors) {
+                if (item && item.errors) {
                     Object.keys(item.errors).forEach(function (field) {
-                        if (item.errors[field].state === "Error") {
+                        if (item.errors[field] && item.errors[field].state === "Error") {
                             aMessages.push({
                                 type: "Error",
                                 title: item.errors[field].text,
@@ -593,12 +669,27 @@ sap.ui.define([
                         })
                     }
                 });
+                this.getView().addDependent(this._oMessagePopover);
             }
 
             var oMsgModel = new JSONModel(aMessages);
             this._oMessagePopover.setModel(oMsgModel, "msg");
-            var oBtn = this.byId("btnInquiryMessages") || this.byId("btnSaveInquiry");
-            this._oMessagePopover.openBy(oBtn);
+
+            var that = this;
+            var oSource = (oEvent && typeof oEvent.getSource === "function") ? oEvent.getSource() : null;
+            var oBtn = oSource || this.byId("btnInquiryMessages");
+            if (!oBtn || !oBtn.getDomRef()) {
+                oBtn = this.byId("btnSaveInquiry") || this.byId("btnCheckIncompletion");
+            }
+
+            setTimeout(function () {
+                if (that._oMessagePopover && !that._oMessagePopover.isOpen()) {
+                    var oTarget = (oBtn && oBtn.getDomRef()) ? oBtn : (that.byId("btnSaveInquiry") || that.byId("btnCheckIncompletion"));
+                    if (oTarget && oTarget.getDomRef()) {
+                        that._oMessagePopover.openBy(oTarget);
+                    }
+                }
+            }, 50);
         },
 
         onDismissError: function () {

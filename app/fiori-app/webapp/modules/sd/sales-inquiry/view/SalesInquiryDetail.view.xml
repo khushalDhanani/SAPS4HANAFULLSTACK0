@@ -4,7 +4,8 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns:core="sap.ui.core"
     xmlns:uxap="sap.uxap"
-    xmlns:f="sap.ui.layout.form">
+    xmlns:f="sap.ui.layout.form"
+    class="sapUiSizeCompact">
 
     <uxap:ObjectPageLayout
         id="salesInquiryObjectPage"
@@ -12,7 +13,8 @@
         showTitleInHeaderContent="false"
         showEditHeaderButton="false"
         headerContentPinnable="true"
-        useIconTabBar="false">
+        useIconTabBar="false"
+        class="sapUiSizeCompact">
 
         <!-- Dynamic Header Title (SAP Fiori Best Practice) -->
         <uxap:headerTitle>
@@ -143,9 +145,9 @@
                                 <Label text="{i18n>salesInquiryLabelDivision}" />
                                 <Text text="{detail>/header/OrganizationDivision}" />
                                 <Label text="{i18n>salesInquiryLabelSalesOffice}" />
-                                <Text text="{detail>/header/SalesOffice}" />
+                                <Text text="{= (${detail>/header/SalesOffice} ? (${detail>/header/SalesOffice} + (${detail>/header/SalesOfficeName} ? ' - ' + ${detail>/header/SalesOfficeName} : '')) : (${detail>/header/SalesOfficeName} || '-')) }" />
                                 <Label text="{i18n>salesInquiryLabelSalesGroup}" />
-                                <Text text="{detail>/header/SalesGroup}" />
+                                <Text text="{= (${detail>/header/SalesGroup} ? (${detail>/header/SalesGroup} + (${detail>/header/SalesGroupName} ? ' - ' + ${detail>/header/SalesGroupName} : '')) : (${detail>/header/SalesGroupName} || '-')) }" />
                             </f:SimpleForm>
                         </uxap:blocks>
                     </uxap:ObjectPageSubSection>

@@ -23,4 +23,13 @@ describe('Unit: Sales Inquiry Value Help Configuration', () => {
         expect(wlConfig).toBeDefined();
         expect(typeof wlConfig.read).toBe('function');
     });
+
+    test('should include SalesInquiryTypeVH in sdValueHelpConfig with dedicated getInquiryTypes reader and deduplication', () => {
+        const typeConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('SalesInquiryTypeVH'));
+        expect(typeConfig).toBeDefined();
+        expect(typeof typeConfig.read).toBe('function');
+        expect(typeConfig.entityDeduplicateBy).toEqual({
+            SalesInquiryTypeVH: 'SalesDocumentType'
+        });
+    });
 });

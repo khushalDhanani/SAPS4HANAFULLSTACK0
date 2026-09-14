@@ -9,6 +9,8 @@ const SD_VALUE_HELP_ENTITIES = [
     'SalesOrganizationVH',
     'DistributionChannelVH',
     'DivisionVH',
+    'SalesOfficeVH',
+    'SalesGroupVH',
     'SoldToPartyVH',
     'CustomerVH',
     'MaterialVH',
@@ -18,10 +20,11 @@ const SD_VALUE_HELP_ENTITIES = [
 const sdValueHelpConfig = [
     {
         entities: [
-            'SalesInquiryTypeVH',
             'SalesOrganizationVH',
             'DistributionChannelVH',
             'DivisionVH',
+            'SalesOfficeVH',
+            'SalesGroupVH',
             'SoldToPartyVH',
             'CustomerVH',
             'CurrencyVH'
@@ -32,8 +35,18 @@ const sdValueHelpConfig = [
         }
     },
     {
+        entities: ['SalesInquiryTypeVH'],
+        read: (query) => salesInquiryAdapter.getInquiryTypes(query),
+        entityDeduplicateBy: {
+            SalesInquiryTypeVH: 'SalesDocumentType'
+        }
+    },
+    {
         entities: ['MaterialVH'],
-        read: (query) => salesInquiryAdapter.readFsData(query)
+        read: (query) => salesInquiryAdapter.getMaterials(query),
+        entityDeduplicateBy: {
+            MaterialVH: 'Material'
+        }
     },
     {
         entities: ['UnitOfMeasureVH'],

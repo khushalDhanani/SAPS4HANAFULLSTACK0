@@ -24,6 +24,9 @@ sap.ui.define([
 
             // Immediately synchronize shell for direct load / browser refresh
             this._syncInitialShellState();
+
+            // Apply official SAPUI5 compact density class to the root view
+            this.getView().addStyleClass(this.getOwnerComponent().getContentDensityClass());
         },
 
         _syncInitialShellState: function () {

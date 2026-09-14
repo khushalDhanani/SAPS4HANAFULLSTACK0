@@ -7,7 +7,8 @@
         contentWidth="850px"
         contentHeight="550px"
         resizable="true"
-        draggable="true">
+        draggable="true"
+        class="sapUiSizeCompact">
         <customHeader>
             <Bar>
                 <contentLeft>

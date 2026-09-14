@@ -228,6 +228,9 @@ sap.ui.define([
                             }
                         })
                     });
+                    if (oSimDialog.addStyleClass) {
+                        oSimDialog.addStyleClass("sapUiSizeCompact");
+                    }
                     oSimDialog.open();
                     return;
                 }
@@ -320,6 +323,9 @@ sap.ui.define([
                 });
 
                 _oActiveCameraDialog = oDialog;
+                if (oDialog.addStyleClass) {
+                    oDialog.addStyleClass("sapUiSizeCompact");
+                }
                 oDialog.open();
 
                 // Initialize camera stream

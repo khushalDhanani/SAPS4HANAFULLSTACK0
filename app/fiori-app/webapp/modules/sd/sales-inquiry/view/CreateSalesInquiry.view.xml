@@ -9,7 +9,8 @@
     <Page
         id="createInquiryPage"
         showHeader="false"
-        backgroundDesign="Solid">
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- Global Incompletion / Error Strip -->
@@ -140,7 +141,7 @@
                                 </Input>
 
                                 <Label text="Customer Details" />
-                                <Text id="txtCustomerName" text="{= ${newInquiry>/header/CustomerName} ? ${newInquiry>/header/CustomerName} + ' (' + ${newInquiry>/header/CustomerCity} + ', ' + ${newInquiry>/header/CustomerCountry} + ')' : 'No customer selected'}" class="textMuted" />
+                                <Text id="txtCustomerName" text="{= ${newInquiry>/header/CustomerName} ? (${newInquiry>/header/CustomerName} + (${newInquiry>/header/CustomerCity} ? ' (' + ${newInquiry>/header/CustomerCity} + (${newInquiry>/header/CustomerCountry} ? ', ' + ${newInquiry>/header/CustomerCountry} : '') + ')' : (${newInquiry>/header/CustomerCountry} ? ' (' + ${newInquiry>/header/CustomerCountry} + ')' : ''))) : 'No customer selected'}" class="textMuted" />
 
                                 <Label text="Ship-to Party" />
                                 <Input id="inShipToParty" value="{newInquiry>/header/ShipToParty}" placeholder="e.g. 10135" maxLength="10"
@@ -185,7 +186,7 @@
                 <Panel id="panelInquiryItems" headerText="Inquiry Items">
                     <headerToolbar>
                         <Toolbar>
-                            <Title text="Items ({= ${newInquiry>/items}.length })" level="H2" />
+                            <Title text="Items ({= ${newInquiry>/items} ? ${newInquiry>/items}.length : 0 })" level="H2" />
                             <ToolbarSpacer />
                             <Button id="btnAddItem" icon="sap-icon://add" text="Add Item" press=".onAddItem" type="Transparent" />
                         </Toolbar>
@@ -195,28 +196,45 @@
                         items="{newInquiry>/items}"
                         noDataText="No items added yet."
                         mode="Delete"
-                        delete=".onDeleteItem">
+                        delete=".onDeleteItem"
+                        autoPopinMode="true"
+                        popinLayout="GridSmall">
                         <columns>
-                            <Column width="5rem"><Text text="Item" /></Column>
-                            <Column width="14rem"><Text text="Material / Product" /></Column>
-                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
-                            <Column width="7rem" hAlign="End"><Text text="Quantity" /></Column>
-                            <Column width="5rem"><Text text="Unit" /></Column>
-                            <Column width="8rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true"><Text text="Net Price" /></Column>
-                            <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
+                            <Column width="4rem" importance="High"><Text text="Item" /></Column>
+                            <Column importance="High"><Text text="Material / Product" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="Description" /></Column>
+                            <Column width="6rem" hAlign="End" importance="High"><Text text="Quantity" /></Column>
+                            <Column width="5rem" importance="High"><Text text="Unit" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="Net Price" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="Net Amount" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
                                 <cells>
                                     <Text text="{newInquiry>SalesInquiryItem}" />
-                                    <Input value="{newInquiry>Material}" placeholder="e.g. 4000000123" required="true"
+                                    <Input value="{newInquiry>Material}" placeholder="e.g. 4000000001" required="true"
                                         valueState="{newInquiry>errors/Material/state}"
                                         valueStateText="{newInquiry>errors/Material/text}"
-                                        change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
-                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/MaterialVH', templateShareable: false}">
-                                        <suggestionItems>
-                                            <core:ListItem key="{salesInquiry>Material}" text="{salesInquiry>Material}" additionalText="{= (${salesInquiry>Material_Text} || ${salesInquiry>MaterialName} || '') + (${salesInquiry>MaterialBaseUnit} ? ' (' + ${salesInquiry>MaterialBaseUnit} + ')' : '') }" />
-                                        </suggestionItems>
+                                        change=".onItemMaterialChange" liveChange=".onItemMaterialLiveChange" suggestionItemSelected=".onItemMaterialSelect"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest"
+                                        maxSuggestionWidth="32rem"
+                                        suggestionRows="{path: 'salesInquiry>/MaterialVH', templateShareable: false}">
+                                        <suggestionColumns>
+                                            <Column width="8rem"><Label text="Material" /></Column>
+                                            <Column minScreenWidth="Tablet" demandPopin="true"><Label text="Description" /></Column>
+                                            <Column width="5rem"><Label text="Type" /></Column>
+                                            <Column width="4rem"><Label text="Unit" /></Column>
+                                        </suggestionColumns>
+                                        <suggestionRows>
+                                            <ColumnListItem>
+                                                <cells>
+                                                    <Label text="{salesInquiry>Material}" design="Bold" />
+                                                    <Text text="{salesInquiry>MaterialName}" />
+                                                    <ObjectStatus text="{salesInquiry>MaterialType}" state="Success" />
+                                                    <Text text="{salesInquiry>MaterialBaseUnit}" />
+                                                </cells>
+                                            </ColumnListItem>
+                                        </suggestionRows>
                                     </Input>
                                     <Input value="{newInquiry>SalesInquiryItemText}" placeholder="Item description" change=".onItemFieldChange" />
                                     <Input value="{newInquiry>OrderQuantity}" type="Number" required="true" textAlign="End"

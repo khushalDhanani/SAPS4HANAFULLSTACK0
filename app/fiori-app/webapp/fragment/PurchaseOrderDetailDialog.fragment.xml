@@ -5,7 +5,8 @@
         id="poDetailDialog"
         title="{i18n>dialogTitle} — {PurchaseOrder}"
         type="Message"
-        contentWidth="400px">
+        contentWidth="400px"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiSmallMargin">
                 <HBox>
