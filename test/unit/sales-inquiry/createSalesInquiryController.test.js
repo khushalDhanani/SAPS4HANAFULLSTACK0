@@ -107,6 +107,7 @@ const mockSalesInquiryService = {
     loadConfiguration: jest.fn().mockResolvedValue({}),
     getCustomerDefaults: jest.fn().mockResolvedValue(null),
     getSalesInquiryDefaults: jest.fn().mockResolvedValue(null),
+    getInquiryCreationCapabilities: jest.fn().mockResolvedValue({ CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, Plant: true }),
     getMaterialDetails: jest.fn().mockResolvedValue(null),
     getMaterialUnit: jest.fn().mockResolvedValue(null),
     createSalesInquiry: jest.fn().mockResolvedValue(null)

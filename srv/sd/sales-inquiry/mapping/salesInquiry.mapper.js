@@ -45,7 +45,8 @@ function normalizeSalesInquiryData(data, options = {}) {
             OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : 'PC',
             NetPriceAmount: price,
             NetAmount: net,
-            TransactionCurrency: currency
+            TransactionCurrency: currency,
+            Plant: item.Plant ? String(item.Plant).trim().toUpperCase() : ''
         };
     });
 
@@ -77,7 +78,12 @@ function normalizeSalesInquiryData(data, options = {}) {
         TransactionCurrency: currency,
         TotalNetAmount: rawHeader.TotalNetAmount !== undefined && rawHeader.TotalNetAmount !== null
             ? parseFloat(rawHeader.TotalNetAmount)
-            : calculatedTotal
+            : calculatedTotal,
+        // Quotation-readiness fields (SAP incompletion procedure Z1 / partner ZP)
+        CustomerGroup2: rawHeader.CustomerGroup2 ? String(rawHeader.CustomerGroup2).trim().toUpperCase() : '',
+        PortOfLoading: rawHeader.PortOfLoading ? String(rawHeader.PortOfLoading).trim() : '',
+        PortOfDischarge: rawHeader.PortOfDischarge ? String(rawHeader.PortOfDischarge).trim() : '',
+        ContactPerson: rawHeader.ContactPerson ? String(rawHeader.ContactPerson).trim() : ''
     };
 
     return {

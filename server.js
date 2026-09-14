@@ -88,21 +88,12 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
         headers: headers
     };
 
-    const credsSDQuot = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/API_SALES_QUOTATION_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.C_PURCHASEORDER_FS_SRV = Object.assign(cds.env.requires.C_PURCHASEORDER_FS_SRV || { kind: 'odata-v2', model: 'srv/external/C_PURCHASEORDER_FS_SRV' }, { credentials: credsFS });
     cds.env.requires.MM_PUR_PO_MAINT_V2_SRV = Object.assign(cds.env.requires.MM_PUR_PO_MAINT_V2_SRV || { kind: 'odata-v2', model: 'srv/external/MM_PUR_PO_MAINT_V2_SRV' }, { credentials: credsMaint });
     cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV = Object.assign(cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV || { kind: 'odata-v2', model: 'srv/external/FAC_GL_JOURNALENTRY_VER_SRV' }, { credentials: credsFI });
     cds.env.requires.SD_F2370_INQY_WL_SRV = Object.assign(cds.env.requires.SD_F2370_INQY_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2370_INQY_WL_SRV' }, { credentials: credsSDWL });
     cds.env.requires.SD_F2369_INQY_FS_SRV = Object.assign(cds.env.requires.SD_F2369_INQY_FS_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2369_INQY_FS_SRV' }, { credentials: credsSDFS });
-    cds.env.requires.API_SALES_QUOTATION_SRV = Object.assign(cds.env.requires.API_SALES_QUOTATION_SRV || { kind: 'odata-v2' }, { credentials: credsSDQuot });
 
     if (cds.requires) {
         if (cds.requires.C_PURCHASEORDER_FS_SRV) cds.requires.C_PURCHASEORDER_FS_SRV.credentials = credsFS;
@@ -110,7 +101,6 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
         if (cds.requires.FAC_GL_JOURNALENTRY_VER_SRV) cds.requires.FAC_GL_JOURNALENTRY_VER_SRV.credentials = credsFI;
         if (cds.requires.SD_F2370_INQY_WL_SRV) cds.requires.SD_F2370_INQY_WL_SRV.credentials = credsSDWL;
         if (cds.requires.SD_F2369_INQY_FS_SRV) cds.requires.SD_F2369_INQY_FS_SRV.credentials = credsSDFS;
-        if (cds.requires.API_SALES_QUOTATION_SRV) cds.requires.API_SALES_QUOTATION_SRV.credentials = credsSDQuot;
     }
 
     registerDestination({

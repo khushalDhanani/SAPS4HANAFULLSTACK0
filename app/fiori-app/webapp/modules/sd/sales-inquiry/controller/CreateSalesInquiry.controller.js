@@ -26,6 +26,9 @@ sap.ui.define([
             var oModel = SalesInquiryModel.createInitialModel(sUser);
             this.getView().setModel(oModel, "newInquiry");
             SalesInquiryModel.updateStatus(oModel);
+            if (this._oCapabilities) {
+                SalesInquiryModel.applyCapabilities(oModel, this._oCapabilities);
+            }
 
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
@@ -33,7 +36,27 @@ sap.ui.define([
 
             if (bLoadConfig) {
                 this._loadConfigurationAndDefaults();
+                this._loadCapabilities();
             }
+        },
+
+        /**
+         * Asks the backend which quotation-required fields the SAP inquiry service accepts, so the
+         * form can require those and warn about the rest (to be maintained in VA22).
+         */
+        _loadCapabilities: function () {
+            var that = this;
+            if (this._oCapabilities) {
+                return Promise.resolve(this._oCapabilities);
+            }
+            return SalesInquiryService.getInquiryCreationCapabilities().then(function (oCaps) {
+                that._oCapabilities = oCaps || {};
+                var oModel = that.getView().getModel("newInquiry");
+                if (oModel) {
+                    SalesInquiryModel.applyCapabilities(oModel, that._oCapabilities);
+                }
+                return that._oCapabilities;
+            });
         },
 
         _loadConfigurationAndDefaults: function () {
@@ -431,7 +454,9 @@ sap.ui.define([
         onCheckIncompletion: function () {
             var oModel = this.getView().getModel("newInquiry");
             var bValid = SalesInquiryModel.validateForm(oModel);
-            if (bValid) {
+            // Mirror SAP's own incompletion log: values SAP needs before a quotation can be created
+            var aGaps = SalesInquiryModel.getQuotationReadinessGaps(oModel);
+            if (bValid && aGaps.length === 0) {
                 MessageToast.show("Document is complete. No incompletions detected.");
             } else {
                 this.onMessageButtonPress();
@@ -651,6 +676,10 @@ sap.ui.define([
                         }
                     });
                 }
+            });
+
+            (oModel.getProperty("/readinessGaps") || []).forEach(function (gap) {
+                aMessages.push({ type: "Warning", title: gap.title, subtitle: gap.subtitle });
             });
 
             if (aMessages.length === 0) {

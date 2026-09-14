@@ -42,13 +42,19 @@ function mapToS4InquiryPayload(header, items, options = {}) {
     if (header.ShipToPartyName) {
         s4Header.ShipToPartyName = String(header.ShipToPartyName).trim();
     }
+    // Quotation-readiness fields: passed through when present, never defaulted
+    ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'].forEach(field => {
+        if (header[field] && String(header[field]).trim() !== '') {
+            s4Header[field] = String(header[field]).trim();
+        }
+    });
 
     const s4Items = (items || []).map((item, index) => {
         const itemNumber = item.SalesInquiryItem
             ? String(item.SalesInquiryItem).padStart(6, '0')
             : String((index + 1) * 10).padStart(6, '0');
 
-        return {
+        const s4Item = {
             SalesInquiryItem: itemNumber,
             Material: String(item.Material || '').trim(),
             SalesInquiryItemText: item.SalesInquiryItemText ? String(item.SalesInquiryItemText).trim() : '',
@@ -58,6 +64,10 @@ function mapToS4InquiryPayload(header, items, options = {}) {
             NetAmount: item.NetAmount !== undefined ? String(parseFloat(item.NetAmount || 0).toFixed(2)) : '0.00',
             TransactionCurrency: s4Header.TransactionCurrency
         };
+        if (item.Plant && String(item.Plant).trim() !== '') {
+            s4Item.Plant = String(item.Plant).trim().toUpperCase();
+        }
+        return s4Item;
     });
 
     return {

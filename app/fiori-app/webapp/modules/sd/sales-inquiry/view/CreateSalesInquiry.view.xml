@@ -28,6 +28,16 @@
                     </link>
                 </MessageStrip>
 
+                <!-- Quotation readiness: SAP-required fields this application cannot send yet -->
+                <MessageStrip
+                    id="createInquiryReadinessStrip"
+                    text="{newInquiry>/readinessNotice}"
+                    type="Warning"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{newInquiry>/showReadinessNotice}"
+                    class="sapUiSmallMarginBottom" />
+
                 <!-- Header Sections Grid (6/6 Layout) -->
                 <layout:Grid
                     id="gridInquiryHeaderSections"
@@ -151,6 +161,34 @@
                                     </suggestionItems>
                                 </Input>
 
+                                <Label text="Customer Group 2" required="{newInquiry>/capabilities/CustomerGroup2}" />
+                                <Input id="inCustomerGroup2" value="{newInquiry>/header/CustomerGroup2}" placeholder="e.g. SEA" maxLength="3"
+                                    enabled="{newInquiry>/capabilities/CustomerGroup2}"
+                                    tooltip="Required by SAP before a quotation can be created (VA21). Disabled when the SAP inquiry service cannot accept it yet."
+                                    valueState="{newInquiry>/errors/CustomerGroup2/state}" valueStateText="{newInquiry>/errors/CustomerGroup2/text}"
+                                    change=".onHeaderFieldChange" />
+
+                                <Label text="Port of Loading" required="{newInquiry>/capabilities/PortOfLoading}" />
+                                <Input id="inPortOfLoading" value="{newInquiry>/header/PortOfLoading}" placeholder="e.g. NHAVA SHEVA" maxLength="50"
+                                    enabled="{newInquiry>/capabilities/PortOfLoading}"
+                                    tooltip="Required by SAP before a quotation can be created (VA21). Disabled when the SAP inquiry service cannot accept it yet."
+                                    valueState="{newInquiry>/errors/PortOfLoading/state}" valueStateText="{newInquiry>/errors/PortOfLoading/text}"
+                                    change=".onHeaderFieldChange" />
+
+                                <Label text="Port of Discharge" required="{newInquiry>/capabilities/PortOfDischarge}" />
+                                <Input id="inPortOfDischarge" value="{newInquiry>/header/PortOfDischarge}" placeholder="e.g. BARCELONA" maxLength="50"
+                                    enabled="{newInquiry>/capabilities/PortOfDischarge}"
+                                    tooltip="Required by SAP before a quotation can be created (VA21). Disabled when the SAP inquiry service cannot accept it yet."
+                                    valueState="{newInquiry>/errors/PortOfDischarge/state}" valueStateText="{newInquiry>/errors/PortOfDischarge/text}"
+                                    change=".onHeaderFieldChange" />
+
+                                <Label text="Contact Person" required="{newInquiry>/capabilities/ContactPerson}" />
+                                <Input id="inContactPerson" value="{newInquiry>/header/ContactPerson}" placeholder="SAP contact number, e.g. 24789" maxLength="10"
+                                    enabled="{newInquiry>/capabilities/ContactPerson}"
+                                    tooltip="Customer contact person (partner function ZP). Required by SAP before a quotation can be created. Disabled when the SAP inquiry service cannot accept it yet."
+                                    valueState="{newInquiry>/errors/ContactPerson/state}" valueStateText="{newInquiry>/errors/ContactPerson/text}"
+                                    change=".onHeaderFieldChange" />
+
                                 <Label text="Description / Reference" />
                                 <Input id="inCustRef" value="{newInquiry>/header/PurchaseOrderByCustomer}" placeholder="e.g. Industrial Grade Chemical Inquiry or PO Reference" maxLength="35" change=".onHeaderFieldChange" />
 
@@ -205,6 +243,7 @@
                             <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="Description" /></Column>
                             <Column width="6rem" hAlign="End" importance="High"><Text text="Quantity" /></Column>
                             <Column width="5rem" importance="High"><Text text="Unit" /></Column>
+                            <Column width="5.5rem" importance="High"><Label text="Plant" required="{newInquiry>/capabilities/Plant}" /></Column>
                             <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="Net Price" /></Column>
                             <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="Net Amount" /></Column>
                         </columns>
@@ -252,6 +291,12 @@
                                             <core:ListItem key="{salesInquiry>UnitOfMeasure}" text="{salesInquiry>UnitOfMeasure}" additionalText="{salesInquiry>UnitOfMeasure_Text}" />
                                         </suggestionItems>
                                     </Input>
+                                    <Input value="{newInquiry>Plant}" placeholder="e.g. 1120" maxLength="4"
+                                        enabled="{newInquiry>/capabilities/Plant}"
+                                        tooltip="Delivering plant. Required by SAP before a quotation can be created."
+                                        valueState="{newInquiry>errors/Plant/state}"
+                                        valueStateText="{newInquiry>errors/Plant/text}"
+                                        change=".onItemFieldChange" />
                                     <Input value="{newInquiry>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End" change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
                                     <ObjectNumber number="{newInquiry>NetAmount}" unit="{newInquiry>/header/TransactionCurrency}" state="Success" />
                                 </cells>

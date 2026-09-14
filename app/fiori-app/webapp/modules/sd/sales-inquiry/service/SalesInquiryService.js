@@ -234,6 +234,22 @@ sap.ui.define([
         /**
          * Retrieves standard initial defaults for VA11 Sales Inquiry creation.
          */
+        /**
+         * Which quotation-required fields the SAP inquiry creation service accepts right now.
+         * Falls back to "none" so the form never requires a value that cannot reach SAP.
+         *
+         * @returns {Promise<Object>}
+         */
+        getInquiryCreationCapabilities: function () {
+            var sUrl = SERVICE_BASE + "/getInquiryCreationCapabilities()";
+            var oNone = { CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, Plant: false };
+            return ODataClient.get(sUrl).then(function (result) {
+                return Object.assign({}, oNone, result || {});
+            }).catch(function () {
+                return oNone;
+            });
+        },
+
         getSalesInquiryDefaults: function () {
             var sUrl = SERVICE_BASE + "/getSalesInquiryDefaults()";
             return ODataClient.get(sUrl).catch(function () {

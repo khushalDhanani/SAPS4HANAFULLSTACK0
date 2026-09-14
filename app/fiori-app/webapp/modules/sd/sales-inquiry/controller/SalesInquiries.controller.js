@@ -279,6 +279,25 @@ sap.ui.define([
                 return;
             }
 
+            // SAP persists the quotation; there is no preview. Nothing is sent until the user confirms.
+            MessageBox.confirm(
+                "This action creates a real Sales Quotation in SAP and cannot be treated as a preview.\n\n" +
+                "Inquiry: " + oData.SalesInquiry + "\nQuotation Type: " + oData.SalesQuotationType,
+                {
+                    title: "Create Sales Quotation in SAP?",
+                    actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                    emphasizedAction: MessageBox.Action.CANCEL,
+                    onClose: function (sAction) {
+                        if (sAction === MessageBox.Action.OK) {
+                            that._createSalesQuoteInSap(oData);
+                        }
+                    }
+                }
+            );
+        },
+
+        _createSalesQuoteInSap: function (oData) {
+            var that = this;
             if (this._oCreateQuoteDialog) {
                 this._oCreateQuoteDialog.close();
             }
@@ -295,7 +314,8 @@ sap.ui.define([
                 .then(function (sQuoteId) {
                     BusyIndicator.hide();
                     var sSuccessMsg = "Sales Quotation " + (sQuoteId || "") +
-                        " created successfully with reference to Sales Inquiry " + oData.SalesInquiry + ".";
+                        " created successfully with reference to Sales Inquiry " + oData.SalesInquiry + "." +
+                        " It was read back from SAP to confirm it exists.";
                     MessageBox.success(sSuccessMsg, {
                         title: "Sales Quotation Created",
                         onClose: function () {

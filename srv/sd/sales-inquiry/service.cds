@@ -108,6 +108,8 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         NetPriceAmount: Decimal;
         NetAmount: Decimal;
         TransactionCurrency: String;
+        // Required by SAP (incompletion procedure) before the inquiry can become a quotation
+        Plant: String;
     }
 
     type InquiryHeader {
@@ -127,6 +129,12 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         BindingPeriodValidityEndDate: Date;
         TransactionCurrency: String;
         TotalNetAmount: Decimal;
+        // Required by SAP (incompletion procedure Z1 / partner ZP) before the inquiry can become a quotation.
+        // Transmitted only when the SAP inquiry service exposes the field; see getInquiryCreationCapabilities.
+        CustomerGroup2: String;
+        PortOfLoading: String;
+        PortOfDischarge: String;
+        ContactPerson: String;
     }
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'User', 'Admin'])
@@ -156,6 +164,18 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesGroup: String;
         SalesGroupName: String;
         derived: Boolean;
+    };
+
+    // Which quotation-required fields the SAP inquiry creation service can currently accept.
+    // False means the value cannot be sent from this application and must be maintained in VA22.
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin'])
+    function getInquiryCreationCapabilities() returns {
+        CustomerGroup2: Boolean;
+        PortOfLoading: Boolean;
+        PortOfDischarge: Boolean;
+        ContactPerson: Boolean;
+        Plant: Boolean;
+        service: String;
     };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'User', 'Admin'])

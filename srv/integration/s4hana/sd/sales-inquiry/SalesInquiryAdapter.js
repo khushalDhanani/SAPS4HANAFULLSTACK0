@@ -1,12 +1,25 @@
 const cds = require('@sap/cds');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');
+const { SalesQuotationManageClient } = require('./SalesQuotationManageClient');
+
+const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
+
+/**
+ * Header values SAP requires (incompletion procedure Z1 and partner function ZP) before an inquiry
+ * can be referenced by a quotation, keyed by the property names agreed for the LORD_ODATA_ORDER_SRV
+ * Header extension. The standard service has none of them; each is sent only when the live
+ * $metadata of the service exposes the property, so the application works unchanged before and
+ * after the SAP-side extension. See docs/sap-inquiry-service-extension-spec.md.
+ */
+const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'];
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA Sales Inquiry services:
  * - SD_F2370_INQY_WL_SRV (Manage Sales Inquiries Worklist & Configuration Value Helps)
  * - SD_F2369_INQY_FS_SRV (Sales Inquiry Factsheet & Line Items)
  * - LORD_ODATA_ORDER_SRV (Lean Order OData Service for Sales Document Creation)
+ * - UI_SALESQUOTATIONMANAGE (OData V4, Sales Quotation creation with reference to an inquiry)
  */
 class SalesInquiryAdapter {
   constructor() {
@@ -773,6 +786,21 @@ class SalesInquiryAdapter {
       PurchaseOrderNumber: custRef
     };
 
+    // Quotation-readiness fields: only those the service exposes can be transmitted.
+    const notTransmitted = [];
+    const provided = INQUIRY_EXTENSION_FIELDS.filter(f => String(header[f] ?? '').trim() !== '');
+    if (provided.length > 0) {
+      const fields = await this._getLeanOrderFields(destination, executeFn);
+      for (const f of provided) {
+        if (fields.header.has(f)) headerPayload[f] = String(header[f]).trim();
+        else notTransmitted.push(f);
+      }
+      if (notTransmitted.length > 0) {
+        console.warn(`[SalesInquiryAdapter] LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
+          + ' the inquiry will stay incomplete for quotation until these are maintained in VA22 or the service is extended.');
+      }
+    }
+
     let headerResp;
     try {
       headerResp = await executeFn(destination, {
@@ -818,6 +846,10 @@ class SalesInquiryAdapter {
           OrderQty: String(qty.toFixed(3)),
           SalesUnit: itm.OrderQuantityUnit || 'PC'
         };
+        // Plant is on the ZIN item incompletion procedure; the Item entity carries it.
+        if (itm.Plant && String(itm.Plant).trim() !== '') {
+          itemPayload.Plant = String(itm.Plant).trim().toUpperCase();
+        }
 
         try {
           await executeFn(destination, {
@@ -875,8 +907,55 @@ class SalesInquiryAdapter {
     return {
       SalesInquiry: sNewInquiryId,
       TotalNetAmount: totalNet > 0 ? String(totalNet.toFixed(2)) : (headerResp.data?.d?.NetValue || '0.00'),
-      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || 'INR'
+      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || 'INR',
+      notTransmitted
     };
+  }
+
+  /**
+   * Property names of the LORD_ODATA_ORDER_SRV Header and Item entities, read once from the live
+   * $metadata and cached for the process. A failed read is not cached and yields empty sets, so
+   * inquiry creation still works with the standard fields.
+   */
+  async _getLeanOrderFields(destination, executeFn) {
+    if (this._leanOrderFields) return this._leanOrderFields;
+    const empty = { header: new Set(), item: new Set() };
+    try {
+      const res = await executeFn(destination, {
+        method: 'get',
+        url: `${LEAN_ORDER_PATH}/$metadata`,
+        headers: { 'Accept': 'application/xml, text/xml' }
+      }, { fetchCsrfToken: false });
+      const xml = typeof res?.data === 'string' ? res.data : '';
+      const props = (name) => {
+        const m = xml.match(new RegExp(`<EntityType Name="${name}"[\\s\\S]*?</EntityType>`));
+        return new Set(m ? [...m[0].matchAll(/<Property Name="([^"]+)"/g)].map(x => x[1]) : []);
+      };
+      const fields = { header: props('Header'), item: props('Item') };
+      if (fields.header.size === 0) {
+        console.warn('[SalesInquiryAdapter] LORD_ODATA_ORDER_SRV $metadata returned no Header properties; capabilities unknown.');
+        return empty;
+      }
+      this._leanOrderFields = fields;
+      return fields;
+    } catch (err) {
+      console.warn('[SalesInquiryAdapter] Could not read LORD_ODATA_ORDER_SRV $metadata:', err.message);
+      return empty;
+    }
+  }
+
+  /**
+   * Reports which quotation-required fields the SAP inquiry creation service can accept right now.
+   * The UI marks accepted fields as required and tells the user to maintain the others in VA22.
+   */
+  async getInquiryCreationCapabilities(options = {}) {
+    const destination = options.destination || await this._getDestination();
+    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const fields = await this._getLeanOrderFields(destination, executeFn);
+    const caps = { service: 'LORD_ODATA_ORDER_SRV' };
+    for (const f of INQUIRY_EXTENSION_FIELDS) caps[f] = fields.header.has(f);
+    caps.Plant = fields.item.has('Plant');
+    return caps;
   }
 
   /**
@@ -940,278 +1019,95 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Discovers and verifies the active Sales Quotation service from the SAP Gateway Service Catalog.
-   * Resolves the technical service name, service URL, and verifies supported entity sets.
+   * Creates a Sales Quotation with reference to a Sales Inquiry in SAP, through the verified
+   * OData V4 service UI_SALESQUOTATIONMANAGE (action CreateWithRefFromSlsInquiry, then SaveChanges
+   * in the same sticky session). SAP's copy control from the inquiry supplies the document data;
+   * only the header values the user entered in the create dialog are changed before saving.
    *
-   * @param {Object} [options]
-   * @returns {Promise<{ technicalServiceName: string, servicePath: string, entitySet: string }>}
-   */
-  async getSalesQuotationCatalogService(options = {}) {
-    if (this._cachedQuotationService) {
-      return this._cachedQuotationService;
-    }
-
-    const destination = options.destination || await this._getDestination();
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
-
-    let candidateServices = [];
-
-    // 1. Query live SAP Gateway Service Catalog in DEV
-    try {
-      const res = await executeFn(destination, {
-        method: 'get',
-        url: '/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection?$format=json',
-        headers: { 'Accept': 'application/json', ...(options.headers || {}) }
-      });
-      const results = res.data?.d?.results || [];
-      candidateServices = results.filter(s => {
-        const text = ((s.TechnicalServiceName || '') + ' ' + (s.Description || '') + ' ' + (s.ID || '') + ' ' + (s.Title || '')).toLowerCase();
-        return (text.includes('quot') || text.includes('qtn')) && !text.includes('pur_');
-      });
-    } catch (err) {
-      // Live catalog query failed
-    }
-
-    // 2. Local catalog definitions check if live catalog query returned nothing
-    if (candidateServices.length === 0) {
-      try {
-        const fs = require('fs');
-        const path = require('path');
-        const localCatalogPath = path.resolve(__dirname, '../../../../../sap_all_services.json');
-        if (fs.existsSync(localCatalogPath)) {
-          const all = JSON.parse(fs.readFileSync(localCatalogPath, 'utf8'));
-          candidateServices = all
-            .filter(s => {
-              const text = ((s.id || '') + ' ' + (s.title || '')).toLowerCase();
-              return (text.includes('quot') || text.includes('qtn')) && !text.includes('pur_');
-            })
-            .map(s => ({
-              TechnicalServiceName: s.id,
-              ServiceUrl: `/sap/opu/odata/sap/${s.id}`,
-              Description: s.title
-            }));
-        }
-      } catch (e) {
-        // Fallback file read error
-      }
-    }
-
-    // 3. Empirically verify metadata and operational create capability for candidates
-    for (const candidate of candidateServices) {
-      let candidatePath = candidate.ServiceUrl || `/sap/opu/odata/sap/${candidate.TechnicalServiceName}`;
-      if (candidatePath.startsWith('http://') || candidatePath.startsWith('https://')) {
-        try {
-          candidatePath = new URL(candidatePath).pathname;
-        } catch (e) {
-          candidatePath = candidatePath.replace(/^https?:\/\/[^/]+/, '');
-        }
-      }
-      candidatePath = candidatePath.replace(/\/+$/, '');
-
-      try {
-        const metaRes = await executeFn(destination, {
-          method: 'get',
-          url: `${candidatePath}/$metadata`,
-          headers: { 'Accept': 'application/xml, text/xml', ...(options.headers || {}) }
-        }, { fetchCsrfToken: false });
-
-        if (metaRes && metaRes.status === 200 && typeof metaRes.data === 'string') {
-          const xml = metaRes.data;
-          const regex = /<EntitySet\s+([^>]+)>/g;
-          let match;
-          let verifiedCreatableEntity = null;
-
-          while ((match = regex.exec(xml)) !== null) {
-            const attrs = match[1];
-            const nameMatch = attrs.match(/Name=\"([^\"]+)\"/);
-            const creatableMatch = attrs.match(/sap:creatable=\"([^\"]+)\"/);
-            const name = nameMatch ? nameMatch[1] : '';
-            const creatable = creatableMatch ? creatableMatch[1] : 'true';
-            const lower = name.toLowerCase();
-
-            // Ignore system/value-help sets and find actual business quotation entities
-            if (creatable !== 'false' &&
-                !name.startsWith('SAP__') &&
-                !lower.includes('workflow') &&
-                !lower.includes('vh') &&
-                !lower.includes('valuehelp') &&
-                (lower.includes('quot') || lower.includes('qtn') || lower.includes('header'))) {
-              verifiedCreatableEntity = name;
-              break;
-            }
-          }
-
-          if (verifiedCreatableEntity) {
-            this._cachedQuotationService = {
-              technicalServiceName: candidate.TechnicalServiceName,
-              servicePath: candidatePath,
-              entitySet: verifiedCreatableEntity
-            };
-            return this._cachedQuotationService;
-          }
-        }
-      } catch (metaErr) {
-        // Metadata validation failed (e.g. no system alias or service inactive), do not use this candidate
-      }
-    }
-
-    // 4. If standard API_SALES_QUOTATION_SRV is in candidate list, resolve it as the genuine standard service
-    const stdCandidate = candidateServices.find(s => (
-      s.TechnicalServiceName === 'API_SALES_QUOTATION_SRV' || s.ID?.includes('API_SALES_QUOTATION_SRV')
-    ));
-    if (stdCandidate && options.allowStandardFallback !== false) {
-      this._cachedQuotationService = {
-        technicalServiceName: 'API_SALES_QUOTATION_SRV',
-        servicePath: '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV',
-        entitySet: 'A_SalesQuotation'
-      };
-      return this._cachedQuotationService;
-    }
-
-    // 5. If catalog does not expose an operational Sales Quotation creation service, stop and report
-    throw new Error('The SAP S/4HANA service catalog in DEV does not expose an operational Sales Quotation creation service.');
-  }
-
-  /**
-   * Creates a Sales Quote (Category B, Type ZQT) referencing an existing Sales Inquiry.
-   * Dispatches payload directly to the actual standard SAP S/4HANA transactional service (API_SALES_QUOTATION_SRV).
+   * Call only when the user has confirmed creation: this persists a real SAP quotation.
    *
    * @param {string} sInquiryId
    * @param {Object} [options]
-   * @returns {Promise<{ SalesQuote: string, SalesQuotation: string }>}
+   * @param {string} [options.SalesQuotationType]
+   * @param {string} [options.SalesQuotationDate]
+   * @param {string} [options.BindingPeriodValidityEndDate]
+   * @param {string} [options.PurchaseOrderByCustomer]
+   * @returns {Promise<{ SalesQuote: string, SalesQuotation: string, createdVia: string }>}
    */
   async createSalesQuoteFromInquiry(sInquiryId, options = {}) {
-    if (!sInquiryId || String(sInquiryId).trim() === '') {
+    const salesInquiry = String(sInquiryId ?? '').trim();
+    if (salesInquiry === '') {
       throw new Error('Sales Inquiry number is required.');
     }
 
-    const cleanInquiryId = String(sInquiryId).trim();
-    const doc = await this.getInquiry(cleanInquiryId);
-    if (!doc) {
-      throw new Error(`Sales Inquiry ${cleanInquiryId} not found.`);
-    }
+    const salesQuotationType = String(
+      options.SalesQuotationType || options.quotationType || process.env.S4_QUOTATION_TYPE || 'ZQT'
+    ).trim();
 
-    const header = doc.header || doc;
-    const items = doc.items || [];
-
-    const quotationType = options.SalesQuotationType || options.quotationType || 'ZQT';
-    const rawCustPo = options.PurchaseOrderByCustomer !== undefined ? options.PurchaseOrderByCustomer : options.purchaseOrderByCustomer;
-    const custPoNo = rawCustPo !== undefined && String(rawCustPo).trim() !== ''
-      ? String(rawCustPo).trim()
-      : (header.PurchaseOrderByCustomer || `Ref Inquiry ${cleanInquiryId}`);
-
-    const quotationPayload = {
-      SalesQuotationType: quotationType,
-      SalesOrganization: header.SalesOrganization || '1000',
-      DistributionChannel: header.DistributionChannel || '10',
-      OrganizationDivision: header.OrganizationDivision || '52',
-      SoldToParty: header.SoldToParty || '',
-      PurchaseOrderByCustomer: custPoNo,
-      ReferenceSDDocument: cleanInquiryId,
-      TransactionCurrency: header.TransactionCurrency || 'INR',
-      to_Item: items.map((itm, idx) => ({
-        SalesQuotationItem: itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0'),
-        Material: itm.Material || '',
-        SalesQuotationItemText: itm.SalesInquiryItemText || itm.MaterialName || '',
-        RequestedQuantity: String(parseFloat(itm.OrderQuantity || 1).toFixed(3)),
-        RequestedQuantityUnit: itm.OrderQuantityUnit || 'PC',
-        ReferenceSDDocument: cleanInquiryId,
-        ReferenceSDDocumentItem: itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0')
-      }))
-    };
-
-    const formatODataDate = (val) => {
-      if (!val) return undefined;
-      const sVal = String(val).trim();
-      if (sVal.startsWith('/Date(')) return sVal;
-      const d = new Date(sVal);
-      if (isNaN(d.getTime())) return sVal;
-      return `/Date(${d.getTime()})/`;
-    };
-
-    const poDate = options.CustomerPurchaseOrderDate || options.customerPurchaseOrderDate || header.CustomerPurchaseOrderDate;
-    if (poDate) {
-      quotationPayload.CustomerPurchaseOrderDate = formatODataDate(poDate);
-    }
-
-    const qDate = options.SalesQuotationDate || options.quotationDate;
-    if (qDate) {
-      quotationPayload.SalesQuotationDate = formatODataDate(qDate);
-    }
-
-    const valEndDate = options.BindingPeriodValidityEndDate || options.bindingPeriodValidityEndDate || header.BindingPeriodValidityEndDate;
-    if (valEndDate) {
-      quotationPayload.BindingPeriodValidityEndDate = formatODataDate(valEndDate);
-    }
-
-    const partners = [];
-    if (header.SoldToParty) {
-      partners.push({
-        PartnerFunction: 'AG',
-        Customer: String(header.SoldToParty).trim()
-      });
-    }
-    const shipToParty = header.ShipToParty || header.SoldToParty;
-    if (shipToParty) {
-      partners.push({
-        PartnerFunction: 'WE',
-        Customer: String(shipToParty).trim()
-      });
-    }
-    if (partners.length > 0) {
-      quotationPayload.to_Partner = partners;
-    }
-
-    const destination = options.destination || await this._getDestination();
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
-
-    // Resolve target service: use options, cached catalog service, or default to standard API_SALES_QUOTATION_SRV
-    // Resolve target service: use options, cached catalog service, or resolve from catalog
-    let catalogService = this._cachedQuotationService;
-    if (!catalogService && (options.servicePath || options.entitySet)) {
-      catalogService = {
-        technicalServiceName: options.technicalServiceName || 'API_SALES_QUOTATION_SRV',
-        servicePath: options.servicePath || '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV',
-        entitySet: options.entitySet || 'A_SalesQuotation'
-      };
-    }
-    if (!catalogService) {
-      catalogService = await this.getSalesQuotationCatalogService(options);
-    }
-
-    const postUrl = `${catalogService.servicePath.replace(/\/+$/, '')}/${catalogService.entitySet}`;
+    const client = options.quotationClient || new SalesQuotationManageClient({
+      destination: options.destination || await this._getQuotationDestination(),
+      executeHttpRequest: options.executeHttpRequest
+    });
 
     try {
-      const res = await executeFn(destination, {
-        method: 'post',
-        url: postUrl,
-        data: quotationPayload,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          ...(options.headers || {})
+      const { SalesQuotation, verified } = await client.createFromInquiry({
+        salesInquiry,
+        salesQuotationType,
+        header: {
+          SalesQuotationDate: options.SalesQuotationDate,
+          BindingPeriodValidityEndDate: options.BindingPeriodValidityEndDate,
+          PurchaseOrderByCustomer: options.PurchaseOrderByCustomer
         }
-      }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
-
-      const sNewQuoteId = res.data?.d?.SalesQuotation || res.data?.SalesQuotation;
-      if (!sNewQuoteId) {
-        throw new Error('Sales Quotation number not returned from SAP S/4HANA');
-      }
-
-      return { SalesQuote: sNewQuoteId, SalesQuotation: sNewQuoteId };
+      });
+      console.info(`[SalesInquiryAdapter] Sales Quotation ${SalesQuotation} created in SAP from Inquiry ${salesInquiry}.`);
+      return { SalesQuote: SalesQuotation, SalesQuotation, verified: verified === true, createdVia: 'UI_SALESQUOTATIONMANAGE' };
     } catch (err) {
-      let sapMsg = err.response?.data?.error?.message?.value ||
-                   err.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
-                   err.message;
-
-      // If SAP Gateway reports missing system alias (/IWFND/CM_COS/064), provide actionable guidance
-      if (typeof sapMsg === 'string' && (sapMsg.includes('No System Alias found') || sapMsg.includes('/IWFND/CM_COS/064'))) {
-        sapMsg += " (SAP Gateway configuration required in Client 220: in transaction /IWFND/MAINT_SERVICE, assign System Alias 'LOCAL' with 'Default System: X' to service 'ZAPI_SALES_QUOTATION_SRV_0001').";
-      }
-
-      console.error(`[SalesInquiryAdapter] Failed to create Sales Quote from Inquiry ${cleanInquiryId} in S/4HANA:`, sapMsg);
-      throw new Error(sapMsg);
+      console.error(`[SalesInquiryAdapter] Sales Quotation creation from Inquiry ${salesInquiry} failed:`,
+        err.sapCode ? `${err.sapCode} ${err.sapMessage || err.message}` : err.message);
+      throw err;
     }
+  }
+
+  /**
+   * Destination for Sales Quotation creation. SAP holds the quotation in a stateful HTTP session, so
+   * this flow should run as a dedicated technical SAP user that nothing else (SAP GUI, browsers, other
+   * applications or integrations) uses at the same time. Configure one of:
+   *   S4_QUOTATION_DESTINATION_NAME          a BTP / registered destination for that user
+   *   S4_QUOTATION_USERNAME + S4_QUOTATION_PASSWORD   credentials for that user on S4_DESTINATION_URL
+   * Without either, the shared destination is used and a warning is logged on every creation.
+   */
+  async _getQuotationDestination() {
+    const destinationName = String(process.env.S4_QUOTATION_DESTINATION_NAME || '').trim();
+    if (destinationName) {
+      const dest = await connectivity.getDestination({ destinationName });
+      if (!dest) {
+        throw new Error(`[SalesInquiryAdapter] Quotation destination '${destinationName}' (S4_QUOTATION_DESTINATION_NAME) not found.`);
+      }
+      return dest;
+    }
+
+    const username = String(process.env.S4_QUOTATION_USERNAME || '').trim();
+    const password = process.env.S4_QUOTATION_PASSWORD || '';
+    if (username || password) {
+      if (!username || !password || !process.env.S4_DESTINATION_URL) {
+        throw new Error('[SalesInquiryAdapter] Dedicated quotation user is incomplete: set S4_QUOTATION_USERNAME,'
+          + ' S4_QUOTATION_PASSWORD and S4_DESTINATION_URL.');
+      }
+      if (username.toUpperCase() === String(process.env.S4_USERNAME || '').trim().toUpperCase()) {
+        console.warn(`[SalesInquiryAdapter] S4_QUOTATION_USERNAME '${username}' is the same user as S4_USERNAME;`
+          + ' it is not a dedicated technical user.');
+      }
+      return {
+        url: process.env.S4_DESTINATION_URL,
+        username,
+        password,
+        headers: { 'sap-client': process.env.S4_CLIENT || '220' }
+      };
+    }
+
+    console.warn('[SalesInquiryAdapter] Sales Quotation creation is using the shared SAP destination, not a dedicated'
+      + ' technical user. Configure S4_QUOTATION_DESTINATION_NAME or S4_QUOTATION_USERNAME/S4_QUOTATION_PASSWORD.');
+    return this._getDestination();
   }
 }
 

@@ -67,6 +67,19 @@ function validateCreateSalesInquiryPayload(payload) {
         errors.push({ field: 'TransactionCurrency', message: 'Currency must be a valid 3-character ISO currency code (e.g. INR, USD)' });
     }
 
+    // Quotation-readiness fields (optional here; SAP requires them before a quotation can be created)
+    if (header.CustomerGroup2 && String(header.CustomerGroup2).trim().length > 3) {
+        errors.push({ field: 'CustomerGroup2', message: 'Customer Group 2 cannot exceed 3 characters' });
+    }
+    ['PortOfLoading', 'PortOfDischarge'].forEach(field => {
+        if (header[field] && String(header[field]).trim().length > 50) {
+            errors.push({ field, message: `${field === 'PortOfLoading' ? 'Port of Loading' : 'Port of Discharge'} cannot exceed 50 characters` });
+        }
+    });
+    if (header.ContactPerson && !/^\d{1,10}$/.test(String(header.ContactPerson).trim())) {
+        errors.push({ field: 'ContactPerson', message: 'Contact Person must be a numeric SAP contact number (up to 10 digits)' });
+    }
+
     // Validity date checks
     if (header.BindingPeriodValidityStartDate && header.BindingPeriodValidityEndDate) {
         const start = new Date(header.BindingPeriodValidityStartDate);
@@ -97,6 +110,10 @@ function validateCreateSalesInquiryPayload(payload) {
 
             if (!item.OrderQuantityUnit || String(item.OrderQuantityUnit).trim() === '') {
                 errors.push({ field: 'OrderQuantityUnit', itemIndex: index, message: `${itemLabel}: Unit of measure is required` });
+            }
+
+            if (item.Plant && String(item.Plant).trim().length > 4) {
+                errors.push({ field: 'Plant', itemIndex: index, message: `${itemLabel}: Plant cannot exceed 4 characters` });
             }
 
             if (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && item.NetPriceAmount !== '') {

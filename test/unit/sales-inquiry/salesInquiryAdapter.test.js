@@ -401,335 +401,93 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(results.some(r => r.SalesDocumentType === 'ZBIN')).toBe(true);
     });
 
-    describe('createSalesQuoteFromInquiry', () => {
+    describe('createSalesQuoteFromInquiry (UI_SALESQUOTATIONMANAGE)', () => {
+        afterEach(() => jest.restoreAllMocks());
+
         test('validates inquiry number is provided', async () => {
             await expect(salesInquiryAdapter.createSalesQuoteFromInquiry(''))
                 .rejects.toThrow('Sales Inquiry number is required.');
         });
 
-        test('throws if inquiry document not found', async () => {
-            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue(null);
-            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('9999999'))
-                .rejects.toThrow('Sales Inquiry 9999999 not found.');
-        });
+        test('delegates to the V4 client with the inquiry, quotation type and dialog header values', async () => {
+            const quotationClient = { createFromInquiry: jest.fn().mockResolvedValue({ SalesQuotation: '20000512', verified: true }) };
+            jest.spyOn(console, 'info').mockImplementation(() => {});
 
-        test('constructs quotation payload and calls S/4 API returning quote number', async () => {
-            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+            const res = await salesInquiryAdapter.createSalesQuoteFromInquiry(' 1000536 ', {
+                quotationClient,
+                SalesQuotationType: 'ZQT',
+                SalesQuotationDate: '2026-09-14',
+                BindingPeriodValidityEndDate: '2026-10-14',
+                PurchaseOrderByCustomer: 'PO-77',
+                CustomerPurchaseOrderDate: '2026-09-14'
+            });
+
+            expect(res).toEqual({ SalesQuote: '20000512', SalesQuotation: '20000512', verified: true, createdVia: 'UI_SALESQUOTATIONMANAGE' });
+            expect(quotationClient.createFromInquiry).toHaveBeenCalledWith({
+                salesInquiry: '1000536',
+                salesQuotationType: 'ZQT',
                 header: {
-                    SalesInquiry: '1000539',
-                    SoldToParty: '10003',
-                    SalesOrganization: '1000',
-                    DistributionChannel: '10',
-                    OrganizationDivision: '52',
-                    TransactionCurrency: 'INR',
-                    TotalNetAmount: '123000.00'
-                },
-                items: [
-                    {
-                        SalesInquiryItem: '000010',
-                        Material: '4000000085',
-                        OrderQuantity: '100.000',
-                        OrderQuantityUnit: 'KG'
-                    }
-                ]
-            });
-
-            salesInquiryAdapter._cachedQuotationService = {
-                technicalServiceName: 'VERIFIED_QUOTATION_SRV',
-                servicePath: '/sap/opu/odata/sap/VERIFIED_QUOTATION_SRV',
-                entitySet: 'SalesQuotationSet'
-            };
-
-            const mockExecute = jest.fn().mockResolvedValue({
-                data: {
-                    d: {
-                        SalesQuotation: '2000045'
-                    }
+                    SalesQuotationDate: '2026-09-14',
+                    BindingPeriodValidityEndDate: '2026-10-14',
+                    PurchaseOrderByCustomer: 'PO-77'
                 }
             });
-
-            const res = await salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', {
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' }
-            });
-
-            expect(res.SalesQuote).toBe('2000045');
-            expect(mockExecute).toHaveBeenCalledWith(
-                { url: 'http://test' },
-                expect.objectContaining({
-                    method: 'post',
-                    url: '/sap/opu/odata/sap/VERIFIED_QUOTATION_SRV/SalesQuotationSet',
-                    data: expect.objectContaining({
-                        SalesQuotationType: 'ZQT',
-                        SoldToParty: '10003',
-                        ReferenceSDDocument: '1000539',
-                        to_Item: expect.arrayContaining([
-                            expect.objectContaining({
-                                Material: '4000000085',
-                                ReferenceSDDocument: '1000539'
-                            })
-                        ])
-                    })
-                }),
-                expect.any(Object)
-            );
         });
 
-        test('throws error when catalog does not expose an operational quotation creation service', async () => {
-            salesInquiryAdapter._cachedQuotationService = null;
-            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
-                header: { SalesInquiry: '1000539', SoldToParty: '10003' },
-                items: []
-            });
+        test('propagates the SAP business error unchanged', async () => {
+            const sapError = Object.assign(new Error('Inquiry 1000539 is incomplete in SAP and cannot be converted to a Sales Quotation. Complete the inquiry in VA22 before creating the quotation.'), { status: 400, sapCode: 'SLS_LORD/166' });
+            const quotationClient = { createFromInquiry: jest.fn().mockRejectedValue(sapError) };
+            jest.spyOn(console, 'error').mockImplementation(() => {});
 
-            const mockExecute = jest.fn().mockImplementation((dest, config) => {
-                if (config.url.includes('CATALOGSERVICE')) {
-                    return Promise.resolve({
-                        data: {
-                            d: {
-                                results: [
-                                    {
-                                        TechnicalServiceName: 'SD_F1852_QUOT_WL_SRV',
-                                        ServiceUrl: '/sap/opu/odata/sap/SD_F1852_QUOT_WL_SRV'
-                                    }
-                                ]
-                            }
-                        }
-                    });
-                }
-                // Candidate metadata is read-only
-                if (config.url.includes('$metadata')) {
-                    return Promise.resolve({
-                        status: 200,
-                        data: '<EntitySet Name="C_SalesQuotationWl" sap:creatable="false" />'
-                    });
-                }
-                return Promise.resolve({});
-            });
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', { quotationClient }))
+                .rejects.toBe(sapError);
+        });
+    });
 
-            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', {
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' }
-            })).rejects.toThrow("The SAP S/4HANA service catalog in DEV does not expose an operational Sales Quotation creation service.");
+    describe('_getQuotationDestination (dedicated technical SAP user)', () => {
+        const KEYS = ['S4_QUOTATION_DESTINATION_NAME', 'S4_QUOTATION_USERNAME', 'S4_QUOTATION_PASSWORD', 'S4_DESTINATION_URL', 'S4_USERNAME', 'S4_PASSWORD', 'S4_CLIENT'];
+        let saved;
+        beforeEach(() => {
+            saved = Object.fromEntries(KEYS.map(k => [k, process.env[k]]));
+            KEYS.forEach(k => delete process.env[k]);
+            process.env.S4_DESTINATION_URL = 'http://s4:8000';
+            process.env.S4_CLIENT = '220';
+            process.env.S4_USERNAME = 'KHUSHAL';
+            process.env.S4_PASSWORD = 'shared-secret';
+            jest.spyOn(console, 'warn').mockImplementation(() => {});
+        });
+        afterEach(() => {
+            KEYS.forEach(k => { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; });
+            jest.restoreAllMocks();
         });
 
-        test('getSalesQuotationCatalogService resolves from live catalog collection when metadata validation succeeds', async () => {
-            salesInquiryAdapter._cachedQuotationService = null;
-            const mockExecute = jest.fn().mockImplementation((dest, config) => {
-                if (config.url.includes('CATALOGSERVICE')) {
-                    return Promise.resolve({
-                        data: {
-                            d: {
-                                results: [
-                                    {
-                                        TechnicalServiceName: 'SD_SALES_QUOTATION_SRV',
-                                        Title: 'SD_SALES_QUOTATION_SRV',
-                                        Description: 'Sales Quotation Service',
-                                        ServiceUrl: 'http://172.27.100.32:8000/sap/opu/odata/sap/SD_SALES_QUOTATION_SRV'
-                                    }
-                                ]
-                            }
-                        }
-                    });
-                }
-                if (config.url.includes('$metadata')) {
-                    return Promise.resolve({
-                        status: 200,
-                        data: '<EntityContainer><EntitySet Name="SalesQuotationHeaderSet" sap:creatable="true" /></EntityContainer>'
-                    });
-                }
-                return Promise.resolve({});
-            });
+        test('uses the dedicated user credentials when configured, never the shared user', async () => {
+            process.env.S4_QUOTATION_USERNAME = 'QTN_TECH';
+            process.env.S4_QUOTATION_PASSWORD = 'tech-secret';
 
-            const svc = await salesInquiryAdapter.getSalesQuotationCatalogService({
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' }
-            });
+            const dest = await salesInquiryAdapter._getQuotationDestination();
 
-            expect(svc.technicalServiceName).toBe('SD_SALES_QUOTATION_SRV');
-            expect(svc.servicePath).toBe('/sap/opu/odata/sap/SD_SALES_QUOTATION_SRV');
-            expect(svc.entitySet).toBe('SalesQuotationHeaderSet');
+            expect(dest).toEqual({ url: 'http://s4:8000', username: 'QTN_TECH', password: 'tech-secret', headers: { 'sap-client': '220' } });
+            expect(console.warn).not.toHaveBeenCalled();
         });
 
-        test('getSalesQuotationCatalogService falls back to local catalog file and validates metadata', async () => {
-            salesInquiryAdapter._cachedQuotationService = null;
-            const mockExecute = jest.fn().mockImplementation((dest, config) => {
-                if (config.url.includes('CATALOGSERVICE')) {
-                    return Promise.reject(new Error('Gateway down'));
-                }
-                if (config.url.includes('$metadata')) {
-                    return Promise.resolve({
-                        status: 200,
-                        data: '<EntityContainer><EntitySet Name="A_SalesQuotation" sap:creatable="true" /></EntityContainer>'
-                    });
-                }
-                return Promise.resolve({});
-            });
-
-            const svc = await salesInquiryAdapter.getSalesQuotationCatalogService({
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' }
-            });
-
-            expect(svc.technicalServiceName).toBeDefined();
-            expect(svc.servicePath).toBeDefined();
-            expect(svc.entitySet).toBe('A_SalesQuotation');
+        test('refuses an incomplete dedicated-user configuration instead of silently falling back', async () => {
+            process.env.S4_QUOTATION_USERNAME = 'QTN_TECH';
+            await expect(salesInquiryAdapter._getQuotationDestination()).rejects.toThrow('Dedicated quotation user is incomplete');
         });
 
-        test('dispatches directly to API_SALES_QUOTATION_SRV/A_SalesQuotation when servicePath is configured or defaulted', async () => {
-            salesInquiryAdapter._cachedQuotationService = null;
-            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
-                header: {
-                    SalesInquiry: '1000539',
-                    SoldToParty: '10003',
-                    SalesOrganization: '1000',
-                    DistributionChannel: '10',
-                    OrganizationDivision: '52',
-                    TransactionCurrency: 'INR'
-                },
-                items: [
-                    {
-                        SalesInquiryItem: '000010',
-                        Material: '4000000085',
-                        OrderQuantity: '1.000',
-                        OrderQuantityUnit: 'PC'
-                    }
-                ]
-            });
-
-            const mockExecute = jest.fn().mockImplementation((dest, config) => {
-                if (config.method === 'post') {
-                    return Promise.resolve({
-                        data: {
-                            d: {
-                                SalesQuotation: '2000050'
-                            }
-                        }
-                    });
-                }
-                return Promise.resolve({});
-            });
-
-            const res = await salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', {
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' },
-                servicePath: '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV',
-                entitySet: 'A_SalesQuotation'
-            });
-
-            expect(res.SalesQuote).toBe('2000050');
-            expect(mockExecute).toHaveBeenCalledWith(
-                { url: 'http://test' },
-                expect.objectContaining({
-                    method: 'post',
-                    url: '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV/A_SalesQuotation',
-                    data: expect.objectContaining({
-                        SalesQuotationType: 'ZQT',
-                        SoldToParty: '10003',
-                        ReferenceSDDocument: '1000539'
-                    })
-                }),
-                expect.any(Object)
-            );
+        test('warns when the "dedicated" user is the shared user', async () => {
+            process.env.S4_QUOTATION_USERNAME = 'khushal';
+            process.env.S4_QUOTATION_PASSWORD = 'x';
+            await salesInquiryAdapter._getQuotationDestination();
+            expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('not a dedicated technical user'));
         });
 
-        test('deep-insert payload includes custom prompt fields, to_Partner, and document flow references on header and items', async () => {
-            salesInquiryAdapter._cachedQuotationService = null;
-            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
-                header: {
-                    SalesInquiry: '1000539',
-                    SoldToParty: '10003',
-                    ShipToParty: '10083',
-                    SalesOrganization: '1000',
-                    DistributionChannel: '10',
-                    OrganizationDivision: '52',
-                    TransactionCurrency: 'INR',
-                    TotalNetAmount: '123000.00'
-                },
-                items: [
-                    {
-                        SalesInquiryItem: '000010',
-                        Material: '4000000085',
-                        SalesInquiryItemText: 'High Grade Reagent',
-                        OrderQuantity: '100.000',
-                        OrderQuantityUnit: 'KG',
-                        NetAmount: '123000.00'
-                    }
-                ]
-            });
-
-            const mockExecute = jest.fn().mockResolvedValue({
-                data: {
-                    d: {
-                        SalesQuotation: '2000099'
-                    }
-                }
-            });
-
-            const res = await salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', {
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' },
-                servicePath: '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV',
-                entitySet: 'A_SalesQuotation',
-                quotationType: 'ZBQT',
-                quotationDate: '2026-04-01',
-                bindingPeriodValidityEndDate: '2026-05-01',
-                purchaseOrderByCustomer: 'PO-CUSTOM-77',
-                customerPurchaseOrderDate: '2026-04-01'
-            });
-
-            expect(res.SalesQuote).toBe('2000099');
-            const sentPayload = mockExecute.mock.calls[0][1].data;
-            expect(sentPayload.SalesQuotationType).toBe('ZBQT');
-            expect(sentPayload.PurchaseOrderByCustomer).toBe('PO-CUSTOM-77');
-            expect(sentPayload.ReferenceSDDocument).toBe('1000539');
-            expect(sentPayload.SalesQuotationDate).toMatch(/\/Date\(\d+\)\//);
-            expect(sentPayload.BindingPeriodValidityEndDate).toMatch(/\/Date\(\d+\)\//);
-
-            // Partners: Sold-to and Ship-to
-            expect(sentPayload.to_Partner).toBeDefined();
-            expect(sentPayload.to_Partner).toHaveLength(2);
-            expect(sentPayload.to_Partner).toEqual(expect.arrayContaining([
-                expect.objectContaining({ PartnerFunction: 'AG', Customer: '10003' }),
-                expect.objectContaining({ PartnerFunction: 'WE', Customer: '10083' })
-            ]));
-
-            // Items: Reference link
-            expect(sentPayload.to_Item).toBeDefined();
-            expect(sentPayload.to_Item).toHaveLength(1);
-            expect(sentPayload.to_Item[0].SalesQuotationItem).toBe('000010');
-            expect(sentPayload.to_Item[0].Material).toBe('4000000085');
-            expect(sentPayload.to_Item[0].ReferenceSDDocument).toBe('1000539');
-            expect(sentPayload.to_Item[0].ReferenceSDDocumentItem).toBe('000010');
-        });
-
-        test('enriches error message with /IWFND/MAINT_SERVICE guidance when SAP Gateway reports missing system alias', async () => {
-            salesInquiryAdapter._cachedQuotationService = null;
-            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
-                header: { SalesInquiry: '1000539', SoldToParty: '10003' },
-                items: []
-            });
-
-            const mockExecute = jest.fn().mockRejectedValue({
-                response: {
-                    status: 500,
-                    data: {
-                        error: {
-                            code: '/IWFND/CM_COS/064',
-                            message: {
-                                value: "No System Alias found for Service 'ZAPI_SALES_QUOTATION_SRV_0001' and user 'KHUSHAL'"
-                            }
-                        }
-                    }
-                }
-            });
-
-            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', {
-                executeHttpRequest: mockExecute,
-                destination: { url: 'http://test' },
-                servicePath: '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV',
-                entitySet: 'A_SalesQuotation'
-            })).rejects.toThrow("/IWFND/MAINT_SERVICE");
+        test('falls back to the shared destination with an explicit warning when nothing is configured', async () => {
+            jest.spyOn(salesInquiryAdapter, '_getDestination').mockResolvedValue({ url: 'http://shared', username: 'KHUSHAL' });
+            const dest = await salesInquiryAdapter._getQuotationDestination();
+            expect(dest.username).toBe('KHUSHAL');
+            expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('shared SAP destination, not a dedicated technical user'));
         });
     });
 });

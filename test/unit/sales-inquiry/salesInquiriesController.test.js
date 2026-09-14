@@ -477,7 +477,22 @@ describe("SalesInquiries.controller", () => {
 
             mockSalesInquiryService.createSalesQuote.mockResolvedValue("2000045");
 
-            const promise = controller.onConfirmCreateSalesQuote();
+            controller.onConfirmCreateSalesQuote();
+            // Nothing is sent to SAP before the user confirms.
+            expect(mockSalesInquiryService.createSalesQuote).not.toHaveBeenCalled();
+            expect(mockMessageBox.confirm).toHaveBeenCalledWith(
+                expect.stringContaining("This action creates a real Sales Quotation in SAP and cannot be treated as a preview."),
+                expect.objectContaining({ title: "Create Sales Quotation in SAP?" })
+            );
+            expect(mockMessageBox.confirm.mock.calls[0][0]).toContain("Inquiry: 1000539");
+            expect(mockMessageBox.confirm.mock.calls[0][0]).toContain("Quotation Type: ZQT");
+
+            const confirmOptions = mockMessageBox.confirm.mock.calls[0][1];
+            mockSalesInquiryService.createSalesQuote.mockClear();
+            let promise;
+            const originalCreate = controller._createSalesQuoteInSap.bind(controller);
+            controller._createSalesQuoteInSap = (oData) => { promise = originalCreate(oData); return promise; };
+            confirmOptions.onClose("OK");
 
             expect(mockDialog.close).toHaveBeenCalled();
             expect(mockBusyIndicator.show).toHaveBeenCalledWith(0);
@@ -511,15 +526,37 @@ describe("SalesInquiries.controller", () => {
             });
             controller.getView().setModel(oModel, "quoteDialog");
 
-            mockSalesInquiryService.createSalesQuote.mockRejectedValue(new Error("No System Alias found for Service 'ZAPI_SALES_QUOTATION_SRV_0001'"));
+            mockSalesInquiryService.createSalesQuote.mockRejectedValue(new Error("Inquiry 1000539 is incomplete in SAP and cannot be converted to a Sales Quotation. Complete the inquiry in VA22 before creating the quotation."));
 
-            await controller.onConfirmCreateSalesQuote();
+            controller.onConfirmCreateSalesQuote();
+            const confirmOptions = mockMessageBox.confirm.mock.calls[mockMessageBox.confirm.mock.calls.length - 1][1];
+            let promise;
+            const originalCreate = controller._createSalesQuoteInSap.bind(controller);
+            controller._createSalesQuoteInSap = (oData) => { promise = originalCreate(oData); return promise; };
+            confirmOptions.onClose("OK");
+            await promise;
 
             expect(mockBusyIndicator.hide).toHaveBeenCalled();
             expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining("No System Alias found for Service 'ZAPI_SALES_QUOTATION_SRV_0001'"),
+                expect.stringContaining("Inquiry 1000539 is incomplete in SAP and cannot be converted to a Sales Quotation. Complete the inquiry in VA22 before creating the quotation."),
                 expect.objectContaining({ title: "SAP S/4HANA Error" })
             );
+        });
+
+        it("onConfirmCreateSalesQuote sends nothing to SAP when the user cancels the confirmation", () => {
+            controller._oCreateQuoteDialog = mockDialog;
+            controller.getView().setModel(new MockJSONModel({
+                SalesInquiry: "1000540", SalesQuotationType: "ZQT",
+                SalesQuotationDate: "2026-09-14", BindingPeriodValidityEndDate: "2026-10-14"
+            }), "quoteDialog");
+            mockSalesInquiryService.createSalesQuote.mockClear();
+            mockMessageBox.confirm.mockClear();
+
+            controller.onConfirmCreateSalesQuote();
+            mockMessageBox.confirm.mock.calls[0][1].onClose("CANCEL");
+
+            expect(mockSalesInquiryService.createSalesQuote).not.toHaveBeenCalled();
+            expect(mockBusyIndicator.show).not.toHaveBeenCalled();
         });
 
         it("onCancelCreateSalesQuote closes the dialog", () => {

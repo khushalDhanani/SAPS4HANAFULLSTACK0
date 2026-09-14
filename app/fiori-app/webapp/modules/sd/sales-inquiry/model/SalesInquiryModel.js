@@ -5,6 +5,22 @@ sap.ui.define([
 
     var CURRENCY_REGEX = /^[A-Z]{3}$/;
 
+    // Header values SAP requires (incompletion procedure Z1 / partner ZP) before an inquiry can become a quotation
+
+    var QUOTATION_HEADER_FIELDS = [
+
+        { field: "CustomerGroup2", label: "Customer Group 2" },
+
+        { field: "PortOfLoading", label: "Port of Loading" },
+
+        { field: "PortOfDischarge", label: "Port of Discharge" },
+
+        { field: "ContactPerson", label: "Contact Person" }
+
+    ];
+
+    var NO_CAPABILITIES = { CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, Plant: false };
+
     return {
         /**
          * Resolves current username from OwnerComponent auth or user models.
@@ -53,6 +69,10 @@ sap.ui.define([
                     BindingPeriodValidityEndDate: validityEnd,
                     TransactionCurrency: "INR",
                     TotalNetAmount: "0.00",
+                    CustomerGroup2: "",
+                    PortOfLoading: "",
+                    PortOfDischarge: "",
+                    ContactPerson: "",
                     StatusText: "Draft",
                     StatusState: "Information",
                     StatusIcon: "sap-icon://edit",
@@ -65,11 +85,16 @@ sap.ui.define([
                         SalesInquiryItemText: "",
                         OrderQuantity: 1,
                         OrderQuantityUnit: "PC",
+                        Plant: "",
                         NetPriceAmount: "",
                         NetAmount: "0.00",
                         errors: {}
                     }
                 ],
+                capabilities: Object.assign({}, NO_CAPABILITIES),
+                readinessNotice: "",
+                showReadinessNotice: false,
+                readinessGaps: [],
                 errors: {},
                 errorCount: 0,
                 errorMessage: "",
@@ -232,6 +257,7 @@ sap.ui.define([
                 SalesInquiryItemText: "",
                 OrderQuantity: 1,
                 OrderQuantityUnit: "PC",
+                Plant: "",
                 NetPriceAmount: "",
                 NetAmount: "0.00",
                 errors: {}
@@ -331,6 +357,54 @@ sap.ui.define([
         /**
          * Updates status indicator based on completeness.
          */
+        /**
+         * Records which quotation-required fields the SAP inquiry service can accept. Accepted fields
+         * become mandatory on this screen; the others are shown disabled with a notice to maintain
+         * them in VA22, because SAP will not allow a quotation until they are filled.
+         */
+        applyCapabilities: function (oModel, oCaps) {
+            if (!oModel) return;
+            var oMerged = Object.assign({}, NO_CAPABILITIES, oCaps || {});
+            oModel.setProperty("/capabilities", oMerged);
+
+            var aUnsupported = QUOTATION_HEADER_FIELDS.filter(function (f) { return !oMerged[f.field]; }).map(function (f) { return f.label; });
+            if (!oMerged.Plant) aUnsupported.push("Plant");
+            var sNotice = aUnsupported.length === 0 ? "" :
+                "SAP requires Customer Group 2, Port of Loading, Port of Discharge, a Contact Person and a Plant before an inquiry can be turned into a quotation. " +
+                "The SAP inquiry service does not yet accept: " + aUnsupported.join(", ") + ". Maintain these in SAP (VA22) after creation.";
+            oModel.setProperty("/readinessNotice", sNotice);
+            oModel.setProperty("/showReadinessNotice", sNotice !== "");
+        },
+
+        /**
+         * Lists the quotation-required values still missing on the document, regardless of whether
+         * this application can send them, so the incompletion check mirrors SAP's own.
+         */
+        getQuotationReadinessGaps: function (oModel) {
+            if (!oModel) return [];
+            var oHeader = oModel.getProperty("/header") || {};
+            var aItems = oModel.getProperty("/items") || [];
+            var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
+            var aGaps = [];
+            var sHint = function (bSupported) {
+                return bSupported ? "Required by SAP for a quotation" : "Required by SAP for a quotation; not yet supported by the SAP inquiry service, maintain in VA22 after creation";
+            };
+
+            QUOTATION_HEADER_FIELDS.forEach(function (f) {
+                if (!oHeader[f.field] || String(oHeader[f.field]).trim() === "") {
+                    aGaps.push({ type: "Warning", title: f.label + " is missing", subtitle: sHint(oCaps[f.field]), field: f.field });
+                }
+            });
+            aItems.forEach(function (item, idx) {
+                if (!item.Plant || String(item.Plant).trim() === "") {
+                    aGaps.push({ type: "Warning", title: "Plant is missing", subtitle: "Item " + (idx + 1) + ": " + sHint(oCaps.Plant), field: "Plant", itemIndex: idx });
+                }
+            });
+
+            oModel.setProperty("/readinessGaps", aGaps);
+            return aGaps;
+        },
+
         updateStatus: function (oModel) {
             if (!oModel) return;
             var oHeader = oModel.getProperty("/header") || {};
@@ -405,6 +479,14 @@ sap.ui.define([
                 addError("TransactionCurrency", "Currency must be a valid 3-letter ISO code (e.g. INR, USD)");
             }
 
+            // Quotation-required fields are mandatory whenever the SAP inquiry service can accept them
+            var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
+            QUOTATION_HEADER_FIELDS.forEach(function (f) {
+                if (oCaps[f.field] && (!oHeader[f.field] || String(oHeader[f.field]).trim() === "")) {
+                    addError(f.field, f.label + " is required by SAP for a quotation");
+                }
+            });
+
             // Date validation
             if (oHeader.BindingPeriodValidityStartDate && oHeader.BindingPeriodValidityEndDate) {
                 var dStart = new Date(oHeader.BindingPeriodValidityStartDate);
@@ -441,6 +523,13 @@ sap.ui.define([
                         var msg = "Item " + (idx + 1) + ": Unit is required";
                         if (!sFirstError) sFirstError = msg;
                         aErrorList.push({ type: "Error", title: "Unit is required", subtitle: "Item " + (idx + 1) + ": OrderQuantityUnit", field: "OrderQuantityUnit", itemIndex: idx });
+                    }
+                    if (oCaps.Plant && (!item.Plant || String(item.Plant).trim() === "")) {
+                        item.errors.Plant = { state: "Error", text: "Plant is required by SAP for a quotation" };
+                        iErrorCount++;
+                        var msgPlant = "Item " + (idx + 1) + ": Plant is required by SAP for a quotation";
+                        if (!sFirstError) sFirstError = msgPlant;
+                        aErrorList.push({ type: "Error", title: "Plant is required by SAP for a quotation", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
                     }
                 });
                 oModel.setProperty("/items", aItems);
@@ -523,6 +612,11 @@ sap.ui.define([
             if (oHeader.ShipToParty) {
                 oCleanHeader.ShipToParty = String(oHeader.ShipToParty).trim();
             }
+            QUOTATION_HEADER_FIELDS.forEach(function (f) {
+                if (oHeader[f.field] && String(oHeader[f.field]).trim() !== "") {
+                    oCleanHeader[f.field] = String(oHeader[f.field]).trim();
+                }
+            });
 
             var aCleanItems = aItems.map(function (item, idx) {
                 var sItemNum = item.SalesInquiryItem && String(item.SalesInquiryItem).trim() !== ""
@@ -541,6 +635,9 @@ sap.ui.define([
 
                 if (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && item.NetPriceAmount !== "") {
                     cleanItem.NetPriceAmount = parseFloat(item.NetPriceAmount);
+                }
+                if (item.Plant && String(item.Plant).trim() !== "") {
+                    cleanItem.Plant = String(item.Plant).trim().toUpperCase();
                 }
 
                 return cleanItem;

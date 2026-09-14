@@ -155,8 +155,9 @@
                                     text="Create Sales Quote"
                                     icon="sap-icon://request"
                                     type="Emphasized"
+                                    enabled="true"
                                     press=".onCreateSalesQuote"
-                                    tooltip="Create Sales Quote against this Inquiry" />
+                                    tooltip="Create a real Sales Quotation in SAP with reference to this Inquiry (confirmation required)" />
                             </cells>
                         </ColumnListItem>
                     </items>

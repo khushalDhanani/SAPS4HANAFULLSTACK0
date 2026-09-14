@@ -17,8 +17,8 @@
   "dependencies": {
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
-    "@sap/cds": "^10.0.6",
-    "@sap-cloud-sdk/resilience": "^4"
+    "@sap-cloud-sdk/resilience": "^4",
+    "@sap/cds": "^10.0.6"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
@@ -129,15 +129,6 @@
       "LORD_ODATA_ORDER_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/LORD_ODATA_ORDER_SRV"
-      },
-      "API_SALES_QUOTATION_SRV": {
-        "kind": "odata-v2",
-        "[production]": {
-          "credentials": {
-            "destination": "S4HANA_PO_API",
-            "path": "/sap/opu/odata/sap/API_SALES_QUOTATION_SRV"
-          }
-        }
       }
     }
   }
