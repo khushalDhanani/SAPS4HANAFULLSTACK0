@@ -5,7 +5,8 @@
         id="userProfilePopover"
         title="{i18n>userProfileTitle}"
         placement="Bottom"
-        contentWidth="280px">
+        contentWidth="280px"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiSmallMargin">
                 <Label text="{i18n>loginUsername}:" design="Bold" />

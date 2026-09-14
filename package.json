@@ -129,6 +129,15 @@
       "LORD_ODATA_ORDER_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/LORD_ODATA_ORDER_SRV"
+      },
+      "API_SALES_QUOTATION_SRV": {
+        "kind": "odata-v2",
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/API_SALES_QUOTATION_SRV"
+          }
+        }
       }
     }
   }

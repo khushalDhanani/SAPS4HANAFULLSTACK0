@@ -331,6 +331,33 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         expect(oModel.getProperty("/items/0/OrderQuantityUnit")).toBe("KG");
         expect(oModel.getProperty("/items/0/errors/Material/state")).toBe("None");
         expect(oModel.getProperty("/items/0/errors/OrderQuantityUnit/state")).toBe("None");
+
+        // Selecting a different material afterward must properly update the description (no stale data)
+        const secondMaterialData = {
+            Material: "1000000004",
+            MaterialName: "Advanced Polypropylene Polymer",
+            MaterialBaseUnit: "PC"
+        };
+        const secondReport = SalesInquiryModel.applyMaterialDefaults(oModel, "/items/0", secondMaterialData);
+        expect(secondReport.Material).toBe("1000000004");
+        expect(secondReport.SalesInquiryItemText).toBe("Advanced Polypropylene Polymer");
+        expect(secondReport.OrderQuantityUnit).toBe("PC");
+
+        expect(oModel.getProperty("/items/0/Material")).toBe("1000000004");
+        expect(oModel.getProperty("/items/0/SalesInquiryItemText")).toBe("Advanced Polypropylene Polymer");
+        expect(oModel.getProperty("/items/0/OrderQuantityUnit")).toBe("PC");
+
+        // When bForce is explicitly false, existing description is preserved
+        const thirdMaterialData = {
+            Material: "1000000005",
+            MaterialName: "Third Product",
+            MaterialBaseUnit: "KG"
+        };
+        const thirdReport = SalesInquiryModel.applyMaterialDefaults(oModel, "/items/0", thirdMaterialData, false);
+        expect(thirdReport.Material).toBe("1000000005");
+        expect(thirdReport.SalesInquiryItemText).toBeUndefined();
+        expect(oModel.getProperty("/items/0/Material")).toBe("1000000005");
+        expect(oModel.getProperty("/items/0/SalesInquiryItemText")).toBe("Advanced Polypropylene Polymer");
     });
 
     describe("SalesInquiryModel - API Payload Builder (buildPayload)", () => {

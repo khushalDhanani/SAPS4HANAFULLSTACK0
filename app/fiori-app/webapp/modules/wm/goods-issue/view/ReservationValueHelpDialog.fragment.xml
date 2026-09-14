@@ -8,7 +8,8 @@
         search=".onSearchReservationValueHelp"
         confirm=".onConfirmReservationValueHelp"
         cancel=".onCancelReservationValueHelp"
-        items="{giView>/openReservations}">
+        items="{giView>/openReservations}"
+        class="sapUiSizeCompact">
         <StandardListItem
             title="{giView>DisplayText}"
             description="{= 'Order: ' + ${giView>OrderNo} + ' | Plant: ' + ${giView>Plant} + ' | ' + ${giView>ItemCount} + ' items' }"

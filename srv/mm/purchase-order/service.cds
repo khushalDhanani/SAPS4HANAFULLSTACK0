@@ -90,6 +90,13 @@ service PurchaseOrderService {
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity CurrencyVH as projection on external.I_CurrencyStdVH;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity UnitOfMeasureVH as projection on external.I_UnitOfMeasure;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity TaxCodeVH as projection on external.I_TaxCode;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity GLAccountVH as projection on external.I_GLAccountStdVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity CostCenterVH as projection on external.I_CostCenterVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity ProfitCenterVH as projection on external.I_ProfitCenterStdVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity FixedAssetVH as projection on external.I_MasterFixedAssetStdVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity WBSElementVH as projection on external.I_WBSElementBasicDataStdVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity InternalOrderVH as projection on external.I_InternalOrderStdVH;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin']) entity PurchaseContractVH as projection on external.C_PurchaseContractValHelp;
 
     type POItem {
         PurchaseOrderItem: String;
@@ -133,4 +140,7 @@ service PurchaseOrderService {
         IncotermsLocation1: String;
         derived: Boolean;
     };
+
+    @(requires: ['Viewer', 'PurchasingManager', 'User', 'Admin'])
+    function getDashboardMetrics() returns String;
 }

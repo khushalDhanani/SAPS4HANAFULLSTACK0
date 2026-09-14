@@ -8,7 +8,8 @@
     <Page
         id="loginPage"
         showHeader="false"
-        enableScrolling="false">
+        enableScrolling="false"
+        class="sapUiSizeCompact">
         <content>
             <VBox
                 id="loginCenterBox"

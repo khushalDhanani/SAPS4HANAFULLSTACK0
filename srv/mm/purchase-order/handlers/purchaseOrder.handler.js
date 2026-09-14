@@ -179,6 +179,12 @@ function registerPurchaseOrderHandlers(srv) {
             derived: false
         };
     });
+
+    // 4. Function getDashboardMetrics: provides unified, authentic SAP S/4HANA live counts
+    srv.on('getDashboardMetrics', async () => {
+        const metrics = await purchaseOrderAdapter.getDashboardMetrics();
+        return JSON.stringify(metrics);
+    });
 }
 
 registerPurchaseOrderHandlers.registerPurchaseOrderHandlers = registerPurchaseOrderHandlers;

@@ -1,0 +1,175 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog
+        id="createQuoteFromInquiryDialog"
+        title="Create Sales Quotation with Reference"
+        contentWidth="620px"
+        class="sapUiSizeCompact"
+        resizable="true"
+        draggable="true">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <!-- Source Inquiry Reference Summary -->
+                <Panel
+                    headerText="Source Document (Sales Inquiry {quoteDialog>/SalesInquiry})"
+                    expandable="true"
+                    expanded="true"
+                    class="sapUiNoContentPadding sapUiSmallMarginBottom">
+                    <form:SimpleForm
+                        editable="false"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="4"
+                        labelSpanL="4"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="0"
+                        emptySpanL="0"
+                        emptySpanM="0"
+                        emptySpanS="0"
+                        columnsXL="1"
+                        columnsL="1"
+                        columnsM="1"
+                        singleContainerFullSize="false">
+                        <form:content>
+                            <Label text="Reference Document" design="Bold" />
+                            <Text text="Inquiry {quoteDialog>/SalesInquiry} (Document Flow Linked)" />
+
+                            <Label text="Customer (Sold-To)" design="Bold" />
+                            <Text text="{= ${quoteDialog>/OrganizationBPName1} ? (${quoteDialog>/OrganizationBPName1} + ' (' + ${quoteDialog>/SoldToParty} + ')') : ${quoteDialog>/SoldToParty} }" />
+
+                            <Label text="Ship-To Party" design="Bold" />
+                            <Text text="{= ${quoteDialog>/ShipToPartyName} ? (${quoteDialog>/ShipToPartyName} + ' (' + ${quoteDialog>/ShipToParty} + ')') : (${quoteDialog>/ShipToParty} || 'Same as Sold-To') }" />
+
+                            <Label text="Sales Area" design="Bold" />
+                            <Text text="{= (${quoteDialog>/SalesOrganization} || '') + ' / ' + (${quoteDialog>/DistributionChannel} || '') + ' / ' + (${quoteDialog>/OrganizationDivision} || '') }" />
+
+                            <Label text="Inquiry Net Amount" design="Bold" />
+                            <ObjectNumber
+                                number="{quoteDialog>/TotalNetAmount}"
+                                unit="{quoteDialog>/TransactionCurrency}"
+                                state="Success" />
+                        </form:content>
+                    </form:SimpleForm>
+                </Panel>
+
+                <!-- Prompt Parameters Required for Quotation Creation -->
+                <Panel
+                    headerText="Quotation Parameters"
+                    expandable="false"
+                    class="sapUiNoContentPadding sapUiSmallMarginBottom">
+                    <form:SimpleForm
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="4"
+                        labelSpanL="4"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="0"
+                        emptySpanL="0"
+                        emptySpanM="0"
+                        emptySpanS="0"
+                        columnsXL="1"
+                        columnsL="1"
+                        columnsM="1"
+                        singleContainerFullSize="false">
+                        <form:content>
+                            <Label text="Quotation Type" required="true" design="Bold" />
+                            <Select
+                                id="selQuotationType"
+                                selectedKey="{quoteDialog>/SalesQuotationType}"
+                                width="100%">
+                                <core:Item key="ZQT" text="ZQT — Standard Sales Quotation" />
+                                <core:Item key="ZBQT" text="ZBQT — Budgetary Sales Quotation" />
+                            </Select>
+
+                            <Label text="Quotation Date" required="true" design="Bold" />
+                            <DatePicker
+                                id="dpQuotationDate"
+                                value="{quoteDialog>/SalesQuotationDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="yyyy-MM-dd"
+                                width="100%" />
+
+                            <Label text="Valid-To Date" required="true" design="Bold" />
+                            <DatePicker
+                                id="dpValidToDate"
+                                value="{quoteDialog>/BindingPeriodValidityEndDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="yyyy-MM-dd"
+                                width="100%" />
+
+                            <Label text="Customer Reference (PO No.)" design="Bold" />
+                            <Input
+                                id="inCustomerReference"
+                                value="{quoteDialog>/PurchaseOrderByCustomer}"
+                                placeholder="Customer PO / Reference Number"
+                                width="100%" />
+
+                            <Label text="Customer Reference Date" design="Bold" />
+                            <DatePicker
+                                id="dpCustomerRefDate"
+                                value="{quoteDialog>/CustomerPurchaseOrderDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="yyyy-MM-dd"
+                                width="100%" />
+                        </form:content>
+                    </form:SimpleForm>
+                </Panel>
+
+                <!-- Copied Line Items Preview -->
+                <Panel
+                    headerText="Referenced Line Items ({= ${quoteDialog>/items} ? ${quoteDialog>/items}.length : 0 })"
+                    expandable="true"
+                    expanded="false"
+                    class="sapUiNoContentPadding">
+                    <Table
+                        id="tblQuoteReferencedItems"
+                        items="{quoteDialog>/items}"
+                        inset="false"
+                        noDataText="No line items found.">
+                        <columns>
+                            <Column width="4rem"><Text text="Item" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Material" /></Column>
+                            <Column hAlign="End" width="6rem"><Text text="Quantity" /></Column>
+                            <Column width="4rem"><Text text="Unit" /></Column>
+                            <Column hAlign="End" width="7rem"><Text text="Net Amount" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{quoteDialog>SalesInquiryItem}" />
+                                    <ObjectIdentifier
+                                        title="{quoteDialog>Material}"
+                                        text="{= ${quoteDialog>SalesInquiryItemText} || ${quoteDialog>MaterialName} || '' }" />
+                                    <Text text="{quoteDialog>OrderQuantity}" />
+                                    <Text text="{quoteDialog>OrderQuantityUnit}" />
+                                    <ObjectNumber
+                                        number="{quoteDialog>NetAmount}"
+                                        unit="{quoteDialog>/TransactionCurrency}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnConfirmCreateQuote"
+                text="Create Sales Quotation"
+                type="Emphasized"
+                icon="sap-icon://accept"
+                press=".onConfirmCreateSalesQuote" />
+        </beginButton>
+        <endButton>
+            <Button
+                id="btnCancelCreateQuote"
+                text="Cancel"
+                press=".onCancelCreateSalesQuote" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

@@ -34,7 +34,37 @@ sap.ui.define([
                 oHashChanger.attachEvent("hashChanged", this._onHashChanged, this);
             }
 
+            // Ensure static area (dialogs, popovers, value helps) receives compact density
+            if (typeof document !== "undefined") {
+                var fnEnsureStaticCompact = function () {
+                    var oStatic = document.getElementById("sap-ui-static");
+                    if (oStatic && !oStatic.classList.contains("sapUiSizeCompact")) {
+                        oStatic.classList.add("sapUiSizeCompact");
+                    }
+                };
+                fnEnsureStaticCompact();
+                if (typeof MutationObserver !== "undefined" && document.body) {
+                    var oStaticObserver = new MutationObserver(function () {
+                        fnEnsureStaticCompact();
+                    });
+                    oStaticObserver.observe(document.body, { childList: true });
+                }
+            }
+
             oRouter.initialize();
+        },
+
+        /**
+         * Returns the content density class for the application.
+         * Official SAPUI5 Compact Density is applied across the entire application.
+         *
+         * @returns {string} "sapUiSizeCompact"
+         */
+        getContentDensityClass: function () {
+            if (!this._sContentDensityClass) {
+                this._sContentDensityClass = "sapUiSizeCompact";
+            }
+            return this._sContentDensityClass;
         },
 
         /**

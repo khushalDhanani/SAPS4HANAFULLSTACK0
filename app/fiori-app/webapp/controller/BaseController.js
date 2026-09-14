@@ -44,6 +44,17 @@ sap.ui.define([
         },
 
         /**
+         * Returns the content density class for the application.
+         * Official SAPUI5 Compact Density is applied across the entire application.
+         *
+         * @returns {string} "sapUiSizeCompact"
+         */
+        getContentDensityClass: function () {
+            var oComp = this.getOwnerComponent();
+            return (oComp && oComp.getContentDensityClass) ? oComp.getContentDensityClass() : "sapUiSizeCompact";
+        },
+
+        /**
          * Convenience method to set the view busy state.
          * @param {boolean} bBusy whether the view is busy
          */
@@ -108,6 +119,7 @@ sap.ui.define([
                     controller: this
                 }).then(function (oPopover) {
                     that.getView().addDependent(oPopover);
+                    oPopover.addStyleClass(that.getContentDensityClass());
                     return oPopover;
                 });
             }
@@ -178,6 +190,7 @@ sap.ui.define([
                     controller: this
                 }).then(function (oDialog) {
                     that.getView().addDependent(oDialog);
+                    oDialog.addStyleClass(that.getContentDensityClass());
                     return oDialog;
                 });
             }

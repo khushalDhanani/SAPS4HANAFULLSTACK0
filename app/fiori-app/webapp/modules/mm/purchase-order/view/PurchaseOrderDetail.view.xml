@@ -4,7 +4,8 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns:core="sap.ui.core"
     xmlns:uxap="sap.uxap"
-    xmlns:f="sap.ui.layout.form">
+    xmlns:f="sap.ui.layout.form"
+    class="sapUiSizeCompact">
 
     <uxap:ObjectPageLayout
         id="poObjectPage"
@@ -12,7 +13,8 @@
         showTitleInHeaderContent="false"
         showEditHeaderButton="false"
         headerContentPinnable="true"
-        useIconTabBar="false">
+        useIconTabBar="false"
+        class="sapUiSizeCompact">
 
         <!-- Dynamic Header Title (SAP Fiori Best Practice) -->
         <uxap:headerTitle>

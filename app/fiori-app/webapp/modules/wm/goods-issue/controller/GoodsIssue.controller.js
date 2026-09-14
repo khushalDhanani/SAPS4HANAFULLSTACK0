@@ -247,6 +247,9 @@ sap.ui.define([
                 }).then(function (oDialog) {
                     that._oResvValueHelpDialog = oDialog;
                     oView.addDependent(oDialog);
+                    if (oDialog && oDialog.addStyleClass) {
+                        oDialog.addStyleClass((that.getContentDensityClass && that.getContentDensityClass()) || "sapUiSizeCompact");
+                    }
                     oDialog.open();
                 });
             } else {
@@ -824,6 +827,9 @@ sap.ui.define([
                         }).then(function (oDialog) {
                             that._oBatchSelectionDialog = oDialog;
                             oView.addDependent(oDialog);
+                            if (oDialog && oDialog.addStyleClass) {
+                                oDialog.addStyleClass((that.getContentDensityClass && that.getContentDensityClass()) || "sapUiSizeCompact");
+                            }
                             oDialog.open();
                         });
                     } else {
@@ -1271,6 +1277,9 @@ sap.ui.define([
                 }).then(function (oDialog) {
                     that._oQueueTrayDialog = oDialog;
                     oView.addDependent(oDialog);
+                    if (oDialog && oDialog.addStyleClass) {
+                        oDialog.addStyleClass((that.getContentDensityClass && that.getContentDensityClass()) || "sapUiSizeCompact");
+                    }
                     that.onRefreshQueueTray();
                     oDialog.open();
                 });

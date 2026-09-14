@@ -8,7 +8,8 @@
     <Page
         id="salesInquiriesPage"
         showHeader="false"
-        backgroundDesign="Solid">
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- Header Toolbar & Title -->
@@ -111,7 +112,11 @@
                                 width="18rem"
                                 search=".onSearch"
                                 liveChange=".onSearch"
-                                placeholder="Search inquiries..." />
+                                placeholder="Search inquiries...">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                </layoutData>
+                            </SearchField>
                             <Button
                                 id="btnRefreshInquiriesTable"
                                 icon="sap-icon://refresh"
@@ -123,12 +128,12 @@
                         <Column width="8rem"><Text text="Inquiry Number" /></Column>
                         <Column width="5rem"><Text text="Type" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
-                        <Column width="7rem"><Text text="Customer" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Customer Name" /></Column>
+                        <Column width="13rem" minScreenWidth="Tablet" demandPopin="true"><Text text="Customer" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="Sales Area (Org/Chnl/Div)" /></Column>
                         <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="Doc Date" /></Column>
                         <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
                         <Column width="6rem" hAlign="Center"><Text text="Status" /></Column>
+                        <Column width="11rem" minScreenWidth="Tablet" demandPopin="true" hAlign="Center"><Text text="Actions" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation">
@@ -136,14 +141,22 @@
                                 <ObjectIdentifier title="{salesInquiry>SalesInquiry}" />
                                 <Text text="{salesInquiry>SalesInquiryType}" />
                                 <Text text="{salesInquiry>PurchaseOrderByCustomer}" />
-                                <Text text="{salesInquiry>SoldToParty}" />
-                                <Text text="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>CustomerName} || '' }" />
+                                <ObjectIdentifier
+                                    title="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>SoldToParty} || '' }"
+                                    text="{= ${salesInquiry>OrganizationBPName1} ? ${salesInquiry>SoldToParty} : '' }" />
                                 <Text text="{= (${salesInquiry>SalesOrganization} || '') + ' / ' + (${salesInquiry>DistributionChannel} || '') + ' / ' + (${salesInquiry>OrganizationDivision} || '') }" />
                                 <Text text="{salesInquiry>SalesInquiryDate}" />
                                 <ObjectNumber number="{salesInquiry>TotalNetAmount}" unit="{salesInquiry>TransactionCurrency}" state="Success" />
                                 <ObjectStatus
                                     text="{path: 'salesInquiry>OverallSDProcessStatus', formatter: '.formatter.statusText'}"
                                     state="{path: 'salesInquiry>OverallSDProcessStatus', formatter: '.formatter.statusState'}" />
+                                <Button
+                                    id="btnCreateSalesQuote"
+                                    text="Create Sales Quote"
+                                    icon="sap-icon://request"
+                                    type="Emphasized"
+                                    press=".onCreateSalesQuote"
+                                    tooltip="Create Sales Quote against this Inquiry" />
                             </cells>
                         </ColumnListItem>
                     </items>

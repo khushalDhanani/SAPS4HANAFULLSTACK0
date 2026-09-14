@@ -39,3 +39,240 @@
         margin-right: 0.5rem !important;
     }
 }
+
+/* ==========================================================================
+   Dashboard Responsive Grid & Layout System
+   ========================================================================== */
+
+/* Hero Header & Welcome Section Breathing Space */
+.dashboardHeroHeader {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 1.25rem 1.5rem !important;
+    margin-bottom: 1.25rem !important;
+    background: #ffffff !important;
+    border-radius: 0.75rem !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+.dashboardHeroTitleContainer {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.375rem !important;
+    padding-right: 0.5rem !important;
+}
+
+.dashboardUserGreetingRow {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 0.75rem !important;
+    row-gap: 0.375rem !important;
+}
+
+.dashboardHeroActions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.625rem !important;
+    row-gap: 0.5rem !important;
+}
+
+.dashboardTabActions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    row-gap: 0.375rem !important;
+}
+
+/* Base Responsive Grid for Dashboard Tiles across Desktop */
+.dashboardTileContainer {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.875rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+}
+
+/* Override UI5 Flex item wrapper behavior inside grid */
+.dashboardTileContainer > .sapMFlexItem {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+}
+
+/* Tile styling within responsive grid */
+.dashboardTileContainer .sapMGT {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    height: 11.25rem !important;
+    min-height: 11.25rem !important;
+    box-sizing: border-box !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    position: relative !important;
+}
+
+.dashboardTileContainer .sapMGT:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Ensure tile headers and subheaders utilize full card width without premature ellipsis */
+.dashboardTileContainer .sapMGTHdrTxt {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+.dashboardTileContainer .sapMGTTitle {
+    white-space: normal !important;
+    word-break: break-word !important;
+}
+
+.dashboardTileContainer .sapMGTContent {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.dashboardTileContainer .sapMTileCnt {
+    width: 100% !important;
+    height: 5.75rem !important;
+    min-height: 5.5rem !important;
+    position: relative !important;
+}
+
+/* Card Bottom Label (Unit / Footer) visibility & breathing space */
+.dashboardTileContainer .sapMTileCntFtrTxt {
+    position: absolute !important;
+    bottom: 0.5rem !important;
+    left: 0 !important;
+    margin: 0 0.75rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1.1rem !important;
+    max-width: calc(100% - 1.5rem) !important;
+    display: block !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    color: var(--sapContent_LabelColor, #555555) !important;
+    font-weight: 500 !important;
+}
+
+.dashboardTileContainer .sapMTCContent {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.dashboardTileContainer .sapMNC {
+    max-width: 100% !important;
+}
+
+/* Breakpoint: Standard Desktop / Small Laptop (960px - 1199px) */
+@media (min-width: 960px) and (max-width: 1199px) {
+    .dashboardTileContainer {
+        grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)) !important;
+        gap: 0.75rem !important;
+    }
+}
+
+/* Breakpoint: Tablets (600px - 959px) */
+@media (min-width: 600px) and (max-width: 959px) {
+    .dashboardHeroHeader {
+        padding: 1.125rem 1.25rem !important;
+        margin-bottom: 1rem !important;
+    }
+    .dashboardTileContainer {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.75rem !important;
+    }
+    .dashboardTileContainer .sapMGT {
+        height: 11.25rem !important;
+        min-height: 11.25rem !important;
+    }
+}
+
+/* Breakpoint: Mobile Phones (360px - 599px) */
+@media (max-width: 599px) {
+    .appPagesContainer .sapUiResponsiveMargin,
+    .sapUiResponsiveMargin {
+        margin: 0.5rem 0.5rem 1rem 0.5rem !important;
+    }
+    .dashboardHeroHeader {
+        padding: 1rem 0.875rem !important;
+        margin-bottom: 0.875rem !important;
+        border-radius: 0.5rem !important;
+    }
+    .sapMPanelContent {
+        padding: 0.5rem 0.625rem !important;
+    }
+    .dashboardTileContainer {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.5rem !important;
+    }
+    .dashboardTileContainer .sapMGT {
+        height: 11.25rem !important;
+        min-height: 11.25rem !important;
+    }
+    .dashboardTileContainer .sapMGT .sapMGTTitle {
+        font-size: 0.82rem !important;
+        line-height: 1.1rem !important;
+    }
+    .dashboardTileContainer .sapMGT .sapMGTSubHdrTxt {
+        font-size: 0.70rem !important;
+    }
+    .dashboardTileContainer .sapMTileCntFtrTxt {
+        bottom: 0.45rem !important;
+        margin: 0 0.5rem !important;
+        font-size: 0.72rem !important;
+        max-width: calc(100% - 1rem) !important;
+    }
+    .dashboardHeroActions {
+        width: 100% !important;
+        margin-top: 0.5rem !important;
+        gap: 0.5rem !important;
+    }
+    .dashboardHeroActions .sapMBtn,
+    .dashboardTabActions .sapMBtn {
+        margin-right: 0.25rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+}
+
+/* Breakpoint: Ultra-Compact Mobile (< 360px, e.g. 320px iPhone SE) */
+@media (max-width: 359px) {
+    .dashboardHeroHeader {
+        padding: 0.75rem !important;
+        margin-bottom: 0.75rem !important;
+    }
+    .dashboardTileContainer {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important;
+    }
+    .dashboardTileContainer .sapMGT {
+        height: 10.75rem !important;
+        min-height: 10.75rem !important;
+    }
+    .dashboardTileContainer .sapMTileCntFtrTxt {
+        bottom: 0.45rem !important;
+        margin: 0 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+    .dashboardHeroActions {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    .dashboardHeroActions .sapMBtn {
+        width: 100% !important;
+        margin-right: 0 !important;
+    }
+}

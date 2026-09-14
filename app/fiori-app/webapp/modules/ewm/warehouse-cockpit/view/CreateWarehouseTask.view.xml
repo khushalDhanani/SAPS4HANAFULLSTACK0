@@ -9,7 +9,8 @@
     <Page
         id="createTaskPage"
         showHeader="false"
-        backgroundDesign="Solid">
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
                 <!-- Page Header Bar -->
