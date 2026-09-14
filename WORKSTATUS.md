@@ -1,6 +1,46 @@
 
 # Changes Log
 
+## 2026-09-14 15:46 IST
+- **Agent**: Claude Code (Fable 5.1)
+- **Change**: Made the Cloud Foundry readiness check satisfiable and the production start command runnable (`server.js`, `package.json`, `test/integration/health.test.js`, `README.md`, `WORKSTATUS.md`).
+  - **Root cause**:
+    1. `mta.yaml` declares `readiness-health-check-type: http` with `readiness-health-check-http-endpoint: /health`, but CAP only serves `/health` when a handler is passed to `cds.server` (`node_modules/@sap/cds/server.js:45`, `if (o.health) app.get('/health', o.health)`), and `cds env server` has no `health` default. The custom `server.js` registered none, so the srv app would have returned 404 on every readiness probe and never entered the ready state.
+    2. Found while verifying the build output: the root `start` script was `cds watch --exclude data`. `cds build --production` copies the root scripts verbatim into `gen/srv/package.json` (confirmed on the previous `gen/srv` output and on a fresh build), so the buildpack's `npm start` would have executed `cds watch`, a `@sap/cds-dk` dev command that is not in production dependencies. The app could not have started at all.
+  - **Resolution**:
+    1. `server.js`: registered `app.get('/health')` at the top of the existing `cds.on('bootstrap')` hook, returning `200 {"status":"UP"}` with `Cache-Control: no-store`. The bootstrap event fires before CAP mounts protocol adapters and auth middleware, so the route needs no credentials and never touches S/4HANA. `mta.yaml` unchanged.
+    2. `package.json`: `start` is now `cds-serve` (the production entrypoint); `watch` keeps `cds watch --exclude data` for local development.
+    3. `test/integration/health.test.js`: two tests, `GET /health` returns 200 with `{ status: 'UP' }` and `Cache-Control: no-store` without auth, and no redirect or `WWW-Authenticate` challenge.
+    4. `README.md`: local run instructions now say `npm run watch`, explain that `npm start` is the production entrypoint, and document the `/health` endpoint.
+  - **Validation**:
+    - `npx cds build --production`: completed; `gen/srv/server.js` contains the `/health` route and `gen/srv/package.json` has `"start": "cds-serve"`.
+    - `npx jest test/integration test/e2e --runInBand`: **11 suites, 56 tests, all passed** (includes the two new health tests).
+    - Live probe, development profile: started `npx cds-serve` on port 4999, `GET /health` returned `200 {"status":"UP"}`, `cache-control: no-store`, no `www-authenticate`.
+    - Live probe, production profile (`NODE_ENV=production`, `CDS_ENV=production`, placeholder XSUAA `VCAP_SERVICES` binding): `cds-serve` started with `auth kind: jwt` and `GET /health` returned `200 {"status":"UP"}`, proving the route is served before jwt auth applies.
+    - Live probe, production profile without any XSUAA binding: `cds-serve` exits with `Authentication kind "jwt" configured, but no XSUAA instance bound`. This is the expected fail-closed behaviour and is unrelated to `/health`; on Cloud Foundry the `saps4hana-auth` binding exists.
+    - `mbt validate`: no errors reported. `git diff --check`: clean.
+  - **Not validated**: no `cf deploy` was run, so the readiness probe has not been observed on a real Cloud Foundry instance.
+  - **Next recommended action**: route the WM/EWM adapters (`GoodsIssueAdapter`, `GoodsReceiptAdapter`, `EwmAdapter`) through the Cloud SDK http client instead of raw `fetch`, then replace their adapter-level `cookie`/`csrfToken` state with `SessionContext`.
+
+## 2026-09-14 15:41 IST
+- **Agent**: Claude Code (Fable 5.1)
+- **Change**: Aligned the XSUAA security descriptor with the roles the CAP services actually require, and removed the undefined `User` role (`xs-security.json`, `srv/mm/purchase-order/service.cds`, `srv/sd/sales-inquiry/service.cds`, `srv/wm/goods-issue/service.cds`, `srv/wm/goods-receipt/service.cds`, `srv/ewm/warehouse-management/service.cds`, `package.json`, `server.js`, `srv/auth-service.js`, `srv/auth/localTokenUtil.js`, `test/integration/purchase-order/authorization.test.js`, `test/integration/ewm/ewmAuthorization.test.js`, `README.md`, `docs/architecture/ARCHITECTURE.md`, `WORKSTATUS.md`).
+  - **Root cause**: `xs-security.json` declared only the `Viewer`, `Admin`, `PurchasingManager` and `FinanceViewer` scopes, while the SD, WM and EWM services require `SalesRepresentative`, `SalesManager`, `WarehouseClerk` and `WarehouseManager`, and 69 `@requires` lists also named a `User` role that no scope defines. Under the production `jwt` auth profile none of those scopes can be assigned, so only `Admin` users could reach Sales Inquiries, Goods Issue, Goods Receipt or the EWM cockpit.
+  - **Resolution**:
+    1. `xs-security.json`: added scopes `SalesRepresentative`, `SalesManager`, `WarehouseClerk`, `WarehouseManager`; added one role template per scope (managers inherit the corresponding clerk/representative scope, every template includes `Viewer`); `Admin` now references all eight scopes; added a `role-collections` section (`SAPS4HANA_<Role>`) for every template so roles can be assigned in the BTP cockpit without manual collection creation.
+    2. Removed `'User'` from every `@requires` list in the five domain `service.cds` files (69 occurrences). The remaining role sets are: `[Viewer, PurchasingManager, Admin]`, `[PurchasingManager, Admin]`, `[Viewer, SalesRepresentative, SalesManager, Admin]`, `[SalesRepresentative, SalesManager, Admin]`, `[Viewer, WarehouseClerk, WarehouseManager, Admin]`, `[WarehouseClerk, WarehouseManager, Admin]`, `[Viewer, FinanceViewer, Admin]`.
+    3. Removed `User` from the mocked `alice`/`bob` users in `package.json` (development and test profiles), from the `S4_USERNAME` dev roles in `server.js`, from the dev token roles in `srv/auth-service.js`, and from the default roles in `localTokenUtil.issueToken`.
+    4. Removed `'User'` from the token role arrays in the two authorization integration tests so they exercise only declared roles.
+    5. Documented all eight roles in the README Security section and corrected the `ARCHITECTURE.md` tenant-isolation note, which still referred to `$XSAPPNAME.User`.
+  - **Validation**:
+    - `git diff --check`: clean.
+    - `npx cds compile srv --to json`: compiled with 0 errors.
+    - Cross-check script (roles referenced by `@requires` vs scopes in `xs-security.json`): roles used `Admin, FinanceViewer, PurchasingManager, SalesManager, SalesRepresentative, Viewer, WarehouseClerk, WarehouseManager`; missing scopes: none; templates without a role collection: none; dangling scope references: none.
+    - `mbt validate`: no errors reported.
+    - `npm test` (unit + integration + e2e, `--runInBand`): **58 suites, 724 tests, all passed**.
+  - **Not validated**: no BTP deployment was performed; the new role collections have not been created in a real subaccount. Role collection names (`SAPS4HANA_<Role>`) must be unique per subaccount, so a subaccount that already has collections with these names will need them renamed in `xs-security.json` or an `mtaext` before `cf deploy`.
+  - **Next recommended action**: fix the remaining production blockers from the 2026-09-14 review in order: (2) register a `/health` route or change the `mta.yaml` readiness check, (3) route the WM/EWM adapters through the Cloud SDK http client instead of raw `fetch`, (4) replace adapter-level `cookie`/`csrfToken` state with `SessionContext`.
+
 ## 2026-09-14 10:25 IST
 - **Agent**: Antigravity
 - **Change**: Resolved `git push` HTTP 400 RPC Failed Error by Configuring `http.postBuffer` (`.git/config`, `WORKSTATUS.md`).

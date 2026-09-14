@@ -35,7 +35,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.auth = cds.env.requires.auth || {};
     cds.env.requires.auth.users = cds.env.requires.auth.users || {};
-    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'];
+    const devRoles = ['Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'];
     cds.env.requires.auth.users[s4User] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
@@ -117,6 +117,13 @@ const localTokenUtil = require('./srv/auth/localTokenUtil');
 
 // Local development bootstrap handlers
 cds.on('bootstrap', (app) => {
+    // Readiness endpoint for the Cloud Foundry HTTP health check declared in mta.yaml
+    // (readiness-health-check-http-endpoint: /health). Registered before CAP mounts its
+    // protocol adapters and auth middleware, so it needs no credentials and never touches S/4HANA.
+    app.get('/health', (req, res) => {
+        res.set('Cache-Control', 'no-store').status(200).json({ status: 'UP' });
+    });
+
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
     app.use((req, res, next) => {
         res.setHeader('Permissions-Policy', 'unload=*');

@@ -4,7 +4,7 @@ namespace saps4hana.ewm;
 service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity Warehouses {
         key Warehouse     : String(4);
             WarehouseName : String(80);
@@ -12,7 +12,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity WarehouseProcessTypes {
         key Warehouse                : String(4);
         key WarehouseProcessType      : String(4);
@@ -20,7 +20,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity StorageTypes {
         key Warehouse       : String(4);
         key StorageType     : String(4);
@@ -28,7 +28,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity StorageBins {
         key Warehouse           : String(4);
         key StorageBin          : String(18);
@@ -42,7 +42,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity WarehouseOrders {
         key Warehouse           : String(4);
         key WarehouseOrder       : String(10);
@@ -53,7 +53,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
             CreationDate         : Date;
     };
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity WarehouseTasks {
         key Warehouse                : String(4);
         key WarehouseTask             : String(12);
@@ -77,7 +77,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity InboundDeliveries {
         key Warehouse                 : String(10);
         key DeliveryDocument          : String(35);
@@ -90,7 +90,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity InboundDeliveryItems {
         key Warehouse                 : String(10);
         key DeliveryDocument          : String(35);
@@ -103,7 +103,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity OutboundDeliveries {
         key Warehouse                 : String(10);
         key OutboundDeliveryOrder     : String(35);
@@ -117,7 +117,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity OutboundDeliveryItems {
         key Warehouse                 : String(10);
         key OutboundDeliveryOrder     : String(35);
@@ -130,7 +130,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity WarehouseKPIs {
         key Warehouse        : String(10);
             OpenTasksCount   : Integer;
@@ -140,7 +140,7 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity WarehouseResources {
         key Warehouse       : String(10);
         key Resource        : String(12);

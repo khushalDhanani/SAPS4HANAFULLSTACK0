@@ -18,6 +18,22 @@
     {
       "name": "$XSAPPNAME.FinanceViewer",
       "description": "View financial accounting journal entry data"
+    },
+    {
+      "name": "$XSAPPNAME.SalesRepresentative",
+      "description": "Create and manage sales inquiries and sales quotations"
+    },
+    {
+      "name": "$XSAPPNAME.SalesManager",
+      "description": "Manage sales inquiries and sales quotations"
+    },
+    {
+      "name": "$XSAPPNAME.WarehouseClerk",
+      "description": "Post goods issue and goods receipt, confirm and create warehouse tasks"
+    },
+    {
+      "name": "$XSAPPNAME.WarehouseManager",
+      "description": "Manage warehouse operations, tasks and resources"
     }
   ],
   "attributes": [],
@@ -36,7 +52,11 @@
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.Admin",
         "$XSAPPNAME.PurchasingManager",
-        "$XSAPPNAME.FinanceViewer"
+        "$XSAPPNAME.FinanceViewer",
+        "$XSAPPNAME.SalesRepresentative",
+        "$XSAPPNAME.SalesManager",
+        "$XSAPPNAME.WarehouseClerk",
+        "$XSAPPNAME.WarehouseManager"
       ]
     },
     {
@@ -53,6 +73,98 @@
       "scope-references": [
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.FinanceViewer"
+      ]
+    },
+    {
+      "name": "SalesRepresentative",
+      "description": "Sales inquiry and quotation processing",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.SalesRepresentative"
+      ]
+    },
+    {
+      "name": "SalesManager",
+      "description": "Sales management",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.SalesRepresentative",
+        "$XSAPPNAME.SalesManager"
+      ]
+    },
+    {
+      "name": "WarehouseClerk",
+      "description": "Warehouse goods movements and task execution",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.WarehouseClerk"
+      ]
+    },
+    {
+      "name": "WarehouseManager",
+      "description": "Warehouse management",
+      "scope-references": [
+        "$XSAPPNAME.Viewer",
+        "$XSAPPNAME.WarehouseClerk",
+        "$XSAPPNAME.WarehouseManager"
+      ]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "SAPS4HANA_Viewer",
+      "description": "SAP S/4HANA Full-Stack: read-only access to all modules",
+      "role-template-references": [
+        "$XSAPPNAME.Viewer"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_Admin",
+      "description": "SAP S/4HANA Full-Stack: full access to all modules",
+      "role-template-references": [
+        "$XSAPPNAME.Admin"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_PurchasingManager",
+      "description": "SAP S/4HANA Full-Stack: purchase order processing",
+      "role-template-references": [
+        "$XSAPPNAME.PurchasingManager"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_FinanceViewer",
+      "description": "SAP S/4HANA Full-Stack: journal entry viewing",
+      "role-template-references": [
+        "$XSAPPNAME.FinanceViewer"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_SalesRepresentative",
+      "description": "SAP S/4HANA Full-Stack: sales inquiry and quotation processing",
+      "role-template-references": [
+        "$XSAPPNAME.SalesRepresentative"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_SalesManager",
+      "description": "SAP S/4HANA Full-Stack: sales management",
+      "role-template-references": [
+        "$XSAPPNAME.SalesManager"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_WarehouseClerk",
+      "description": "SAP S/4HANA Full-Stack: goods issue, goods receipt and warehouse task execution",
+      "role-template-references": [
+        "$XSAPPNAME.WarehouseClerk"
+      ]
+    },
+    {
+      "name": "SAPS4HANA_WarehouseManager",
+      "description": "SAP S/4HANA Full-Stack: warehouse management",
+      "role-template-references": [
+        "$XSAPPNAME.WarehouseManager"
       ]
     }
   ],

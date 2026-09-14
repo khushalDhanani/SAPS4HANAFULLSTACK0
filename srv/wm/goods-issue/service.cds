@@ -15,11 +15,11 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Barcode      : String(40);
     };
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity GoodsIssueQueue as projection on DBGoodsIssueQueue;
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity GIItems {
         key ReservationNo   : String(10);
         key ReservationItem : String(4);
@@ -43,7 +43,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity MaterialBatches {
         key Material            : String(40);
         key Plant               : String(4);
@@ -61,7 +61,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity OpenReservations {
         key ReservationNo      : String(10);
             OrderNo            : String(12);
@@ -207,10 +207,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Items       : array of QueueItem;
     };
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function resolveIdentifier(barcode: String(40)) returns GoodsIssueResolution;
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getQueueSummary() returns QueueSummary;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -321,14 +321,14 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Message          : String(500);
     };
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function resolveStockUnit(
         suBarcode       : String(40),
         reservationNo   : String(10),
         reservationItem : String(4)
     ) returns StockUnitResolution;
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function revalidateStock(
         material        : String(40),
         plant           : String(4),

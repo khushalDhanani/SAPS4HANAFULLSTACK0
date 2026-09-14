@@ -85,4 +85,4 @@ The deployment architecture is defined in `mta.yaml`:
 
 - **Zero Hardcoded Secrets**: All credentials and backend hosts are externalized via BTP Destination service and environment configuration (`.env.local` for local development, BTP service bindings for production).
 - **Session & CSRF Protection**: The CAP S/4 adapter dynamically manages CSRF tokens and SAP session cookies across multiple sequential Gateway requests (Draft Create → Draft Activate).
-- **Tenant Isolation**: Dedicated tenant mode configured in `xs-security.json` with scopes `$XSAPPNAME.User` and `$XSAPPNAME.Admin`.
+- **Tenant Isolation**: Dedicated tenant mode configured in `xs-security.json` with one scope, role template and role collection per application role (Viewer, Admin, PurchasingManager, FinanceViewer, SalesRepresentative, SalesManager, WarehouseClerk, WarehouseManager).

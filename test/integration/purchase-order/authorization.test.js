@@ -126,7 +126,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
 
     describe('Local Development Bearer Token Authorization (JWT with XSUAA Claims)', () => {
         it('should allow PurchasingManager Bearer token to invoke createPurchaseOrder', async () => {
-            const token = localTokenUtil.issueToken('KHUSHAL', ['PurchasingManager', 'Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('KHUSHAL', ['PurchasingManager', 'Viewer']).token;
             const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload, {
                 headers: { authorization: 'Bearer ' + token }
             });
@@ -137,7 +137,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
 
         it('should REJECT Viewer Bearer token attempting to invoke createPurchaseOrder with 403 Forbidden', async () => {
-            const token = localTokenUtil.issueToken('bob_local', ['Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('bob_local', ['Viewer']).token;
             try {
                 await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload, {
                     headers: { authorization: 'Bearer ' + token }
@@ -150,7 +150,7 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
 
         it('should allow Viewer Bearer token to READ PurchaseOrders entity set', async () => {
-            const token = localTokenUtil.issueToken('bob_local', ['Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('bob_local', ['Viewer']).token;
             const { status, data } = await GET('/odata/v4/purchase-order/PurchaseOrders', {
                 headers: { authorization: 'Bearer ' + token }
             });

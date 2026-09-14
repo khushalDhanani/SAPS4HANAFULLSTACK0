@@ -32,12 +32,12 @@ function base64UrlDecode(str) {
  * Issues a signed local development JWT containing standard XSUAA/BTP claims.
  *
  * @param {string} username - Logon user ID
- * @param {string[]} [roles] - Application roles (e.g. ['PurchasingManager', 'Viewer', 'User'])
+ * @param {string[]} [roles] - Application roles (e.g. ['PurchasingManager', 'Viewer'])
  * @param {Object} [options]
  * @param {number} [options.expiresInSeconds] - Token expiration in seconds
  * @returns {{ token: string, scopes: string[], expiresAt: number }}
  */
-function issueToken(username, roles = ['PurchasingManager', 'Viewer', 'User'], options = {}) {
+function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options = {}) {
     if (!username || typeof username !== 'string') {
         throw new Error('Username is required to issue local development token.');
     }

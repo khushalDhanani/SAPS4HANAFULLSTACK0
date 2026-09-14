@@ -214,10 +214,13 @@ NODE_ENV=development
 Runs the CAP backend with auto-reload, serving both the OData V4 services and the Fiori application:
 
 ```bash
-npm start
+npm run watch
 # or
-npx cds watch
+npx cds watch --exclude data
 ```
+
+> `npm start` runs `cds-serve` without auto-reload. It is the entrypoint the Cloud Foundry buildpack executes, so keep it production-safe.
+> The Cloud Foundry readiness check (`mta.yaml`) polls `GET /health`, which `server.js` serves without authentication: [http://localhost:4004/health](http://localhost:4004/health)
 
 - **CAP Service Home & Test Launchpad**: [http://localhost:4004](http://localhost:4004)
 - **Fiori Purchase Order Application**: [http://localhost:4004/fiori-app/webapp/index.html](http://localhost:4004/fiori-app/webapp/index.html)
@@ -435,6 +438,10 @@ cf deploy mta_archives/SAPS4HANAFULLSTACK_1.0.0.mtar
 - **Role-Based Access Control (RBAC)**: Enforced via `xs-security.json` and CAP `@requires` annotations:
   - `Viewer`: Read-only access to Purchase Orders and Value Helps.
   - `PurchasingManager`: Authorization to create and activate Purchase Orders.
+  - `FinanceViewer`: Read-only access to Journal Entry verification data.
+  - `SalesRepresentative` / `SalesManager`: Create Sales Inquiries and Sales Quotations.
+  - `WarehouseClerk` / `WarehouseManager`: Post Goods Issue and Goods Receipt, create and confirm warehouse tasks.
+  - `Admin`: All of the above. Every role template and a matching role collection is declared in `xs-security.json`.
 - **Sanitized Error Payloads**: Technical stack traces, backend hostnames, and internal SAP system IDs are sanitized before responding to the client.
 - **Principal Propagation**: Fully compatible with SAP BTP Principal Propagation to preserve user auditing end-to-end into SAP S/4HANA `CDHDR` / `CDPOS` change documents.
 

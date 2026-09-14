@@ -125,7 +125,7 @@ describe('Security & Authorization: EWM Warehouse Management RBAC', () => {
 
     describe('Local Development Bearer Token Authorization (JWT with XSUAA Claims)', () => {
         it('should allow Viewer Bearer token to READ Warehouses entity set', async () => {
-            const token = localTokenUtil.issueToken('bob_local', ['Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('bob_local', ['Viewer']).token;
             const { status, data } = await GET('/odata/v4/warehouse-management/Warehouses', {
                 headers: { authorization: 'Bearer ' + token }
             });
@@ -134,7 +134,7 @@ describe('Security & Authorization: EWM Warehouse Management RBAC', () => {
         });
 
         it('should allow WarehouseClerk Bearer token to READ Warehouses entity set', async () => {
-            const token = localTokenUtil.issueToken('alice_local', ['WarehouseClerk', 'Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('alice_local', ['WarehouseClerk', 'Viewer']).token;
             const { status, data } = await GET('/odata/v4/warehouse-management/Warehouses', {
                 headers: { authorization: 'Bearer ' + token }
             });
@@ -143,7 +143,7 @@ describe('Security & Authorization: EWM Warehouse Management RBAC', () => {
         });
 
         it('should allow WarehouseClerk Bearer token to invoke createWarehouseTask action', async () => {
-            const token = localTokenUtil.issueToken('clerk_local', ['WarehouseClerk', 'User']).token;
+            const token = localTokenUtil.issueToken('clerk_local', ['WarehouseClerk']).token;
             const { status, data } = await POST('/odata/v4/warehouse-management/createWarehouseTask', {
                 Warehouse: '0001',
                 Product: 'TG11',
@@ -158,7 +158,7 @@ describe('Security & Authorization: EWM Warehouse Management RBAC', () => {
         });
 
         it('should REJECT Viewer Bearer token attempting to invoke createWarehouseTask with 403 Forbidden', async () => {
-            const token = localTokenUtil.issueToken('viewer_only', ['Viewer', 'User']).token;
+            const token = localTokenUtil.issueToken('viewer_only', ['Viewer']).token;
             try {
                 await POST('/odata/v4/warehouse-management/createWarehouseTask', {
                     Warehouse: '0001',

@@ -5,7 +5,7 @@ namespace saps4hana.wm;
 service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity OpenInboundDeliveries {
         key StorageUnit          : String(20);
         key DeliveryDocument     : String(12);
@@ -22,7 +22,7 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity MaterialStorageLocations {
         key Material            : String(40);
         key Plant               : String(4);
@@ -34,7 +34,7 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity MaterialBatches {
         key Material        : String(40);
         key Plant           : String(4);
@@ -77,7 +77,7 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         SupplierCityName     : String(40);
     };
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getStorageUnitDetails(StorageUnit : String) returns StorageUnitDetails;
 
     type GRPostResult {

@@ -49,8 +49,8 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     let aScopes = [];
     if (process.env.NODE_ENV !== "production") {
       const devRoles = sUserLower === "bob"
-        ? ["User", "Viewer"]
-        : ["User", "Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
+        ? ["Viewer"]
+        : ["Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
       const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
       sToken = tokenObj.token;
       aScopes = tokenObj.scopes;
