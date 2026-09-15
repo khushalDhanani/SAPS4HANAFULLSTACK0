@@ -1,8 +1,5 @@
-const fs = require('fs');
-const path = require('path');
-const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
 const S4ErrorMapper = require('../S4ErrorMapper');
+const { S4HttpClient } = require('../S4HttpClient');
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA for Goods Receipt (Movement 101):
@@ -14,41 +11,17 @@ const S4ErrorMapper = require('../S4ErrorMapper');
  *   NO dummy fallback data, NO mock persistence, NO synthetic document generation.
  */
 class GoodsReceiptAdapter {
-  constructor() {
-    this.destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
-    this.csrfToken = null;
-    this.cookie = null;
-
-    this._ensureEnvLoaded();
-  }
-
   /**
-   * Helper to ensure .env or .env.local variables are loaded in non-standard execution contexts
+   * Gateway entity set that reliably issues a CSRF token and session cookies on this system; used for
+   * every transactional POST of this adapter.
    */
-  _ensureEnvLoaded() {
-    if (process.env.S4_DESTINATION_URL) return;
-    const candidates = ['.env.local', '.env'];
-    for (const f of candidates) {
-      const fullPath = path.resolve(process.cwd(), f);
-      if (fs.existsSync(fullPath)) {
-        try {
-          const content = fs.readFileSync(fullPath, 'utf8');
-          for (const line of content.split('\n')) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-              const idx = trimmed.indexOf('=');
-              const k = trimmed.substring(0, idx).trim();
-              const v = trimmed.substring(idx + 1).trim();
-              if (!process.env[k]) {
-                process.env[k] = v;
-              }
-            }
-          }
-        } catch (_) {
-          // Continue
-        }
-      }
-    }
+  static CSRF_FETCH_PATH = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1';
+
+  constructor(options = {}) {
+    // All HTTP traffic to S/4HANA goes through the shared SAP Cloud SDK based client (BTP destination,
+    // Connectivity proxy for on-premise systems, per-call CSRF/cookie handling). No session state lives here.
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
   }
 
   /**
@@ -100,146 +73,51 @@ class GoodsReceiptAdapter {
   }
 
   /**
-   * Resolves connection credentials for SAP Gateway
+   * Resolve the S/4HANA destination through the shared client. Returns null when nothing is configured.
    */
-  async _getCredentials() {
-    try {
-      const dest = await connectivity.getDestination({ destinationName: this.destinationName });
-      if (dest && dest.url) {
-        return {
-          url: dest.url,
-          username: dest.username,
-          password: dest.password,
-          client: dest.sapClient || process.env.S4_CLIENT || '220'
-        };
-      }
-    } catch (_) {
-      // Local fallback
-    }
-
-    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials;
-    if (creds && creds.url) {
-      return {
-        url: creds.url,
-        username: creds.username,
-        password: creds.password,
-        client: creds.client || process.env.S4_CLIENT || '220'
-      };
-    }
-
-    return {
-      url: process.env.S4_DESTINATION_URL || 'http://172.27.100.32:8000',
-      username: process.env.S4_USERNAME,
-      password: process.env.S4_PASSWORD,
-      client: process.env.S4_CLIENT || '220'
-    };
+  async _getDestination() {
+    return this.client.resolveDestination();
   }
 
   /**
-   * Executes an authenticated GET request against SAP Gateway
+   * Converts a shared-client failure into the Gateway error shape the Goods Receipt handlers expect:
+   * the SAP message as text and the HTTP status in statusCode.
+   */
+  static _toGatewayError(err) {
+    const errObj = new Error(S4ErrorMapper.extractS4ErrorMessage(err));
+    errObj.statusCode = err.status || err.statusCode;
+    errObj.status = errObj.statusCode;
+    errObj.code = err.code;
+    return errObj;
+  }
+
+  /**
+   * Executes an authenticated GET request against SAP Gateway via the SAP Cloud SDK
    */
   async _get(servicePath, queryString = '') {
-    const creds = await this._getCredentials();
-    const url = `${creds.url}${servicePath}${queryString ? (queryString.startsWith('?') ? queryString : `?${queryString}`) : ''}`;
-    const authHeader = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-
-    const headers = {
-      'Accept': 'application/json',
-      'sap-client': creds.client,
-      'Authorization': authHeader
-    };
-
-    if (this.cookie) {
-      headers['Cookie'] = this.cookie;
-    }
-
-    const response = await fetch(url, { method: 'GET', headers });
-
-    const setCookie = response.headers.get('set-cookie');
-    if (setCookie) {
-      this.cookie = setCookie;
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const message = S4ErrorMapper.extractS4ErrorMessage({ message: errorText });
-      const errObj = new Error(message);
-      errObj.statusCode = response.status;
-      throw errObj;
-    }
-
-    const data = await response.json();
-    return data.d?.results || data.d || data;
-  }
-
-  /**
-   * Fetches CSRF token and session cookies for POST requests
-   */
-  async _fetchCsrfToken() {
-    const creds = await this._getCredentials();
-    const authHeader = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-
-    // Query active Gateway endpoint that reliably generates CSRF tokens and session cookies on Client 220
-    const response = await fetch(`${creds.url}/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1`, {
-      method: 'GET',
-      headers: {
-        'x-csrf-token': 'Fetch',
-        'sap-client': creds.client,
-        'Authorization': authHeader
-      }
-    });
-
-    this.csrfToken = response.headers.get('x-csrf-token');
-    if (response.headers.getSetCookie) {
-      const cookies = response.headers.getSetCookie();
-      this.cookie = cookies.map(c => c.split(';')[0]).join('; ');
-    } else {
-      const setCookie = response.headers.get('set-cookie');
-      if (setCookie) {
-        this.cookie = setCookie.split(';')[0];
-      }
+    try {
+      const { data } = await this.client.get(servicePath, { query: queryString });
+      return data?.d?.results || data?.d || data;
+    } catch (err) {
+      throw GoodsReceiptAdapter._toGatewayError(err);
     }
   }
 
   /**
-   * Executes an authenticated POST request against SAP Gateway
+   * Executes an authenticated POST request against SAP Gateway via the SAP Cloud SDK. The CSRF token and
+   * the session cookies are fetched for this call only; nothing is cached on the adapter.
    */
   async _post(servicePath, body = {}, customHeaders = {}) {
-    const creds = await this._getCredentials();
-    await this._fetchCsrfToken();
-
-    const authHeader = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-    const url = `${creds.url}${servicePath}`;
-
-    const headers = {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'sap-client': creds.client,
-      'Authorization': authHeader,
-      'x-csrf-token': this.csrfToken || '',
-      ...customHeaders
-    };
-
-    if (this.cookie) {
-      headers['Cookie'] = this.cookie;
+    try {
+      const { data } = await this.client.post(servicePath, {
+        data: body,
+        headers: customHeaders,
+        csrfPath: GoodsReceiptAdapter.CSRF_FETCH_PATH
+      });
+      return (data && typeof data === 'object') ? (data.d || data) : data;
+    } catch (err) {
+      throw GoodsReceiptAdapter._toGatewayError(err);
     }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const message = S4ErrorMapper.extractS4ErrorMessage({ message: errorText });
-      const errObj = new Error(message);
-      errObj.statusCode = response.status;
-      throw errObj;
-    }
-
-    const data = await response.json();
-    return data.d || data;
   }
 
   /**
@@ -771,3 +649,4 @@ class GoodsReceiptAdapter {
 }
 
 module.exports = new GoodsReceiptAdapter();
+module.exports.GoodsReceiptAdapter = GoodsReceiptAdapter;

@@ -217,57 +217,31 @@ describe('Unit: EwmAdapter - Authentic Warehouse Master Data Only', () => {
             expect(result).toBeDefined();
         });
 
-        it('Strategy 3: should fall back to Goods Receipt when Strategies 1 & 2 fail', async () => {
+        it('never posts a goods receipt or reads deliveries as a side effect of task creation', async () => {
             EwmAdapter._post = jest.fn().mockRejectedValue(new Error('Service unavailable'));
             EwmAdapter.getInboundDeliveries = jest.fn().mockResolvedValue([
-                {
-                    DeliveryDocument: '180000010',
-                    OverallGoodsReceiptStatus: 'A',
-                    Items: [{ Product: 'TG11', DeliveryQuantity: 10 }]
-                }
+                { DeliveryDocument: '180000010', OverallGoodsReceiptStatus: 'A', Items: [{ Product: 'TG11' }] }
             ]);
-            EwmAdapter.getWarehouseTasks = jest.fn()
-                .mockResolvedValueOnce([]) // before GR
-                .mockResolvedValueOnce([   // after GR
-                    { Warehouse: '0001', WarehouseTask: 'WT-0001', Product: 'TG11', WarehouseTaskStatus: 'O' }
-                ]);
+            EwmAdapter.getWarehouseTasks = jest.fn().mockResolvedValue([]);
             EwmAdapter.postGoodsReceipt = jest.fn().mockResolvedValue(true);
 
-            const result = await EwmAdapter.createWarehouseTask({
+            await expect(EwmAdapter.createWarehouseTask({
                 Warehouse: '0001',
                 WarehouseProcessType: '1010',
                 Product: 'TG11',
                 Quantity: 10,
                 UnitOfMeasure: 'PC'
-            });
+            })).rejects.toMatchObject({ status: 422 });
 
-            expect(EwmAdapter.postGoodsReceipt).toHaveBeenCalledWith('0001', '180000010');
-            expect(result.WarehouseTask).toBe('WT-0001');
-        });
-
-        it('Strategy 3: should return GR-prefixed task when GR succeeds but no new task appears', async () => {
-            EwmAdapter._post = jest.fn().mockRejectedValue(new Error('Service unavailable'));
-            EwmAdapter.getInboundDeliveries = jest.fn().mockResolvedValue([
-                {
-                    DeliveryDocument: '180000015',
-                    OverallGoodsReceiptStatus: 'B',
-                    Items: [{ Product: 'TG11' }]
-                }
+            expect(EwmAdapter.postGoodsReceipt).not.toHaveBeenCalled();
+            expect(EwmAdapter.getInboundDeliveries).not.toHaveBeenCalled();
+            expect(EwmAdapter.getWarehouseTasks).not.toHaveBeenCalled();
+            // Only the two real create services are attempted
+            const paths = EwmAdapter._post.mock.calls.map(c => c[0]);
+            expect(paths).toEqual([
+                '/sap/opu/odata/sap/API_WAREHOUSE_ORDER_TASK/WarehouseTask',
+                '/sap/opu/odata/scwm/PICKCART_SRV/WarehouseTaskSet'
             ]);
-            EwmAdapter.getWarehouseTasks = jest.fn().mockResolvedValue([]);
-            EwmAdapter.postGoodsReceipt = jest.fn().mockResolvedValue(true);
-
-            const result = await EwmAdapter.createWarehouseTask({
-                Warehouse: '0001',
-                WarehouseProcessType: '1010',
-                Product: 'TG11',
-                Quantity: 5,
-                UnitOfMeasure: 'PC'
-            });
-
-            expect(result._goodsReceiptTriggered).toBe(true);
-            expect(result.WarehouseTask).toBe('GR-180000015');
-            expect(result._deliveryDocument).toBe('180000015');
         });
 
         it('should throw descriptive error when all strategies are exhausted', async () => {
@@ -300,57 +274,11 @@ describe('Unit: EwmAdapter - Authentic Warehouse Master Data Only', () => {
                 expect(err.status).toBe(422);
                 expect(err.message).toContain('API_WAREHOUSE_ORDER_TASK');
                 expect(err.message).toContain('PICKCART_SRV');
-                expect(err.message).toContain('PostGoodsReceipt');
+                expect(err.message).toContain('no task was created');
+                expect(err.message).not.toContain('PostGoodsReceipt');
             }
         });
 
-        it('Strategy 3: should match delivery by product when available', async () => {
-            EwmAdapter._post = jest.fn().mockRejectedValue(new Error('fail'));
-            EwmAdapter.getInboundDeliveries = jest.fn().mockResolvedValue([
-                {
-                    DeliveryDocument: '180000001',
-                    OverallGoodsReceiptStatus: 'A',
-                    Items: [{ Product: 'OTHER_PRODUCT' }]
-                },
-                {
-                    DeliveryDocument: '180000002',
-                    OverallGoodsReceiptStatus: 'A',
-                    Items: [{ Product: 'TG11' }]
-                }
-            ]);
-            EwmAdapter.getWarehouseTasks = jest.fn().mockResolvedValue([]);
-            EwmAdapter.postGoodsReceipt = jest.fn().mockResolvedValue(true);
-
-            await EwmAdapter.createWarehouseTask({
-                Warehouse: '0001',
-                WarehouseProcessType: '1010',
-                Product: 'TG11',
-                Quantity: 10,
-                UnitOfMeasure: 'PC'
-            });
-
-            // Should have posted GR for delivery matching the product
-            expect(EwmAdapter.postGoodsReceipt).toHaveBeenCalledWith('0001', '180000002');
-        });
-
-        it('should skip completed deliveries in Strategy 3', async () => {
-            EwmAdapter._post = jest.fn().mockRejectedValue(new Error('fail'));
-            EwmAdapter.getInboundDeliveries = jest.fn().mockResolvedValue([
-                {
-                    DeliveryDocument: '180000001',
-                    OverallGoodsReceiptStatus: 'C', // Completed — should be skipped
-                    Items: [{ Product: 'TG11' }]
-                }
-            ]);
-
-            await expect(EwmAdapter.createWarehouseTask({
-                Warehouse: '0001',
-                WarehouseProcessType: '1010',
-                Product: 'TG11',
-                Quantity: 10,
-                UnitOfMeasure: 'PC'
-            })).rejects.toThrow('all SAP strategies exhausted');
-        });
     });
 
     describe('getWarehouseProcessTypes', () => {

@@ -1,3 +1,8 @@
+const cds = require('@sap/cds');
+// The dispatch queue lives in the CAP database: boot the server with the test profile's in-memory
+// SQLite so the queue-related handler tests below have a bound store (cds.db).
+cds.test(__dirname + '/../../../');
+
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const {

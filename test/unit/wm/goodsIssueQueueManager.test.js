@@ -1,68 +1,65 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const {
-  GoodsIssueQueueManager
-} = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+const cds = require('@sap/cds');
+// Boots the CAP server with the test profile's in-memory SQLite database so cds.db is bound.
+cds.test(__dirname + '/../../../');
 
-function makeTempDir(label) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `giq-manager-${label}-`));
+const queueSingleton = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+const { GoodsIssueQueueManager, QueueStoreUnavailableError } = queueSingleton;
+const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
+const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+
+function sapPostingUnavailable() {
+  const err = new Error('SAP S/4HANA Backend Posting Capability Unavailable: posting service not activated');
+  err.status = 501;
+  return err;
 }
 
-describe('GoodsIssueQueueManager', () => {
-  let tempRoot;
+function fakeService() {
+  const handlers = {};
+  const srv = {
+    on: jest.fn((event, entityOrHandler, handler) => {
+      const key = typeof entityOrHandler === 'string' ? `${event}:${entityOrHandler}` : event;
+      handlers[key] = typeof entityOrHandler === 'function' ? entityOrHandler : handler;
+    })
+  };
+  GoodsIssueHandler.init(srv);
+  return handlers;
+}
 
-  beforeEach(() => {
-    tempRoot = makeTempDir('root');
+describe('GoodsIssueQueueManager (CAP database store)', () => {
+  let manager;
+
+  beforeEach(async () => {
+    manager = new GoodsIssueQueueManager();
+    await manager.clear();
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
-    try {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
-    } catch (_) {
-      // Ignore
-    }
   });
 
-  describe('storage location', () => {
-    it('resolves the default store OUTSIDE the project tree so cds watch never restarts on enqueue', () => {
-      const storage = GoodsIssueQueueManager.resolveStorageFile();
-      expect(path.isAbsolute(storage)).toBe(true);
-      expect(storage.includes(`${path.sep}data${path.sep}goods-issue-queue.json`)).toBe(false);
-      expect(path.dirname(storage).startsWith(process.cwd())).toBe(false);
-      expect(path.basename(storage)).toBe('goods-issue-queue.json');
-      expect(path.basename(path.dirname(storage))).toBe('.saps4hana');
+  describe('store availability', () => {
+    it('is available when CAP has bound a database', () => {
+      expect(cds.db).toBeDefined();
+      expect(manager.isAvailable()).toBe(true);
+      expect(queueSingleton.isAvailable()).toBe(true);
     });
 
-    it('honors the GI_QUEUE_STORAGE_FILE environment override', () => {
-      const override = path.join(tempRoot, 'override', 'queue.json');
-      process.env.GI_QUEUE_STORAGE_FILE = override;
-      try {
-        const storage = GoodsIssueQueueManager.resolveStorageFile();
-        expect(storage).toBe(override);
-        const manager = new GoodsIssueQueueManager();
-        expect(manager.storageFile).toBe(override);
-      } finally {
-        delete process.env.GI_QUEUE_STORAGE_FILE;
-      }
-    });
-
-    it('accepts an explicit storageFile (isolated instances for tests)', () => {
-      const storage = path.join(tempRoot, 'isolated', 'queue.json');
-      const manager = new GoodsIssueQueueManager({ storageFile: storage });
-      expect(manager.storageFile).toBe(storage);
-      expect(fs.existsSync(storage)).toBe(true);
+    it('is unavailable without a database: reads are empty and writes are refused', async () => {
+      const detached = new GoodsIssueQueueManager({ db: null });
+      expect(detached.isAvailable()).toBe(false);
+      await expect(detached.getAll()).resolves.toEqual([]);
+      await expect(detached.get('GI-QUEUE-X')).resolves.toBeNull();
+      await expect(detached.getSummary()).resolves.toEqual({ QueuedCount: 0, TotalCount: 0, Items: [], StoreAvailable: false });
+      await expect(detached.enqueue({ ReservationNo: '1', ReservationItem: '1' })).rejects.toBeInstanceOf(QueueStoreUnavailableError);
+      await expect(detached.update('x', {})).rejects.toBeInstanceOf(QueueStoreUnavailableError);
+      await expect(detached.remove('x')).rejects.toBeInstanceOf(QueueStoreUnavailableError);
     });
   });
 
   describe('queue operations', () => {
-    it('enqueues, persists across instances, updates, removes and summarizes', () => {
-      const storage = path.join(tempRoot, 'queue.json');
-      const managerA = new GoodsIssueQueueManager({ storageFile: storage });
-
+    it('enqueues, reads back through another instance, updates, removes and summarizes', async () => {
       for (let i = 1; i <= 3; i++) {
-        const record = managerA.enqueue({
+        const record = await manager.enqueue({
           ReservationNo: `RTS${i}`,
           ReservationItem: `${i}`,
           Material: '4000000125',
@@ -75,96 +72,131 @@ describe('GoodsIssueQueueManager', () => {
         expect(record.SyncAttempts).toBe(1);
       }
 
-      const summary = managerA.getSummary();
+      const summary = await manager.getSummary();
       expect(summary.QueuedCount).toBe(3);
       expect(summary.TotalCount).toBe(3);
+      expect(summary.StoreAvailable).toBe(true);
+      expect(summary.Items[0].ReservationNo).toBe('RTS3');
 
-      const managerB = new GoodsIssueQueueManager({ storageFile: storage });
-      expect(managerB.getAll()).toHaveLength(3);
+      // A second instance (another application instance in production) sees the same records.
+      const other = new GoodsIssueQueueManager();
+      const all = await other.getAll();
+      expect(all).toHaveLength(3);
+      expect(all[0].QueuedAt >= all[2].QueuedAt).toBe(true);
 
-      const updated = managerB.update(managerB.getAll()[0].QueueReference, {
+      const updated = await other.update(all[0].QueueReference, {
         SyncStatus: 'POSTED_IN_SAP',
         SapMaterialDocument: '5000000012',
         SapMaterialDocYear: '2026'
       });
       expect(updated.SyncStatus).toBe('POSTED_IN_SAP');
       expect(updated.SapMaterialDocument).toBe('5000000012');
-      expect(managerB.getSummary().QueuedCount).toBe(2);
+      expect((await other.getSummary()).QueuedCount).toBe(2);
 
-      const reference = managerB.getAll()[0].QueueReference;
-      expect(managerB.remove(reference)).toBe(true);
-      expect(managerB.remove(reference)).toBe(false);
-      expect(managerB.getAll()).toHaveLength(2);
+      expect(await other.get(all[1].ID)).toMatchObject({ QueueReference: all[1].QueueReference });
+      expect(await other.remove(all[1].QueueReference)).toBe(true);
+      expect(await other.remove(all[1].QueueReference)).toBe(false);
+      expect(await manager.getAll()).toHaveLength(2);
+      expect(await manager.update('does-not-exist', { SyncStatus: 'FAILED' })).toBeNull();
     });
 
-    it('updates and removes are persisted via atomic file replacement', () => {
-      const storage = path.join(tempRoot, 'atomic.json');
-      const manager = new GoodsIssueQueueManager({ storageFile: storage });
-
-      const record = manager.enqueue({ ReservationNo: 'RTA1', ReservationItem: '1', IssueQty: 5, Unit: 'KG' });
-      const leftover = fs.readdirSync(path.dirname(storage)).filter(f => f.includes('.tmp'));
-      expect(leftover).toHaveLength(0);
-
-      manager.update(record.QueueReference, { SyncStatus: 'FAILED', LastSyncError: 'sap unreachable' });
-      const reloaded = new GoodsIssueQueueManager({ storageFile: storage });
-      expect(reloaded.get(record.QueueReference).LastSyncError).toBe('sap unreachable');
+    it('keeps FAILED records pending and counts only QUEUED / FAILED as pending', async () => {
+      const a = await manager.enqueue({ ReservationNo: 'RTA1', ReservationItem: '1', IssueQty: 5, Unit: 'KG' });
+      const b = await manager.enqueue({ ReservationNo: 'RTA2', ReservationItem: '1', IssueQty: 5, Unit: 'KG' });
+      await manager.update(a.QueueReference, { SyncStatus: 'FAILED', LastSyncError: 'sap unreachable', SyncAttempts: 2 });
+      await manager.update(b.QueueReference, { SyncStatus: 'POSTED_IN_SAP' });
+      const summary = await manager.getSummary();
+      expect(summary.QueuedCount).toBe(1);
+      expect(summary.TotalCount).toBe(2);
+      expect((await manager.get(a.ID)).LastSyncError).toBe('sap unreachable');
     });
 
-    it('clear() empties the store', () => {
-      const storage = path.join(tempRoot, 'clear.json');
-      const manager = new GoodsIssueQueueManager({ storageFile: storage });
-      manager.enqueue({ ReservationNo: 'RTC1', ReservationItem: '1', IssueQty: 1, Unit: 'KG' });
-      manager.clear();
-      expect(manager.getSummary().TotalCount).toBe(0);
+    it('clear() empties the store', async () => {
+      await manager.enqueue({ ReservationNo: 'RTC1', ReservationItem: '1', IssueQty: 1, Unit: 'KG' });
+      await manager.clear();
+      expect((await manager.getSummary()).TotalCount).toBe(0);
     });
   });
 
-  describe('legacy store migration', () => {
-    it('merges legacy ./data records once, idempotently, and leaves the legacy file untouched', () => {
-      const legacyRoot = path.join(tempRoot, 'project');
-      const legacyDir = path.join(legacyRoot, 'data');
-      fs.mkdirSync(legacyDir, { recursive: true });
-      const legacyFile = path.join(legacyDir, 'goods-issue-queue.json');
-      const legacy = [
-        { ID: '00000000-0000-0000-0000-000000000001', QueueReference: 'GI-QUEUE-LEG-0001-1111', ReservationNo: 'LEG', ReservationItem: '0001', SyncStatus: 'QUEUED', IssueQty: 3, Unit: 'KG' },
-        { ID: '00000000-0000-0000-0000-000000000002', QueueReference: 'GI-QUEUE-LEG-0002-2222', ReservationNo: 'LEG', ReservationItem: '0002', SyncStatus: 'QUEUED', IssueQty: 7, Unit: 'KG' }
-      ];
-      fs.writeFileSync(legacyFile, JSON.stringify(legacy, null, 2), 'utf8');
-
-      const cwdSpy = jest.spyOn(process, 'cwd').mockReturnValue(legacyRoot);
-      const storage = path.join(tempRoot, 'target', 'queue.json');
-      process.env.GI_QUEUE_STORAGE_FILE = storage;
-      try {
-        const managerA = new GoodsIssueQueueManager();
-
-        expect(managerA.getAll().map(i => i.QueueReference)).toEqual(
-          expect.arrayContaining(['GI-QUEUE-LEG-0001-1111', 'GI-QUEUE-LEG-0002-2222'])
-        );
-
-        const managerB = new GoodsIssueQueueManager();
-        expect(managerB.getAll()).toHaveLength(2);
-      } finally {
-        delete process.env.GI_QUEUE_STORAGE_FILE;
-        cwdSpy.mockRestore();
-      }
+  describe('Goods Issue handlers with the database-backed queue', () => {
+    const request = () => ({
+      data: { ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG' },
+      error: jest.fn((code, msg) => ({ code, message: msg }))
     });
 
-    it('skips migration when there are no legacy records', () => {
-      const legacyRoot = path.join(tempRoot, 'project-empty');
-      const legacyFile = path.join(legacyRoot, 'data', 'goods-issue-queue.json');
-      fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
-      fs.writeFileSync(legacyFile, JSON.stringify([], null, 2), 'utf8');
+    it('queues the transaction and reports QUEUED (never a SAP document) when SAP cannot post and a store is bound', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValue(sapPostingUnavailable());
+      const handlers = fakeService();
 
-      const cwdSpy = jest.spyOn(process, 'cwd').mockReturnValue(legacyRoot);
-      const storage = path.join(tempRoot, 'target-empty', 'queue.json');
-      process.env.GI_QUEUE_STORAGE_FILE = storage;
-      try {
-        const manager = new GoodsIssueQueueManager();
-        expect(manager.getAll()).toHaveLength(0);
-      } finally {
-        delete process.env.GI_QUEUE_STORAGE_FILE;
-        cwdSpy.mockRestore();
-      }
+      const result = await handlers['postGoodsIssue'](request());
+
+      expect(result).toMatchObject({ Success: true, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
+      expect(result.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
+      expect(result.Message).not.toMatch(/safely/i);
+      await expect(manager.get(result.QueueReference)).resolves.toMatchObject({ ReservationNo: '18025', SyncStatus: 'QUEUED' });
+
+      const summary = await handlers['getQueueSummary']({});
+      expect(summary.QueuedCount).toBe(1);
+      expect(summary.StoreAvailable).toBe(true);
+    });
+
+    it('fails closed with the SAP error when SAP cannot post and no queue store is bound', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValue(sapPostingUnavailable());
+      jest.spyOn(queueSingleton, 'enqueue').mockRejectedValue(new QueueStoreUnavailableError());
+      const handlers = fakeService();
+      const req = request();
+
+      await handlers['postGoodsIssue'](req);
+
+      expect(req.error).toHaveBeenCalledTimes(1);
+      const [status, message] = req.error.mock.calls[0];
+      expect(status).toBe(501);
+      expect(message).toMatch(/Posting Capability Unavailable/);
+      expect(message).toMatch(/could not be recorded in the dispatch queue/);
+      expect(message).toMatch(/NOT recorded/);
+      expect(await manager.getAll()).toHaveLength(0);
+    });
+
+    it('retry and clear refuse with 503 when no queue store is bound', async () => {
+      jest.spyOn(queueSingleton, 'isAvailable').mockReturnValue(false);
+      const handlers = fakeService();
+
+      const retryReq = { data: { QueueReference: 'GI-QUEUE-1-0001-1234' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
+      await handlers['retryQueuedGoodsIssue'](retryReq);
+      expect(retryReq.error).toHaveBeenCalledWith(503, expect.stringContaining('no database is bound'));
+
+      const clearReq = { data: { QueueReference: 'GI-QUEUE-1-0001-1234' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
+      await handlers['clearQueuedGoodsIssue'](clearReq);
+      expect(clearReq.error).toHaveBeenCalledWith(503, expect.stringContaining('no database is bound'));
+
+      expect(await handlers['READ:GoodsIssueQueue']({}, () => Promise.resolve(['generic']))).toEqual([]);
+      expect(await handlers['getQueueSummary']({})).toMatchObject({ QueuedCount: 0, StoreAvailable: false });
+    });
+
+    it('READ GoodsIssueQueue delegates to the generic database handler when a store is bound', async () => {
+      const handlers = fakeService();
+      const next = jest.fn().mockResolvedValue(['from-db']);
+      expect(await handlers['READ:GoodsIssueQueue']({}, next)).toEqual(['from-db']);
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries a queued item and records the outcome in the database', async () => {
+      const queued = await manager.enqueue({ ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG' });
+      const handlers = fakeService();
+
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValueOnce(sapPostingUnavailable());
+      const failed = await handlers['retryQueuedGoodsIssue']({ data: { QueueReference: queued.QueueReference }, error: jest.fn() });
+      expect(failed).toMatchObject({ Success: false, Queued: true, SyncStatus: 'FAILED', QueueReference: queued.QueueReference });
+      expect(await manager.get(queued.ID)).toMatchObject({ SyncAttempts: 2, LastSyncError: expect.stringContaining('Posting Capability Unavailable') });
+
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockResolvedValueOnce({ MaterialDocument: '4900001234', MaterialDocYear: '2026', Success: true });
+      const posted = await handlers['retryQueuedGoodsIssue']({ data: { QueueReference: queued.QueueReference }, error: jest.fn() });
+      expect(posted).toMatchObject({ Success: true, Queued: false, SyncStatus: 'POSTED_IN_SAP', MaterialDocument: '4900001234' });
+      expect(await manager.get(queued.ID)).toMatchObject({ SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '4900001234', SapMaterialDocYear: '2026' });
+      expect((await manager.getSummary()).QueuedCount).toBe(0);
+
+      expect(await handlers['clearQueuedGoodsIssue']({ data: { QueueReference: queued.QueueReference }, error: jest.fn() })).toBe(true);
+      expect(await manager.getAll()).toHaveLength(0);
     });
   });
 });

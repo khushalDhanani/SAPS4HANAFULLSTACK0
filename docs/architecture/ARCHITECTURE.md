@@ -59,7 +59,7 @@ Per [ADR-0001: Pure S/4HANA Integration Façade](../decisions/ADR-0001-s4-centri
 | **Routing** | `app/router/` | Standalone Approuter, central entry point, authentication gateway, route dispatching | Stateless proxy; routes only to registered destinations and HTML5 repo. |
 | **CAP Service** | `srv/` | OData V4 projection, CSRF token handling, S/4 session cookie management, payload normalization, error translation | Communicates with S/4 strictly via `srv/integration/s4hana/`. |
 | **S/4 Integration** | `srv/integration/s4hana/` | S/4HANA technical adapter, HTTP client, CSRF fetch, draft creation, line scheduling, and document activation | Exclusive location for S/4 technical HTTP and OData communication. |
-| **Persistence** | `db/` | Integration façade definition (no local tables provisioned) | S/4 is the sole persistence engine; no local HDI tables. |
+| **Persistence** | `db/` | Application-owned state only: the Goods Issue dispatch queue (`saps4hana.wm.GoodsIssueQueue`) in an HDI container | S/4 remains the system of record for every business document; the queue holds transactions SAP has not yet accepted and never claims SAP persistence (ADR-0001 addendum 2026-09-14). |
 
 ---
 
@@ -72,12 +72,14 @@ The deployment architecture is defined in `mta.yaml`:
 2. `saps4hana-srv` (`gen/srv`): CAP Node.js backend executing business orchestration.
 3. `saps4hana-fiori-app` (`app/fiori-app`): UI5 build module producing the optimized distribution bundle.
 4. `saps4hana-app-deployer` (`gen`): Deploys the built UI5 zip archive to the BTP HTML5 Application Repository.
+5. `saps4hana-db-deployer` (`gen/db`): Deploys the HDI design-time artifacts of the dispatch queue into the `saps4hana-db` container.
 
 ### Backing Service Resources
 1. `saps4hana-auth` (`xsuaa`): BTP OAuth2 authorization service enforcing role templates.
 2. `saps4hana-destination` (`destination`): Manages outbound HTTP destinations to the S/4HANA Gateway.
 3. `saps4hana-connectivity` (`connectivity`): Manages secure proxy tunnels via SAP Cloud Connector.
 4. `saps4hana-html5-repo-host` / `saps4hana-html5-runtime`: Hosts and serves the UI5 frontend.
+5. `saps4hana-db` (`hana`, plan `hdi-shared`): HDI container for the Goods Issue dispatch queue; bound to `saps4hana-srv`. Requires a SAP HANA Cloud instance mapped to the space.
 
 ---
 

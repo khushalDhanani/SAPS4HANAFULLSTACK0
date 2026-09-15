@@ -79,12 +79,14 @@ class GoodsIssueHandler {
       }
     });
 
-    // READ GoodsIssueQueue: query offline dispatch queue
-    srv.on('READ', 'GoodsIssueQueue', async () => {
-      return GoodsIssueQueueManager.getAll();
+    // READ GoodsIssueQueue: dispatch queue records from the CAP database (generic handler); empty when no
+    // database is bound to this deployment.
+    srv.on('READ', 'GoodsIssueQueue', async (req, next) => {
+      if (!GoodsIssueQueueManager.isAvailable()) return [];
+      return typeof next === 'function' ? next() : GoodsIssueQueueManager.getAll();
     });
 
-    // FUNCTION: getQueueSummary: return pending count and items
+    // FUNCTION: getQueueSummary: pending count, items and whether a queue store is bound at all
     srv.on('getQueueSummary', async () => {
       return GoodsIssueQueueManager.getSummary();
     });
@@ -152,9 +154,12 @@ class GoodsIssueHandler {
           return req.error(400, err.message || 'Validation failed for Goods Issue');
         }
 
-        // If backend posting capability is unavailable (501 / 403 / 404), route to Dispatch Queue
+        // If backend posting capability is unavailable (501 / 403 / 404), route to the Dispatch Queue.
+        // Fails closed: without a bound database the SAP error is returned and nothing claims to be recorded.
         if (err.status === 501 || err.status === 403 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
-          const queueRecord = GoodsIssueQueueManager.enqueue({
+          let queueRecord;
+          try {
+            queueRecord = await GoodsIssueQueueManager.enqueue({
             ReservationNo,
             ReservationItem,
             Material,
@@ -167,6 +172,12 @@ class GoodsIssueHandler {
             FinalIssue,
             LastSyncError: err.message
           });
+          } catch (queueErr) {
+            return req.error(
+              err.status || 503,
+              `${err.message || 'Failed to post Goods Issue in S/4HANA'} The transaction could not be recorded in the dispatch queue either: ${queueErr.message}`
+            );
+          }
 
           return {
             ReservationNo: String(ReservationNo),
@@ -180,7 +191,7 @@ class GoodsIssueHandler {
             Queued: true,
             QueueReference: queueRecord.QueueReference,
             SyncStatus: 'QUEUED',
-            Message: `Transaction safely recorded in CAP Dispatch Queue (${queueRecord.QueueReference}). Pending SAP S/4HANA Gateway service activation.`
+            Message: `Transaction recorded in the dispatch queue (${queueRecord.QueueReference}), not yet posted in SAP. Pending SAP S/4HANA Gateway service activation.`
           };
         }
 
@@ -219,7 +230,11 @@ class GoodsIssueHandler {
         return req.error(400, 'QueueReference parameter is required');
       }
 
-      const item = GoodsIssueQueueManager.get(QueueReference);
+      if (!GoodsIssueQueueManager.isAvailable()) {
+        return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
+      }
+
+      const item = await GoodsIssueQueueManager.get(QueueReference);
       if (!item) {
         return req.error(404, `Queued transaction ${QueueReference} not found`);
       }
@@ -239,7 +254,7 @@ class GoodsIssueHandler {
         );
 
         // Update queue item
-        GoodsIssueQueueManager.update(QueueReference, {
+        await GoodsIssueQueueManager.update(QueueReference, {
           SyncStatus: 'POSTED_IN_SAP',
           SapMaterialDocument: result.MaterialDocument || '',
           SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
@@ -254,7 +269,7 @@ class GoodsIssueHandler {
         }, result);
       } catch (err) {
         // Record retry attempt
-        GoodsIssueQueueManager.update(QueueReference, {
+        await GoodsIssueQueueManager.update(QueueReference, {
           SyncAttempts: (item.SyncAttempts || 1) + 1,
           LastSyncError: err.message || 'Posting rejected by Gateway'
         });
@@ -281,6 +296,9 @@ class GoodsIssueHandler {
       const { QueueReference } = req.data;
       if (!QueueReference) {
         return req.error(400, 'QueueReference parameter is required');
+      }
+      if (!GoodsIssueQueueManager.isAvailable()) {
+        return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
       }
       return GoodsIssueQueueManager.remove(QueueReference);
     });

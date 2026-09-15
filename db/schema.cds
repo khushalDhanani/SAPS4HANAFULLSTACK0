@@ -10,11 +10,14 @@
  *   - C_PURCHASEORDER_FS_SRV (OData V2 read & value helps)
  *   - MM_PUR_PO_MAINT_V2_SRV (OData V2 draft & activation)
  *
- * Consequently, no local database tables or SAP HANA HDI container artifacts are provisioned.
- * If local domain persistence or audit trails are required in future phases, entities can be
- * modeled here and bound to an HDI container.
+ * Consequently, no business documents are stored locally.
+ *
+ * ADDENDUM (2026-09-14, see ADR-0001): the only application-owned state is the Goods Issue
+ * dispatch queue (db/wm/goods-issue-queue.cds), persisted in the HDI container 'saps4hana-db'
+ * on Cloud Foundry and in the in-memory SQLite database of @cap-js/sqlite for local development
+ * and tests. It holds transactions S/4HANA has not yet accepted and never claims SAP persistence.
  */
 
 namespace saps4hana.fullstack;
 
-// Intentionally empty — persistence delegated completely to SAP S/4HANA.
+// Intentionally empty — business persistence delegated completely to SAP S/4HANA.

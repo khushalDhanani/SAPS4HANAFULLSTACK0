@@ -15,6 +15,7 @@
   },
   "license": "ISC",
   "dependencies": {
+    "@cap-js/hana": "^3",
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
     "@sap-cloud-sdk/resilience": "^4",

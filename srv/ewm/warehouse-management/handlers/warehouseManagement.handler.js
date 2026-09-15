@@ -36,33 +36,14 @@ function _cleanseCode(val, maxLen) {
   return s.toUpperCase();
 }
 
-// In-memory local staging persistence for Warehouse Tasks when live SAP creation is unsupported
-const localStagedTasks = new Map();
-const localGoodsReceipts = new Set();
-const localGoodsIssues = new Set();
-
 /**
  * CAP Event Handler for WarehouseManagementService
+ *
+ * Every read and every transaction goes to SAP S/4HANA / EWM. When SAP rejects a request the
+ * rejection is returned to the caller unchanged: nothing is staged, simulated or marked complete
+ * locally (AGENTS.md: no local substitute for an SAP transaction; ADR-0001).
  */
 class WarehouseManagementHandler {
-  static resetLocalStaging() {
-    localStagedTasks.clear();
-    localGoodsReceipts.clear();
-    localGoodsIssues.clear();
-  }
-
-  static getLocalStagedTasks() {
-    return Array.from(localStagedTasks.values());
-  }
-
-  static getLocalGoodsReceipts() {
-    return Array.from(localGoodsReceipts);
-  }
-
-  static getLocalGoodsIssues() {
-    return Array.from(localGoodsIssues);
-  }
-
   static init(srv) {
     // -------------------------------------------------------------
     // READ Handlers
@@ -86,17 +67,14 @@ class WarehouseManagementHandler {
       try {
         const warehouse = _extractWarehouse(req);
         if (!warehouse) return req.error(400, 'Warehouse parameter or filter is required');
+        // Exactly what SAP EWM configures for the warehouse; an empty list is an empty list.
         const list = await EwmAdapter.getWarehouseProcessTypes(warehouse);
-        const resolvedList = (Array.isArray(list) && list.length > 0) ? list : [
-          { Warehouse: warehouse, WarehouseProcessType: '1010', WarehouseProcessTypeName: 'Putaway (Local Staging)' },
-          { Warehouse: warehouse, WarehouseProcessType: '2010', WarehouseProcessTypeName: 'Picking (Local Staging)' },
-          { Warehouse: warehouse, WarehouseProcessType: '3010', WarehouseProcessTypeName: 'Internal Movement (Local Staging)' }
-        ];
+        const processTypes = Array.isArray(list) ? list : [];
         if (req.params && req.params.length > 0 && req.params[0].WarehouseProcessType) {
-          const found = resolvedList.find(p => p.WarehouseProcessType === req.params[0].WarehouseProcessType);
+          const found = processTypes.find(p => p.WarehouseProcessType === req.params[0].WarehouseProcessType);
           return found || null;
         }
-        return resolvedList;
+        return processTypes;
       } catch (err) {
         req.error(err.status || 500, err.message);
       }
@@ -152,13 +130,12 @@ class WarehouseManagementHandler {
         const warehouse = _extractWarehouse(req);
         if (!warehouse) return req.error(400, 'Warehouse parameter or filter is required');
         const list = await EwmAdapter.getWarehouseTasks(warehouse);
-        const staged = Array.from(localStagedTasks.values()).filter(t => t.Warehouse === warehouse);
-        const combined = [...(Array.isArray(list) ? list : []), ...staged];
+        const tasks = Array.isArray(list) ? list : [];
         if (req.params && req.params.length > 0 && req.params[0].WarehouseTask) {
-          const found = combined.find(t => t.WarehouseTask === req.params[0].WarehouseTask);
+          const found = tasks.find(t => t.WarehouseTask === req.params[0].WarehouseTask);
           return found || null;
         }
-        return combined;
+        return tasks;
       } catch (err) {
         req.error(err.status || 500, err.message);
       }
@@ -169,21 +146,12 @@ class WarehouseManagementHandler {
         const warehouse = _extractWarehouse(req);
         if (!warehouse) return req.error(400, 'Warehouse parameter or filter is required');
         const list = await EwmAdapter.getInboundDeliveries(warehouse);
-        const mappedList = (Array.isArray(list) ? list : []).map(d => {
-          if (localGoodsReceipts.has(String(d.DeliveryDocument))) {
-            return {
-              ...d,
-              OverallGoodsReceiptStatus: 'C',
-              Items: Array.isArray(d.Items) ? d.Items.map(it => ({ ...it, GoodsReceiptStatus: 'C' })) : d.Items
-            };
-          }
-          return d;
-        });
+        const deliveries = Array.isArray(list) ? list : [];
         if (req.params && req.params.length > 0 && req.params[0].DeliveryDocument) {
-          const found = mappedList.find(d => d.DeliveryDocument === req.params[0].DeliveryDocument);
+          const found = deliveries.find(d => d.DeliveryDocument === req.params[0].DeliveryDocument);
           return found || null;
         }
-        return mappedList;
+        return deliveries;
       } catch (err) {
         req.error(err.status || 500, err.message);
       }
@@ -194,22 +162,12 @@ class WarehouseManagementHandler {
         const warehouse = _extractWarehouse(req);
         if (!warehouse) return req.error(400, 'Warehouse parameter or filter is required');
         const list = await EwmAdapter.getOutboundDeliveries(warehouse);
-        const mappedList = (Array.isArray(list) ? list : []).map(d => {
-          if (localGoodsIssues.has(String(d.OutboundDeliveryOrder))) {
-            return {
-              ...d,
-              OverallGoodsIssueStatus: 'C',
-              OverallPickingStatus: 'C',
-              Items: Array.isArray(d.Items) ? d.Items.map(it => ({ ...it, PickingStatus: 'C' })) : d.Items
-            };
-          }
-          return d;
-        });
+        const deliveries = Array.isArray(list) ? list : [];
         if (req.params && req.params.length > 0 && req.params[0].OutboundDeliveryOrder) {
-          const found = mappedList.find(d => d.OutboundDeliveryOrder === req.params[0].OutboundDeliveryOrder);
+          const found = deliveries.find(d => d.OutboundDeliveryOrder === req.params[0].OutboundDeliveryOrder);
           return found || null;
         }
-        return mappedList;
+        return deliveries;
       } catch (err) {
         req.error(err.status || 500, err.message);
       }
@@ -233,10 +191,7 @@ class WarehouseManagementHandler {
         const binList = bins.status === 'fulfilled' ? (bins.value || []) : [];
         const typeList = storageTypes.status === 'fulfilled' ? (storageTypes.value || []) : [];
 
-        const staged = Array.from(localStagedTasks.values()).filter(t => t.Warehouse === warehouse);
-        const combinedTasks = [...taskList, ...staged];
-
-        const openTasks = combinedTasks.filter(t => t.WarehouseTaskStatus === 'O').length;
+        const openTasks = taskList.filter(t => t.WarehouseTaskStatus === 'O').length;
         const pendingInb = inbList.filter(d => d.OverallGoodsReceiptStatus !== 'C').length;
         const pendingOutb = outbList.filter(d => d.OverallGoodsIssueStatus !== 'C').length;
         const totalBins = binList.length > 0 ? binList.length : typeList.length;
@@ -265,15 +220,6 @@ class WarehouseManagementHandler {
       const qty = Number(ConfirmedQuantity);
       if (!ConfirmedQuantity || isNaN(qty) || qty <= 0) {
         return req.error(400, 'Valid positive ConfirmedQuantity is required');
-      }
-
-      const key = `${Warehouse}:${WarehouseTask}`;
-      if (localStagedTasks.has(key)) {
-        const task = localStagedTasks.get(key);
-        task.WarehouseTaskStatus = 'C'; // Confirmed
-        task.ConfirmedQuantity = qty;
-        task.ConfirmedByUser = req.user?.id || 'LOCAL_USER';
-        return true;
       }
 
       try {
@@ -316,7 +262,10 @@ class WarehouseManagementHandler {
       if (!UnitOfMeasure) {
         return req.error(400, 'UnitOfMeasure is required');
       }
-      const sWpt = _cleanseCode(WarehouseProcessType, 4) || '1010';
+      const sWpt = _cleanseCode(WarehouseProcessType, 4);
+      if (!sWpt) {
+        return req.error(400, 'WarehouseProcessType is required');
+      }
 
       const sResolvedTargetType = _cleanseCode(TargetStorageType || DestinationStorageType, 4);
       const sResolvedTargetBin = (TargetStorageBin || DestinationStorageBin) ? String(TargetStorageBin || DestinationStorageBin).trim() : '';
@@ -339,41 +288,8 @@ class WarehouseManagementHandler {
           DestinationHandlingUnit: DestinationHandlingUnit ? String(DestinationHandlingUnit).trim() : ''
         });
       } catch (err) {
-        // If client input validation error (excluding backend process type / T333 configuration issues), rethrow with status 400
-        const errMsg = (err && err.message) || '';
-        const isBackendConfigError = errMsg.includes('process type') || errMsg.includes('T333') || errMsg.includes('/SCWM/');
-        if (err.status === 400 && !isBackendConfigError) {
-          return req.error(400, err.message);
-        }
-
-        // When SAP S/4HANA rejects task creation across all available strategies
-        // (e.g. API_WAREHOUSE_ORDER_TASK is deprecated, PICKCART_SRV has create disabled, etc.),
-        // fall back gracefully to Local CAP Staging Persistence so the full end-to-end flow works.
-        const taskId = 'WT-' + String(10001 + localStagedTasks.size);
-        const stagedTask = {
-          Warehouse: sWhse,
-          WarehouseTask: taskId,
-          WarehouseOrder: 'WO-' + sWhse,
-          WarehouseProcessType: sWpt,
-          WarehouseProcessCategory: '1',
-          WarehouseTaskStatus: 'O', // Open
-          Product: String(Product).trim(),
-          ProductName: String(Product).trim(),
-          TargetQuantity: qty,
-          ConfirmedQuantity: 0,
-          BaseUnit: String(UnitOfMeasure).trim().toUpperCase(),
-          SourceStorageType: _cleanseCode(SourceStorageType, 4),
-          SourceStorageBin: SourceStorageBin ? String(SourceStorageBin).trim() : '',
-          TargetStorageType: sResolvedTargetType,
-          DestinationStorageType: sResolvedTargetType,
-          TargetStorageBin: sResolvedTargetBin,
-          DestinationStorageBin: sResolvedTargetBin,
-          CreationDate: new Date().toISOString().split('T')[0],
-          ConfirmedByUser: '',
-          _isLocalStaging: true
-        };
-        localStagedTasks.set(`${sWhse}:${taskId}`, stagedTask);
-        return stagedTask;
+        // SAP rejected the creation: return the rejection unchanged. No task is created or simulated locally.
+        return req.error(err.status || 500, err.message || 'Warehouse Task creation was rejected by SAP S/4HANA');
       }
     });
 
@@ -381,13 +297,6 @@ class WarehouseManagementHandler {
       const { Warehouse, WarehouseTask } = req.data;
       if (!Warehouse || !WarehouseTask) {
         return req.error(400, 'Warehouse and WarehouseTask are required');
-      }
-
-      const key = `${Warehouse}:${WarehouseTask}`;
-      if (localStagedTasks.has(key)) {
-        const task = localStagedTasks.get(key);
-        task.WarehouseTaskStatus = 'X'; // Cancelled
-        return true;
       }
 
       try {
@@ -400,42 +309,35 @@ class WarehouseManagementHandler {
 
     srv.on('postGoodsReceipt', async (req) => {
       const { Warehouse, DeliveryDocument } = req.data;
-      if (!DeliveryDocument) {
+      const sDoc = String(DeliveryDocument || '').trim();
+      const sWhse = _cleanseCode(Warehouse, 4);
+      if (!sWhse || !sDoc) {
         return req.error(400, 'Warehouse and DeliveryDocument are required');
       }
-      const sDoc = String(DeliveryDocument).trim();
-      const rawWhse = String(Warehouse || '').trim();
-      const sWhse = (rawWhse && rawWhse.length <= 4) ? rawWhse : (_cleanseCode(rawWhse, 4) || 'W22');
 
       try {
+        // True only when SAP posted the goods receipt; a rejection is returned unchanged.
         await EwmAdapter.postGoodsReceipt(sWhse, sDoc);
-        localGoodsReceipts.add(sDoc);
         return true;
       } catch (err) {
-        // When live SAP rejects (e.g. ERP delivery, unconfigured EWM, or service error),
-        // track the Goods Receipt locally so the user's Cockpit flow succeeds
-        localGoodsReceipts.add(sDoc);
-        return true;
+        return req.error(err.status || 500, err.message || 'Goods Receipt posting was rejected by SAP S/4HANA');
       }
     });
 
     srv.on('postGoodsIssue', async (req) => {
       const { Warehouse, OutboundDeliveryOrder } = req.data;
-      if (!OutboundDeliveryOrder) {
+      const sOdo = String(OutboundDeliveryOrder || '').trim();
+      const sWhse = _cleanseCode(Warehouse, 4);
+      if (!sWhse || !sOdo) {
         return req.error(400, 'Warehouse and OutboundDeliveryOrder are required');
       }
-      const sOdo = String(OutboundDeliveryOrder).trim();
-      const rawWhse = String(Warehouse || '').trim();
-      const sWhse = (rawWhse && rawWhse.length <= 4) ? rawWhse : (_cleanseCode(rawWhse, 4) || 'W22');
 
       try {
+        // True only when SAP posted the goods issue; a rejection is returned unchanged.
         await EwmAdapter.postGoodsIssue(sWhse, sOdo);
-        localGoodsIssues.add(sOdo);
         return true;
       } catch (err) {
-        // Fallback to local staging
-        localGoodsIssues.add(sOdo);
-        return true;
+        return req.error(err.status || 500, err.message || 'Goods Issue posting was rejected by SAP S/4HANA');
       }
     });
 
@@ -490,17 +392,6 @@ class WarehouseManagementHandler {
       }
       if (!DestinationHU || !ScannedBin) {
         return req.error(400, 'DestinationHU and ScannedBin are required for RF pick confirmation');
-      }
-
-      const key = `${Warehouse}:${WarehouseTask}`;
-      if (localStagedTasks.has(key)) {
-        const task = localStagedTasks.get(key);
-        task.WarehouseTaskStatus = 'C';
-        task.ConfirmedQuantity = qty;
-        task.ConfirmedByUser = req.user?.id || 'RF_OPERATOR';
-        task.DestinationHandlingUnit = DestinationHU;
-        task.TargetStorageBin = ScannedBin;
-        return true;
       }
 
       try {

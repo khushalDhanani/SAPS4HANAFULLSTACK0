@@ -1,5 +1,4 @@
-const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
+const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const EwmMapper = require('./EwmMapper');
 
@@ -12,150 +11,54 @@ const EwmMapper = require('./EwmMapper');
  * - API_WHSE_OUTB_DLV_ORDER (Outbound Delivery Orders & Goods Issue)
  */
 class EwmAdapter {
-  constructor() {
-    this.destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
-    this.csrfToken = null;
-    this.cookie = null;
+  constructor(options = {}) {
+    // All HTTP traffic to S/4HANA goes through the shared SAP Cloud SDK based client (BTP destination,
+    // Connectivity proxy for on-premise systems, per-call CSRF/cookie handling). No session state lives here.
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
   }
 
   /**
-   * Resolve destination for S/4HANA communication using SAP Cloud SDK with local fallback.
+   * Resolve the S/4HANA destination through the shared client. Returns null when nothing is configured.
    */
   async _getDestination() {
-    try {
-      const dest = await connectivity.getDestination({ destinationName: this.destinationName });
-      if (dest && dest.url) return dest;
-    } catch (err) {
-      // In local development without BTP Destination service, continue to env fallback
-    }
-
-    if (process.env.S4_DESTINATION_URL) {
-      return {
-        url: process.env.S4_DESTINATION_URL.replace(/\/+$/, ''),
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: { 'sap-client': process.env.S4_CLIENT || '220' }
-      };
-    }
-
-    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials ||
-                  cds.env.requires?.C_PURCHASEORDER_FS_SRV?.credentials;
-    if (creds && creds.url) {
-      return {
-        url: creds.url.replace(/\/+$/, ''),
-        username: creds.username,
-        password: creds.password,
-        headers: creds.headers || { 'sap-client': '220' }
-      };
-    }
-
-    return null;
+    return this.client.resolveDestination();
   }
 
   /**
-   * Helper to perform HTTP GET against S/4HANA Gateway
+   * HTTP GET against an S/4HANA OData service via the SAP Cloud SDK.
    */
   async _get(servicePath, queryParams = '') {
-    const dest = await this._getDestination();
-    if (!dest) {
-      throw new Error('S/4HANA Destination could not be resolved');
-    }
-
-    const url = `${dest.url}${servicePath}${queryParams ? (servicePath.includes('?') ? '&' : '?') + queryParams : ''}`;
-    const headers = {
-      'Accept': 'application/json',
-      'sap-client': dest.headers?.['sap-client'] || '220'
-    };
-
-    if (dest.username && dest.password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64');
-    }
-
     try {
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`S/4HANA GET ${servicePath} failed: HTTP ${res.status} - ${errText}`);
-      }
-      const data = await res.json();
-      return data.d?.results || data.d || [];
+      const { data } = await this.client.get(servicePath, { query: queryParams });
+      return data?.d?.results || data?.d || [];
     } catch (err) {
+      if (err.code === DESTINATION_NOT_CONFIGURED) throw err;
       throw S4ErrorMapper.mapS4Error(err);
     }
   }
 
   /**
-   * Helper to fetch CSRF token for transactional operations
-   */
-  async _fetchCsrfToken(servicePath) {
-    const dest = await this._getDestination();
-    if (!dest) throw new Error('S/4HANA Destination could not be resolved');
-
-    // Extract base service root path for CSRF token retrieval
-    const serviceRootMatch = servicePath.match(/^(\/sap\/opu\/odata\/(?:sap|scwm)\/[^/?]+)/i);
-    const csrfPath = serviceRootMatch ? `${serviceRootMatch[1]}/` : servicePath;
-    const url = `${dest.url}${csrfPath}`;
-    const headers = {
-      'x-csrf-token': 'Fetch',
-      'sap-client': dest.headers?.['sap-client'] || '220'
-    };
-    if (dest.username && dest.password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64');
-    }
-
-    const res = await fetch(url, { headers });
-    this.csrfToken = res.headers.get('x-csrf-token');
-    const rawCookies = typeof res.headers.getSetCookie === 'function'
-      ? res.headers.getSetCookie()
-      : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
-    if (rawCookies && rawCookies.length > 0) {
-      this.cookie = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
-    }
-    return this.csrfToken;
-  }
-
-  /**
-   * Helper to perform HTTP POST against S/4HANA Gateway
+   * HTTP POST against an S/4HANA OData service via the SAP Cloud SDK. The CSRF token is fetched from the
+   * target service root for this call only, together with the session cookies; nothing is cached here.
    */
   async _post(servicePath, payload = {}, customHeaders = {}) {
-    const dest = await this._getDestination();
-    if (!dest) throw new Error('S/4HANA Destination could not be resolved');
-
-    await this._fetchCsrfToken(servicePath);
-
-    const url = `${dest.url}${servicePath}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'x-csrf-token': this.csrfToken || '',
-      'sap-client': dest.headers?.['sap-client'] || '220',
-      ...customHeaders
-    };
-    if (this.cookie) {
-      headers['Cookie'] = this.cookie;
-    }
-    if (dest.username && dest.password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64');
-    }
-
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`S/4HANA POST ${servicePath} failed: HTTP ${res.status} - ${errText}`);
-      }
-      const text = await res.text();
-      try {
-        const data = JSON.parse(text);
+      const { data } = await this.client.post(servicePath, { data: payload, headers: customHeaders });
+      if (data && typeof data === 'object') {
         return data.d || data;
-      } catch (_) {
-        return { success: true };
       }
+      if (typeof data === 'string' && data.trim() !== '') {
+        try {
+          const parsed = JSON.parse(data);
+          return parsed.d || parsed;
+        } catch (_) {
+          // Non-JSON body (e.g. an empty OData response): treated as success below
+        }
+      }
+      return { success: true };
     } catch (err) {
+      if (err.code === DESTINATION_NOT_CONFIGURED) throw err;
       throw S4ErrorMapper.mapS4Error(err);
     }
   }
@@ -395,104 +298,20 @@ class EwmAdapter {
       strategyErrors.push({ strategy: 'PICKCART_SRV', error: err.message || String(err) });
     }
 
-    // ─── Strategy 3: Trigger via Goods Receipt on matching Inbound Delivery ───
-    try {
-      const deliveryResult = await this._findInboundDeliveryForProduct(warehouse, product);
-      if (deliveryResult) {
-        // Record existing task count before GR
-        const tasksBefore = await this.getWarehouseTasks(warehouse);
-        const beforeCount = Array.isArray(tasksBefore) ? tasksBefore.length : 0;
-
-        // Post Goods Receipt to trigger auto-creation of Warehouse Tasks
-        await this.postGoodsReceipt(warehouse, deliveryResult.DeliveryDocument);
-
-        // Read back any newly-created tasks
-        const tasksAfter = await this.getWarehouseTasks(warehouse);
-        const afterList = Array.isArray(tasksAfter) ? tasksAfter : [];
-
-        if (afterList.length > beforeCount) {
-          // Return the newest task (last in the list)
-          return afterList[afterList.length - 1];
-        }
-
-        // GR succeeded but no new task appeared — still a valid outcome
-        return {
-          Warehouse: warehouse,
-          WarehouseTask: 'GR-' + deliveryResult.DeliveryDocument,
-          WarehouseProcessType: wpt,
-          Product: product,
-          ProductName: product,
-          TargetQuantity: qty,
-          BaseUnit: uom,
-          WarehouseTaskStatus: 'O',
-          CreationDate: new Date().toISOString().split('T')[0],
-          _goodsReceiptTriggered: true,
-          _deliveryDocument: deliveryResult.DeliveryDocument
-        };
-      } else {
-        strategyErrors.push({
-          strategy: 'PostGoodsReceipt',
-          error: `No matching inbound delivery found for warehouse '${warehouse}' and product '${product}'. Goods Receipt-triggered task creation requires an existing inbound delivery document.`
-        });
-      }
-    } catch (err) {
-      strategyErrors.push({ strategy: 'PostGoodsReceipt', error: err.message || String(err) });
-    }
-
     // ─── All strategies failed ───
     const summary = strategyErrors.map(s =>
       `[${s.strategy}]: ${s.error}`
     ).join('\n');
 
+    // No fallback of any kind: a task either exists in SAP EWM or it does not (AGENTS.md, ADR-0001).
     const error = new Error(
-      `Warehouse Task creation failed — all SAP strategies exhausted:\n${summary}\n\n` +
-      `In this SAP S/4HANA instance, API_WAREHOUSE_ORDER_TASK is deprecated, ` +
-      `PICKCART_SRV/WarehouseTaskSet is read-only, and Goods Receipt actions in ` +
-      `API_WHSE_INBOUND_DELIVERY are not released on this software stack. ` +
-      `Warehouse Tasks in EWM are typically auto-generated by business processes ` +
-      `(Goods Receipt, Goods Issue, Transfer Posting) rather than created directly.`
+      `Warehouse Task creation failed — all SAP strategies exhausted; no task was created:\n${summary}\n\n` +
+      `In this SAP S/4HANA instance API_WAREHOUSE_ORDER_TASK is deprecated and PICKCART_SRV/WarehouseTaskSet ` +
+      `does not accept creates. EWM warehouse tasks are normally generated by the business process itself ` +
+      `(goods receipt, goods issue, transfer posting) in SAP.`
     );
     error.status = 422;
     throw error;
-  }
-
-  /**
-   * Find an inbound delivery for a given warehouse and product that can be used
-   * to trigger Goods Receipt-based Warehouse Task auto-creation.
-   * @param {string} warehouse
-   * @param {string} product
-   * @returns {Object|null} Matching delivery or null
-   */
-  async _findInboundDeliveryForProduct(warehouse, product) {
-    try {
-      const deliveries = await this.getInboundDeliveries(warehouse);
-      if (!Array.isArray(deliveries) || deliveries.length === 0) return null;
-
-      // Prefer deliveries with OverallGoodsReceiptStatus 'A' (Not Started) or 'B' (Partial)
-      const eligible = deliveries.filter(d =>
-        d.OverallGoodsReceiptStatus !== 'C'
-      );
-
-      if (eligible.length === 0) return null;
-
-      // If a product is specified, try to find a delivery containing that product
-      if (product) {
-        const productUpper = product.toUpperCase().trim();
-        for (const del of eligible) {
-          if (del.Items && Array.isArray(del.Items)) {
-            const match = del.Items.some(item =>
-              item.Product && item.Product.toUpperCase().trim() === productUpper
-            );
-            if (match) return del;
-          }
-        }
-      }
-
-      // Fall back to first eligible delivery
-      return eligible[0];
-    } catch (_) {
-      return null;
-    }
   }
 
   async confirmWarehouseTask(warehouse, warehouseTask, confirmedQuantity) {
@@ -605,13 +424,10 @@ class EwmAdapter {
     if (!queue) {
       throw new Error('Queue is required for RF logon');
     }
-    try {
-      const path = `/sap/opu/odata/scwm/PICKCART_SRV/LogonRSRC`;
-      const query = `Lgnum='${warehouse}',Rsrc='${resource}'`;
-      await this._post(`${path}?${query}`);
-    } catch (_) {
-      // In sandbox/mock development without registered physical RSRC, accept local session logon
-    }
+    // The logon is reported only after SAP EWM accepted it; a rejection propagates to the caller.
+    const path = `/sap/opu/odata/scwm/PICKCART_SRV/LogonRSRC`;
+    const query = `Lgnum='${warehouse}',Rsrc='${resource}'`;
+    await this._post(`${path}?${query}`);
     return {
       Warehouse: warehouse,
       Resource: resource,

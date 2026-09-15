@@ -1,238 +1,205 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const cds = require('@sap/cds');
 const crypto = require('crypto');
 
-const STORAGE_DIR_NAME = '.saps4hana';
-const STORAGE_FILE_NAME = 'goods-issue-queue.json';
-const USER_HOME = os.homedir() || os.tmpdir();
+const { INSERT, SELECT, UPDATE, DELETE } = cds.ql;
+
+/** Persisted entity (db/wm/goods-issue-queue.cds). */
+const QUEUE_ENTITY = 'saps4hana.wm.GoodsIssueQueue';
+
+/** Sync states that still need an SAP posting. */
+const PENDING_STATUSES = ['QUEUED', 'FAILED'];
+
+/**
+ * Raised when a queue write is attempted and no database is bound to this deployment.
+ * The Goods Issue handlers turn this into a transparent failure: the SAP error is returned to the
+ * user and nothing pretends to have been recorded.
+ */
+class QueueStoreUnavailableError extends Error {
+  constructor() {
+    super('Goods Issue dispatch queue is not available: no database is bound to this deployment, so the transaction was NOT recorded.');
+    this.name = 'QueueStoreUnavailableError';
+    this.status = 503;
+    this.code = 'GI_QUEUE_STORE_UNAVAILABLE';
+  }
+}
 
 /**
  * GoodsIssueQueueManager
- * Persistent Dispatch Queue manager for offline-first warehouse Goods Issue operations.
- * Allows warehouse clerks to queue Goods Issue 261 transactions when SAP posting services
- * are restricted or unavailable, generating verifiable Queue Reference IDs and supporting
- * automated / on-demand retry sync to S/4HANA.
+ * Dispatch queue for Goods Issue (movement 261) transactions that SAP could not accept at posting time
+ * (posting service not activated / not authorised). Queued items are retried against S/4HANA on demand.
  *
- * In accordance with AGENTS.md, items in this queue are explicitly marked as:
- * SyncStatus: 'QUEUED' / 'QUEUED_PENDING_SAP_SYNC'
- * and never claim fake SAP persistence.
- *
- * Storage location contract:
- * The queue store MUST live OUTSIDE the project tree. Writing the queue inside the
- * repository directory (e.g. ./data) makes `cds watch` treat every enqueue as a source
- * change and restart the dev server, which drops the connection for in-flight UI requests
- * (the "localhost refused to connect" failure on the Goods Issue last step). The default
- * store is therefore resolved under the user's home directory and can be overridden via
- * the GI_QUEUE_STORAGE_FILE environment variable (used by deployments and tests).
+ * Storage contract:
+ * Records live in the CAP database (entity saps4hana.wm.GoodsIssueQueue) and nowhere else. This is what
+ * makes the queue durable across restarts and shared between application instances. Locally CAP binds
+ * the in-memory SQLite database of the development/test profile; a deployed environment must bind a real
+ * database. Without one, isAvailable() is false, reads return empty results and writes fail with
+ * QueueStoreUnavailableError. In line with AGENTS.md, queued items are always marked QUEUED / FAILED and
+ * never claim SAP persistence.
  */
 class GoodsIssueQueueManager {
+  /**
+   * @param {Object} [options]
+   * @param {Object|null} [options.db] - Database service to use (tests); default: cds.db at call time
+   */
   constructor(options = {}) {
-    this.storageFile = options.storageFile || GoodsIssueQueueManager.resolveStorageFile();
-    this.legacyStorageFile = GoodsIssueQueueManager.resolveLegacyStorageFile();
-    this._ensureStorageDir();
-    // Only migrate the legacy in-tree store for the default/production store. Instances
-    // constructed with an explicit storageFile (e.g. isolated unit-test stores) are
-    // intentionally not migrated so they never absorb unrelated production records.
-    if (!options.storageFile) {
-      this._migrateLegacyStore();
-    }
+    this._dbProvider = options.db !== undefined ? () => options.db : () => cds.db;
   }
 
-  static resolveStorageFile() {
-    const override = process.env.GI_QUEUE_STORAGE_FILE;
-    if (override && override.trim()) {
-      return path.resolve(override.trim());
-    }
-    return path.join(USER_HOME, STORAGE_DIR_NAME, STORAGE_FILE_NAME);
+  /** The bound CAP database service, or null when none is available. */
+  get db() {
+    return this._dbProvider() || null;
   }
 
-  static resolveLegacyStorageFile() {
-    return path.resolve(process.cwd(), 'data', 'goods-issue-queue.json');
+  /** True when queue records can be read and written. */
+  isAvailable() {
+    return Boolean(this.db);
   }
 
-  _ensureStorageDir() {
-    const dir = path.dirname(this.storageFile);
-    if (!fs.existsSync(dir)) {
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-      } catch (_) {
-        // Ignore
-      }
-    }
-    if (!fs.existsSync(this.storageFile)) {
-      try {
-        fs.writeFileSync(this.storageFile, JSON.stringify([], null, 2), 'utf8');
-      } catch (_) {
-        // Ignore
-      }
-    }
+  _requireDb() {
+    const db = this.db;
+    if (!db) throw new QueueStoreUnavailableError();
+    return db;
+  }
+
+  /** Where clause matching a record by QueueReference or technical ID. */
+  static _keyMatch(queueRefOrId) {
+    const val = String(queueRefOrId);
+    return [{ ref: ['QueueReference'] }, '=', { val }, 'or', { ref: ['ID'] }, '=', { val }];
   }
 
   /**
-   * One-time, idempotent migration of records previously persisted in the legacy
-   * ./data/goods-issue-queue.json (inside the watched project tree). Existing records
-   * are merged by QueueReference/ID so no queued transaction is lost and nothing is
-   * duplicated if the migration runs more than once. The legacy file itself is left
-   * untouched so no live session data is disturbed.
+   * Builds a queue record from a validated goods issue request.
+   *
+   * @param {Object} data
+   * @returns {Object}
    */
-  _migrateLegacyStore() {
-    if (this.legacyStorageFile === this.storageFile) return;
-    if (!fs.existsSync(this.legacyStorageFile)) return;
-
-    let legacyItems = [];
-    try {
-      const parsed = JSON.parse(fs.readFileSync(this.legacyStorageFile, 'utf8'));
-      legacyItems = Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      legacyItems = [];
-    }
-    if (legacyItems.length === 0) return;
-
-    const current = this._readAll();
-    const known = new Set(current.map(i => i && (i.QueueReference || i.ID)));
-    const missing = legacyItems.filter(i => i && !known.has(i.QueueReference || i.ID));
-    if (missing.length === 0) return;
-
-    this._writeAll(missing.concat(current));
-    console.info(
-      `[GoodsIssueQueueManager] Migrated ${missing.length} queued transaction(s) from legacy store to ${this.storageFile}`
-    );
-  }
-
-  _readAll() {
-    this._ensureStorageDir();
-    try {
-      if (fs.existsSync(this.storageFile)) {
-        const raw = fs.readFileSync(this.storageFile, 'utf8');
-        return JSON.parse(raw) || [];
-      }
-    } catch (_) {
-      // Fallback
-    }
-    return [];
-  }
-
-  _writeAll(items) {
-    this._ensureStorageDir();
-    const tmpFile = `${this.storageFile}.${process.pid}.tmp`;
-    try {
-      fs.writeFileSync(tmpFile, JSON.stringify(items, null, 2), 'utf8');
-      fs.renameSync(tmpFile, this.storageFile);
-      return true;
-    } catch (err) {
-      console.error('[GoodsIssueQueueManager] Failed to write queue storage:', err.message);
-      try {
-        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
-      } catch (_) {
-        // Ignore
-      }
-      return false;
-    }
-  }
-
-  /**
-   * Enqueue a validated goods issue transaction
-   */
-  enqueue(data) {
-    const items = this._readAll();
-    const id = crypto.randomUUID();
+  static buildRecord(data) {
     const sReserv = String(data.ReservationNo || '').trim();
     const sItem = String(data.ReservationItem || '').trim().padStart(4, '0');
     const randSuffix = Math.floor(1000 + Math.random() * 9000);
-    const queueRef = `GI-QUEUE-${sReserv}-${sItem}-${randSuffix}`;
 
-    const record = {
-      ID: id,
-      QueueReference: queueRef,
+    return {
+      ID: crypto.randomUUID(),
+      QueueReference: `GI-QUEUE-${sReserv}-${sItem}-${randSuffix}`,
       ReservationNo: sReserv,
       ReservationItem: sItem,
       OrderNo: String(data.OrderNo || '').trim(),
       Material: String(data.Material || '').trim(),
       MaterialDesc: String(data.MaterialDesc || '').trim(),
-      Plant: String(data.Plant || '1120').trim(),
-      StorageLocation: String(data.StorageLocation || 'CS01').trim(),
+      Plant: String(data.Plant || '').trim(),
+      StorageLocation: String(data.StorageLocation || '').trim(),
       StorageBin: String(data.StorageBin || '').trim(),
       Batch: String(data.Batch || '').trim(),
       ExpiryDate: data.ExpiryDate || null,
       IssueQty: Number(data.IssueQty) || 0,
-      Unit: String(data.Unit || 'KG').trim(),
+      Unit: String(data.Unit || '').trim(),
       DifferenceQty: Number(data.DifferenceQty) || 0,
       DifferenceReason: String(data.DifferenceReason || '').trim(),
-      DifferenceStorageType: String(data.DifferenceStorageType || '999').trim(),
+      DifferenceStorageType: String(data.DifferenceStorageType || '').trim(),
       FinalIssue: Boolean(data.FinalIssue),
       SyncStatus: 'QUEUED',
       SyncAttempts: 1,
-      LastSyncError: String(data.LastSyncError || 'SAP Gateway posting service unavailable on Client 220').slice(0, 500),
+      LastSyncError: String(data.LastSyncError || 'SAP Gateway posting service unavailable').slice(0, 500),
       SapMaterialDocument: '',
       SapMaterialDocYear: '',
       QueuedAt: new Date().toISOString(),
       SyncedAt: null
     };
+  }
 
-    items.unshift(record);
-    this._writeAll(items);
+  /**
+   * Enqueues a validated goods issue transaction.
+   *
+   * @param {Object} data
+   * @returns {Promise<Object>} The persisted record
+   * @throws {QueueStoreUnavailableError} when no database is bound
+   */
+  async enqueue(data) {
+    const db = this._requireDb();
+    const record = GoodsIssueQueueManager.buildRecord(data);
+    await db.run(INSERT.into(QUEUE_ENTITY).entries(record));
     return record;
   }
 
   /**
-   * Get all queued items
+   * All queue records, newest first. Empty when no database is bound.
+   *
+   * @returns {Promise<Array<Object>>}
    */
-  getAll() {
-    return this._readAll();
+  async getAll() {
+    if (!this.isAvailable()) return [];
+    const rows = await this.db.run(SELECT.from(QUEUE_ENTITY).orderBy('QueuedAt desc', 'createdAt desc'));
+    return Array.isArray(rows) ? rows : [];
   }
 
   /**
-   * Get specific item by QueueReference or ID
+   * One record by QueueReference or ID, or null.
+   *
+   * @param {string} queueRefOrId
+   * @returns {Promise<Object|null>}
    */
-  get(queueRefOrId) {
-    const items = this._readAll();
-    return items.find(i => i.QueueReference === queueRefOrId || i.ID === queueRefOrId) || null;
+  async get(queueRefOrId) {
+    if (!this.isAvailable() || !queueRefOrId) return null;
+    const row = await this.db.run(SELECT.one.from(QUEUE_ENTITY).where(GoodsIssueQueueManager._keyMatch(queueRefOrId)));
+    return row || null;
   }
 
   /**
-   * Update queued item status and SAP document reference
+   * Updates sync status and SAP document references of a queued record.
+   *
+   * @param {string} queueRefOrId
+   * @param {Object} updates
+   * @returns {Promise<Object|null>} The updated record, or null when it does not exist
    */
-  update(queueRefOrId, updates) {
-    const items = this._readAll();
-    const idx = items.findIndex(i => i.QueueReference === queueRefOrId || i.ID === queueRefOrId);
-    if (idx === -1) return null;
-
-    items[idx] = Object.assign({}, items[idx], updates);
-    this._writeAll(items);
-    return items[idx];
+  async update(queueRefOrId, updates) {
+    const db = this._requireDb();
+    const existing = await this.get(queueRefOrId);
+    if (!existing) return null;
+    await db.run(UPDATE(QUEUE_ENTITY).set(updates).where({ ID: existing.ID }));
+    return this.get(existing.ID);
   }
 
   /**
-   * Remove item from queue
+   * Removes a record from the queue.
+   *
+   * @param {string} queueRefOrId
+   * @returns {Promise<boolean>} true when a record was removed
    */
-  remove(queueRefOrId) {
-    const items = this._readAll();
-    const filtered = items.filter(i => i.QueueReference !== queueRefOrId && i.ID !== queueRefOrId);
-    this._writeAll(filtered);
-    return filtered.length < items.length;
+  async remove(queueRefOrId) {
+    const db = this._requireDb();
+    const affected = await db.run(DELETE.from(QUEUE_ENTITY).where(GoodsIssueQueueManager._keyMatch(queueRefOrId)));
+    return Number(affected) > 0;
   }
 
   /**
-   * Get summary for UI tray
+   * Summary for the UI tray.
+   *
+   * @returns {Promise<{ QueuedCount: number, TotalCount: number, Items: Array<Object>, StoreAvailable: boolean }>}
    */
-  getSummary() {
-    const items = this._readAll();
-    const pending = items.filter(i => i.SyncStatus === 'QUEUED' || i.SyncStatus === 'FAILED');
+  async getSummary() {
+    if (!this.isAvailable()) {
+      return { QueuedCount: 0, TotalCount: 0, Items: [], StoreAvailable: false };
+    }
+    const items = await this.getAll();
+    const pending = items.filter(i => PENDING_STATUSES.includes(i.SyncStatus));
     return {
       QueuedCount: pending.length,
       TotalCount: items.length,
-      Items: items
+      Items: items,
+      StoreAvailable: true
     };
   }
 
   /**
-   * Clear all items (for testing)
+   * Removes every record (tests).
    */
-  clear() {
-    this._writeAll([]);
+  async clear() {
+    const db = this._requireDb();
+    await db.run(DELETE.from(QUEUE_ENTITY));
   }
 }
 
 module.exports = new GoodsIssueQueueManager();
 module.exports.GoodsIssueQueueManager = GoodsIssueQueueManager;
+module.exports.QueueStoreUnavailableError = QueueStoreUnavailableError;
+module.exports.QUEUE_ENTITY = QUEUE_ENTITY;

@@ -177,15 +177,16 @@ describe('Unit: CreateWarehouseTask Controller', () => {
     });
 
     describe('Form Validation (_validateForm)', () => {
-        it('should fail validation when mandatory fields are empty and auto-default Process Type to 1010', () => {
+        it('should fail validation when mandatory fields are empty, including Warehouse Process Type (never defaulted)', () => {
             const isValid = controller._validateForm(false);
             expect(isValid).toBe(false);
             const oModel = controller.getView().getModel('taskModel');
             expect(oModel.getProperty('/hasError')).toBe(true);
-            expect(oModel.getProperty('/errorCount')).toBe(4); // Warehouse, Product, Quantity, UnitOfMeasure (WarehouseProcessType is auto-defaulted to 1010)
+            expect(oModel.getProperty('/errorCount')).toBe(5); // Warehouse, WarehouseProcessType, Product, Quantity, UnitOfMeasure
             expect(oModel.getProperty('/errors/Warehouse/state')).toBe('Error');
-            expect(oModel.getProperty('/task/WarehouseProcessType')).toBe('1010');
-            expect(oModel.getProperty('/errors/WarehouseProcessType/state')).toBe('None');
+            expect(oModel.getProperty('/task/WarehouseProcessType')).toBe('');
+            expect(oModel.getProperty('/errors/WarehouseProcessType/state')).toBe('Error');
+            expect(oModel.getProperty('/errors/WarehouseProcessType/text')).toBe('Warehouse Process Type is required');
             expect(oModel.getProperty('/errors/Product/state')).toBe('Error');
             expect(oModel.getProperty('/errors/Quantity/state')).toBe('Error');
             expect(oModel.getProperty('/errors/UnitOfMeasure/state')).toBe('Error');
@@ -320,7 +321,7 @@ describe('Unit: CreateWarehouseTask Controller', () => {
             expect(mockRouter.navTo).toHaveBeenCalledWith('ewmWarehouseCockpit', {}, true);
         });
 
-        it('should display transparent Local Staging success message when _isLocalStaging is true', async () => {
+        it('should never present a task as locally staged: the success wording always refers to SAP S/4HANA', async () => {
             const oModel = controller.getView().getModel('taskModel');
             oModel.setProperty('/task/Warehouse', 'W05');
             oModel.setProperty('/task/WarehouseProcessType', '1010');
@@ -329,48 +330,66 @@ describe('Unit: CreateWarehouseTask Controller', () => {
             oModel.setProperty('/task/UnitOfMeasure', 'EA');
 
             mockEwmService.createWarehouseTask.mockResolvedValueOnce({
-                WarehouseTask: 'WT-10001',
-                Warehouse: 'W05',
-                _isLocalStaging: true
+                WarehouseTask: '10001',
+                Warehouse: 'W05'
             });
 
             controller.onCreatePress();
             await Promise.resolve();
 
-            expect(mockMessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining('Local Staging — SAP backend task creation is unavailable on this software stack'),
-                expect.any(Object)
-            );
+            const sMessage = mockMessageBox.success.mock.calls[0][0];
+            expect(sMessage).toContain('Warehouse Task 10001 created successfully in SAP S/4HANA.');
+            expect(sMessage).not.toMatch(/local staging/i);
             expect(mockRouter.navTo).toHaveBeenCalledWith('ewmWarehouseCockpit', {}, true);
         });
 
-        it('should flag isNonEwmWarehouse and provide fallback process types, types, and bins for warehouse W22', async () => {
+        it('should show only SAP master data and warn, without inventing process types, types or bins, for warehouse W22', async () => {
             mockEwmService.getWarehouseProcessTypes.mockResolvedValueOnce({ value: [] });
             mockEwmService.getStorageTypes.mockResolvedValueOnce({ value: [] });
             mockEwmService.getStorageBins.mockResolvedValueOnce({ value: [] });
             await controller._loadWarehouseLocations('W22');
             const oModel = controller.getView().getModel('taskModel');
             expect(oModel.getProperty('/isNonEwmWarehouse')).toBe(true);
-            expect(oModel.getProperty('/nonEwmWarningText')).toContain('Warehouse W22 has no active EWM process types');
-            expect(oModel.getProperty('/task/WarehouseProcessType')).toBe('1010');
-            expect(oModel.getProperty('/processTypes')).toHaveLength(3);
-            expect(oModel.getProperty('/storageTypes')).toHaveLength(3);
-            expect(oModel.getProperty('/storageBins')).toHaveLength(4);
+            expect(oModel.getProperty('/nonEwmWarningText')).toContain('Warehouse W22 has no warehouse process types configured in SAP EWM');
+            expect(oModel.getProperty('/nonEwmWarningText')).not.toMatch(/local staging/i);
+            expect(oModel.getProperty('/task/WarehouseProcessType')).toBe('');
+            expect(oModel.getProperty('/processTypes')).toEqual([]);
+            expect(oModel.getProperty('/storageTypes')).toEqual([]);
+            expect(oModel.getProperty('/storageBins')).toEqual([]);
         });
 
-        it('should successfully create Warehouse Task for warehouse W22 using Local Staging persistence fallback', async () => {
+        it('should block submission when no Warehouse Process Type is entered instead of defaulting one', async () => {
             const oModel = controller.getView().getModel('taskModel');
             oModel.setProperty('/task/Warehouse', 'W22');
-            oModel.setProperty('/task/WarehouseProcessType', ''); // Left blank or unconfigured
+            oModel.setProperty('/task/WarehouseProcessType', '');
+            oModel.setProperty('/task/Product', 'TG11');
+            oModel.setProperty('/task/Quantity', '10');
+            oModel.setProperty('/task/UnitOfMeasure', 'EA');
+
+            controller.onCreatePress();
+            await Promise.resolve();
+
+            expect(mockEwmService.createWarehouseTask).not.toHaveBeenCalled();
+            expect(oModel.getProperty('/task/WarehouseProcessType')).toBe('');
+            expect(oModel.getProperty('/errors/WarehouseProcessType/state')).toBe('Error');
+            expect(oModel.getProperty('/errorList')).toEqual(expect.arrayContaining([
+                expect.objectContaining({ title: 'Warehouse Process Type is required' })
+            ]));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('Please correct the highlighted fields before submitting.');
+        });
+
+        it('should send the entered process type for warehouse W22 and report SAP success', async () => {
+            const oModel = controller.getView().getModel('taskModel');
+            oModel.setProperty('/task/Warehouse', 'W22');
+            oModel.setProperty('/task/WarehouseProcessType', '1010');
             oModel.setProperty('/task/Product', 'TG11');
             oModel.setProperty('/task/Quantity', '10');
             oModel.setProperty('/task/UnitOfMeasure', 'EA');
 
             mockEwmService.createWarehouseTask.mockResolvedValueOnce({
-                WarehouseTask: 'WT-10005',
+                WarehouseTask: '10005',
                 Warehouse: 'W22',
-                WarehouseProcessType: '1010',
-                _isLocalStaging: true
+                WarehouseProcessType: '1010'
             });
 
             controller.onCreatePress();
@@ -386,7 +405,7 @@ describe('Unit: CreateWarehouseTask Controller', () => {
                 })
             );
             expect(mockMessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining('Local Staging — SAP backend task creation is unavailable on this software stack'),
+                expect.stringContaining('Warehouse Task 10005 created successfully in SAP S/4HANA.'),
                 expect.any(Object)
             );
             expect(mockRouter.navTo).toHaveBeenCalledWith('ewmWarehouseCockpit', {}, true);

@@ -164,6 +164,7 @@ Ensure the following tools and runtimes are installed on your workstation:
    ```
 6. **Cloud Foundry CLI**: `cf` version 8 or higher with the MTA deployment plugin (`cf add-plugin-repo CF-Community https://plugins.cloudfoundry.org && cf install-plugin multiapps`).
 7. **SAP S/4HANA Access**: An active SAP S/4HANA system (Cloud or On-Premise 1909+) with OData services activated on the SAP Gateway.
+8. **SAP HANA Cloud** (deployment only): a HANA Cloud instance mapped to the target Cloud Foundry space. The Goods Issue dispatch queue is persisted in an HDI container (`saps4hana-db`); local development and tests use the in-memory SQLite database of `@cap-js/sqlite` and need no HANA.
 
 ---
 
@@ -282,6 +283,7 @@ The multi-target application relies on managed BTP Cloud Foundry backing service
 
 ### 1. Managed Services
 
+- **`saps4hana-db`** (`hana` / `hdi-shared`): HDI container holding the Goods Issue dispatch queue (`saps4hana.wm.GoodsIssueQueue`). Deployed by the `saps4hana-db-deployer` module from `gen/db`; requires a HANA Cloud instance mapped to the space. All other business data stays in S/4HANA (see ADR-0001 and its 2026-09-14 addendum).
 - **`saps4hana-auth`** (`xsuaa` / `application`): Secures endpoints with OAuth 2.0 and provisions application roles configured via `xs-security.json`.
 - **`saps4hana-destination`** (`destination` / `lite`): Resolves S/4HANA destination targets at runtime.
 - **`saps4hana-connectivity`** (`connectivity` / `lite`): Handles secure SOCKS5 proxy tunneling via Cloud Connector.
@@ -395,7 +397,7 @@ npm run validate:mta
 npm run build:mta
 ```
 
-This compiles the CAP Node.js service into `gen/srv/`, builds optimized SAPUI5 assets (`dist/`), and outputs `mta_archives/SAPS4HANAFULLSTACK_1.0.0.mtar`.
+This compiles the CAP Node.js service into `gen/srv/`, the HDI design-time artifacts for the dispatch queue into `gen/db/`, builds optimized SAPUI5 assets (`dist/`), and outputs `mta_archives/SAPS4HANAFULLSTACK_1.0.0.mtar`.
 
 ### Deploying to SAP BTP Cloud Foundry
 

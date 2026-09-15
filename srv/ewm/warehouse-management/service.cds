@@ -73,7 +73,6 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
             DestinationStorageBin     : String(18);
             CreationDate              : Date;
             ConfirmedByUser           : String(12);
-            _isLocalStaging           : Boolean;
     };
 
     @readonly
@@ -218,3 +217,17 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
     ) returns Boolean;
 }
 
+// These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:
+// no database table is generated for them (only saps4hana.wm.GoodsIssueQueue is persisted).
+annotate WarehouseManagementService.Warehouses with @cds.persistence.skip;
+annotate WarehouseManagementService.WarehouseProcessTypes with @cds.persistence.skip;
+annotate WarehouseManagementService.StorageTypes with @cds.persistence.skip;
+annotate WarehouseManagementService.StorageBins with @cds.persistence.skip;
+annotate WarehouseManagementService.WarehouseOrders with @cds.persistence.skip;
+annotate WarehouseManagementService.WarehouseTasks with @cds.persistence.skip;
+annotate WarehouseManagementService.InboundDeliveries with @cds.persistence.skip;
+annotate WarehouseManagementService.InboundDeliveryItems with @cds.persistence.skip;
+annotate WarehouseManagementService.OutboundDeliveries with @cds.persistence.skip;
+annotate WarehouseManagementService.OutboundDeliveryItems with @cds.persistence.skip;
+annotate WarehouseManagementService.WarehouseKPIs with @cds.persistence.skip;
+annotate WarehouseManagementService.WarehouseResources with @cds.persistence.skip;

@@ -1,8 +1,5 @@
-const fs = require('fs');
-const path = require('path');
-const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
 const S4ErrorMapper = require('../S4ErrorMapper');
+const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
 
 // ──────────────────────────────────────────────────────────
 // Stock Unit (SU) / Handling Unit (HU) resolution configuration
@@ -55,42 +52,17 @@ const SU_HU_SERVICES = process.env.SU_HU_SERVICE_PATH
  *   NO dummy data, NO mock persistence, NO synthetic document generation.
  */
 class GoodsIssueAdapter {
-  constructor() {
-    this.destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
-    this.csrfToken = null;
-    this.cookie = null;
-
-    // Load local environment variables if not already initialized
-    this._ensureEnvLoaded();
-  }
-
   /**
-   * Helper to ensure .env or .env.local variables are loaded in non-standard execution contexts
+   * Gateway entity set that reliably issues a CSRF token and session cookies on this system; used for
+   * every transactional POST of this adapter (the OData V4 posting service shares the ICF session).
    */
-  _ensureEnvLoaded() {
-    if (process.env.S4_DESTINATION_URL) return;
-    const candidates = ['.env.local', '.env'];
-    for (const f of candidates) {
-      const fullPath = path.resolve(process.cwd(), f);
-      if (fs.existsSync(fullPath)) {
-        try {
-          const content = fs.readFileSync(fullPath, 'utf8');
-          for (const line of content.split('\n')) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-              const idx = trimmed.indexOf('=');
-              const k = trimmed.substring(0, idx).trim();
-              const v = trimmed.substring(idx + 1).trim();
-              if (!process.env[k]) {
-                process.env[k] = v;
-              }
-            }
-          }
-        } catch (_) {
-          // Continue
-        }
-      }
-    }
+  static CSRF_FETCH_PATH = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1';
+
+  constructor(options = {}) {
+    // All HTTP traffic to S/4HANA goes through the shared SAP Cloud SDK based client (BTP destination,
+    // Connectivity proxy for on-premise systems, per-call CSRF/cookie handling). No session state lives here.
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
   }
 
   /**
@@ -149,163 +121,38 @@ class GoodsIssueAdapter {
   }
 
   /**
-   * Resolve destination for S/4HANA communication using SAP Cloud SDK with fallback
+   * Resolve the S/4HANA destination through the shared client (BTP Destination service or SDK-registered
+   * destination first, then local environment). Returns null when nothing is configured.
    */
   async _getDestination() {
-    this._ensureEnvLoaded();
-
-    try {
-      const dest = await connectivity.getDestination({ destinationName: this.destinationName });
-      if (dest && dest.url) return dest;
-    } catch (_) {
-      // Continue to local env fallback
-    }
-
-    if (process.env.S4_DESTINATION_URL) {
-      return {
-        url: process.env.S4_DESTINATION_URL.replace(/\/+$/, ''),
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: { 'sap-client': process.env.S4_CLIENT || '220' }
-      };
-    }
-
-    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials ||
-                  cds.env.requires?.C_PURCHASEORDER_FS_SRV?.credentials;
-    if (creds && creds.url) {
-      return {
-        url: creds.url.replace(/\/+$/, ''),
-        username: creds.username,
-        password: creds.password,
-        headers: creds.headers || { 'sap-client': '220' }
-      };
-    }
-
-    return null;
+    return this.client.resolveDestination();
   }
 
   /**
-   * Helper to perform HTTP GET against S/4HANA Gateway
+   * HTTP GET against an S/4HANA OData service via the SAP Cloud SDK.
+   * Returns the unwrapped OData V2 result set (d.results / d) or the OData V4 value array.
    */
   async _get(servicePath, queryParams = '') {
-    const dest = await this._getDestination();
-    if (!dest) {
-      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
-      err.status = 502;
-      throw err;
-    }
-
-    const url = `${dest.url}${servicePath}${queryParams ? (servicePath.includes('?') ? '&' : '?') + queryParams : ''}`;
-    const headers = {
-      'Accept': 'application/json',
-      'sap-client': dest.headers?.['sap-client'] || '220'
-    };
-
-    if (dest.username && dest.password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64');
-    }
-
     try {
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const errText = await res.text();
-        const err = new Error(`S/4HANA GET ${servicePath} failed: HTTP ${res.status} - ${errText}`);
-        err.status = res.status;
-        throw err;
-      }
-      const data = await res.json();
-      return data.d?.results || data.d || data.value || [];
+      const { data } = await this.client.get(servicePath, { query: queryParams });
+      return data?.d?.results || data?.d || data?.value || [];
     } catch (err) {
+      if (err.code === DESTINATION_NOT_CONFIGURED) throw err;
       throw S4ErrorMapper.mapS4Error(err);
     }
   }
 
   /**
-   * Helper to fetch CSRF token and session cookies for transactional POST requests
-   */
-  async _fetchCsrfToken() {
-    const dest = await this._getDestination();
-    if (!dest) return;
-    const authHeader = dest.username && dest.password ? 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64') : '';
-    const headers = {
-      'x-csrf-token': 'Fetch',
-      'sap-client': dest.headers?.['sap-client'] || '220'
-    };
-    if (authHeader) headers['Authorization'] = authHeader;
-
-    try {
-      const response = await fetch(`${dest.url}/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1`, {
-        method: 'GET',
-        headers
-      });
-      this.csrfToken = response.headers.get('x-csrf-token');
-      if (response.headers.getSetCookie) {
-        const cookies = response.headers.getSetCookie();
-        this.cookie = cookies.map(c => c.split(';')[0]).join('; ');
-      } else {
-        const setCookie = response.headers.get('set-cookie');
-        if (setCookie) {
-          this.cookie = setCookie.split(';')[0];
-        }
-      }
-    } catch (_) {
-      // Continue
-    }
-  }
-
-  /**
-   * Helper to perform HTTP POST against S/4HANA Gateway
+   * HTTP POST against an S/4HANA OData service via the SAP Cloud SDK. The CSRF token and the SAP session
+   * cookies are fetched for this call only and sent with it; nothing is cached on the adapter.
    */
   async _post(servicePath, payload = {}, customHeaders = {}) {
-    const dest = await this._getDestination();
-    if (!dest) {
-      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
-      err.status = 502;
-      throw err;
-    }
-
-    await this._fetchCsrfToken();
-
-    const url = `${dest.url}${servicePath}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'sap-client': dest.headers?.['sap-client'] || '220',
-      'x-csrf-token': this.csrfToken || '',
-      ...customHeaders
-    };
-
-    if (this.cookie) {
-      headers['Cookie'] = this.cookie;
-    }
-
-    if (dest.username && dest.password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64');
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
+    const { data } = await this.client.post(servicePath, {
+      data: payload,
+      headers: customHeaders,
+      csrfPath: GoodsIssueAdapter.CSRF_FETCH_PATH
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      let parsedMsg = `HTTP ${res.status} - ${errText}`;
-      try {
-        const jsonErr = JSON.parse(errText);
-        parsedMsg = jsonErr.error?.message?.value || jsonErr.error?.message || jsonErr.message || parsedMsg;
-      } catch (_) {
-        // use parsedMsg
-      }
-      const err = new Error(`S/4HANA POST ${servicePath} failed: ${parsedMsg}`);
-      err.status = res.status;
-      throw err;
-    }
-
-    const resContentType = res.headers.get('content-type') || '';
-    if (resContentType.includes('application/json')) {
-      const data = await res.json();
+    if (data && typeof data === 'object') {
       return data.d || data;
     }
     return true;
@@ -1076,31 +923,10 @@ class GoodsIssueAdapter {
   }
 
   /**
-   * Fetch an OData service $metadata document as raw XML text.
+   * Fetch an OData service $metadata document as raw XML text (via the shared SAP Cloud SDK client).
    */
   async _getMetadataXml(servicePath) {
-    const dest = await this._getDestination();
-    if (!dest) {
-      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
-      err.status = 502;
-      throw err;
-    }
-    const url = `${dest.url}${servicePath}/$metadata`;
-    const headers = {
-      'Accept': 'application/xml',
-      'sap-client': dest.headers?.['sap-client'] || '220'
-    };
-    if (dest.username && dest.password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${dest.username}:${dest.password}`).toString('base64');
-    }
-    const res = await fetch(url, { headers });
-    if (!res.ok) {
-      const errText = await res.text();
-      const err = new Error(`S/4HANA GET ${servicePath}/$metadata failed: HTTP ${res.status} - ${errText}`);
-      err.status = res.status;
-      throw err;
-    }
-    const xml = await res.text();
+    const xml = await this.client.getText(`${servicePath}/$metadata`, { accept: 'application/xml' });
     this._suDiag('HU metadata fetched', {
       huService: servicePath,
       sapObject: 'EWM Handling Unit OData service $metadata',

@@ -54,15 +54,35 @@ describe('Unit: EWM RF Terminal & Scan Verification', () => {
       );
     });
 
-    it('should return active logon session for valid inputs', async () => {
-      const session = await EwmAdapter.logonResource('0001', 'CART-01', 'PICK_FAST');
-      expect(session).toEqual(expect.objectContaining({
-        Warehouse: '0001',
-        Resource: 'CART-01',
-        Queue: 'PICK_FAST',
-        LogonStatus: 'ACTIVE'
-      }));
-      expect(session.LogonTimestamp).toBeDefined();
+    it('should report an active logon session only after SAP EWM accepted the logon', async () => {
+      const post = jest.spyOn(EwmAdapter, '_post').mockResolvedValueOnce({ success: true });
+      try {
+        const session = await EwmAdapter.logonResource('0001', 'CART-01', 'PICK_FAST');
+        expect(post).toHaveBeenCalledWith("/sap/opu/odata/scwm/PICKCART_SRV/LogonRSRC?Lgnum='0001',Rsrc='CART-01'");
+        expect(session).toEqual(expect.objectContaining({
+          Warehouse: '0001',
+          Resource: 'CART-01',
+          Queue: 'PICK_FAST',
+          LogonStatus: 'ACTIVE'
+        }));
+        expect(session.LogonTimestamp).toBeDefined();
+      } finally {
+        post.mockRestore();
+      }
+    });
+
+    it('should propagate a rejected logon instead of reporting an active session', async () => {
+      const sapErr = new Error('Resource CART-01 is not defined in warehouse 0001');
+      sapErr.status = 404;
+      const post = jest.spyOn(EwmAdapter, '_post').mockRejectedValueOnce(sapErr);
+      try {
+        await expect(EwmAdapter.logonResource('0001', 'CART-01', 'PICK_FAST')).rejects.toMatchObject({
+          status: 404,
+          message: 'Resource CART-01 is not defined in warehouse 0001'
+        });
+      } finally {
+        post.mockRestore();
+      }
     });
   });
 

@@ -138,46 +138,16 @@ sap.ui.define([
                 var aTypes = (aResults[0] && aResults[0].value) ? aResults[0].value : [];
                 var aBins = (aResults[1] && aResults[1].value) ? aResults[1].value : [];
                 var aProcessTypes = (aResults[2] && aResults[2].value) ? aResults[2].value : [];
-                if (sWhse && aProcessTypes.length === 0) {
-                    var aDefaultProcessTypes = [
-                        { Warehouse: sWhse, WarehouseProcessType: "1010", WarehouseProcessTypeName: "Putaway (Local Staging)" },
-                        { Warehouse: sWhse, WarehouseProcessType: "2010", WarehouseProcessTypeName: "Picking (Local Staging)" },
-                        { Warehouse: sWhse, WarehouseProcessType: "3010", WarehouseProcessTypeName: "Internal Movement (Local Staging)" }
-                    ];
-                    oModel.setProperty("/processTypes", aDefaultProcessTypes);
-                    if (!oModel.getProperty("/task/WarehouseProcessType")) {
-                        oModel.setProperty("/task/WarehouseProcessType", "1010");
-                    }
-                    oModel.setProperty("/isNonEwmWarehouse", true);
-                    oModel.setProperty("/nonEwmWarningText", "Warehouse " + sWhse + " has no active EWM process types (/SCWM/T333) configured in this system. Local Staging persistence will be automatically used.");
-                } else {
-                    oModel.setProperty("/processTypes", aProcessTypes);
-                    oModel.setProperty("/isNonEwmWarehouse", false);
-                    oModel.setProperty("/nonEwmWarningText", "");
-                }
+                // Only what SAP EWM returns for the warehouse is offered; nothing is invented.
+                oModel.setProperty("/processTypes", aProcessTypes);
+                oModel.setProperty("/storageTypes", aTypes);
+                oModel.setProperty("/storageBins", aBins);
 
-                if (sWhse && aTypes.length === 0) {
-                    var aDefaultTypes = [
-                        { StorageType: "0010", StorageTypeName: "General Storage (Local Staging)" },
-                        { StorageType: "0020", StorageTypeName: "High Rack Storage (Local Staging)" },
-                        { StorageType: "0030", StorageTypeName: "Picking Area (Local Staging)" }
-                    ];
-                    oModel.setProperty("/storageTypes", aDefaultTypes);
-                } else {
-                    oModel.setProperty("/storageTypes", aTypes);
-                }
-
-                if (sWhse && aBins.length === 0) {
-                    var aDefaultBins = [
-                        { StorageBin: sWhse + "-01-01", StorageType: "0010" },
-                        { StorageBin: sWhse + "-01-02", StorageType: "0010" },
-                        { StorageBin: sWhse + "-02-01", StorageType: "0020" },
-                        { StorageBin: sWhse + "-03-01", StorageType: "0030" }
-                    ];
-                    oModel.setProperty("/storageBins", aDefaultBins);
-                } else {
-                    oModel.setProperty("/storageBins", aBins);
-                }
+                var bNoProcessTypes = aProcessTypes.length === 0;
+                oModel.setProperty("/isNonEwmWarehouse", bNoProcessTypes);
+                oModel.setProperty("/nonEwmWarningText", bNoProcessTypes
+                    ? "Warehouse " + sWhse + " has no warehouse process types configured in SAP EWM (/SCWM/T333). SAP will reject warehouse task creation for this warehouse until they are configured."
+                    : "");
             });
         },
 
@@ -287,10 +257,8 @@ sap.ui.define([
 
             // 2. Warehouse Process Type
             if (!oTask.WarehouseProcessType || !oTask.WarehouseProcessType.trim()) {
-                // If warehouse process types are not configured in backend (such as W22), automatically default to standard '1010' (Putaway)
-                oTask.WarehouseProcessType = "1010";
-                oModel.setProperty("/task/WarehouseProcessType", "1010");
-                oModel.setProperty("/errors/WarehouseProcessType", { state: "None", text: "" });
+                oModel.setProperty("/errors/WarehouseProcessType", { state: "Error", text: "Warehouse Process Type is required" });
+                aErrors.push("Warehouse Process Type is required");
             } else if (oTask.WarehouseProcessType.trim().length > 4) {
                 oModel.setProperty("/errors/WarehouseProcessType", { state: "Error", text: "Process Type cannot exceed 4 characters" });
                 aErrors.push("Process Type cannot exceed 4 characters");
@@ -389,7 +357,7 @@ sap.ui.define([
 
             var oPayload = {
                 Warehouse: sanitizeCode(oTask.Warehouse, 4),
-                WarehouseProcessType: sanitizeCode(oTask.WarehouseProcessType || "1010", 4),
+                WarehouseProcessType: sanitizeCode(oTask.WarehouseProcessType, 4),
                 Product: (oTask.Product || "").trim(),
                 Quantity: Number(oTask.Quantity),
                 UnitOfMeasure: (oTask.UnitOfMeasure || "").trim()
@@ -425,11 +393,9 @@ sap.ui.define([
 
             EwmService.createWarehouseTask(oPayload)
                 .then(function (oCreated) {
+                    // The backend only resolves when SAP S/4HANA created the task; a rejection is shown as an error below.
                     var sTaskId = (oCreated && (oCreated.WarehouseTask || oCreated.WarehouseTaskNumber)) || "Success";
-                    var bIsStaged = Boolean(oCreated && oCreated._isLocalStaging);
-                    var sSuccessMsg = bIsStaged
-                        ? "Warehouse Task " + sTaskId + " created successfully (Local Staging — SAP backend task creation is unavailable on this software stack)."
-                        : "Warehouse Task " + sTaskId + " created successfully in SAP S/4HANA.";
+                    var sSuccessMsg = "Warehouse Task " + sTaskId + " created successfully in SAP S/4HANA.";
                     MessageBox.success(sSuccessMsg, {
                         onClose: function () {
                             var oRouter = that.getRouter();

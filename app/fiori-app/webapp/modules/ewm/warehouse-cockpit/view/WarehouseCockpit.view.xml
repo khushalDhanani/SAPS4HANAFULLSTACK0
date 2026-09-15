@@ -160,9 +160,7 @@
                                 <items>
                                     <ColumnListItem>
                                         <cells>
-                                            <ObjectIdentifier
-                                                title="{ewmView>WarehouseTask}"
-                                                text="{= ${ewmView>_isLocalStaging} ? 'Local Staging' : '' }" />
+                                            <ObjectIdentifier title="{ewmView>WarehouseTask}" />
                                             <Text text="{ewmView>WarehouseOrder}" />
                                             <VBox>
                                                 <Text text="{ewmView>Product}" />

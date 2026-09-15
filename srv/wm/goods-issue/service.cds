@@ -15,6 +15,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Barcode      : String(40);
     };
 
+    // Dispatch queue records persisted in the CAP database. Read-only over OData: every change goes
+    // through postGoodsIssue / retryQueuedGoodsIssue / clearQueuedGoodsIssue.
+    @readonly
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity GoodsIssueQueue as projection on DBGoodsIssueQueue;
 
@@ -203,8 +206,11 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     };
 
     type QueueSummary {
-        QueuedCount : Integer;
-        Items       : array of QueueItem;
+        QueuedCount    : Integer;
+        TotalCount     : Integer;
+        // False when no database is bound to this deployment: nothing can be queued or listed.
+        StoreAvailable : Boolean;
+        Items          : array of QueueItem;
     };
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -338,3 +344,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     ) returns StockRevalidationResult;
 }
 
+// These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:
+// no database table is generated for them (only saps4hana.wm.GoodsIssueQueue is persisted).
+annotate GoodsIssueService.GIItems with @cds.persistence.skip;
+annotate GoodsIssueService.MaterialBatches with @cds.persistence.skip;
+annotate GoodsIssueService.OpenReservations with @cds.persistence.skip;

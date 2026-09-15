@@ -1,33 +1,8 @@
 const cds = require('@sap/cds');
-const fs = require('fs');
-const path = require('path');
+const { loadLocalEnv } = require('./srv/integration/s4hana/localEnv');
 
-// In local development, load local environment configuration if present
-if (process.env.NODE_ENV !== 'production') {
-    try {
-        const envFile = fs.existsSync(path.resolve(__dirname, '.env'))
-            ? path.resolve(__dirname, '.env')
-            : (fs.existsSync(path.resolve(__dirname, '.env.local')) ? path.resolve(__dirname, '.env.local') : null);
-        if (envFile) {
-            const lines = fs.readFileSync(envFile, 'utf8').split('\n');
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed.startsWith('#')) continue;
-                const eqIdx = trimmed.indexOf('=');
-                if (eqIdx > 0) {
-                    const key = trimmed.substring(0, eqIdx).trim();
-                    let val = trimmed.substring(eqIdx + 1).trim();
-                    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                        val = val.slice(1, -1);
-                    }
-                    if (!process.env[key]) {
-                        process.env[key] = val;
-                    }
-                }
-            }
-        }
-    } catch (e) {}
-}
+// In local development, load .env.local / .env into process.env (no-op in production)
+loadLocalEnv({ root: __dirname });
 
 // Register local development S4_USERNAME in mock auth users if running in development
 if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {

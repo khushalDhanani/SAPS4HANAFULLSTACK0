@@ -220,11 +220,13 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(poDetails.Supplier).toBe('101245');
         });
 
-        it('should successfully fetch CSRF token and cookie from MMIM_GR4PO_DL_SRV', async () => {
-            await GoodsReceiptAdapter._fetchCsrfToken();
-            expect(GoodsReceiptAdapter.csrfToken).toBeTruthy();
-            expect(GoodsReceiptAdapter.cookie).toBeTruthy();
-            expect(GoodsReceiptAdapter.cookie).toContain('sap-client=220');
+        it('should fetch a CSRF token and session cookie from MMIM_GR4PO_DL_SRV through the shared S/4 client, without caching them on the adapter', async () => {
+            const session = await GoodsReceiptAdapter.client.fetchCsrfSession(GoodsReceiptAdapter.constructor.CSRF_FETCH_PATH);
+            expect(session.token).toBeTruthy();
+            expect(session.cookie).toBeTruthy();
+            expect(session.cookie).toContain('sap-client=220');
+            expect(GoodsReceiptAdapter.csrfToken).toBeUndefined();
+            expect(GoodsReceiptAdapter.cookie).toBeUndefined();
         });
 
         it('should fail with transparent SAP backend error without mock persistence when posting fails', async () => {
