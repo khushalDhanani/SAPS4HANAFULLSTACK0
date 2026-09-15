@@ -73,8 +73,6 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         null as IsActive : Boolean,
         null as StatusText : String(20),
         null as StatusState : String(20),
-        null as Classification : String(40),
-        null as Purpose : String(120),
         ScreenSequenceGroup,
         NumberRangeForIntIDAssignment,
         NumberRangeForExtIDAssignment,

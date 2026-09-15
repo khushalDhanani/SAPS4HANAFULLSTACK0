@@ -160,8 +160,12 @@ function registerSalesInquiryHandlers(srv) {
     });
 
     // 6. Function getSalesOrderMetrics
-    srv.on('getSalesOrderMetrics', async () => {
-        return await salesInquiryAdapter.getSalesMetrics();
+    srv.on('getSalesOrderMetrics', async (req) => {
+        try {
+            return await salesInquiryAdapter.getSalesMetrics();
+        } catch (error) {
+            return req.error(error.status || 502, error.message);
+        }
     });
 }
 

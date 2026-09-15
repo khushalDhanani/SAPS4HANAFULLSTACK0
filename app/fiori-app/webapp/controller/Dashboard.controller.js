@@ -2,84 +2,69 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
-    "sap/m/MessageToast",
-    "sap/m/MessageBox"
+    "sap/m/MessageToast"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
-    MessageToast,
-    MessageBox
+    MessageToast
 ) {
     "use strict";
 
+    /**
+     * Counts returned by PurchaseOrderService.getDashboardMetrics(). Each is read live from SAP S/4HANA.
+     * In the view model a metric is:
+     *   undefined  while it is loading,
+     *   null       when SAP did not return it (the tile shows "Failed"),
+     *   a number   when SAP returned it.
+     * Nothing is ever defaulted to 0, sampled, extrapolated or simulated.
+     */
+    var METRIC_KEYS = [
+        "totalCount",
+        "supplierCount",
+        "productCount",
+        "fiDocCount",
+        "salesInquiryCount",
+        "customerCount",
+        "openSalesOrderCount",
+        "totalSalesOrderCount",
+        "bpCount",
+        "glAccountCount",
+        "costCenterCount",
+        "profitCenterCount",
+        "fixedAssetCount",
+        "wbsElementCount",
+        "internalOrderCount",
+        "purchaseContractCount",
+        "companyCodeCount",
+        "plantCount",
+        "storageLocationCount",
+        "materialGroupCount",
+        "purchasingOrgCount",
+        "purchasingGroupCount",
+        "warehouseCount",
+        "openReservationCount",
+        "inboundDeliveryCount",
+        "gatewayCatalogCount"
+    ];
+
+    function toCount(vValue) {
+        if (vValue === null || vValue === undefined || String(vValue).trim() === "") {
+            return null;
+        }
+        var n = Number(vValue);
+        return (isFinite(n) && Math.floor(n) === n && n >= 0) ? n : null;
+    }
+
     return BaseController.extend("saps4hana.fiori.controller.Dashboard", {
+        METRIC_KEYS: METRIC_KEYS,
+
         onInit: function () {
             var oViewModel = new JSONModel({
                 selectedTab: "overview",
-                systemHealth: 100,
-                totalCount: 0,
-                supplierCount: 0,
-                totalSpend: "0.00",
-                completeRate: 0,
-                fiDocCount: 0,
-                openSalesOrderCount: 0,
-                totalSalesOrderCount: 0,
-                salesInquiryCount: 0,
-                customerCount: 0,
-                bpCount: 0,
-                productCount: 0,
-                glAccountCount: 0,
-                costCenterCount: 0,
-                profitCenterCount: 0,
-                fixedAssetCount: 0,
-                wbsElementCount: 0,
-                internalOrderCount: 0,
-                purchaseContractCount: 0,
-                companyCodeCount: 0,
-                plantCount: 0,
-                storageLocationCount: 0,
-                materialGroupCount: 0,
-                purchasingOrgCount: 0,
-                purchasingGroupCount: 0,
-                warehouseCount: 0,
-                openReservationCount: 0,
-                inboundDeliveryCount: 0,
-                gatewayCatalogCount: 0,
-                carLoanActiveCount: 0,
-                mdgOpenCRCount: 0,
-                bankAccountCount: 0,
-                workCenterCount: 0,
-                workCenterCapacityRate: 0,
-                technicalObjectCount: 0,
-                bpProcessWorkflowCount: 0,
-                productProcessWorkflowCount: 0,
-                masterDataImportBatchCount: 0,
-                masterDataExportBatchCount: 0,
-                costSettlementRate: 0,
-                costAllocationCyclesCount: 0,
-                ppCapacityUtilization: 0,
-                productionOrderCount: 0,
-                inspectionLotCount: 0,
-                fmeaCaseCount: 0,
-                maintenanceOrderCount: 0,
-                eamCostVarianceRate: 0,
-                projectWipAmount: "0.00",
-                ewmOperationsRate: 0,
-                ewmStorageTypeCount: 0,
-                ewmTaskCount: 0,
-                tmRouteCount: 0,
-                tmDispatchedCount: 0,
-                carLoanVolume: "0.00",
-                carLoanApprovalRate: 0,
-                hcmOrgUnitCount: 0,
-                hcmHeadcount: 0,
-                hcmLoanCount: 0,
-                analyticsCashFlow: "0.00",
-                analyticsDso: 0,
-                supplierScorecardAvg: 0,
-                adminJobsCount: 0,
-                adminWorkflowCount: 0
+                connectionState: "None",
+                connectionText: this._text("dashboardConnectionChecking", "Checking S/4HANA connection…"),
+                metricsError: ""
             });
             this.getView().setModel(oViewModel, "dashboardView");
 
@@ -93,6 +78,29 @@ sap.ui.define([
             }
         },
 
+        /**
+         * Resolves an i18n text, falling back to the given default when no resource bundle is available.
+         *
+         * @private
+         */
+        _text: function (sKey, sDefault, aArgs) {
+            try {
+                var oComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
+                var oI18n = oComp && oComp.getModel ? oComp.getModel("i18n") : null;
+                var oBundle = oI18n && oI18n.getResourceBundle ? oI18n.getResourceBundle() : null;
+                if (oBundle && oBundle.hasText && oBundle.hasText(sKey)) {
+                    return oBundle.getText(sKey, aArgs);
+                }
+            } catch (e) {
+                // fall through to the default text
+            }
+            var sText = sDefault;
+            (aArgs || []).forEach(function (vArg, i) {
+                sText = sText.replace("{" + i + "}", vArg);
+            });
+            return sText;
+        },
+
         _onDashboardMatched: function () {
             var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
             if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
@@ -101,6 +109,12 @@ sap.ui.define([
             this._loadMetrics();
         },
 
+        /**
+         * Loads all dashboard counts from SAP in one call. A count SAP did not return stays null, and the
+         * header status reports whether S/4HANA answered fully, partially or not at all.
+         *
+         * @returns {Promise<void>}
+         */
         _loadMetrics: function () {
             var oViewModel = this.getView().getModel("dashboardView");
             if (!oViewModel) {
@@ -108,272 +122,85 @@ sap.ui.define([
             }
 
             var that = this;
+            METRIC_KEYS.forEach(function (sKey) {
+                oViewModel.setProperty("/" + sKey, undefined);
+            });
+            oViewModel.setProperty("/metricsError", "");
+            oViewModel.setProperty("/connectionState", "None");
+            oViewModel.setProperty("/connectionText", this._text("dashboardConnectionChecking", "Checking S/4HANA connection…"));
+
             return ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
                 .then(function (res) {
-                    if (!res) return;
                     var oMetrics = res;
                     if (typeof oMetrics === "string") {
-                        try {
-                            oMetrics = JSON.parse(oMetrics);
-                        } catch (_) {}
+                        oMetrics = JSON.parse(oMetrics);
                     }
-                    if (oMetrics && oMetrics.value && typeof oMetrics.value === "string") {
-                        try {
-                            oMetrics = JSON.parse(oMetrics.value);
-                        } catch (_) {}
+                    if (oMetrics && typeof oMetrics.value === "string") {
+                        oMetrics = JSON.parse(oMetrics.value);
                     }
-                    if (oMetrics && typeof oMetrics === "object") {
-                        Object.keys(oMetrics).forEach(function (sKey) {
-                            oViewModel.setProperty("/" + sKey, oMetrics[sKey]);
-                        });
+                    if (!oMetrics || typeof oMetrics !== "object") {
+                        throw new Error(that._text("dashboardMetricsInvalid", "The metrics service returned no data."));
                     }
+
+                    var iAvailable = 0;
+                    METRIC_KEYS.forEach(function (sKey) {
+                        var iCount = toCount(oMetrics[sKey]);
+                        oViewModel.setProperty("/" + sKey, iCount);
+                        if (iCount !== null) {
+                            iAvailable++;
+                        }
+                    });
+                    that._setConnectionStatus(iAvailable, METRIC_KEYS.length);
                 })
                 .catch(function (err) {
-                    console.warn("[DashboardController] Unified metrics load warning, falling back to individual queries:", err && err.message);
-                    return that._loadIndividualMetrics();
+                    METRIC_KEYS.forEach(function (sKey) {
+                        oViewModel.setProperty("/" + sKey, null);
+                    });
+                    oViewModel.setProperty("/metricsError", that._text(
+                        "dashboardMetricsUnavailable",
+                        "Live figures could not be loaded from SAP S/4HANA: {0}",
+                        [(err && err.message) || String(err || "")]
+                    ));
+                    that._setConnectionStatus(0, METRIC_KEYS.length);
                 });
         },
 
-        _loadIndividualMetrics: function () {
+        /**
+         * @private
+         */
+        _setConnectionStatus: function (iAvailable, iTotal) {
             var oViewModel = this.getView().getModel("dashboardView");
-            if (!oViewModel) {
-                return Promise.resolve();
+            if (iAvailable === iTotal) {
+                oViewModel.setProperty("/connectionState", "Success");
+                oViewModel.setProperty("/connectionText", this._text("dashboardConnectionOk", "S/4HANA connected"));
+            } else if (iAvailable === 0) {
+                oViewModel.setProperty("/connectionState", "Error");
+                oViewModel.setProperty("/connectionText", this._text("dashboardConnectionDown", "S/4HANA not reachable"));
+            } else {
+                oViewModel.setProperty("/connectionState", "Warning");
+                oViewModel.setProperty("/connectionText", this._text(
+                    "dashboardConnectionPartial",
+                    "S/4HANA partially available ({0} of {1} figures)",
+                    [String(iAvailable), String(iTotal)]
+                ));
             }
+        },
 
-            var pPurchaseOrders = ODataClient.get("/odata/v4/purchase-order/PurchaseOrders?$top=100&$select=PurchaseOrder,Supplier,PurchaseOrderNetAmount,PurchasingCompletenessStatus&$count=true")
-                .then(function (oData) {
-                    if (!oData) return;
-                    var aOrders = oData.value || [];
-                    var iTotal = oData["@odata.count"] != null ? parseInt(oData["@odata.count"], 10) : aOrders.length;
-                    if (isNaN(iTotal)) iTotal = aOrders.length;
+        /**
+         * Tile value: the SAP count as text, or nothing while loading / unavailable.
+         */
+        formatMetricValue: function (vCount) {
+            return (typeof vCount === "number") ? String(vCount) : "";
+        },
 
-                    var iCompleted = 0;
-                    var fSpendSum = 0;
-                    aOrders.forEach(function (oOrder) {
-                        if (oOrder.PurchasingCompletenessStatus) {
-                            iCompleted++;
-                        }
-                        fSpendSum += parseFloat(oOrder.PurchaseOrderNetAmount) || 0;
-                    });
-
-                    var iRate = aOrders.length > 0 ? Math.round((iCompleted / aOrders.length) * 100) : 100;
-                    var fAvg = aOrders.length > 0 ? (fSpendSum / aOrders.length) : 0;
-                    var fTotalSpend = iTotal > aOrders.length ? (fAvg * iTotal) : fSpendSum;
-                    var sSpendMillions = (fTotalSpend / 1000000).toFixed(2);
-
-                    oViewModel.setProperty("/totalCount", iTotal);
-                    oViewModel.setProperty("/completeRate", iRate);
-                    oViewModel.setProperty("/totalSpend", sSpendMillions);
-                })
-                .catch(function () {});
-
-            var pSuppliers = ODataClient.get("/odata/v4/purchase-order/SupplierVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iSuppliers = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iSuppliers) && iSuppliers > 0) {
-                            oViewModel.setProperty("/supplierCount", iSuppliers);
-                        }
-                    }
-                })
-                .catch(function () {});
-
-            var pMaterials = ODataClient.get("/odata/v4/purchase-order/MaterialVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iMaterials = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iMaterials) && iMaterials > 0) {
-                            oViewModel.setProperty("/productCount", iMaterials);
-                        }
-                    }
-                })
-                .catch(function () {});
-
-            var pFiDocs = ODataClient.get("/odata/v4/journal-entry/JournalEntryItems?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iFiCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iFiCount)) {
-                            oViewModel.setProperty("/fiDocCount", iFiCount);
-                        }
-                    }
-                })
-                .catch(function () {});
-
-            var pSalesInquiries = ODataClient.get("/odata/v4/sales-inquiry/SalesInquiries?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iInqCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iInqCount)) {
-                            oViewModel.setProperty("/salesInquiryCount", iInqCount);
-                        }
-                    }
-                })
-                .catch(function () {});
-
-            var pCustomers = ODataClient.get("/odata/v4/sales-inquiry/CustomerVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCustCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCustCount)) {
-                            oViewModel.setProperty("/customerCount", iCustCount);
-                        }
-                    }
-                })
-                .catch(function () {});
-
-            var pSalesOrders = ODataClient.get("/odata/v4/sales-inquiry/getSalesOrderMetrics()")
-                .then(function (oData) {
-                    if (oData) {
-                        var iOpen = oData.openOrdersCount != null ? parseInt(oData.openOrdersCount, 10) : 0;
-                        var iTotal = oData.totalOrdersCount != null ? parseInt(oData.totalOrdersCount, 10) : 0;
-                        if (!isNaN(iOpen)) {
-                            oViewModel.setProperty("/openSalesOrderCount", iOpen);
-                        }
-                        if (!isNaN(iTotal)) {
-                            oViewModel.setProperty("/totalSalesOrderCount", iTotal);
-                        }
-                    }
-                })
-                .catch(function () {});
-
-            var pReservations = ODataClient.get("/odata/v4/goods-issue/OpenReservations?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iResCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iResCount)) {
-                            oViewModel.setProperty("/openReservationCount", iResCount);
-                        }
-                    } else if (oData && oData.value) {
-                        oViewModel.setProperty("/openReservationCount", oData.value.length);
-                    }
-                })
-                .catch(function () {});
-
-            var pInboundDeliveries = ODataClient.get("/odata/v4/goods-receipt/OpenInboundDeliveries?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iInbCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iInbCount)) {
-                            oViewModel.setProperty("/inboundDeliveryCount", iInbCount);
-                        }
-                    } else if (oData && oData.value) {
-                        oViewModel.setProperty("/inboundDeliveryCount", oData.value.length);
-                    }
-                })
-                .catch(function () {});
-
-            var pGL = ODataClient.get("/odata/v4/purchase-order/GLAccountVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/glAccountCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pCostCenter = ODataClient.get("/odata/v4/purchase-order/CostCenterVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/costCenterCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pProfitCenter = ODataClient.get("/odata/v4/purchase-order/ProfitCenterVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/profitCenterCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pFixedAsset = ODataClient.get("/odata/v4/purchase-order/FixedAssetVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/fixedAssetCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pWBS = ODataClient.get("/odata/v4/purchase-order/WBSElementVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/wbsElementCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pInternalOrder = ODataClient.get("/odata/v4/purchase-order/InternalOrderVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/internalOrderCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pContract = ODataClient.get("/odata/v4/purchase-order/PurchaseContractVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/purchaseContractCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pCompanyCode = ODataClient.get("/odata/v4/purchase-order/CompanyCodeVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/companyCodeCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pPlant = ODataClient.get("/odata/v4/purchase-order/PlantVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/plantCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pStorageLoc = ODataClient.get("/odata/v4/purchase-order/StorageLocationVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/storageLocationCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pMaterialGroup = ODataClient.get("/odata/v4/purchase-order/MaterialGroupVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/materialGroupCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pPurchasingOrg = ODataClient.get("/odata/v4/purchase-order/PurchasingOrgVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/purchasingOrgCount", iCount);
-                    }
-                }).catch(function () {});
-
-            var pPurchasingGroup = ODataClient.get("/odata/v4/purchase-order/PurchasingGroupVH?$top=1&$count=true")
-                .then(function (oData) {
-                    if (oData && oData["@odata.count"] != null) {
-                        var iCount = parseInt(oData["@odata.count"], 10);
-                        if (!isNaN(iCount)) oViewModel.setProperty("/purchasingGroupCount", iCount);
-                    }
-                }).catch(function () {});
-
-            return Promise.all([
-                pPurchaseOrders, pSuppliers, pMaterials, pFiDocs, pSalesInquiries,
-                pCustomers, pSalesOrders, pReservations, pInboundDeliveries,
-                pGL, pCostCenter, pProfitCenter, pFixedAsset, pWBS, pInternalOrder,
-                pContract, pCompanyCode, pPlant, pStorageLoc, pMaterialGroup,
-                pPurchasingOrg, pPurchasingGroup
-            ]);
+        /**
+         * Tile state: Loading until the count arrives, Failed when SAP did not return it.
+         */
+        formatTileState: function (vCount) {
+            if (vCount === undefined) {
+                return "Loading";
+            }
+            return vCount === null ? "Failed" : "Loaded";
         },
 
         onTabSelect: function (oEvent) {
@@ -390,84 +217,42 @@ sap.ui.define([
         },
 
         onRefresh: function () {
-            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            var that = this;
             this._loadMetrics().then(function () {
-                MessageToast.show(oBundle.getText("dashboardActionRefreshDesc"));
+                MessageToast.show(that._text("dashboardActionRefreshDesc", "Fetch latest changes from SAP Gateway"));
             });
         },
 
         onNavigateToPurchaseOrders: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("purchaseOrders");
+            this.getOwnerComponent().getRouter().navTo("purchaseOrders");
         },
 
         onNavigateToCreatePO: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("createPurchaseOrder");
+            this.getOwnerComponent().getRouter().navTo("createPurchaseOrder");
         },
 
         onNavigateToJournalEntries: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("journalEntries");
+            this.getOwnerComponent().getRouter().navTo("journalEntries");
         },
 
         onNavigateToSalesInquiries: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("salesInquiries");
+            this.getOwnerComponent().getRouter().navTo("salesInquiries");
         },
 
         onNavigateToCreateSalesInquiry: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("createSalesInquiry");
+            this.getOwnerComponent().getRouter().navTo("createSalesInquiry");
         },
 
         onNavigateToEwmCockpit: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("ewmWarehouseCockpit");
+            this.getOwnerComponent().getRouter().navTo("ewmWarehouseCockpit");
         },
 
         onNavigateToGoodsIssue: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("wmGoodsIssue");
+            this.getOwnerComponent().getRouter().navTo("wmGoodsIssue");
         },
 
         onNavigateToGoodsReceipt: function () {
-            var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("wmGoodsReceipt");
-        },
-
-        onSimulateCarLoan: function () {
-            var fLoanAmount = 45000;
-            var fAnnualRate = 5.5;
-            var iTenorMonths = 60;
-            var fMonthlyRate = (fAnnualRate / 100) / 12;
-            var fEmi = (fLoanAmount * fMonthlyRate * Math.pow(1 + fMonthlyRate, iTenorMonths)) / (Math.pow(1 + fMonthlyRate, iTenorMonths) - 1);
-            var sEmiFormatted = fEmi.toFixed(2);
-
-            MessageBox.information(
-                "Car Loan EMI Simulation:\n\n" +
-                "• Vehicle Loan Principal: $" + fLoanAmount.toLocaleString() + "\n" +
-                "• Annual Interest Rate: " + fAnnualRate + "%\n" +
-                "• Loan Tenor: " + iTenorMonths + " months (5 years)\n" +
-                "• Estimated Monthly EMI: $" + sEmiFormatted + " / month\n\n" +
-                "Actual integration: Compatible with S/4HANA G/L Journal Entries and HR Infotype 0045 (Company Loans).",
-                {
-                    title: "Car Loan Service Simulator"
-                }
-            );
-        },
-
-        onNewCarLoanApp: function () {
-            MessageBox.success(
-                "New Car Loan Application initialized.\n\n" +
-                "Application Number: LA-2026-089\n" +
-                "Status: Draft\n" +
-                "Integration Target: CarLoanService (CAP) / S/4HANA Financial Services\n\n" +
-                "Workflow routing has been initiated for managerial approval.",
-                {
-                    title: "Car Loan Origination"
-                }
-            );
+            this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt");
         },
 
         switchToTab: function (sKey) {
@@ -484,35 +269,9 @@ sap.ui.define([
         },
 
         onSelectTabFI: function () { this.switchToTab("fi"); },
-        onSelectTabCO: function () { this.switchToTab("co"); },
         onSelectTabMM: function () { this.switchToTab("mm"); },
         onSelectTabSD: function () { this.switchToTab("sd"); },
-        onSelectTabPP: function () { this.switchToTab("pp"); },
-        onSelectTabQM: function () { this.switchToTab("qm"); },
-        onSelectTabEAM: function () { this.switchToTab("eam"); },
-        onSelectTabPS: function () { this.switchToTab("ps"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
-        onSelectTabTM: function () { this.switchToTab("tm"); },
-        onSelectTabService: function () { this.switchToTab("service"); },
-        onSelectTabHCM: function () { this.switchToTab("hcm"); },
-        onSelectTabAnalytics: function () { this.switchToTab("analytics"); },
-        onSelectTabAdmin: function () { this.switchToTab("admin"); },
-        onSelectTabMasterData: function () { this.switchToTab("masterData"); },
-
-        onShowMasterDataInfo: function (oEvent) {
-            var oSource = oEvent.getSource();
-            var sTitle = oSource.getProperty("title") || oSource.getProperty("header") || "SAP Master Data Application";
-            var sDescription = oSource.getProperty("description") || oSource.getProperty("subheader") || "";
-            var sInfo = oSource.getProperty("info") || "";
-            MessageBox.information(
-                sTitle + "\n\n" +
-                "Official SAP Catalog Entry:\n" +
-                "• Purpose: " + sDescription + "\n" +
-                "• Status: " + (sInfo || "Verified in S/4HANA Catalog (DS4 / Client 220)") + "\n" +
-                "• Architecture: Governed S/4HANA OData Service\n\n" +
-                "Source of Truth: Official SAP S/4HANA Catalog & Fiori Apps Reference Library.",
-                { title: sTitle }
-            );
-        }
+        onSelectTabMasterData: function () { this.switchToTab("masterData"); }
     });
 });

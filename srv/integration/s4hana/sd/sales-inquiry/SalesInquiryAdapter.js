@@ -193,25 +193,32 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Retrieves Sales Inquiry Document Types dynamically from S/4HANA SD_F2369_INQY_FS_SRV.I_SalesDocumentType.
-   * Restricts strictly to Document Category 'A' (Inquiry) and enriches dynamically with:
-   * - Human-readable description / name
-   * - Document Category Name (resolved via I_SDDocumentCategory)
-   * - Active / Inactive Status derived from SAP IsLocked flag ('X' = Inactive, '' = Active)
-   * - Sales & Logistics Classification (Commercial Sales, Budgetary, Logistics, Inventory, System Reference)
-   * - Detailed Business Purpose & Operational Scope
-   * - Number Range & Screen Sequence Group metadata
-   * Includes fallback to SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp if FS is unavailable.
+   * Sales inquiry document types (category A) as configured in SAP S/4HANA.
+   *
+   * Reads SD_F2369_INQY_FS_SRV.I_SalesDocumentType and falls back to
+   * SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp only when the factsheet service returns nothing.
+   * Descriptions, number ranges and procedures are passed through exactly as SAP returns them; the only
+   * derived fields are the active/inactive status (from SAP's IsLocked flag) and the category name of
+   * category A. When SAP cannot be read, the call fails: no built-in list of types is ever returned.
+   *
+   * @param {Object} [query] - CAP query (limit / offset are honoured)
+   * @returns {Promise<Array<Object>>}
+   * @throws {Error} status 503 when no SD service is connected, 502 when SAP could not be read
    */
   async getInquiryTypes(query) {
     await this.init();
+    if (!this.s4hanaFS && !this.s4hanaWL) {
+      const err = new Error('Sales inquiry types cannot be read: the SAP SD services SD_F2369_INQY_FS_SRV and SD_F2370_INQY_WL_SRV are not connected.');
+      err.status = 503;
+      throw err;
+    }
+
+    const failures = [];
     let rawList = [];
-    let bFromFs = false;
 
     if (this.s4hanaFS) {
       try {
-        const inqyCondition = [{ ref: ['SDDocumentCategory'] }, '=', { val: 'A' }];
-        let execQuery = SELECT.from('SD_F2369_INQY_FS_SRV.I_SalesDocumentType')
+        const execQuery = SELECT.from('SD_F2369_INQY_FS_SRV.I_SalesDocumentType')
           .columns(
             'SalesDocumentType',
             'SalesDocumentType_Text',
@@ -223,140 +230,57 @@ class SalesInquiryAdapter {
             'TextDeterminationProcedure',
             'PartnerDeterminationProcedure'
           )
-          .where(inqyCondition)
+          .where([{ ref: ['SDDocumentCategory'] }, '=', { val: 'A' }])
           .orderBy('SalesDocumentType asc');
-
         if (query && query.SELECT && query.SELECT.limit) {
           execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
         }
-
         const raw = await this.s4hanaFS.run(execQuery);
         rawList = Array.isArray(raw) ? raw : (raw?.value || raw?.d?.results || []);
-        if (rawList.length > 0) {
-          bFromFs = true;
-        }
       } catch (error) {
+        failures.push(`SD_F2369_INQY_FS_SRV: ${error.message}`);
         console.warn('[SalesInquiryAdapter] Error querying I_SalesDocumentType from FS:', error.message);
       }
     }
 
-    // Fallback to WL service if FS returned nothing or failed
-    if (!bFromFs && this.s4hanaWL) {
+    if (rawList.length === 0 && this.s4hanaWL) {
       try {
         const rawWl = await this.s4hanaWL.run(SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp'));
         rawList = Array.isArray(rawWl) ? rawWl : (rawWl?.value || rawWl?.d?.results || []);
       } catch (wlError) {
-        console.warn('[SalesInquiryAdapter] Error fallback querying C_SalesInquiryTypeValueHelp from WL:', wlError.message);
+        failures.push(`SD_F2370_INQY_WL_SRV: ${wlError.message}`);
+        console.warn('[SalesInquiryAdapter] Error querying C_SalesInquiryTypeValueHelp from WL:', wlError.message);
       }
     }
 
-    // Baseline fallback if both remote services are unavailable (e.g. offline unit testing)
-    if (!rawList || rawList.length === 0) {
-      rawList = [
-        { SalesDocumentType: 'ZIN', SalesDocumentType_Text: 'Standard Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Z1', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'ZBIN', SalesDocumentType_Text: 'Budgetary Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Q7', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'ZLIS', SalesDocumentType_Text: 'Logistics Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Z1', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'IN', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'RAF', SalesDocumentType_Text: 'Stock Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'ICPL', SalesDocumentType_Text: 'Customer Price List', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'STAT', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'IBOS', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'HBIN', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' },
-        { SalesDocumentType: 'VLAF', SalesDocumentType_Text: '', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03', ScreenSequenceGroup: 'AG' }
-      ];
+    if (rawList.length === 0 && failures.length > 0) {
+      const err = new Error(`Sales inquiry types could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
     }
 
-    // SAP metadata definitions derived from SAP configuration
-    const docTypeMetadata = {
-      ZIN: {
-        description: 'Standard Inquiry',
-        classification: 'Commercial Sales',
-        purpose: 'Standard commercial sales inquiry for pricing, discounts, availability, and delivery lead-time quotes'
-      },
-      ZBIN: {
-        description: 'Budgetary Inquiry',
-        classification: 'Budgetary / Estimation',
-        purpose: 'Non-binding budgetary inquiry for project cost estimation, capital expenditure planning, and budget forecasting'
-      },
-      ZLIS: {
-        description: 'Logistics Inquiry',
-        classification: 'Logistics & Supply Chain',
-        purpose: 'Logistics-driven inquiry for plant stock verification, transport route planning, and supply chain schedules'
-      },
-      RAF: {
-        description: 'Stock Inquiry',
-        classification: 'Inventory & Stock',
-        purpose: 'Immediate warehouse inventory and on-hand stock availability check without creating sales commitments'
-      },
-      ICPL: {
-        description: 'Customer Price List',
-        classification: 'Pricing & Quotation',
-        purpose: 'Customer-specific pricing list inquiry referencing master sales contracts and condition records'
-      },
-      IN: {
-        description: 'Standard Reference Inquiry',
-        classification: 'Standard Reference',
-        purpose: 'Standard SAP reference inquiry template; pre-configured baseline model retained for system auditing'
-      },
-      STAT: {
-        description: 'Statistical Inquiry',
-        classification: 'Internal / Reporting',
-        purpose: 'Statistical inquiry record used for demand pipeline analysis, CRM synchronizations, and reporting'
-      },
-      IBOS: {
-        description: 'Bill of Services Inquiry',
-        classification: 'Services & Contracting',
-        purpose: 'Service and procurement inquiry used for structured bill-of-service and engineering quotation requests'
-      },
-      HBIN: {
-        description: 'Historical / Batch Inquiry',
-        classification: 'Internal / Historical',
-        purpose: 'Historical inquiry archive and batch reference template for recurring customer requisition tracking'
-      },
-      VLAF: {
-        description: 'Delivery Schedule Inquiry',
-        classification: 'Logistics & Shipping',
-        purpose: 'Shipping and outbound delivery scheduling inquiry for advance logistics feasibility verification'
-      }
-    };
-
-    const items = rawList.map(item => {
+    return rawList.map(item => {
       const sCode = item.SalesDocumentType || item.SalesInquiryType || '';
-      const meta = docTypeMetadata[sCode] || {};
-
-      const isLocked = item.IsLocked === 'X';
-      const isActive = !isLocked;
-      const statusText = isActive ? 'Active' : 'Inactive';
-      const statusState = isActive ? 'Success' : 'Warning';
-
-      const sDesc = item.SalesDocumentType_Text && item.SalesDocumentType_Text !== 'Inquiry' && item.SalesDocumentType_Text.trim() !== ''
-        ? item.SalesDocumentType_Text
-        : (meta.description || item.SalesDocumentTypeName || item.SalesDocumentType_Text || 'Inquiry');
-
-      const classification = meta.classification || (isActive ? 'Commercial Sales' : 'General Inquiry');
-      const purpose = meta.purpose || (sDesc + ' (SAP SD Document Category A)');
-
+      const sText = item.SalesDocumentType_Text || item.SalesInquiryType_Text || item.SalesDocumentTypeName || '';
+      const isActive = item.IsLocked !== 'X' && item.IsLocked !== true;
       return {
         SalesDocumentType: sCode,
-        SalesDocumentType_Text: sDesc,
-        SalesDocumentTypeName: sDesc,
+        SalesDocumentType_Text: sText,
+        SalesDocumentTypeName: sText,
+        // Both sources return sales inquiry types only, i.e. SD document category A.
         SDDocumentCategory: item.SDDocumentCategory || 'A',
         SDDocumentCategoryName: 'Inquiry',
-        IsLocked: item.IsLocked != null ? item.IsLocked : (isActive ? '' : 'X'),
+        IsLocked: item.IsLocked ?? null,
         IsActive: isActive,
-        StatusText: statusText,
-        StatusState: statusState,
-        Classification: classification,
-        Purpose: purpose,
-        ScreenSequenceGroup: item.ScreenSequenceGroup || 'AG',
-        NumberRangeForIntIDAssignment: item.NumberRangeForIntIDAssignment || '',
-        NumberRangeForExtIDAssignment: item.NumberRangeForExtIDAssignment || '',
-        TextDeterminationProcedure: item.TextDeterminationProcedure || '01',
-        PartnerDeterminationProcedure: item.PartnerDeterminationProcedure || 'TA'
+        StatusText: isActive ? 'Active' : 'Inactive',
+        StatusState: isActive ? 'Success' : 'Warning',
+        ScreenSequenceGroup: item.ScreenSequenceGroup ?? null,
+        NumberRangeForIntIDAssignment: item.NumberRangeForIntIDAssignment ?? null,
+        NumberRangeForExtIDAssignment: item.NumberRangeForExtIDAssignment ?? null,
+        TextDeterminationProcedure: item.TextDeterminationProcedure ?? null,
+        PartnerDeterminationProcedure: item.PartnerDeterminationProcedure ?? null
       };
     });
-
-    return items;
   }
 
   /**
@@ -959,63 +883,60 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Retrieves real-time Sales Order metrics directly from SAP S/4HANA Gateway
-   * service SD_F1873_SO_WL_SRV (entity C_SalesOrderWl_F1873).
-   * - Open Orders: OverallSDProcessStatus ne 'C'
-   * - Total Orders: all records
+   * Sales order counts read live from SAP S/4HANA (SD_F1873_SO_WL_SRV, entity C_SalesOrderWl_F1873):
+   * open orders (OverallSDProcessStatus ne 'C') and all orders.
    *
-   * @param {Object} [options] - User and execution options
+   * Fails when the destination cannot be resolved or SAP does not return both counts; no count is
+   * ever defaulted.
+   *
+   * @param {Object} [options] - destination / executeHttpRequest / headers overrides
    * @returns {Promise<{ openOrdersCount: number, totalOrdersCount: number }>}
+   * @throws {Error} status 503 without a destination, 502 when SAP could not be read
    */
   async getSalesMetrics(options = {}) {
     let dest;
     try {
       dest = options.destination || await this._getDestination();
     } catch (e) {
-      return { openOrdersCount: 498, totalOrdersCount: 880 };
+      const err = new Error(`Sales order metrics are not available: ${e.message}`);
+      err.status = 503;
+      throw err;
     }
 
     const servicePath = '/sap/opu/odata/sap/SD_F1873_SO_WL_SRV';
     const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const request = (query) => executeFn(dest, {
+      method: 'get',
+      url: `${servicePath}/C_SalesOrderWl_F1873?${query}`,
+      headers: { 'Accept': 'application/json', ...(options.headers || {}) }
+    });
+    const countOf = (res) => {
+      const raw = res?.data?.d?.__count ?? res?.data?.['@odata.count'];
+      const n = Number(raw);
+      return raw !== undefined && raw !== null && String(raw).trim() !== '' && Number.isInteger(n) && n >= 0 ? n : null;
+    };
 
-    let openOrdersCount = 0;
-    let totalOrdersCount = 0;
-
+    let resOpen;
+    let resTotal;
     try {
-      const [resOpen, resTotal] = await Promise.all([
-        executeFn(dest, {
-          method: 'get',
-          url: `${servicePath}/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'`,
-          headers: {
-            'Accept': 'application/json',
-            ...(options.headers || {})
-          }
-        }),
-        executeFn(dest, {
-          method: 'get',
-          url: `${servicePath}/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1`,
-          headers: {
-            'Accept': 'application/json',
-            ...(options.headers || {})
-          }
-        })
+      [resOpen, resTotal] = await Promise.all([
+        request("$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'"),
+        request('$inlinecount=allpages&$top=1')
       ]);
-
-      const openStr = resOpen.data?.d?.__count != null ? resOpen.data.d.__count : (resOpen.data?.['@odata.count'] || '0');
-      const totalStr = resTotal.data?.d?.__count != null ? resTotal.data.d.__count : (resTotal.data?.['@odata.count'] || '0');
-
-      openOrdersCount = parseInt(openStr, 10) || 0;
-      totalOrdersCount = parseInt(totalStr, 10) || 0;
-    } catch (err) {
-      console.warn('[SalesInquiryAdapter] Warning fetching Sales Order metrics from SD_F1873_SO_WL_SRV:', err.message);
-      openOrdersCount = 0;
-      totalOrdersCount = 0;
+    } catch (e) {
+      const err = new Error(`Sales order metrics could not be read from SD_F1873_SO_WL_SRV: ${e.message}`);
+      err.status = 502;
+      throw err;
     }
 
-    return {
-      openOrdersCount,
-      totalOrdersCount
-    };
+    const openOrdersCount = countOf(resOpen);
+    const totalOrdersCount = countOf(resTotal);
+    if (openOrdersCount === null || totalOrdersCount === null) {
+      const err = new Error('Sales order metrics are not available: SD_F1873_SO_WL_SRV returned no count.');
+      err.status = 502;
+      throw err;
+    }
+    return { openOrdersCount, totalOrdersCount };
   }
 
   /**

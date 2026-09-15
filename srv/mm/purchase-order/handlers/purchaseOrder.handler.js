@@ -180,10 +180,16 @@ function registerPurchaseOrderHandlers(srv) {
         };
     });
 
-    // 4. Function getDashboardMetrics: provides unified, authentic SAP S/4HANA live counts
-    srv.on('getDashboardMetrics', async () => {
-        const metrics = await purchaseOrderAdapter.getDashboardMetrics();
-        return JSON.stringify(metrics);
+    // 4. Function getDashboardMetrics: live SAP S/4HANA counts; a count SAP did not return is null
+    srv.on('getDashboardMetrics', async (req) => {
+        try {
+            const metrics = await purchaseOrderAdapter.getDashboardMetrics();
+            return JSON.stringify(metrics);
+        } catch (error) {
+            const sapError = mapS4Error(error);
+            const status = sapError.status >= 500 ? 503 : sapError.status;
+            return req.error(status, `Dashboard metrics are not available: ${sapError.message}`);
+        }
     });
 }
 

@@ -10,8 +10,6 @@ sap.ui.define([
     "sap/m/SearchField",
     "sap/m/SegmentedButton",
     "sap/m/SegmentedButtonItem",
-    "sap/m/Select",
-    "sap/ui/core/Item",
     "sap/m/Button",
     "sap/m/VBox",
     "sap/m/Label",
@@ -21,7 +19,7 @@ sap.ui.define([
     "sap/m/Text",
     "sap/m/ObjectIdentifier",
     "sap/m/ObjectStatus"
-], function (Filter, FilterOperator, SelectDialog, TableSelectDialog, Dialog, Table, Toolbar, ToolbarSpacer, SearchField, SegmentedButton, SegmentedButtonItem, Select, Item, Button, VBox, Label, StandardListItem, Column, ColumnListItem, Text, ObjectIdentifier, ObjectStatus) {
+], function (Filter, FilterOperator, SelectDialog, TableSelectDialog, Dialog, Table, Toolbar, ToolbarSpacer, SearchField, SegmentedButton, SegmentedButtonItem, Button, VBox, Label, StandardListItem, Column, ColumnListItem, Text, ObjectIdentifier, ObjectStatus) {
     "use strict";
 
     var oValueHelpConfig = {
@@ -303,8 +301,9 @@ sap.ui.define([
          * Dedicated compact and scannable dialog for SAP S/4HANA Sales Inquiry Document Types.
          * Dynamically displays:
          * - Primary line: Code + Name (ObjectIdentifier)
-         * - Secondary metadata: Document Category, Classification, SAP Purpose/Scope, Internal Number Range, Active/Inactive Status
-         * - Sub-header filters: Live multi-attribute search across all fields, Status filter (All/Active/Inactive), Category filter, Reset.
+         * - Secondary metadata as returned by SAP: Document Category, Screen Sequence Group, Internal Number Range,
+         *   Active/Inactive Status (from the SAP IsLocked flag)
+         * - Sub-header filters: search across code, description and number range, Status filter (All/Active/Inactive), Reset.
          *
          * @private
          */
@@ -314,7 +313,6 @@ sap.ui.define([
 
             var sCurrentSearchText = "";
             var sCurrentStatusFilter = "ALL";
-            var sCurrentCategoryFilter = "ALL";
 
             var oSelectBtn = new Button({
                 text: "Select",
@@ -349,15 +347,9 @@ sap.ui.define([
                         header: new Text({ text: "Inquiry Type" })
                     }),
                     new Column({
-                        width: "13rem",
                         minScreenWidth: "Tablet",
                         demandPopin: true,
-                        header: new Text({ text: "Classification & Category" })
-                    }),
-                    new Column({
-                        minScreenWidth: "Desktop",
-                        demandPopin: true,
-                        header: new Text({ text: "SAP Business Scope & Purpose" })
+                        header: new Text({ text: "Category" })
                     }),
                     new Column({
                         width: "6.5rem",
@@ -398,16 +390,13 @@ sap.ui.define([
             function updateFilters() {
                 var aCombinedFilters = [];
 
-                // 1. Multi-attribute Search across Code, Description, Purpose, Classification, Category, Status, Number Range
+                // 1. Search across the SAP code, SAP description, status and number range
                 if (sCurrentSearchText && sCurrentSearchText.trim() !== "") {
                     var sVal = sCurrentSearchText.trim();
                     var aOrSearch = [
                         new Filter("SalesDocumentType", FilterOperator.Contains, sVal),
                         new Filter("SalesDocumentTypeName", FilterOperator.Contains, sVal),
                         new Filter("SalesDocumentType_Text", FilterOperator.Contains, sVal),
-                        new Filter("Purpose", FilterOperator.Contains, sVal),
-                        new Filter("Classification", FilterOperator.Contains, sVal),
-                        new Filter("SDDocumentCategoryName", FilterOperator.Contains, sVal),
                         new Filter("StatusText", FilterOperator.Contains, sVal),
                         new Filter("NumberRangeForIntIDAssignment", FilterOperator.Contains, sVal)
                     ];
@@ -419,11 +408,6 @@ sap.ui.define([
                     aCombinedFilters.push(new Filter("IsActive", FilterOperator.EQ, true));
                 } else if (sCurrentStatusFilter === "INACTIVE") {
                     aCombinedFilters.push(new Filter("IsActive", FilterOperator.EQ, false));
-                }
-
-                // 3. Category / Classification Filter
-                if (sCurrentCategoryFilter && sCurrentCategoryFilter !== "ALL") {
-                    aCombinedFilters.push(new Filter("Classification", FilterOperator.Contains, sCurrentCategoryFilter));
                 }
 
                 if (Array.isArray(aActiveContextFilters) && aActiveContextFilters.length > 0) {
@@ -439,7 +423,7 @@ sap.ui.define([
 
             var oSearchField = new SearchField({
                 width: "16rem",
-                placeholder: "Search code, description, purpose...",
+                placeholder: "Search code or description...",
                 liveChange: function (oEvent) {
                     sCurrentSearchText = oEvent.getParameter("newValue") || "";
                     updateFilters();
@@ -463,33 +447,14 @@ sap.ui.define([
                 }
             });
 
-            var oCategorySelect = new Select({
-                selectedKey: "ALL",
-                items: [
-                    new Item({ key: "ALL", text: "All Categories" }),
-                    new Item({ key: "Commercial Sales", text: "Commercial Sales" }),
-                    new Item({ key: "Budgetary", text: "Budgetary / Estimation" }),
-                    new Item({ key: "Logistics", text: "Logistics & Supply Chain" }),
-                    new Item({ key: "Inventory", text: "Inventory & Stock" }),
-                    new Item({ key: "Standard Reference", text: "Standard Reference" }),
-                    new Item({ key: "Reporting", text: "Internal / Reporting" })
-                ],
-                change: function (oEvent) {
-                    sCurrentCategoryFilter = oEvent.getParameter("selectedItem").getKey();
-                    updateFilters();
-                }
-            });
-
             var oResetBtn = new Button({
                 icon: "sap-icon://clear-filter",
                 tooltip: "Reset All Filters",
                 press: function () {
                     sCurrentSearchText = "";
                     sCurrentStatusFilter = "ALL";
-                    sCurrentCategoryFilter = "ALL";
                     oSearchField.setValue("");
                     oStatusSegmentedButton.setSelectedKey("ALL");
-                    oCategorySelect.setSelectedKey("ALL");
                     updateFilters();
                 }
             });
@@ -500,8 +465,6 @@ sap.ui.define([
                     new ToolbarSpacer(),
                     new Label({ text: "Status:" }),
                     oStatusSegmentedButton,
-                    new Label({ text: "Category:" }),
-                    oCategorySelect,
                     oResetBtn
                 ]
             });
@@ -518,16 +481,10 @@ sap.ui.define([
                         }),
                         new VBox({
                             items: [
-                                new Text({ text: "{Classification}" }),
                                 new Text({
                                     text: "{= 'Category ' + (${SDDocumentCategory} || 'A') + ' • ' + (${SDDocumentCategoryName} || 'Inquiry') }",
                                     wrapping: false
-                                }).addStyleClass("sapUiTinyMarginTop")
-                            ]
-                        }),
-                        new VBox({
-                            items: [
-                                new Text({ text: "{Purpose}", wrapping: true }),
+                                }),
                                 new Text({
                                     text: "{= ${ScreenSequenceGroup} ? ('Screen Sequence: ' + ${ScreenSequenceGroup}) : '' }",
                                     wrapping: false

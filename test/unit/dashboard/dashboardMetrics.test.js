@@ -1,73 +1,74 @@
 /**
- * Unit Tests for Dashboard Real-Time Metrics & SalesInquiryAdapter
- * (Dashboard.controller.js & SalesInquiryAdapter.js)
+ * Dashboard live figures (Dashboard.controller.js, PurchaseOrderAdapter.getDashboardMetrics,
+ * SalesInquiryAdapter.getSalesMetrics).
+ *
+ * Every figure must come from SAP S/4HANA. When SAP does not return a figure it is reported as
+ * unavailable (null / "Failed" tile); it is never defaulted, sampled, extrapolated or simulated.
  */
 
+const fs = require('fs');
+const path = require('path');
 const salesInquiryAdapter = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 
 describe('Unit: SalesInquiryAdapter getSalesMetrics', () => {
-    test('should query SD_F1873_SO_WL_SRV for open and total sales order counts', async () => {
+    test('queries SD_F1873_SO_WL_SRV for open and total sales order counts', async () => {
         const mockExecute = jest.fn()
-            .mockResolvedValueOnce({
-                data: {
-                    d: {
-                        __count: '498',
-                        results: [{ SalesOrder: '2500000' }]
-                    }
-                }
-            })
-            .mockResolvedValueOnce({
-                data: {
-                    d: {
-                        __count: '880',
-                        results: [{ SalesOrder: '2500000' }]
-                    }
-                }
-            });
+            .mockResolvedValueOnce({ data: { d: { __count: '498', results: [{ SalesOrder: '2500000' }] } } })
+            .mockResolvedValueOnce({ data: { d: { __count: '880', results: [{ SalesOrder: '2500000' }] } } });
 
         const metrics = await salesInquiryAdapter.getSalesMetrics({
             destination: { url: 'https://mock.s4hana' },
             executeHttpRequest: mockExecute
         });
 
-        expect(metrics).toEqual({
-            openOrdersCount: 498,
-            totalOrdersCount: 880
-        });
+        expect(metrics).toEqual({ openOrdersCount: 498, totalOrdersCount: 880 });
         expect(mockExecute).toHaveBeenCalledTimes(2);
         expect(mockExecute.mock.calls[0][1].url).toContain("$filter=OverallSDProcessStatus ne 'C'");
     });
 
-    test('should return 0 counts when remote SAP service call fails', async () => {
+    test('fails with 502 instead of returning zero counts when the SAP call fails', async () => {
         const mockExecute = jest.fn().mockRejectedValue(new Error('Gateway timeout'));
 
-        const metrics = await salesInquiryAdapter.getSalesMetrics({
+        await expect(salesInquiryAdapter.getSalesMetrics({
             destination: { url: 'https://mock.s4hana' },
             executeHttpRequest: mockExecute
-        });
+        })).rejects.toMatchObject({ status: 502, message: expect.stringContaining('Gateway timeout') });
+    });
 
-        expect(metrics).toEqual({
-            openOrdersCount: 0,
-            totalOrdersCount: 0
-        });
+    test('fails with 503 instead of returning fixed counts when the destination cannot be resolved', async () => {
+        const spy = jest.spyOn(salesInquiryAdapter, '_getDestination').mockRejectedValue(new Error("Destination 'S4HANA_PO_API' not found"));
+        try {
+            await expect(salesInquiryAdapter.getSalesMetrics({ executeHttpRequest: jest.fn() }))
+                .rejects.toMatchObject({ status: 503, message: expect.stringContaining('not found') });
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('fails when SAP answers without a count instead of inventing one', async () => {
+        const mockExecute = jest.fn().mockResolvedValue({ data: { d: { results: [] } } });
+
+        await expect(salesInquiryAdapter.getSalesMetrics({
+            destination: { url: 'https://mock.s4hana' },
+            executeHttpRequest: mockExecute
+        })).rejects.toMatchObject({ status: 502, message: expect.stringContaining('returned no count') });
     });
 });
 
-describe('Unit: Dashboard Controller Metrics Loading', () => {
+describe('Unit: Dashboard Controller live figures', () => {
     let DashboardControllerClass;
     let mockODataClient;
+    const mockMessageToast = { show: jest.fn() };
 
     class MockJSONModel {
         constructor(data) {
-            this.data = data || {};
+            this.data = Object.assign({}, data);
         }
-        setProperty(path, value) {
-            const prop = path.replace(/^\//, '');
-            this.data[prop] = value;
+        setProperty(p, value) {
+            this.data[p.replace(/^\//, '')] = value;
         }
-        getProperty(path) {
-            const prop = path.replace(/^\//, '');
-            return this.data[prop];
+        getProperty(p) {
+            return this.data[p.replace(/^\//, '')];
         }
         getData() {
             return this.data;
@@ -77,40 +78,42 @@ describe('Unit: Dashboard Controller Metrics Loading', () => {
     const MockBaseController = {
         extend: (name, proto) => {
             function Controller() {
-                if (proto) {
-                    Object.assign(this, proto);
-                }
+                Object.assign(this, proto);
             }
             return Controller;
         }
     };
 
     const mockRouter = {
-        getRoute: jest.fn().mockReturnValue({
-            attachPatternMatched: jest.fn()
-        }),
+        getRoute: jest.fn().mockReturnValue({ attachPatternMatched: jest.fn() }),
         navTo: jest.fn()
     };
 
-    beforeAll(() => {
-        mockODataClient = {
-            get: jest.fn()
-        };
+    const makeController = (oViewModel) => {
+        const controller = new DashboardControllerClass();
+        controller.getView = () => ({
+            getModel: (name) => (name === 'dashboardView' ? oViewModel : null),
+            setModel: jest.fn()
+        });
+        controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
+        return controller;
+    };
 
+    const fullPayload = (overrides = {}) => {
+        const payload = {};
+        new DashboardControllerClass().METRIC_KEYS.forEach((key, i) => { payload[key] = 100 + i; });
+        return Object.assign(payload, overrides);
+    };
+
+    beforeAll(() => {
+        mockODataClient = { get: jest.fn() };
         global.sap = {
             ui: {
                 define: jest.fn((deps, factory) => {
-                    DashboardControllerClass = factory(
-                        MockBaseController,
-                        MockJSONModel,
-                        mockODataClient,
-                        { show: jest.fn() },
-                        { information: jest.fn(), success: jest.fn() }
-                    );
+                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast);
                 })
             }
         };
-
         require('../../../app/fiori-app/webapp/controller/Dashboard.controller.js');
     });
 
@@ -118,115 +121,241 @@ describe('Unit: Dashboard Controller Metrics Loading', () => {
         jest.clearAllMocks();
     });
 
-    test('onInit should initialize dashboardView model with all metric properties', () => {
+    test('onInit starts with no figures at all (no zeros) and a neutral "checking" status', () => {
         const controller = new DashboardControllerClass();
-        let setModelData = null;
-        controller.getView = () => ({
-            setModel: (m) => { setModelData = m.getData(); }
-        });
-        controller.getOwnerComponent = () => ({
-            getRouter: () => mockRouter
-        });
+        let data = null;
+        controller.getView = () => ({ setModel: (m) => { data = m.getData(); } });
+        controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
 
         controller.onInit();
 
-        expect(setModelData).toBeDefined();
-        expect(setModelData).toHaveProperty('openSalesOrderCount', 0);
-        expect(setModelData).toHaveProperty('totalSalesOrderCount', 0);
-        expect(setModelData).toHaveProperty('salesInquiryCount', 0);
-        expect(setModelData).toHaveProperty('customerCount', 0);
-        expect(setModelData).toHaveProperty('totalCount', 0);
-        expect(setModelData).toHaveProperty('supplierCount', 0);
-        expect(setModelData).toHaveProperty('fiDocCount', 0);
+        expect(data.selectedTab).toBe('overview');
+        expect(data.connectionState).toBe('None');
+        expect(data.connectionText).toMatch(/Checking/);
+        controller.METRIC_KEYS.forEach((key) => expect(data).not.toHaveProperty(key));
+        ['systemHealth', 'totalSpend', 'completeRate', 'carLoanActiveCount', 'hcmHeadcount', 'tmRouteCount', 'ppCapacityUtilization']
+            .forEach((key) => expect(data).not.toHaveProperty(key));
     });
 
-    test('_loadMetrics should load real-time SAP counts across all modules and update model', async () => {
-        const controller = new DashboardControllerClass();
-        const oViewModel = new MockJSONModel({
-            totalCount: 0,
-            completeRate: 0,
-            supplierCount: 0,
-            fiDocCount: 0,
-            salesInquiryCount: 0,
-            customerCount: 0,
-            openSalesOrderCount: 0,
-            totalSalesOrderCount: 0
-        });
+    test('populates every figure SAP returned and reports S/4HANA connected', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, gatewayCatalogCount: 1345 });
+        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [] }));
 
-        controller.getView = () => ({
-            getModel: (name) => name === 'dashboardView' ? oViewModel : null
-        });
+        await controller._loadMetrics();
 
-        mockODataClient.get.mockImplementation((url) => {
-            if (url.includes('/PurchaseOrders')) {
-                return Promise.resolve({
-                    '@odata.count': '2729',
-                    value: [
-                        { PurchaseOrder: '300000001', PurchasingCompletenessStatus: true },
-                        { PurchaseOrder: '300000002', PurchasingCompletenessStatus: false }
-                    ]
-                });
-            }
-            if (url.includes('/SupplierVH')) {
-                return Promise.resolve({
-                    '@odata.count': '4376',
-                    value: [{ Supplier: '1110' }]
-                });
-            }
-            if (url.includes('/JournalEntryItems')) {
-                return Promise.resolve({
-                    '@odata.count': '173386',
-                    value: [{ AccountingDocument: '1900000025' }]
-                });
-            }
-            if (url.includes('/SalesInquiries')) {
-                return Promise.resolve({
-                    '@odata.count': '618',
-                    value: [{ SalesInquiry: '100000' }]
-                });
-            }
-            if (url.includes('/CustomerVH')) {
-                return Promise.resolve({
-                    '@odata.count': '891',
-                    value: [{ Customer: '1110' }]
-                });
-            }
-            if (url.includes('getSalesOrderMetrics')) {
-                return Promise.resolve({
-                    openOrdersCount: 498,
-                    totalOrdersCount: 880
-                });
-            }
-            return Promise.reject(new Error('Unknown URL: ' + url));
+        expect(mockODataClient.get).toHaveBeenCalledTimes(1);
+        expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/purchase-order/getDashboardMetrics()');
+        controller.METRIC_KEYS.forEach((key) => expect(oViewModel.getProperty('/' + key)).toBe(payload[key]));
+        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
+        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA connected');
+        expect(oViewModel.getProperty('/metricsError')).toBe('');
+    });
+
+    test('accepts the OData { value: "<json>" } envelope', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        mockODataClient.get.mockResolvedValue({ value: JSON.stringify(fullPayload({ fiDocCount: 173386 })) });
+
+        await controller._loadMetrics();
+
+        expect(oViewModel.getProperty('/fiDocCount')).toBe(173386);
+        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
+    });
+
+    test('keeps a figure SAP did not return as null (never 0) and reports partial availability', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        const payload = fullPayload({ bpCount: null, warehouseCount: null });
+        delete payload.gatewayCatalogCount; // missing entirely
+        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: ['bpCount', 'warehouseCount'] }));
+
+        await controller._loadMetrics();
+
+        expect(oViewModel.getProperty('/bpCount')).toBeNull();
+        expect(oViewModel.getProperty('/warehouseCount')).toBeNull();
+        expect(oViewModel.getProperty('/gatewayCatalogCount')).toBeNull();
+        expect(oViewModel.getProperty('/totalCount')).toBe(payload.totalCount);
+        expect(oViewModel.getProperty('/connectionState')).toBe('Warning');
+        expect(oViewModel.getProperty('/connectionText')).toBe(`S/4HANA partially available (${controller.METRIC_KEYS.length - 3} of ${controller.METRIC_KEYS.length} figures)`);
+    });
+
+    test('rejects non-count values from the payload instead of displaying them', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        mockODataClient.get.mockResolvedValue(fullPayload({ totalCount: 'abc', supplierCount: -1, productCount: 3.5, fiDocCount: '42' }));
+
+        await controller._loadMetrics();
+
+        expect(oViewModel.getProperty('/totalCount')).toBeNull();
+        expect(oViewModel.getProperty('/supplierCount')).toBeNull();
+        expect(oViewModel.getProperty('/productCount')).toBeNull();
+        expect(oViewModel.getProperty('/fiDocCount')).toBe(42);
+    });
+
+    test('when the metrics call fails, marks every figure unavailable, shows the error and makes no fallback calls', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        mockODataClient.get.mockRejectedValue(new Error('Dashboard metrics are not available: destination not found'));
+
+        await controller._loadMetrics();
+
+        expect(mockODataClient.get).toHaveBeenCalledTimes(1);
+        controller.METRIC_KEYS.forEach((key) => expect(oViewModel.getProperty('/' + key)).toBeNull());
+        expect(oViewModel.getProperty('/connectionState')).toBe('Error');
+        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA not reachable');
+        expect(oViewModel.getProperty('/metricsError')).toContain('destination not found');
+    });
+
+    test('a refresh clears previous figures back to "loading" before the new call resolves', async () => {
+        const oViewModel = new MockJSONModel({ totalCount: 5 });
+        const controller = makeController(oViewModel);
+        let seenDuringCall;
+        mockODataClient.get.mockImplementation(() => {
+            seenDuringCall = oViewModel.getProperty('/totalCount');
+            return Promise.resolve(fullPayload());
         });
 
         await controller._loadMetrics();
 
-        const data = oViewModel.getData();
-        expect(data.totalCount).toBe(2729);
-        expect(data.completeRate).toBe(50);
-        expect(data.supplierCount).toBe(4376);
-        expect(data.fiDocCount).toBe(173386);
-        expect(data.salesInquiryCount).toBe(618);
-        expect(data.customerCount).toBe(891);
-        expect(data.openSalesOrderCount).toBe(498);
-        expect(data.totalSalesOrderCount).toBe(880);
+        expect(seenDuringCall).toBeUndefined();
     });
 
-    test('_loadMetrics should fast-path parse and populate unified getDashboardMetrics payload directly', async () => {
+    test('formatters: Loading while undefined, Failed when unavailable, the count otherwise', () => {
         const controller = new DashboardControllerClass();
-        const oViewModel = new MockJSONModel({});
+        expect(controller.formatTileState(undefined)).toBe('Loading');
+        expect(controller.formatTileState(null)).toBe('Failed');
+        expect(controller.formatTileState(0)).toBe('Loaded');
+        expect(controller.formatMetricValue(undefined)).toBe('');
+        expect(controller.formatMetricValue(null)).toBe('');
+        expect(controller.formatMetricValue(0)).toBe('0');
+        expect(controller.formatMetricValue(2729)).toBe('2729');
+    });
 
-        controller.getView = () => ({
-            getModel: (name) => name === 'dashboardView' ? oViewModel : null
+    test('exposes no simulator, info-dialog or placeholder-tab handlers', () => {
+        const controller = new DashboardControllerClass();
+        ['onSimulateCarLoan', 'onNewCarLoanApp', 'onShowMasterDataInfo', '_loadIndividualMetrics',
+            'onSelectTabCO', 'onSelectTabPP', 'onSelectTabQM', 'onSelectTabEAM', 'onSelectTabPS',
+            'onSelectTabTM', 'onSelectTabService', 'onSelectTabHCM', 'onSelectTabAnalytics', 'onSelectTabAdmin']
+            .forEach((fn) => expect(controller[fn]).toBeUndefined());
+    });
+});
+
+describe('Unit: Dashboard view binds only live figures', () => {
+    const viewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/Dashboard.view.xml'), 'utf8');
+    const controllerSource = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/Dashboard.controller.js'), 'utf8');
+    const metricKeys = [...controllerSource.match(/var METRIC_KEYS = \[([\s\S]*?)\];/)[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]);
+    const nonMetricModelKeys = ['selectedTab', 'connectionText', 'connectionState', 'metricsError'];
+
+    test('every dashboardView binding is a live SAP metric or a status field', () => {
+        const bound = [...new Set([...viewXml.matchAll(/dashboardView>\/([A-Za-z]+)/g)].map((m) => m[1]))];
+        const unknown = bound.filter((key) => !metricKeys.includes(key) && !nonMetricModelKeys.includes(key));
+        expect(unknown).toEqual([]);
+    });
+
+    test('every metric tile shows Loading / Failed states through the formatter', () => {
+        const numericValues = [...viewXml.matchAll(/<NumericContent[^>]*value="([^"]*)"/g)].map((m) => m[1]);
+        expect(numericValues.length).toBeGreaterThan(0);
+        numericValues.forEach((binding) => expect(binding).toMatch(/formatter: '\.formatMetricValue'/));
+        const tilesWithValue = [...viewXml.matchAll(/<GenericTile[^>]*>\s*<TileContent[^>]*>\s*<NumericContent[^>]*value=/g)].map((m) => m[0]);
+        tilesWithValue.forEach((tile) => expect(tile).toMatch(/state="\{path: 'dashboardView>\/[A-Za-z]+', formatter: '\.formatTileState'\}"/));
+    });
+
+    test('contains no simulators, info dialogs, hard-coded status or placeholder tabs', () => {
+        expect(viewXml).not.toMatch(/onSimulateCarLoan|onNewCarLoanApp|onShowMasterDataInfo/);
+        expect(viewXml).not.toMatch(/Client 220/);
+        expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
+        const tabKeys = [...viewXml.matchAll(/<IconTabFilter[\s\S]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
+        expect(tabKeys).toEqual(['overview', 'masterData', 'fi', 'mm', 'sd', 'ewm']);
+    });
+
+    test('every press handler used by the view exists on the controller', () => {
+        const handlers = [...new Set([...viewXml.matchAll(/(?:press|select)="\.([A-Za-z]+)"/g)].map((m) => m[1]))];
+        handlers.forEach((handler) => expect(controllerSource).toMatch(new RegExp(`\\b${handler}: function`)));
+    });
+});
+
+describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCount', () => {
+    const poAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
+
+    const COUNTS = {
+        'C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs': '2729',
+        'C_MM_SupplierValueHelp': '4376',
+        'C_MM_MaterialValueHelp': '151976',
+        'FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified': '173386',
+        'SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370': '618',
+        'SD_F2370_INQY_WL_SRV/I_Customer_VH': '891',
+        'I_GLAccountStdVH': '33784',
+        'I_CostCenterVH': '952',
+        'I_ProfitCenterStdVH': '103',
+        'I_MasterFixedAssetStdVH': '304',
+        'I_WBSElementBasicDataStdVH': '489',
+        'I_InternalOrderStdVH': '141',
+        'C_PurchaseContractValHelp': '24',
+        'C_MM_CompanyCodeValueHelp': '69',
+        'C_MM_PlantValueHelp': '76',
+        'C_MM_StorLocValueHelp': '689',
+        'C_MM_MaterialGroupValueHelp': '258',
+        'C_PurchasingOrgValueHelp': '9',
+        'C_PurchasingGroupValueHelp': '44',
+        'API_WAREHOUSE/Warehouse': '1',
+        'UI_RESERVATION_ITM_MNG_V2': '54',
+        'MMIM_GR4PO_DL_SRV': '12'
+    };
+
+    const liveSap = (overrides = {}) => jest.fn().mockImplementation((dest, config) => {
+        const u = config.url;
+        for (const [fragment, behaviour] of Object.entries(overrides)) {
+            if (u.includes(fragment)) return typeof behaviour === 'function' ? behaviour() : Promise.resolve(behaviour);
+        }
+        if (u.includes('ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count')) return Promise.resolve({ data: '6677' });
+        if (u.includes('CATALOGSERVICE;v=2/ServiceCollection/$count')) return Promise.resolve({ data: '1345' });
+        if (u.includes("OverallSDProcessStatus ne 'C'")) return Promise.resolve({ data: { d: { __count: '498' } } });
+        if (u.includes('SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873')) return Promise.resolve({ data: { d: { __count: '880' } } });
+        const hit = Object.keys(COUNTS).find((fragment) => u.includes(fragment));
+        if (hit) return Promise.resolve({ data: { d: { __count: COUNTS[hit] } } });
+        return Promise.reject(new Error('Unexpected URL ' + u));
+    });
+
+    beforeEach(() => {
+        jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test('getBusinessPartnerCount queries ZAPI_GETBUPA_SRV/$count', async () => {
+        const mockExecute = jest.fn().mockResolvedValue({ data: '6677' });
+        const count = await poAdapter.getBusinessPartnerCount({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
+        expect(count).toBe(6677);
+        expect(mockExecute.mock.calls[0][1].url).toContain('ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count');
+    });
+
+    test('getBusinessPartnerCount returns null, not 0, when SAP cannot be read', async () => {
+        const count = await poAdapter.getBusinessPartnerCount({
+            destination: { url: 'https://mock.s4hana' },
+            executeHttpRequest: jest.fn().mockRejectedValue(new Error('403'))
         });
+        expect(count).toBeNull();
+    });
 
-        const mockUnifiedMetrics = {
+    test('getDashboardMetrics reads all 26 counts live from SAP and reports none unavailable', async () => {
+        const mockExecute = liveSap();
+        const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
+
+        expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(metrics).toEqual({
             totalCount: 2729,
             supplierCount: 4376,
             productCount: 151976,
-            bpCount: 6677,
             fiDocCount: 173386,
+            salesInquiryCount: 618,
+            customerCount: 891,
+            openSalesOrderCount: 498,
+            totalSalesOrderCount: 880,
+            bpCount: 6677,
             glAccountCount: 33784,
             costCenterCount: 952,
             profitCenterCount: 103,
@@ -244,195 +373,55 @@ describe('Unit: Dashboard Controller Metrics Loading', () => {
             openReservationCount: 54,
             inboundDeliveryCount: 12,
             gatewayCatalogCount: 1345,
-            totalSpend: '3.42',
-            completeRate: 98,
-            openSalesOrderCount: 498,
-            totalSalesOrderCount: 880,
-            salesInquiryCount: 618,
-            customerCount: 891
-        };
-
-        mockODataClient.get.mockImplementation((url) => {
-            if (url.includes('getDashboardMetrics()')) {
-                return Promise.resolve(JSON.stringify(mockUnifiedMetrics));
-            }
-            return Promise.reject(new Error('Should not call individual fallback'));
+            unavailable: []
         });
-
-        await controller._loadMetrics();
-
-        const data = oViewModel.getData();
-        expect(data.totalCount).toBe(2729);
-        expect(data.supplierCount).toBe(4376);
-        expect(data.productCount).toBe(151976);
-        expect(data.bpCount).toBe(6677);
-        expect(data.costCenterCount).toBe(952);
-        expect(data.profitCenterCount).toBe(103);
-        expect(data.fixedAssetCount).toBe(304);
-        expect(data.wbsElementCount).toBe(489);
-        expect(data.internalOrderCount).toBe(141);
-        expect(data.purchaseContractCount).toBe(24);
-        expect(data.companyCodeCount).toBe(69);
-        expect(data.plantCount).toBe(76);
-        expect(data.storageLocationCount).toBe(689);
-        expect(data.materialGroupCount).toBe(258);
-        expect(data.purchasingOrgCount).toBe(9);
-        expect(data.purchasingGroupCount).toBe(44);
-        expect(data.warehouseCount).toBe(1);
-        expect(data.openReservationCount).toBe(54);
-        expect(data.inboundDeliveryCount).toBe(12);
-        expect(data.gatewayCatalogCount).toBe(1345);
-        expect(data.totalSpend).toBe('3.42');
-        expect(data.completeRate).toBe(98);
-        expect(data.openSalesOrderCount).toBe(498);
-        expect(data.totalSalesOrderCount).toBe(880);
-        expect(data.salesInquiryCount).toBe(618);
-        expect(data.customerCount).toBe(891);
-    });
-});
-
-describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCount', () => {
-    const poAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
-
-    test('getBusinessPartnerCount should query ZAPI_GETBUPA_SRV/$count', async () => {
-        const mockExecute = jest.fn().mockResolvedValue({
-            data: '6677'
-        });
-
-        const count = await poAdapter.getBusinessPartnerCount({
-            destination: { url: 'https://mock.s4hana' },
-            executeHttpRequest: mockExecute
-        });
-
-        expect(count).toBe(6677);
-        expect(mockExecute).toHaveBeenCalledTimes(1);
-        expect(mockExecute.mock.calls[0][1].url).toContain('ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count');
     });
 
-    test('getDashboardMetrics should fetch and combine all 25 live SAP metrics concurrently', async () => {
-        const mockExecute = jest.fn().mockImplementation((dest, config) => {
-            const u = config.url;
-            if (u.includes('C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs')) {
-                return Promise.resolve({
-                    data: {
-                        d: {
-                            __count: '2729',
-                            results: [
-                                { PurchaseOrder: '1', PurchaseOrderNetAmount: '1000.00', PurchasingCompletenessStatus: true }
-                            ]
-                        }
-                    }
-                });
-            }
-            if (u.includes('ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count')) {
-                return Promise.resolve({ data: '6677' });
-            }
-            if (u.includes('C_MM_SupplierValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '4376' } } });
-            }
-            if (u.includes('C_MM_MaterialValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '151976' } } });
-            }
-            if (u.includes('FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified')) {
-                return Promise.resolve({ data: { d: { __count: '173386' } } });
-            }
-            if (u.includes('SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370')) {
-                return Promise.resolve({ data: { d: { __count: '618' } } });
-            }
-            if (u.includes('SD_F2370_INQY_WL_SRV/I_Customer_VH')) {
-                return Promise.resolve({ data: { d: { __count: '891' } } });
-            }
-            if (u.includes("OverallSDProcessStatus ne 'C'")) {
-                return Promise.resolve({ data: { d: { __count: '498' } } });
-            }
-            if (u.includes('SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873')) {
-                return Promise.resolve({ data: { d: { __count: '880' } } });
-            }
-            if (u.includes('I_GLAccountStdVH')) {
-                return Promise.resolve({ data: { d: { __count: '33784' } } });
-            }
-            if (u.includes('I_CostCenterVH')) {
-                return Promise.resolve({ data: { d: { __count: '952' } } });
-            }
-            if (u.includes('I_ProfitCenterStdVH')) {
-                return Promise.resolve({ data: { d: { __count: '103' } } });
-            }
-            if (u.includes('I_MasterFixedAssetStdVH')) {
-                return Promise.resolve({ data: { d: { __count: '304' } } });
-            }
-            if (u.includes('I_WBSElementBasicDataStdVH')) {
-                return Promise.resolve({ data: { d: { __count: '489' } } });
-            }
-            if (u.includes('I_InternalOrderStdVH')) {
-                return Promise.resolve({ data: { d: { __count: '141' } } });
-            }
-            if (u.includes('C_PurchaseContractValHelp')) {
-                return Promise.resolve({ data: { d: { __count: '24' } } });
-            }
-            if (u.includes('C_MM_CompanyCodeValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '69' } } });
-            }
-            if (u.includes('C_MM_PlantValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '76' } } });
-            }
-            if (u.includes('C_MM_StorLocValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '689' } } });
-            }
-            if (u.includes('C_MM_MaterialGroupValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '258' } } });
-            }
-            if (u.includes('C_PurchasingOrgValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '9' } } });
-            }
-            if (u.includes('C_PurchasingGroupValueHelp')) {
-                return Promise.resolve({ data: { d: { __count: '44' } } });
-            }
-            if (u.includes('API_WAREHOUSE/Warehouse')) {
-                return Promise.resolve({ data: { d: { __count: '1' } } });
-            }
-            if (u.includes('UI_RESERVATION_ITM_MNG_V2')) {
-                return Promise.resolve({ data: { d: { __count: '54' } } });
-            }
-            if (u.includes('MMIM_GR4PO_DL_SRV')) {
-                return Promise.resolve({ data: { d: { __count: '12' } } });
-            }
-            if (u.includes('CATALOGSERVICE;v=2/ServiceCollection/$count')) {
-                return Promise.resolve({ data: '1345' });
-            }
-            return Promise.resolve({ data: { d: { __count: '1' } } });
-        });
+    test('reads the purchase order total with $top=1 and returns no spend estimate or sampled rate', async () => {
+        const mockExecute = liveSap();
+        const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
-        const metrics = await poAdapter.getDashboardMetrics({
-            destination: { url: 'https://mock.s4hana' },
-            executeHttpRequest: mockExecute
-        });
+        const poCall = mockExecute.mock.calls.map((c) => c[1].url).find((u) => u.includes('C_PurchaseOrderFs'));
+        expect(poCall).toContain('$inlinecount=allpages&$top=1');
+        expect(poCall).not.toContain('$top=100');
+        expect(metrics).not.toHaveProperty('totalSpend');
+        expect(metrics).not.toHaveProperty('completeRate');
+    });
 
-        expect(metrics).toBeDefined();
+    test('a failed service call yields null for that count only, never 0, and lists it as unavailable', async () => {
+        const mockExecute = liveSap({
+            'API_WAREHOUSE/Warehouse': () => Promise.reject(new Error('404 service not activated')),
+            'ZAPI_GETBUPA_SRV': () => Promise.reject(new Error('403 not authorized'))
+        });
+        const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
+
+        expect(metrics.warehouseCount).toBeNull();
+        expect(metrics.bpCount).toBeNull();
         expect(metrics.totalCount).toBe(2729);
-        expect(metrics.supplierCount).toBe(4376);
-        expect(metrics.productCount).toBe(151976);
-        expect(metrics.bpCount).toBe(6677);
-        expect(metrics.fiDocCount).toBe(173386);
-        expect(metrics.salesInquiryCount).toBe(618);
-        expect(metrics.customerCount).toBe(891);
-        expect(metrics.openSalesOrderCount).toBe(498);
-        expect(metrics.totalSalesOrderCount).toBe(880);
-        expect(metrics.glAccountCount).toBe(33784);
-        expect(metrics.costCenterCount).toBe(952);
-        expect(metrics.profitCenterCount).toBe(103);
-        expect(metrics.fixedAssetCount).toBe(304);
-        expect(metrics.wbsElementCount).toBe(489);
-        expect(metrics.internalOrderCount).toBe(141);
-        expect(metrics.purchaseContractCount).toBe(24);
-        expect(metrics.companyCodeCount).toBe(69);
-        expect(metrics.plantCount).toBe(76);
-        expect(metrics.storageLocationCount).toBe(689);
-        expect(metrics.materialGroupCount).toBe(258);
-        expect(metrics.purchasingOrgCount).toBe(9);
-        expect(metrics.purchasingGroupCount).toBe(44);
-        expect(metrics.warehouseCount).toBe(1);
-        expect(metrics.openReservationCount).toBe(54);
-        expect(metrics.inboundDeliveryCount).toBe(12);
-        expect(metrics.gatewayCatalogCount).toBe(1345);
+        expect(metrics.unavailable.sort()).toEqual(['bpCount', 'warehouseCount']);
+    });
+
+    test('a response without a count yields null instead of the number of rows returned', async () => {
+        const mockExecute = liveSap({
+            'C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs': { data: { d: { results: [{ PurchaseOrder: '4500000001' }] } } },
+            'CATALOGSERVICE': { data: '<html>not a count</html>' }
+        });
+        const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
+
+        expect(metrics.totalCount).toBeNull();
+        expect(metrics.gatewayCatalogCount).toBeNull();
+        expect(metrics.unavailable).toEqual(expect.arrayContaining(['totalCount', 'gatewayCatalogCount']));
+    });
+
+    test('a genuine zero from SAP is kept as 0', async () => {
+        const mockExecute = liveSap({ 'MMIM_GR4PO_DL_SRV': { data: { d: { __count: '0' } } } });
+        const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
+        expect(metrics.inboundDeliveryCount).toBe(0);
+        expect(metrics.unavailable).not.toContain('inboundDeliveryCount');
+    });
+
+    test('propagates an unresolvable destination instead of returning empty figures', async () => {
+        jest.spyOn(poAdapter, '_getDestination').mockRejectedValue(new Error("Destination 'S4HANA_PO_API' not found"));
+        await expect(poAdapter.getDashboardMetrics({ executeHttpRequest: jest.fn() })).rejects.toThrow('not found');
     });
 });

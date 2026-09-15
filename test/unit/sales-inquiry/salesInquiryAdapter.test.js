@@ -333,32 +333,11 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(results).toEqual([]);
     });
 
-    test('should query I_SalesDocumentType and enrich metadata for inquiry types', async () => {
+    test('should return inquiry types exactly as SAP describes them, deriving only the active status', async () => {
         const mockRun = jest.fn().mockResolvedValue([
-            {
-                SalesDocumentType: 'ZIN',
-                SalesDocumentType_Text: 'Inquiry',
-                SDDocumentCategory: 'A',
-                IsLocked: '',
-                NumberRangeForIntIDAssignment: 'Z1',
-                ScreenSequenceGroup: 'AG'
-            },
-            {
-                SalesDocumentType: 'ZBIN',
-                SalesDocumentType_Text: 'Budgetary Inquiry',
-                SDDocumentCategory: 'A',
-                IsLocked: '',
-                NumberRangeForIntIDAssignment: 'Q7',
-                ScreenSequenceGroup: 'AG'
-            },
-            {
-                SalesDocumentType: 'IN',
-                SalesDocumentType_Text: 'Inquiry',
-                SDDocumentCategory: 'A',
-                IsLocked: 'X',
-                NumberRangeForIntIDAssignment: '03',
-                ScreenSequenceGroup: 'AG'
-            }
+            { SalesDocumentType: 'ZIN', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Z1', ScreenSequenceGroup: 'AG' },
+            { SalesDocumentType: 'ZBIN', SalesDocumentType_Text: 'Budgetary Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Q7', ScreenSequenceGroup: 'AG' },
+            { SalesDocumentType: 'IN', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03' }
         ]);
         salesInquiryAdapter.s4hanaFS = { run: mockRun };
 
@@ -366,39 +345,63 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(results).toHaveLength(3);
 
         const zin = results.find(r => r.SalesDocumentType === 'ZIN');
-        expect(zin.IsActive).toBe(true);
-        expect(zin.StatusText).toBe('Active');
-        expect(zin.StatusState).toBe('Success');
-        expect(zin.Classification).toBe('Commercial Sales');
-        expect(zin.SalesDocumentTypeName).toBe('Standard Inquiry');
-        expect(zin.NumberRangeForIntIDAssignment).toBe('Z1');
-        expect(zin.SDDocumentCategoryName).toBe('Inquiry');
+        expect(zin).toEqual({
+            SalesDocumentType: 'ZIN',
+            SalesDocumentType_Text: 'Inquiry',
+            SalesDocumentTypeName: 'Inquiry',
+            SDDocumentCategory: 'A',
+            SDDocumentCategoryName: 'Inquiry',
+            IsLocked: '',
+            IsActive: true,
+            StatusText: 'Active',
+            StatusState: 'Success',
+            ScreenSequenceGroup: 'AG',
+            NumberRangeForIntIDAssignment: 'Z1',
+            NumberRangeForExtIDAssignment: null,
+            TextDeterminationProcedure: null,
+            PartnerDeterminationProcedure: null
+        });
 
         const zbin = results.find(r => r.SalesDocumentType === 'ZBIN');
-        expect(zbin.IsActive).toBe(true);
-        expect(zbin.Classification).toBe('Budgetary / Estimation');
         expect(zbin.SalesDocumentTypeName).toBe('Budgetary Inquiry');
-        expect(zbin.NumberRangeForIntIDAssignment).toBe('Q7');
 
         const inqy = results.find(r => r.SalesDocumentType === 'IN');
         expect(inqy.IsActive).toBe(false);
         expect(inqy.StatusText).toBe('Inactive');
         expect(inqy.StatusState).toBe('Warning');
-        expect(inqy.Classification).toBe('Standard Reference');
+        expect(inqy.ScreenSequenceGroup).toBeNull();
+
+        results.forEach(r => {
+            expect(r).not.toHaveProperty('Classification');
+            expect(r).not.toHaveProperty('Purpose');
+        });
     });
 
-    test('should fallback to baseline inquiry types when remote services fail', async () => {
-        salesInquiryAdapter.s4hanaFS = {
-            run: jest.fn().mockRejectedValue(new Error('FS Network Error'))
-        };
-        salesInquiryAdapter.s4hanaWL = {
-            run: jest.fn().mockRejectedValue(new Error('WL Network Error'))
-        };
+    test('should read the WL value help only when the factsheet service returns no types', async () => {
+        salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockResolvedValue([]) };
+        salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockResolvedValue([{ SalesDocumentType: 'ZIN', SalesDocumentType_Text: 'Standard Inquiry' }]) };
 
         const results = await salesInquiryAdapter.getInquiryTypes();
-        expect(results.length).toBeGreaterThanOrEqual(6);
-        expect(results.some(r => r.SalesDocumentType === 'ZIN')).toBe(true);
-        expect(results.some(r => r.SalesDocumentType === 'ZBIN')).toBe(true);
+        expect(results.map(r => [r.SalesDocumentType, r.SalesDocumentTypeName, r.IsActive])).toEqual([['ZIN', 'Standard Inquiry', true]]);
+        expect(salesInquiryAdapter.s4hanaWL.run).toHaveBeenCalledTimes(1);
+    });
+
+    test('should fail with 502, not a built-in list, when both SAP services fail', async () => {
+        jest.spyOn(console, 'warn').mockImplementation(() => {});
+        salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockRejectedValue(new Error('FS Network Error')) };
+        salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockRejectedValue(new Error('WL Network Error')) };
+
+        await expect(salesInquiryAdapter.getInquiryTypes()).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringMatching(/FS Network Error[\s\S]*WL Network Error/)
+        });
+        console.warn.mockRestore();
+    });
+
+    test('should return an empty list when SAP answers successfully with no inquiry types', async () => {
+        salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockResolvedValue([]) };
+        salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockResolvedValue([]) };
+        await expect(salesInquiryAdapter.getInquiryTypes()).resolves.toEqual([]);
     });
 
     describe('createSalesQuoteFromInquiry (UI_SALESQUOTATIONMANAGE)', () => {
