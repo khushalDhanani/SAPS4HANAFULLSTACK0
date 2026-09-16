@@ -1,37 +1,8 @@
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
+const { extractFilterParam } = require('../../../common/filterUtils');
 
-function _extractFilterParam(req, fieldName) {
-  if (req.data?.[fieldName]) return req.data[fieldName];
-  if (req.params && req.params.length > 0 && req.params[0][fieldName]) return req.params[0][fieldName];
-
-  const where = req.query?.SELECT?.where;
-  if (Array.isArray(where)) {
-    for (let i = 0; i < where.length; i++) {
-      const item = where[i];
-      if (item === fieldName && where[i + 1] === '=' && where[i + 2] !== undefined) {
-        const val = where[i + 2];
-        return typeof val === 'object' ? (val.val || val) : String(val).replace(/['"]/g, '');
-      }
-      if (item && typeof item === 'object' && item.ref && item.ref[0] === fieldName) {
-        if (where[i + 1] === '=' && where[i + 2] !== undefined) {
-          const val = where[i + 2];
-          return typeof val === 'object' ? (val.val || val) : String(val).replace(/['"]/g, '');
-        }
-      }
-    }
-  }
-
-  // Fallback to raw query string or query options
-  const rawFilter = req._queryOptions?.$filter || (req.req && req.req.url ? decodeURIComponent(req.req.url) : '');
-  if (rawFilter) {
-    const re = new RegExp(`${fieldName}\\s+eq\\s+['"]?([^'"&\\s)]+)['"]?`, 'i');
-    const m = rawFilter.match(re);
-    if (m && m[1]) return m[1];
-  }
-
-  return null;
-}
+const _extractFilterParam = extractFilterParam;
 
 class GoodsIssueHandler {
   static init(srv) {

@@ -1,6 +1,7 @@
 const cds = require("@sap/cds");
 const authAdapter = require("./integration/s4hana/AuthAdapter");
 const localTokenUtil = require("./auth/localTokenUtil");
+const { resolveUserIdentity } = require("./auth/userIdentity");
 
 /**
  * CAP Authentication Service Handler
@@ -32,7 +33,12 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       };
     }
 
-    const sUser = (user.attr?.logon_name || user.id || "User").trim();
+    let sUser = "User";
+    try {
+      sUser = resolveUserIdentity(req) || "User";
+    } catch (_) {
+      sUser = (user.attr?.logon_name || user.id || "User").trim();
+    }
     const sCapitalized = sUser.charAt(0).toUpperCase() + sUser.slice(1);
     const sInitials = sCapitalized.substring(0, 2).toUpperCase();
     const sTimestamp = new Date().toLocaleTimeString([], {

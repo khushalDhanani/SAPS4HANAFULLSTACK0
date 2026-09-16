@@ -5,6 +5,7 @@ const { validateCreateSalesInquiryPayload } = require('../validation/salesInquir
 const { normalizeSalesInquiryData } = require('../mapping/salesInquiry.mapper');
 const { mapToS4InquiryPayload } = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
 const { resolveUserIdentity } = require('../../../auth/userIdentity');
+const { extractFilterParam } = require('../../../common/filterUtils');
 
 /**
  * Safety switch for Sales Quotation creation. Re-enabled on explicit instruction; the UI requires the
@@ -22,22 +23,7 @@ const QUOTATION_CREATION_BLOCKED_MESSAGE = 'Sales Quotation creation is temporar
 function registerSalesInquiryHandlers(srv) {
     // 1. READ SalesInquiries
     srv.on('READ', 'SalesInquiries', async (req) => {
-        let sKey = req.params?.[0]?.SalesInquiry || req.data?.SalesInquiry;
-        if (!sKey && typeof req.params?.[0] === 'string') {
-            sKey = req.params[0];
-        }
-        if (!sKey && typeof req.params?.[0] === 'number') {
-            sKey = String(req.params[0]);
-        }
-        if (!sKey && req.query?.SELECT?.where) {
-            const where = req.query.SELECT.where;
-            for (let i = 0; i < where.length; i++) {
-                if (where[i]?.ref?.[0] === 'SalesInquiry' && where[i + 2]?.val) {
-                    sKey = String(where[i + 2].val);
-                    break;
-                }
-            }
-        }
+        const sKey = extractFilterParam(req, 'SalesInquiry');
         if (sKey) {
             try {
                 const doc = await salesInquiryAdapter.getInquiry(sKey);

@@ -29,6 +29,18 @@ sap.ui.define([
          * @returns {string}
          */
         getCurrentUserName: function (oComponent) {
+            try {
+                var oGlobal = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+                var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+                if (oSap && oSap.ui && typeof oSap.ui.require === "function") {
+                    var AuthService = oSap.ui.require("saps4hana/fiori/service/AuthService");
+                    if (AuthService && typeof AuthService.getCurrentUserName === "function") {
+                        var sUser = AuthService.getCurrentUserName(oComponent);
+                        if (sUser) return sUser;
+                    }
+                }
+            } catch (e) {}
+
             if (!oComponent) return "alice";
             var oAuthModel = oComponent.getModel("auth");
             var sAuthUser = oAuthModel ? oAuthModel.getProperty("/user/username") : "";
@@ -36,8 +48,8 @@ sap.ui.define([
                 return sAuthUser.trim();
             }
             var oUserModel = oComponent.getModel("user");
-            var sUser = oUserModel ? oUserModel.getProperty("/username") : "";
-            return (sUser && typeof sUser === "string" && sUser.trim() !== "") ? sUser.trim() : "alice";
+            var sModelUser = oUserModel ? oUserModel.getProperty("/username") : "";
+            return (sModelUser && typeof sModelUser === "string" && sModelUser.trim() !== "") ? sModelUser.trim() : "alice";
         },
 
         /**

@@ -4,6 +4,9 @@ const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient } = require('../S4HttpClient');
 const s4Config = require('../s4Config');
 
+const { enrichBatchStatus } = require('../../../common/batchUtils');
+const { formatDateToYMD } = require('../../../common/dateUtils');
+
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA for Goods Receipt (Movement 101):
  * - Resolve Storage Unit Number to authentic Inbound Delivery, Material, Batch, SLED, Plant, SLoc via MMIM_GR4PO_DL_SRV & LO_BM_BATCH_SRV
@@ -28,51 +31,25 @@ class GoodsReceiptAdapter {
   }
 
   /**
-   * Enrich batch object with SLED classification against current date
+   * Enrich batch object with SLED classification against current date (delegates to shared batchUtils)
    */
   _enrichBatchStatus(expiryDate) {
-    if (!expiryDate) {
-      return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
-    }
+    return enrichBatchStatus(expiryDate);
+  }
 
-    let expTime = null;
-    if (typeof expiryDate === 'string' && expiryDate.includes('/Date(')) {
-      const match = expiryDate.match(/\/Date\((\d+)\)\//);
-      if (match) expTime = Number(match[1]);
-    } else {
-      expTime = new Date(expiryDate).getTime();
-    }
-
-    if (!expTime || isNaN(expTime)) {
-      return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
-    }
-
-    const now = Date.now();
-    const diffDays = Math.ceil((expTime - now) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) {
-      return { StatusState: 'Error', StatusText: 'EXPIRED', DaysToExpiry: diffDays };
-    } else if (diffDays <= 30) {
-      return { StatusState: 'Warning', StatusText: 'EXPIRING SOON', DaysToExpiry: diffDays };
-    } else {
-      return { StatusState: 'Success', StatusText: 'VALID', DaysToExpiry: diffDays };
-    }
+  static _enrichBatchStatus(expiryDate) {
+    return enrichBatchStatus(expiryDate);
   }
 
   /**
-   * Format epoch date or /Date(xxx)/ to ISO string YYYY-MM-DD
+   * Format epoch date or /Date(xxx)/ to ISO string YYYY-MM-DD (delegates to shared dateUtils)
    */
   _formatDate(dateVal) {
-    if (!dateVal) return '';
-    let d = null;
-    if (typeof dateVal === 'string' && dateVal.includes('/Date(')) {
-      const match = dateVal.match(/\/Date\((\d+)\)\//);
-      if (match) d = new Date(Number(match[1]));
-    } else {
-      d = new Date(dateVal);
-    }
-    if (!d || isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    return formatDateToYMD(dateVal, { emptyFallback: '' });
+  }
+
+  static _formatDate(dateVal) {
+    return formatDateToYMD(dateVal, { emptyFallback: '' });
   }
 
   /**

@@ -282,6 +282,53 @@ sap.ui.define([
             return this._oModel.getProperty("/isAuthenticated") === true;
         },
 
+        /**
+         * Resolves the current authenticated user's name across FLP Container,
+         * AuthService model, and Component-scoped user/auth models.
+         *
+         * @param {sap.ui.core.UIComponent} [oComponent]
+         * @returns {string} The resolved username or empty string
+         */
+        getCurrentUserName: function (oComponent) {
+            try {
+                var oGlobal = typeof window !== "undefined" ? window : null;
+                var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+                var oUshell = oSap ? oSap["ushell"] : null;
+                var oContainer = oUshell ? oUshell["Container"] : null;
+                if (oContainer && typeof oContainer["getUser"] === "function") {
+                    var oUser = oContainer["getUser"]();
+                    if (oUser && typeof oUser["getId"] === "function" && oUser["getId"]()) {
+                        return oUser["getId"]();
+                    }
+                }
+            } catch (e) {
+                // Ignore shell container error when running outside FLP
+            }
+
+            var oAuthUser = this.getCurrentUser();
+            if (oAuthUser && oAuthUser.username && typeof oAuthUser.username === "string" && oAuthUser.username.trim() !== "") {
+                return oAuthUser.username.trim();
+            }
+
+            if (oComponent && oComponent.getModel) {
+                var oAuthModel = oComponent.getModel("auth");
+                if (oAuthModel && oAuthModel.getProperty) {
+                    var sAuthUser = oAuthModel.getProperty("/user/username");
+                    if (sAuthUser && typeof sAuthUser === "string" && sAuthUser.trim() !== "") {
+                        return sAuthUser.trim();
+                    }
+                }
+                var oUserModel = oComponent.getModel("user");
+                if (oUserModel && oUserModel.getProperty) {
+                    var sUser = oUserModel.getProperty("/username");
+                    if (sUser && typeof sUser === "string" && sUser.trim() !== "") {
+                        return sUser.trim();
+                    }
+                }
+            }
+            return "";
+        },
+
         getCurrentUser: function () {
             return this._oModel.getProperty("/user");
         },

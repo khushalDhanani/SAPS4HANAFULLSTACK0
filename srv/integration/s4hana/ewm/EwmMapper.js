@@ -1,3 +1,5 @@
+const { formatDateToYMD } = require('../../../common/dateUtils');
+
 /**
  * Mapper utility for SAP S/4HANA EWM (Extended Warehouse Management) data.
  * Transforms remote S/4HANA Gateway payloads to CAP entities and validates contracts.
@@ -231,24 +233,10 @@ class EwmMapper {
   }
 
   /**
-   * Format S/4HANA date representation into ISO YYYY-MM-DD string
+   * Format S/4HANA date representation into ISO YYYY-MM-DD string (delegates to shared dateUtils)
    */
   static formatDate(val) {
-    if (!val) return null;
-    if (typeof val === 'string') {
-      const match = /\/Date\((\d+)\)\//.exec(val);
-      if (match) {
-        return new Date(parseInt(match[1], 10)).toISOString().split('T')[0];
-      }
-      if (val.includes('T')) {
-        return val.split('T')[0];
-      }
-      return val;
-    }
-    if (val instanceof Date) {
-      return val.toISOString().split('T')[0];
-    }
-    return String(val);
+    return formatDateToYMD(val);
   }
 
   /**

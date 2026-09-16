@@ -1,6 +1,7 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
+const { extractFilterParam, extractFilterParams } = require('../../../common/filterUtils');
 
 const init = (srv) => {
     /**
@@ -9,18 +10,7 @@ const init = (srv) => {
      */
     srv.on('READ', 'OpenInboundDeliveries', async (req) => {
         try {
-            let sPlant = '';
-            const whereClause = req.query?.SELECT?.where;
-            if (Array.isArray(whereClause)) {
-                for (let i = 0; i < whereClause.length; i++) {
-                    const token = whereClause[i];
-                    if (token?.ref?.[0] === 'Plant' && whereClause[i + 2]?.val) {
-                        sPlant = String(whereClause[i + 2].val).trim();
-                        break;
-                    }
-                }
-            }
-
+            const sPlant = extractFilterParam(req, 'Plant') || '';
             return await GoodsReceiptAdapter.getOpenInboundDeliveries(sPlant);
         } catch (err) {
             LOG.error('READ OpenInboundDeliveries failed:', err.message);
@@ -34,21 +24,7 @@ const init = (srv) => {
      */
     srv.on('READ', 'MaterialStorageLocations', async (req) => {
         try {
-            let sMaterial = '';
-            let sPlant = '';
-
-            const whereClause = req.query?.SELECT?.where;
-            if (Array.isArray(whereClause)) {
-                for (let i = 0; i < whereClause.length; i++) {
-                    const token = whereClause[i];
-                    if (token?.ref?.[0] === 'Material' && whereClause[i + 2]?.val) {
-                        sMaterial = String(whereClause[i + 2].val).trim();
-                    }
-                    if (token?.ref?.[0] === 'Plant' && whereClause[i + 2]?.val) {
-                        sPlant = String(whereClause[i + 2].val).trim();
-                    }
-                }
-            }
+            const { Material: sMaterial, Plant: sPlant } = extractFilterParams(req, ['Material', 'Plant']);
 
             if (!sMaterial) {
                 return req.reject(400, 'Material parameter is required to query storage locations.');
@@ -66,25 +42,7 @@ const init = (srv) => {
      */
     srv.on('READ', 'MaterialBatches', async (req) => {
         try {
-            let sMaterial = '';
-            let sPlant = '';
-            let sStorageLocation = '';
-
-            const whereClause = req.query?.SELECT?.where;
-            if (Array.isArray(whereClause)) {
-                for (let i = 0; i < whereClause.length; i++) {
-                    const token = whereClause[i];
-                    if (token?.ref?.[0] === 'Material' && whereClause[i + 2]?.val) {
-                        sMaterial = String(whereClause[i + 2].val).trim();
-                    }
-                    if (token?.ref?.[0] === 'Plant' && whereClause[i + 2]?.val) {
-                        sPlant = String(whereClause[i + 2].val).trim();
-                    }
-                    if (token?.ref?.[0] === 'StorageLocation' && whereClause[i + 2]?.val) {
-                        sStorageLocation = String(whereClause[i + 2].val).trim();
-                    }
-                }
-            }
+            const { Material: sMaterial, Plant: sPlant, StorageLocation: sStorageLocation } = extractFilterParams(req, ['Material', 'Plant', 'StorageLocation']);
 
             if (!sMaterial) {
                 return req.reject(400, 'Material parameter is required to query batches.');

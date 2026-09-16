@@ -1,5 +1,79 @@
 
 # Changes Log
+## 2026-09-16 11:35 IST
+- **Agent**: Antigravity
+- **Change**: Decomposed oversized `GoodsIssueAdapter.js` (reduced from 2,163 lines to 466 lines) into specialized domain clients under `srv/integration/s4hana/wm/goods-issue/`; maintained 100% backward compatibility for all methods and Jest spies; added dedicated unit tests (`srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `srv/integration/s4hana/wm/goods-issue/index.js`, `test/unit/wm/goodsIssueClients.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
+  - **Root cause**:
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js` had ballooned to 2,164 lines, combining multiple disparate responsibilities: barcode discovery & multi-tier resolution, reservation item queries, batch master data & SLED calculations, alternative packaging units (MARM), EWM Handling Unit metadata discovery & XML parsing, GS1 barcode matching, physical HU contents resolution, pre-posting stock revalidation, and single-line / batch goods issue posting.
+    - This oversized monolithic structure made maintenance and isolated testing cumbersome.
+  - **Resolution**:
+    1. **`BaseGoodsIssueClient.js`**:
+       - Created base client providing delegation to `adapter._get`, `adapter._post`, `adapter._isOutage`, `adapter._getDestination`, and shared date & batch status enrichment utilities.
+       - Supports standalone instantiation with fallback to direct `client` HTTP methods.
+    2. **`GoodsIssueReservationsClient.js`**:
+       - Extracted reservation document item queries: `getOpenReservations` and `getOpenItems`.
+       - Handles display text generation and open item quantity calculation.
+    3. **`GoodsIssueBatchesClient.js`**:
+       - Extracted batch and stock domain operations: `getMaterialPackagingUnits` (MARM), `getMaterialBatches` (FEFO sort, SLED filtering), `validateBatch` (deletion, restriction, SLED hard stop), and `revalidateStockBeforePosting`.
+    4. **`GoodsIssueStockUnitClient.js`**:
+       - Extracted EWM Handling Unit / Stock Unit resolution engine (~1,000 lines): live `$metadata` discovery across `/SCWM/` services (`_discoverHuModel`), warehouse session validation (`_resolveEwmWarehouse`), physical HU lookup (`_findHuByBarcode`), product GUID translation (`_resolveProductNumbers`), HU contents reading (`_readHuContents`), and authoritative resolution (`resolveStockUnitForGoodsIssue`).
+    5. **`GoodsIssuePostingClient.js`**:
+       - Extracted transactional posting operations: `postGoodsIssue` (tier 1 custom RAP OData V4 `zui_gi_order_rsv_o4`, tier 2 standard OData V2 `API_MATERIAL_DOCUMENT_SRV`, 501 non-mocking fallback) and `submitGoodsIssueRequest` (batch submission).
+    6. **Refactored `GoodsIssueAdapter.js` (Facade / Orchestrator)**:
+       - Reduced from 2,164 to 466 lines.
+       - Hosts multi-tier `resolveIdentifier(barcode)` orchestration engine.
+       - Instantiates all 4 clients and cleanly delegates all domain methods.
+       - Preserves exact method names, parameters, error types, and prototype targets required by existing test spies (`jest.spyOn(GoodsIssueAdapter, ...)`).
+    7. **Unit Testing (`test/unit/wm/goodsIssueClients.test.js`)**:
+       - Added 23 comprehensive tests covering each domain client independently as well as the facade delegation wiring.
+  - **Validation**:
+    - `npm test`: **72 passed, 72 total test suites; 941 passed, 941 total tests (100% green)** in 46.6 s.
+    - `npx jest test/unit/wm`: 7 passed, 7 total suites; 156 passed, 156 total tests.
+    - `cd app/fiori-app && npm run lint`: 0 findings detected.
+    - `cd app/fiori-app && npm run build`: Succeeded in 655 ms.
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**:
+    - Address remaining oversized units (Goods Issue controller, PurchaseOrderModel, dashboard view) per user backlog.
+
+## 2026-09-16 11:05 IST
+- **Agent**: Antigravity
+- **Change**: Eliminated code duplication across user identity resolution, query filter extraction, batch-status enrichment, and date formatting; standardized all CAP service classes on canonical `class <ServiceName> extends cds.ApplicationService`; deleted orphaned dead root file `srv/service.js` (`srv/common/dateUtils.js`, `srv/common/batchUtils.js`, `srv/common/filterUtils.js`, `srv/auth-service.js`, `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/ewm/EwmMapper.js`, `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`, `srv/wm/goods-issue/handlers/goodsIssue.handler.js`, `srv/ewm/warehouse-management/handlers/warehouseManagement.handler.js`, `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`, `srv/fi/journal-entry/service.js`, `srv/mm/purchase-order/service.js`, `srv/sd/sales-inquiry/service.js`, `srv/wm/goods-issue/service.js`, `srv/ewm/warehouse-management/service.js`, `srv/service.js` [DELETED], `app/fiori-app/webapp/service/AuthService.js`, `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`, `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js`, `test/unit/common/dateUtils.test.js`, `test/unit/common/batchUtils.test.js`, `test/unit/common/filterUtils.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
+  - **Root cause**:
+    - Duplicated SLED logic and day calculations existed across `GoodsReceiptAdapter._enrichBatchStatus` and `GoodsIssueAdapter._enrichBatchStatus`.
+    - Duplicated date parsing and conversion from `/Date(epoch)/`, ISO strings, and Date objects existed across `GoodsReceiptAdapter._formatDate`, `GoodsIssueAdapter._formatDate`, and `EwmMapper.formatDate`.
+    - Handcrafted and diverging query filter extraction logic existed across `goodsIssue.handler.js`, `warehouseManagement.handler.js`, `goodsReceipt.handler.js`, and `salesInquiry.handler.js`.
+    - User identity resolution in frontend existed in copy-pasted versions across `PurchaseOrderModel.getCurrentUserName` and `SalesInquiryModel.getCurrentUserName`, while backend user resolution in `srv/auth-service.js` manually read `user.attr` instead of reusing `srv/auth/userIdentity.js`.
+    - CAP services were implemented inconsistently using three patterns: `cds.service.impl`, `class ... extends cds.ApplicationService`, and static handler classes.
+    - Dead root entry point `srv/service.js` remained in the repository even though `srv/service.cds` never declared a service named `service`, causing CAP to resolve handlers beside each domain CDS file instead.
+  - **Resolution**:
+    1. **Date Utilities (`srv/common/dateUtils.js`)**:
+       - Created centralized `formatDateToYMD(dateVal, options)` supporting `/Date(...)`, ISO strings, Date objects, and epoch timestamps with configurable `emptyFallback`.
+       - Refactored `GoodsReceiptAdapter._formatDate`, `GoodsIssueAdapter._formatDate`, and `EwmMapper.formatDate` to delegate to `formatDateToYMD`.
+       - Added 8 unit tests in `test/unit/common/dateUtils.test.js`.
+    2. **Batch Utilities (`srv/common/batchUtils.js`)**:
+       - Created centralized `enrichBatchStatus(expiryDate)` normalizing SLED expiration and computing day boundaries.
+       - Refactored `GoodsReceiptAdapter._enrichBatchStatus` and `GoodsIssueAdapter._enrichBatchStatus` to delegate to `enrichBatchStatus`.
+       - Added 7 unit tests in `test/unit/common/batchUtils.test.js`.
+    3. **Filter Extraction Utilities (`srv/common/filterUtils.js`)**:
+       - Created centralized `extractFilterParam(req, fieldName)` and `extractFilterParams(req, fieldNames)` inspecting `req.data`, `req.params` (objects and single-key primitives), `req.query.SELECT.where` AST, and raw `$filter` query options.
+       - Replaced duplicated AST scanning loops in `goodsIssue.handler.js`, `warehouseManagement.handler.js`, `goodsReceipt.handler.js`, and `salesInquiry.handler.js`.
+       - Added 10 unit tests in `test/unit/common/filterUtils.test.js`.
+    4. **Unified User Identity Resolution**:
+       - In backend `srv/auth-service.js`, refactored `_handleGetUserInfo(req)` to use `resolveUserIdentity(req)`.
+       - In frontend, added `AuthService.getCurrentUserName(oComponent)` unifying FLP Container, auth model, and user model resolution.
+       - Refactored `PurchaseOrderModel.getCurrentUserName` and `SalesInquiryModel.getCurrentUserName` to delegate to `AuthService.getCurrentUserName(oComponent)`.
+    5. **Canonical Service Architecture & Dead File Removal**:
+       - Deleted dead root file `srv/service.js`.
+       - Standardized all 7 services on canonical `class <ServiceName> extends cds.ApplicationService` with lifecycle-guaranteed `async init()` calling `await super.init()`: `AuthServiceHandler`, `JournalEntryService`, `PurchaseOrderService`, `SalesInquiryService`, `GoodsIssueService`, `GoodsReceiptService`, and `WarehouseManagementService`.
+  - **Validation**:
+    - `npm test`: **71 passed, 71 total suites; 918 passed, 918 total tests (100% green)** in 44.8 s.
+    - `cd app/fiori-app && npm run lint`: 0 findings detected.
+    - `cd app/fiori-app && npm run build`: Succeeded in 955 ms.
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**:
+    - Stage and commit refactored architecture changes to `feature/CL01`.
 
 ## 2026-09-16 10:35 IST
 - **Agent**: Antigravity
@@ -2048,6 +2122,25 @@
      - `git diff --check`: ✅ Pass (no whitespace errors).
 
 ## Current Status
+- **2026-09-16 11:35 IST (Antigravity)**: **GoodsIssueAdapter Decomposition into Dedicated Domain Clients Complete.**
+  - Decomposed oversized `srv/integration/s4hana/wm/GoodsIssueAdapter.js` from 2,164 lines to 466 lines.
+  - Extracted 4 focused domain clients under `srv/integration/s4hana/wm/goods-issue/`:
+    - `GoodsIssueReservationsClient`: reservation & open item queries (`getOpenReservations`, `getOpenItems`).
+    - `GoodsIssueBatchesClient`: packaging units (MARM), batch master queries with FEFO sorting, SLED validation, and pre-posting stock revalidation (`getMaterialPackagingUnits`, `getMaterialBatches`, `validateBatch`, `revalidateStockBeforePosting`).
+    - `GoodsIssueStockUnitClient`: live EWM metadata discovery, warehouse session resolution, physical HU lookup, and authoritative SU resolution (`resolveStockUnitForGoodsIssue`).
+    - `GoodsIssuePostingClient`: multi-tier Goods Issue posting pipeline (`postGoodsIssue`, `submitGoodsIssueRequest`).
+    - `BaseGoodsIssueClient`: unified HTTP delegation to adapter/client and shared utilities.
+  - Maintained `GoodsIssueAdapter.js` as the primary facade & orchestrator hosting `resolveIdentifier(barcode)` and delegating domain methods while preserving 100% backward compatibility for method signatures, error types, and Jest spies (`jest.spyOn(GoodsIssueAdapter, ...)`).
+  - Added 23 new unit tests in `test/unit/wm/goodsIssueClients.test.js`.
+  - 100% validation pass: **72 test suites passed (941/941 tests passing 100% green)**, UI5 linter 0 findings, UI5 build succeeded in 655 ms, CDS compile 0 errors, clean `git diff --check`.
+- **2026-09-16 11:05 IST (Antigravity)**: **Code Duplication Eliminated, Canonical Service Architecture Standardized & Dead File Removed Complete.**
+  - Centralized utilities created: `srv/common/dateUtils.js` (`formatDateToYMD`), `srv/common/batchUtils.js` (`enrichBatchStatus`), and `srv/common/filterUtils.js` (`extractFilterParam`, `extractFilterParams`).
+  - Replaced redundant copies of batch-status enrichment and date formatting across `GoodsReceiptAdapter`, `GoodsIssueAdapter`, and `EwmMapper`.
+  - Replaced duplicated where-clause AST loops across `goodsIssue.handler.js`, `warehouseManagement.handler.js`, `goodsReceipt.handler.js`, and `salesInquiry.handler.js`.
+  - Unified user identity resolution: backend calls `srv/auth/userIdentity.js`; frontend models delegate to `AuthService.getCurrentUserName(oComponent)`.
+  - Standardized all 7 CAP services on canonical `class <ServiceName> extends cds.ApplicationService` with lifecycle-guaranteed `init()`.
+  - Deleted dead orphaned file `srv/service.js`.
+  - 100% validation pass: **71 test suites passed (918/918 tests passing 100% green)**, UI5 linter 0 findings, UI5 build succeeded in 955 ms, CDS compile 0 errors, clean `git diff --check`.
 - **2026-09-16 10:35 IST (Antigravity)**: **Swallowed Errors Eliminated Across Adapters & Explicit Unavailable States Surfaced in UI Complete.**
   - Eliminated silent `catch (_) {}` and `catch (_) { return []; }` patterns across EWM, Goods Issue, and Sales Inquiry adapters and value help handlers.
   - S/4HANA backend outages, network timeouts, and unconfigured destinations now log structured errors via CAP `cds.log` and reject with explicit HTTP 502/503 status codes instead of returning synthetic empty lists (`[]`).

@@ -1,27 +1,8 @@
 const EwmAdapter = require('../../../integration/s4hana/ewm/EwmAdapter');
+const { extractFilterParam } = require('../../../common/filterUtils');
 
 function _extractWarehouse(req) {
-  if (req.data?.Warehouse) return req.data.Warehouse;
-  if (req.params && req.params.length > 0 && req.params[0].Warehouse) return req.params[0].Warehouse;
-
-  // Extract from query where clause: e.g. ["Warehouse", "=", "0001"] or [{ ref: ['Warehouse'] }, '=', { val: '0001' }]
-  const where = req.query?.SELECT?.where;
-  if (Array.isArray(where)) {
-    for (let i = 0; i < where.length; i++) {
-      const item = where[i];
-      if (item === 'Warehouse' && where[i + 1] === '=' && where[i + 2] !== undefined) {
-        const val = where[i + 2];
-        return typeof val === 'object' ? (val.val || val) : String(val).replace(/['"]/g, '');
-      }
-      if (item && typeof item === 'object' && item.ref && item.ref[0] === 'Warehouse') {
-        if (where[i + 1] === '=' && where[i + 2] !== undefined) {
-          const val = where[i + 2];
-          return typeof val === 'object' ? (val.val || val) : String(val).replace(/['"]/g, '');
-        }
-      }
-    }
-  }
-  return null;
+  return extractFilterParam(req, 'Warehouse');
 }
 
 function _cleanseCode(val, maxLen) {
