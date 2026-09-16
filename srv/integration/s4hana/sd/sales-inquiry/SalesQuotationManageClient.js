@@ -48,6 +48,7 @@ const UPDATABLE_HEADER_FIELDS = [
 
 /** SAP message: the reference document is incomplete and cannot be referenced. */
 const INCOMPLETE_REFERENCE_CODE = 'SLS_LORD/166';
+const INCOMPLETE_DOCUMENT_CODE = 'SLS_LORD/009';
 
 /** An error reported by SAP for business reasons, carrying the SAP message code. */
 class SapQuotationError extends Error {
@@ -425,7 +426,13 @@ const OUTCOME = {
   IN_PROGRESS: 'CREATION_IN_PROGRESS'
 };
 
-/** Inquiries with a creation in flight in this process; blocks a second, parallel creation. */
+/**
+ * Inquiries with a creation in flight in this process; blocks a second, parallel creation.
+ * ponytail: Single-instance ceiling — inFlightInquiries is a per-process in-memory Set.
+ * Cross-instance concurrency across multiple Cloud Foundry application containers would
+ * require a distributed mutex or HDI row lock (like GoodsIssueQueueManager); this runtime
+ * is constrained to a single-instance ceiling for stateful quotation creation sessions.
+ */
 const inFlightInquiries = new Set();
 
 /** Logs a failed step with SAP code and message only; no payload, cookies, tokens or credentials. */
@@ -452,7 +459,7 @@ function toQuotationError(err, salesInquiry, step) {
   const response = responseOf(err);
   const notConfirmed = 'SAP did not confirm the result. Do not retry; check SAP.';
 
-  if (code === INCOMPLETE_REFERENCE_CODE) {
+  if (code === INCOMPLETE_REFERENCE_CODE || (code === INCOMPLETE_DOCUMENT_CODE && step === STEP.CREATE)) {
     return new SapQuotationError(
       `Inquiry ${salesInquiry} is incomplete in SAP and cannot be converted to a Sales Quotation.`
       + ' Complete the inquiry in VA22 before creating the quotation.',
@@ -484,10 +491,15 @@ module.exports = {
   SalesQuotationManageClient,
   OUTCOME,
   SapQuotationError,
+  toEdmDate,
   buildHeaderChanges,
+  parseSapError,
+  toQuotationError,
+  STEP,
+  INCOMPLETE_REFERENCE_CODE,
+  INCOMPLETE_DOCUMENT_CODE,
   SERVICE_PATH,
   NAMESPACE,
   ENTITY_SET,
-  UPDATABLE_HEADER_FIELDS,
-  INCOMPLETE_REFERENCE_CODE
+  UPDATABLE_HEADER_FIELDS
 };

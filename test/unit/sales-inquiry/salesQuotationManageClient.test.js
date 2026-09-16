@@ -147,6 +147,16 @@ describe('Unit: SalesQuotationManageClient - business errors', () => {
         expect(calls).toHaveLength(2);
     });
 
+    test('(2b) SLS_LORD/009 at CREATE step shows the incompletion message and opens no session', async () => {
+        const { execute, calls } = fakeSap([csrfOk, () => { throw odataError(400, 'SLS_LORD/009', 'Document is incomplete'); }]);
+
+        const err = await run(execute, { salesInquiry: '1000540' }).catch(e => e);
+
+        expect(err.message).toBe('Inquiry 1000540 is incomplete in SAP and cannot be converted to a Sales Quotation. Complete the inquiry in VA22 before creating the quotation.');
+        expect(err).toMatchObject({ status: 400, sapCode: 'SLS_LORD/009' });
+        expect(calls).toHaveLength(2);
+    });
+
     test('an explicit SAP rejection of SaveChanges is reported with the SAP code and releases the lock', async () => {
         const { execute, calls } = fakeSap([csrfOk, createdOk, sessionCheckOk, patchedOk, () => { throw odataError(400, 'SLS_LORD/009', 'Document is incomplete'); }, discardOk]);
 

@@ -693,9 +693,217 @@ describe('Unit: Sales Inquiry Adapter', () => {
                 .rejects.toThrow('Sales Inquiry number is required.');
         });
 
-        test('delegates to the V4 client with the inquiry, quotation type and dialog header values', async () => {
+        test('pre-flight check: rejects with 404 when inquiry does not exist in SAP', async () => {
+            const quotationClient = { createFromInquiry: jest.fn() };
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue(null);
+
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000999', { quotationClient }))
+                .rejects.toMatchObject({ message: 'Sales Inquiry 1000999 could not be found in SAP.', status: 404 });
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+        });
+
+        test('pre-flight check: rejects with 400 naming all 4 missing fields in business language before CreateWithRefFromSlsInquiry is sent', async () => {
+            const quotationClient = { createFromInquiry: jest.fn() };
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: { SalesInquiry: '1000536' },
+                items: []
+            });
+
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000536', { quotationClient, checkIncompletionLog: false }))
+                .rejects.toMatchObject({
+                    name: 'SapQuotationIncompleteError',
+                    status: 400,
+                    missingFields: ['Customer Group 2', 'Port of Loading', 'Port of Discharge', 'Contact Person'],
+                    message: expect.stringContaining('Inquiry 1000536 is incomplete in SAP (missing: Customer Group 2, Port of Loading, Port of Discharge, Contact Person).')
+                });
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+        });
+
+        test('pre-flight check: rejects with 400 naming only missing Contact Person when other fields are present', async () => {
+            const quotationClient = { createFromInquiry: jest.fn() };
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: {
+                    SalesInquiry: '1000536',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN'
+                },
+                items: []
+            });
+
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000536', { quotationClient, checkIncompletionLog: false }))
+                .rejects.toMatchObject({
+                    name: 'SapQuotationIncompleteError',
+                    status: 400,
+                    missingFields: ['Contact Person'],
+                    message: expect.stringContaining('Inquiry 1000536 is incomplete in SAP (missing: Contact Person).')
+                });
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+        });
+
+        test('pre-flight check: rejects with 400 when Contact Person has display name but lacks numeric partner number', async () => {
+            const quotationClient = { createFromInquiry: jest.fn() };
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: {
+                    SalesInquiry: '1000536',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN',
+                    ContactPerson: '', // name only, no numeric partner
+                    ContactPersonName: 'John Doe'
+                },
+                items: []
+            });
+
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000536', { quotationClient, checkIncompletionLog: false }))
+                .rejects.toMatchObject({
+                    name: 'SapQuotationIncompleteError',
+                    status: 400,
+                    missingFields: ['Contact Person'],
+                    message: expect.stringContaining('Inquiry 1000536 is incomplete in SAP (missing: Contact Person).')
+                });
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+        });
+
+        test('pre-flight check: rejects with 400 when Contact Person is non-numeric string', async () => {
+            const quotationClient = { createFromInquiry: jest.fn() };
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: {
+                    SalesInquiry: '1000536',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN',
+                    ContactPerson: 'John Doe' // text instead of NUMC partner
+                },
+                items: []
+            });
+
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000536', { quotationClient, checkIncompletionLog: false }))
+                .rejects.toMatchObject({
+                    name: 'SapQuotationIncompleteError',
+                    status: 400,
+                    missingFields: ['Contact Person']
+                });
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+        });
+
+        test('exports MANDATORY_INCOMPLETION_FIELDS referencing OVA2/TVUVF table', () => {
+            expect(salesInquiryAdapter.MANDATORY_INCOMPLETION_FIELDS).toBeDefined();
+            expect(Array.isArray(salesInquiryAdapter.MANDATORY_INCOMPLETION_FIELDS)).toBe(true);
+            expect(salesInquiryAdapter.MANDATORY_INCOMPLETION_FIELDS).toHaveLength(4);
+            const fieldNames = salesInquiryAdapter.MANDATORY_INCOMPLETION_FIELDS.map(f => f.property);
+            expect(fieldNames).toEqual(['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson']);
+        });
+
+        test('pre-flight check: rejects when SD_F2430_INCOMP_SRV reports document is incomplete even if fallback fields are filled', async () => {
+            const quotationClient = { createFromInquiry: jest.fn() };
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: {
+                    SalesInquiry: '1000536',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN',
+                    ContactPerson: '0000025160',
+                    ContactPersonName: 'MN Rao'
+                },
+                items: []
+            });
+            jest.spyOn(salesInquiryAdapter, '_checkIncompletionLog').mockResolvedValue({
+                isIncomplete: true,
+                count: 2,
+                status: 'A'
+            });
+
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000536', { quotationClient }))
+                .rejects.toMatchObject({
+                    name: 'SapQuotationIncompleteError',
+                    status: 400,
+                    message: expect.stringContaining('Inquiry 1000536 is incomplete in SAP (2 incompletion issues flagged by SAP).')
+                });
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+        });
+
+        test('_checkIncompletionLog: returns isIncomplete=true when SD_F2430_INCOMP_SRV reports incomplete fields', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                data: {
+                    d: {
+                        SalesDocument: '1000537',
+                        NumberOfIncompleteFields: 4,
+                        HdrGeneralIncompletionStatus: 'A'
+                    }
+                }
+            });
+            const result = await salesInquiryAdapter._checkIncompletionLog('1000537', {
+                destination: { url: 'http://sap.example.com' },
+                executeHttpRequest: mockExecute
+            });
+            expect(result).toEqual({ isIncomplete: true, count: 4, status: 'A' });
+            expect(mockExecute).toHaveBeenCalledWith(
+                { url: 'http://sap.example.com' },
+                expect.objectContaining({
+                    url: expect.stringContaining("/sap/opu/odata/sap/SD_F2430_INCOMP_SRV/C_Incompl_SalesDocWL_F2430('1000537')")
+                })
+            );
+        });
+
+        test('_checkIncompletionLog: returns isIncomplete=false when SD_F2430_INCOMP_SRV returns 404 (document is complete)', async () => {
+            const notFoundErr = new Error('Not Found');
+            notFoundErr.response = { status: 404 };
+            const mockExecute = jest.fn().mockRejectedValue(notFoundErr);
+            const result = await salesInquiryAdapter._checkIncompletionLog('100000', {
+                destination: { url: 'http://sap.example.com' },
+                executeHttpRequest: mockExecute
+            });
+            expect(result).toEqual({ isIncomplete: false, count: 0 });
+        });
+
+        test('capability states: Standard vs Extended reaction without code change', async () => {
+            const quotationClient = { createFromInquiry: jest.fn().mockResolvedValue({ SalesQuotation: '20000515', verified: true }) };
+            jest.spyOn(console, 'info').mockImplementation(() => {});
+
+            // State A: Standard capability (unsupported fields -> inquiry missing values -> pre-flight rejects)
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValueOnce({
+                header: { SalesInquiry: '1000538' }, // lacks CustomerGroup2, PortOfLoading, PortOfDischarge, ContactPerson
+                items: []
+            });
+            await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000538', { quotationClient, checkIncompletionLog: false }))
+                .rejects.toThrow(salesInquiryAdapter.SapQuotationIncompleteError);
+            expect(quotationClient.createFromInquiry).not.toHaveBeenCalled();
+
+            // State B: Extended capability (transport landed -> inquiry created with values -> pre-flight passes)
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValueOnce({
+                header: {
+                    SalesInquiry: '1000539',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN',
+                    ContactPerson: '0000025160',
+                    ContactPersonName: 'MN Rao'
+                },
+                items: []
+            });
+            jest.spyOn(salesInquiryAdapter, '_checkIncompletionLog').mockResolvedValueOnce({ isIncomplete: false, count: 0 });
+
+            const res = await salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', { quotationClient });
+            expect(res.SalesQuotation).toBe('20000515');
+            expect(quotationClient.createFromInquiry).toHaveBeenCalled();
+        });
+
+        test('delegates to the V4 client when inquiry is complete', async () => {
             const quotationClient = { createFromInquiry: jest.fn().mockResolvedValue({ SalesQuotation: '20000512', verified: true }) };
             jest.spyOn(console, 'info').mockImplementation(() => {});
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: {
+                    SalesInquiry: '1000536',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN',
+                    ContactPerson: '0000025160',
+                    ContactPersonName: 'MN Rao'
+                },
+                items: []
+            });
+            jest.spyOn(salesInquiryAdapter, '_checkIncompletionLog').mockResolvedValue({ isIncomplete: false, count: 0 });
 
             const res = await salesInquiryAdapter.createSalesQuoteFromInquiry(' 1000536 ', {
                 quotationClient,
@@ -718,10 +926,22 @@ describe('Unit: Sales Inquiry Adapter', () => {
             });
         });
 
-        test('propagates the SAP business error unchanged', async () => {
+        test('propagates the SAP business error unchanged when complete inquiry is rejected by SAP backend', async () => {
             const sapError = Object.assign(new Error('Inquiry 1000539 is incomplete in SAP and cannot be converted to a Sales Quotation. Complete the inquiry in VA22 before creating the quotation.'), { status: 400, sapCode: 'SLS_LORD/166' });
             const quotationClient = { createFromInquiry: jest.fn().mockRejectedValue(sapError) };
             jest.spyOn(console, 'error').mockImplementation(() => {});
+            jest.spyOn(salesInquiryAdapter, 'getInquiry').mockResolvedValue({
+                header: {
+                    SalesInquiry: '1000539',
+                    CustomerGroup2: 'SEA',
+                    PortOfLoading: 'INNSA',
+                    PortOfDischarge: 'SGSIN',
+                    ContactPerson: '0000025160',
+                    ContactPersonName: 'MN Rao'
+                },
+                items: []
+            });
+            jest.spyOn(salesInquiryAdapter, '_checkIncompletionLog').mockResolvedValue({ isIncomplete: false, count: 0 });
 
             await expect(salesInquiryAdapter.createSalesQuoteFromInquiry('1000539', { quotationClient }))
                 .rejects.toBe(sapError);
