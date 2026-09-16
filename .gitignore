@@ -9,6 +9,13 @@ dist/
 gen/
 .mbtbuild/
 *.mtar
-.DS_Store
 srv/external/all_catalog_services.json
 *.trc
+
+# Development screenshots
+docs/screenshots/
+docs/*.png
+
+# SAP RFC trace & dev files
+dev_*
+rfc*.trc
