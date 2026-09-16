@@ -2,6 +2,7 @@
 const cds = require('@sap/cds');
 const SessionContext = require('../../SessionContext');
 const { S4HttpClient } = require('../../S4HttpClient');
+const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
 
 /**
@@ -349,7 +350,7 @@ class PurchaseOrderAdapter {
     metrics.unavailable = unavailable;
     if (unavailable.length === keys.length && lastError) {
       metrics.error = lastError.includes('401')
-        ? 'SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client 220.'
+        ? `SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client ${s4Config.getClient()}.`
         : `SAP S/4HANA backend unavailable: ${lastError}`;
     }
 

@@ -1,6 +1,48 @@
 
 # Changes Log
 
+## 2026-09-16 09:45 IST
+- **Agent**: Antigravity
+- **Change**: Centralized environment-specific S/4HANA values into `cds.env` via a dedicated configuration module (`s4Config.js`), removed hardcoded fallback literals across all adapters and mappers, and implemented fail-loud validation (`package.json`, `.env.example`, `server.js`, `srv/common/s4Config.js`, `srv/integration/s4hana/s4Config.js`, `srv/integration/s4hana/AuthAdapter.js`, `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`, `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/ewm/EwmAdapter.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`, `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`, `test/unit/common/s4Config.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
+  - **Root cause**:
+    - Environment-specific values and business defaults were hardcoded as string literals throughout the integration and service layers (SAP client `220`, plant `1120`, storage location `CS01`, storage bin `CS01-BIN`, sales organization `1000`, distribution channel `10`, division `52`, currency `INR`, inquiry type `ZIN`, quotation type `ZQT`, condition type `ZPR1`, and specific shipping points `['1120', '1112', '1108', '1109']`).
+    - Fallback expressions like `|| '220'`, `|| '1000'`, `|| 'CS01'`, and `|| 'INR'` in adapters and mappers violated AGENTS.md rules against hardcoded environment literals and masked missing configuration silently instead of failing loudly.
+  - **Resolution**:
+    1. **Central Configuration in `package.json` under `cds.s4`**:
+       - Configured standard defaults in `package.json` under `cds.s4`: `client: "220"`, `plant: "1120"`, `storageLocation: "CS01"`, `storageBin: "CS01-BIN"`, `salesOrganization: "1000"`, `distributionChannel: "10"`, `division: "52"`, `currency: "INR"`, `inquiryType: "ZIN"`, `quotationType: "ZQT"`, `conditionType: "ZPR1"`, `shippingPoints: ["1120", "1112", "1108", "1109"]`.
+       - Documented environment variable overrides in `.env.example`.
+    2. **Fail-Loud Configuration Module (`srv/common/s4Config.js` & `srv/integration/s4hana/s4Config.js`)**:
+       - Created `S4Config` class and `ConfigurationError` reading dynamically from `cds.env.s4` / `cds.env.s4hana` with environment variable override support.
+       - Implemented fail-loud validation throwing `ConfigurationError` when any required key is missing, empty string, or empty array.
+       - Exported typed getters (`getClient()`, `getPlant()`, `getStorageLocation()`, `getStorageBin()`, `getSalesOrganization()`, `getDistributionChannel()`, `getDivision()`, `getCurrency()`, `getInquiryType()`, `getQuotationType()`, `getConditionType()`, `getShippingPoints()`), property getters, `getAll()`, and `validate()`.
+       - Re-exported singleton from `srv/integration/s4hana/s4Config.js`.
+    3. **Refactored Adapters, Server, and Mappers**:
+       - `server.js`: Replaced `process.env.S4_CLIENT || '220'` with `s4Config.getClient()`.
+       - `AuthAdapter.js`: Replaced `process.env.S4_CLIENT || '220'` with `options.client || s4Config.getClient()`.
+       - `PurchaseOrderAdapter.js`: Replaced hardcoded `client 220` with `client ${s4Config.getClient()}`.
+       - `GoodsReceiptAdapter.js`: Replaced `'CS01'` fallback with `s4Config.getStorageLocation()` and dynamic client in error messages.
+       - `GoodsIssueAdapter.js`: Replaced `'CS01'` and `'CS01-BIN'` with `s4Config.getStorageLocation()` and `s4Config.getStorageBin()`, and dynamic client in error messages.
+       - `EwmAdapter.js`: Replaced warehouse `'1120'` literal with `s4Config.getPlant()` and hardcoded shipping points with `s4Config.getShippingPoints()`.
+       - `SalesInquiryAdapter.js`: Replaced fallback literals for client, sales org, channel, division, currency, inquiry type, quotation type, and condition type with `s4Config` getters.
+       - `SalesInquiryMapper.js`: Replaced `'ZIN'`, `'1000'`, `'10'`, `'52'`, and `'INR'` fallbacks with `s4Config` getters.
+       - `salesInquiry.mapper.js`: Replaced `'ZIN'`, `'1000'`, `'10'`, `'52'`, and `'INR'` fallbacks with `s4Config` getters.
+    4. **Automated Unit Tests (`test/unit/common/s4Config.test.js`)**:
+       - Added 32 comprehensive tests verifying default loading from `cds.env.s4`, property getters, `getAll()`, `validate()`, environment variable overrides, and fail-loud `ConfigurationError` assertions for every required key.
+  - **Validation**:
+    - `npm test`: **67 passed, 67 total suites; 864 passed, 864 total tests (100% green)** in 44.9 s.
+    - `npx jest test/unit/common/s4Config.test.js`: 32/32 passed (100% green).
+    - `npx jest test/unit/authAdapter.test.js`: 12/12 passed (100% green).
+    - `npx jest test/unit/sales-inquiry`: 13/13 suites, 170/170 tests passed (100% green).
+    - `npx jest test/unit/wm`: 6/6 suites, 131/131 tests passed (100% green).
+    - `npx jest test/unit/ewm`: 9/9 suites, 167/167 tests passed (100% green).
+    - `npx jest test/unit/dashboard`: 29/29 passed (100% green).
+    - `cd app/fiori-app && npm run lint`: 0 findings detected.
+    - `cd app/fiori-app && npm run build`: Succeeded in 1.01 s.
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**:
+    - Commit and push changes to remote repository.
+
 ## 2026-09-16 09:35 IST
 - **Agent**: Antigravity
 - **Change**: Parallelized independent S/4HANA reads, cached slow-changing master data with short TTLs, and eliminated redundant 26-request dashboard query storms (`srv/common/TtlCache.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`, `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`, `test/unit/common/ttlCache.test.js`, `test/unit/sales-inquiry/salesInquiryAdapter.test.js`, `test/unit/dashboard/dashboardMetrics.test.js`, `WORKSTATUS.md`, `walkthrough.md`).

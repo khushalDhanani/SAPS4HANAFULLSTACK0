@@ -3,6 +3,8 @@
  * Normalizes incoming CAP domain data into consistent business structures.
  */
 
+const s4Config = require('../../../common/s4Config');
+
 /**
  * Normalizes sales inquiry domain data.
  *
@@ -20,7 +22,7 @@ function normalizeSalesInquiryData(data, options = {}) {
 
     const currency = rawHeader.TransactionCurrency
         ? String(rawHeader.TransactionCurrency).trim().toUpperCase()
-        : 'INR';
+        : s4Config.getCurrency();
 
     let calculatedTotal = 0;
 
@@ -58,10 +60,10 @@ function normalizeSalesInquiryData(data, options = {}) {
         : firstItemDesc;
 
     const normalizedHeader = {
-        SalesInquiryType: rawHeader.SalesInquiryType ? String(rawHeader.SalesInquiryType).trim() : 'ZIN',
-        SalesOrganization: rawHeader.SalesOrganization ? String(rawHeader.SalesOrganization).trim() : '1000',
-        DistributionChannel: rawHeader.DistributionChannel ? String(rawHeader.DistributionChannel).trim() : '10',
-        OrganizationDivision: rawHeader.OrganizationDivision ? String(rawHeader.OrganizationDivision).trim() : '52',
+        SalesInquiryType: rawHeader.SalesInquiryType ? String(rawHeader.SalesInquiryType).trim() : s4Config.getInquiryType(),
+        SalesOrganization: rawHeader.SalesOrganization ? String(rawHeader.SalesOrganization).trim() : s4Config.getSalesOrganization(),
+        DistributionChannel: rawHeader.DistributionChannel ? String(rawHeader.DistributionChannel).trim() : s4Config.getDistributionChannel(),
+        OrganizationDivision: rawHeader.OrganizationDivision ? String(rawHeader.OrganizationDivision).trim() : s4Config.getDivision(),
         SalesOffice: rawHeader.SalesOffice ? String(rawHeader.SalesOffice).trim() : '',
         SalesOfficeName: rawHeader.SalesOfficeName ? String(rawHeader.SalesOfficeName).trim() : '',
         SalesGroup: rawHeader.SalesGroup ? String(rawHeader.SalesGroup).trim() : '',

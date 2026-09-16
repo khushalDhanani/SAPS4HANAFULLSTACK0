@@ -1,5 +1,6 @@
 const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient } = require('../S4HttpClient');
+const s4Config = require('../s4Config');
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA for Goods Receipt (Movement 101):
@@ -526,7 +527,7 @@ class GoodsReceiptAdapter {
     // --- TIER 7: Genuine Non-Existent Object / Validation Error ---
     if (!scannedType) {
       const err = new Error(
-        `Validation Error: Scanned barcode '${sCleanScan}' was evaluated across active Inbound Deliveries, Purchase Orders, Materials, Batches, and Storage Units in SAP S/4HANA (Client 220) and does not exist in any active record. Please scan a valid SAP barcode or use Value Help to select an open inbound record.`
+        `Validation Error: Scanned barcode '${sCleanScan}' was evaluated across active Inbound Deliveries, Purchase Orders, Materials, Batches, and Storage Units in SAP S/4HANA (Client ${s4Config.getClient()}) and does not exist in any active record. Please scan a valid SAP barcode or use Value Help to select an open inbound record.`
       );
       err.statusCode = 404;
       throw err;
@@ -534,7 +535,7 @@ class GoodsReceiptAdapter {
 
     // Retrieve authentic Storage Locations & Bins
     const storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
-    const defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : 'CS01';
+    const defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : s4Config.getStorageLocation();
     const defaultSLocName = storageLocations.length > 0 ? storageLocations[0].StorageLocationName : '';
     const defaultBin = storageLocations.length > 0 ? storageLocations[0].WarehouseStorageBin : '';
 
@@ -642,7 +643,7 @@ class GoodsReceiptAdapter {
       // Mock persistence and dummy document generation are strictly prohibited.
       const errorMsg = err.message || JSON.stringify(err);
       throw new Error(
-        `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' failed in SAP Gateway (Client 220): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
+        `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' failed in SAP Gateway (Client ${s4Config.getClient()}): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
       );
     }
   }

@@ -1,6 +1,7 @@
 const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const EwmMapper = require('./EwmMapper');
+const s4Config = require('../s4Config');
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA EWM Services:
@@ -343,7 +344,8 @@ class EwmAdapter {
   async getInboundDeliveries(warehouse, top = 50) {
     // 1. Try real SAP deliveries from LE_SHP_WHSE_CLERK_OVP_SRV
     try {
-      const filter = (warehouse === '1120' || warehouse === '1130')
+      const defaultPlant = s4Config.getPlant();
+      const filter = (warehouse === defaultPlant || warehouse === '1130')
         ? `$filter=Supplier eq '${warehouse}'`
         : '';
       const query = `${filter ? filter + '&' : ''}$expand=to_Supplier&$top=${top}&$format=json`;
@@ -378,8 +380,10 @@ class EwmAdapter {
     // 1. Try real SAP Outbound Deliveries from LE_SHP_WHSE_CLERK_OVP_SRV
     try {
       let filter = '';
-      if (warehouse === '1120') {
-        filter = `$filter=ShippingPoint eq '1120' or ShippingPoint eq '1112' or ShippingPoint eq '1108' or ShippingPoint eq '1109'`;
+      const defaultPlant = s4Config.getPlant();
+      if (warehouse === defaultPlant) {
+        const shippingPoints = s4Config.getShippingPoints();
+        filter = `$filter=${shippingPoints.map(sp => `ShippingPoint eq '${sp}'`).join(' or ')}`;
       } else if (warehouse === '1130') {
         filter = `$filter=ShippingPoint eq '1130' or ShippingPoint eq '1113'`;
       } else if (warehouse) {

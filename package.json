@@ -152,6 +152,25 @@
         "kind": "odata-v2",
         "model": "srv/external/LORD_ODATA_ORDER_SRV"
       }
+    },
+    "s4": {
+      "client": "220",
+      "plant": "1120",
+      "storageLocation": "CS01",
+      "storageBin": "CS01-BIN",
+      "salesOrganization": "1000",
+      "distributionChannel": "10",
+      "division": "52",
+      "currency": "INR",
+      "inquiryType": "ZIN",
+      "quotationType": "ZQT",
+      "conditionType": "ZPR1",
+      "shippingPoints": [
+        "1120",
+        "1112",
+        "1108",
+        "1109"
+      ]
     }
   }
 }

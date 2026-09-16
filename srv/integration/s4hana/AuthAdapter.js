@@ -1,4 +1,5 @@
 const { S4HttpClient } = require('./S4HttpClient');
+const s4Config = require('./s4Config');
 
 /**
  * Adapter class to encapsulate authentication and credential validation
@@ -93,7 +94,7 @@ class AuthAdapter {
 
     const sUser = username.trim();
     const sPass = password.trim();
-    const sClient = options.client || process.env.S4_CLIENT || '220';
+    const sClient = options.client || s4Config.getClient();
 
     const baseDest = options.destination || (await this._getDestination(options));
     const baseUrl = options.baseUrl || (baseDest && baseDest.url);

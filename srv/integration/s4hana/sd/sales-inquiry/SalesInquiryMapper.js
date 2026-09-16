@@ -3,6 +3,8 @@
  * Maps between CAP Sales Inquiry domain representations and SAP S/4HANA OData technical payloads.
  */
 
+const s4Config = require('../../s4Config');
+
 /**
  * Maps CAP domain payload to S/4HANA Inquiry structure.
  *
@@ -19,10 +21,10 @@ function mapToS4InquiryPayload(header, items, options = {}) {
     const today = new Date().toISOString().split('T')[0];
 
     const s4Header = {
-        SalesInquiryType: String(header.SalesInquiryType || 'ZIN').trim(),
-        SalesOrganization: String(header.SalesOrganization || '1000').trim(),
-        DistributionChannel: String(header.DistributionChannel || '10').trim(),
-        OrganizationDivision: String(header.OrganizationDivision || '52').trim(),
+        SalesInquiryType: String(header.SalesInquiryType || s4Config.getInquiryType()).trim(),
+        SalesOrganization: String(header.SalesOrganization || s4Config.getSalesOrganization()).trim(),
+        DistributionChannel: String(header.DistributionChannel || s4Config.getDistributionChannel()).trim(),
+        OrganizationDivision: String(header.OrganizationDivision || s4Config.getDivision()).trim(),
         SalesOffice: String(header.SalesOffice || '').trim(),
         SalesGroup: String(header.SalesGroup || '').trim(),
         SoldToParty: String(header.SoldToParty || '').trim(),
@@ -32,7 +34,7 @@ function mapToS4InquiryPayload(header, items, options = {}) {
         SalesInquiryDate: header.SalesInquiryDate || today,
         BindingPeriodValidityStartDate: header.BindingPeriodValidityStartDate || today,
         BindingPeriodValidityEndDate: header.BindingPeriodValidityEndDate || today,
-        TransactionCurrency: String(header.TransactionCurrency || 'INR').trim().toUpperCase(),
+        TransactionCurrency: String(header.TransactionCurrency || s4Config.getCurrency()).trim().toUpperCase(),
         TotalNetAmount: header.TotalNetAmount !== undefined ? String(header.TotalNetAmount) : '0.00'
     };
 

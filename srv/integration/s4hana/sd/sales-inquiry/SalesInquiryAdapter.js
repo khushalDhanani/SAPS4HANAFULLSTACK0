@@ -1,6 +1,7 @@
 const cds = require('@sap/cds');
 const { SalesQuotationManageClient } = require('./SalesQuotationManageClient');
 const { S4HttpClient } = require('../../S4HttpClient');
+const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
 
 const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
@@ -513,15 +514,15 @@ class SalesInquiryAdapter {
 
         // If still unassigned, query valid Sales Office for the inquiry's Sales Area from SAP configuration
         if ((!header.SalesOffice || header.SalesOffice.trim() === '') && sOrg) {
-          const areaKey = `${sOrg}:${header.DistributionChannel || '10'}:${header.OrganizationDivision || '52'}`;
+          const areaKey = `${sOrg}:${header.DistributionChannel || s4Config.getDistributionChannel()}:${header.OrganizationDivision || s4Config.getDivision()}`;
           try {
             const oMatch = await this.salesOfficeVhCache.getOrSet(`area:${areaKey}`, async () => {
               const orgRows = await this.s4hanaWL.run(
                 SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp')
                   .where({
                     SalesOrganization: sOrg,
-                    DistributionChannel: header.DistributionChannel || '10',
-                    OrganizationDivision: header.OrganizationDivision || '52'
+                    DistributionChannel: header.DistributionChannel || s4Config.getDistributionChannel(),
+                    OrganizationDivision: header.OrganizationDivision || s4Config.getDivision()
                   })
                   .limit(1)
               );
@@ -621,7 +622,7 @@ class SalesInquiryAdapter {
     let sName = '';
     let sCity = '';
     let sCountry = '';
-    let sCurrency = 'INR';
+    let sCurrency = s4Config.getCurrency();
     let sOffice = '';
     let sOfficeName = '';
     let sGroup = '';
@@ -673,14 +674,14 @@ class SalesInquiryAdapter {
 
         // If no office found on customer history, query valid office for provided sales area from cache or SAP
         if (!sOffice && sOrg) {
-          const areaKey = `${sOrg}:${sChannel || '10'}:${sDivision || '52'}`;
+          const areaKey = `${sOrg}:${sChannel || s4Config.getDistributionChannel()}:${sDivision || s4Config.getDivision()}`;
           const oMatch = await this.salesOfficeVhCache.getOrSet(`area:${areaKey}`, async () => {
             const areaOffices = await this.s4hanaWL.run(
               SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp')
                 .where({
                   SalesOrganization: sOrg,
-                  DistributionChannel: sChannel || '10',
-                  OrganizationDivision: sDivision || '52'
+                  DistributionChannel: sChannel || s4Config.getDistributionChannel(),
+                  OrganizationDivision: sDivision || s4Config.getDivision()
                 })
                 .limit(1)
             );
@@ -763,14 +764,14 @@ class SalesInquiryAdapter {
     const validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     return {
-      SalesInquiryType: 'ZIN',
-      SalesOrganization: '1000',
-      DistributionChannel: '10',
-      OrganizationDivision: '52',
+      SalesInquiryType: s4Config.getInquiryType(),
+      SalesOrganization: s4Config.getSalesOrganization(),
+      DistributionChannel: s4Config.getDistributionChannel(),
+      OrganizationDivision: s4Config.getDivision(),
       SalesInquiryDate: today,
       BindingPeriodValidityStartDate: today,
       BindingPeriodValidityEndDate: validityEnd,
-      TransactionCurrency: 'INR',
+      TransactionCurrency: s4Config.getCurrency(),
       derived: true
     };
   }
@@ -824,10 +825,10 @@ class SalesInquiryAdapter {
 
     // 1. Post Header to LORD_ODATA_ORDER_SRV/HeaderSet
     const headerPayload = {
-      SalesOrderTypeCode: header.SalesInquiryType || 'ZIN',
-      SalesOrganization: header.SalesOrganization || '1000',
-      DistributionChannel: header.DistributionChannel || '10',
-      Division: header.OrganizationDivision || '52',
+      SalesOrderTypeCode: header.SalesInquiryType || s4Config.getInquiryType(),
+      SalesOrganization: header.SalesOrganization || s4Config.getSalesOrganization(),
+      DistributionChannel: header.DistributionChannel || s4Config.getDistributionChannel(),
+      Division: header.OrganizationDivision || s4Config.getDivision(),
       SoldToPartyID: header.SoldToParty || '',
       PurchaseOrderNumber: custRef
     };
@@ -932,9 +933,9 @@ class SalesInquiryAdapter {
           const condPayload = {
             SalesOrderID: sNewInquiryId,
             ItemID: lineNum,
-            CondTypeCode: 'ZPR1',
+            CondTypeCode: s4Config.getConditionType(),
             AmountInternal: String(effectivePrice.toFixed(2)),
-            RateUnitExternal: header.TransactionCurrency || 'INR',
+            RateUnitExternal: header.TransactionCurrency || s4Config.getCurrency(),
             PriceUnit: '1.000',
             UnitOfMeasure: itm.OrderQuantityUnit || 'PC'
           };
@@ -973,7 +974,7 @@ class SalesInquiryAdapter {
     return {
       SalesInquiry: sNewInquiryId,
       TotalNetAmount: totalNet > 0 ? String(totalNet.toFixed(2)) : (headerResp.data?.d?.NetValue || '0.00'),
-      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || 'INR',
+      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || s4Config.getCurrency(),
       notTransmitted
     };
   }
@@ -1104,7 +1105,7 @@ class SalesInquiryAdapter {
     }
 
     const salesQuotationType = String(
-      options.SalesQuotationType || options.quotationType || process.env.S4_QUOTATION_TYPE || 'ZQT'
+      options.SalesQuotationType || options.quotationType || s4Config.getQuotationType()
     ).trim();
 
     const client = options.quotationClient || new SalesQuotationManageClient({
@@ -1163,7 +1164,7 @@ class SalesInquiryAdapter {
         url: process.env.S4_DESTINATION_URL,
         username,
         password,
-        headers: { 'sap-client': process.env.S4_CLIENT || '220' }
+        headers: { 'sap-client': s4Config.getClient() }
       };
     }
 

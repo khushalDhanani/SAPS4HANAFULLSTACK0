@@ -29,7 +29,8 @@ const { registerDestination } = require('@sap-cloud-sdk/connectivity');
 
 // In local development, configure credentials and register local destination if running outside BTP
 if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
-    const client = process.env.S4_CLIENT || '220';
+    const s4Config = require('./srv/common/s4Config');
+    const client = s4Config.getClient();
     const headers = { 'sap-client': client };
 
     const credsFS = {

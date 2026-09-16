@@ -1,5 +1,6 @@
 const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
+const s4Config = require('../s4Config');
 
 // ──────────────────────────────────────────────────────────
 // Stock Unit (SU) / Handling Unit (HU) resolution configuration
@@ -293,7 +294,7 @@ class GoodsIssueAdapter {
     // TIER 6: Error if not found across all tiers in SAP Client 220
     if (!scannedType || !resolvedResv) {
       const err = new Error(
-        `Validation Error: Scanned barcode '${sClean}' was evaluated across active Reservations, Production Orders, Materials, Batches, and Storage Units in SAP S/4HANA (Client 220) and does not match any open Goods Issue requirement. Please scan a valid SAP identifier or use Value Help to select an open reservation.`
+        `Validation Error: Scanned barcode '${sClean}' was evaluated across active Reservations, Production Orders, Materials, Batches, and Storage Units in SAP S/4HANA (Client ${s4Config.getClient()}) and does not match any open Goods Issue requirement. Please scan a valid SAP identifier or use Value Help to select an open reservation.`
       );
       err.status = 404;
       throw err;
@@ -359,9 +360,9 @@ class GoodsIssueAdapter {
       Items: openItems,
       AvailableBatches: availableBatches,
       AvailableStock: availableStock,
-      DefaultStorageLocation: activeItem.StorageLocation || 'CS01',
+      DefaultStorageLocation: activeItem.StorageLocation || s4Config.getStorageLocation(),
       DefaultStorageLocationName: activeItem.StorageBin || 'Raw Material',
-      DefaultStorageBin: activeItem.StorageBin || 'CS01-BIN'
+      DefaultStorageBin: activeItem.StorageBin || s4Config.getStorageBin()
     };
   }
 
@@ -829,7 +830,7 @@ class GoodsIssueAdapter {
       } catch (v2Err) {
         // In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.
         const postingError = new Error(
-          `SAP S/4HANA Backend Posting Capability Unavailable: Neither custom RAP service 'ZUI_GI_ORDER_RSV_O4' nor standard service 'API_MATERIAL_DOCUMENT_SRV' is registered/activated on Gateway client 220 (${v4Err.message}). Catalog service 'ZMMIM_MATDOC_SRV' (sap_all_services.json L1863) exists on client 220 but is restricted to MBND_CLOUD Stock Transfers (returns HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`
+          `SAP S/4HANA Backend Posting Capability Unavailable: Neither custom RAP service 'ZUI_GI_ORDER_RSV_O4' nor standard service 'API_MATERIAL_DOCUMENT_SRV' is registered/activated on Gateway client ${s4Config.getClient()} (${v4Err.message}). Catalog service 'ZMMIM_MATDOC_SRV' (sap_all_services.json L1863) exists on client ${s4Config.getClient()} but is restricted to MBND_CLOUD Stock Transfers (returns HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`
         );
         postingError.status = 501;
         throw postingError;
@@ -900,7 +901,7 @@ class GoodsIssueAdapter {
       return response;
     } catch (err) {
       // In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.
-      const postingError = new Error(`SAP S/4HANA Backend Posting Capability Unavailable: Neither standard service 'API_MATERIAL_DOCUMENT_SRV' nor custom RAP service 'ZUI_GI_ORDER_RSV_O4' is registered/activated on Gateway client 220 (${err.message}). In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`);
+      const postingError = new Error(`SAP S/4HANA Backend Posting Capability Unavailable: Neither standard service 'API_MATERIAL_DOCUMENT_SRV' nor custom RAP service 'ZUI_GI_ORDER_RSV_O4' is registered/activated on Gateway client ${s4Config.getClient()} (${err.message}). In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`);
       postingError.status = 501;
       throw postingError;
     }
