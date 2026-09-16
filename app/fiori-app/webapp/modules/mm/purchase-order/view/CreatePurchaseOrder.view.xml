@@ -25,7 +25,7 @@
                     close=".onDismissError"
                     class="sapUiSmallMarginBottom">
                     <link>
-                        <Link text="View all {newPO>/errorCount} issue(s)" press=".onMessageButtonPress" />
+                        <Link text="{i18n>viewAllIssuesPrefix} {newPO>/errorCount} {i18n>issuesSuffix}" press=".onMessageButtonPress" />
                     </link>
                 </MessageStrip>
 
@@ -43,7 +43,7 @@
                         </layoutData>
                         <headerToolbar>
                             <Toolbar>
-                                <Title text="General &amp; Organizational Data" level="H3" />
+                                <Title text="{i18n>poPanelGeneralData}" level="H3" />
                                 <ToolbarSpacer />
                                 <ObjectStatus
                                     id="headerPOStatus"
@@ -62,8 +62,8 @@
                             columnsXL="1" columnsL="1" columnsM="1"
                             singleContainerFullSize="false">
                             <f:content>
-                                <Label text="Document Type" required="true" />
-                                <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="e.g. NB" maxLength="4"
+                                <Label text="{i18n>colDocType}" required="true" />
+                                <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="{i18n>poPlaceholderDocType}" maxLength="4"
                                     valueState="{newPO>/errors/PurchaseOrderType/state}"
                                     valueStateText="{newPO>/errors/PurchaseOrderType/text}"
                                     change=".onDocTypeChange" liveChange=".onDocTypeChange" suggestionItemSelected=".onDocTypeSelect"
@@ -73,21 +73,21 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Status" />
+                                <Label text="{i18n>colStatus}" />
                                 <ObjectStatus
                                     id="formPOStatus"
                                     text="{newPO>/header/StatusText}"
                                     state="{newPO>/header/StatusState}"
                                     icon="{newPO>/header/StatusIcon}" />
 
-                                <Label text="Document Date" required="true" />
+                                <Label text="{i18n>salesInquiryLabelDocDate}" required="true" />
                                 <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true"
                                     valueState="{newPO>/errors/DocumentDate/state}"
                                     valueStateText="{newPO>/errors/DocumentDate/text}"
                                     change=".onDocDateChange" />
 
-                                <Label text="Company Code" required="true" />
-                                <Input id="inCompanyCode" value="{newPO>/header/CompanyCode}" placeholder="e.g. 1010" maxLength="4"
+                                <Label text="{i18n>colCompany}" required="true" />
+                                <Input id="inCompanyCode" value="{newPO>/header/CompanyCode}" placeholder="{i18n>poPlaceholderCompanyCode}" maxLength="4"
                                     valueState="{newPO>/errors/CompanyCode/state}"
                                     valueStateText="{newPO>/errors/CompanyCode/text}"
                                     change=".onCompanyCodeChange" liveChange=".onCompanyCodeChange" suggestionItemSelected=".onCompanyCodeSelect"
@@ -97,8 +97,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Purchasing Organization" required="true" />
-                                <Input id="inPurchOrg" value="{newPO>/header/PurchasingOrganization}" placeholder="e.g. 1010" maxLength="4"
+                                <Label text="{i18n>colPurchasingOrg}" required="true" />
+                                <Input id="inPurchOrg" value="{newPO>/header/PurchasingOrganization}" placeholder="{i18n>poPlaceholderPurchasingOrg}" maxLength="4"
                                     valueState="{newPO>/errors/PurchasingOrganization/state}"
                                     valueStateText="{newPO>/errors/PurchasingOrganization/text}"
                                     change=".onPurchOrgChange" liveChange=".onPurchOrgChange" suggestionItemSelected=".onPurchOrgSelect"
@@ -108,8 +108,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Purchasing Group" required="true" />
-                                <Input id="inPurchGrp" value="{newPO>/header/PurchasingGroup}" placeholder="e.g. 001" maxLength="3"
+                                <Label text="{i18n>colPurchasingGroup}" required="true" />
+                                <Input id="inPurchGrp" value="{newPO>/header/PurchasingGroup}" placeholder="{i18n>poPlaceholderPurchasingGroup}" maxLength="3"
                                     valueState="{newPO>/errors/PurchasingGroup/state}"
                                     valueStateText="{newPO>/errors/PurchasingGroup/text}"
                                     change=".onPurchGrpChange" liveChange=".onPurchGrpChange" suggestionItemSelected=".onPurchGrpSelect"
@@ -129,7 +129,7 @@
                         </layoutData>
                         <headerToolbar>
                             <Toolbar>
-                                <Title text="Supplier &amp; Commercial Terms" level="H3" />
+                                <Title text="{i18n>poPanelSupplierTerms}" level="H3" />
                             </Toolbar>
                         </headerToolbar>
                         <f:SimpleForm
@@ -142,8 +142,8 @@
                             columnsXL="1" columnsL="1" columnsM="1"
                             singleContainerFullSize="false">
                             <f:content>
-                                <Label text="Supplier" required="true" />
-                                <Input id="inSupplier" value="{newPO>/header/Supplier}" placeholder="e.g. 10300001" maxLength="10"
+                                <Label text="{i18n>colSupplier}" required="true" />
+                                <Input id="inSupplier" value="{newPO>/header/Supplier}" placeholder="{i18n>poPlaceholderSupplier}" maxLength="10"
                                     valueState="{newPO>/errors/Supplier/state}"
                                     valueStateText="{newPO>/errors/Supplier/text}"
                                     change=".onSupplierChange" liveChange=".onSupplierLiveChange" suggestionItemSelected=".onSupplierSelect"
@@ -153,8 +153,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Currency" required="true" />
-                                <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="e.g. EUR" maxLength="5"
+                                <Label text="{i18n>labelCurrency}" required="true" />
+                                <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="{i18n>poPlaceholderCurrency}" maxLength="5"
                                     valueState="{newPO>/errors/Currency/state}"
                                     valueStateText="{newPO>/errors/Currency/text}"
                                     change=".onCurrencyChange" liveChange=".onCurrencyChange" suggestionItemSelected=".onCurrencySelect"
@@ -164,8 +164,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Payment Terms" />
-                                <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="e.g. 0001" maxLength="4"
+                                <Label text="{i18n>labelPaymentTerms}" />
+                                <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="{i18n>poPlaceholderPaymentTerms}" maxLength="4"
                                     valueState="{newPO>/errors/PaymentTerms/state}"
                                     valueStateText="{newPO>/errors/PaymentTerms/text}"
                                     change=".onPaymentTermsChange" liveChange=".onPaymentTermsChange" suggestionItemSelected=".onPaymentTermsSelect"
@@ -175,8 +175,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Incoterms" />
-                                <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="e.g. EXW" maxLength="3"
+                                <Label text="{i18n>labelIncoterms}" />
+                                <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="{i18n>poPlaceholderIncoterms}" maxLength="3"
                                     valueState="{newPO>/errors/IncotermsClassification/state}"
                                     valueStateText="{newPO>/errors/IncotermsClassification/text}"
                                     change=".onIncotermsChange" liveChange=".onIncotermsChange" suggestionItemSelected=".onIncotermsSelect"
@@ -186,8 +186,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Incoterms Location 1" />
-                                <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="e.g. MUMBAI" maxLength="70"
+                                <Label text="{i18n>labelIncotermsLoc}" />
+                                <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="{i18n>poPlaceholderIncotermsLoc}" maxLength="70"
                                     valueState="{newPO>/errors/IncotermsLocation1/state}"
                                     valueStateText="{newPO>/errors/IncotermsLocation1/text}"
                                     change=".onIncotermsLocChange" liveChange=".onIncotermsLocChange" />
@@ -197,37 +197,37 @@
 
                 </layout:Grid>
 
-                <Panel headerText="Items">
+                <Panel headerText="{i18n>poHeaderItems}">
                     <headerToolbar>
                         <Toolbar>
-                            <Title text="Items ({= ${newPO>/items}.length })" level="H2"/>
+                            <Title text="{i18n>poItemsTitle} ({= ${newPO>/items}.length })" level="H2"/>
                             <ToolbarSpacer />
-                            <Button icon="sap-icon://add" text="Add Item" press=".onAddItem" type="Transparent" />
+                            <Button icon="sap-icon://add" text="{i18n>poBtnAddItem}" press=".onAddItem" type="Transparent" />
                         </Toolbar>
                     </headerToolbar>
                     <Table
                         id="poItemsTable"
                         items="{newPO>/items}"
-                        noDataText="No items added yet."
+                        noDataText="{i18n>poNoItemsAdded}"
                         mode="Delete"
                         delete=".onDeleteItem">
                         <columns>
-                            <Column width="4rem"><Text text="Item" /></Column>
-                            <Column width="9rem"><Text text="Plant" /></Column>
-                            <Column width="9rem"><Text text="Storage Location" /></Column>
-                            <Column width="11rem"><Text text="Material" /></Column>
-                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Description" /></Column>
-                            <Column width="7rem" hAlign="End"><Text text="Quantity" /></Column>
-                            <Column width="6rem"><Text text="Unit" /></Column>
-                            <Column width="7.5rem" hAlign="End"><Text text="Net Price" /></Column>
-                            <Column width="6.5rem"><Text text="Tax Code" /></Column>
-                            <Column width="8rem" hAlign="End"><Text text="Net Amount" /></Column>
+                            <Column width="4rem"><Text text="{i18n>poColItem}" /></Column>
+                            <Column width="9rem"><Text text="{i18n>poColPlant}" /></Column>
+                            <Column width="9rem"><Text text="{i18n>poColStorageLocation}" /></Column>
+                            <Column width="11rem"><Text text="{i18n>poColMaterial}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>poColDescription}" /></Column>
+                            <Column width="7rem" hAlign="End"><Text text="{i18n>poColQuantity}" /></Column>
+                            <Column width="6rem"><Text text="{i18n>poColUnit}" /></Column>
+                            <Column width="7.5rem" hAlign="End"><Text text="{i18n>poColNetPrice}" /></Column>
+                            <Column width="6.5rem"><Text text="{i18n>poColTaxCode}" /></Column>
+                            <Column width="8rem" hAlign="End"><Text text="{i18n>poColNetAmount}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
                                 <cells>
                                      <Text text="{newPO>PurchaseOrderItem}" />
-                                    <Input value="{newPO>Plant}" placeholder="e.g. 1010" required="true"
+                                    <Input value="{newPO>Plant}" placeholder="{i18n>poPlaceholderPlant}" required="true"
                                         valueState="{newPO>errors/Plant/state}"
                                         valueStateText="{newPO>errors/Plant/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -236,7 +236,7 @@
                                             <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>StorageLocation}" placeholder="e.g. 101A" required="true"
+                                    <Input value="{newPO>StorageLocation}" placeholder="{i18n>poPlaceholderStorageLocation}" required="true"
                                         valueState="{newPO>errors/StorageLocation/state}"
                                         valueStateText="{newPO>errors/StorageLocation/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -245,7 +245,7 @@
                                             <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>Material}" placeholder="e.g. TG11" required="true"
+                                    <Input value="{newPO>Material}" placeholder="{i18n>poPlaceholderMaterial}" required="true"
                                         valueState="{newPO>errors/Material/state}"
                                         valueStateText="{newPO>errors/Material/text}"
                                         change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
@@ -254,12 +254,12 @@
                                             <core:ListItem key="{Material}" text="{Material}" additionalText="{= (${MaterialName} || ${Material_Text} || '') + (${MaterialBaseUnit} ? ' (' + ${MaterialBaseUnit} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>PurchaseOrderItemText}" placeholder="Material description" change=".onItemFieldChange" />
+                                    <Input value="{newPO>PurchaseOrderItemText}" placeholder="{i18n>poPlaceholderItemText}" change=".onItemFieldChange" />
                                     <Input value="{newPO>OrderQuantity}" type="Number" required="true" textAlign="End"
                                         valueState="{newPO>errors/OrderQuantity/state}"
                                         valueStateText="{newPO>errors/OrderQuantity/text}"
                                         change=".onCalculateNetAmount" liveChange=".onCalculateNetAmount" />
-                                    <Input value="{newPO>UnitOfMeasure}" placeholder="e.g. PC" required="true"
+                                    <Input value="{newPO>UnitOfMeasure}" placeholder="{i18n>poPlaceholderUnit}" required="true"
                                         valueState="{newPO>errors/UnitOfMeasure/state}"
                                         valueStateText="{newPO>errors/UnitOfMeasure/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -272,7 +272,7 @@
                                         valueState="{newPO>errors/NetPriceAmount/state}"
                                         valueStateText="{newPO>errors/NetPriceAmount/text}"
                                         change=".onCalculateNetAmount" liveChange=".onCalculateNetAmount" />
-                                    <Input value="{newPO>TaxCode}" placeholder="e.g. V1" maxLength="2"
+                                    <Input value="{newPO>TaxCode}" placeholder="{i18n>poPlaceholderTaxCode}" maxLength="2"
                                         valueState="{newPO>errors/TaxCode/state}"
                                         valueStateText="{newPO>errors/TaxCode/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -282,7 +282,7 @@
                                         </suggestionItems>
                                     </Input>
                                     <Input value="{newPO>NetAmount}" type="Number" placeholder="0.00" textAlign="End" editable="false" />
-                                </cells>
+                                 </cells>
                             </ColumnListItem>
                         </items>
                     </Table>
@@ -299,8 +299,8 @@
                     visible="{newPO>/hasError}"
                     press=".onMessageButtonPress" />
                 <ToolbarSpacer />
-                <Button id="btnSave" text="Create" type="Emphasized" press=".onCreatePress" />
-                <Button id="btnCancel" text="Cancel" press=".onCancelPress" />
+                <Button id="btnSave" text="{i18n>btnCreate}" type="Emphasized" press=".onCreatePress" />
+                <Button id="btnCancel" text="{i18n>btnCancel}" press=".onCancelPress" />
             </OverflowToolbar>
         </footer>
     </Page>

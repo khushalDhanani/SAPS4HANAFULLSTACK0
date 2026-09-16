@@ -20,7 +20,7 @@
                 <HBox class="sapUiSmallMarginBottom dashboardHeroHeader" justifyContent="SpaceBetween" alignItems="Center" wrap="Wrap">
                     <VBox class="sapUiTinyMarginBottom dashboardHeroTitleContainer">
                         <HBox alignItems="Center" wrap="Wrap" class="dashboardUserGreetingRow">
-                            <Title text="Welcome back, {auth>/user/username}!" level="H2" titleStyle="H3" class="sapUiTinyMarginEnd" />
+                            <Title text="{i18n>dashboardWelcomePrefix}{auth>/user/username}!" level="H2" titleStyle="H3" class="sapUiTinyMarginEnd" />
                             <ObjectStatus
                                 id="dashboardConnectionStatus"
                                 text="{dashboardView>/connectionText}"

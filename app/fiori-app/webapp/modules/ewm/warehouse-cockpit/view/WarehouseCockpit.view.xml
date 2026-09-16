@@ -244,7 +244,7 @@
                                                 <ObjectIdentifier title="{ewmView>DeliveryDocument}" text="{ewmView>DeliveryDocumentType}" />
                                                 <VBox>
                                                     <Text text="{ewmView>SupplierName}" />
-                                                    <Text text="ID: {ewmView>Supplier}" class="textMuted" />
+                                                    <Text text="{i18n>commonIdPrefix} {ewmView>Supplier}" class="textMuted" />
                                                 </VBox>
                                                 <Text text="{ewmView>DeliveryDate}" />
                                                 <ObjectStatus
@@ -307,7 +307,7 @@
                                                 <ObjectIdentifier title="{ewmView>OutboundDeliveryOrder}" text="{ewmView>OutboundDeliveryOrderType}" />
                                                 <VBox>
                                                     <Text text="{ewmView>ShipToPartyName}" />
-                                                    <Text text="ID: {ewmView>ShipToParty}" class="textMuted" />
+                                                    <Text text="{i18n>commonIdPrefix} {ewmView>ShipToParty}" class="textMuted" />
                                                 </VBox>
                                                 <ObjectStatus
                                                     text="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsIssueStatus} === 'B' ? 'Partial' : 'Not Issued') }"

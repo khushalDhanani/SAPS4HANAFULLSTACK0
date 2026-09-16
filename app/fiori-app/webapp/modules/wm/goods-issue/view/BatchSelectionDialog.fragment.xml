@@ -49,7 +49,7 @@
                         <Column width="5rem"><Text text="{i18n>giColStorageLocation}" /></Column>
                         <Column width="6rem"><Text text="{i18n>giColStorageBin}" /></Column>
                         <Column hAlign="End" width="8rem"><Text text="{i18n>giColAvailableStock}" /></Column>
-                        <Column width="6rem" hAlign="Center"><Text text="Action" /></Column>
+                        <Column width="6rem" hAlign="Center"><Text text="{i18n>giColAction}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem>
@@ -66,7 +66,7 @@
                                     state="{= ${giBatchSelection>StorageBin} &amp;&amp; ${giBatchSelection>StorageBin} !== '-' ? 'Warning' : 'None' }" />
                                 <Text text="{= ${giBatchSelection>AvailableStock} !== null &amp;&amp; ${giBatchSelection>AvailableStock} !== undefined ? (${giBatchSelection>AvailableStock} + ' ' + ${giBatchSelection>Unit}) : '-' }" />
                                 <Button
-                                    text="Select"
+                                    text="{i18n>btnSelect}"
                                     icon="sap-icon://accept"
                                     type="{= ${giBatchSelection>StatusState} === 'Error' ? 'Reject' : 'Emphasized' }"
                                     press=".onSelectBatch" />

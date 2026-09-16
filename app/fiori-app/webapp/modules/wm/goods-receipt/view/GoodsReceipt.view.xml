@@ -24,14 +24,14 @@
                 <Button
                     id="btnGrToggleAudio"
                     icon="{= ${grView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
-                    tooltip="Toggle Audio Feedback"
+                    tooltip="{i18n>grTooltipToggleAudio}"
                     type="Transparent"
                     press=".onToggleAudio"
                     class="sapUiTinyMarginEnd" />
                 <Button
                     id="btnGrReset"
                     icon="sap-icon://refresh"
-                    tooltip="Reset Workflow"
+                    tooltip="{i18n>grTooltipResetWorkflow}"
                     type="Transparent"
                     press=".onResetWorkflow" />
             </HBox>
@@ -67,7 +67,7 @@
                             <Button
                                 id="btnGrCameraScan"
                                 icon="sap-icon://camera"
-                                tooltip="Scan with Camera"
+                                tooltip="{i18n>grTooltipScanCamera}"
                                 press=".onCameraScanStorageUnit"
                                 class="sapUiTinyMarginEnd" />
                             <Button

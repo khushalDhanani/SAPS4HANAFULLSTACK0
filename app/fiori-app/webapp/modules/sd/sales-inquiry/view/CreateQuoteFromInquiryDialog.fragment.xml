@@ -4,7 +4,7 @@
     xmlns:form="sap.ui.layout.form">
     <Dialog
         id="createQuoteFromInquiryDialog"
-        title="Create Sales Quotation with Reference"
+        title="{i18n>quoteDialogTitle}"
         contentWidth="620px"
         class="sapUiSizeCompact"
         resizable="true"
@@ -13,7 +13,7 @@
             <VBox class="sapUiSmallMargin">
                 <!-- Source Inquiry Reference Summary -->
                 <Panel
-                    headerText="Source Document (Sales Inquiry {quoteDialog>/SalesInquiry})"
+                    headerText="{i18n>quoteDialogSourcePanelHeaderPrefix}{quoteDialog>/SalesInquiry})"
                     expandable="true"
                     expanded="true"
                     class="sapUiNoContentPadding sapUiSmallMarginBottom">
@@ -34,19 +34,19 @@
                         columnsM="1"
                         singleContainerFullSize="false">
                         <form:content>
-                            <Label text="Reference Document" design="Bold" />
-                            <Text text="Inquiry {quoteDialog>/SalesInquiry} (Document Flow Linked)" />
+                            <Label text="{i18n>quoteDialogRefDocLabel}" design="Bold" />
+                            <Text text="{i18n>quoteDialogRefDocPrefix}{quoteDialog>/SalesInquiry} {i18n>quoteDialogRefDocSuffix}" />
 
-                            <Label text="Customer (Sold-To)" design="Bold" />
+                            <Label text="{i18n>quoteDialogCustomerLabel}" design="Bold" />
                             <Text text="{= ${quoteDialog>/OrganizationBPName1} ? (${quoteDialog>/OrganizationBPName1} + ' (' + ${quoteDialog>/SoldToParty} + ')') : ${quoteDialog>/SoldToParty} }" />
 
-                            <Label text="Ship-To Party" design="Bold" />
+                            <Label text="{i18n>quoteDialogShipToLabel}" design="Bold" />
                             <Text text="{= ${quoteDialog>/ShipToPartyName} ? (${quoteDialog>/ShipToPartyName} + ' (' + ${quoteDialog>/ShipToParty} + ')') : (${quoteDialog>/ShipToParty} || 'Same as Sold-To') }" />
 
-                            <Label text="Sales Area" design="Bold" />
+                            <Label text="{i18n>quoteDialogSalesAreaLabel}" design="Bold" />
                             <Text text="{= (${quoteDialog>/SalesOrganization} || '') + ' / ' + (${quoteDialog>/DistributionChannel} || '') + ' / ' + (${quoteDialog>/OrganizationDivision} || '') }" />
 
-                            <Label text="Inquiry Net Amount" design="Bold" />
+                            <Label text="{i18n>quoteDialogNetAmountLabel}" design="Bold" />
                             <ObjectNumber
                                 number="{quoteDialog>/TotalNetAmount}"
                                 unit="{quoteDialog>/TransactionCurrency}"
@@ -57,7 +57,7 @@
 
                 <!-- Prompt Parameters Required for Quotation Creation -->
                 <Panel
-                    headerText="Quotation Parameters"
+                    headerText="{i18n>quoteDialogParamsPanelHeader}"
                     expandable="false"
                     class="sapUiNoContentPadding sapUiSmallMarginBottom">
                     <form:SimpleForm
@@ -77,16 +77,16 @@
                         columnsM="1"
                         singleContainerFullSize="false">
                         <form:content>
-                            <Label text="Quotation Type" required="true" design="Bold" />
+                            <Label text="{i18n>quoteDialogTypeLabel}" required="true" design="Bold" />
                             <Select
                                 id="selQuotationType"
                                 selectedKey="{quoteDialog>/SalesQuotationType}"
                                 width="100%">
-                                <core:Item key="ZQT" text="ZQT — Standard Sales Quotation" />
-                                <core:Item key="ZBQT" text="ZBQT — Budgetary Sales Quotation" />
+                                <core:Item key="ZQT" text="{i18n>quoteDialogTypeStandard}" />
+                                <core:Item key="ZBQT" text="{i18n>quoteDialogTypeBudgetary}" />
                             </Select>
 
-                            <Label text="Quotation Date" required="true" design="Bold" />
+                            <Label text="{i18n>quoteDialogDateLabel}" required="true" design="Bold" />
                             <DatePicker
                                 id="dpQuotationDate"
                                 value="{quoteDialog>/SalesQuotationDate}"
@@ -94,7 +94,7 @@
                                 displayFormat="yyyy-MM-dd"
                                 width="100%" />
 
-                            <Label text="Valid-To Date" required="true" design="Bold" />
+                            <Label text="{i18n>quoteDialogValidToLabel}" required="true" design="Bold" />
                             <DatePicker
                                 id="dpValidToDate"
                                 value="{quoteDialog>/BindingPeriodValidityEndDate}"
@@ -102,14 +102,14 @@
                                 displayFormat="yyyy-MM-dd"
                                 width="100%" />
 
-                            <Label text="Customer Reference (PO No.)" design="Bold" />
+                            <Label text="{i18n>quoteDialogCustRefLabel}" design="Bold" />
                             <Input
                                 id="inCustomerReference"
                                 value="{quoteDialog>/PurchaseOrderByCustomer}"
-                                placeholder="Customer PO / Reference Number"
+                                placeholder="{i18n>quoteDialogCustRefPlaceholder}"
                                 width="100%" />
 
-                            <Label text="Customer Reference Date" design="Bold" />
+                            <Label text="{i18n>quoteDialogCustRefDateLabel}" design="Bold" />
                             <DatePicker
                                 id="dpCustomerRefDate"
                                 value="{quoteDialog>/CustomerPurchaseOrderDate}"
@@ -122,7 +122,7 @@
 
                 <!-- Copied Line Items Preview -->
                 <Panel
-                    headerText="Referenced Line Items ({= ${quoteDialog>/items} ? ${quoteDialog>/items}.length : 0 })"
+                    headerText="{i18n>quoteDialogItemsPanelHeader} ({= ${quoteDialog>/items} ? ${quoteDialog>/items}.length : 0 })"
                     expandable="true"
                     expanded="false"
                     class="sapUiNoContentPadding">
@@ -130,13 +130,13 @@
                         id="tblQuoteReferencedItems"
                         items="{quoteDialog>/items}"
                         inset="false"
-                        noDataText="No line items found.">
+                        noDataText="{i18n>quoteDialogNoItemsText}">
                         <columns>
-                            <Column width="4rem"><Text text="Item" /></Column>
-                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="Material" /></Column>
-                            <Column hAlign="End" width="6rem"><Text text="Quantity" /></Column>
-                            <Column width="4rem"><Text text="Unit" /></Column>
-                            <Column hAlign="End" width="7rem"><Text text="Net Amount" /></Column>
+                            <Column width="4rem"><Text text="{i18n>quoteDialogColItem}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>quoteDialogColMaterial}" /></Column>
+                            <Column hAlign="End" width="6rem"><Text text="{i18n>quoteDialogColQuantity}" /></Column>
+                            <Column width="4rem"><Text text="{i18n>quoteDialogColUnit}" /></Column>
+                            <Column hAlign="End" width="7rem"><Text text="{i18n>quoteDialogColNetAmount}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -160,7 +160,7 @@
         <beginButton>
             <Button
                 id="btnConfirmCreateQuote"
-                text="Create Sales Quotation"
+                text="{i18n>quoteDialogBtnCreate}"
                 type="Emphasized"
                 icon="sap-icon://accept"
                 press=".onConfirmCreateSalesQuote" />
@@ -168,7 +168,7 @@
         <endButton>
             <Button
                 id="btnCancelCreateQuote"
-                text="Cancel"
+                text="{i18n>btnCancel}"
                 press=".onCancelCreateSalesQuote" />
         </endButton>
     </Dialog>

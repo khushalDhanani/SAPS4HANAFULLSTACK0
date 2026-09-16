@@ -126,15 +126,15 @@
 
                             <VBox class="sapUiSmallMarginBottom">
                                 <HBox justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
-                                    <Text text="Operator:" class="textMuted" />
+                                    <Text text="{i18n>rfOperatorFieldLabel}" class="textMuted" />
                                     <Label text="{rfView>/operator}" design="Bold" />
                                 </HBox>
                                 <HBox justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
-                                    <Text text="Resource / Cart:" class="textMuted" />
+                                    <Text text="{i18n>rfResourceCartLabel}" class="textMuted" />
                                     <Label text="{rfView>/resource}" design="Bold" />
                                 </HBox>
                                 <HBox justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
-                                    <Text text="Assigned Queue:" class="textMuted" />
+                                    <Text text="{i18n>rfAssignedQueueLabel}" class="textMuted" />
                                     <Label text="{= ${rfView>/queue} || '(Default)' }" design="Bold" />
                                 </HBox>
                             </VBox>
@@ -151,13 +151,13 @@
                             <VBox visible="{= !${rfView>/activeTask} }" class="sapUiSmallMarginBottom">
                                 <MessageStrip
                                     id="stripNoOpenTasks"
-                                    text="No open warehouse tasks in the queue. Check for newly created tasks or create one in the Warehouse Cockpit."
+                                    text="{i18n>rfNoTasksInQueueMsg}"
                                     type="Information"
                                     showIcon="true"
                                     class="sapUiTinyMarginBottom" />
                                 <Button
                                     id="btnCreateTaskFromRf"
-                                    text="Create Warehouse Task in Cockpit"
+                                    text="{i18n>rfBtnCreateTaskInCockpit}"
                                     icon="sap-icon://add"
                                     type="Ghost"
                                     press=".onNavigateToCreateTask"
@@ -226,8 +226,8 @@
                             <Button
                                 id="btnSimulateScanBin"
                                 icon="sap-icon://bar-code"
-                                tooltip="Simulate Scan Required Bin"
-                                text="Scan"
+                                tooltip="{i18n>rfTooltipScanRequiredBin}"
+                                text="{i18n>rfBtnScan}"
                                 press=".onSimulateScanBin" />
                         </HBox>
 
@@ -281,8 +281,8 @@
                             <Button
                                 id="btnSimulateScanProduct"
                                 icon="sap-icon://bar-code"
-                                tooltip="Simulate Scan Expected Product"
-                                text="Scan"
+                                tooltip="{i18n>rfTooltipScanExpectedProduct}"
+                                text="{i18n>rfBtnScan}"
                                 press=".onSimulateScanProduct" />
                         </HBox>
 
@@ -332,8 +332,8 @@
                             <Button
                                 id="btnSimulateScanHU"
                                 icon="sap-icon://bar-code"
-                                tooltip="Use Suggested / Default HU"
-                                text="Scan"
+                                tooltip="{i18n>rfTooltipUseSuggestedHU}"
+                                text="{i18n>rfBtnScan}"
                                 press=".onSimulateScanHU" />
                         </HBox>
 
@@ -375,7 +375,7 @@
                             width="100%" />
                         <Button
                             id="btnReturnStep5"
-                            text="Return to Queue"
+                            text="{i18n>rfBtnReturnToQueue}"
                             type="Transparent"
                             press=".onCancelTask"
                             width="100%"

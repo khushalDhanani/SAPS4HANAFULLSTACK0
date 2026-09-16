@@ -21,7 +21,7 @@
                     <headerToolbar>
                         <Toolbar>
                             <core:Icon src="sap-icon://dimension" />
-                            <Title text="SAP S/4HANA" level="H2" />
+                            <Title text="{i18n>loginTitle}" level="H2" />
                         </Toolbar>
                     </headerToolbar>
                     <content>

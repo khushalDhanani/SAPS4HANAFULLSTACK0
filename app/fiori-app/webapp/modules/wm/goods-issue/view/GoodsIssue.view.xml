@@ -231,7 +231,7 @@
                                     title="{giView>/activeItem/Material}"
                                     text="{giView>/activeItem/MaterialDesc}" />
 
-                                <Label text="Plant / Location" />
+                                <Label text="{i18n>giLabelPlantLocation}" />
                                 <Text text="{giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation} (Bin: {= ${giView>/activeItem/StorageBin} || '-' })" />
 
                                 <Label text="{i18n>giConfirmedStockLabel}" />
@@ -397,14 +397,14 @@
                                     id="selectDiffReason"
                                     selectedKey="{giView>/differenceReason}"
                                     width="14rem">
-                                    <core:Item key="01" text="01 - Short Pick" />
-                                    <core:Item key="02" text="02 - Damage" />
-                                    <core:Item key="03" text="03 - Quality Issue" />
-                                    <core:Item key="04" text="04 - Other" />
+                                    <core:Item key="01" text="{i18n>giDiffReasonShortPick}" />
+                                    <core:Item key="02" text="{i18n>giDiffReasonDamage}" />
+                                    <core:Item key="03" text="{i18n>giDiffReasonQuality}" />
+                                    <core:Item key="04" text="{i18n>giDiffReasonOther}" />
                                 </Select>
 
                                 <Label text="{i18n>giStorageType999Label}" />
-                                <Text text="999 (Differences)" />
+                                <Text text="{i18n>giStorageType999Desc}" />
 
                                 <Label text="" />
                                 <CheckBox
@@ -486,7 +486,7 @@
                                     title="{giView>/activeItem/Material}"
                                     text="{giView>/activeItem/MaterialDesc}" />
 
-                                <Label text="Location &amp; Bin" />
+                                <Label text="{i18n>giLabelLocationBin}" />
                                 <Text text="{giView>/activeItem/StorageLocation} / Bin {= ${giView>/activeItem/StorageBin} || '-' }" />
 
                                 <Label text="{i18n>giBatchLabel}" />
@@ -593,7 +593,7 @@
                                 class="sapUiSmallMarginBottom"
                                 width="32rem">
                                 <form:content>
-                                    <core:Title text="Dispatch Queue Record Details" />
+                                    <core:Title text="{i18n>giQueueRecordDetailsTitle}" />
                                     <Label text="{i18n>wmGIQueueRefLabel}" />
                                     <Text text="{giView>/postResult/QueueReference}" class="fontBold" />
 

@@ -18,14 +18,14 @@
                     <Button
                         id="btnNavBack"
                         icon="sap-icon://nav-back"
-                        tooltip="Back"
+                        tooltip="{i18n>btnBack}"
                         type="Transparent"
                         press=".onNavBack" />
                     <Title text="{i18n>ewmCreateTaskPageTitle}" level="H2" />
                     <ToolbarSpacer />
                     <ObjectStatus
                         id="taskDraftStatus"
-                        text="Draft / New"
+                        text="{i18n>ewmTaskDraftStatus}"
                         state="Warning"
                         icon="sap-icon://status-in-process"
                         class="sapUiSmallMarginEnd" />
@@ -46,7 +46,7 @@
                     close=".onDismissError"
                     class="sapUiSmallMarginBottom">
                     <link>
-                        <Link text="View all {taskModel>/errorCount} issue(s)" press=".onMessageButtonPress" />
+                        <Link text="{i18n>viewAllIssuesPrefix} {taskModel>/errorCount} {i18n>issuesSuffix}" press=".onMessageButtonPress" />
                     </link>
                 </MessageStrip>
 
@@ -125,8 +125,8 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="Task Status" />
-                                <ObjectStatus text="Open (Unassigned)" state="None" />
+                                <Label text="{i18n>ewmLabelTaskStatus}" />
+                                <ObjectStatus text="{i18n>ewmStatusOpenUnassigned}" state="None" />
                             </f:content>
                         </f:SimpleForm>
                     </Panel>
