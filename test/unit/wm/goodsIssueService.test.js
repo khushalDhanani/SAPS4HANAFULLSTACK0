@@ -758,4 +758,93 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       });
     });
   });
+
+  describe('Frontend GoodsIssueService V4 Model Operations', () => {
+    let FrontendGoodsIssueService;
+    let mockODataClient;
+    let mockModel;
+    let mockBinding;
+
+    beforeAll(() => {
+      mockODataClient = {
+        get: jest.fn(),
+        post: jest.fn()
+      };
+      const origSap = global.sap;
+      global.sap = {
+        ui: {
+          define: (deps, factory) => {
+            FrontendGoodsIssueService = factory(mockODataClient);
+          }
+        }
+      };
+      delete require.cache[require.resolve('../../../app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService')];
+      require('../../../app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService');
+      global.sap = origSap;
+    });
+
+    beforeEach(() => {
+      mockBinding = {
+        requestContexts: jest.fn().mockResolvedValue([
+          { getObject: () => ({ ReservationNo: '18025', ReservationItem: '0001', Material: '100001' }) }
+        ])
+      };
+      mockModel = {
+        bindList: jest.fn().mockReturnValue(mockBinding)
+      };
+    });
+
+    it('supports setModel and getModel', () => {
+      FrontendGoodsIssueService.setModel(mockModel);
+      expect(FrontendGoodsIssueService.getModel()).toBe(mockModel);
+      FrontendGoodsIssueService.setModel(null);
+      expect(FrontendGoodsIssueService.getModel()).toBeNull();
+    });
+
+    it('queries open reservations via passed V4 model without calling ODataClient.get', async () => {
+      const res = await FrontendGoodsIssueService.fetchOpenReservations(mockModel);
+      expect(mockModel.bindList).toHaveBeenCalledWith(
+        '/OpenReservations',
+        undefined,
+        undefined,
+        []
+      );
+      expect(mockBinding.requestContexts).toHaveBeenCalledWith(0, Infinity);
+      expect(res).toEqual([{ ReservationNo: '18025', ReservationItem: '0001', Material: '100001' }]);
+      expect(mockODataClient.get).not.toHaveBeenCalled();
+    });
+
+    it('queries reservation items via V4 model with ReservationNo filter', async () => {
+      await FrontendGoodsIssueService.fetchOpenItems(mockModel, '1000040', '18025');
+      expect(mockModel.bindList).toHaveBeenCalledWith(
+        '/GIItems',
+        undefined,
+        undefined,
+        expect.any(Array)
+      );
+      const aFilters = mockModel.bindList.mock.calls[0][3];
+      expect(aFilters).toBeDefined();
+    });
+
+    it('queries material batches via V4 model with Material and Plant filters', async () => {
+      await FrontendGoodsIssueService.fetchMaterialBatches(mockModel, '100001', '1010');
+      expect(mockModel.bindList).toHaveBeenCalledWith(
+        '/MaterialBatches',
+        undefined,
+        undefined,
+        expect.any(Array)
+      );
+      const aFilters = mockModel.bindList.mock.calls[0][3];
+      expect(aFilters.some(f => f.sPath === 'Material' && f.oValue1 === '100001')).toBe(true);
+      expect(aFilters.some(f => f.sPath === 'Plant' && f.oValue1 === '1010')).toBe(true);
+    });
+
+    it('falls back to ODataClient.get when no model is available', async () => {
+      FrontendGoodsIssueService.setModel(null);
+      mockODataClient.get.mockResolvedValueOnce({ value: [{ ReservationNo: '99999' }] });
+      const res = await FrontendGoodsIssueService.fetchOpenReservations();
+      expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/goods-issue/OpenReservations');
+      expect(res).toEqual([{ ReservationNo: '99999' }]);
+    });
+  });
 });

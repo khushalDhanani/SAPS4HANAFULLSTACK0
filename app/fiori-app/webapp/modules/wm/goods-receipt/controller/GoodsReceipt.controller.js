@@ -79,7 +79,8 @@ sap.ui.define([
          */
         _loadOpenDeliveries: function () {
             var oModel = this.getView().getModel("grView");
-            GoodsReceiptService.fetchOpenInboundDeliveries()
+            var oDataModel = this.getModel("goodsReceipt");
+            GoodsReceiptService.fetchOpenInboundDeliveries(oDataModel)
                 .then(function (aList) {
                     oModel.setProperty("/openDeliveries", aList || []);
                 })

@@ -73,15 +73,22 @@ const mockRouter = {
     navTo: jest.fn()
 };
 
+const mockWarehouseMgmtModel = {
+    bindList: jest.fn()
+};
+
 const mockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             Object.assign(this, proto);
-            this.models = {};
+            this.models = {
+                warehouseMgmt: mockWarehouseMgmtModel
+            };
             this.getView = () => ({
                 getModel: (name) => this.models[name],
                 setModel: (m, name) => { this.models[name] = m; }
             });
+            this.getModel = (name) => this.models[name] || null;
             this.getRouter = () => mockRouter;
             this.byId = jest.fn().mockReturnValue({
                 getBinding: jest.fn().mockReturnValue({ filter: jest.fn() })
@@ -89,9 +96,9 @@ const mockBaseController = {
             this.setBusy = jest.fn();
             this.getText = jest.fn((k) => k);
             this.getOwnerComponent = jest.fn().mockReturnValue({
-                getModel: jest.fn().mockReturnValue({
+                getModel: jest.fn((name) => this.models[name] || ({
                     getProperty: jest.fn().mockReturnValue(true)
-                })
+                }))
             });
         }
         return Controller;
@@ -181,7 +188,7 @@ describe('Unit: WarehouseCockpit Controller', () => {
 
             // Selected warehouse should resolve to W05 (first project-specific warehouse)
             expect(oModel.getProperty('/selectedWarehouse')).toBe('W05');
-            expect(mockEwmService.getWarehouseTasks).toHaveBeenCalledWith('W05');
+            expect(mockEwmService.getWarehouseTasks).toHaveBeenCalledWith(mockWarehouseMgmtModel, 'W05');
         });
 
         it('should handle empty warehouses list gracefully', async () => {

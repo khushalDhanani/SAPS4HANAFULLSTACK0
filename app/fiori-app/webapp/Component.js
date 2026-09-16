@@ -3,8 +3,13 @@ sap.ui.define([
     "sap/ui/Device",
     "sap/m/MessageToast",
     "saps4hana/fiori/model/models",
-    "saps4hana/fiori/service/AuthService"
-], function (UIComponent, Device, MessageToast, models, AuthService) {
+    "saps4hana/fiori/service/AuthService",
+    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
+    "saps4hana/fiori/modules/wm/goods-receipt/service/GoodsReceiptService",
+    "saps4hana/fiori/modules/ewm/warehouse-cockpit/service/EwmService",
+    "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService",
+    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService"
+], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, EwmService, PurchaseOrderService, SalesInquiryService) {
     "use strict";
 
     return UIComponent.extend("saps4hana.fiori.Component", {
@@ -22,6 +27,28 @@ sap.ui.define([
 
             // set the device model
             this.setModel(models.createDeviceModel(), "device");
+
+            // Wire OData V4 models to services for entity set reads
+            var oGoodsIssueModel = this.getModel("goodsIssue");
+            if (oGoodsIssueModel && GoodsIssueService && typeof GoodsIssueService.setModel === "function") {
+                GoodsIssueService.setModel(oGoodsIssueModel);
+            }
+            var oGoodsReceiptModel = this.getModel("goodsReceipt");
+            if (oGoodsReceiptModel && GoodsReceiptService && typeof GoodsReceiptService.setModel === "function") {
+                GoodsReceiptService.setModel(oGoodsReceiptModel);
+            }
+            var oWarehouseMgmtModel = this.getModel("warehouseMgmt");
+            if (oWarehouseMgmtModel && EwmService && typeof EwmService.setModel === "function") {
+                EwmService.setModel(oWarehouseMgmtModel);
+            }
+            var oPoModel = this.getModel();
+            if (oPoModel && PurchaseOrderService && typeof PurchaseOrderService.setModel === "function") {
+                PurchaseOrderService.setModel(oPoModel);
+            }
+            var oSalesInquiryModel = this.getModel("salesInquiry");
+            if (oSalesInquiryModel && SalesInquiryService && typeof SalesInquiryService.setModel === "function") {
+                SalesInquiryService.setModel(oSalesInquiryModel);
+            }
 
             // setup routing and route guard
             var oRouter = this.getRouter();

@@ -70,23 +70,31 @@ const mockRouter = {
     navTo: jest.fn()
 };
 
+const mockGoodsReceiptModel = {
+    bindList: jest.fn()
+};
+
 const mockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             Object.assign(this, proto);
-            this.models = {};
+            this.models = {
+                goodsReceipt: mockGoodsReceiptModel
+            };
             this.getView = () => ({
                 getId: () => 'mockViewId',
                 getModel: (name) => this.models[name],
                 setModel: (m, name) => { this.models[name] = m; },
                 addDependent: jest.fn()
             });
+            this.getModel = (name) => this.models[name] || (this.getView() && this.getView().getModel(name)) || null;
             this.getRouter = () => mockRouter;
             this.byId = jest.fn();
             this.setBusy = jest.fn();
             this.getText = (k) => k;
             this.getOwnerComponent = () => ({
-                getRouter: () => mockRouter
+                getRouter: () => mockRouter,
+                getModel: (name) => this.models[name]
             });
         }
         return Controller;

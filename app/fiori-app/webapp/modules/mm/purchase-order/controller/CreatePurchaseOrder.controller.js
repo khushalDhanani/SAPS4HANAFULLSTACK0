@@ -41,7 +41,8 @@ sap.ui.define([
                 return Promise.resolve(this._oConfigData);
             }
 
-            return PurchaseOrderService.loadConfiguration().then(function (oConfigData) {
+            var oPoModel = this.getModel();
+            return PurchaseOrderService.loadConfiguration(oPoModel).then(function (oConfigData) {
                 that._oConfigData = oConfigData;
                 var oCurrentModel = that.getView().getModel("newPO");
                 if (oCurrentModel) {
@@ -294,7 +295,8 @@ sap.ui.define([
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
                 // Directly retrieve and set Unit and master data from S/4HANA material configuration on manual input
                 var that = this;
-                PurchaseOrderService.getMaterialDetails(sVal, sPlant).then(function (oMaterial) {
+                var oPoModel = this.getModel();
+                PurchaseOrderService.getMaterialDetails(oPoModel, sVal, sPlant).then(function (oMaterial) {
                     if (oMaterial) {
                         PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMaterial, true);
                         that.onItemFieldChange();
@@ -344,7 +346,8 @@ sap.ui.define([
             // Ensure Unit and master data is derived from S/4HANA if not already present
             var that = this;
             if (!oMaterialData || !oMaterialData.MaterialBaseUnit || !oMaterialData.MaterialGroup) {
-                PurchaseOrderService.getMaterialDetails(sKey, sPlant).then(function (oMat) {
+                var oPoModel = (this.getModel && this.getModel("purchaseOrder")) || null;
+                PurchaseOrderService.getMaterialDetails(oPoModel, sKey, sPlant).then(function (oMat) {
                     if (oMat) {
                         PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMat, true);
                         that.onItemFieldChange();
@@ -538,7 +541,8 @@ sap.ui.define([
                     PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
                     var that = this;
                     if (!oData || !oData.MaterialBaseUnit || !oData.MaterialGroup) {
-                        PurchaseOrderService.getMaterialDetails(sKey, sPlant).then(function (oMat) {
+                        var oPoModel = (this.getModel && this.getModel("purchaseOrder")) || null;
+                        PurchaseOrderService.getMaterialDetails(oPoModel, sKey, sPlant).then(function (oMat) {
                             if (oMat) {
                                 PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMat, true);
                                 that.onItemFieldChange();

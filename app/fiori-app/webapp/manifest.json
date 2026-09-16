@@ -33,6 +33,30 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "goodsIssueService": {
+        "uri": "/odata/v4/goods-issue/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "goodsReceiptService": {
+        "uri": "/odata/v4/goods-receipt/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "warehouseManagementService": {
+        "uri": "/odata/v4/warehouse-management/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -83,6 +107,27 @@
       },
       "salesInquiry": {
         "dataSource": "salesInquiryService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "goodsIssue": {
+        "dataSource": "goodsIssueService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "goodsReceipt": {
+        "dataSource": "goodsReceiptService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "warehouseMgmt": {
+        "dataSource": "warehouseManagementService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true

@@ -79,7 +79,9 @@ sap.ui.define([
 
             this.setBusy(true);
 
-            EwmService.getWarehouses()
+            var oDataModel = this.getModel("warehouseMgmt");
+
+            EwmService.getWarehouses(oDataModel)
                 .then(function (oData) {
                     var aRaw = (oData && Array.isArray(oData.value)) ? oData.value : [];
                     // Filter strictly to project-specific warehouse types
@@ -130,10 +132,12 @@ sap.ui.define([
                 return Promise.resolve();
             }
 
+            var oDataModel = this.getModel("warehouseMgmt");
+
             return Promise.all([
-                EwmService.getStorageTypes(sWhse).catch(function () { return { value: [] }; }),
-                EwmService.getStorageBins(sWhse, 100).catch(function () { return { value: [] }; }),
-                EwmService.getWarehouseProcessTypes(sWhse).catch(function () { return { value: [] }; })
+                EwmService.getStorageTypes(oDataModel, sWhse).catch(function () { return { value: [] }; }),
+                EwmService.getStorageBins(oDataModel, sWhse, 100).catch(function () { return { value: [] }; }),
+                EwmService.getWarehouseProcessTypes(oDataModel, sWhse).catch(function () { return { value: [] }; })
             ]).then(function (aResults) {
                 var aTypes = (aResults[0] && aResults[0].value) ? aResults[0].value : [];
                 var aBins = (aResults[1] && aResults[1].value) ? aResults[1].value : [];

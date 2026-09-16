@@ -25,7 +25,11 @@ sap.ui.define([
             var that = this;
             BusyIndicator.show(0);
 
-            SalesInquiryService.getSalesInquiry(sId).then(function (result) {
+            var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+            var oPromise = oSalesInquiryModel ?
+                SalesInquiryService.getSalesInquiry(oSalesInquiryModel, sId) :
+                SalesInquiryService.getSalesInquiry(sId);
+            oPromise.then(function (result) {
                 BusyIndicator.hide();
                 var oData = result || {};
                 var oHeader = oData.header || oData;

@@ -501,4 +501,71 @@ describe('Unit: EwmService - Strict Validation & Zero Fallbacks', () => {
             await expect(EwmService.postGoodsIssue('0001', '')).rejects.toThrow(/OutboundDeliveryOrder is required/);
         });
     });
+
+    describe('V4 Model Integration', () => {
+        let mockModel;
+        let mockBinding;
+
+        beforeEach(() => {
+            mockBinding = {
+                requestContexts: jest.fn().mockResolvedValue([
+                    { getObject: () => ({ Warehouse: '1001', WarehouseText: 'Main Warehouse' }) }
+                ])
+            };
+            mockModel = {
+                bindList: jest.fn().mockReturnValue(mockBinding)
+            };
+        });
+
+        it('should support setModel and getModel', () => {
+            EwmService.setModel(mockModel);
+            expect(EwmService.getModel()).toBe(mockModel);
+            EwmService.setModel(null);
+            expect(EwmService.getModel()).toBeNull();
+        });
+
+        it('should read entity set via passed V4 model without calling ODataClient.get', async () => {
+            const res = await EwmService.getWarehouses(mockModel);
+            expect(mockModel.bindList).toHaveBeenCalledWith(
+                '/Warehouses',
+                undefined,
+                undefined,
+                undefined,
+                undefined
+            );
+            expect(mockBinding.requestContexts).toHaveBeenCalledWith(0, Infinity);
+            expect(res.value).toEqual([{ Warehouse: '1001', WarehouseText: 'Main Warehouse' }]);
+            expect(mockODataClient.get).not.toHaveBeenCalled();
+        });
+
+        it('should read entity set via injected model if no model argument passed', async () => {
+            EwmService.setModel(mockModel);
+            const res = await EwmService.getWarehouses();
+            expect(mockModel.bindList).toHaveBeenCalled();
+            expect(res.value).toHaveLength(1);
+            expect(mockODataClient.get).not.toHaveBeenCalled();
+            EwmService.setModel(null);
+        });
+
+        it('should fallback to ODataClient.get when no model is available', async () => {
+            EwmService.setModel(null);
+            mockODataClient.get.mockResolvedValueOnce({ value: [{ Warehouse: 'FALLBACK' }] });
+            const res = await EwmService.getWarehouses();
+            expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/warehouse-management/Warehouses');
+            expect(res.value).toEqual([{ Warehouse: 'FALLBACK' }]);
+        });
+
+        it('should pass filters to bindList when querying warehouse tasks with V4 model', async () => {
+            await EwmService.getWarehouseTasks(mockModel, '1001', { Status: 'OPEN' });
+            expect(mockModel.bindList).toHaveBeenCalledWith(
+                '/WarehouseTasks',
+                undefined,
+                undefined,
+                expect.any(Array),
+                undefined
+            );
+            const aFilters = mockModel.bindList.mock.calls[0][3];
+            expect(aFilters.length).toBeGreaterThanOrEqual(1);
+        });
+    });
 });

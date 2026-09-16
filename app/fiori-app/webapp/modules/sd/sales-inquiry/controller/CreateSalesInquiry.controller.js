@@ -69,7 +69,11 @@ sap.ui.define([
                 return Promise.resolve(this._oConfigData);
             }
 
-            return SalesInquiryService.loadConfiguration().then(function (oConfigData) {
+            var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+            var oConfigPromise = oSalesInquiryModel ?
+                SalesInquiryService.loadConfiguration(oSalesInquiryModel) :
+                SalesInquiryService.loadConfiguration();
+            return oConfigPromise.then(function (oConfigData) {
                 that._oConfigData = oConfigData;
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel) {
@@ -327,7 +331,10 @@ sap.ui.define([
             } else {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
                 // Directly retrieve and set Unit from S/4HANA material configuration on manual input
-                var oChangePromise = SalesInquiryService.getMaterialDetails(sVal);
+                var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                var oChangePromise = oSalesInquiryModel ?
+                    SalesInquiryService.getMaterialDetails(oSalesInquiryModel, sVal) :
+                    SalesInquiryService.getMaterialDetails(sVal);
                 if (oChangePromise && typeof oChangePromise.then === "function") {
                     oChangePromise.then(function (oMaterial) {
                         if (oMaterial) {
@@ -413,7 +420,10 @@ sap.ui.define([
             var sMatUnit = oMaterialData && (oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit);
             var sMatDesc = oMaterialData && (oMaterialData.MaterialName || oMaterialData.Material_Text);
             if (!sMatUnit || !sMatDesc) {
-                var oDetailsPromise = SalesInquiryService.getMaterialDetails(sKey);
+                var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                var oDetailsPromise = oSalesInquiryModel ?
+                    SalesInquiryService.getMaterialDetails(oSalesInquiryModel, sKey) :
+                    SalesInquiryService.getMaterialDetails(sKey);
                 if (oDetailsPromise && typeof oDetailsPromise.then === "function") {
                     oDetailsPromise.then(function (oMat) {
                         if (oMat) {
@@ -621,7 +631,10 @@ sap.ui.define([
                         }
                         SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
                         if (!oData || !oData.MaterialBaseUnit || !(oData.MaterialName || oData.Material_Text)) {
-                            var oVhPromise = SalesInquiryService.getMaterialDetails(sKey);
+                            var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                            var oVhPromise = oSalesInquiryModel ?
+                                SalesInquiryService.getMaterialDetails(oSalesInquiryModel, sKey) :
+                                SalesInquiryService.getMaterialDetails(sKey);
                             if (oVhPromise && typeof oVhPromise.then === "function") {
                                 oVhPromise.then(function (oMat) {
                                     if (oMat) {

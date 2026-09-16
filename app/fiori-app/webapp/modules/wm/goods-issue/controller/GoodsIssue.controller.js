@@ -192,7 +192,8 @@ sap.ui.define([
             this.setBusy(true);
             oModel.setProperty("/reservationsUnavailable", false);
             oModel.setProperty("/reservationsUnavailableMsg", "");
-            return GoodsIssueService.fetchOpenReservations(sPlant)
+            var oDataModel = this.getModel("goodsIssue");
+            return GoodsIssueService.fetchOpenReservations(oDataModel, sPlant)
                 .then(function (aReservations) {
                     var aResvs = aReservations || [];
                     oModel.setProperty("/openReservations", aResvs);
@@ -329,7 +330,8 @@ sap.ui.define([
             oModel.setProperty("/itemsUnavailable", false);
             oModel.setProperty("/itemsUnavailableMsg", "");
             var sOrderNo = (oResv && oResv.OrderNo) ? oResv.OrderNo : "";
-            return GoodsIssueService.fetchOpenItems(sOrderNo, sReservationNo)
+            var oDataModel = this.getModel("goodsIssue");
+            return GoodsIssueService.fetchOpenItems(oDataModel, sOrderNo, sReservationNo)
                 .then(function (aItems) {
                     that._playBeep(true);
                     var oResolved = {
@@ -821,7 +823,8 @@ sap.ui.define([
             var oView = this.getView();
             this.setBusy(true);
 
-            return GoodsIssueService.fetchMaterialBatches(oActive.Material, oActive.Plant, oActive.StorageLocation)
+            var oDataModel = this.getModel("goodsIssue");
+            return GoodsIssueService.fetchMaterialBatches(oDataModel, oActive.Material, oActive.Plant, oActive.StorageLocation)
                 .then(function (aBatches) {
                     var aList = Array.isArray(aBatches) ? aBatches : [];
                     oBatchModel.setProperty("/rawBatches", aList);

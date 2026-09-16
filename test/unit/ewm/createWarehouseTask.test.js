@@ -80,19 +80,30 @@ const mockRouter = {
     navTo: jest.fn()
 };
 
+const mockWarehouseMgmtModel = {
+    bindList: jest.fn()
+};
+
 const mockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             Object.assign(this, proto);
-            this.models = {};
+            this.models = {
+                warehouseMgmt: mockWarehouseMgmtModel
+            };
             this.getView = () => ({
                 getModel: (name) => this.models[name],
                 setModel: (m, name) => { this.models[name] = m; },
                 addDependent: jest.fn()
             });
+            this.getModel = (name) => this.models[name] || null;
             this.getRouter = () => mockRouter;
             this.byId = jest.fn();
             this.setBusy = jest.fn();
+            this.getOwnerComponent = () => ({
+                getRouter: () => mockRouter,
+                getModel: (name) => this.models[name]
+            });
         }
         return Controller;
     }
@@ -142,7 +153,7 @@ describe('Unit: CreateWarehouseTask Controller', () => {
         it('should load process types from SAP when warehouse locations are loaded', async () => {
             await controller._loadWarehouseLocations('W05');
             const oModel = controller.getView().getModel('taskModel');
-            expect(mockEwmService.getWarehouseProcessTypes).toHaveBeenCalledWith('W05');
+            expect(mockEwmService.getWarehouseProcessTypes).toHaveBeenCalledWith(mockWarehouseMgmtModel, 'W05');
             expect(oModel.getProperty('/processTypes')).toEqual([
                 { Warehouse: 'W05', WarehouseProcessType: '1010', WarehouseProcessTypeName: 'Putaway' }
             ]);

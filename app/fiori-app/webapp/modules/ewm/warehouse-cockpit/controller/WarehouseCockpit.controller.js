@@ -120,8 +120,10 @@ sap.ui.define([
 
             this.setBusy(true);
 
+            var oDataModel = this.getModel("warehouseMgmt");
+
             // 1. Fetch Warehouses first from SAP
-            EwmService.getWarehouses()
+            EwmService.getWarehouses(oDataModel)
                 .then(function (oData) {
                     var aRaw = (oData && Array.isArray(oData.value)) ? oData.value : [];
                     // Exclude all SAP standard, default, and demo warehouse types (e.g. 0001, 001, 002, 100, EWM, MLO,
@@ -195,7 +197,9 @@ sap.ui.define([
                 })
                 .catch(function () {});
 
-            var pTasks = EwmService.getWarehouseTasks(sWhse)
+            var oDataModel = this.getModel("warehouseMgmt");
+
+            var pTasks = EwmService.getWarehouseTasks(oDataModel, sWhse)
                 .then(function (oData) {
                     var aTasks = (oData && oData.value) ? oData.value : [];
                     oModel.setProperty("/tasks", aTasks);
@@ -207,7 +211,7 @@ sap.ui.define([
                     oModel.setProperty("/tasksUnavailableMsg", (err && err.message) || "Warehouse tasks service is currently unavailable.");
                 });
 
-            var pInb = EwmService.getInboundDeliveries(sWhse)
+            var pInb = EwmService.getInboundDeliveries(oDataModel, sWhse)
                 .then(function (oData) {
                     var aInb = (oData && oData.value) ? oData.value : [];
                     oModel.setProperty("/inboundDeliveries", aInb);
@@ -219,7 +223,7 @@ sap.ui.define([
                     oModel.setProperty("/inboundUnavailableMsg", (err && err.message) || "Inbound deliveries service is currently unavailable.");
                 });
 
-            var pOutb = EwmService.getOutboundDeliveries(sWhse)
+            var pOutb = EwmService.getOutboundDeliveries(oDataModel, sWhse)
                 .then(function (oData) {
                     var aOutb = (oData && oData.value) ? oData.value : [];
                     oModel.setProperty("/outboundDeliveries", aOutb);
@@ -232,8 +236,8 @@ sap.ui.define([
                 });
 
             var pStorage = Promise.allSettled([
-                EwmService.getStorageTypes(sWhse),
-                EwmService.getStorageBins(sWhse)
+                EwmService.getStorageTypes(oDataModel, sWhse),
+                EwmService.getStorageBins(oDataModel, sWhse)
             ]).then(function (results) {
                 var bTypesFailed = results[0].status === "rejected";
                 var bBinsFailed = results[1].status === "rejected";

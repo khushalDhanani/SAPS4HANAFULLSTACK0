@@ -218,6 +218,8 @@ sap.ui.define([], function () {
         /**
          * Convenience GET request.
          *
+         * @deprecated Prefer SAPUI5 OData V4 model bindings (bindList / bindContext) for entity set queries.
+         * ODataClient is maintained for unbound actions, function imports, and fallback requests.
          * @param {string} sUrl
          * @param {Object} [mHeaders]
          * @returns {Promise<any>}

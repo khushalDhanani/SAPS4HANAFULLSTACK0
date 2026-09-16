@@ -66,15 +66,22 @@ const mockRouter = {
     navTo: jest.fn()
 };
 
+const mockWarehouseMgmtModel = {
+    bindList: jest.fn()
+};
+
 const mockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             Object.assign(this, proto);
-            this.models = {};
+            this.models = {
+                warehouseMgmt: mockWarehouseMgmtModel
+            };
             this.getView = () => ({
                 getModel: (name) => this.models[name],
                 setModel: (m, name) => { this.models[name] = m; }
             });
+            this.getModel = (name) => this.models[name] || null;
             this.getRouter = () => mockRouter;
             this.byId = jest.fn();
             this.setBusy = jest.fn();
@@ -88,6 +95,7 @@ const mockBaseController = {
             };
             this.getOwnerComponent = () => ({
                 getModel: (name) => {
+                    if (this.models[name]) return this.models[name];
                     if (name === 'auth') {
                         return {
                             getProperty: (p) => {

@@ -87,17 +87,24 @@ const mockWizard = {
 };
 const mockStep = { getId: () => 'mockStep' };
 
+const mockGoodsIssueModel = {
+    bindList: jest.fn()
+};
+
 const mockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             Object.assign(this, proto);
-            this.models = {};
+            this.models = {
+                goodsIssue: mockGoodsIssueModel
+            };
             this.getView = () => ({
                 getId: () => 'mockViewId',
                 getModel: (name) => this.models[name],
                 setModel: (m, name) => { this.models[name] = m; },
                 addDependent: jest.fn()
             });
+            this.getModel = (name) => this.models[name] || (this.getView() && this.getView().getModel(name)) || null;
             this.getRouter = () => mockRouter;
             this.byId = jest.fn((id) => {
                 if (id === 'giWizard') return mockWizard;
@@ -106,7 +113,8 @@ const mockBaseController = {
             this.setBusy = jest.fn();
             this.getText = (k) => k;
             this.getOwnerComponent = () => ({
-                getRouter: () => mockRouter
+                getRouter: () => mockRouter,
+                getModel: (name) => this.models[name]
             });
         }
         return Controller;
@@ -325,7 +333,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             await controller.onReservationSelected(mockEvent);
 
             expect(oModel.getProperty('/selectedReservation')).toBe('168779');
-            expect(mockGoodsIssueService.fetchOpenItems).toHaveBeenCalledWith('1000856', '168779');
+            expect(mockGoodsIssueService.fetchOpenItems).toHaveBeenCalledWith(mockGoodsIssueModel, '1000856', '168779');
             expect(oModel.getProperty('/resolved')).toBeDefined();
             expect(oModel.getProperty('/resolved/ReservationNo')).toBe('168779');
             expect(oModel.getProperty('/resolved/Items').length).toBe(1);
@@ -365,7 +373,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             await controller.onConfirmReservationValueHelp(mockEvent);
 
             expect(oModel.getProperty('/selectedReservation')).toBe('168779');
-            expect(mockGoodsIssueService.fetchOpenItems).toHaveBeenCalledWith('1000856', '168779');
+            expect(mockGoodsIssueService.fetchOpenItems).toHaveBeenCalledWith(mockGoodsIssueModel, '1000856', '168779');
         });
 
         it('should filter components table on search', () => {
@@ -720,7 +728,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             ]);
 
             await controller.onOpenBatchSelectionDialog();
-            expect(mockGoodsIssueService.fetchMaterialBatches).toHaveBeenCalledWith('3000000200', '1120', 'CS01');
+            expect(mockGoodsIssueService.fetchMaterialBatches).toHaveBeenCalledWith(mockGoodsIssueModel, '3000000200', '1120', 'CS01');
         });
 
         it('should assign selected valid batch and re-validate', () => {

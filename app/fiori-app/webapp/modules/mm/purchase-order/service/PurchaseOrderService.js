@@ -1,15 +1,100 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient"
-], function (ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator"
+], function (ODataClient, Filter, FilterOperator) {
     "use strict";
 
     var SERVICE_BASE = "/odata/v4/purchase-order";
+
+    var _FilterOperator = FilterOperator || {
+        EQ: "EQ",
+        NE: "NE",
+        GT: "GT",
+        GE: "GE",
+        LT: "LT",
+        LE: "LE",
+        BT: "BT",
+        Contains: "Contains"
+    };
+
+    var _Filter = Filter || function (sPath, sOperator, oValue1, oValue2) {
+        if (typeof sPath === "object") {
+            this.aFilters = sPath.filters;
+            this.bAnd = sPath.and;
+        } else {
+            this.sPath = sPath;
+            this.sOperator = sOperator;
+            this.oValue1 = oValue1;
+            this.oValue2 = oValue2;
+        }
+    };
+
+    var _oModel = null;
+
+    function _isModel(o) {
+        return !!(o && typeof o.bindList === "function");
+    }
+
+    /**
+     * Read an entity set via the OData V4 model's list binding.
+     * Falls back to ODataClient.get() if no model is provided.
+     *
+     * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+     * @param {string} sEntitySet
+     * @param {sap.ui.model.Filter[]} [aFilters]
+     * @param {Object} [mParameters]
+     * @returns {Promise<Array>}
+     */
+    function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
+        if (!oModel || typeof oModel.bindList !== "function") {
+            var sUrl = SERVICE_BASE + sEntitySet;
+            var aParts = [];
+            if (aFilters && aFilters.length > 0) {
+                var aFilterParts = aFilters.map(function (f) {
+                    return f.sPath + " eq '" + encodeURIComponent(f.oValue1) + "'";
+                });
+                aParts.push("$filter=" + aFilterParts.join(" and "));
+            }
+            if (mParameters && mParameters.$top) {
+                aParts.push("$top=" + mParameters.$top);
+            }
+            if (aParts.length > 0) {
+                sUrl += "?" + aParts.join("&");
+            }
+            return ODataClient.get(sUrl).then(function (result) {
+                if (!result) return [];
+                return result.value || (result.d && result.d.results) || [];
+            });
+        }
+
+        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters, mParameters);
+        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
+            return aContexts.map(function (oCtx) { return oCtx.getObject(); });
+        });
+    }
 
     /**
      * PurchaseOrderService
      * Encapsulates Purchase Order business API communication with the CAP backend.
      */
     return {
+        /**
+         * Set the OData V4 model for entity set reads
+         * @param {sap.ui.model.odata.v4.ODataModel} oModel
+         */
+        setModel: function (oModel) {
+            _oModel = oModel;
+        },
+
+        /**
+         * Get the current OData V4 model
+         * @returns {sap.ui.model.odata.v4.ODataModel|null}
+         */
+        getModel: function () {
+            return _oModel;
+        },
+
         /**
          * Dispatches createPurchaseOrder action to the CAP OData service.
          *
@@ -29,11 +114,17 @@ sap.ui.define([
         /**
          * Queries Purchase Orders list from CAP OData service.
          *
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrQuery]
          * @param {string} [sQuery] Optional OData query string (e.g. "?$top=10")
          * @returns {Promise<Array<Object>>}
          */
-        getPurchaseOrders: function (sQuery) {
-            var sUrl = SERVICE_BASE + "/PurchaseOrders" + (sQuery || "");
+        getPurchaseOrders: function (oModelOrQuery, sQuery) {
+            var oModel = _isModel(oModelOrQuery) ? oModelOrQuery : _oModel;
+            var sQueryVal = _isModel(oModelOrQuery) ? sQuery : oModelOrQuery;
+            if (oModel) {
+                return _readEntitySet(oModel, "/PurchaseOrders");
+            }
+            var sUrl = SERVICE_BASE + "/PurchaseOrders" + (sQueryVal || "");
             return ODataClient.get(sUrl).then(function (result) {
                 if (!result) return [];
                 return result.value || (result.d && result.d.results) || [];
@@ -43,11 +134,18 @@ sap.ui.define([
         /**
          * Queries a single Purchase Order by key.
          *
-         * @param {string} sPoNumber
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrPo]
+         * @param {string} [sPoNumber]
          * @returns {Promise<Object>}
          */
-        getPurchaseOrder: function (sPoNumber) {
-            var sUrl = SERVICE_BASE + "/PurchaseOrders('" + encodeURIComponent(sPoNumber) + "')";
+        getPurchaseOrder: function (oModelOrPo, sPoNumber) {
+            var oModel = _isModel(oModelOrPo) ? oModelOrPo : _oModel;
+            var sPoVal = _isModel(oModelOrPo) ? sPoNumber : oModelOrPo;
+            if (oModel && typeof oModel.bindContext === "function") {
+                var oContextBinding = oModel.bindContext("/PurchaseOrders('" + encodeURIComponent(sPoVal) + "')");
+                return oContextBinding.requestObject();
+            }
+            var sUrl = SERVICE_BASE + "/PurchaseOrders('" + encodeURIComponent(sPoVal) + "')";
             return ODataClient.get(sUrl);
         },
 
@@ -55,9 +153,35 @@ sap.ui.define([
          * Loads actual configuration and master data from CAP OData service concurrently:
          * Document Types, Company Codes, Purchasing Organizations, and Purchasing Groups.
          *
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
          * @returns {Promise<{ documentTypes: Array<Object>, companyCodes: Array<Object>, purchasingOrgs: Array<Object>, purchasingGroups: Array<Object> }>}
          */
-        loadConfiguration: function () {
+        loadConfiguration: function (oModel) {
+            var m = _isModel(oModel) ? oModel : _oModel;
+            if (m) {
+                return Promise.all([
+                    _readEntitySet(m, "/DocumentTypeVH"),
+                    _readEntitySet(m, "/CompanyCodeVH"),
+                    _readEntitySet(m, "/PurchasingOrgVH"),
+                    _readEntitySet(m, "/PurchasingGroupVH")
+                ]).then(function (aResults) {
+                    return {
+                        documentTypes: aResults[0] || [],
+                        companyCodes: aResults[1] || [],
+                        purchasingOrgs: aResults[2] || [],
+                        purchasingGroups: aResults[3] || []
+                    };
+                }).catch(function (err) {
+                    console.warn("[PurchaseOrderService] Error loading configuration data:", err);
+                    return {
+                        documentTypes: [],
+                        companyCodes: [],
+                        purchasingOrgs: [],
+                        purchasingGroups: []
+                    };
+                });
+            }
+
             return Promise.all([
                 ODataClient.get(SERVICE_BASE + "/DocumentTypeVH").then(function (res) { return (res && res.value) || []; }),
                 ODataClient.get(SERVICE_BASE + "/CompanyCodeVH").then(function (res) { return (res && res.value) || []; }),
@@ -175,18 +299,45 @@ sap.ui.define([
          * Looks up Material master data details including MaterialBaseUnit from S/4HANA.
          * Optionally filters by Plant to retrieve the plant-specific master record.
          *
-         * @param {string} sMaterial
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMaterial]
+         * @param {string} [sMaterialOrPlant]
          * @param {string} [sPlant]
          * @returns {Promise<Object|null>}
          */
-        getMaterialDetails: function (sMaterial, sPlant) {
+        getMaterialDetails: function (oModelOrMaterial, sMaterialOrPlant, sPlant) {
+            var oModel = _isModel(oModelOrMaterial) ? oModelOrMaterial : _oModel;
+            var sMaterial = _isModel(oModelOrMaterial) ? sMaterialOrPlant : oModelOrMaterial;
+            var sPlantVal = _isModel(oModelOrMaterial) ? sPlant : sMaterialOrPlant;
+
             if (!sMaterial || String(sMaterial).trim() === "") {
                 return Promise.resolve(null);
             }
-            var sMatClean = encodeURIComponent(String(sMaterial).trim());
-            var sFilter = "?$filter=Material eq '" + sMatClean + "'";
-            if (sPlant && String(sPlant).trim() !== "") {
-                var sPlantFilter = sFilter + " and Plant eq '" + encodeURIComponent(String(sPlant).trim()) + "'&$top=1";
+            var sMatClean = String(sMaterial).trim();
+
+            if (oModel) {
+                var aFilters = [new _Filter("Material", _FilterOperator.EQ, sMatClean)];
+                if (sPlantVal && String(sPlantVal).trim() !== "") {
+                    aFilters.push(new _Filter("Plant", _FilterOperator.EQ, String(sPlantVal).trim()));
+                }
+                return _readEntitySet(oModel, "/MaterialVH", aFilters, { $top: 1 }).then(function (aItems) {
+                    if (aItems.length > 0) {
+                        return aItems[0];
+                    }
+                    if (sPlantVal && String(sPlantVal).trim() !== "") {
+                        return _readEntitySet(oModel, "/MaterialVH", [new _Filter("Material", _FilterOperator.EQ, sMatClean)], { $top: 1 }).then(function (aFallback) {
+                            return aFallback.length > 0 ? aFallback[0] : null;
+                        });
+                    }
+                    return null;
+                }).catch(function (err) {
+                    console.warn("[PurchaseOrderService] Error fetching material details for " + sMaterial + ":", err);
+                    return null;
+                });
+            }
+
+            var sFilter = "?$filter=Material eq '" + encodeURIComponent(sMatClean) + "'";
+            if (sPlantVal && String(sPlantVal).trim() !== "") {
+                var sPlantFilter = sFilter + " and Plant eq '" + encodeURIComponent(String(sPlantVal).trim()) + "'&$top=1";
                 return ODataClient.get(SERVICE_BASE + "/MaterialVH" + sPlantFilter).then(function (res) {
                     var aItems = (res && (res.value || (res.d && res.d.results))) || [];
                     if (aItems.length > 0) {
@@ -215,12 +366,13 @@ sap.ui.define([
         /**
          * Directly retrieves the configured Base Unit of Measure for a Material.
          *
-         * @param {string} sMaterial
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMaterial]
+         * @param {string} [sMaterialOrPlant]
          * @param {string} [sPlant]
          * @returns {Promise<string|null>}
          */
-        getMaterialUnit: function (sMaterial, sPlant) {
-            return this.getMaterialDetails(sMaterial, sPlant).then(function (oMaterial) {
+        getMaterialUnit: function (oModelOrMaterial, sMaterialOrPlant, sPlant) {
+            return this.getMaterialDetails(oModelOrMaterial, sMaterialOrPlant, sPlant).then(function (oMaterial) {
                 return (oMaterial && (oMaterial.MaterialBaseUnit || oMaterial.BaseUnit || oMaterial.UnitOfMeasure)) || null;
             });
         }

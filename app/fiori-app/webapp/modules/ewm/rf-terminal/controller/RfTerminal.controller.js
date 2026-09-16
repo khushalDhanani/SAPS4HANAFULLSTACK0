@@ -78,7 +78,8 @@ sap.ui.define([
             var that = this;
 
             this.setBusy(true);
-            EwmService.getWarehouses()
+            var oDataModel = this.getModel("warehouseMgmt");
+            EwmService.getWarehouses(oDataModel)
                 .then(function (oData) {
                     var aRaw = (oData && Array.isArray(oData.value)) ? oData.value : [];
                     // Filter strictly to project-specific warehouse types
@@ -380,7 +381,8 @@ sap.ui.define([
             }
 
             this.setBusy(true);
-            return EwmService.getWarehouseTasks(sWhse)
+            var oDataModel = this.getModel("warehouseMgmt");
+            return EwmService.getWarehouseTasks(oDataModel, sWhse)
                 .then(function (oData) {
                     var aTasks = (oData && oData.value) ? oData.value : [];
                     var oFound = aTasks.find(function (t) { return String(t.WarehouseTask) === sTaskId; });
@@ -439,7 +441,8 @@ sap.ui.define([
             var oModel = this.getView().getModel("rfView");
             var sWhse = oModel.getProperty("/warehouse");
 
-            return EwmService.getWarehouseTasks(sWhse)
+            var oDataModel = this.getModel("warehouseMgmt");
+            return EwmService.getWarehouseTasks(oDataModel, sWhse)
                 .then(function (oData) {
                     var aTasks = (oData && oData.value) ? oData.value : [];
                     var aOpenTasks = aTasks.filter(function (t) { return t.WarehouseTaskStatus === "O"; });

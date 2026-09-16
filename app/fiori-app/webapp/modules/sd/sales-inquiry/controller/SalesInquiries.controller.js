@@ -226,7 +226,11 @@ sap.ui.define([
 
             // If line items not loaded in worklist row, fetch full inquiry detail
             if (aItems.length === 0) {
-                SalesInquiryService.getSalesInquiry(sInquiryId).then(function (fullInq) {
+                var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                var oFetchPromise = oSalesInquiryModel ?
+                    SalesInquiryService.getSalesInquiry(oSalesInquiryModel, sInquiryId) :
+                    SalesInquiryService.getSalesInquiry(sInquiryId);
+                oFetchPromise.then(function (fullInq) {
                     if (fullInq) {
                         var h = fullInq.header || fullInq;
                         var itms = fullInq.items || fullInq.to_Items || [];

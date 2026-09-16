@@ -1,78 +1,158 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient"
-], function (ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator"
+], function (ODataClient, Filter, FilterOperator) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/goods-issue";
 
+    var _FilterOperator = FilterOperator || {
+        EQ: "EQ",
+        NE: "NE",
+        GT: "GT",
+        GE: "GE",
+        LT: "LT",
+        LE: "LE",
+        BT: "BT",
+        Contains: "Contains"
+    };
+
+    var _Filter = Filter || function (sPath, sOperator, oValue1, oValue2) {
+        if (typeof sPath === "object") {
+            this.aFilters = sPath.filters;
+            this.bAnd = sPath.and;
+        } else {
+            this.sPath = sPath;
+            this.sOperator = sOperator;
+            this.oValue1 = oValue1;
+            this.oValue2 = oValue2;
+        }
+    };
+
+    var _oModel = null;
+
+    function _isModel(o) {
+        return !!(o && typeof o.bindList === "function");
+    }
+
+    /**
+     * Read an entity set via the OData V4 model's list binding.
+     * Falls back to ODataClient.get() if no model is provided.
+     *
+     * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+     * @param {string} sEntitySet - Entity set path e.g. "/OpenReservations"
+     * @param {sap.ui.model.Filter[]} [aFilters]
+     * @returns {Promise<Array>}
+     */
+    function _readEntitySet(oModel, sEntitySet, aFilters) {
+        if (!oModel || typeof oModel.bindList !== "function") {
+            // Fallback: use ODataClient for backward compatibility
+            var sUrl = BASE_PATH + sEntitySet;
+            if (aFilters && aFilters.length > 0) {
+                var aParts = aFilters.map(function (f) {
+                    return f.sPath + " eq '" + encodeURIComponent(f.oValue1) + "'";
+                });
+                sUrl += "?$filter=" + aParts.join(" and ");
+            }
+            return ODataClient.get(sUrl).then(function (oData) {
+                if (Array.isArray(oData)) {
+                    return oData;
+                }
+                return (oData && oData.value) ? oData.value : [];
+            });
+        }
+
+        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters);
+        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
+            return aContexts.map(function (oCtx) { return oCtx.getObject(); });
+        });
+    }
+
     var GoodsIssueService = {
         /**
+         * Set the OData V4 model for entity set reads
+         * @param {sap.ui.model.odata.v4.ODataModel} oModel
+         */
+        setModel: function (oModel) {
+            _oModel = oModel;
+        },
+
+        /**
+         * Get the current OData V4 model
+         * @returns {sap.ui.model.odata.v4.ODataModel|null}
+         */
+        getModel: function () {
+            return _oModel;
+        },
+
+        /**
          * Fetch distinct open reservations for Goods Issue from SAP S/4HANA
-         * @param {string} [sPlant]
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrPlant] - Model or Plant code
+         * @param {string} [sPlant] - Plant code if model is provided
          * @returns {Promise<Array>}
          */
-        fetchOpenReservations: function (sPlant) {
-            var sQuery = "";
-            if (sPlant && sPlant.trim()) {
-                sQuery = "?$filter=Plant eq '" + encodeURIComponent(sPlant.trim()) + "'";
+        fetchOpenReservations: function (oModelOrPlant, sPlant) {
+            var oModel = _isModel(oModelOrPlant) ? oModelOrPlant : _oModel;
+            var sPlantVal = _isModel(oModelOrPlant) ? sPlant : oModelOrPlant;
+            var aFilters = [];
+            if (sPlantVal && typeof sPlantVal === "string" && sPlantVal.trim()) {
+                aFilters.push(new _Filter("Plant", _FilterOperator.EQ, sPlantVal.trim()));
             }
-
-            return ODataClient.get(BASE_PATH + "/OpenReservations" + sQuery)
-                .then(function (oData) {
-                    return (oData && oData.value) ? oData.value : [];
-                });
+            return _readEntitySet(oModel, "/OpenReservations", aFilters);
         },
 
         /**
          * Fetch open reservation items by OrderNo or ReservationNo
-         * @param {string} [sOrderNo]
-         * @param {string} [sReservNo]
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrOrder] - Model or OrderNo
+         * @param {string} [sOrderOrReserv] - OrderNo or ReservationNo
+         * @param {string} [sReservNo] - ReservationNo if model is provided
          * @returns {Promise<Array>}
          */
-        fetchOpenItems: function (sOrderNo, sReservNo) {
+        fetchOpenItems: function (oModelOrOrder, sOrderOrReserv, sReservNo) {
+            var oModel = _isModel(oModelOrOrder) ? oModelOrOrder : _oModel;
+            var sOrderNo = _isModel(oModelOrOrder) ? sOrderOrReserv : oModelOrOrder;
+            var sReserv = _isModel(oModelOrOrder) ? sReservNo : sOrderOrReserv;
             var aFilters = [];
-            if (sOrderNo && sOrderNo.trim()) {
-                aFilters.push("OrderNo eq '" + encodeURIComponent(sOrderNo.trim()) + "'");
+            if (sOrderNo && typeof sOrderNo === "string" && sOrderNo.trim()) {
+                aFilters.push(new _Filter("OrderNo", _FilterOperator.EQ, sOrderNo.trim()));
             }
-            if (sReservNo && sReservNo.trim()) {
-                aFilters.push("ReservationNo eq '" + encodeURIComponent(sReservNo.trim()) + "'");
+            if (sReserv && typeof sReserv === "string" && sReserv.trim()) {
+                aFilters.push(new _Filter("ReservationNo", _FilterOperator.EQ, sReserv.trim()));
             }
-
-            var sQuery = "";
-            if (aFilters.length > 0) {
-                sQuery = "?$filter=" + aFilters.join(" or ");
-            }
-
-            return ODataClient.get(BASE_PATH + "/GIItems" + sQuery)
-                .then(function (oData) {
-                    return (oData && oData.value) ? oData.value : [];
-                });
+            // If multiple filters, combine with OR (matching original behavior)
+            var aCombined = aFilters.length > 1
+                ? [new _Filter({ filters: aFilters, and: false })]
+                : aFilters;
+            return _readEntitySet(oModel, "/GIItems", aCombined);
         },
 
         /**
          * Fetch available batches for a material with SLED information and FEFO sort
-         * @param {string} sMaterial
-         * @param {string} [sPlant]
-         * @param {string} [sStorageLocation]
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrMat] - Model or Material code
+         * @param {string} [sMatOrPlant] - Material or Plant
+         * @param {string} [sPlantOrSLoc] - Plant or StorageLocation
+         * @param {string} [sSLoc] - StorageLocation if model is provided
          * @returns {Promise<Array>}
          */
-        fetchMaterialBatches: function (sMaterial, sPlant, sStorageLocation) {
-            if (!sMaterial || !sMaterial.trim()) {
+        fetchMaterialBatches: function (oModelOrMat, sMatOrPlant, sPlantOrSLoc, sSLoc) {
+            var oModel = _isModel(oModelOrMat) ? oModelOrMat : _oModel;
+            var sMaterial = _isModel(oModelOrMat) ? sMatOrPlant : oModelOrMat;
+            var sPlant = _isModel(oModelOrMat) ? sPlantOrSLoc : sMatOrPlant;
+            var sStorageLocation = _isModel(oModelOrMat) ? sSLoc : sPlantOrSLoc;
+
+            if (!sMaterial || typeof sMaterial !== "string" || !sMaterial.trim()) {
                 return Promise.reject(new Error("Material is required to fetch batches"));
             }
 
-            var sQuery = "?$filter=Material eq '" + encodeURIComponent(sMaterial.trim()) + "'";
-            if (sPlant && sPlant.trim()) {
-                sQuery += " and Plant eq '" + encodeURIComponent(sPlant.trim()) + "'";
+            var aFilters = [new _Filter("Material", _FilterOperator.EQ, sMaterial.trim())];
+            if (sPlant && typeof sPlant === "string" && sPlant.trim()) {
+                aFilters.push(new _Filter("Plant", _FilterOperator.EQ, sPlant.trim()));
             }
-            if (sStorageLocation && sStorageLocation.trim()) {
-                sQuery += " and StorageLocation eq '" + encodeURIComponent(sStorageLocation.trim()) + "'";
+            if (sStorageLocation && typeof sStorageLocation === "string" && sStorageLocation.trim()) {
+                aFilters.push(new _Filter("StorageLocation", _FilterOperator.EQ, sStorageLocation.trim()));
             }
-
-            return ODataClient.get(BASE_PATH + "/MaterialBatches" + sQuery)
-                .then(function (oData) {
-                    return (oData && oData.value) ? oData.value : [];
-                });
+            return _readEntitySet(oModel, "/MaterialBatches", aFilters);
         },
 
         /**

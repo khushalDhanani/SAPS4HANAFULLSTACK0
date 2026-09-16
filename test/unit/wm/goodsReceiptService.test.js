@@ -339,4 +339,94 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(registeredEvents).toContain('postGoodsReceipt');
         });
     });
+
+    describe('Frontend GoodsReceiptService V4 Model Operations', () => {
+        let FrontendGoodsReceiptService;
+        let mockODataClient;
+        let mockModel;
+        let mockBinding;
+
+        beforeAll(() => {
+            mockODataClient = {
+                get: jest.fn(),
+                post: jest.fn()
+            };
+            const origSap = global.sap;
+            global.sap = {
+                ui: {
+                    define: (deps, factory) => {
+                        FrontendGoodsReceiptService = factory(mockODataClient);
+                    }
+                }
+            };
+            delete require.cache[require.resolve('../../../app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService')];
+            require('../../../app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService');
+            global.sap = origSap;
+        });
+
+        beforeEach(() => {
+            mockBinding = {
+                requestContexts: jest.fn().mockResolvedValue([
+                    { getObject: () => ({ DeliveryDocument: '180000001', DeliveryDocumentItem: '000010', Material: '1000000045' }) }
+                ])
+            };
+            mockModel = {
+                bindList: jest.fn().mockReturnValue(mockBinding)
+            };
+        });
+
+        it('supports setModel and getModel', () => {
+            FrontendGoodsReceiptService.setModel(mockModel);
+            expect(FrontendGoodsReceiptService.getModel()).toBe(mockModel);
+            FrontendGoodsReceiptService.setModel(null);
+            expect(FrontendGoodsReceiptService.getModel()).toBeNull();
+        });
+
+        it('queries open inbound deliveries via passed V4 model without calling ODataClient.get', async () => {
+            const res = await FrontendGoodsReceiptService.fetchOpenInboundDeliveries(mockModel);
+            expect(mockModel.bindList).toHaveBeenCalledWith(
+                '/OpenInboundDeliveries',
+                undefined,
+                undefined,
+                []
+            );
+            expect(mockBinding.requestContexts).toHaveBeenCalledWith(0, Infinity);
+            expect(res).toEqual([{ DeliveryDocument: '180000001', DeliveryDocumentItem: '000010', Material: '1000000045' }]);
+            expect(mockODataClient.get).not.toHaveBeenCalled();
+        });
+
+        it('queries material storage locations via V4 model with Material and Plant filters', async () => {
+            await FrontendGoodsReceiptService.fetchMaterialStorageLocations(mockModel, '1000000045', '1120');
+            expect(mockModel.bindList).toHaveBeenCalledWith(
+                '/MaterialStorageLocations',
+                undefined,
+                undefined,
+                expect.any(Array)
+            );
+            const aFilters = mockModel.bindList.mock.calls[0][3];
+            expect(aFilters.some(f => f.sPath === 'Material' && f.oValue1 === '1000000045')).toBe(true);
+            expect(aFilters.some(f => f.sPath === 'Plant' && f.oValue1 === '1120')).toBe(true);
+        });
+
+        it('queries material batches via V4 model with Material and Plant filters', async () => {
+            await FrontendGoodsReceiptService.fetchMaterialBatches(mockModel, '1000000045', '1120');
+            expect(mockModel.bindList).toHaveBeenCalledWith(
+                '/MaterialBatches',
+                undefined,
+                undefined,
+                expect.any(Array)
+            );
+            const aFilters = mockModel.bindList.mock.calls[0][3];
+            expect(aFilters.some(f => f.sPath === 'Material' && f.oValue1 === '1000000045')).toBe(true);
+            expect(aFilters.some(f => f.sPath === 'Plant' && f.oValue1 === '1120')).toBe(true);
+        });
+
+        it('falls back to ODataClient.get when no model is available', async () => {
+            FrontendGoodsReceiptService.setModel(null);
+            mockODataClient.get.mockResolvedValueOnce([{ DeliveryDocument: '99999' }]);
+            const res = await FrontendGoodsReceiptService.fetchOpenInboundDeliveries();
+            expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/goods-receipt/OpenInboundDeliveries');
+            expect(res).toEqual([{ DeliveryDocument: '99999' }]);
+        });
+    });
 });

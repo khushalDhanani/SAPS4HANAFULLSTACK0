@@ -32,6 +32,17 @@ sap.ui.define([
         },
 
         /**
+         * Convenience method for getting a model by name from view or owner component.
+         * @param {string} [sName] the model name
+         * @returns {sap.ui.model.Model|null}
+         */
+        getModel: function (sName) {
+            return (this.getView() && this.getView().getModel(sName)) ||
+                   (this.getOwnerComponent() && this.getOwnerComponent().getModel(sName)) ||
+                   null;
+        },
+
+        /**
          * Convenience method for getting the resource bundle text.
          * @param {string} sKey the key of the text
          * @param {string[]} [aArgs] optional arguments

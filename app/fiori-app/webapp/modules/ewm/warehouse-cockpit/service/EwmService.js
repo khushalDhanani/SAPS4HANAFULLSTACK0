@@ -1,9 +1,76 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient"
-], function (ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator"
+], function (ODataClient, Filter, FilterOperator) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/warehouse-management";
+
+    var _FilterOperator = FilterOperator || {
+        EQ: "EQ",
+        NE: "NE",
+        GT: "GT",
+        GE: "GE",
+        LT: "LT",
+        LE: "LE",
+        BT: "BT",
+        Contains: "Contains"
+    };
+
+    var _Filter = Filter || function (sPath, sOperator, oValue1, oValue2) {
+        if (typeof sPath === "object") {
+            this.aFilters = sPath.filters;
+            this.bAnd = sPath.and;
+        } else {
+            this.sPath = sPath;
+            this.sOperator = sOperator;
+            this.oValue1 = oValue1;
+            this.oValue2 = oValue2;
+        }
+    };
+
+    var _oModel = null;
+
+    function _isModel(o) {
+        return !!(o && typeof o.bindList === "function");
+    }
+
+    /**
+     * Read an entity set via the OData V4 model's list binding.
+     * Falls back to ODataClient.get() if no model is provided.
+     *
+     * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+     * @param {string} sEntitySet - Entity set path e.g. "/Warehouses"
+     * @param {sap.ui.model.Filter[]} [aFilters]
+     * @param {Object} [mParameters] - Additional binding parameters (e.g. $expand)
+     * @returns {Promise<Object>} Object with value array e.g. { value: [...] }
+     */
+    function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
+        if (!oModel || typeof oModel.bindList !== "function") {
+            var sUrl = BASE_PATH + sEntitySet;
+            var aQueryParts = [];
+            if (aFilters && aFilters.length > 0) {
+                var aParts = aFilters.map(function (f) {
+                    return f.sPath + " eq '" + encodeURIComponent(f.oValue1) + "'";
+                });
+                aQueryParts.push("$filter=" + aParts.join(" and "));
+            }
+            if (mParameters && mParameters.$expand) {
+                aQueryParts.push("$expand=" + mParameters.$expand);
+            }
+            if (aQueryParts.length > 0) {
+                sUrl += "?" + aQueryParts.join("&");
+            }
+            return ODataClient.get(sUrl);
+        }
+
+        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters, mParameters);
+        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
+            var aItems = aContexts.map(function (oCtx) { return oCtx.getObject(); });
+            return { value: aItems };
+        });
+    }
 
     /**
      * Validate that a parameter is a non-empty string.
@@ -99,6 +166,22 @@ sap.ui.define([
 
     return {
         /**
+         * Set the OData V4 model for entity set reads
+         * @param {sap.ui.model.odata.v4.ODataModel} oModel
+         */
+        setModel: function (oModel) {
+            _oModel = oModel;
+        },
+
+        /**
+         * Get the current OData V4 model
+         * @returns {sap.ui.model.odata.v4.ODataModel|null}
+         */
+        getModel: function () {
+            return _oModel;
+        },
+
+        /**
          * Determine if a warehouse is a project-specific warehouse (excluding SAP standard/demo warehouses)
          * @param {Object} w - Warehouse entity
          * @returns {boolean}
@@ -119,20 +202,33 @@ sap.ui.define([
 
         /**
          * Fetch list of configured warehouses from SAP
-         * @returns {Promise<Object>}
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel] - The "warehouseMgmt" V4 model
+         * @returns {Promise<Object>} Object with value array e.g. { value: [...] }
          */
-        getWarehouses: function () {
+        getWarehouses: function (oModel) {
+            var m = _isModel(oModel) ? oModel : _oModel;
+            if (_isModel(m)) {
+                return _readEntitySet(m, "/Warehouses");
+            }
             return ODataClient.get(BASE_PATH + "/Warehouses");
         },
 
         /**
          * Fetch warehouse process types for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWarehouse] - Warehouse number if model is provided
          * @returns {Promise<Object>}
          */
-        getWarehouseProcessTypes: function (sWarehouse) {
+        getWarehouseProcessTypes: function (oModelOrWhse, sWarehouse) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWhseParam = _isModel(oModelOrWhse) ? sWarehouse : oModelOrWhse;
             try {
-                var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
+                var sWhse = _validateRequiredString(sWhseParam, "Warehouse");
+                if (_isModel(oModel)) {
+                    return _readEntitySet(oModel, "/WarehouseProcessTypes", [
+                        new _Filter("Warehouse", _FilterOperator.EQ, sWhse)
+                    ]);
+                }
                 return ODataClient.get(BASE_PATH + "/WarehouseProcessTypes?$filter=Warehouse eq '" + encodeURIComponent(sWhse) + "'");
             } catch (oErr) {
                 return Promise.reject(oErr);
@@ -141,16 +237,27 @@ sap.ui.define([
 
         /**
          * Fetch storage types for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
-         * @param {string} [sStorageType] - Optional storage type filter
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWhseOrStorageType] - Warehouse or Storage type
+         * @param {string} [sStorageType] - Storage type if model is provided
          * @returns {Promise<Object>}
          */
-        getStorageTypes: function (sWarehouse, sStorageType) {
+        getStorageTypes: function (oModelOrWhse, sWhseOrStorageType, sStorageType) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWarehouse = _isModel(oModelOrWhse) ? sWhseOrStorageType : oModelOrWhse;
+            var sType = _isModel(oModelOrWhse) ? sStorageType : sWhseOrStorageType;
             try {
                 var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
+                if (_isModel(oModel)) {
+                    var aFilters = [new _Filter("Warehouse", _FilterOperator.EQ, sWhse)];
+                    if (sType && typeof sType === "string" && sType.trim()) {
+                        aFilters.push(new _Filter("StorageType", _FilterOperator.EQ, sType.trim()));
+                    }
+                    return _readEntitySet(oModel, "/StorageTypes", aFilters);
+                }
                 var sFilter = "Warehouse eq '" + encodeURIComponent(sWhse) + "'";
-                if (sStorageType && typeof sStorageType === "string" && sStorageType.trim()) {
-                    sFilter += " and StorageType eq '" + encodeURIComponent(sStorageType.trim()) + "'";
+                if (sType && typeof sType === "string" && sType.trim()) {
+                    sFilter += " and StorageType eq '" + encodeURIComponent(sType.trim()) + "'";
                 }
                 return ODataClient.get(BASE_PATH + "/StorageTypes?$filter=" + sFilter);
             } catch (oErr) {
@@ -160,22 +267,37 @@ sap.ui.define([
 
         /**
          * Fetch storage bins for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
-         * @param {string} [sStorageType] - Optional storage type filter
-         * @param {string} [sStorageBin] - Optional storage bin filter
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWhseOrStorageType] - Warehouse or Storage type
+         * @param {string} [sStorageTypeOrBin] - Storage type or Storage bin
+         * @param {string} [sStorageBin] - Storage bin if model is provided
          * @returns {Promise<Object>}
          */
-        getStorageBins: function (sWarehouse, sStorageType, sStorageBin) {
+        getStorageBins: function (oModelOrWhse, sWhseOrStorageType, sStorageTypeOrBin, sStorageBin) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWarehouse = _isModel(oModelOrWhse) ? sWhseOrStorageType : oModelOrWhse;
+            var sType = _isModel(oModelOrWhse) ? sStorageTypeOrBin : sWhseOrStorageType;
+            var sBin = _isModel(oModelOrWhse) ? sStorageBin : sStorageTypeOrBin;
             try {
                 var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
-                var aFilters = ["Warehouse eq '" + encodeURIComponent(sWhse) + "'"];
-                if (sStorageType && typeof sStorageType === "string" && sStorageType.trim()) {
-                    aFilters.push("StorageType eq '" + encodeURIComponent(sStorageType.trim()) + "'");
+                if (_isModel(oModel)) {
+                    var aFilters = [new _Filter("Warehouse", _FilterOperator.EQ, sWhse)];
+                    if (sType && typeof sType === "string" && sType.trim()) {
+                        aFilters.push(new _Filter("StorageType", _FilterOperator.EQ, sType.trim()));
+                    }
+                    if (sBin && typeof sBin === "string" && sBin.trim()) {
+                        aFilters.push(new _Filter("StorageBin", _FilterOperator.EQ, sBin.trim()));
+                    }
+                    return _readEntitySet(oModel, "/StorageBins", aFilters);
                 }
-                if (sStorageBin && typeof sStorageBin === "string" && sStorageBin.trim()) {
-                    aFilters.push("StorageBin eq '" + encodeURIComponent(sStorageBin.trim()) + "'");
+                var aFiltersOld = ["Warehouse eq '" + encodeURIComponent(sWhse) + "'"];
+                if (sType && typeof sType === "string" && sType.trim()) {
+                    aFiltersOld.push("StorageType eq '" + encodeURIComponent(sType.trim()) + "'");
                 }
-                return ODataClient.get(BASE_PATH + "/StorageBins?$filter=" + aFilters.join(" and "));
+                if (sBin && typeof sBin === "string" && sBin.trim()) {
+                    aFiltersOld.push("StorageBin eq '" + encodeURIComponent(sBin.trim()) + "'");
+                }
+                return ODataClient.get(BASE_PATH + "/StorageBins?$filter=" + aFiltersOld.join(" and "));
             } catch (oErr) {
                 return Promise.reject(oErr);
             }
@@ -199,22 +321,37 @@ sap.ui.define([
 
         /**
          * Fetch warehouse orders for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
-         * @param {string} [sQueue] - Optional queue filter
-         * @param {string} [sOrderStatus] - Optional order status filter
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWhseOrQueue] - Warehouse or Queue
+         * @param {string} [sQueueOrStatus] - Queue or Order status
+         * @param {string} [sOrderStatus] - Order status if model is provided
          * @returns {Promise<Object>}
          */
-        getWarehouseOrders: function (sWarehouse, sQueue, sOrderStatus) {
+        getWarehouseOrders: function (oModelOrWhse, sWhseOrQueue, sQueueOrStatus, sOrderStatus) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWarehouse = _isModel(oModelOrWhse) ? sWhseOrQueue : oModelOrWhse;
+            var sQueue = _isModel(oModelOrWhse) ? sQueueOrStatus : sWhseOrQueue;
+            var sStatus = _isModel(oModelOrWhse) ? sOrderStatus : sQueueOrStatus;
             try {
                 var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
-                var aFilters = ["Warehouse eq '" + encodeURIComponent(sWhse) + "'"];
+                if (_isModel(oModel)) {
+                    var aFilters = [new _Filter("Warehouse", _FilterOperator.EQ, sWhse)];
+                    if (sQueue && typeof sQueue === "string" && sQueue.trim()) {
+                        aFilters.push(new _Filter("WarehouseOrderQueue", _FilterOperator.EQ, sQueue.trim()));
+                    }
+                    if (sStatus && typeof sStatus === "string" && sStatus.trim()) {
+                        aFilters.push(new _Filter("WarehouseOrderStatus", _FilterOperator.EQ, sStatus.trim()));
+                    }
+                    return _readEntitySet(oModel, "/WarehouseOrders", aFilters);
+                }
+                var aFiltersOld = ["Warehouse eq '" + encodeURIComponent(sWhse) + "'"];
                 if (sQueue && typeof sQueue === "string" && sQueue.trim()) {
-                    aFilters.push("WarehouseOrderQueue eq '" + encodeURIComponent(sQueue.trim()) + "'");
+                    aFiltersOld.push("WarehouseOrderQueue eq '" + encodeURIComponent(sQueue.trim()) + "'");
                 }
-                if (sOrderStatus && typeof sOrderStatus === "string" && sOrderStatus.trim()) {
-                    aFilters.push("WarehouseOrderStatus eq '" + encodeURIComponent(sOrderStatus.trim()) + "'");
+                if (sStatus && typeof sStatus === "string" && sStatus.trim()) {
+                    aFiltersOld.push("WarehouseOrderStatus eq '" + encodeURIComponent(sStatus.trim()) + "'");
                 }
-                return ODataClient.get(BASE_PATH + "/WarehouseOrders?$filter=" + aFilters.join(" and "));
+                return ODataClient.get(BASE_PATH + "/WarehouseOrders?$filter=" + aFiltersOld.join(" and "));
             } catch (oErr) {
                 return Promise.reject(oErr);
             }
@@ -238,22 +375,37 @@ sap.ui.define([
 
         /**
          * Fetch warehouse tasks for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
-         * @param {string} [sStatus] - Optional task status filter ('O' = Open, 'C' = Confirmed, 'X' = Cancelled)
-         * @param {string} [sOrder] - Optional warehouse order filter
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWhseOrStatus] - Warehouse or Status
+         * @param {string} [sStatusOrOrder] - Status or Order
+         * @param {string} [sOrder] - Order if model is provided
          * @returns {Promise<Object>}
          */
-        getWarehouseTasks: function (sWarehouse, sStatus, sOrder) {
+        getWarehouseTasks: function (oModelOrWhse, sWhseOrStatus, sStatusOrOrder, sOrder) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWarehouse = _isModel(oModelOrWhse) ? sWhseOrStatus : oModelOrWhse;
+            var sStatus = _isModel(oModelOrWhse) ? sStatusOrOrder : sWhseOrStatus;
+            var sOrd = _isModel(oModelOrWhse) ? sOrder : sStatusOrOrder;
             try {
                 var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
-                var aFilters = ["Warehouse eq '" + encodeURIComponent(sWhse) + "'"];
+                if (_isModel(oModel)) {
+                    var aFilters = [new _Filter("Warehouse", _FilterOperator.EQ, sWhse)];
+                    if (sStatus && typeof sStatus === "string" && sStatus.trim()) {
+                        aFilters.push(new _Filter("WarehouseTaskStatus", _FilterOperator.EQ, sStatus.trim()));
+                    }
+                    if (sOrd && typeof sOrd === "string" && sOrd.trim()) {
+                        aFilters.push(new _Filter("WarehouseOrder", _FilterOperator.EQ, sOrd.trim()));
+                    }
+                    return _readEntitySet(oModel, "/WarehouseTasks", aFilters);
+                }
+                var aFiltersOld = ["Warehouse eq '" + encodeURIComponent(sWhse) + "'"];
                 if (sStatus && typeof sStatus === "string" && sStatus.trim()) {
-                    aFilters.push("WarehouseTaskStatus eq '" + encodeURIComponent(sStatus.trim()) + "'");
+                    aFiltersOld.push("WarehouseTaskStatus eq '" + encodeURIComponent(sStatus.trim()) + "'");
                 }
-                if (sOrder && typeof sOrder === "string" && sOrder.trim()) {
-                    aFilters.push("WarehouseOrder eq '" + encodeURIComponent(sOrder.trim()) + "'");
+                if (sOrd && typeof sOrd === "string" && sOrd.trim()) {
+                    aFiltersOld.push("WarehouseOrder eq '" + encodeURIComponent(sOrd.trim()) + "'");
                 }
-                return ODataClient.get(BASE_PATH + "/WarehouseTasks?$filter=" + aFilters.join(" and "));
+                return ODataClient.get(BASE_PATH + "/WarehouseTasks?$filter=" + aFiltersOld.join(" and "));
             } catch (oErr) {
                 return Promise.reject(oErr);
             }
@@ -277,12 +429,20 @@ sap.ui.define([
 
         /**
          * Fetch inbound deliveries for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWarehouse] - Warehouse number if model is provided
          * @returns {Promise<Object>}
          */
-        getInboundDeliveries: function (sWarehouse) {
+        getInboundDeliveries: function (oModelOrWhse, sWarehouse) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWhseParam = _isModel(oModelOrWhse) ? sWarehouse : oModelOrWhse;
             try {
-                var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
+                var sWhse = _validateRequiredString(sWhseParam, "Warehouse");
+                if (_isModel(oModel)) {
+                    return _readEntitySet(oModel, "/InboundDeliveries", [
+                        new _Filter("Warehouse", _FilterOperator.EQ, sWhse)
+                    ], { $expand: "Items" });
+                }
                 return ODataClient.get(BASE_PATH + "/InboundDeliveries?$filter=Warehouse eq '" + encodeURIComponent(sWhse) + "'&$expand=Items");
             } catch (oErr) {
                 return Promise.reject(oErr);
@@ -307,12 +467,20 @@ sap.ui.define([
 
         /**
          * Fetch outbound delivery orders for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWarehouse] - Warehouse number if model is provided
          * @returns {Promise<Object>}
          */
-        getOutboundDeliveries: function (sWarehouse) {
+        getOutboundDeliveries: function (oModelOrWhse, sWarehouse) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWhseParam = _isModel(oModelOrWhse) ? sWarehouse : oModelOrWhse;
             try {
-                var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
+                var sWhse = _validateRequiredString(sWhseParam, "Warehouse");
+                if (_isModel(oModel)) {
+                    return _readEntitySet(oModel, "/OutboundDeliveries", [
+                        new _Filter("Warehouse", _FilterOperator.EQ, sWhse)
+                    ], { $expand: "Items" });
+                }
                 return ODataClient.get(BASE_PATH + "/OutboundDeliveries?$filter=Warehouse eq '" + encodeURIComponent(sWhse) + "'&$expand=Items");
             } catch (oErr) {
                 return Promise.reject(oErr);
@@ -337,12 +505,20 @@ sap.ui.define([
 
         /**
          * Fetch warehouse KPIs for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWarehouse] - Warehouse number if model is provided
          * @returns {Promise<Object>}
          */
-        getWarehouseKPIs: function (sWarehouse) {
+        getWarehouseKPIs: function (oModelOrWhse, sWarehouse) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWhseParam = _isModel(oModelOrWhse) ? sWarehouse : oModelOrWhse;
             try {
-                var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
+                var sWhse = _validateRequiredString(sWhseParam, "Warehouse");
+                if (_isModel(oModel)) {
+                    return _readEntitySet(oModel, "/WarehouseKPIs", [
+                        new _Filter("Warehouse", _FilterOperator.EQ, sWhse)
+                    ]);
+                }
                 return ODataClient.get(BASE_PATH + "/WarehouseKPIs?$filter=Warehouse eq '" + encodeURIComponent(sWhse) + "'");
             } catch (oErr) {
                 return Promise.reject(oErr);
@@ -351,12 +527,20 @@ sap.ui.define([
 
         /**
          * Fetch RF Warehouse Resources for a warehouse from SAP
-         * @param {string} sWarehouse - Warehouse number (required)
+         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrWhse] - Model or Warehouse number
+         * @param {string} [sWarehouse] - Warehouse number if model is provided
          * @returns {Promise<Object>}
          */
-        getResources: function (sWarehouse) {
+        getResources: function (oModelOrWhse, sWarehouse) {
+            var oModel = _isModel(oModelOrWhse) ? oModelOrWhse : _oModel;
+            var sWhseParam = _isModel(oModelOrWhse) ? sWarehouse : oModelOrWhse;
             try {
-                var sWhse = _validateRequiredString(sWarehouse, "Warehouse");
+                var sWhse = _validateRequiredString(sWhseParam, "Warehouse");
+                if (_isModel(oModel)) {
+                    return _readEntitySet(oModel, "/WarehouseResources", [
+                        new _Filter("Warehouse", _FilterOperator.EQ, sWhse)
+                    ]);
+                }
                 return ODataClient.get(BASE_PATH + "/WarehouseResources?$filter=Warehouse eq '" + encodeURIComponent(sWhse) + "'");
             } catch (oErr) {
                 return Promise.reject(oErr);
