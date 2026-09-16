@@ -198,3 +198,178 @@
     - `npx cds compile srv`: Succeeded with 0 errors.
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit preload and auth synchronization fixes to `feature/CL01`.
+
+## 2026-09-16 15:10 IST
+- **Agent**: Antigravity
+- **Change**: Incomplete Sales Inquiry & Quotation Pre-flight Check Architecture & Planning (Task 1–4)
+  - **Task 1 Investigation (Catalog Service Verification on S/4HANA Client 220)**:
+    - Inspected all 1,345 Gateway catalog services in `srv/external/all_catalog_services.json`:
+      - `API_SALES_INQUIRY_SRV`: Does not exist on client 220 (only `API_SALES_ORDER_SRV` and `API_SALES_QUOTATION_SRV` exist).
+      - `SD_F2369_INQY_FS_SRV`: Registered as `ZSD_F2369_INQY_FS_SRV_0001`. Verified 100% read-only (`sap:creatable="false"`, `sap:updatable="false"`, `sap:deletable="false"`, 0 FunctionImports, 0 Actions).
+      - `ui_salesinquirymanage` (V2/V4): Does not exist on client 220.
+      - `SD_F2370_INQY_WL_SRV`: Verified 100% read-only (`C_InquiryWL_F2370`).
+      - `LORD_ODATA_ORDER_SRV`: Currently active creation service. Exposes `Plant` (`WERKS`), but does not expose `CustomerGroup2` (`KVGR2`), `PortOfLoading` (`ZOLLA`), `PortOfDischarge` (`ZOLLB`), or `ContactPerson` (`PARNR`).
+  - **Task 2 (Supplementing/Replacing LORD_ODATA_ORDER_SRV)**:
+    - Confirmed no newer standard or V4 inquiry service exists in Gateway client 220 to replace or supplement `LORD_ODATA_ORDER_SRV`.
+  - **Task 3 (Post-Creation BAPI Wrapper Architecture)**:
+    - Designed technical ABAP Gateway OData wrapper `ZSD_INQUIRY_UPDATE_SRV` executing `BAPI_SALESDOCUMENT_CHANGE` for `CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, and partner table update for `ContactPerson` (`CP`/`ZP`), with commit control and error propagation.
+  - **Task 4 (Pre-flight Check Architecture in `createSalesQuote`)**:
+    - Formulated pre-flight validation in `SalesInquiryAdapter.createSalesQuoteFromInquiry` and error code handling for `SLS_LORD/009` in `SalesQuotationManageClient.js`:
+      - Reads inquiry directly from SAP via `getInquiry(salesInquiry)`.
+      - Validates presence of Contact Person in partner cards (`ZP`/`CP`) and header fields (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`).
+      - Immediately rejects with HTTP 400 naming the exact missing fields before `CreateWithRefFromSlsInquiry` is called, ensuring incomplete inquiries never trigger quotation session persistence.
+  - **Artifact Generated**: `implementation_plan.md` created with comprehensive design.
+  - **Next recommended action**: Proceed with implementation following user approval.
+
+## 2026-09-16 15:18 IST
+- **Agent**: Antigravity
+- **Change**: Implemented Pre-flight Inquiry Completeness Check and Quotation Incompletion Protection (Task 4)
+  - **`SalesInquiryAdapter.js`**:
+    - Added `_validateInquiryForQuotation(salesInquiry, salesQuotationType, options)` invoked in `createSalesQuoteFromInquiry` before instantiating the quotation client.
+    - Inspects inquiry partner cards (`ZP` / `CP`) and header fields (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`).
+    - Throws `SapQuotationIncompleteError` with HTTP 400 naming all missing fields when incomplete, completely preventing `CreateWithRefFromSlsInquiry` from firing.
+    - Enhanced `getInquiry` partner extraction to support both `ZP` and `CP` functions and populate both `ContactPerson` and `ContactPersonName`.
+  - **`SalesQuotationManageClient.js`**:
+    - Added `INCOMPLETE_DOCUMENT_CODE = 'SLS_LORD/009'`.
+    - Updated `toQuotationError` to classify `SLS_LORD/009` at `STEP.CREATE` as an incomplete reference document error.
+  - **Unit Tests**:
+    - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Added tests for 404 on non-existent inquiry, 400 on all 4 missing fields, 400 on missing ContactPerson, and confirmed `client.createFromInquiry` is never invoked when incomplete.
+    - `test/unit/sales-inquiry/salesQuotationManageClient.test.js`: Added test for `SLS_LORD/009` at `STEP.CREATE`.
+  - **Validation**:
+    - `npm test test/unit/sales-inquiry/salesInquiryAdapter.test.js`: 33 passed, 33 total (100% green).
+    - `npm test test/unit/sales-inquiry/salesQuotationManageClient.test.js`: 28 passed, 28 total (100% green).
+    - `npm test test/unit/sales-inquiry/`: 13 suites, 180 passed, 180 total (100% green).
+    - `npm test`: **72 passed, 72 total test suites; 960 passed, 960 total tests (100% green)** in 48.8 s.
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit inquiry pre-flight check to `feature/CL01`.
+
+## 2026-09-16 15:40 IST
+- **Agent**: Antigravity
+- **Change**: Incomplete Sales Inquiry Pre-Flight Check & Quotation Incompletion Protection via `SD_F2430_INCOMP_SRV` and UI Guard.
+  - **Task 1 & 2 — Incompletion Log Integration & Documented Fallback**:
+    - Registered `SD_F2430_INCOMP_SRV` under `cds.requires` in `package.json` (`kind: "odata-v2"`).
+    - Added `_checkIncompletionLog(salesInquiry, options)` in `SalesInquiryAdapter.js` querying `/sap/opu/odata/sap/SD_F2430_INCOMP_SRV/C_Incompl_SalesDocWL_F2430('${salesInquiry}')` on S/4 destination. Returns 200 with `NumberOfIncompleteFields` and `HdrGeneralIncompletionStatus` for incomplete inquiries, 404 for complete inquiries.
+    - Documented that `SD_F2430_INCOMP_SRV` delivers document-level aggregate status/count but does not provide line-by-line field descriptions.
+    - Maintained documented fallback inspecting inquiry header and partner fields, reporting missing fields in business language: `"Customer Group 2"`, `"Port of Loading"`, `"Port of Discharge"`, `"Contact Person"`.
+    - Defined and exported `SapQuotationIncompleteError` class (`name: 'SapQuotationIncompleteError'`, `status: 400`, `missingFields` array in business language).
+  - **Task 3 — Strict Execution Order Prior to `CreateWithRefFromSlsInquiry`**:
+    - `_validateInquiryForQuotation` executes before `client.createFromInquiry` under all conditions; incomplete inquiries are rejected immediately before any quotation session or action is invoked.
+  - **Task 4 — Error Contract & Fiori UI Dialog Integration**:
+    - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Handled `SapQuotationIncompleteError` emitting `req.error(error.status || 400, error.message)`.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateQuoteFromInquiryDialog.fragment.xml`: Added error `MessageStrip` bound to `quoteDialog>/isIncomplete` and `quoteDialog>/incompletionMessage`. Bound `btnConfirmCreateQuote` `enabled="{= !${quoteDialog>/isIncomplete} }"`.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js`: Implemented `_checkInquiryQuotationReadiness`, guarded `onConfirmCreateSalesQuote` against `isIncomplete`, and captured backend incompletion errors to display in the dialog model.
+  - **Task 5 — Capability State Reactions**:
+    - Standard capability state (capabilities false): inquiries created without the 4 fields are flagged incomplete, blocking quotation creation.
+    - Extended capability state (capabilities true): inquiries created with all 4 fields pass pre-flight validation automatically with zero code change or redeploy.
+    - Added unit test covering both capability states in `salesInquiryAdapter.test.js`.
+  - **Validation**:
+    - `npm test`: **72 passed, 72 total test suites; 966 passed, 966 total tests (100% green)** in 46.5 s.
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `cd app/fiori-app && npm run lint && npm run build`: **0 findings, build succeeded in 776 ms**.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Review diff and stage/commit to `feature/CL01`.
+
+## 2026-09-16 15:55 IST
+- **Agent**: Antigravity
+- **Change**: Actionable VA22 Navigation on Incomplete Inquiries & Forward-Compatible Quotation Action Signature (Branch 3: "Neither exposes them").
+  - **CDS Contract & Backend Handler**:
+    - `srv/sd/sales-inquiry/service.cds`: Added optional parameters `CustomerGroup2: String`, `PortOfLoading: String`, `PortOfDischarge: String`, `ContactPerson: String` to `createSalesQuote` action signature for forward-compatibility when the SAP transport lands.
+    - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Forwarded optional parameters from `req.data` into `salesInquiryAdapter.createSalesQuoteFromInquiry`.
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Conditionally populated `CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, and `ContactPerson` on `headerPayload` to `client.createFromInquiry` when provided.
+  - **Fiori Frontend**:
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateQuoteFromInquiryDialog.fragment.xml`: Wrapped incompletion alert in `VBox` `id="boxInquiryIncomplete"`, adding action button `id="btnOpenInquiryInVa22"` (`text="{i18n>quoteDialogBtnOpenVA22}"`, `icon="sap-icon://action"`, `type="Emphasized"`, `press=".onOpenInquiryInVa22"`).
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js`: Implemented `onOpenInquiryInVa22` opening `/sap/bc/gui/sap/its/webgui?~transaction=*VA22%20VBAK-VBELN=<InquiryId>` in a new tab via standard `window.open` safely with inquiry ID validation.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added `quoteDialogBtnOpenVA22=Open in VA22`.
+  - **Automated Tests**:
+    - `test/unit/sales-inquiry/createSalesQuoteHandler.test.js`: Added test asserting optional incompletion parameters pass through handler to adapter.
+    - `test/unit/sales-inquiry/salesInquiriesController.test.js`: Added unit tests for `onOpenInquiryInVa22` validating URL formation and empty inquiry ID handling.
+  - **Validation**:
+    - `npm test`: **72 passed, 72 total test suites; 969 passed, 969 total tests (100% green)** in 47.2 s.
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+    - `cd app/fiori-app && npm run build`: **Build succeeded in 817 ms**; preload generated at 535 KB.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Review git diff with user and stage/commit to `feature/CL01`.
+
+## 2026-09-16 16:00 IST
+- **Agent**: Antigravity
+- **Change**: In-Dialog "Re-check" Pre-flight Validation in Create Sales Quotation Dialog.
+  - **Fiori UI & Controller**:
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateQuoteFromInquiryDialog.fragment.xml`: Added "Re-check" button (`id="btnRecheckInquiry"`, `text="{i18n>quoteDialogBtnRecheck}"`, `icon="sap-icon://refresh"`, `press=".onRecheckInquiryStatus"`) beside the "Open in VA22" button in `boxInquiryIncomplete`.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js`: Implemented `onRecheckInquiryStatus()`. Re-runs pre-flight validation by fetching the latest inquiry data from SAP via `SalesInquiryService.getSalesInquiry(sCleanId, undefined, true)`. On success, if the inquiry is complete in SAP, clears `isIncomplete`, hides the error strip, and immediately enables the "Create Sales Quotation" button without closing or reopening the dialog or reloading the page.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js`: Added `bForceRefresh` parameter to `getSalesInquiry` to ensure cache invalidation when re-querying updated SAP data.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added `quoteDialogBtnRecheck=Re-check`.
+  - **Automated Tests**:
+    - `test/unit/sales-inquiry/salesInquiriesController.test.js`: Added 4 unit tests for `onRecheckInquiryStatus`:
+      - Clears incompletion error and enables creation button when all fields are present in SAP.
+      - Keeps `isIncomplete=true` and updates message when fields are still missing.
+      - Rejection/error handling with MessageBox.
+      - Empty inquiry validation guard.
+  - **Validation**:
+    - `npm test`: **72 passed, 72 total test suites; 973 passed, 973 total tests (100% green)** in 51.2 s.
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+    - `cd app/fiori-app && npm run build`: **Build succeeded in 926 ms**; preload generated at 535 KB.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Review git diff with user and stage/commit to `feature/CL01`.
+
+## 2026-09-16 16:15 IST
+- **Agent**: Antigravity
+- **Change**: Complete implementation of Incomplete Sales Inquiry Handling, Server-Side Inquiry Completeness Re-check, V4 Cache Lifecycle Fix, and Unsupported `sap.ui.core.Title` Setting Fix.
+  - **Delivered Capabilities & Bug Fixes**:
+    1. **Fixed `[FUTURE FATAL]` unsupported `visible` property on `sap.ui.core.Title`**: Replaced section title in `CreateQuoteFromInquiryDialog.fragment.xml` with `sap.m.Panel id="pnlSupplyMissingParams"` with `visible="{= ${quoteDialog>/canCollectMissingFields} === true }"`. Hides entire missing parameters section when false.
+    2. **Strict Numeric Contact Person (`VBPA-PARNR`)**: Fixed `SalesInquiryAdapter.getInquiry` and `validateInquiryForQuotation` to enforce NUMC partner number; name-only strings fail pre-flight.
+    3. **Maintainability**: Defined and exported `MANDATORY_INCOMPLETION_FIELDS` referencing OVA2/TVUVF table (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, `ContactPerson`).
+    4. **Concurrency Ceiling**: Documented single-instance CF ceiling in `SalesQuotationManageClient.js` with `// ponytail:` comment.
+    5. **Server-Side Re-check Function**: Added read-only `getInquiryCompleteness` function to `service.cds` and implemented in `salesInquiry.handler.js` catching `SapQuotationIncompleteError` without opening quotation sessions or touching the quotation client.
+    6. **V4 Inactive Cache Lifecycle Fix**: Refactored dialog controller's `onRecheckInquiryStatus` to call `SalesInquiryService.getInquiryCompleteness` via direct `ODataClient.get()` without any UI5 OData V4 context binding, `$expand`, or model refresh, eliminating inactive cache discards. Debounced Re-check button against overlapping clicks.
+    7. **Copy Inquiry Action & UX**: Replaced VA22 button with Copy Inquiry Number action (`navigator.clipboard`) and added labelled rows in Source Document panel displaying `(Not maintained in SAP)` when empty.
+    8. **Dynamic Forward-Compatible Collection**: Implemented conditional inputs and payload forwarding in `CreateQuoteFromInquiryDialog.fragment.xml`, `SalesInquiries.controller.js`, and `SalesInquiryService.js` when capabilities flip to `true`.
+  - **Validation & Quality Gates**:
+    - `npx cds compile srv`: Passed with code 0.
+    - `npm run lint`: **0 errors**, 23 warnings (eliminated unused catch error warning in `SalesInquiryAdapter.js`).
+    - `cd app/fiori-app && npm run lint && npm run build`: **0 errors, 0 warnings**; build succeeded in 703 ms (`Component-preload.js` generated cleanly).
+    - `npx jest test/unit/sales-inquiry/createSalesQuoteHandler.test.js test/unit/sales-inquiry/salesInquiriesController.test.js test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **3 passed, 3 total test suites; 84 passed, 84 total tests (100% green)**.
+    - `npm test`: **72 passed, 72 total test suites; 988 passed, 988 total tests (100% green)** in 45.5 s.
+    - `git diff --check`: Clean (0 errors).
+  - **Next Recommended Action**: Execute the 5 logical commits on branch `feature/CL01`.
+
+## 2026-09-16 16:45 IST
+- **Agent**: Antigravity
+- **Change**: Code Review Remediation & Dead Code Removal — purged unpersisted missing parameter UI and wiring, consolidated in-dialog pre-flight checking, and stabilized dialog lifecycle.
+  - **Dead Code Removed**:
+    - Deleted `pnlSupplyMissingParams` and its four `Input` controls (`inCustomerGroup2`, `inPortOfLoading`, `inPortOfDischarge`, `inContactPerson`) from `CreateQuoteFromInquiryDialog.fragment.xml`.
+    - Removed `*Input` model properties (`CustomerGroup2Input`, `PortOfLoadingInput`, etc.) and `canCollectMissingFields` flag from `SalesInquiries.controller.js`.
+    - Removed client-side missing field validation and input payload mapping from `SalesInquiries.controller.js`.
+    - Reverted `createSalesQuote` action in `service.cds`, `salesInquiry.handler.js`, and `SalesInquiryService.js` to the standard 6 quotation parameters (`SalesInquiry`, `SalesQuotationType`, `SalesQuotationDate`, `BindingPeriodValidityEndDate`, `PurchaseOrderByCustomer`, `CustomerPurchaseOrderDate`).
+    - Reverted Create button enabled binding in dialog fragment to `enabled="{= !${quoteDialog>/isIncomplete} }"`.
+    - Ensured `skipIncompletionCheck` is not wired; pre-flight validation cannot be bypassed.
+  - **Verified Capabilities Retained**:
+    - Incompletion error banner (`stripInquiryIncomplete`), Copy Inquiry Number action (`btnCopyInquiryNumber`), and Re-check action (`btnRecheckInquiry`) in `boxInquiryIncomplete`.
+    - Source Document panel displaying `CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, and `ContactPerson` as read-only with semantic `(Not maintained in SAP)` fallback.
+    - Server-side read-only `getInquiryCompleteness` function in `service.cds` and `salesInquiry.handler.js` for safe in-dialog re-checking without OData V4 context binding or cache discards.
+    - Strict numeric partner validation (`/^\d+$/`) for `ContactPerson` in `validateInquiryForQuotation`.
+    - `MANDATORY_INCOMPLETION_FIELDS` configuration list based on OVA2/TVUVF.
+  - **Bug & Warning Fixes**:
+    - Fixed double MessageToast trigger: ensured single-instance dialog lifecycle and promise caching with proper cleanup on controller exit.
+    - Removed any redundant MessageToast position options, retaining UI5 defaults without `Popup.Dock` deprecation warnings.
+    - Removed duplicate property initialization in dialog view model.
+  - **Validation & Quality Gates**:
+    - `npm run lint`: **0 errors**, 23 warnings.
+    - `cd app/fiori-app && npm run lint && npm run build`: **0 errors, 0 warnings**; build succeeded in 695 ms (`Component-preload.js` generated cleanly).
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm test`: **72 passed, 72 total test suites; 986 passed, 986 total tests (100% green)** in 55.6 s.
+    - `git diff --check`: Clean (0 errors).
+  - **Next Recommended Action**: Execute the 6 atomic commits to `feature/CL01`.
+
+## Current Status
+- **Branch**: `feature/CL01`
+- **Build Status**: Green (100% test pass rate across 72 suites, 986 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean).
+- **Incompletion & Pre-flight Handling**: Fully verified. Strict server-side validation against mandatory incompletion fields with read-only source document display and safe in-dialog re-check. Dead parameter write paths removed.
+- **XML Fragment & Dialog Lifecycle**: Clean and compliant with latest SAPUI5 specifications; no unsupported properties, no duplicate triggers, and clean lifecycle management.
+
+## Next Steps
+1. Review git status and staged diff breakdown with the user.
+2. Execute the 6 separate commits to `feature/CL01` as instructed.
+3. Verify git log and status post-commit.
