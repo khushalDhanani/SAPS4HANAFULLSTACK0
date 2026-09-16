@@ -152,3 +152,25 @@
     - `npx cds compile srv`: Succeeded with 0 errors.
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit CI pipeline, ESLint configuration, and Node 22 engines declaration to `feature/CL01`.
+
+## 2026-09-16 13:15 IST
+- **Agent**: Antigravity
+- **Change**: Comprehensive README.md Documentation Realignment and Drift Resolution
+  - **Scope Expansion**: Replaced procurement-only narrative with the canonical **SAP S/4HANA Enterprise Full-Stack Platform**, detailing all 5 active business domains: Materials Management (MM), Warehouse Management (WM), Extended Warehouse Management (EWM), Sales & Distribution (SD), and Financial Accounting (FI).
+  - **Test Metrics Realignment**: Corrected badges and testing section from obsolete "18 Suites, 116 Tests" to **72 Suites, 956 Tests (100% Green)**.
+  - **Authoritative 8-Role RBAC Matrix**: Documented all 8 application roles from `xs-security.json` (`Viewer`, `Admin`, `PurchasingManager`, `FinanceViewer`, `SalesRepresentative`, `SalesManager`, `WarehouseClerk`, `WarehouseManager`), defining scopes, role collections, domain access permissions, and resolving the prior 2-role truncation.
+  - **Architecture & Technical Stack Refresh**:
+    - Updated architecture Mermaid diagram depicting presentation routing across MM, WM, EWM, SD, and FI, CAP OData V4 services, S/4 integration adapters, HDI dispatch queue persistence (`saps4hana-db`), and Gateway services.
+    - Updated tech stack versions: SAPUI5 pinned to `1.136.0`, Node.js to `>=22.0.0` (v22 LTS), ESLint flat config, and `@ui5/linter`.
+    - Added dedicated Continuous Integration (CI/CD) section detailing `.github/workflows/ci.yml`.
+    - Updated Local Development launchpad navigation paths for all 7 application views (`#/dashboard`, `#/purchase-orders`, `#/goods-issue`, `#/goods-receipt`, `#/warehouse-cockpit`, `#/rf-terminal`, `#/sales-inquiries`, `#/journal-entries`) and OData V4 metadata endpoints.
+    - Updated Project Structure tree to reflect modules under `app/fiori-app/webapp/modules/`, services under `srv/`, and root configurations.
+  - **Validation**:
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm test`: **72 passed, 72 total test suites; 956 passed, 956 total tests (100% green)** in 43.2 s.
+    - `cd app/fiori-app && npm run build`: Build succeeded in 664 ms; `Component-preload.js` generated cleanly.
+    - `npm run validate:mta`: Succeeded with `[INFO] validating the MTA project` (exit code 0).
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit updated documentation to `feature/CL01`.
