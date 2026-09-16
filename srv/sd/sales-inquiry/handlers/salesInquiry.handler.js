@@ -115,11 +115,40 @@ function registerSalesInquiryHandlers(srv) {
             LOG.error('Error creating Sales Quote from Inquiry:', error.message);
             // SAP business rejections (e.g. SLS_LORD/166) and unconfirmed outcomes ("verify in SAP, do not
             // retry") already carry a message for the user; show it unchanged.
-            if (error.name === 'SapQuotationError' || error.status === 400) {
-                req.error(error.status || 500, error.message);
+            if (error.name === 'SapQuotationError' || error.name === 'SapQuotationIncompleteError' || error.status === 400) {
+                req.error(error.status || 400, error.message);
                 return;
             }
             req.error(error.status || 500, `Failed to create Sales Quote: ${error.message}`);
+        }
+    });
+
+    // 3c. Function getInquiryCompleteness (read-only pre-flight validation check)
+    srv.on('getInquiryCompleteness', async (req) => {
+        const sInquiryId = req.data?.SalesInquiry;
+        if (!sInquiryId || String(sInquiryId).trim() === '') {
+            req.error(400, 'Sales Inquiry number is required');
+            return;
+        }
+
+        const authenticatedUser = resolveUserIdentity(req);
+        try {
+            await salesInquiryAdapter.validateInquiryForQuotation(String(sInquiryId).trim(), 'ZQT', {
+                user: authenticatedUser
+            });
+            return {
+                complete: true,
+                missingFields: []
+            };
+        } catch (error) {
+            if (error.name === 'SapQuotationIncompleteError') {
+                return {
+                    complete: false,
+                    missingFields: error.missingFields || []
+                };
+            }
+            LOG.error('Error checking inquiry completeness:', error.message);
+            req.error(error.status || 500, error.message);
         }
     });
 

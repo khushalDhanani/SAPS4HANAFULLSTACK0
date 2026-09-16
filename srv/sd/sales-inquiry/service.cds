@@ -149,6 +149,12 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
     ) returns String;
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
+    function getInquiryCompleteness(SalesInquiry: String) returns {
+        complete      : Boolean;
+        missingFields : array of String;
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getCustomerDefaults(Customer: String, SalesOrganization: String, DistributionChannel: String, Division: String) returns {
         Customer: String;
         CustomerName: String;
