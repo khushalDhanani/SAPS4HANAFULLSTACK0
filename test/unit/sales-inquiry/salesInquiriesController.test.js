@@ -5,6 +5,10 @@
 
 let ControllerClass;
 
+global.window = global.window || {
+    open: jest.fn()
+};
+
 class MockJSONModel {
     constructor(data) {
         this.data = JSON.parse(JSON.stringify(data || {}));
@@ -38,6 +42,7 @@ const mockMessageBox = {
     confirm: jest.fn(),
     success: jest.fn(),
     error: jest.fn(),
+    warning: jest.fn(),
     Action: {
         OK: "OK",
         CANCEL: "CANCEL"
@@ -55,12 +60,16 @@ const mockBusyIndicator = {
 
 const mockSalesInquiryService = {
     createSalesQuote: jest.fn(),
-    getSalesInquiry: jest.fn().mockResolvedValue({ header: {}, items: [] })
+    getSalesInquiry: jest.fn().mockResolvedValue({ header: {}, items: [] }),
+    getInquiryCreationCapabilities: jest.fn().mockResolvedValue({ CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false }),
+    getInquiryCompleteness: jest.fn()
 };
 
 const mockDialog = {
     open: jest.fn(),
-    close: jest.fn()
+    close: jest.fn(),
+    attachAfterClose: jest.fn(),
+    destroy: jest.fn()
 };
 
 const mockFragment = {
@@ -310,6 +319,7 @@ describe("SalesInquiries.controller", () => {
             mockMessageToast.show.mockReset();
             mockBusyIndicator.show.mockReset();
             mockBusyIndicator.hide.mockReset();
+            mockMessageBox.warning.mockReset();
             mockSalesInquiryService.createSalesQuote.mockReset();
             mockSalesInquiryService.getSalesInquiry.mockReset().mockResolvedValue({
                 header: { ShipToParty: "10003", ShipToPartyName: "Aarti Drugs Ltd" },
@@ -426,6 +436,40 @@ describe("SalesInquiries.controller", () => {
 
             expect(mockFragment.load).not.toHaveBeenCalled();
             expect(mockDialog.open).toHaveBeenCalled();
+        });
+
+        it("_checkInquiryQuotationReadiness flags incomplete fields in business language", () => {
+            const oModel = new MockJSONModel({ SalesInquiry: "1000537" });
+            const oHeader = { SalesInquiry: "1000537" }; // lacks all 4 fields
+            controller._checkInquiryQuotationReadiness(oModel, oHeader);
+
+            expect(oModel.getProperty("/isIncomplete")).toBe(true);
+            expect(oModel.getProperty("/missingFields")).toEqual([
+                "Customer Group 2",
+                "Port of Loading",
+                "Port of Discharge",
+                "Contact Person"
+            ]);
+            expect(oModel.getProperty("/incompletionMessage")).toContain("Inquiry 1000537 is incomplete in SAP (missing: Customer Group 2, Port of Loading, Port of Discharge, Contact Person).");
+        });
+
+        it("onConfirmCreateSalesQuote blocks creation and shows error when inquiry is incomplete", () => {
+            const oModel = new MockJSONModel({
+                SalesInquiry: "1000537",
+                isIncomplete: true,
+                incompletionMessage: "Inquiry 1000537 is incomplete in SAP (missing: Customer Group 2, Port of Loading, Port of Discharge, Contact Person). Maintain these fields in SAP (transaction VA22) before creating a Sales Quotation.",
+                SalesQuotationType: "ZQT",
+                SalesQuotationDate: "2026-03-14",
+                BindingPeriodValidityEndDate: "2026-04-14"
+            });
+            controller.getView().setModel(oModel, "quoteDialog");
+
+            controller.onConfirmCreateSalesQuote();
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining("Inquiry 1000537 is incomplete in SAP (missing: Customer Group 2, Port of Loading, Port of Discharge, Contact Person)."),
+                expect.objectContaining({ title: "Incomplete Inquiry" })
+            );
+            expect(mockSalesInquiryService.createSalesQuote).not.toHaveBeenCalled();
         });
 
         it("onConfirmCreateSalesQuote validates mandatory fields", () => {
@@ -563,6 +607,194 @@ describe("SalesInquiries.controller", () => {
             controller._oCreateQuoteDialog = mockDialog;
             controller.onCancelCreateSalesQuote();
             expect(mockDialog.close).toHaveBeenCalled();
+        });
+
+        it("onOpenInquiryInVa22 opens SAP WebGUI with encoded inquiry ID when inquiry ID is present", () => {
+            const openSpy = jest.spyOn(global.window, "open").mockImplementation(() => {});
+            controller.getView().setModel(new MockJSONModel({
+                SalesInquiry: "1000540"
+            }), "quoteDialog");
+            controller.onOpenInquiryInVa22();
+            expect(openSpy).toHaveBeenCalledWith(
+                "/sap/bc/gui/sap/its/webgui?~transaction=*VA22%20VBAK-VBELN=1000540",
+                "_blank"
+            );
+            openSpy.mockRestore();
+        });
+
+        it("onOpenInquiryInVa22 warns when no inquiry ID is present in dialog model", () => {
+            const openSpy = jest.spyOn(global.window, "open").mockImplementation(() => {});
+            controller.getView().setModel(new MockJSONModel({
+                SalesInquiry: ""
+            }), "quoteDialog");
+            controller.onOpenInquiryInVa22();
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                "No Sales Inquiry selected to open in VA22."
+            );
+            expect(openSpy).not.toHaveBeenCalled();
+            openSpy.mockRestore();
+        });
+
+        it("onRecheckInquiryStatus re-runs pre-flight check server-side and clears incompletion without re-binding", async () => {
+            const oDialogModel = new MockJSONModel({
+                SalesInquiry: "1000540",
+                isIncomplete: true,
+                isRechecking: false,
+                incompletionMessage: "Inquiry 1000540 is incomplete in SAP",
+                missingFields: ["Customer Group 2", "Port of Loading", "Port of Discharge"]
+            });
+            controller.getView().setModel(oDialogModel, "quoteDialog");
+
+            mockSalesInquiryService.getInquiryCompleteness.mockResolvedValue({
+                complete: true,
+                missingFields: []
+            });
+
+            await controller.onRecheckInquiryStatus();
+
+            expect(mockBusyIndicator.show).toHaveBeenCalled();
+            expect(mockBusyIndicator.hide).toHaveBeenCalled();
+            expect(mockSalesInquiryService.getInquiryCompleteness).toHaveBeenCalledWith("1000540");
+            expect(mockSalesInquiryService.getSalesInquiry).not.toHaveBeenCalled();
+            expect(oDialogModel.getProperty("/isRechecking")).toBe(false);
+            expect(oDialogModel.getProperty("/isIncomplete")).toBe(false);
+            expect(oDialogModel.getProperty("/missingFields")).toEqual([]);
+            expect(oDialogModel.getProperty("/incompletionMessage")).toBe("");
+            expect(mockMessageToast.show).toHaveBeenCalledWith(
+                expect.stringContaining("complete in SAP. You can now create the Sales Quotation.")
+            );
+        });
+
+        it("onRecheckInquiryStatus re-runs pre-flight check and keeps isIncomplete=true when SAP still misses fields", async () => {
+            const oDialogModel = new MockJSONModel({
+                SalesInquiry: "1000540",
+                isIncomplete: true,
+                isRechecking: false,
+                incompletionMessage: "Old message",
+                missingFields: []
+            });
+            controller.getView().setModel(oDialogModel, "quoteDialog");
+
+            mockSalesInquiryService.getInquiryCompleteness.mockResolvedValue({
+                complete: false,
+                missingFields: ["Customer Group 2", "Port of Loading", "Port of Discharge"]
+            });
+
+            await controller.onRecheckInquiryStatus();
+
+            expect(oDialogModel.getProperty("/isRechecking")).toBe(false);
+            expect(oDialogModel.getProperty("/isIncomplete")).toBe(true);
+            expect(oDialogModel.getProperty("/missingFields")).toEqual([
+                "Customer Group 2", "Port of Loading", "Port of Discharge"
+            ]);
+            expect(mockMessageToast.show).toHaveBeenCalledWith(
+                expect.stringContaining("still incomplete in SAP")
+            );
+        });
+
+        it("onRecheckInquiryStatus prevents overlapping requests when re-check is already in flight", async () => {
+            const oDialogModel = new MockJSONModel({
+                SalesInquiry: "1000540",
+                isRechecking: true
+            });
+            controller.getView().setModel(oDialogModel, "quoteDialog");
+
+            await controller.onRecheckInquiryStatus();
+
+            expect(mockSalesInquiryService.getInquiryCompleteness).not.toHaveBeenCalled();
+            expect(mockBusyIndicator.show).not.toHaveBeenCalled();
+        });
+
+        it("onRecheckInquiryStatus warns when no inquiry is set in dialog model", async () => {
+            controller.getView().setModel(new MockJSONModel({
+                SalesInquiry: ""
+            }), "quoteDialog");
+
+            await controller.onRecheckInquiryStatus();
+
+            expect(mockMessageBox.warning).toHaveBeenCalledWith("No Sales Inquiry selected to re-check.");
+            expect(mockSalesInquiryService.getInquiryCompleteness).not.toHaveBeenCalled();
+        });
+
+        it("onRecheckInquiryStatus handles service failure with MessageBox.error and resets isRechecking", async () => {
+            const oDialogModel = new MockJSONModel({
+                SalesInquiry: "1000540",
+                isRechecking: false
+            });
+            controller.getView().setModel(oDialogModel, "quoteDialog");
+
+            mockSalesInquiryService.getInquiryCompleteness.mockRejectedValue(new Error("SAP connection timeout"));
+
+            await controller.onRecheckInquiryStatus();
+
+            expect(mockBusyIndicator.hide).toHaveBeenCalled();
+            expect(oDialogModel.getProperty("/isRechecking")).toBe(false);
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                "SAP connection timeout",
+                expect.objectContaining({ title: "Re-check Failed" })
+            );
+        });
+
+        it("_checkInquiryQuotationReadiness rejects name-only or non-numeric Contact Person", () => {
+            const oModel = new MockJSONModel({ SalesInquiry: "1000540" });
+            const oHeader = {
+                SalesInquiry: "1000540",
+                CustomerGroup2: "SEA",
+                PortOfLoading: "INNSA",
+                PortOfDischarge: "SGSIN",
+                ContactPerson: "", // empty partner
+                ContactPersonName: "John Doe" // display name only
+            };
+            controller._checkInquiryQuotationReadiness(oModel, oHeader);
+
+            expect(oModel.getProperty("/isIncomplete")).toBe(true);
+            expect(oModel.getProperty("/missingFields")).toEqual(["Contact Person"]);
+            expect(oModel.getProperty("/incompletionMessage")).toContain("missing: Contact Person");
+        });
+
+        it("onCopyInquiryNumber writes inquiry ID to clipboard and shows toast", async () => {
+            const writeTextMock = jest.fn().mockResolvedValue();
+            const originalNavigator = global.navigator;
+            global.navigator = { clipboard: { writeText: writeTextMock } };
+
+            controller.getView().setModel(new MockJSONModel({
+                SalesInquiry: "1000540"
+            }), "quoteDialog");
+
+            controller.onCopyInquiryNumber();
+            expect(writeTextMock).toHaveBeenCalledWith("1000540");
+
+            await Promise.resolve(); // wait for promise resolution
+            expect(mockMessageToast.show).toHaveBeenCalledWith("Inquiry number 1000540 copied to clipboard.");
+
+            global.navigator = originalNavigator;
+        });
+
+        it("onCopyInquiryNumber warns when no inquiry ID is present", () => {
+            controller.getView().setModel(new MockJSONModel({
+                SalesInquiry: ""
+            }), "quoteDialog");
+
+            controller.onCopyInquiryNumber();
+            expect(mockMessageToast.show).toHaveBeenCalledWith("No Sales Inquiry number to copy.");
+        });
+
+        describe("Incomplete Inquiry Handling", () => {
+            it("blocks creation if inquiry is incomplete in SAP", () => {
+                const oDialogModel = new MockJSONModel({
+                    SalesInquiry: "1000540",
+                    isIncomplete: true,
+                    incompletionMessage: "Inquiry 1000540 is incomplete in SAP (missing: Customer Group 2)."
+                });
+                controller.getView().setModel(oDialogModel, "quoteDialog");
+
+                controller.onConfirmCreateSalesQuote();
+                expect(mockMessageBox.error).toHaveBeenCalledWith(
+                    expect.stringContaining("Inquiry 1000540 is incomplete in SAP"),
+                    expect.objectContaining({ title: "Incomplete Inquiry" })
+                );
+                expect(mockSalesInquiryService.createSalesQuote).not.toHaveBeenCalled();
+            });
         });
     });
 });

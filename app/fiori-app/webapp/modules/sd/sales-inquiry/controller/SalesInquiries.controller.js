@@ -217,12 +217,21 @@ sap.ui.define([
                 BindingPeriodValidityEndDate: sValidToStr,
                 PurchaseOrderByCustomer: oInquiry.PurchaseOrderByCustomer || ("Ref Inquiry " + sInquiryId),
                 CustomerPurchaseOrderDate: oInquiry.CustomerPurchaseOrderDate || sTodayStr,
+                CustomerGroup2: oInquiry.CustomerGroup2 || "",
+                PortOfLoading: oInquiry.PortOfLoading || "",
+                PortOfDischarge: oInquiry.PortOfDischarge || "",
+                ContactPerson: oInquiry.ContactPerson || "",
+                ContactPersonName: oInquiry.ContactPersonName || "",
+                isRechecking: false,
                 items: aItems
             };
 
             var oView = this.getView();
             var oDialogModel = new JSONModel(oDialogData);
             oView.setModel(oDialogModel, "quoteDialog");
+
+            // Evaluate inquiry quotation readiness based on mandatory incompletion fields
+            this._checkInquiryQuotationReadiness(oDialogModel, oInquiry);
 
             // If line items not loaded in worklist row, fetch full inquiry detail
             if (aItems.length === 0) {
@@ -239,24 +248,80 @@ sap.ui.define([
                         }
                         if (h.ShipToParty) oDialogModel.setProperty("/ShipToParty", h.ShipToParty);
                         if (h.ShipToPartyName) oDialogModel.setProperty("/ShipToPartyName", h.ShipToPartyName);
+                        if (h.CustomerGroup2 !== undefined) {
+                            oDialogModel.setProperty("/CustomerGroup2", h.CustomerGroup2 || "");
+                        }
+                        if (h.PortOfLoading !== undefined) {
+                            oDialogModel.setProperty("/PortOfLoading", h.PortOfLoading || "");
+                        }
+                        if (h.PortOfDischarge !== undefined) {
+                            oDialogModel.setProperty("/PortOfDischarge", h.PortOfDischarge || "");
+                        }
+                        if (h.ContactPerson !== undefined) {
+                            oDialogModel.setProperty("/ContactPerson", h.ContactPerson || "");
+                        }
+                        if (h.ContactPersonName !== undefined) {
+                            oDialogModel.setProperty("/ContactPersonName", h.ContactPersonName || "");
+                        }
+                        // Re-evaluate quotation readiness with full header data
+                        that._checkInquiryQuotationReadiness(oDialogModel, h);
                     }
                 }).catch(function () {
                     // Fallback gracefully to header info
                 });
             }
 
-            if (!this._oCreateQuoteDialog) {
-                Fragment.load({
+            if (this._oCreateQuoteDialog) {
+                this._oCreateQuoteDialog.open();
+            } else if (this._pCreateQuoteDialog) {
+                this._pCreateQuoteDialog.then(function (oDialog) {
+                    oDialog.open();
+                });
+            } else {
+                this._pCreateQuoteDialog = Fragment.load({
                     id: oView.getId(),
                     name: "saps4hana.fiori.modules.sd.sales-inquiry.view.CreateQuoteFromInquiryDialog",
                     controller: this
                 }).then(function (oDialog) {
                     that._oCreateQuoteDialog = oDialog;
+                    that._pCreateQuoteDialog = null;
                     oView.addDependent(oDialog);
                     oDialog.open();
+                    return oDialog;
                 });
+            }
+        },
+
+        _checkInquiryQuotationReadiness: function (oDialogModel, oHeader) {
+            if (!oDialogModel || !oHeader) return;
+            var aMissing = [];
+            if (!oHeader.CustomerGroup2 || String(oHeader.CustomerGroup2).trim() === "") {
+                aMissing.push("Customer Group 2");
+            }
+            if (!oHeader.PortOfLoading || String(oHeader.PortOfLoading).trim() === "") {
+                aMissing.push("Port of Loading");
+            }
+            if (!oHeader.PortOfDischarge || String(oHeader.PortOfDischarge).trim() === "") {
+                aMissing.push("Port of Discharge");
+            }
+            var sContactPerson = oHeader.ContactPerson ? String(oHeader.ContactPerson).trim() : "";
+            var bHasContact = sContactPerson !== "" && /^\d+$/.test(sContactPerson);
+            if (!bHasContact) {
+                aMissing.push("Contact Person");
+            }
+
+            var sInquiryId = oDialogModel.getProperty("/SalesInquiry") || oHeader.SalesInquiry || "";
+            if (aMissing.length > 0) {
+                oDialogModel.setProperty("/isIncomplete", true);
+                oDialogModel.setProperty("/missingFields", aMissing);
+                oDialogModel.setProperty("/incompletionMessage",
+                    "Inquiry " + sInquiryId + " is incomplete in SAP (missing: " + aMissing.join(", ") + "). " +
+                    "Maintain these fields in SAP before creating a Sales Quotation."
+                );
             } else {
-                this._oCreateQuoteDialog.open();
+                oDialogModel.setProperty("/isIncomplete", false);
+                oDialogModel.setProperty("/missingFields", []);
+                oDialogModel.setProperty("/incompletionMessage", "");
             }
         },
 
@@ -265,6 +330,13 @@ sap.ui.define([
             var oModel = this.getView().getModel("quoteDialog");
             if (!oModel) return;
             var oData = oModel.getData();
+
+            if (oData.isIncomplete) {
+                MessageBox.error(oData.incompletionMessage || "Inquiry is incomplete in SAP. Maintain these fields in SAP before creating a quotation.", {
+                    title: "Incomplete Inquiry"
+                });
+                return;
+            }
 
             if (!oData.SalesQuotationType) {
                 MessageBox.error("Please select a Quotation Type.");
@@ -307,14 +379,16 @@ sap.ui.define([
             }
 
             BusyIndicator.show(0);
-            return SalesInquiryService.createSalesQuote({
+            var oCreatePayload = {
                 SalesInquiry: oData.SalesInquiry,
                 SalesQuotationType: oData.SalesQuotationType,
                 SalesQuotationDate: oData.SalesQuotationDate,
                 BindingPeriodValidityEndDate: oData.BindingPeriodValidityEndDate,
                 PurchaseOrderByCustomer: oData.PurchaseOrderByCustomer,
                 CustomerPurchaseOrderDate: oData.CustomerPurchaseOrderDate
-            })
+            };
+
+            return SalesInquiryService.createSalesQuote(oCreatePayload)
                 .then(function (sQuoteId) {
                     BusyIndicator.hide();
                     var sSuccessMsg = "Sales Quotation " + (sQuoteId || "") +
@@ -331,6 +405,11 @@ sap.ui.define([
                 .catch(function (err) {
                     BusyIndicator.hide();
                     var sErrorMsg = (err && (err.message || err.error || err)) || "Unknown error occurred";
+                    var oModel = that.getView().getModel("quoteDialog");
+                    if (oModel && (sErrorMsg.indexOf("incomplete") !== -1 || sErrorMsg.indexOf("SLS_LORD") !== -1)) {
+                        oModel.setProperty("/isIncomplete", true);
+                        oModel.setProperty("/incompletionMessage", sErrorMsg);
+                    }
                     MessageBox.error("Failed to create Sales Quotation against Inquiry " + oData.SalesInquiry + ":\n\n" + sErrorMsg, {
                         title: "SAP S/4HANA Error"
                     });
@@ -341,6 +420,98 @@ sap.ui.define([
             if (this._oCreateQuoteDialog) {
                 this._oCreateQuoteDialog.close();
             }
+        },
+
+        onCopyInquiryNumber: function () {
+            var oModel = this.getView().getModel("quoteDialog");
+            var sInquiryId = oModel ? oModel.getProperty("/SalesInquiry") : "";
+            if (!sInquiryId || String(sInquiryId).trim() === "") {
+                MessageToast.show("No Sales Inquiry number to copy.");
+                return;
+            }
+            var sCleanId = String(sInquiryId).trim();
+            if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(sCleanId).then(function () {
+                    MessageToast.show("Inquiry number " + sCleanId + " copied to clipboard.");
+                }).catch(function () {
+                    MessageToast.show("Inquiry: " + sCleanId);
+                });
+            } else {
+                MessageToast.show("Inquiry: " + sCleanId);
+            }
+        },
+
+        onOpenInquiryInVa22: function () {
+            var oModel = this.getView().getModel("quoteDialog");
+            var sInquiryId = oModel ? oModel.getProperty("/SalesInquiry") : "";
+            if (!sInquiryId || String(sInquiryId).trim() === "") {
+                MessageBox.warning("No Sales Inquiry selected to open in VA22.");
+                return;
+            }
+            var sCleanId = String(sInquiryId).trim();
+            var sUrl = "/sap/bc/gui/sap/its/webgui?~transaction=*VA22%20VBAK-VBELN=" + encodeURIComponent(sCleanId);
+            if (typeof window !== "undefined" && window.open) {
+                window.open(sUrl, "_blank");
+            }
+        },
+
+        onRecheckInquiryStatus: function () {
+            var that = this;
+            var oModel = this.getView().getModel("quoteDialog");
+            if (!oModel) return;
+
+            // Handle overlapping clicks: ignore while re-check is in flight
+            if (oModel.getProperty("/isRechecking")) {
+                return;
+            }
+
+            var sInquiryId = oModel.getProperty("/SalesInquiry");
+            if (!sInquiryId || String(sInquiryId).trim() === "") {
+                MessageBox.warning("No Sales Inquiry selected to re-check.");
+                return;
+            }
+
+            var sCleanId = String(sInquiryId).trim();
+            oModel.setProperty("/isRechecking", true);
+            BusyIndicator.show(0);
+
+            return SalesInquiryService.getInquiryCompleteness(sCleanId)
+                .then(function (result) {
+                    BusyIndicator.hide();
+                    oModel.setProperty("/isRechecking", false);
+
+                    if (result && result.complete === true) {
+                        oModel.setProperty("/isIncomplete", false);
+                        oModel.setProperty("/missingFields", []);
+                        oModel.setProperty("/incompletionMessage", "");
+                        MessageToast.show("Inquiry " + sCleanId + " is complete in SAP. You can now create the Sales Quotation.");
+                    } else {
+                        var aMissing = (result && result.missingFields) || [];
+                        oModel.setProperty("/isIncomplete", true);
+                        oModel.setProperty("/missingFields", aMissing);
+                        oModel.setProperty("/incompletionMessage",
+                            "Inquiry " + sCleanId + " is incomplete in SAP (missing: " + aMissing.join(", ") + "). " +
+                            "Maintain these fields in SAP before creating a Sales Quotation."
+                        );
+                        MessageToast.show("Inquiry " + sCleanId + " is still incomplete in SAP (missing: " + aMissing.join(", ") + ").");
+                    }
+                })
+                .catch(function (err) {
+                    BusyIndicator.hide();
+                    oModel.setProperty("/isRechecking", false);
+                    var sErrMsg = (err && (err.message || err.error || err)) || "Failed to re-check inquiry in SAP";
+                    MessageBox.error(sErrMsg, {
+                        title: "Re-check Failed"
+                    });
+                });
+        },
+
+        onExit: function () {
+            if (this._oCreateQuoteDialog) {
+                this._oCreateQuoteDialog.destroy();
+                this._oCreateQuoteDialog = null;
+            }
+            this._pCreateQuoteDialog = null;
         }
     });
 });

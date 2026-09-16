@@ -11,6 +11,34 @@
         draggable="true">
         <content>
             <VBox class="sapUiSmallMargin">
+                <!-- Incompletion Alert Banner & Navigation -->
+                <VBox
+                    id="boxInquiryIncomplete"
+                    visible="{= ${quoteDialog>/isIncomplete} === true }"
+                    class="sapUiSmallMarginBottom">
+                    <MessageStrip
+                        id="stripInquiryIncomplete"
+                        text="{quoteDialog>/incompletionMessage}"
+                        type="Error"
+                        showIcon="true"
+                        class="sapUiTinyMarginBottom" />
+                    <HBox justifyContent="End" alignItems="Center">
+                        <Button
+                            id="btnCopyInquiryNumber"
+                            text="{i18n>quoteDialogBtnCopyInquiry}"
+                            icon="sap-icon://copy"
+                            press=".onCopyInquiryNumber"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnRecheckInquiry"
+                            text="{i18n>quoteDialogBtnRecheck}"
+                            icon="sap-icon://refresh"
+                            type="Emphasized"
+                            enabled="{= !${quoteDialog>/isRechecking} }"
+                            press=".onRecheckInquiryStatus" />
+                    </HBox>
+                </VBox>
+
                 <!-- Source Inquiry Reference Summary -->
                 <Panel
                     headerText="{i18n>quoteDialogSourcePanelHeaderPrefix}{quoteDialog>/SalesInquiry})"
@@ -45,6 +73,18 @@
 
                             <Label text="{i18n>quoteDialogSalesAreaLabel}" design="Bold" />
                             <Text text="{= (${quoteDialog>/SalesOrganization} || '') + ' / ' + (${quoteDialog>/DistributionChannel} || '') + ' / ' + (${quoteDialog>/OrganizationDivision} || '') }" />
+
+                            <Label text="{i18n>quoteDialogCustomerGroup2Label}" design="Bold" />
+                            <Text text="{= ${quoteDialog>/CustomerGroup2} ? ${quoteDialog>/CustomerGroup2} : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+
+                            <Label text="{i18n>quoteDialogPortOfLoadingLabel}" design="Bold" />
+                            <Text text="{= ${quoteDialog>/PortOfLoading} ? ${quoteDialog>/PortOfLoading} : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+
+                            <Label text="{i18n>quoteDialogPortOfDischargeLabel}" design="Bold" />
+                            <Text text="{= ${quoteDialog>/PortOfDischarge} ? ${quoteDialog>/PortOfDischarge} : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+
+                            <Label text="{i18n>quoteDialogContactPersonLabel}" design="Bold" />
+                            <Text text="{= ${quoteDialog>/ContactPerson} ? (${quoteDialog>/ContactPersonName} ? (${quoteDialog>/ContactPersonName} + ' (' + ${quoteDialog>/ContactPerson} + ')') : ${quoteDialog>/ContactPerson}) : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
 
                             <Label text="{i18n>quoteDialogNetAmountLabel}" design="Bold" />
                             <ObjectNumber
@@ -163,6 +203,7 @@
                 text="{i18n>quoteDialogBtnCreate}"
                 type="Emphasized"
                 icon="sap-icon://accept"
+                enabled="{= !${quoteDialog>/isIncomplete} }"
                 press=".onConfirmCreateSalesQuote" />
         </beginButton>
         <endButton>

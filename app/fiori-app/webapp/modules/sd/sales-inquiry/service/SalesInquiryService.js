@@ -226,22 +226,30 @@ sap.ui.define([
         },
 
         /**
-         * Queries a single Sales Inquiry by key.
+         * Fetches full Sales Inquiry details (header + line items via to_Items expand).
          *
          * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrInquiry]
-         * @param {string} [sInquiryNumber]
+         * @param {string|boolean} [sInquiryNumber]
+         * @param {boolean} [bForceRefresh]
          * @returns {Promise<Object>}
          */
-        getSalesInquiry: function (oModelOrInquiry, sInquiryNumber) {
+        getSalesInquiry: function (oModelOrInquiry, sInquiryNumber, bForceRefresh) {
             var oModel = _isModel(oModelOrInquiry) ? oModelOrInquiry : _oModel;
             var sInquiryVal = _isModel(oModelOrInquiry) ? sInquiryNumber : oModelOrInquiry;
+            var bForce = typeof sInquiryNumber === "boolean" ? sInquiryNumber : !!bForceRefresh;
             if (oModel && typeof oModel.bindContext === "function") {
                 var oContextBinding = oModel.bindContext("/SalesInquiries('" + encodeURIComponent(sInquiryVal) + "')", undefined, {
                     $expand: "to_Items"
                 });
+                if (bForce && typeof oContextBinding.refresh === "function") {
+                    oContextBinding.refresh();
+                }
                 return oContextBinding.requestObject();
             }
             var sUrl = SERVICE_BASE + "/SalesInquiries('" + encodeURIComponent(sInquiryVal) + "')?$expand=to_Items";
+            if (bForce) {
+                sUrl += "&_t=" + Date.now();
+            }
             return ODataClient.get(sUrl);
         },
 
@@ -372,6 +380,22 @@ sap.ui.define([
                 return Object.assign({}, oNone, result || {});
             }).catch(function () {
                 return oNone;
+            });
+        },
+
+        /**
+         * Server-side pre-flight inquiry completeness check for quotation creation.
+         * Runs the identical validation as createSalesQuote without opening a quotation session.
+         *
+         * @param {string} sInquiryId
+         * @returns {Promise<{ complete: boolean, missingFields: string[] }>}
+         */
+        getInquiryCompleteness: function (sInquiryId) {
+            var sCleanId = String(sInquiryId || "").trim();
+            var sUrl = SERVICE_BASE + "/getInquiryCompleteness(SalesInquiry='" + encodeURIComponent(sCleanId) + "')";
+            return ODataClient.get(sUrl).then(function (result) {
+                if (!result) return { complete: false, missingFields: [] };
+                return result.value || result;
             });
         },
 
