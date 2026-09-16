@@ -38,6 +38,7 @@ class MockJSONModel {
 const mockMessageBox = {
     success: jest.fn(),
     error: jest.fn(),
+    warning: jest.fn(),
     confirm: jest.fn(),
     information: jest.fn(),
     Action: { OK: "OK" }
@@ -542,6 +543,41 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockModel.getProperty("/hasError")).toBe(true);
             expect(mockModel.getProperty("/errorMessage")).toContain("Customer credit limit exceeded");
             expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Customer credit limit exceeded"));
+        });
+
+        it("onSave handles partial backend creation with warning and navigation to detail", async () => {
+            mockModel.setProperty("/header/SoldToParty", "10135");
+            mockModel.setProperty("/items/0/Material", "1000000003");
+            mockModel.setProperty("/items/0/OrderQuantity", 10);
+            mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+
+            const partialErrMsg = "Sales Inquiry 1000529 was created in SAP S/4HANA, but adding item 000010 failed: Material blocked. Do not retry: check or complete inquiry 1000529 in SAP.";
+            const partialError = new Error(partialErrMsg);
+            partialError.SalesInquiry = "1000529";
+
+            mockSalesInquiryService.createSalesInquiry.mockRejectedValue(partialError);
+
+            controller.onSave();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(mockBusyIndicator.hide).toHaveBeenCalled();
+            expect(mockModel.getProperty("/hasError")).toBe(true);
+            expect(mockModel.getProperty("/errorMessage")).toContain("1000529");
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                expect.stringContaining("1000529"),
+                expect.objectContaining({
+                    title: "Partial Creation in SAP",
+                    actions: expect.arrayContaining(["Display Inquiry 1000529", "Close"])
+                })
+            );
+
+            // Test navigation on "Display Inquiry 1000529"
+            const warningConfig = mockMessageBox.warning.mock.calls[0][1];
+            warningConfig.onClose("Display Inquiry 1000529");
+            expect(mockRouter.navTo).toHaveBeenCalledWith("salesInquiryDetail", {
+                SalesInquiry: "1000529"
+            });
         });
     });
 

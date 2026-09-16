@@ -2,6 +2,7 @@ const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquir
 const { validateCreateSalesInquiryPayload } = require('../validation/salesInquiry.validation');
 const { normalizeSalesInquiryData } = require('../mapping/salesInquiry.mapper');
 const { mapToS4InquiryPayload } = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
+const { resolveUserIdentity } = require('../../../auth/userIdentity');
 
 /**
  * Safety switch for Sales Quotation creation. Re-enabled on explicit instruction; the UI requires the
@@ -10,32 +11,6 @@ const { mapToS4InquiryPayload } = require('../../../integration/s4hana/sd/sales-
 const QUOTATION_CREATION_BLOCKED = false;
 const QUOTATION_CREATION_BLOCKED_MESSAGE = 'Sales Quotation creation is temporarily disabled while an SAP session issue is'
     + ' being investigated. No quotation was created. Create the quotation in SAP (VA21) if it is needed now.';
-
-/**
- * Derives authenticated user identity from request context.
- *
- * @param {import('@sap/cds').Request} req
- * @returns {string}
- */
-function resolveUserIdentity(req) {
-    if (!req) return process.env.S4_USER || 'SYSTEM';
-
-    if (req.user?.attr?.logon_name) {
-        return String(req.user.attr.logon_name).trim();
-    }
-    if (req.user?.id && req.user.id !== 'anonymous') {
-        return String(req.user.id).trim();
-    }
-    if (req.user?.name && req.user.name !== 'anonymous') {
-        return String(req.user.name).trim();
-    }
-    const headerUser = req.headers?.['x-user-id'] || req._?.req?.headers?.['x-user-id'];
-    if (headerUser && String(headerUser).trim() !== '') {
-        return String(headerUser).trim();
-    }
-
-    return process.env.S4_USER || 'SYSTEM';
-}
 
 /**
  * Registers Sales Inquiry business handlers on the CAP service.
@@ -101,6 +76,10 @@ function registerSalesInquiryHandlers(srv) {
             return result.SalesInquiry || 'Inquiry Created';
         } catch (error) {
             console.error('[SalesInquiryService] Error creating Sales Inquiry:', error.message);
+            if (error.SalesInquiry || error.documentNumber || error.name === 'PartialSalesInquiryError') {
+                req.error(error.status || 502, error.message);
+                return;
+            }
             req.error(500, `Failed to create Sales Inquiry: ${error.message}`);
         }
     });

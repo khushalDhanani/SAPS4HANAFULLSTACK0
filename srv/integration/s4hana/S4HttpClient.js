@@ -2,7 +2,6 @@ const cds = require('@sap/cds');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');
 const SessionContext = require('./SessionContext');
-const { loadLocalEnv } = require('./localEnv');
 
 /**
  * S4HttpClient
@@ -122,23 +121,57 @@ class S4HttpClient {
     constructor({ destinationName, getDestination, executeHttpRequest, env, cdsRequires } = {}) {
         this._env = env || process.env;
         this.destinationName = destinationName || this._env.S4_DESTINATION_NAME || DEFAULT_DESTINATION_NAME;
-        this._getDestination = getDestination || connectivity.getDestination;
-        this._execute = executeHttpRequest || httpClient.executeHttpRequest;
+        this._customGetDestination = getDestination;
+        this._customExecute = executeHttpRequest;
         this._cdsRequires = cdsRequires || (() => cds.env.requires);
+    }
+
+    get _getDestination() {
+        return this._customGetDestination || connectivity.getDestination;
+    }
+
+    get _execute() {
+        return this._customExecute || httpClient.executeHttpRequest;
+    }
+
+    /**
+     * Extracts caller's JWT from options or current CAP request context.
+     * Enables Principal Propagation to S/4HANA via SAP Cloud Connector.
+     *
+     * @param {Object} [options]
+     * @returns {string|undefined}
+     */
+    static extractUserJwt(options = {}) {
+        if (options.userJwt) return options.userJwt;
+        if (options.jwt) return options.jwt;
+        const req = cds.context?.http?.req || cds.context?.req;
+        if (req) {
+            const jwt = connectivity.retrieveJwt(req);
+            if (jwt) return jwt;
+        }
+        if (cds.context?.user?.token) {
+            return cds.context.user.token;
+        }
+        return undefined;
     }
 
     /**
      * Resolves the S/4HANA destination (see resolution order above).
+     * Passes userJwt to support Principal Propagation destinations.
      *
+     * @param {Object} [options]
      * @returns {Promise<Object|null>} Cloud SDK destination, or null when nothing is configured
      */
-    async resolveDestination() {
-        if (this._env === process.env && process.env.NODE_ENV !== 'production') {
-            loadLocalEnv();
-        }
+    async resolveDestination(options = {}) {
+        if (options.destination) return options.destination;
+
+        const userJwt = S4HttpClient.extractUserJwt(options);
 
         try {
-            const dest = await this._getDestination({ destinationName: this.destinationName });
+            const dest = await this._getDestination({
+                destinationName: this.destinationName,
+                ...(userJwt ? { userJwt } : {})
+            });
             if (dest && dest.url) return dest;
         } catch (_) {
             // No Destination service binding and no registered destination: use local configuration.
@@ -173,8 +206,8 @@ class S4HttpClient {
         return null;
     }
 
-    async _requireDestination() {
-        const dest = await this.resolveDestination();
+    async _requireDestination(options = {}) {
+        const dest = await this.resolveDestination(options);
         if (!dest) {
             throw new S4HttpError('S/4HANA Destination could not be resolved or is not configured', {
                 status: 502,
@@ -199,17 +232,21 @@ class S4HttpClient {
      * @param {Object} [options.headers]
      * @param {string} [options.accept]
      * @param {string} [options.responseType] - axios responseType, e.g. 'text'
+     * @param {string} [options.userJwt] - Explicit user JWT override for principal propagation
+     * @param {Object} [options.destination] - Destination override
+     * @param {Function} [options.executeHttpRequest] - SDK executor override
      * @returns {Promise<{ status: number, data: any, headers: Object }>}
      */
-    async get(path, { query = '', headers = {}, accept = 'application/json', responseType } = {}) {
-        const destination = await this._requireDestination();
+    async get(path, options = {}) {
+        const { query = '', headers = {}, accept = 'application/json', responseType, userJwt } = options;
+        const destination = await this._requireDestination(options);
         const requestConfig = {
             method: 'get',
             url: joinQuery(path, query),
             headers: { Accept: accept, ...S4HttpClient.sapClientHeader(destination), ...headers },
             ...(responseType ? { responseType } : {})
         };
-        return this._send(destination, requestConfig, 'GET', path);
+        return this._send(destination, requestConfig, 'GET', path, options);
     }
 
     /**
@@ -219,8 +256,9 @@ class S4HttpClient {
      * @param {Object} [options]
      * @returns {Promise<string>}
      */
-    async getText(path, { accept = 'application/xml, text/xml;q=0.9, */*;q=0.1', headers = {} } = {}) {
-        const res = await this.get(path, { accept, headers, responseType: 'text' });
+    async getText(path, options = {}) {
+        const { accept = 'application/xml, text/xml;q=0.9, */*;q=0.1', headers = {} } = options;
+        const res = await this.get(path, { ...options, accept, headers, responseType: 'text' });
         if (typeof res.data === 'string') return res.data;
         return res.data == null ? '' : JSON.stringify(res.data);
     }
@@ -232,17 +270,23 @@ class S4HttpClient {
      *
      * @param {string} csrfPath
      * @param {Object} [destination] - Already resolved destination
+     * @param {Object} [options] - Options including userJwt, executeHttpRequest
      * @returns {Promise<SessionContext>}
      */
-    async fetchCsrfSession(csrfPath, destination) {
-        const dest = destination || await this._requireDestination();
+    async fetchCsrfSession(csrfPath, destination, options = {}) {
+        const dest = destination || await this._requireDestination(options);
+        const userJwt = S4HttpClient.extractUserJwt(options);
+        const executeFn = options.executeHttpRequest || this._execute;
         const requestConfig = {
             method: 'get',
             url: csrfPath,
             headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json', ...S4HttpClient.sapClientHeader(dest) }
         };
         try {
-            const res = await this._execute(dest, requestConfig, { fetchCsrfToken: false });
+            const res = await executeFn(dest, requestConfig, {
+                fetchCsrfToken: false,
+                ...(userJwt ? { userJwt } : {})
+            });
             return SessionContext.fromResponse(res);
         } catch (err) {
             const response = responseOf(err);
@@ -262,11 +306,15 @@ class S4HttpClient {
      * @param {any} [options.data] - JSON body
      * @param {Object} [options.headers] - Additional headers (e.g. If-Match); override the defaults
      * @param {string} [options.csrfPath] - Where to fetch the CSRF token (default: service root of path)
+     * @param {string} [options.userJwt] - Explicit user JWT override for principal propagation
+     * @param {Object} [options.destination] - Destination override
+     * @param {Function} [options.executeHttpRequest] - SDK executor override
      * @returns {Promise<{ status: number, data: any, headers: Object }>}
      */
-    async post(path, { data = {}, headers = {}, csrfPath } = {}) {
-        const destination = await this._requireDestination();
-        const session = await this.fetchCsrfSession(csrfPath || serviceRootOf(path), destination);
+    async post(path, options = {}) {
+        const { data = {}, headers = {}, csrfPath, userJwt } = options;
+        const destination = await this._requireDestination(options);
+        const session = await this.fetchCsrfSession(csrfPath || serviceRootOf(path), destination, options);
         const requestConfig = {
             method: 'post',
             url: path,
@@ -280,12 +328,17 @@ class S4HttpClient {
                 ...headers
             }
         };
-        return this._send(destination, requestConfig, 'POST', path);
+        return this._send(destination, requestConfig, 'POST', path, options);
     }
 
-    async _send(destination, requestConfig, method, path) {
+    async _send(destination, requestConfig, method, path, options = {}) {
+        const userJwt = S4HttpClient.extractUserJwt(options);
+        const executeFn = options.executeHttpRequest || this._execute;
         try {
-            return await this._execute(destination, requestConfig, { fetchCsrfToken: false });
+            return await executeFn(destination, requestConfig, {
+                fetchCsrfToken: false,
+                ...(userJwt ? { userJwt } : {})
+            });
         } catch (err) {
             throw S4HttpClient.toS4HttpError(err, method, path);
         }

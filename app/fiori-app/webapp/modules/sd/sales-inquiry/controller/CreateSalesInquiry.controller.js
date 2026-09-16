@@ -499,7 +499,26 @@ sap.ui.define([
                 var sErrMsg = (error && error.message) ? error.message : "An unexpected error occurred.";
                 oModel.setProperty("/errorMessage", sErrMsg);
                 oModel.setProperty("/hasError", true);
-                MessageBox.error("Failed to create Sales Inquiry: " + sErrMsg);
+
+                var sInquiryMatch = sErrMsg.match(/Sales Inquiry (\d+)/i);
+                var sPartialInquiryId = (error && (error.SalesInquiry || error.documentNumber)) || (sInquiryMatch ? sInquiryMatch[1] : null);
+
+                if (sPartialInquiryId) {
+                    MessageBox.warning(sErrMsg, {
+                        title: "Partial Creation in SAP",
+                        actions: ["Display Inquiry " + sPartialInquiryId, "Close"],
+                        emphasizedAction: "Display Inquiry " + sPartialInquiryId,
+                        onClose: function (sAction) {
+                            if (sAction && sAction.indexOf("Display Inquiry") === 0) {
+                                that.getOwnerComponent().getRouter().navTo("salesInquiryDetail", {
+                                    SalesInquiry: sPartialInquiryId
+                                });
+                            }
+                        }
+                    });
+                } else {
+                    MessageBox.error("Failed to create Sales Inquiry: " + sErrMsg);
+                }
             });
         },
 

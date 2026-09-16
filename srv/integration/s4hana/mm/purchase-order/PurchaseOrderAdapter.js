@@ -1,20 +1,32 @@
-// PurchaseOrderAdapter for S/4HANA integration using SAP Cloud SDK
+// PurchaseOrderAdapter for S/4HANA integration using S4HttpClient
 const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
-const httpClient = require('@sap-cloud-sdk/http-client');
 const SessionContext = require('../../SessionContext');
+const { S4HttpClient } = require('../../S4HttpClient');
+const TtlCache = require('../../../../common/TtlCache');
 
 /**
  * Adapter class to encapsulate all communication with S/4HANA services
- * using SAP Cloud SDK and BTP Destination management.
+ * using SAP Cloud SDK and BTP Destination management via S4HttpClient.
  *
  * Designed to be completely stateless to guarantee thread-safe concurrent execution
  * without CSRF token or session cookie collisions between parallel requests.
  */
 class PurchaseOrderAdapter {
-  constructor() {
+  constructor(options = {}) {
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
     this.s4hana = null; // For read service
     this.s4hanaMaint = null; // For PO maintenance service
+    this.metricsCache = new TtlCache({ defaultTtlMs: 30000 }); // 30s TTL for aggregated dashboard
+    this.masterDataCountCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL for master data counts
+  }
+
+  /**
+   * Resets internal metrics caches.
+   */
+  clearMetricsCache() {
+    this.metricsCache.clear();
+    this.masterDataCountCache.clear();
   }
 
   /** Initialize the generic read service */
@@ -49,70 +61,19 @@ class PurchaseOrderAdapter {
   }
 
   /**
-   * Helper to ensure .env or .env.local variables are loaded in non-standard execution contexts
-   */
-  _ensureEnvLoaded() {
-    if (process.env.S4_DESTINATION_URL) return;
-    const fs = require('fs');
-    const path = require('path');
-    const candidates = ['.env.local', '.env'];
-    for (const f of candidates) {
-      const fullPath = path.resolve(process.cwd(), f);
-      if (fs.existsSync(fullPath)) {
-        try {
-          const content = fs.readFileSync(fullPath, 'utf8');
-          for (const line of content.split('\n')) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-              const idx = trimmed.indexOf('=');
-              const k = trimmed.substring(0, idx).trim();
-              let v = trimmed.substring(idx + 1).trim();
-              if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-              if (!process.env[k]) {
-                process.env[k] = v;
-              }
-            }
-          }
-        } catch (_) {}
-      }
-    }
-  }
-
-  /**
-   * Resolve destination for S/4HANA communication using SAP Cloud SDK.
+   * Resolve destination for S/4HANA communication using the shared S4HttpClient.
    * Resolves destination via BTP Destination Service (or registered local destination).
+   * Propagates caller userJwt for Principal Propagation when available.
+   *
+   * @param {Object} [options]
    */
-  async _getDestination() {
-    this._ensureEnvLoaded();
-    const destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
-    try {
-      const dest = await connectivity.getDestination({ destinationName });
-      if (dest) return dest;
-    } catch (err) {
-      // In local development without BTP Destination Service, fallback to cds.env credentials
+  async _getDestination(options = {}) {
+    const dest = await this.client.resolveDestination(options);
+    if (!dest) {
+      const destinationName = this.client.destinationName;
+      throw new Error(`[PurchaseOrderAdapter] Destination '${destinationName}' not found and no local credentials configured in cds.env.`);
     }
-
-    if (process.env.S4_DESTINATION_URL) {
-      return {
-        url: process.env.S4_DESTINATION_URL.replace(/\/+$/, ''),
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: { 'sap-client': process.env.S4_CLIENT || '220' }
-      };
-    }
-
-    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials ||
-                  cds.env.requires?.C_PURCHASEORDER_FS_SRV?.credentials;
-    if (creds && creds.url) {
-      return {
-        url: creds.url.replace(/\/+$/, ''),
-        username: creds.username,
-        password: creds.password,
-        headers: creds.headers || { 'sap-client': '220' }
-      };
-    }
-
-    throw new Error(`[PurchaseOrderAdapter] Destination '${destinationName}' not found and no local credentials configured in cds.env.`);
+    return dest;
   }
 
   /**
@@ -124,10 +85,10 @@ class PurchaseOrderAdapter {
    * @returns {Promise<SessionContext>}
    */
   async createDraft(payload, options = {}) {
-    const destination = options.destination || await this._getDestination();
+    const destination = options.destination || await this._getDestination(options);
     const servicePath = '/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV';
     const basePath = (destination.url && destination.url.includes(servicePath)) ? '' : servicePath;
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const executeFn = options.executeHttpRequest || this.client._execute;
 
     const draftResp = await executeFn(destination, {
       method: 'post',
@@ -163,7 +124,7 @@ class PurchaseOrderAdapter {
    * @returns {Promise<Object>}
    */
   async activateDraft(draftData, sessionContext = {}, options = {}) {
-    const destination = options.destination || await this._getDestination();
+    const destination = options.destination || await this._getDestination(options);
     const servicePath = '/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV';
     const basePath = (destination.url && destination.url.includes(servicePath)) ? '' : servicePath;
 
@@ -175,7 +136,7 @@ class PurchaseOrderAdapter {
 
     const cookie = sessionContext.cookie;
     const token = sessionContext.token || sessionContext.csrfToken;
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const executeFn = options.executeHttpRequest || this.client._execute;
 
     const actResp = await executeFn(destination, {
       method: 'post',
@@ -220,8 +181,8 @@ class PurchaseOrderAdapter {
    * @returns {Promise<number|null>} null when SAP did not return a count
    */
   async getBusinessPartnerCount(options = {}) {
-    const dest = options.destination || await this._getDestination();
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const dest = options.destination || await this._getDestination(options);
+    const executeFn = options.executeHttpRequest || this.client._execute;
     const rootUrl = (dest.url || '').replace(/\/sap\/opu\/odata\/.*$/, '');
 
     try {
@@ -254,9 +215,20 @@ class PurchaseOrderAdapter {
    * @throws when the S/4HANA destination cannot be resolved
    */
   async getDashboardMetrics(options = {}) {
-    const dest = options.destination || await this._getDestination();
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const dest = options.destination || await this._getDestination(options);
+    const executeFn = options.executeHttpRequest || this.client._execute;
     const rootUrl = (dest.url || '').replace(/\/sap\/opu\/odata\/.*$/, '');
+
+    // By default, caching is enabled unless a custom executeHttpRequest was supplied (unit tests) or useCache is false
+    const useCache = options.useCache ?? !options.executeHttpRequest;
+    const cacheKey = `${rootUrl}:${dest.url || ''}:${options.userJwt || 'default'}`;
+
+    if (useCache && !options.forceRefresh) {
+      const cached = this.metricsCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
 
     const reqHeaders = {
       'Accept': 'application/json',
@@ -270,6 +242,8 @@ class PurchaseOrderAdapter {
       return Number.isInteger(n) && n >= 0 ? n : null;
     };
 
+    let lastError = null;
+
     // OData V2 $inlinecount (d.__count) or V4 @odata.count; null when SAP returned no count.
     const fetchCount = async (serviceRelPath) => {
       try {
@@ -277,6 +251,7 @@ class PurchaseOrderAdapter {
         const data = res && res.data;
         return toCount(data?.d?.__count ?? data?.['@odata.count']);
       } catch (err) {
+        lastError = err.message || String(err);
         console.warn(`[PurchaseOrderAdapter] Dashboard metric unavailable (${serviceRelPath.split('?')[0]}): ${err.message}`);
         return null;
       }
@@ -292,6 +267,7 @@ class PurchaseOrderAdapter {
         });
         return toCount(res && res.data);
       } catch (err) {
+        lastError = err.message || String(err);
         console.warn(`[PurchaseOrderAdapter] Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
         return null;
       }
@@ -326,8 +302,43 @@ class PurchaseOrderAdapter {
       gatewayCatalogCount: () => fetchRawCount('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection/$count')
     };
 
+    const MASTER_DATA_METRIC_KEYS = new Set([
+      'supplierCount',
+      'productCount',
+      'customerCount',
+      'bpCount',
+      'glAccountCount',
+      'costCenterCount',
+      'profitCenterCount',
+      'fixedAssetCount',
+      'wbsElementCount',
+      'internalOrderCount',
+      'purchaseContractCount',
+      'companyCodeCount',
+      'plantCount',
+      'storageLocationCount',
+      'materialGroupCount',
+      'purchasingOrgCount',
+      'purchasingGroupCount',
+      'warehouseCount',
+      'gatewayCatalogCount'
+    ]);
+
     const keys = Object.keys(sources);
-    const values = await Promise.all(keys.map(key => sources[key]()));
+    const values = await Promise.all(keys.map(async (key) => {
+      if (useCache && !options.forceRefresh && MASTER_DATA_METRIC_KEYS.has(key)) {
+        const cachedCount = this.masterDataCountCache.get(key);
+        if (cachedCount !== undefined) {
+          return cachedCount;
+        }
+        const val = await sources[key]();
+        if (val !== null) {
+          this.masterDataCountCache.set(key, val);
+        }
+        return val;
+      }
+      return await sources[key]();
+    }));
 
     const metrics = {};
     const unavailable = [];
@@ -336,6 +347,16 @@ class PurchaseOrderAdapter {
       if (values[i] === null) unavailable.push(key);
     });
     metrics.unavailable = unavailable;
+    if (unavailable.length === keys.length && lastError) {
+      metrics.error = lastError.includes('401')
+        ? 'SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client 220.'
+        : `SAP S/4HANA backend unavailable: ${lastError}`;
+    }
+
+    if (useCache && unavailable.length < keys.length) {
+      this.metricsCache.set(cacheKey, metrics);
+    }
+
     return metrics;
   }
 }

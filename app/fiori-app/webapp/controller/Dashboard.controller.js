@@ -150,6 +150,9 @@ sap.ui.define([
                             iAvailable++;
                         }
                     });
+                    if (iAvailable === 0 && oMetrics.error) {
+                        oViewModel.setProperty("/metricsError", oMetrics.error);
+                    }
                     that._setConnectionStatus(iAvailable, METRIC_KEYS.length);
                 })
                 .catch(function (err) {

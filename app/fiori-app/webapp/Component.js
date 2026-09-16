@@ -77,17 +77,27 @@ sap.ui.define([
             var bIsAuth = AuthService.isAuthenticated();
             var oRouter = this.getRouter();
 
-            // Default route and login route both show the Login page
-            if (sRouteName === "login" || sRouteName === "default") {
+            if (sRouteName === "login") {
                 if (bIsAuth) {
                     oRouter.navTo("dashboard", {}, true);
                 }
                 return;
             }
 
-            // Protected routes — redirect unauthenticated users to login
-            if (!bIsAuth) {
-                var oI18n = this.getModel("i18n");
+            // If already authenticated, proceed normally
+            if (bIsAuth) {
+                return;
+            }
+
+            // In deployed / XSUAA environments, probe for SSO user info before redirecting
+            var that = this;
+            AuthService.fetchCurrentUserInfo().then(function (oUser) {
+                if (oUser && oUser.username) {
+                    // Authenticated via SSO/XSUAA; stay on route
+                    return;
+                }
+                // Unauthenticated in local environment — redirect to login
+                var oI18n = that.getModel("i18n");
                 var sMsg = "Authentication required. Please sign in to access SAP S/4HANA.";
                 if (oI18n) {
                     var oBundle = oI18n.getResourceBundle();
@@ -97,7 +107,7 @@ sap.ui.define([
                 }
                 MessageToast.show(sMsg);
                 oRouter.navTo("login", {}, true);
-            }
+            });
         },
 
         /**
@@ -107,11 +117,6 @@ sap.ui.define([
         _onHashChanged: function (oEvent) {
             var sNewHash = oEvent.getParameter("newHash") || "";
             var bIsAuth = AuthService.isAuthenticated();
-
-            // If not authenticated and trying to access a protected route, force login hash
-            if (!bIsAuth && sNewHash !== "login" && sNewHash !== "") {
-                window.location.hash = "login";
-            }
 
             // If authenticated and landing on empty hash or login, redirect to dashboard
             if (bIsAuth && (sNewHash === "" || sNewHash === "login")) {

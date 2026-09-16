@@ -86,7 +86,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                             BaseObject,
                             MockJSONModel,
                             { warning: jest.fn() },
-                            { post: jest.fn() }
+                            { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
                         );
                     } else {
                         PurchaseOrderModel = factory(MockJSONModel);

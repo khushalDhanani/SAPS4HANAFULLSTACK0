@@ -5,7 +5,6 @@ const {
     joinQuery,
     DESTINATION_NOT_CONFIGURED
 } = require('../../srv/integration/s4hana/S4HttpClient');
-const { loadLocalEnv, parseEnvFile } = require('../../srv/integration/s4hana/localEnv');
 
 /** Builds an axios-style error the way the Cloud SDK surfaces failed responses. */
 function axiosError(status, data, headers = {}) {
@@ -56,23 +55,15 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(joinQuery('/a?x=1', '$top=1')).toBe('/a?x=1&$top=1');
             expect(joinQuery('/a', '')).toBe('/a');
         });
-
-        it('parses dotenv content and loads it without overriding existing values', () => {
-            expect(parseEnvFile('# c\nA=1\nB="two words"\n\nC=\'x\'\nBAD')).toEqual([['A', '1'], ['B', 'two words'], ['C', 'x']]);
-            const env = { A: 'keep', NODE_ENV: 'test' };
-            const fs = require('fs');
-            const os = require('os');
-            const path = require('path');
-            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 's4env-'));
-            fs.writeFileSync(path.join(dir, '.env.local'), 'A=override\nB=fromLocal\n');
-            fs.writeFileSync(path.join(dir, '.env'), 'B=fromEnv\nC=fromEnv\n');
-            expect(loadLocalEnv({ root: dir, env })).toBe(true);
-            expect(env).toEqual({ A: 'keep', B: 'fromLocal', C: 'fromEnv', NODE_ENV: 'test' });
-            expect(loadLocalEnv({ root: dir, env: { NODE_ENV: 'production' } })).toBe(false);
-        });
     });
 
     describe('resolveDestination', () => {
+        it('prefers explicit options.destination override when provided', async () => {
+            const { client, getDestination } = makeClient();
+            const customDest = { url: 'https://custom.s4:44300' };
+            await expect(client.resolveDestination({ destination: customDest })).resolves.toBe(customDest);
+            expect(getDestination).not.toHaveBeenCalled();
+        });
         it('prefers the destination returned by the SDK (BTP Destination service or registered destination)', async () => {
             const { client, getDestination } = makeClient({ env: { S4_DESTINATION_URL: 'https://ignored' } });
             await expect(client.resolveDestination()).resolves.toBe(DEST);
@@ -275,6 +266,32 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(executeHttpRequest.mock.calls[1][1].headers).toMatchObject({ 'x-csrf-token': 'TOKEN-1', Cookie: 'SAP_SESSIONID_DS4_220=abc; sap-usercontext=sap-client=220' });
             expect(executeHttpRequest.mock.calls[3][1].headers).toMatchObject({ 'x-csrf-token': 'TOKEN-2', Cookie: 'SAP_SESSIONID_DS4_220=xyz' });
             expect(Object.keys(client)).not.toEqual(expect.arrayContaining(['cookie', 'csrfToken', '_csrfToken']));
+        });
+
+        it('propagates caller userJwt to getDestination and executeHttpRequest for principal propagation', async () => {
+            const executeHttpRequest = jest.fn()
+                .mockResolvedValueOnce(csrfResponse)
+                .mockResolvedValueOnce({ status: 200, data: { ok: true }, headers: {} });
+            const getDestination = jest.fn().mockResolvedValue(DEST);
+            const { client } = makeClient({ executeHttpRequest, getDestination });
+
+            await client.post('/sap/opu/odata/sap/API_X_SRV/Set', {
+                data: { test: 1 },
+                userJwt: 'caller.jwt.token'
+            });
+
+            expect(getDestination).toHaveBeenCalledWith({
+                destinationName: 'S4HANA_PO_API',
+                userJwt: 'caller.jwt.token'
+            });
+            expect(executeHttpRequest.mock.calls[0][2]).toMatchObject({
+                fetchCsrfToken: false,
+                userJwt: 'caller.jwt.token'
+            });
+            expect(executeHttpRequest.mock.calls[1][2]).toMatchObject({
+                fetchCsrfToken: false,
+                userJwt: 'caller.jwt.token'
+            });
         });
     });
 });

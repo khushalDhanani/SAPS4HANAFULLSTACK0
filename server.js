@@ -1,8 +1,17 @@
 const cds = require('@sap/cds');
-const { loadLocalEnv } = require('./srv/integration/s4hana/localEnv');
 
-// In local development, load .env.local / .env into process.env (no-op in production)
-loadLocalEnv({ root: __dirname });
+// In local development, load .env.local / .env once via dotenv (no-op in production)
+if (process.env.NODE_ENV !== 'production') {
+    const fs = require('fs');
+    const path = require('path');
+    const dotenv = require('dotenv');
+
+    const localEnvPath = path.resolve(__dirname, '.env.local');
+    if (fs.existsSync(localEnvPath)) {
+        dotenv.config({ path: localEnvPath });
+    }
+    dotenv.config({ path: path.resolve(__dirname, '.env') });
+}
 
 // Register local development S4_USERNAME in mock auth users if running in development
 if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
@@ -116,9 +125,9 @@ cds.on('bootstrap', (app) => {
         next();
     });
 
-    // In local development, verify Bearer tokens (JWT with standard XSUAA claims)
-    if (process.env.NODE_ENV !== 'production') {
-        app.use((req, res, next) => {
+    // In local development, verify Bearer tokens (JWT with standard XSUAA claims) when dev issuer is explicitly enabled
+    app.use((req, res, next) => {
+        if (localTokenUtil.isDevTokenIssuerEnabled()) {
             const auth = req.headers.authorization;
             if (auth && auth.match(/^bearer\s+/i)) {
                 const token = auth.replace(/^bearer\s+/i, '').trim();
@@ -127,9 +136,9 @@ cds.on('bootstrap', (app) => {
                     req.user = u;
                 }
             }
-            next();
-        });
-    }
+        }
+        next();
+    });
 
     // Handle Component-preload.js in local dev to return 404 with JS MIME type, preventing strict MIME checking refusal
     app.get(/Component-preload\.js$/, (req, res) => {
@@ -168,9 +177,9 @@ cds.on('serving', (srv) => {
     }
 });
 
-// Register local development Bearer token verification into CAP OData middleware chain
-if (process.env.NODE_ENV !== 'production') {
-    cds.middlewares.add((req, res, next) => {
+// Register local development Bearer token verification into CAP OData middleware chain when dev issuer is enabled
+cds.middlewares.add((req, res, next) => {
+    if (localTokenUtil.isDevTokenIssuerEnabled()) {
         const auth = req.headers.authorization;
         if (auth && auth.match(/^bearer\s+/i)) {
             const token = auth.replace(/^bearer\s+/i, '').trim();
@@ -182,9 +191,9 @@ if (process.env.NODE_ENV !== 'production') {
                 }
             }
         }
-        next();
-    }, { after: 'auth' });
-}
+    }
+    next();
+}, { after: 'auth' });
 
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;

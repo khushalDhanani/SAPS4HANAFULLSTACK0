@@ -6,6 +6,16 @@ const { POST, GET } = cds.test(__dirname + '/../../../');
 
 describe('Security & Authorization: EWM Warehouse Management RBAC', () => {
 
+    beforeAll(() => {
+        process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+        process.env.LOCAL_AUTH_SECRET = 'test-secret-key-ewm-auth-2026';
+    });
+
+    afterAll(() => {
+        delete process.env.ENABLE_DEV_TOKEN_ISSUER;
+        delete process.env.LOCAL_AUTH_SECRET;
+    });
+
     let getWarehousesSpy;
     let getStorageTypesSpy;
     let createWarehouseTaskSpy;

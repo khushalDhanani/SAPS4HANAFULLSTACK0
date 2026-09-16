@@ -208,6 +208,23 @@ describe('Unit: Dashboard Controller live figures', () => {
         expect(oViewModel.getProperty('/metricsError')).toContain('destination not found');
     });
 
+    test('displays backend error message in metricsError when all figures are unavailable in resolved payload', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        const payload = {
+            totalCount: null,
+            supplierCount: null,
+            error: 'SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client 220.'
+        };
+        mockODataClient.get.mockResolvedValue(JSON.stringify(payload));
+
+        await controller._loadMetrics();
+
+        expect(oViewModel.getProperty('/connectionState')).toBe('Error');
+        expect(oViewModel.getProperty('/connectionText')).toBe('S/4HANA not reachable');
+        expect(oViewModel.getProperty('/metricsError')).toContain('HTTP 401 Unauthorized');
+    });
+
     test('a refresh clears previous figures back to "loading" before the new call resolves', async () => {
         const oViewModel = new MockJSONModel({ totalCount: 5 });
         const controller = makeController(oViewModel);
@@ -423,5 +440,46 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
     test('propagates an unresolvable destination instead of returning empty figures', async () => {
         jest.spyOn(poAdapter, '_getDestination').mockRejectedValue(new Error("Destination 'S4HANA_PO_API' not found"));
         await expect(poAdapter.getDashboardMetrics({ executeHttpRequest: jest.fn() })).rejects.toThrow('not found');
+    });
+
+    test('caches dashboard metrics on subsequent calls when useCache is enabled', async () => {
+        poAdapter.clearMetricsCache();
+        const mockExecute = liveSap();
+        const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
+
+        const metrics1 = await poAdapter.getDashboardMetrics(opts);
+        expect(mockExecute).toHaveBeenCalledTimes(26);
+
+        // Second call should return cached object without invoking executeHttpRequest
+        const metrics2 = await poAdapter.getDashboardMetrics(opts);
+        expect(mockExecute).toHaveBeenCalledTimes(26); // No new calls
+        expect(metrics2).toEqual(metrics1);
+    });
+
+    test('bypasses cache and refetches live figures when forceRefresh is true', async () => {
+        poAdapter.clearMetricsCache();
+        const mockExecute = liveSap();
+        const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
+
+        await poAdapter.getDashboardMetrics(opts);
+        expect(mockExecute).toHaveBeenCalledTimes(26);
+
+        // With forceRefresh: true, executes calls again
+        await poAdapter.getDashboardMetrics({ ...opts, forceRefresh: true });
+        // The 7 transactional counts are executed again; master data counts may hit masterDataCountCache
+        expect(mockExecute.mock.calls.length).toBeGreaterThan(26);
+    });
+
+    test('clearMetricsCache invalidates cached metrics', async () => {
+        poAdapter.clearMetricsCache();
+        const mockExecute = liveSap();
+        const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
+
+        await poAdapter.getDashboardMetrics(opts);
+        expect(mockExecute).toHaveBeenCalledTimes(26);
+
+        poAdapter.clearMetricsCache();
+        await poAdapter.getDashboardMetrics(opts);
+        expect(mockExecute).toHaveBeenCalledTimes(52);
     });
 });

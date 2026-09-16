@@ -273,6 +273,96 @@ describe('Unit: Sales Inquiry Adapter', () => {
         })).rejects.toThrow('Customer 99999 does not exist in sales area 1000/10/52');
     });
 
+    test('should throw PartialSalesInquiryError with created document number when item creation fails midway', async () => {
+        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5 }];
+
+        const mockExecuteHttpRequest = jest.fn()
+            .mockResolvedValueOnce({
+                status: 201,
+                data: { d: { SalesOrderID: '1000550' } }
+            })
+            .mockRejectedValueOnce({
+                message: 'Request failed with status code 400',
+                response: {
+                    status: 400,
+                    data: {
+                        error: {
+                            message: { value: 'Material 4000000091 is blocked for sales' }
+                        }
+                    }
+                }
+            });
+
+        let thrownError;
+        try {
+            await salesInquiryAdapter.createSalesInquiry(header, items, {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: mockExecuteHttpRequest
+            });
+        } catch (err) {
+            thrownError = err;
+        }
+
+        expect(thrownError).toBeDefined();
+        expect(thrownError.name).toBe('PartialSalesInquiryError');
+        expect(thrownError.SalesInquiry).toBe('1000550');
+        expect(thrownError.documentNumber).toBe('1000550');
+        expect(thrownError.isPartialCreation).toBe(true);
+        expect(thrownError.step).toBe('ItemSet');
+        expect(thrownError.itemNumber).toBe('000010');
+        expect(thrownError.message).toContain('Sales Inquiry 1000550 was created in SAP S/4HANA, but adding item 000010 failed');
+        expect(thrownError.message).toContain('Material 4000000091 is blocked for sales');
+        expect(thrownError.message).toContain('Do not retry: check or complete inquiry 1000550 in SAP');
+    });
+
+    test('should throw PartialSalesInquiryError with created document number when price condition creation fails midway', async () => {
+        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135', TransactionCurrency: 'INR' };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, NetPriceAmount: 250.00 }];
+
+        const mockExecuteHttpRequest = jest.fn()
+            .mockResolvedValueOnce({
+                status: 201,
+                data: { d: { SalesOrderID: '1000551' } }
+            })
+            .mockResolvedValueOnce({
+                status: 201,
+                data: { d: { SalesOrderID: '1000551', ItemID: '000010' } }
+            })
+            .mockRejectedValueOnce({
+                message: 'Request failed with status code 400',
+                response: {
+                    status: 400,
+                    data: {
+                        error: {
+                            message: { value: 'Condition record ZPR1 could not be determined' }
+                        }
+                    }
+                }
+            });
+
+        let thrownError;
+        try {
+            await salesInquiryAdapter.createSalesInquiry(header, items, {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: mockExecuteHttpRequest
+            });
+        } catch (err) {
+            thrownError = err;
+        }
+
+        expect(thrownError).toBeDefined();
+        expect(thrownError.name).toBe('PartialSalesInquiryError');
+        expect(thrownError.SalesInquiry).toBe('1000551');
+        expect(thrownError.documentNumber).toBe('1000551');
+        expect(thrownError.isPartialCreation).toBe(true);
+        expect(thrownError.step).toBe('PriceCondSet');
+        expect(thrownError.itemNumber).toBe('000010');
+        expect(thrownError.message).toContain('Sales Inquiry 1000551 was created in SAP S/4HANA with items, but adding price condition for item 000010 failed');
+        expect(thrownError.message).toContain('Condition record ZPR1 could not be determined');
+        expect(thrownError.message).toContain('Do not retry: check or complete inquiry 1000551 in SAP');
+    });
+
     test('should query Finished Goods materials with ZFRT/FERT condition and map MaterialName', async () => {
         const mockRun = jest.fn().mockResolvedValue([
             { Material: '4000000001', Material_Text: 'X-265', MaterialType: 'ZFRT', MaterialGroup: '164', MaterialBaseUnit: 'KG' },
@@ -402,6 +492,117 @@ describe('Unit: Sales Inquiry Adapter', () => {
         salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockResolvedValue([]) };
         salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockResolvedValue([]) };
         await expect(salesInquiryAdapter.getInquiryTypes()).resolves.toEqual([]);
+    });
+
+    test('getCustomerDefaults caches customer master data on subsequent queries', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        const mockCustRun = jest.fn().mockResolvedValue([
+            { Customer: '10083', CustomerName: 'Bajaj Healthcare', CityName: 'Surat', Country: 'IN' }
+        ]);
+        const mockInqRun = jest.fn().mockResolvedValue([
+            { TransactionCurrency: 'INR', SalesOffice: 'SO10', SalesGroup: '100' }
+        ]);
+        const mockOfficeRun = jest.fn().mockResolvedValue({ SalesOfficeName: 'Surat' });
+        const mockGroupRun = jest.fn().mockResolvedValue({ SalesGroupName: 'Surat' });
+
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('I_Customer_VH')) return mockCustRun(q);
+                if (sFrom.includes('C_InquiryWL_F2370')) return mockInqRun(q);
+                if (sFrom.includes('C_SalesOfficeValueHelp')) return mockOfficeRun(q);
+                if (sFrom.includes('C_SalesGroupValueHelp')) return mockGroupRun(q);
+                return Promise.resolve(null);
+            })
+        };
+
+        const res1 = await adapter.getCustomerDefaults('10083', '1000', '10', '52');
+        expect(res1.CustomerName).toBe('Bajaj Healthcare');
+        expect(res1.City).toBe('Surat');
+        expect(mockCustRun).toHaveBeenCalledTimes(1);
+
+        // Second call should hit customerMasterCache without calling I_Customer_VH again
+        const res2 = await adapter.getCustomerDefaults('10083', '1000', '10', '52');
+        expect(res2.CustomerName).toBe('Bajaj Healthcare');
+        expect(mockCustRun).toHaveBeenCalledTimes(1); // Still 1!
+
+        // clearCache resets and causes a fresh query
+        adapter.clearCache();
+        await adapter.getCustomerDefaults('10083', '1000', '10', '52');
+        expect(mockCustRun).toHaveBeenCalledTimes(2);
+    });
+
+    test('getInquiry fetches WL header, FS header, and FS items concurrently and caches value helps', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        let wlCalled = false;
+        let fsHeaderCalled = false;
+        let fsItemsCalled = false;
+
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('C_InquiryWL_F2370')) {
+                    wlCalled = true;
+                    return Promise.resolve({
+                        SalesInquiry: '100005',
+                        SalesOrganization: '1000',
+                        DistributionChannel: '10',
+                        OrganizationDivision: '52',
+                        SalesOffice: 'SO10',
+                        SalesGroup: '100',
+                        SoldToParty: '10083'
+                    });
+                }
+                if (sFrom.includes('C_SalesOfficeValueHelp')) {
+                    return Promise.resolve({ SalesOfficeName: 'Surat Office' });
+                }
+                if (sFrom.includes('C_SalesGroupValueHelp')) {
+                    return Promise.resolve({ SalesGroupName: 'Surat Group' });
+                }
+                return Promise.resolve(null);
+            })
+        };
+
+        adapter.s4hanaFS = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('C_Inquiryfs')) {
+                    fsHeaderCalled = true;
+                    return Promise.resolve({
+                        SalesInquiry: '100005',
+                        to_SDDocumentPartnerCard: []
+                    });
+                }
+                if (sFrom.includes('C_Inquiryitemfs')) {
+                    fsItemsCalled = true;
+                    return Promise.resolve([
+                        { SalesInquiry: '100005', SalesInquiryItem: '10', OrderQuantity: 2, NetAmount: 100 }
+                    ]);
+                }
+                return Promise.resolve(null);
+            })
+        };
+
+        const result = await adapter.getInquiry('100005');
+        expect(wlCalled).toBe(true);
+        expect(fsHeaderCalled).toBe(true);
+        expect(fsItemsCalled).toBe(true);
+        expect(result.header.SalesOfficeName).toBe('Surat Office');
+        expect(result.header.SalesGroupName).toBe('Surat Group');
+        expect(result.items).toHaveLength(1);
+        expect(result.items[0].NetPriceAmount).toBe('50.00');
+
+        // Reading a second inquiry with the same SalesOffice & SalesGroup should hit the VH caches
+        const vhCallsBefore = adapter.s4hanaWL.run.mock.calls.filter(c =>
+            String(c[0]?.SELECT?.from?.ref?.[0] || '').includes('ValueHelp')
+        ).length;
+
+        await adapter.getInquiry('100005');
+        const vhCallsAfter = adapter.s4hanaWL.run.mock.calls.filter(c =>
+            String(c[0]?.SELECT?.from?.ref?.[0] || '').includes('ValueHelp')
+        ).length;
+
+        expect(vhCallsAfter).toBe(vhCallsBefore); // Value help caches hit!
     });
 
     describe('createSalesQuoteFromInquiry (UI_SALESQUOTATIONMANAGE)', () => {

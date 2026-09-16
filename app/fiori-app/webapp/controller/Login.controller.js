@@ -43,6 +43,14 @@ sap.ui.define([
          * so the user always sees a clean login form after logout.
          */
         _onLoginRouteMatched: function () {
+            if (AuthService.isAuthenticated()) {
+                var oRouter = this.getOwnerComponent().getRouter();
+                if (oRouter) {
+                    oRouter.navTo("dashboard", {}, true);
+                    return;
+                }
+            }
+
             var oViewModel = this.getView().getModel("loginView");
             if (oViewModel) {
                 var sSavedUser = "";

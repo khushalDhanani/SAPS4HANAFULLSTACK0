@@ -308,8 +308,8 @@ WebIDESystem=S4HANA
 sap-client=220
 ```
 
-> [!TIP]
-> For production enterprise setups, replace `BasicAuthentication` with `PrincipalPropagation` and configure X.509 user mapping in the SAP Cloud Connector.
+> [!IMPORTANT]
+> **Production Standard: XSUAA with Principal Propagation**: In deployed environments, user authentication is managed exclusively via SAP BTP XSUAA Single Sign-On (SSO). The destination `S4HANA_PO_API` is configured with `Authentication=PrincipalPropagation` and X.509 user certificate mapping in the SAP Cloud Connector, propagating the authenticated user identity directly to S/4HANA without handling credentials.
 
 ---
 
@@ -323,11 +323,13 @@ sap-client=220
 | `S4_CONNECTION_TYPE` | Local Dev | Optional | `abap_catalog` | Connection catalog mode |
 | `S4_USERNAME` | Local Dev | Yes | — | Technical user for local Gateway calls |
 | `S4_PASSWORD` | Local Dev | Yes | — | Technical user password |
+| `ENABLE_DEV_TOKEN_ISSUER` | Local Dev / Test | No | `false` | Explicit opt-in flag to enable local dev JWT issuer and middleware |
+| `LOCAL_AUTH_SECRET` | Local Dev / Test | If dev issuer enabled | — | Secret key for signing local dev JWTs (no fallback) |
 | `PORT` | Local Dev | No | `4004` | Local CAP web server port |
 | `NODE_ENV` | All | No | `development` | Runtime environment (`development`, `production`, `test`) |
 
 > [!IMPORTANT]
-> When deployed to SAP BTP Cloud Foundry, credentials are never read from `.env` files. BTP automatically injects destination and connectivity credentials through `VCAP_SERVICES`.
+> When deployed to SAP BTP Cloud Foundry, credentials are never read from `.env` files. BTP automatically injects destination and connectivity credentials through `VCAP_SERVICES`. Custom login is disabled in deployed environments.
 
 ---
 

@@ -109,7 +109,7 @@
         {
           "name": "default",
           "pattern": "",
-          "target": "TargetLogin"
+          "target": "TargetDashboard"
         },
         {
           "name": "login",

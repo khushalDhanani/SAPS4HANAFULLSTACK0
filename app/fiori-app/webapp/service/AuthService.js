@@ -24,8 +24,49 @@ sap.ui.define([
         init: function (oComponent) {
             this._oComponent = oComponent;
             this._oComponent.setModel(this._oModel, "auth");
-            this._restoreSession();
+            var bRestored = this._restoreSession();
             this.syncModelHeaders(oComponent);
+            if (!bRestored) {
+                this.fetchCurrentUserInfo();
+            }
+        },
+
+        /**
+         * Queries the CAP AuthService to get the current authenticated session
+         * (enforced by XSUAA in deployed environments or via Bearer token in local dev).
+         *
+         * @returns {Promise<Object|null>}
+         */
+        fetchCurrentUserInfo: function () {
+            var that = this;
+            if (!ODataClient || typeof ODataClient.get !== "function") {
+                return Promise.resolve(null);
+            }
+            return ODataClient.get("/odata/v4/auth/getUserInfo()")
+                .then(function (oData) {
+                    var oResult = oData && (oData.value !== undefined ? oData.value : oData);
+                    if (oResult && oResult.authenticated) {
+                        var oUserSession = {
+                            username: oResult.username,
+                            avatarInitials: oResult.avatarInitials || (oResult.username ? oResult.username.substring(0, 2).toUpperCase() : "US"),
+                            system: oResult.system || "S/4HANA (XSUAA SSO)",
+                            loginTimestamp: oResult.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                            token: oResult.token || null,
+                            scopes: oResult.scopes || []
+                        };
+                        that._oModel.setProperty("/isAuthenticated", true);
+                        that._oModel.setProperty("/user", oUserSession);
+                        that.syncModelHeaders();
+                        return oUserSession;
+                    }
+                    return null;
+                })
+                .catch(function (err) {
+                    if (Log && typeof Log.info === "function") {
+                        Log.info("AuthService: No active XSUAA/SSO session found (" + (err && err.message) + ")");
+                    }
+                    return null;
+                });
         },
 
         /**

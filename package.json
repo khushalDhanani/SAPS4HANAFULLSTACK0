@@ -19,7 +19,8 @@
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
     "@sap-cloud-sdk/resilience": "^4",
-    "@sap/cds": "^10.0.6"
+    "@sap/cds": "^10.0.6",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
@@ -50,6 +51,18 @@
               "roles": [
                 "Viewer"
               ]
+            },
+            "khushal": {
+              "roles": [
+                "Admin",
+                "Viewer",
+                "PurchasingManager",
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
+              ]
             }
           }
         },
@@ -71,6 +84,18 @@
             "bob": {
               "roles": [
                 "Viewer"
+              ]
+            },
+            "khushal": {
+              "roles": [
+                "Admin",
+                "Viewer",
+                "PurchasingManager",
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
               ]
             }
           }
