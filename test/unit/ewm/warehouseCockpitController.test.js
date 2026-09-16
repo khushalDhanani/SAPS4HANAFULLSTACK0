@@ -105,6 +105,8 @@ const mockBaseController = {
     }
 };
 
+let WarehouseCockpitController;
+
 global.sap = {
     ui: {
         define: (deps, factory) => {
