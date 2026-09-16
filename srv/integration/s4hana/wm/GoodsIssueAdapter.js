@@ -1,3 +1,5 @@
+const cds = require('@sap/cds');
+const LOG = require('../logger')('goods-issue-adapter');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
 const s4Config = require('../s4Config');
@@ -64,6 +66,35 @@ class GoodsIssueAdapter {
     // Connectivity proxy for on-premise systems, per-call CSRF/cookie handling). No session state lives here.
     this.client = options.client || new S4HttpClient();
     this.destinationName = this.client.destinationName;
+  }
+
+  /**
+   * Determine if an error represents an S/4HANA backend outage, network timeout,
+   * unconfigured destination, or authentication failure.
+   */
+  _isOutage(err) {
+    if (!err) return false;
+    if (err.code === DESTINATION_NOT_CONFIGURED) return true;
+    const status = err.status || err.statusCode || err.response?.status;
+    if (status && (status === 502 || status === 503 || status === 504 || status === 500 || status === 401 || status === 403)) {
+      return true;
+    }
+    const code = String(err.code || err.cause?.code || '').toUpperCase();
+    if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ENOTFOUND' || code === 'ECONNRESET') {
+      return true;
+    }
+    const msg = String(err.message || '').toLowerCase();
+    if (
+      msg.includes('destination') ||
+      msg.includes('network error') ||
+      msg.includes('connection refused') ||
+      msg.includes('etimedout') ||
+      msg.includes('econnrefused') ||
+      msg.includes('enotfound')
+    ) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -203,7 +234,15 @@ class GoodsIssueAdapter {
         resolvedResv = res[0].Reservation;
         resolvedOrder = res[0].OrderID || '';
       }
-    } catch (_) {}
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`resolveBarcode tier 1 failed due to S/4HANA outage: ${err.message}`, err);
+        const outageErr = new Error(`S/4HANA unavailable during barcode resolution: ${err.message}`);
+        outageErr.status = err.status || 502;
+        throw outageErr;
+      }
+      LOG.warn(`resolveBarcode tier 1 (Reservation) non-outage warning: ${err.message}`);
+    }
 
     // TIER 2: Check Production / Manufacturing Order Number
     if (!scannedType) {
@@ -230,7 +269,15 @@ class GoodsIssueAdapter {
             }
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          LOG.error(`resolveBarcode tier 2 failed due to S/4HANA outage: ${err.message}`, err);
+          const outageErr = new Error(`S/4HANA unavailable during barcode resolution: ${err.message}`);
+          outageErr.status = err.status || 502;
+          throw outageErr;
+        }
+        LOG.warn(`resolveBarcode tier 2 (Production Order) non-outage warning: ${err.message}`);
+      }
     }
 
     // TIER 3: Check Batch via LO_BM_BATCH_SRV/I_Batch
@@ -253,7 +300,15 @@ class GoodsIssueAdapter {
             resolvedOrder = batchMatch.OrderID || '';
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          LOG.error(`resolveBarcode tier 3 failed due to S/4HANA outage: ${err.message}`, err);
+          const outageErr = new Error(`S/4HANA unavailable during barcode resolution: ${err.message}`);
+          outageErr.status = err.status || 502;
+          throw outageErr;
+        }
+        LOG.warn(`resolveBarcode tier 3 (Batch) non-outage warning: ${err.message}`);
+      }
     }
 
     // TIER 4: Check Material via UI_RESERVATION_ITM_MNG_V2
@@ -269,7 +324,15 @@ class GoodsIssueAdapter {
           resolvedResv = resvItems[0].Reservation;
           resolvedOrder = resvItems[0].OrderID || '';
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          LOG.error(`resolveBarcode tier 4 failed due to S/4HANA outage: ${err.message}`, err);
+          const outageErr = new Error(`S/4HANA unavailable during barcode resolution: ${err.message}`);
+          outageErr.status = err.status || 502;
+          throw outageErr;
+        }
+        LOG.warn(`resolveBarcode tier 4 (Material) non-outage warning: ${err.message}`);
+      }
     }
 
     // TIER 5: Check Storage Unit / Inbound Delivery via HMmimGr4inbdelSet
@@ -288,7 +351,15 @@ class GoodsIssueAdapter {
             resolvedOrder = resvItems[0].OrderID || '';
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          LOG.error(`resolveBarcode tier 5 failed due to S/4HANA outage: ${err.message}`, err);
+          const outageErr = new Error(`S/4HANA unavailable during barcode resolution: ${err.message}`);
+          outageErr.status = err.status || 502;
+          throw outageErr;
+        }
+        LOG.warn(`resolveBarcode tier 5 (Storage Unit) non-outage warning: ${err.message}`);
+      }
     }
 
     // TIER 6: Error if not found across all tiers in SAP Client 220
@@ -392,8 +463,8 @@ class GoodsIssueAdapter {
           };
         });
       }
-    } catch (_) {
-      // Return empty array if AUOM service is unavailable or material has no alternate UOMs
+    } catch (err) {
+      LOG.warn(`Failed to fetch alternative packaging units for material ${sMat}: ${err.message}`);
     }
 
     return [];
@@ -419,8 +490,8 @@ class GoodsIssueAdapter {
         if (Array.isArray(slocRes) && slocRes.length > 0) {
           slocInfo = slocRes[0];
         }
-      } catch (_) {
-        // Storage location help is optional
+      } catch (err) {
+        LOG.warn(`Storage location help lookup failed for material ${sMat}, plant ${sPlant}, sloc ${sSLoc}: ${err.message}`);
       }
     }
 
@@ -518,7 +589,15 @@ class GoodsIssueAdapter {
           return { valid: false, reason: `Batch ${sBatch} has expired on ${found.ExpiryDate || 'unknown date'}. Goods issue is blocked (SLED Exceeded).` };
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`validateBatch (getMaterialBatches) failed due to S/4HANA outage for batch ${sBatch}, material ${sMat}: ${err.message}`, err);
+        const outageErr = new Error(`S/4HANA batch validation service unavailable: ${err.message}`);
+        outageErr.status = err.status || 502;
+        throw outageErr;
+      }
+      LOG.warn(`validateBatch (getMaterialBatches) warning for batch ${sBatch}, material ${sMat}: ${err.message}`);
+    }
 
     // Direct check against SAP I_Batch for real backend deletion, restricted status, and expiry
     let filter = `Material eq '${encodeURIComponent(sMat)}' and Batch eq '${encodeURIComponent(sBatch)}'`;
@@ -545,8 +624,14 @@ class GoodsIssueAdapter {
           }
         }
       }
-    } catch (_) {
-      // In isolated mock test environment, ignore network errors
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`validateBatch failed due to S/4HANA outage for batch ${sBatch}, material ${sMat}: ${err.message}`, err);
+        const outageErr = new Error(`S/4HANA batch validation service unavailable: ${err.message}`);
+        outageErr.status = err.status || 502;
+        throw outageErr;
+      }
+      LOG.warn(`validateBatch warning for batch ${sBatch}, material ${sMat}: ${err.message}`);
     }
 
     return { valid: true };
@@ -617,7 +702,7 @@ class GoodsIssueAdapter {
         }).sort((a, b) => Number(b.ReservationNo) - Number(a.ReservationNo));
       }
     } catch (err) {
-      console.warn(`[GoodsIssueAdapter] Failed to query open reservations from S/4HANA: ${err.message}`);
+      LOG.warn(`Failed to query open reservations from S/4HANA: ${err.message}`);
       throw err;
     }
 
@@ -686,8 +771,8 @@ class GoodsIssueAdapter {
               expiryDate = matchedBatch.ExpiryDate;
               batchStatus = this._enrichBatchStatus(matchedBatch.ExpiryDate);
             }
-          } catch (_) {
-            // Ignore batch lookup errors for header item display
+          } catch (err) {
+            LOG.warn(`Could not enrich batch status for item ${r.ReservationItem} batch ${r.Batch}: ${err.message}`);
           }
         }
 
@@ -920,7 +1005,7 @@ class GoodsIssueAdapter {
    */
   _suDiag(label, fields) {
     if (process.env.NODE_ENV === 'test') return;
-    try { console.info(`[SU-DIAG] ${label}: ${JSON.stringify(fields)}`); } catch (_) {}
+    try { LOG.info(`[SU-DIAG] ${label}:`, fields); } catch (_) {}
   }
 
   /**
@@ -1395,7 +1480,8 @@ class GoodsIssueAdapter {
         );
         const row = Array.isArray(rows) ? rows[0] : null;
         if (row && row[model.productSet.numberField]) map[g] = String(row[model.productSet.numberField]).trim();
-      } catch (_) {
+      } catch (err) {
+        LOG.warn(`Could not resolve product GUID ${g} via ${model.base}/${model.productSet.name}: ${err.message}`);
         // Product number stays unresolved; reported as missing material
       }
     }
@@ -1552,8 +1638,8 @@ class GoodsIssueAdapter {
           currentStock = Number(slocRes[0].CurrentStock || 0);
           if (slocRes[0].BaseUnit) baseUnit = slocRes[0].BaseUnit;
         }
-      } catch (_) {
-        // Fallback to C_STOCKQUANTITYVALUEBYTYPE if needed
+      } catch (err) {
+        LOG.warn(`MaterialStorLocHelps query failed for ${resvMaterial}/${resvPlant}/${resvSLoc}: ${err.message}`);
       }
 
       if (currentStock === 0) {
@@ -1567,7 +1653,9 @@ class GoodsIssueAdapter {
             currentStock = Number(stockRes[0].MatlWrhsStkQtyInMatlBaseUnit || 0);
             if (stockRes[0].MaterialBaseUnit) baseUnit = stockRes[0].MaterialBaseUnit;
           }
-        } catch (_) {}
+        } catch (err) {
+          LOG.warn(`C_STOCKQUANTITYVALUEBYTYPE query failed for ${resvMaterial}/${resvPlant}/${resvSLoc}: ${err.message}`);
+        }
       }
     }
 
@@ -1714,6 +1802,7 @@ class GoodsIssueAdapter {
       }
     } catch (checkErr) {
       if (checkErr.status === 422) throw checkErr;
+      LOG.warn(`Batch check before HU lookup encountered error: ${checkErr.message}`);
       // Continue to HU lookup if batch query throws other errors
     }
 

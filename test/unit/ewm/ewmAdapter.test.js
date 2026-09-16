@@ -117,6 +117,23 @@ describe('Unit: EwmAdapter - Authentic Warehouse Master Data Only', () => {
                 IsEwm: false
             });
         });
+
+        it('should throw 502 when all warehouse APIs fail', async () => {
+            EwmAdapter._get = jest.fn().mockImplementation((path) => {
+                if (path.includes('API_WAREHOUSE/Warehouse')) {
+                    return Promise.reject(new Error('API_WAREHOUSE Connection Refused'));
+                }
+                if (path.includes('LE_SHP_OD_LIST_SRV/I_WarehouseStdVH')) {
+                    return Promise.reject(new Error('Gateway Timeout 504'));
+                }
+                return Promise.resolve([]);
+            });
+
+            await expect(EwmAdapter.getWarehouses()).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Warehouse master data could not be read from SAP S/4HANA')
+            });
+        });
     });
 
     describe('createWarehouseTask', () => {
@@ -302,6 +319,72 @@ describe('Unit: EwmAdapter - Authentic Warehouse Master Data Only', () => {
                 { Warehouse: '0001', WarehouseProcessType: '1010', WarehouseProcessTypeName: 'Putaway' },
                 { Warehouse: '0001', WarehouseProcessType: '2010', WarehouseProcessTypeName: 'Stock Removal' }
             ]);
+        });
+    });
+
+    describe('Outage & Error Surfacing in EwmAdapter', () => {
+        it('should throw 502 when all storage types sources fail', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Storage Type API Down'));
+            await expect(EwmAdapter.getStorageTypes('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Storage types for warehouse 1120 could not be read')
+            });
+        });
+
+        it('should throw 502 when all storage bins sources fail', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Storage Bin API Down'));
+            await expect(EwmAdapter.getStorageBins('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Storage bins for warehouse 1120 could not be read')
+            });
+        });
+
+        it('should throw 502 when inbound deliveries sources fail', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Inbound Delivery API Down'));
+            await expect(EwmAdapter.getInboundDeliveries('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Inbound deliveries for warehouse 1120 could not be read')
+            });
+        });
+
+        it('should throw 502 when outbound deliveries sources fail', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Outbound Delivery API Down'));
+            await expect(EwmAdapter.getOutboundDeliveries('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Outbound deliveries for warehouse 1120 could not be read')
+            });
+        });
+
+        it('should rethrow error with status 502 when getWarehouseTasks fails', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Task Service 500'));
+            await expect(EwmAdapter.getWarehouseTasks('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Task Service 500')
+            });
+        });
+
+        it('should rethrow error with status 502 when getWarehouseOrders fails', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Order Service 500'));
+            await expect(EwmAdapter.getWarehouseOrders('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Order Service 500')
+            });
+        });
+
+        it('should rethrow error with status 502 when getWarehouseResources fails', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Resource Service 500'));
+            await expect(EwmAdapter.getWarehouseResources('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Resource Service 500')
+            });
+        });
+
+        it('should rethrow error with status 502 when getWarehouseProcessTypes fails', async () => {
+            EwmAdapter._get = jest.fn().mockRejectedValue(new Error('Process Type Service 500'));
+            await expect(EwmAdapter.getWarehouseProcessTypes('1120')).rejects.toMatchObject({
+                status: 502,
+                message: expect.stringContaining('Process Type Service 500')
+            });
         });
     });
 });

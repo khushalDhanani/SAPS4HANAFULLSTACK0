@@ -192,38 +192,47 @@
                 <uxap:subSections>
                     <uxap:ObjectPageSubSection id="subSecItems" title="{i18n>salesInquirySubSecLineItems}">
                         <uxap:blocks>
-                            <Table
-                                id="detailItemsTable"
-                                items="{detail>/items}"
-                                growing="true"
-                                growingThreshold="20"
-                                noDataText="{i18n>salesInquiryTableNoData}">
-                                <columns>
-                                    <Column width="5rem"><Text text="{i18n>salesInquiryColItem}" /></Column>
-                                    <Column width="10rem"><Text text="{i18n>salesInquiryColMaterial}" /></Column>
-                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesInquiryColDescription}" /></Column>
-                                    <Column width="7rem" hAlign="End"><Text text="{i18n>salesInquiryColQuantity}" /></Column>
-                                    <Column width="5rem"><Text text="{i18n>salesInquiryColUnit}" /></Column>
-                                    <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiryColNetPrice}" /></Column>
-                                    <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiryColNetAmount}" /></Column>
-                                </columns>
-                                <items>
-                                    <ColumnListItem>
-                                        <cells>
-                                            <Text text="{detail>SalesInquiryItem}" />
-                                            <Text text="{detail>Material}" />
-                                            <Text text="{= ${detail>MaterialName} || ${detail>SalesInquiryItemText} }" />
-                                            <Text text="{detail>OrderQuantity}" />
-                                            <Text text="{detail>OrderQuantityUnit}" />
-                                            <Text text="{detail>NetPriceAmount}" />
-                                            <ObjectNumber
-                                                number="{detail>NetAmount}"
-                                                unit="{detail>/header/TransactionCurrency}"
-                                                state="Success" />
-                                        </cells>
-                                    </ColumnListItem>
-                                </items>
-                            </Table>
+                            <VBox class="sapUiTinyMarginBottom">
+                                <MessageStrip
+                                    id="inquiryItemsUnavailableStrip"
+                                    visible="{detail>/itemsUnavailable}"
+                                    text="{= ${detail>/itemsUnavailableReason} ? ${detail>/itemsUnavailableReason} : 'Line items service is currently unavailable in SAP S/4HANA.' }"
+                                    type="Warning"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
+                                <Table
+                                    id="detailItemsTable"
+                                    items="{detail>/items}"
+                                    growing="true"
+                                    growingThreshold="20"
+                                    noDataText="{= ${detail>/itemsUnavailable} ? 'Line items are currently unavailable (S/4HANA items service offline).' : ${i18n>salesInquiryTableNoData} }">
+                                    <columns>
+                                        <Column width="5rem"><Text text="{i18n>salesInquiryColItem}" /></Column>
+                                        <Column width="10rem"><Text text="{i18n>salesInquiryColMaterial}" /></Column>
+                                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesInquiryColDescription}" /></Column>
+                                        <Column width="7rem" hAlign="End"><Text text="{i18n>salesInquiryColQuantity}" /></Column>
+                                        <Column width="5rem"><Text text="{i18n>salesInquiryColUnit}" /></Column>
+                                        <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiryColNetPrice}" /></Column>
+                                        <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiryColNetAmount}" /></Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem>
+                                            <cells>
+                                                <Text text="{detail>SalesInquiryItem}" />
+                                                <Text text="{detail>Material}" />
+                                                <Text text="{= ${detail>MaterialName} || ${detail>SalesInquiryItemText} }" />
+                                                <Text text="{detail>OrderQuantity}" />
+                                                <Text text="{detail>OrderQuantityUnit}" />
+                                                <Text text="{detail>NetPriceAmount}" />
+                                                <ObjectNumber
+                                                    number="{detail>NetAmount}"
+                                                    unit="{detail>/header/TransactionCurrency}"
+                                                    state="Success" />
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
+                            </VBox>
                         </uxap:blocks>
                     </uxap:ObjectPageSubSection>
                 </uxap:subSections>

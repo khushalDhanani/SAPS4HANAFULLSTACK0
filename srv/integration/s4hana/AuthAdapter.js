@@ -1,3 +1,5 @@
+const cds = require('@sap/cds');
+const LOG = require('../../common/logger')('auth');
 const { S4HttpClient } = require('./S4HttpClient');
 const s4Config = require('./s4Config');
 
@@ -100,7 +102,7 @@ class AuthAdapter {
     const baseUrl = options.baseUrl || (baseDest && baseDest.url);
 
     if (!baseUrl) {
-      console.error('[AuthAdapter] S/4HANA destination URL is not configured.');
+      LOG.error('S/4HANA destination URL is not configured.');
       return {
         authenticated: false,
         statusCode: 500,
@@ -149,7 +151,7 @@ class AuthAdapter {
       }
 
       if (!err.response) {
-        console.error('[AuthAdapter] S/4HANA connection error:', err.message);
+        LOG.error('S/4HANA connection error:', err.message);
         return {
           authenticated: false,
           statusCode: 503,
@@ -157,7 +159,7 @@ class AuthAdapter {
         };
       }
 
-      console.error(`[AuthAdapter] Unexpected S/4 response: ${status}`);
+      LOG.error(`Unexpected S/4 response: ${status}`);
       return {
         authenticated: false,
         statusCode: status,

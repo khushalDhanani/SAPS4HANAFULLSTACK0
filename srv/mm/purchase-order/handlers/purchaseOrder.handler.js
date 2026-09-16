@@ -1,3 +1,5 @@
+const cds = require('@sap/cds');
+const LOG = require('../../../common/logger')('purchase-order');
 const purchaseOrderAdapter = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const { validateCreatePurchaseOrderPayload } = require('../validation/purchaseOrder.validation');
 const { normalizePurchaseOrderData } = require('../mapping/purchaseOrder.mapper');
@@ -57,7 +59,7 @@ function registerPurchaseOrderHandlers(srv) {
             return result.PurchaseOrder || 'PO Created but no ID returned';
         } catch (error) {
             const sapError = mapS4Error(error);
-            console.error(`[PurchaseOrderService] Error creating PO (${sapError.status}):`, sapError.message);
+            LOG.error(`Error creating PO (${sapError.status}):`, sapError.message);
             req.error(sapError.status, `Failed to create Purchase Order: ${sapError.message}`);
         }
     });
@@ -112,7 +114,7 @@ function registerPurchaseOrderHandlers(srv) {
                 };
             }
         } catch (error) {
-            console.warn('[PurchaseOrderService] getSupplierDefaults readFsData failed, falling back:', error.message);
+            LOG.warn('getSupplierDefaults readFsData failed, falling back:', error.message);
         }
 
         return {

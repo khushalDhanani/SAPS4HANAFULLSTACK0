@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+require('./srv/common/logger');
 
 // In local development, load .env.local / .env once via dotenv (no-op in production)
 if (process.env.NODE_ENV !== 'production') {

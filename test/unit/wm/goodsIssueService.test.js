@@ -732,4 +732,30 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(metaSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('Outage Handling & Explicit Failure Surface (S/4HANA Outages)', () => {
+    it('throws 502/503 when resolveIdentifier encounters an S/4HANA outage instead of masking as 404', async () => {
+      const outageErr = new Error('Connection refused: S/4HANA backend unreachable');
+      outageErr.code = 'ECONNREFUSED';
+      outageErr.status = 503;
+      jest.spyOn(GoodsIssueAdapter, '_get').mockRejectedValue(outageErr);
+
+      await expect(GoodsIssueAdapter.resolveIdentifier('18025')).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining('S/4HANA unavailable during barcode resolution')
+      });
+    });
+
+    it('throws 502/504 when validateBatch encounters an S/4HANA outage instead of returning valid: true', async () => {
+      const outageErr = new Error('Gateway timeout');
+      outageErr.status = 504;
+      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue([]);
+      jest.spyOn(GoodsIssueAdapter, '_get').mockRejectedValue(outageErr);
+
+      await expect(GoodsIssueAdapter.validateBatch('1000000514', 'BATCH01', '1010')).rejects.toMatchObject({
+        status: 504,
+        message: expect.stringContaining('S/4HANA batch validation service unavailable')
+      });
+    });
+  });
 });

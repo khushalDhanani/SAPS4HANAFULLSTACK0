@@ -1,3 +1,5 @@
+const cds = require('@sap/cds');
+const LOG = require('../logger')('goods-receipt-adapter');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient } = require('../S4HttpClient');
 const s4Config = require('../s4Config');
@@ -150,7 +152,7 @@ class GoodsReceiptAdapter {
         SupplierCityName: r.SupplierCityName
       }));
     } catch (err) {
-      console.error('[GoodsReceiptAdapter] Error fetching open inbound deliveries:', err.message);
+      LOG.error('Error fetching open inbound deliveries:', err.message);
       throw err;
     }
   }

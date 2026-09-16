@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
 const { SalesQuotationManageClient } = require('./SalesQuotationManageClient');
 const { S4HttpClient } = require('../../S4HttpClient');
 const s4Config = require('../../s4Config');
@@ -99,14 +100,14 @@ class SalesInquiryAdapter {
       try {
         this.s4hanaWL = await cds.connect.to('SD_F2370_INQY_WL_SRV');
       } catch (err) {
-        console.warn('[SalesInquiryAdapter] Could not connect to SD_F2370_INQY_WL_SRV:', err.message);
+        LOG.warn('Could not connect to SD_F2370_INQY_WL_SRV:', err.message);
       }
     }
     if (!this.s4hanaFS) {
       try {
         this.s4hanaFS = await cds.connect.to('SD_F2369_INQY_FS_SRV');
       } catch (err) {
-        console.warn('[SalesInquiryAdapter] Could not connect to SD_F2369_INQY_FS_SRV:', err.message);
+        LOG.warn('Could not connect to SD_F2369_INQY_FS_SRV:', err.message);
       }
     }
   }
@@ -130,12 +131,15 @@ class SalesInquiryAdapter {
   async readWlData(query) {
     await this.init();
     if (!this.s4hanaWL) {
-      return [];
+      const err = new Error('Sales inquiry worklist data cannot be read: the SAP SD service SD_F2370_INQY_WL_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
       return await this.s4hanaWL.run(query);
     } catch (error) {
-      console.error('[SalesInquiryAdapter] Error reading data from WL service:', error.message);
+      LOG.error('Error reading data from WL service:', error.message);
+      if (!error.status) error.status = 502;
       throw error;
     }
   }
@@ -144,13 +148,17 @@ class SalesInquiryAdapter {
   async readFsData(query) {
     await this.init();
     if (!this.s4hanaFS) {
-      return [];
+      const err = new Error('Sales inquiry factsheet data cannot be read: the SAP SD service SD_F2369_INQY_FS_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
       return await this.s4hanaFS.run(query);
     } catch (error) {
-      console.warn('[SalesInquiryAdapter] Error reading data from FS service:', error.message);
-      return [];
+      LOG.error('Error reading data from FS service:', error.message);
+      const err = new Error(`Sales inquiry factsheet data could not be read from SAP S/4HANA: ${error.message}`);
+      err.status = error.status || 502;
+      throw err;
     }
   }
 
@@ -162,7 +170,9 @@ class SalesInquiryAdapter {
   async getMaterials(query) {
     await this.init();
     if (!this.s4hanaFS) {
-      return [];
+      const err = new Error('Finished Goods materials cannot be read: the SAP SD service SD_F2369_INQY_FS_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
       // Finished Goods constraint in S/4HANA Client 220
@@ -231,8 +241,10 @@ class SalesInquiryAdapter {
 
       return items;
     } catch (error) {
-      console.warn('[SalesInquiryAdapter] Error querying Finished Goods materials:', error.message);
-      return [];
+      LOG.error('Error querying Finished Goods materials from SAP S/4HANA:', error.message);
+      const err = new Error(`Finished Goods materials could not be read from SAP S/4HANA: ${error.message}`);
+      err.status = error.status || 502;
+      throw err;
     }
   }
 
@@ -288,7 +300,7 @@ class SalesInquiryAdapter {
         rawList = Array.isArray(raw) ? raw : (raw?.value || raw?.d?.results || []);
       } catch (error) {
         failures.push(`SD_F2369_INQY_FS_SRV: ${error.message}`);
-        console.warn('[SalesInquiryAdapter] Error querying I_SalesDocumentType from FS:', error.message);
+        LOG.warn('Error querying I_SalesDocumentType from FS:', error.message);
       }
     }
 
@@ -298,7 +310,7 @@ class SalesInquiryAdapter {
         rawList = Array.isArray(rawWl) ? rawWl : (rawWl?.value || rawWl?.d?.results || []);
       } catch (wlError) {
         failures.push(`SD_F2370_INQY_WL_SRV: ${wlError.message}`);
-        console.warn('[SalesInquiryAdapter] Error querying C_SalesInquiryTypeValueHelp from WL:', wlError.message);
+        LOG.warn('Error querying C_SalesInquiryTypeValueHelp from WL:', wlError.message);
       }
     }
 
@@ -344,7 +356,9 @@ class SalesInquiryAdapter {
   async getInquiries(query) {
     await this.init();
     if (!this.s4hanaWL) {
-      return [];
+      const err = new Error('Sales inquiries cannot be read: the SAP SD service SD_F2370_INQY_WL_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
       const defaultQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
@@ -361,7 +375,8 @@ class SalesInquiryAdapter {
       const res = await this.s4hanaWL.run(execQuery);
       return Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
     } catch (err) {
-      console.error('[SalesInquiryAdapter] Error fetching inquiries from SD_F2370_INQY_WL_SRV:', err.message);
+      LOG.error('Error fetching inquiries from SD_F2370_INQY_WL_SRV:', err.message);
+      if (!err.status) err.status = 502;
       throw err;
     }
   }
@@ -396,8 +411,8 @@ class SalesInquiryAdapter {
               SELECT.one.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370').where({ SalesInquiry: sKey })
             );
           } catch (innerErr) {
-            console.warn('[SalesInquiryAdapter] Error fetching WL record for inquiry:', innerErr.message);
-            return null;
+            LOG.warn('Error fetching WL record for inquiry:', innerErr.message);
+            throw innerErr;
           }
         }
       })(),
@@ -413,8 +428,8 @@ class SalesInquiryAdapter {
             }).where({ SalesInquiry: sKey })
           );
         } catch (fse) {
-          console.warn('[SalesInquiryAdapter] Error fetching FS record for inquiry:', fse.message);
-          return null;
+          LOG.warn('Error fetching FS record for inquiry:', fse.message);
+          throw fse;
         }
       })(),
 
@@ -426,8 +441,8 @@ class SalesInquiryAdapter {
             SELECT.from('SD_F2369_INQY_FS_SRV.C_Inquiryitemfs').where({ SalesInquiry: sKey })
           );
         } catch (ie) {
-          console.warn('[SalesInquiryAdapter] Error fetching items for inquiry:', ie.message);
-          return [];
+          LOG.warn('Error fetching items for inquiry:', ie.message);
+          throw ie;
         }
       })()
     ]);
@@ -465,6 +480,30 @@ class SalesInquiryAdapter {
       if (salesEmp) {
         header.SalesEmployeeName = salesEmp.FullName;
       }
+    }
+
+    // Check for outage when header could not be read
+    const headerFailures = [];
+    if (wlResult.status === 'rejected') {
+      headerFailures.push(`WL: ${wlResult.reason?.message || 'failed'}`);
+    }
+    if (fsHeaderResult.status === 'rejected') {
+      headerFailures.push(`FS: ${fsHeaderResult.reason?.message || 'failed'}`);
+    }
+
+    if (!header && headerFailures.length > 0) {
+      LOG.error(`Failed to read Sales Inquiry ${sKey} from SAP S/4HANA:`, headerFailures.join('; '));
+      const err = new Error(`Sales Inquiry ${sKey} could not be read from SAP S/4HANA (${headerFailures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    let itemsUnavailable = false;
+    let itemsUnavailableReason = '';
+    if (fsItemsResult.status === 'rejected') {
+      itemsUnavailable = true;
+      itemsUnavailableReason = fsItemsResult.reason?.message || 'Factsheet item service error';
+      LOG.warn(`Line items for inquiry ${sKey} were unavailable:`, itemsUnavailableReason);
     }
 
     const itemRes = fsItemsResult.status === 'fulfilled' ? fsItemsResult.value : [];
@@ -508,7 +547,7 @@ class SalesInquiryAdapter {
               }
             }
           } catch (ce) {
-            console.warn('[SalesInquiryAdapter] Could not derive customer sales office from SAP:', ce.message);
+            LOG.warn('Could not derive customer sales office from SAP:', ce.message);
           }
         }
 
@@ -533,7 +572,7 @@ class SalesInquiryAdapter {
               header.SalesOfficeName = oMatch.SalesOfficeName || '';
             }
           } catch (oe) {
-            console.warn('[SalesInquiryAdapter] Could not derive sales area office from SAP:', oe.message);
+            LOG.warn('Could not derive sales area office from SAP:', oe.message);
           }
         }
 
@@ -580,7 +619,9 @@ class SalesInquiryAdapter {
               return gVH?.SalesGroupName || '';
             });
             if (grpName) header.SalesGroupName = grpName;
-          } catch (e) { }
+          } catch (e) {
+            LOG.warn(`Could not resolve sales group name for ${sGrp}:`, e.message);
+          }
         }
       }
 
@@ -589,7 +630,7 @@ class SalesInquiryAdapter {
       header.SalesGroup = header.SalesGroup || '';
       header.SalesGroupName = header.SalesGroupName || '';
 
-      return { header, items };
+      return { header, items, itemsUnavailable, itemsUnavailableReason };
     }
 
     return null;
@@ -733,10 +774,12 @@ class SalesInquiryAdapter {
               return gVH?.SalesGroupName || '';
             });
             if (grpName) sGroupName = grpName;
-          } catch (e) { }
+          } catch (e) {
+            LOG.warn(`Could not resolve customer sales group name for ${sGroup}:`, e.message);
+          }
         }
       } catch (err) {
-        console.warn('[SalesInquiryAdapter] getCustomerDefaults remote query warning:', err.message);
+        LOG.warn('getCustomerDefaults remote query warning:', err.message);
       }
     }
 
@@ -800,7 +843,7 @@ class SalesInquiryAdapter {
           return rows[0].Material;
         }
       } catch (e) {
-        console.warn('[SalesInquiryAdapter] Could not resolve material description:', raw, e.message);
+        LOG.warn('Could not resolve material description:', raw, e.message);
       }
     }
     return raw;
@@ -843,7 +886,7 @@ class SalesInquiryAdapter {
         else notTransmitted.push(f);
       }
       if (notTransmitted.length > 0) {
-        console.warn(`[SalesInquiryAdapter] LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
+        LOG.warn(`LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
           + ' the inquiry will stay incomplete for quotation until these are maintained in VA22 or the service is extended.');
       }
     }
@@ -864,7 +907,7 @@ class SalesInquiryAdapter {
       const sapMsg = headerErr.response?.data?.error?.message?.value ||
         headerErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
         headerErr.message;
-      console.error('[SalesInquiryAdapter] Failed to create Sales Inquiry header in S/4HANA:', sapMsg);
+      LOG.error('Failed to create Sales Inquiry header in S/4HANA:', sapMsg);
       throw new Error(sapMsg);
     }
 
@@ -913,7 +956,7 @@ class SalesInquiryAdapter {
           const itemSapMsg = itemErr.response?.data?.error?.message?.value ||
             itemErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
             itemErr.message;
-          console.error(`[SalesInquiryAdapter] Failed to create item ${itemPayload.ItemID} for inquiry ${sNewInquiryId}:`, itemSapMsg);
+          LOG.error(`Failed to create item ${itemPayload.ItemID} for inquiry ${sNewInquiryId}:`, itemSapMsg);
           throw new PartialSalesInquiryError(
             `Sales Inquiry ${sNewInquiryId} was created in SAP S/4HANA, but adding item ${lineNum} failed: ${itemSapMsg}. Do not retry: check or complete inquiry ${sNewInquiryId} in SAP.`,
             sNewInquiryId,
@@ -954,7 +997,7 @@ class SalesInquiryAdapter {
             const condSapMsg = condErr.response?.data?.error?.message?.value ||
               condErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
               condErr.message;
-            console.error(`[SalesInquiryAdapter] Failed to set price condition for item ${lineNum}:`, condSapMsg);
+            LOG.error(`Failed to set price condition for item ${lineNum}:`, condSapMsg);
             throw new PartialSalesInquiryError(
               `Sales Inquiry ${sNewInquiryId} was created in SAP S/4HANA with items, but adding price condition for item ${lineNum} failed: ${condSapMsg}. Do not retry: check or complete inquiry ${sNewInquiryId} in SAP.`,
               sNewInquiryId,
@@ -1000,13 +1043,13 @@ class SalesInquiryAdapter {
       };
       const fields = { header: props('Header'), item: props('Item') };
       if (fields.header.size === 0) {
-        console.warn('[SalesInquiryAdapter] LORD_ODATA_ORDER_SRV $metadata returned no Header properties; capabilities unknown.');
+        LOG.warn('LORD_ODATA_ORDER_SRV $metadata returned no Header properties; capabilities unknown.');
         return empty;
       }
       this._leanOrderFields = fields;
       return fields;
     } catch (err) {
-      console.warn('[SalesInquiryAdapter] Could not read LORD_ODATA_ORDER_SRV $metadata:', err.message);
+      LOG.warn('Could not read LORD_ODATA_ORDER_SRV $metadata:', err.message);
       return empty;
     }
   }
@@ -1123,10 +1166,10 @@ class SalesInquiryAdapter {
           PurchaseOrderByCustomer: options.PurchaseOrderByCustomer
         }
       });
-      console.info(`[SalesInquiryAdapter] Sales Quotation ${SalesQuotation} created in SAP from Inquiry ${salesInquiry}.`);
+      LOG.info(`Sales Quotation ${SalesQuotation} created in SAP from Inquiry ${salesInquiry}.`);
       return { SalesQuote: SalesQuotation, SalesQuotation, verified: verified === true, createdVia: 'UI_SALESQUOTATIONMANAGE' };
     } catch (err) {
-      console.error(`[SalesInquiryAdapter] Sales Quotation creation from Inquiry ${salesInquiry} failed:`,
+      LOG.error(`Sales Quotation creation from Inquiry ${salesInquiry} failed:`,
         err.sapCode ? `${err.sapCode} ${err.sapMessage || err.message}` : err.message);
       throw err;
     }
@@ -1157,7 +1200,7 @@ class SalesInquiryAdapter {
           + ' S4_QUOTATION_PASSWORD and S4_DESTINATION_URL.');
       }
       if (username.toUpperCase() === String(process.env.S4_USERNAME || '').trim().toUpperCase()) {
-        console.warn(`[SalesInquiryAdapter] S4_QUOTATION_USERNAME '${username}' is the same user as S4_USERNAME;`
+        LOG.warn(`S4_QUOTATION_USERNAME '${username}' is the same user as S4_USERNAME;`
           + ' it is not a dedicated technical user.');
       }
       return {
@@ -1168,7 +1211,7 @@ class SalesInquiryAdapter {
       };
     }
 
-    console.warn('[SalesInquiryAdapter] Sales Quotation creation is using the shared SAP destination, not a dedicated'
+    LOG.warn('Sales Quotation creation is using the shared SAP destination, not a dedicated'
       + ' technical user. Configure S4_QUOTATION_DESTINATION_NAME or S4_QUOTATION_USERNAME/S4_QUOTATION_PASSWORD.');
     return this._getDestination(options);
   }

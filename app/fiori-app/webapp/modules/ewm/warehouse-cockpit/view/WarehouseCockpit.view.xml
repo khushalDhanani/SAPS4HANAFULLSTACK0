@@ -128,68 +128,76 @@
                             key="tasks"
                             icon="sap-icon://task"
                             text="{i18n>ewmTabTasksTitle}">
-                            <Table
-                                id="tasksTable"
-                                items="{ewmView>/tasks}"
-                                noDataText="{i18n>ewmNoTasksText}"
-                                growing="true"
-                                growingThreshold="25"
-                                class="sapUiResponsiveMargin">
-                                <headerToolbar>
-                                    <Toolbar>
-                                        <Title text="{i18n>ewmTasksTableTitle} ({= ${ewmView>/tasks}.length })" level="H4" />
-                                        <ToolbarSpacer />
-                                        <SearchField
-                                            id="searchTasks"
-                                            width="250px"
-                                            placeholder="{i18n>ewmSearchTasksPlaceholder}"
-                                            search=".onSearchTasks" />
-                                    </Toolbar>
-                                </headerToolbar>
-                                <columns>
-                                    <Column><Text text="{i18n>ewmColTaskNo}" /></Column>
-                                    <Column><Text text="{i18n>ewmColOrderNo}" /></Column>
-                                    <Column><Text text="{i18n>ewmColProduct}" /></Column>
-                                    <Column><Text text="{i18n>ewmColTargetQty}" /></Column>
-                                    <Column><Text text="{i18n>ewmColConfirmedQty}" /></Column>
-                                    <Column><Text text="{i18n>ewmColSourceBin}" /></Column>
-                                    <Column><Text text="{i18n>ewmColTargetBin}" /></Column>
-                                    <Column><Text text="{i18n>ewmColStatus}" /></Column>
-                                    <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
-                                </columns>
-                                <items>
-                                    <ColumnListItem>
-                                        <cells>
-                                            <ObjectIdentifier title="{ewmView>WarehouseTask}" />
-                                            <Text text="{ewmView>WarehouseOrder}" />
-                                            <VBox>
-                                                <Text text="{ewmView>Product}" />
-                                                <Text text="{ewmView>ProductName}" class="textMuted" />
-                                            </VBox>
-                                            <Text text="{ewmView>TargetQuantity} {ewmView>BaseUnit}" />
-                                            <Text text="{ewmView>ConfirmedQuantity} {ewmView>BaseUnit}" />
-                                            <Text text="{ewmView>SourceStorageBin}" />
-                                            <Text text="{ewmView>TargetStorageBin}" />
-                                            <ObjectStatus
-                                                text="{= ${ewmView>WarehouseTaskStatus} === 'C' ? 'Confirmed' : (${ewmView>WarehouseTaskStatus} === 'X' ? 'Cancelled' : 'Open') }"
-                                                state="{= ${ewmView>WarehouseTaskStatus} === 'C' ? 'Success' : (${ewmView>WarehouseTaskStatus} === 'X' ? 'Error' : 'Warning') }" />
-                                            <HBox justifyContent="End">
-                                                <Button
-                                                    text="{i18n>ewmBtnConfirm}"
-                                                    type="Emphasized"
-                                                    enabled="{= ${ewmView>WarehouseTaskStatus} === 'O' }"
-                                                    press=".onConfirmTaskPress"
-                                                    class="sapUiTinyMarginEnd" />
-                                                <Button
-                                                    text="{i18n>ewmBtnCancel}"
-                                                    type="Reject"
-                                                    enabled="{= ${ewmView>WarehouseTaskStatus} === 'O' }"
-                                                    press=".onCancelTaskPress" />
-                                            </HBox>
-                                        </cells>
-                                    </ColumnListItem>
-                                </items>
-                            </Table>
+                            <VBox class="sapUiResponsiveMargin">
+                                <MessageStrip
+                                    id="tasksUnavailableStrip"
+                                    visible="{ewmView>/tasksUnavailable}"
+                                    text="{= ${ewmView>/tasksUnavailableMsg} ? ${ewmView>/tasksUnavailableMsg} : 'Warehouse tasks service is currently unavailable in SAP S/4HANA.' }"
+                                    type="Error"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
+                                <Table
+                                    id="tasksTable"
+                                    items="{ewmView>/tasks}"
+                                    noDataText="{= ${ewmView>/tasksUnavailable} ? 'Warehouse tasks are currently unavailable (S/4HANA service offline).' : ${i18n>ewmNoTasksText} }"
+                                    growing="true"
+                                    growingThreshold="25">
+                                    <headerToolbar>
+                                        <Toolbar>
+                                            <Title text="{i18n>ewmTasksTableTitle} ({= ${ewmView>/tasks}.length })" level="H4" />
+                                            <ToolbarSpacer />
+                                            <SearchField
+                                                id="searchTasks"
+                                                width="250px"
+                                                placeholder="{i18n>ewmSearchTasksPlaceholder}"
+                                                search=".onSearchTasks" />
+                                        </Toolbar>
+                                    </headerToolbar>
+                                    <columns>
+                                        <Column><Text text="{i18n>ewmColTaskNo}" /></Column>
+                                        <Column><Text text="{i18n>ewmColOrderNo}" /></Column>
+                                        <Column><Text text="{i18n>ewmColProduct}" /></Column>
+                                        <Column><Text text="{i18n>ewmColTargetQty}" /></Column>
+                                        <Column><Text text="{i18n>ewmColConfirmedQty}" /></Column>
+                                        <Column><Text text="{i18n>ewmColSourceBin}" /></Column>
+                                        <Column><Text text="{i18n>ewmColTargetBin}" /></Column>
+                                        <Column><Text text="{i18n>ewmColStatus}" /></Column>
+                                        <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem>
+                                            <cells>
+                                                <ObjectIdentifier title="{ewmView>WarehouseTask}" />
+                                                <Text text="{ewmView>WarehouseOrder}" />
+                                                <VBox>
+                                                    <Text text="{ewmView>Product}" />
+                                                    <Text text="{ewmView>ProductName}" class="textMuted" />
+                                                </VBox>
+                                                <Text text="{ewmView>TargetQuantity} {ewmView>BaseUnit}" />
+                                                <Text text="{ewmView>ConfirmedQuantity} {ewmView>BaseUnit}" />
+                                                <Text text="{ewmView>SourceStorageBin}" />
+                                                <Text text="{ewmView>TargetStorageBin}" />
+                                                <ObjectStatus
+                                                    text="{= ${ewmView>WarehouseTaskStatus} === 'C' ? 'Confirmed' : (${ewmView>WarehouseTaskStatus} === 'X' ? 'Cancelled' : 'Open') }"
+                                                    state="{= ${ewmView>WarehouseTaskStatus} === 'C' ? 'Success' : (${ewmView>WarehouseTaskStatus} === 'X' ? 'Error' : 'Warning') }" />
+                                                <HBox justifyContent="End">
+                                                    <Button
+                                                        text="{i18n>ewmBtnConfirm}"
+                                                        type="Emphasized"
+                                                        enabled="{= ${ewmView>WarehouseTaskStatus} === 'O' }"
+                                                        press=".onConfirmTaskPress"
+                                                        class="sapUiTinyMarginEnd" />
+                                                    <Button
+                                                        text="{i18n>ewmBtnCancel}"
+                                                        type="Reject"
+                                                        enabled="{= ${ewmView>WarehouseTaskStatus} === 'O' }"
+                                                        press=".onCancelTaskPress" />
+                                                </HBox>
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
+                            </VBox>
                         </IconTabFilter>
 
                         <!-- TAB 2: Inbound Deliveries -->
@@ -198,52 +206,60 @@
                             key="inbound"
                             icon="sap-icon://inbox"
                             text="{i18n>ewmTabInboundTitle}">
-                            <Table
-                                id="inboundTable"
-                                items="{ewmView>/inboundDeliveries}"
-                                noDataText="{i18n>ewmNoInboundText}"
-                                growing="true"
-                                growingThreshold="25"
-                                class="sapUiResponsiveMargin">
-                                <headerToolbar>
-                                    <Toolbar>
-                                        <Title text="{i18n>ewmInboundTableTitle} ({= ${ewmView>/inboundDeliveries}.length })" level="H4" />
-                                        <ToolbarSpacer />
-                                        <SearchField
-                                            id="searchInbound"
-                                            width="250px"
-                                            placeholder="{i18n>ewmSearchInboundPlaceholder}"
-                                            search=".onSearchInbound" />
-                                    </Toolbar>
-                                </headerToolbar>
-                                <columns>
-                                    <Column><Text text="{i18n>ewmColDeliveryDoc}" /></Column>
-                                    <Column><Text text="{i18n>ewmColSupplier}" /></Column>
-                                    <Column><Text text="{i18n>ewmColDeliveryDate}" /></Column>
-                                    <Column><Text text="{i18n>ewmColGRStatus}" /></Column>
-                                    <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
-                                </columns>
-                                <items>
-                                    <ColumnListItem>
-                                        <cells>
-                                            <ObjectIdentifier title="{ewmView>DeliveryDocument}" text="{ewmView>DeliveryDocumentType}" />
-                                            <VBox>
-                                                <Text text="{ewmView>SupplierName}" />
-                                                <Text text="ID: {ewmView>Supplier}" class="textMuted" />
-                                            </VBox>
-                                            <Text text="{ewmView>DeliveryDate}" />
-                                            <ObjectStatus
-                                                text="{= ${ewmView>OverallGoodsReceiptStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsReceiptStatus} === 'B' ? 'Partially Posted' : 'Not Posted') }"
-                                                state="{= ${ewmView>OverallGoodsReceiptStatus} === 'C' ? 'Success' : (${ewmView>OverallGoodsReceiptStatus} === 'B' ? 'Information' : 'Warning') }" />
-                                            <Button
-                                                text="{i18n>ewmBtnPostGR}"
-                                                type="Emphasized"
-                                                enabled="{= ${ewmView>OverallGoodsReceiptStatus} !== 'C' }"
-                                                press=".onPostGoodsReceiptPress" />
-                                        </cells>
-                                    </ColumnListItem>
-                                </items>
-                            </Table>
+                            <VBox class="sapUiResponsiveMargin">
+                                <MessageStrip
+                                    id="inboundUnavailableStrip"
+                                    visible="{ewmView>/inboundUnavailable}"
+                                    text="{= ${ewmView>/inboundUnavailableMsg} ? ${ewmView>/inboundUnavailableMsg} : 'Inbound deliveries service is currently unavailable in SAP S/4HANA.' }"
+                                    type="Error"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
+                                <Table
+                                    id="inboundTable"
+                                    items="{ewmView>/inboundDeliveries}"
+                                    noDataText="{= ${ewmView>/inboundUnavailable} ? 'Inbound deliveries are currently unavailable (S/4HANA service offline).' : ${i18n>ewmNoInboundText} }"
+                                    growing="true"
+                                    growingThreshold="25">
+                                    <headerToolbar>
+                                        <Toolbar>
+                                            <Title text="{i18n>ewmInboundTableTitle} ({= ${ewmView>/inboundDeliveries}.length })" level="H4" />
+                                            <ToolbarSpacer />
+                                            <SearchField
+                                                id="searchInbound"
+                                                width="250px"
+                                                placeholder="{i18n>ewmSearchInboundPlaceholder}"
+                                                search=".onSearchInbound" />
+                                        </Toolbar>
+                                    </headerToolbar>
+                                    <columns>
+                                        <Column><Text text="{i18n>ewmColDeliveryDoc}" /></Column>
+                                        <Column><Text text="{i18n>ewmColSupplier}" /></Column>
+                                        <Column><Text text="{i18n>ewmColDeliveryDate}" /></Column>
+                                        <Column><Text text="{i18n>ewmColGRStatus}" /></Column>
+                                        <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem>
+                                            <cells>
+                                                <ObjectIdentifier title="{ewmView>DeliveryDocument}" text="{ewmView>DeliveryDocumentType}" />
+                                                <VBox>
+                                                    <Text text="{ewmView>SupplierName}" />
+                                                    <Text text="ID: {ewmView>Supplier}" class="textMuted" />
+                                                </VBox>
+                                                <Text text="{ewmView>DeliveryDate}" />
+                                                <ObjectStatus
+                                                    text="{= ${ewmView>OverallGoodsReceiptStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsReceiptStatus} === 'B' ? 'Partially Posted' : 'Not Posted') }"
+                                                    state="{= ${ewmView>OverallGoodsReceiptStatus} === 'C' ? 'Success' : (${ewmView>OverallGoodsReceiptStatus} === 'B' ? 'Information' : 'Warning') }" />
+                                                <Button
+                                                    text="{i18n>ewmBtnPostGR}"
+                                                    type="Emphasized"
+                                                    enabled="{= ${ewmView>OverallGoodsReceiptStatus} !== 'C' }"
+                                                    press=".onPostGoodsReceiptPress" />
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
+                            </VBox>
                         </IconTabFilter>
 
                         <!-- TAB 3: Outbound Delivery Orders -->
@@ -252,56 +268,64 @@
                             key="outbound"
                             icon="sap-icon://shipping-status"
                             text="{i18n>ewmTabOutboundTitle}">
-                            <Table
-                                id="outboundTable"
-                                items="{ewmView>/outboundDeliveries}"
-                                noDataText="{i18n>ewmNoOutboundText}"
-                                growing="true"
-                                growingThreshold="25"
-                                class="sapUiResponsiveMargin">
-                                <headerToolbar>
-                                    <Toolbar>
-                                        <Title text="{i18n>ewmOutboundTableTitle} ({= ${ewmView>/outboundDeliveries}.length })" level="H4" />
-                                        <ToolbarSpacer />
-                                        <SearchField
-                                            id="searchOutbound"
-                                            width="250px"
-                                            placeholder="{i18n>ewmSearchOutboundPlaceholder}"
-                                            search=".onSearchOutbound" />
-                                    </Toolbar>
-                                </headerToolbar>
-                                <columns>
-                                    <Column><Text text="{i18n>ewmColOutboundOrder}" /></Column>
-                                    <Column><Text text="{i18n>ewmColShipToParty}" /></Column>
-                                    <Column><Text text="{i18n>ewmColGIStatus}" /></Column>
-                                    <Column><Text text="{i18n>ewmColPickStatus}" /></Column>
-                                    <Column><Text text="{i18n>ewmColPlannedGIDate}" /></Column>
-                                    <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
-                                </columns>
-                                <items>
-                                    <ColumnListItem>
-                                        <cells>
-                                            <ObjectIdentifier title="{ewmView>OutboundDeliveryOrder}" text="{ewmView>OutboundDeliveryOrderType}" />
-                                            <VBox>
-                                                <Text text="{ewmView>ShipToPartyName}" />
-                                                <Text text="ID: {ewmView>ShipToParty}" class="textMuted" />
-                                            </VBox>
-                                            <ObjectStatus
-                                                text="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsIssueStatus} === 'B' ? 'Partial' : 'Not Issued') }"
-                                                state="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Success' : 'Warning' }" />
-                                            <ObjectStatus
-                                                text="{= ${ewmView>OverallPickingStatus} === 'C' ? 'Picked' : (${ewmView>OverallPickingStatus} === 'B' ? 'Partially Picked' : 'Not Picked') }"
-                                                state="{= ${ewmView>OverallPickingStatus} === 'C' ? 'Success' : 'Information' }" />
-                                            <Text text="{ewmView>PlannedGoodsIssueDate}" />
-                                            <Button
-                                                text="{i18n>ewmBtnPostGI}"
-                                                type="Emphasized"
-                                                enabled="{= ${ewmView>OverallGoodsIssueStatus} !== 'C' }"
-                                                press=".onPostGoodsIssuePress" />
-                                        </cells>
-                                    </ColumnListItem>
-                                </items>
-                            </Table>
+                            <VBox class="sapUiResponsiveMargin">
+                                <MessageStrip
+                                    id="outboundUnavailableStrip"
+                                    visible="{ewmView>/outboundUnavailable}"
+                                    text="{= ${ewmView>/outboundUnavailableMsg} ? ${ewmView>/outboundUnavailableMsg} : 'Outbound deliveries service is currently unavailable in SAP S/4HANA.' }"
+                                    type="Error"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
+                                <Table
+                                    id="outboundTable"
+                                    items="{ewmView>/outboundDeliveries}"
+                                    noDataText="{= ${ewmView>/outboundUnavailable} ? 'Outbound deliveries are currently unavailable (S/4HANA service offline).' : ${i18n>ewmNoOutboundText} }"
+                                    growing="true"
+                                    growingThreshold="25">
+                                    <headerToolbar>
+                                        <Toolbar>
+                                            <Title text="{i18n>ewmOutboundTableTitle} ({= ${ewmView>/outboundDeliveries}.length })" level="H4" />
+                                            <ToolbarSpacer />
+                                            <SearchField
+                                                id="searchOutbound"
+                                                width="250px"
+                                                placeholder="{i18n>ewmSearchOutboundPlaceholder}"
+                                                search=".onSearchOutbound" />
+                                        </Toolbar>
+                                    </headerToolbar>
+                                    <columns>
+                                        <Column><Text text="{i18n>ewmColOutboundOrder}" /></Column>
+                                        <Column><Text text="{i18n>ewmColShipToParty}" /></Column>
+                                        <Column><Text text="{i18n>ewmColGIStatus}" /></Column>
+                                        <Column><Text text="{i18n>ewmColPickStatus}" /></Column>
+                                        <Column><Text text="{i18n>ewmColPlannedGIDate}" /></Column>
+                                        <Column hAlign="End"><Text text="{i18n>ewmColActions}" /></Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem>
+                                            <cells>
+                                                <ObjectIdentifier title="{ewmView>OutboundDeliveryOrder}" text="{ewmView>OutboundDeliveryOrderType}" />
+                                                <VBox>
+                                                    <Text text="{ewmView>ShipToPartyName}" />
+                                                    <Text text="ID: {ewmView>ShipToParty}" class="textMuted" />
+                                                </VBox>
+                                                <ObjectStatus
+                                                    text="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Completed' : (${ewmView>OverallGoodsIssueStatus} === 'B' ? 'Partial' : 'Not Issued') }"
+                                                    state="{= ${ewmView>OverallGoodsIssueStatus} === 'C' ? 'Success' : 'Warning' }" />
+                                                <ObjectStatus
+                                                    text="{= ${ewmView>OverallPickingStatus} === 'C' ? 'Picked' : (${ewmView>OverallPickingStatus} === 'B' ? 'Partially Picked' : 'Not Picked') }"
+                                                    state="{= ${ewmView>OverallPickingStatus} === 'C' ? 'Success' : 'Information' }" />
+                                                <Text text="{ewmView>PlannedGoodsIssueDate}" />
+                                                <Button
+                                                    text="{i18n>ewmBtnPostGI}"
+                                                    type="Emphasized"
+                                                    enabled="{= ${ewmView>OverallGoodsIssueStatus} !== 'C' }"
+                                                    press=".onPostGoodsIssuePress" />
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
+                            </VBox>
                         </IconTabFilter>
 
                         <!-- TAB 4: Storage Infrastructure -->
@@ -311,9 +335,17 @@
                             icon="sap-icon://dimension"
                             text="{i18n>ewmTabStorageTitle}">
                             <VBox class="sapUiResponsiveMargin">
+                                <MessageStrip
+                                    id="storageUnavailableStrip"
+                                    visible="{ewmView>/storageUnavailable}"
+                                    text="{= ${ewmView>/storageUnavailableMsg} ? ${ewmView>/storageUnavailableMsg} : 'Storage structure service is currently unavailable in SAP S/4HANA.' }"
+                                    type="Error"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
                                 <Table
                                     id="storageTypesTable"
                                     items="{ewmView>/storageTypes}"
+                                    noDataText="{= ${ewmView>/storageUnavailable} ? 'Storage types are currently unavailable (S/4HANA service offline).' : 'No storage types found.' }"
                                     headerText="{i18n>ewmStorageTypesHeading} ({= ${ewmView>/storageTypes}.length })"
                                     growing="true"
                                     growingThreshold="25"
@@ -337,6 +369,7 @@
                                 <Table
                                     id="storageBinsTable"
                                     items="{ewmView>/storageBins}"
+                                    noDataText="{= ${ewmView>/storageUnavailable} ? 'Storage bins are currently unavailable (S/4HANA service offline).' : 'No storage bins found.' }"
                                     headerText="{i18n>ewmStorageBinsHeading} ({= ${ewmView>/storageBins}.length })"
                                     growing="true"
                                     growingThreshold="25">

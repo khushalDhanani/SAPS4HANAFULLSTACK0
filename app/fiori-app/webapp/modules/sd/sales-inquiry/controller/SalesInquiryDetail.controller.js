@@ -2,8 +2,9 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "sap/ui/core/BusyIndicator",
+    "sap/m/MessageBox",
     "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService"
-], function (BaseController, JSONModel, BusyIndicator, SalesInquiryService) {
+], function (BaseController, JSONModel, BusyIndicator, MessageBox, SalesInquiryService) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.modules.sd.sales-inquiry.controller.SalesInquiryDetail", {
@@ -32,12 +33,16 @@ sap.ui.define([
 
                 var oModel = new JSONModel({
                     header: oHeader,
-                    items: aItems
+                    items: aItems,
+                    itemsUnavailable: Boolean(oData.itemsUnavailable),
+                    itemsUnavailableReason: oData.itemsUnavailableReason || ""
                 });
                 that.getView().setModel(oModel, "detail");
             }).catch(function (err) {
                 BusyIndicator.hide();
                 console.warn("[SalesInquiryDetail] Error loading inquiry:", err);
+                var sMsg = (err && err.message) || String(err || "");
+                MessageBox.error("Failed to load Sales Inquiry " + sId + " from SAP S/4HANA: " + sMsg);
             });
         },
 

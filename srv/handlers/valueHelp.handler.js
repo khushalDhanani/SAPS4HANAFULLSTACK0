@@ -18,7 +18,12 @@ function registerValueHelpHandlers(srv, groups) {
         if (!entities || entities.length === 0 || typeof read !== 'function') continue;
 
         srv.on('READ', entities, async (req) => {
-            let results = await read(req.query);
+            let results;
+            try {
+                results = await read(req.query);
+            } catch (err) {
+                return req.error(err.status || 502, err.message);
+            }
 
             const entityName = req.target ? req.target.name.split('.').pop() : '';
 

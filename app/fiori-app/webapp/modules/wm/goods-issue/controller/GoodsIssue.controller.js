@@ -190,14 +190,21 @@ sap.ui.define([
             var oModel = this.getView().getModel("giView");
             var that = this;
             this.setBusy(true);
+            oModel.setProperty("/reservationsUnavailable", false);
+            oModel.setProperty("/reservationsUnavailableMsg", "");
             return GoodsIssueService.fetchOpenReservations(sPlant)
                 .then(function (aReservations) {
                     var aResvs = aReservations || [];
                     oModel.setProperty("/openReservations", aResvs);
+                    oModel.setProperty("/reservationsUnavailable", false);
                     return aResvs;
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load open reservations from SAP: " + (err.message || err));
+                    var sMsg = (err && err.message) || String(err || "");
+                    oModel.setProperty("/openReservations", []);
+                    oModel.setProperty("/reservationsUnavailable", true);
+                    oModel.setProperty("/reservationsUnavailableMsg", sMsg || "Failed to load open reservations from SAP S/4HANA.");
+                    MessageBox.error("Failed to load open reservations from SAP: " + sMsg);
                     return [];
                 })
                 .finally(function () {
@@ -319,6 +326,8 @@ sap.ui.define([
             }
 
             this.setBusy(true);
+            oModel.setProperty("/itemsUnavailable", false);
+            oModel.setProperty("/itemsUnavailableMsg", "");
             var sOrderNo = (oResv && oResv.OrderNo) ? oResv.OrderNo : "";
             return GoodsIssueService.fetchOpenItems(sOrderNo, sReservationNo)
                 .then(function (aItems) {
@@ -332,12 +341,19 @@ sap.ui.define([
                         Items: aItems || []
                     };
                     oModel.setProperty("/resolved", oResolved);
+                    oModel.setProperty("/itemsUnavailable", false);
                     MessageToast.show("Reservation " + sReservationNo + " loaded (" + (aItems ? aItems.length : 0) + " open components)");
                     return oResolved;
                 })
                 .catch(function (err) {
                     that._playBeep(false);
-                    MessageBox.error("Failed to load components for Reservation " + sReservationNo + ": " + (err.message || err));
+                    var sMsg = (err && err.message) || String(err || "");
+                    oModel.setProperty("/itemsUnavailable", true);
+                    oModel.setProperty("/itemsUnavailableMsg", sMsg || "Failed to load components from SAP S/4HANA.");
+                    var oResolved = oModel.getProperty("/resolved") || {};
+                    oResolved.Items = [];
+                    oModel.setProperty("/resolved", oResolved);
+                    MessageBox.error("Failed to load components for Reservation " + sReservationNo + ": " + sMsg);
                 })
                 .finally(function () {
                     that.setBusy(false);

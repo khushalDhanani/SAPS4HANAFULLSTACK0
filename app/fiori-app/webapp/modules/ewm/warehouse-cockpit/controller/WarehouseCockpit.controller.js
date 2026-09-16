@@ -178,6 +178,15 @@ sap.ui.define([
                 return Promise.resolve();
             }
 
+            oModel.setProperty("/tasksUnavailable", false);
+            oModel.setProperty("/tasksUnavailableMsg", "");
+            oModel.setProperty("/inboundUnavailable", false);
+            oModel.setProperty("/inboundUnavailableMsg", "");
+            oModel.setProperty("/outboundUnavailable", false);
+            oModel.setProperty("/outboundUnavailableMsg", "");
+            oModel.setProperty("/storageUnavailable", false);
+            oModel.setProperty("/storageUnavailableMsg", "");
+
             var pKpis = EwmService.getWarehouseKPIs(sWhse)
                 .then(function (oData) {
                     if (oData && oData.value && oData.value[0]) {
@@ -190,38 +199,57 @@ sap.ui.define([
                 .then(function (oData) {
                     var aTasks = (oData && oData.value) ? oData.value : [];
                     oModel.setProperty("/tasks", aTasks);
+                    oModel.setProperty("/tasksUnavailable", false);
                 })
-                .catch(function () {
+                .catch(function (err) {
                     oModel.setProperty("/tasks", []);
+                    oModel.setProperty("/tasksUnavailable", true);
+                    oModel.setProperty("/tasksUnavailableMsg", (err && err.message) || "Warehouse tasks service is currently unavailable.");
                 });
 
             var pInb = EwmService.getInboundDeliveries(sWhse)
                 .then(function (oData) {
                     var aInb = (oData && oData.value) ? oData.value : [];
                     oModel.setProperty("/inboundDeliveries", aInb);
+                    oModel.setProperty("/inboundUnavailable", false);
                 })
-                .catch(function () {
+                .catch(function (err) {
                     oModel.setProperty("/inboundDeliveries", []);
+                    oModel.setProperty("/inboundUnavailable", true);
+                    oModel.setProperty("/inboundUnavailableMsg", (err && err.message) || "Inbound deliveries service is currently unavailable.");
                 });
 
             var pOutb = EwmService.getOutboundDeliveries(sWhse)
                 .then(function (oData) {
                     var aOutb = (oData && oData.value) ? oData.value : [];
                     oModel.setProperty("/outboundDeliveries", aOutb);
+                    oModel.setProperty("/outboundUnavailable", false);
                 })
-                .catch(function () {
+                .catch(function (err) {
                     oModel.setProperty("/outboundDeliveries", []);
+                    oModel.setProperty("/outboundUnavailable", true);
+                    oModel.setProperty("/outboundUnavailableMsg", (err && err.message) || "Outbound deliveries service is currently unavailable.");
                 });
 
             var pStorage = Promise.allSettled([
                 EwmService.getStorageTypes(sWhse),
                 EwmService.getStorageBins(sWhse)
             ]).then(function (results) {
-                var aTypes = (results[0].status === "fulfilled" && results[0].value?.value) ? results[0].value.value : [];
-                var aBins = (results[1].status === "fulfilled" && results[1].value?.value) ? results[1].value.value : [];
+                var bTypesFailed = results[0].status === "rejected";
+                var bBinsFailed = results[1].status === "rejected";
+                var aTypes = (!bTypesFailed && results[0].value && results[0].value.value) ? results[0].value.value : [];
+                var aBins = (!bBinsFailed && results[1].value && results[1].value.value) ? results[1].value.value : [];
                 oModel.setProperty("/storageTypes", aTypes);
                 oModel.setProperty("/storageTypeCount", aTypes.length);
                 oModel.setProperty("/storageBins", aBins);
+
+                if (bTypesFailed || bBinsFailed) {
+                    oModel.setProperty("/storageUnavailable", true);
+                    var sReason = (bTypesFailed && results[0].reason && results[0].reason.message) || (bBinsFailed && results[1].reason && results[1].reason.message) || "Storage structure service is currently unavailable.";
+                    oModel.setProperty("/storageUnavailableMsg", sReason);
+                } else {
+                    oModel.setProperty("/storageUnavailable", false);
+                }
             });
 
             return Promise.allSettled([pKpis, pTasks, pInb, pOutb, pStorage]);

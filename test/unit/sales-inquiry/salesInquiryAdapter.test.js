@@ -414,13 +414,93 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(whereStr).toContain('FERT');
     });
 
-    test('should return empty array gracefully when s4hanaFS is unavailable or fails', async () => {
+    test('should throw 502 when querying Finished Goods materials fails or times out', async () => {
         salesInquiryAdapter.s4hanaFS = {
             run: jest.fn().mockRejectedValue(new Error('S/4 Gateway Connection Timeout'))
         };
 
-        const results = await salesInquiryAdapter.getMaterials();
-        expect(results).toEqual([]);
+        await expect(salesInquiryAdapter.getMaterials()).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringContaining('Finished Goods materials could not be read from SAP S/4HANA: S/4 Gateway Connection Timeout')
+        });
+    });
+
+    test('should throw 502 when readFsData fails with S/4 error', async () => {
+        salesInquiryAdapter.s4hanaFS = {
+            run: jest.fn().mockRejectedValue(new Error('Factsheet 500 error'))
+        };
+
+        await expect(salesInquiryAdapter.readFsData({ SELECT: {} })).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringContaining('Sales inquiry factsheet data could not be read from SAP S/4HANA')
+        });
+    });
+
+    test('should throw 503 when readFsData is called and s4hanaFS is disconnected', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaFS = null;
+        adapter.init = jest.fn().mockResolvedValue();
+
+        await expect(adapter.readFsData({ SELECT: {} })).rejects.toMatchObject({
+            status: 503,
+            message: expect.stringContaining('SD_F2369_INQY_FS_SRV is not connected')
+        });
+    });
+
+    test('should throw 503 when getInquiries is called and s4hanaWL is disconnected', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = null;
+        adapter.init = jest.fn().mockResolvedValue();
+
+        await expect(adapter.getInquiries()).rejects.toMatchObject({
+            status: 503,
+            message: expect.stringContaining('SD_F2370_INQY_WL_SRV is not connected')
+        });
+    });
+
+    test('should throw 502 when getInquiry fails with outages on both WL and FS services', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = {
+            run: jest.fn().mockRejectedValue(new Error('WL Outage 503'))
+        };
+        adapter.s4hanaFS = {
+            run: jest.fn().mockRejectedValue(new Error('FS Outage 503'))
+        };
+        adapter.init = jest.fn().mockResolvedValue();
+
+        await expect(adapter.getInquiry('100001')).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringContaining('Sales Inquiry 100001 could not be read from SAP S/4HANA')
+        });
+    });
+
+    test('should flag itemsUnavailable when factsheet items service fails for an inquiry', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = {
+            run: jest.fn().mockResolvedValue({
+                SalesInquiry: '100001',
+                SoldToParty: '10083'
+            })
+        };
+        adapter.s4hanaFS = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('C_Inquiryitemfs')) {
+                    return Promise.reject(new Error('Item Service Timeout'));
+                }
+                return Promise.resolve({
+                    SalesInquiry: '100001'
+                });
+            })
+        };
+        adapter.init = jest.fn().mockResolvedValue();
+
+        const res = await adapter.getInquiry('100001');
+        expect(res).toBeDefined();
+        expect(res.header.SalesInquiry).toBe('100001');
+        expect(res.items).toEqual([]);
+        expect(res.itemsUnavailable).toBe(true);
+        expect(res.itemsUnavailableReason).toContain('Item Service Timeout');
     });
 
     test('should return inquiry types exactly as SAP describes them, deriving only the active status', async () => {

@@ -1,5 +1,6 @@
 // PurchaseOrderAdapter for S/4HANA integration using S4HttpClient
 const cds = require('@sap/cds');
+const LOG = require('../../../../common/logger')('purchase-order-adapter');
 const SessionContext = require('../../SessionContext');
 const { S4HttpClient } = require('../../S4HttpClient');
 const s4Config = require('../../s4Config');
@@ -43,7 +44,7 @@ class PurchaseOrderAdapter {
     try {
       return await this.s4hana.run(query);
     } catch (error) {
-      console.error('[PurchaseOrderAdapter] Error reading data from FS service:', error.message);
+      LOG.error('Error reading data from FS service:', error.message);
       throw error;
     }
   }
@@ -56,7 +57,7 @@ class PurchaseOrderAdapter {
     try {
       return await this.s4hanaMaint.run(query);
     } catch (error) {
-      console.error('[PurchaseOrderAdapter] Error reading data from Maint service:', error.message);
+      LOG.error('Error reading data from Maint service:', error.message);
       throw error;
     }
   }
@@ -199,7 +200,7 @@ class PurchaseOrderAdapter {
       const n = Number(String(res.data ?? '').trim());
       return String(res.data ?? '').trim() !== '' && Number.isInteger(n) && n >= 0 ? n : null;
     } catch (e) {
-      console.warn('[PurchaseOrderAdapter] Warning fetching BP count from ZAPI_GETBUPA_SRV:', e.message);
+      LOG.warn('Warning fetching BP count from ZAPI_GETBUPA_SRV:', e.message);
       return null;
     }
   }
@@ -253,7 +254,7 @@ class PurchaseOrderAdapter {
         return toCount(data?.d?.__count ?? data?.['@odata.count']);
       } catch (err) {
         lastError = err.message || String(err);
-        console.warn(`[PurchaseOrderAdapter] Dashboard metric unavailable (${serviceRelPath.split('?')[0]}): ${err.message}`);
+        LOG.warn(`Dashboard metric unavailable (${serviceRelPath.split('?')[0]}): ${err.message}`);
         return null;
       }
     };
@@ -269,7 +270,7 @@ class PurchaseOrderAdapter {
         return toCount(res && res.data);
       } catch (err) {
         lastError = err.message || String(err);
-        console.warn(`[PurchaseOrderAdapter] Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
+        LOG.warn(`Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
         return null;
       }
     };

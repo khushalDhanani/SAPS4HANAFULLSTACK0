@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const LOG = require('../../common/logger')('s4-client');
 const connectivity = require('@sap-cloud-sdk/connectivity');
 const httpClient = require('@sap-cloud-sdk/http-client');
 const SessionContext = require('./SessionContext');
@@ -292,7 +293,7 @@ class S4HttpClient {
             const response = responseOf(err);
             const session = response ? SessionContext.fromResponse(response) : new SessionContext();
             if (!session.token) {
-                console.warn(`[S4HttpClient] CSRF token fetch on ${csrfPath} failed (${response?.status || codeOf(err) || err.message}); continuing without a token.`);
+                LOG.warn(`CSRF token fetch on ${csrfPath} failed (${response?.status || codeOf(err) || err.message}); continuing without a token.`);
             }
             return session;
         }

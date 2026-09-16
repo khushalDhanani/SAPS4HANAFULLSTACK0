@@ -153,6 +153,20 @@
         "model": "srv/external/LORD_ODATA_ORDER_SRV"
       }
     },
+    "log": {
+      "format": "plain",
+      "levels": {
+        "auth": "info",
+        "s4-client": "info",
+        "purchase-order": "info",
+        "purchase-order-adapter": "info",
+        "sales-inquiry": "info",
+        "sales-inquiry-adapter": "info",
+        "goods-receipt": "info",
+        "goods-receipt-adapter": "info",
+        "goods-issue-adapter": "info"
+      }
+    },
     "s4": {
       "client": "220",
       "plant": "1120",

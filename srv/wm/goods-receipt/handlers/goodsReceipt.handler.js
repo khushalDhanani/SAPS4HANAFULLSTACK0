@@ -1,3 +1,5 @@
+const cds = require('@sap/cds');
+const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
 
 const init = (srv) => {
@@ -21,7 +23,7 @@ const init = (srv) => {
 
             return await GoodsReceiptAdapter.getOpenInboundDeliveries(sPlant);
         } catch (err) {
-            console.error('[GoodsReceiptHandler] READ OpenInboundDeliveries failed:', err.message);
+            LOG.error('READ OpenInboundDeliveries failed:', err.message);
             req.reject(err.statusCode || 502, err.message || 'Failed to retrieve open inbound deliveries from SAP');
         }
     });
@@ -107,7 +109,7 @@ const init = (srv) => {
         try {
             return await GoodsReceiptAdapter.resolveStorageUnit(StorageUnit);
         } catch (err) {
-            console.error('[GoodsReceiptHandler] getStorageUnitDetails failed:', err.message);
+            LOG.error('getStorageUnitDetails failed:', err.message);
             req.reject(err.statusCode || 404, err.message);
         }
     });
@@ -156,7 +158,7 @@ const init = (srv) => {
                 ExpiryDate
             });
         } catch (err) {
-            console.error('[GoodsReceiptHandler] postGoodsReceipt failed:', err.message);
+            LOG.error('postGoodsReceipt failed:', err.message);
             req.reject(err.statusCode || 500, err.message);
         }
     });

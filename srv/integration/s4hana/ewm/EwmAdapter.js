@@ -2,6 +2,7 @@ const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const EwmMapper = require('./EwmMapper');
 const s4Config = require('../s4Config');
+const LOG = require('../logger')('ewm-adapter');
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA EWM Services:
@@ -70,6 +71,7 @@ class EwmAdapter {
 
   async getWarehouses() {
     const whMap = new Map();
+    const failures = [];
 
     // 1. Fetch EWM Warehouses
     try {
@@ -86,7 +88,10 @@ class EwmAdapter {
           });
         }
       });
-    } catch (_) {}
+    } catch (err) {
+      failures.push(`API_WAREHOUSE: ${err.message}`);
+      LOG.warn('Could not fetch EWM warehouses from API_WAREHOUSE:', err.message);
+    }
 
     // 2. Fetch Master Warehouse Numbers (WHN / LGNUM from T300)
     try {
@@ -103,7 +108,17 @@ class EwmAdapter {
           });
         }
       });
-    } catch (_) {}
+    } catch (err) {
+      failures.push(`LE_SHP_OD_LIST_SRV: ${err.message}`);
+      LOG.warn('Could not fetch master warehouse numbers from LE_SHP_OD_LIST_SRV:', err.message);
+    }
+
+    if (whMap.size === 0 && failures.length > 0) {
+      LOG.error('Failed to fetch warehouses from SAP S/4HANA:', failures.join('; '));
+      const err = new Error(`Warehouse master data could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
 
     const allWh = Array.from(whMap.values());
     allWh.sort((a, b) => a.Warehouse.localeCompare(b.Warehouse, undefined, { numeric: true }));
@@ -113,6 +128,8 @@ class EwmAdapter {
   async getStorageTypes(warehouse) {
     if (!warehouse) return [];
 
+    const failures = [];
+
     // First try standard EWM Storage Types
     try {
       const path = `/sap/opu/odata/sap/API_WAREHOUSE/Warehouse('${warehouse}')/to_WarehouseStorageType`;
@@ -120,21 +137,37 @@ class EwmAdapter {
       const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
       const mapped = list.map(EwmMapper.mapStorageType).filter(Boolean);
       if (mapped.length > 0) return mapped;
-    } catch (_) {}
+    } catch (err) {
+      failures.push(`API_WAREHOUSE: ${err.message}`);
+      LOG.warn(`Could not fetch storage types for warehouse ${warehouse} from API_WAREHOUSE:`, err.message);
+    }
 
     // For plant/warehouse sites like 1120, query authentic SAP Storage Locations
     try {
       const query = `$filter=Plant eq '${warehouse}'&$format=json`;
       const rawLocs = await this._get('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_MM_StorLocValueHelp', query);
       const listLocs = Array.isArray(rawLocs) ? rawLocs : (rawLocs ? [rawLocs] : []);
-      return listLocs.map(EwmMapper.mapStorageLocationToStorageType).filter(Boolean);
-    } catch (_) {
-      return [];
+      const mapped = listLocs.map(EwmMapper.mapStorageLocationToStorageType).filter(Boolean);
+      if (mapped.length > 0 || failures.length === 0) return mapped;
+    } catch (err) {
+      failures.push(`C_PURCHASEORDER_FS_SRV: ${err.message}`);
+      LOG.warn(`Could not fetch storage locations for warehouse ${warehouse} from C_PURCHASEORDER_FS_SRV:`, err.message);
     }
+
+    if (failures.length > 0) {
+      LOG.error(`Failed to fetch storage types for warehouse ${warehouse} from SAP:`, failures.join('; '));
+      const err = new Error(`Storage types for warehouse ${warehouse} could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    return [];
   }
 
   async getStorageBins(warehouse, top = 100) {
     if (!warehouse) return [];
+
+    const failures = [];
 
     // First try standard EWM Storage Bins
     try {
@@ -144,17 +177,31 @@ class EwmAdapter {
       const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
       const mapped = list.map(EwmMapper.mapStorageBin).filter(Boolean);
       if (mapped.length > 0) return mapped;
-    } catch (_) {}
+    } catch (err) {
+      failures.push(`API_WAREHOUSE_STORAGE_BIN: ${err.message}`);
+      LOG.warn(`Could not fetch storage bins for warehouse ${warehouse} from API_WAREHOUSE_STORAGE_BIN:`, err.message);
+    }
 
     // If no standalone EWM bins (e.g. Plant 1120), map from active storage locations
     try {
       const query = `$filter=Plant eq '${warehouse}'&$top=${top}&$format=json`;
       const rawLocs = await this._get('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_MM_StorLocValueHelp', query);
       const listLocs = Array.isArray(rawLocs) ? rawLocs : (rawLocs ? [rawLocs] : []);
-      return listLocs.map(EwmMapper.mapStorageLocationToStorageBin).filter(Boolean);
-    } catch (_) {
-      return [];
+      const mapped = listLocs.map(EwmMapper.mapStorageLocationToStorageBin).filter(Boolean);
+      if (mapped.length > 0 || failures.length === 0) return mapped;
+    } catch (err) {
+      failures.push(`C_PURCHASEORDER_FS_SRV: ${err.message}`);
+      LOG.warn(`Could not fetch storage locations for bins for warehouse ${warehouse} from C_PURCHASEORDER_FS_SRV:`, err.message);
     }
+
+    if (failures.length > 0) {
+      LOG.error(`Failed to fetch storage bins for warehouse ${warehouse} from SAP:`, failures.join('; '));
+      const err = new Error(`Storage bins for warehouse ${warehouse} could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    return [];
   }
 
   async getWarehouseResources(warehouse, top = 100) {
@@ -164,8 +211,10 @@ class EwmAdapter {
       const raw = await this._get('/sap/opu/odata/sap/API_WAREHOUSE_RESOURCE/WarehouseResource', query);
       const list = Array.isArray(raw) ? raw : [raw];
       return list.map(EwmMapper.mapWarehouseResource).filter(Boolean);
-    } catch (_) {
-      return [];
+    } catch (err) {
+      LOG.error(`Failed to fetch warehouse resources for warehouse ${warehouse || 'all'} from API_WAREHOUSE_RESOURCE:`, err.message);
+      if (!err.status) err.status = 502;
+      throw err;
     }
   }
 
@@ -180,8 +229,10 @@ class EwmAdapter {
       const raw = await this._get('/sap/opu/odata/sap/API_WAREHOUSE_ORDER_TASK/WarehouseOrder', query);
       const list = Array.isArray(raw) ? raw : [raw];
       return list.map(EwmMapper.mapWarehouseOrder).filter(Boolean);
-    } catch (_) {
-      return [];
+    } catch (err) {
+      LOG.error(`Failed to fetch warehouse orders for warehouse ${warehouse || 'all'} from API_WAREHOUSE_ORDER_TASK:`, err.message);
+      if (!err.status) err.status = 502;
+      throw err;
     }
   }
 
@@ -192,8 +243,10 @@ class EwmAdapter {
       const raw = await this._get('/sap/opu/odata/sap/API_WAREHOUSE_ORDER_TASK/WarehouseTask', query);
       const list = Array.isArray(raw) ? raw : [raw];
       return list.map(EwmMapper.mapWarehouseTask).filter(Boolean);
-    } catch (_) {
-      return [];
+    } catch (err) {
+      LOG.error(`Failed to fetch warehouse tasks for warehouse ${warehouse || 'all'} from API_WAREHOUSE_ORDER_TASK:`, err.message);
+      if (!err.status) err.status = 502;
+      throw err;
     }
   }
 
@@ -204,8 +257,10 @@ class EwmAdapter {
       const raw = await this._get('/sap/opu/odata/scwm/WAREHOUSE_KPIS_SRV/I_EWM_WhseProcTypeVH', query);
       const list = Array.isArray(raw) ? raw : (raw?.results || (raw ? [raw] : []));
       return list.map(EwmMapper.mapWarehouseProcessType).filter(Boolean);
-    } catch (_) {
-      return [];
+    } catch (err) {
+      LOG.error(`Failed to fetch warehouse process types for warehouse ${warehouse} from WAREHOUSE_KPIS_SRV:`, err.message);
+      if (!err.status) err.status = 502;
+      throw err;
     }
   }
 
@@ -342,6 +397,8 @@ class EwmAdapter {
   // ==========================================
 
   async getInboundDeliveries(warehouse, top = 50) {
+    const failures = [];
+
     // 1. Try real SAP deliveries from LE_SHP_WHSE_CLERK_OVP_SRV
     try {
       const defaultPlant = s4Config.getPlant();
@@ -353,7 +410,10 @@ class EwmAdapter {
       const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
       const mapped = list.map(d => EwmMapper.mapInboundDelivery(d, warehouse)).filter(Boolean);
       if (mapped.length > 0) return mapped;
-    } catch (_) {}
+    } catch (err) {
+      failures.push(`LE_SHP_WHSE_CLERK_OVP_SRV: ${err.message}`);
+      LOG.warn(`Could not fetch inbound deliveries from LE_SHP_WHSE_CLERK_OVP_SRV:`, err.message);
+    }
 
     // 2. Try EWM Inbound Deliveries
     try {
@@ -361,10 +421,21 @@ class EwmAdapter {
       const query = `${filter ? filter + '&' : ''}$expand=to_WhseInboundDeliveryItem&$top=${top}&$format=json`;
       const raw = await this._get('/sap/opu/odata/sap/API_WHSE_INBOUND_DELIVERY/WhseInboundDeliveryHead', query);
       const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-      return list.map(d => EwmMapper.mapInboundDelivery(d, warehouse)).filter(Boolean);
-    } catch (_) {
-      return [];
+      const mapped = list.map(d => EwmMapper.mapInboundDelivery(d, warehouse)).filter(Boolean);
+      if (mapped.length > 0 || failures.length === 0) return mapped;
+    } catch (err) {
+      failures.push(`API_WHSE_INBOUND_DELIVERY: ${err.message}`);
+      LOG.warn(`Could not fetch inbound deliveries from API_WHSE_INBOUND_DELIVERY:`, err.message);
     }
+
+    if (failures.length > 0) {
+      LOG.error(`Failed to fetch inbound deliveries for warehouse ${warehouse} from SAP:`, failures.join('; '));
+      const err = new Error(`Inbound deliveries for warehouse ${warehouse} could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    return [];
   }
 
   async postGoodsReceipt(warehouse, deliveryDocument) {
@@ -377,6 +448,8 @@ class EwmAdapter {
   }
 
   async getOutboundDeliveries(warehouse, top = 50) {
+    const failures = [];
+
     // 1. Try real SAP Outbound Deliveries from LE_SHP_WHSE_CLERK_OVP_SRV
     try {
       let filter = '';
@@ -394,7 +467,10 @@ class EwmAdapter {
       const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
       const mapped = list.map(d => EwmMapper.mapOutboundDelivery(d, warehouse)).filter(Boolean);
       if (mapped.length > 0) return mapped;
-    } catch (_) {}
+    } catch (err) {
+      failures.push(`LE_SHP_WHSE_CLERK_OVP_SRV: ${err.message}`);
+      LOG.warn(`Could not fetch outbound deliveries from LE_SHP_WHSE_CLERK_OVP_SRV:`, err.message);
+    }
 
     // 2. Try EWM Outbound Deliveries
     try {
@@ -402,10 +478,21 @@ class EwmAdapter {
       const query = `${filter ? filter + '&' : ''}$expand=to_WhseOutboundDeliveryOrderItem&$top=${top}&$format=json`;
       const raw = await this._get('/sap/opu/odata/sap/API_WHSE_OUTB_DLV_ORDER/WhseOutboundDeliveryOrderHead', query);
       const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-      return list.map(d => EwmMapper.mapOutboundDelivery(d, warehouse)).filter(Boolean);
-    } catch (_) {
-      return [];
+      const mapped = list.map(d => EwmMapper.mapOutboundDelivery(d, warehouse)).filter(Boolean);
+      if (mapped.length > 0 || failures.length === 0) return mapped;
+    } catch (err) {
+      failures.push(`API_WHSE_OUTB_DLV_ORDER: ${err.message}`);
+      LOG.warn(`Could not fetch outbound deliveries from API_WHSE_OUTB_DLV_ORDER:`, err.message);
     }
+
+    if (failures.length > 0) {
+      LOG.error(`Failed to fetch outbound deliveries for warehouse ${warehouse} from SAP:`, failures.join('; '));
+      const err = new Error(`Outbound deliveries for warehouse ${warehouse} could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    return [];
   }
 
   async postGoodsIssue(warehouse, outboundDeliveryOrder) {

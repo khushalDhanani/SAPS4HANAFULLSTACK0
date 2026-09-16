@@ -1,6 +1,99 @@
 
 # Changes Log
 
+## 2026-09-16 10:35 IST
+- **Agent**: Antigravity
+- **Change**: Eliminated swallowed errors across EWM, Goods Issue, and Sales Inquiry adapters and value help handlers; converted silent return [] and empty catch blocks into structured logging and explicit HTTP 502/503 rejections; surfaced explicit unavailable states across Fiori UI (`srv/integration/s4hana/ewm/EwmAdapter.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`, `srv/handlers/valueHelp.handler.js`, `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/controller/WarehouseCockpit.controller.js`, `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/view/WarehouseCockpit.view.xml`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`, `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`, `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiryDetail.controller.js`, `app/fiori-app/webapp/modules/sd/sales-inquiry/view/SalesInquiryDetail.view.xml`, `test/unit/ewm/ewmAdapter.test.js`, `test/unit/sales-inquiry/salesInquiryAdapter.test.js`, `test/unit/sales-inquiry/salesInquiryDetail.test.js`, `test/unit/wm/goodsIssueService.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
+  - **Root cause**:
+    - Dozens of empty catch blocks (`catch (_) {}`) and silent fallback paths (`catch (_) { return []; }`) across `EwmAdapter`, `GoodsIssueAdapter`, and `SalesInquiryAdapter` swallowed S/4HANA backend failures, network timeouts, unconfigured destinations, and 500/502/503 errors.
+    - S/4HANA outages and service failures were returned as genuine empty lists (`[]`, HTTP 200), masking outages as "no data found".
+    - In `GoodsIssueAdapter.resolveIdentifier`, all 5 resolution tiers silently caught errors and fell through to Tier 6, falsely reporting that a valid barcode was evaluated and mismatched across SAP objects.
+    - In `SalesInquiryAdapter.getInquiry`, a failure in factsheet items returned an empty array, falsely telling the user the inquiry had 0 items.
+    - Fiori UI views displayed standard empty-list placeholders without alerting users to backend connectivity or service unavailability.
+  - **Resolution**:
+    1. **EWM Adapter (`srv/integration/s4hana/ewm/EwmAdapter.js`)**:
+       - Imported logger `const LOG = require('../logger')('ewm-adapter');`.
+       - Refactored fallback methods (`getWarehouses`, `getStorageTypes`, `getStorageBins`, `getInboundDeliveries`, `getOutboundDeliveries`): each query records failures with `LOG.warn`; if all sources fail and no genuine records are obtained, throws `status: 502` and logs `LOG.error`.
+       - Refactored single-source methods (`getWarehouseResources`, `getWarehouseOrders`, `getWarehouseTasks`, `getWarehouseProcessTypes`): replaced silent `catch (_) { return []; }` with `LOG.error` and rethrows with `status: 502`.
+       - Added 9 unit tests to `test/unit/ewm/ewmAdapter.test.js` verifying outage rejections and 502 status.
+    2. **Sales Inquiry Adapter (`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`)**:
+       - `readWlData`: throws `status: 503` if `!s4hanaWL`, rethrows 502 on query error.
+       - `readFsData`: throws `status: 503` if `!s4hanaFS`, throws 502 on query error (removed silent `return []`).
+       - `getMaterials`: throws `status: 503` if `!s4hanaFS`, throws 502 on query error (removed silent `return []`).
+       - `getInquiries`: throws `status: 503` if `!s4hanaWL`, throws 502 on query error (removed silent `return []`).
+       - `getInquiry`: throws `status: 502` when both WL and FS headers fail; flags `itemsUnavailable: true, itemsUnavailableReason` when factsheet items service fails instead of masking as empty.
+       - Replaced auxiliary empty catches in sales group resolution with `LOG.warn`.
+       - Added unit tests in `test/unit/sales-inquiry/salesInquiryAdapter.test.js` verifying 502/503 outage errors and `itemsUnavailable` flag.
+    3. **Goods Issue Adapter (`srv/integration/s4hana/wm/GoodsIssueAdapter.js`)**:
+       - Implemented `_isOutage(err)` method to detect connectivity failures, timeouts, unconfigured destinations, auth rejections, and 5xx statuses.
+       - In `resolveIdentifier`: check `_isOutage(err)` across all 5 tiers; immediately log `LOG.error` and throw `status: 502/503` instead of falling through to Tier 6 false validation error. For non-outage errors, log `LOG.warn`.
+       - In `validateBatch`: check `_isOutage(err)` and throw 502/504 outage error instead of silently returning `{ valid: true }`.
+       - In `getMaterialPackagingUnits`, `getMaterialBatches`, `getOpenItems`, `_resolveProductNumbers`, and `resolveStorageUnitForGoodsIssue`: replaced empty `catch (_) {}` blocks with `LOG.warn`.
+       - Added unit tests in `test/unit/wm/goodsIssueService.test.js` verifying `resolveIdentifier` and `validateBatch` outage propagation.
+    4. **CAP Handlers Layer (`salesInquiry.handler.js` & `valueHelp.handler.js`)**:
+       - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: wrapped `READ SalesInquiries` (both single-key and list) and `READ SalesInquiryItems` in `try/catch` with `req.error(err.status || 502, err.message)`.
+       - `srv/handlers/valueHelp.handler.js`: wrapped `read(req.query)` in `try/catch` with `req.error(err.status || 502, err.message)` so value helps (e.g. `MaterialVH`) surface S/4HANA outages.
+    5. **Fiori UI Presentation Layer**:
+       - **Warehouse Cockpit (`WarehouseCockpit.controller.js` & `WarehouseCockpit.view.xml`)**:
+         - Tracked `/tasksUnavailable`, `/inboundUnavailable`, `/outboundUnavailable`, `/storageUnavailable` in model with error messages when promises reject.
+         - Added `MessageStrip` components (type `Error`) above tables in all 4 tabs and bound dynamic `noDataText` indicating S/4HANA service unavailability.
+       - **Goods Issue (`GoodsIssue.controller.js` & `GoodsIssue.view.xml`)**:
+         - Set `/reservationsUnavailable` and `/itemsUnavailable` in model when queries fail.
+         - Added error `MessageStrip` above reference reservation form and component table, with dynamic `noDataText` on `tblComponentItems`.
+       - **Sales Inquiry Detail (`SalesInquiryDetail.controller.js` & `SalesInquiryDetail.view.xml`)**:
+         - Displayed `MessageBox.error` on inquiry fetch failure and mapped `itemsUnavailable` / `itemsUnavailableReason` to `detail` model.
+         - Added `MessageStrip` (type `Warning`) above line items table visible when `detail>/itemsUnavailable` is true, with dynamic `noDataText`.
+  - **Validation**:
+    - `npm test`: **68 passed, 68 total suites; 893 passed, 893 total tests (100% green)** in 43.1 s.
+    - `npx jest test/unit/wm`: 6/6 suites, 133/133 tests passed (100% green).
+    - `npx jest test/unit/ewm`: 9/9 suites, 176/176 tests passed (100% green).
+    - `npx jest test/unit/sales-inquiry`: 13/13 suites, 175/175 tests passed (100% green).
+    - `cd app/fiori-app && npm run lint`: 0 findings detected.
+    - `cd app/fiori-app && npm run build`: Succeeded in 725 ms.
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**:
+    - Commit and push changes to remote repository.
+
+## 2026-09-16 10:05 IST
+- **Agent**: Antigravity
+- **Change**: Standardized server layer and S/4HANA integration logging on CAP `cds.log` with correlation ID injection, log level control, and structured JSON output (`srv/common/logger.js`, `srv/integration/s4hana/logger.js`, `server.js`, `package.json`, `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`, `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`, `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`, `srv/integration/s4hana/AuthAdapter.js`, `srv/integration/s4hana/S4HttpClient.js`, `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`, `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`, `test/unit/common/logger.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
+  - **Root cause**:
+    - The server layer (CAP handlers and S/4HANA integration adapters/clients) relied on raw `console.log`, `console.warn`, `console.error`, and `console.info` calls instead of CAP's native `cds.log`.
+    - As a result, runtime log level gating (`SILENT`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`), structured JSON formatting (`cds.env.log.format = 'json'`), and request-scoped correlation IDs (`cds.context.id`) were missing across the entire server layer outside the quotation client.
+  - **Resolution**:
+    1. **Centralized Logger Module (`srv/common/logger.js` & `srv/integration/s4hana/logger.js`)**:
+       - Built `srv/common/logger.js` with `getLogger(label)` wrapping CAP's native `cds.log(label)`.
+       - Created `correlationPlainFormat` which automatically prepends `[<label>] [<correlationId>] - ` when `cds.context.id` or `cds.context.correlation_id` is present, while maintaining single-string argument normalization to ensure 100% backward compatibility with Jest spy assertions (`expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(...))`).
+       - Supported native CAP JSON formatting (`cds.env.log.format === 'json'`) for structured log streaming in production environments.
+       - Exported and re-exported singleton from `srv/integration/s4hana/logger.js`.
+    2. **Server Bootstrap & Configuration (`server.js`, `package.json`)**:
+       - Required `./srv/common/logger` in `server.js` immediately upon bootstrap to register the correlation plain formatter before any handler or service runs.
+       - Added default `cds.log` levels and format under `cds.log` in `package.json`.
+    3. **Handler Migration (`purchaseOrder.handler.js`, `salesInquiry.handler.js`, `goodsReceipt.handler.js`)**:
+       - Replaced all raw `console.error` and `console.warn` calls with `LOG.error` and `LOG.warn` using module-scoped loggers (`purchase-order`, `sales-inquiry`, `goods-receipt`).
+    4. **Adapter & Client Migration (`AuthAdapter.js`, `S4HttpClient.js`, `PurchaseOrderAdapter.js`, `GoodsReceiptAdapter.js`, `GoodsIssueAdapter.js`, `SalesInquiryAdapter.js`)**:
+       - Replaced all raw `console.warn`, `console.error`, and `console.info` calls with `LOG.warn`, `LOG.error`, and `LOG.info` using module-scoped loggers (`auth`, `s4-client`, `purchase-order-adapter`, `goods-receipt-adapter`, `goods-issue-adapter`, `sales-inquiry-adapter`).
+       - Preserved `SalesQuotationManageClient.js` diagnostic flow logging intact as designated.
+    5. **Automated Unit Tests (`test/unit/common/logger.test.js`)**:
+       - Added 12 unit tests verifying logger instantiation, caching, level gating, plain text correlation ID injection, structured JSON formatting with `correlation_id`, and Jest mock compatibility.
+  - **Validation**:
+    - `npm test`: **68 passed, 68 total suites; 876 passed, 876 total tests (100% green)** in 43.2 s.
+    - `npx jest test/unit/common/logger.test.js`: 12/12 passed (100% green).
+    - `npx jest test/unit/sales-inquiry`: 13/13 suites, 170/170 tests passed (100% green).
+    - `npx jest test/unit/wm`: 6/6 suites, 131/131 tests passed (100% green).
+    - `npx jest test/unit/ewm`: 9/9 suites, 167/167 tests passed (100% green).
+    - `npx jest test/unit/dashboard`: 29/29 passed (100% green).
+    - `npx jest test/unit/purchase-order test/unit/common`: 18/18 suites, 225/225 tests passed (100% green).
+    - `npx jest test/unit/s4HttpClient.test.js test/unit/authAdapter.test.js`: 2/2 suites, 31/31 tests passed (100% green).
+    - `cd app/fiori-app && npm run lint`: 0 findings detected.
+    - `cd app/fiori-app && npm run build`: Succeeded in 654 ms.
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**:
+    - Commit and push changes to remote repository.
+
+
 ## 2026-09-16 09:45 IST
 - **Agent**: Antigravity
 - **Change**: Centralized environment-specific S/4HANA values into `cds.env` via a dedicated configuration module (`s4Config.js`), removed hardcoded fallback literals across all adapters and mappers, and implemented fail-loud validation (`package.json`, `.env.example`, `server.js`, `srv/common/s4Config.js`, `srv/integration/s4hana/s4Config.js`, `srv/integration/s4hana/AuthAdapter.js`, `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`, `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/ewm/EwmAdapter.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`, `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`, `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`, `test/unit/common/s4Config.test.js`, `WORKSTATUS.md`, `walkthrough.md`).
@@ -1955,6 +2048,17 @@
      - `git diff --check`: ✅ Pass (no whitespace errors).
 
 ## Current Status
+- **2026-09-16 10:35 IST (Antigravity)**: **Swallowed Errors Eliminated Across Adapters & Explicit Unavailable States Surfaced in UI Complete.**
+  - Eliminated silent `catch (_) {}` and `catch (_) { return []; }` patterns across EWM, Goods Issue, and Sales Inquiry adapters and value help handlers.
+  - S/4HANA backend outages, network timeouts, and unconfigured destinations now log structured errors via CAP `cds.log` and reject with explicit HTTP 502/503 status codes instead of returning synthetic empty lists (`[]`).
+  - Added `_isOutage(err)` to `GoodsIssueAdapter` ensuring barcode resolution fails with 502/503 instead of false 404 barcode mismatch, and `validateBatch` fails loudly instead of approving invalid batches.
+  - Propagated errors through CAP handlers (`salesInquiry.handler.js`, `valueHelp.handler.js`) using `req.error(err.status || 502, err.message)`.
+  - Surfaced explicit unavailable states across Fiori UI: `WarehouseCockpit` (error `MessageStrip` across all 4 tabs, dynamic `noDataText`), `GoodsIssue` (reservation and component `MessageStrip`, dynamic `noDataText`), and `SalesInquiryDetail` (`MessageBox.error` on failure, warning `MessageStrip` for missing line items service).
+  - 100% validation pass: 68 test suites passed (893/893 tests passing 100% green), UI5 linter 0 findings, UI5 build succeeded in 725 ms, CDS compile 0 errors, clean `git diff --check`.
+- **2026-09-16 10:05 IST (Antigravity)**: **Standardized Logging on CAP cds.log with Correlation ID Injection Complete.**
+  - Centralized logger module `srv/common/logger.js` and `srv/integration/s4hana/logger.js`.
+  - Replaced all raw `console.*` calls across server handlers and S/4HANA adapters with `LOG.error`, `LOG.warn`, and `LOG.info`.
+  - Verified across 68/68 test suites (876/876 tests passing), UI5 lint/build, and CDS compile.
 - **2026-09-16 09:35 IST (Antigravity)**: **Parallelized Independent S/4 Reads, Master Data Caching & Dashboard Metrics Caching Complete.**
   - Resolved inquiry detail sequential round trips: refactored `SalesInquiryAdapter.getInquiry` to execute worklist header, factsheet header, and factsheet items concurrently using `Promise.allSettled`.
   - Resolved customer defaults fan-out: refactored `SalesInquiryAdapter.getCustomerDefaults` to query customer master data (cached with 5m TTL) and historical inquiries concurrently in parallel.

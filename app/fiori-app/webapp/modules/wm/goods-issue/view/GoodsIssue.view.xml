@@ -61,6 +61,14 @@
                     validated="{= !!${giView>/activeItem} }">
                     <VBox class="sapUiSmallMargin">
                         <!-- Section 1: Select Reference Reservation from Live SAP Data -->
+                        <MessageStrip
+                            id="reservationsUnavailableStrip"
+                            visible="{giView>/reservationsUnavailable}"
+                            text="{= ${giView>/reservationsUnavailableMsg} ? ${giView>/reservationsUnavailableMsg} : 'Failed to retrieve open reservations from SAP S/4HANA.' }"
+                            type="Error"
+                            showIcon="true"
+                            class="sapUiSmallMarginBottom" />
+
                         <form:SimpleForm
                             id="formSelectReservation"
                             editable="true"
@@ -129,15 +137,24 @@
                         <!-- Section 2: Open Components for Selected Reservation (from SAP S/4HANA) -->
                         <VBox visible="{= !!${giView>/resolved/ReservationNo} }" class="sapUiSmallMarginTop">
                             <MessageStrip
+                                id="resvItemsUnavailableStrip"
+                                visible="{giView>/itemsUnavailable}"
+                                text="{= ${giView>/itemsUnavailableMsg} ? ${giView>/itemsUnavailableMsg} : 'Failed to retrieve open component requirements from SAP S/4HANA.' }"
+                                type="Error"
+                                showIcon="true"
+                                class="sapUiSmallMarginBottom" />
+
+                            <MessageStrip
                                 text="{i18n>giSelectComponentInstruction}"
                                 type="Information"
                                 showIcon="true"
+                                visible="{= !${giView>/itemsUnavailable} }"
                                 class="sapUiSmallMarginBottom" />
 
                             <Table
                                 id="tblComponentItems"
                                 items="{giView>/resolved/Items}"
-                                noDataText="{i18n>giNoOpenItemsText}"
+                                noDataText="{= ${giView>/itemsUnavailable} ? 'Reservation components currently unavailable (S/4HANA service offline).' : ${i18n>giNoOpenItemsText} }"
                                 class="sapUiSizeCompact">
                                 <headerToolbar>
                                     <OverflowToolbar>

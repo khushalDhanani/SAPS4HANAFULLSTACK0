@@ -1,3 +1,5 @@
+const cds = require('@sap/cds');
+const LOG = require('../../../common/logger')('sales-inquiry');
 const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const { validateCreateSalesInquiryPayload } = require('../validation/salesInquiry.validation');
 const { normalizeSalesInquiryData } = require('../mapping/salesInquiry.mapper');
@@ -37,19 +39,32 @@ function registerSalesInquiryHandlers(srv) {
             }
         }
         if (sKey) {
-            const doc = await salesInquiryAdapter.getInquiry(sKey);
-            if (doc) {
-                const header = { ...(doc.header || doc) };
-                header.to_Items = doc.items || [];
-                return header;
+            try {
+                const doc = await salesInquiryAdapter.getInquiry(sKey);
+                if (doc) {
+                    const header = { ...(doc.header || doc) };
+                    header.to_Items = doc.items || [];
+                    return header;
+                }
+                return req.error(404, `Sales Inquiry ${sKey} not found`);
+            } catch (err) {
+                return req.error(err.status || 500, err.message);
             }
         }
-        return await salesInquiryAdapter.getInquiries(req.query);
+        try {
+            return await salesInquiryAdapter.getInquiries(req.query);
+        } catch (err) {
+            return req.error(err.status || 500, err.message);
+        }
     });
 
     // 2. READ SalesInquiryItems
     srv.on('READ', 'SalesInquiryItems', async (req) => {
-        return await salesInquiryAdapter.readFsData(req.query);
+        try {
+            return await salesInquiryAdapter.readFsData(req.query);
+        } catch (err) {
+            return req.error(err.status || 500, err.message);
+        }
     });
 
     // 3. Action createSalesInquiry
@@ -75,7 +90,7 @@ function registerSalesInquiryHandlers(srv) {
             const result = await salesInquiryAdapter.createSalesInquiry(s4Payload.header, s4Payload.items, { user: authenticatedUser });
             return result.SalesInquiry || 'Inquiry Created';
         } catch (error) {
-            console.error('[SalesInquiryService] Error creating Sales Inquiry:', error.message);
+            LOG.error('Error creating Sales Inquiry:', error.message);
             if (error.SalesInquiry || error.documentNumber || error.name === 'PartialSalesInquiryError') {
                 req.error(error.status || 502, error.message);
                 return;
@@ -111,7 +126,7 @@ function registerSalesInquiryHandlers(srv) {
             });
             return result.SalesQuote || result.SalesQuotation || result;
         } catch (error) {
-            console.error('[SalesInquiryService] Error creating Sales Quote from Inquiry:', error.message);
+            LOG.error('Error creating Sales Quote from Inquiry:', error.message);
             // SAP business rejections (e.g. SLS_LORD/166) and unconfirmed outcomes ("verify in SAP, do not
             // retry") already carry a message for the user; show it unchanged.
             if (error.name === 'SapQuotationError' || error.status === 400) {
