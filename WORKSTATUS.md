@@ -116,3 +116,39 @@
     - `git diff --check`: Clean (0 errors, no trailing whitespace, proper Unicode escapes).
     - `diff -u i18n.properties i18n_en.properties`: Clean (0 differences).
   - **Next recommended action**: Stage and commit internationalization changes to `feature/CL01`.
+
+## 2026-09-16 13:00 IST
+- **Agent**: Antigravity
+- **Change**: Added GitHub Actions CI Pipeline, Root ESLint Configuration, Node 22 Engines Declaration, and MTA Validation Setup
+  - **Pipeline (`.github/workflows/ci.yml`)**:
+    - Created GitHub Actions CI workflow triggering on `push` (`main`, `feature/**`), `pull_request` (`main`), and manual `workflow_dispatch`.
+    - Configured `actions/setup-node@v4` with Node 22 and dual lockfile caching (`package-lock.json` and `app/fiori-app/package-lock.json`).
+    - Configured complete pipeline execution steps:
+      1. Repository checkout (`actions/checkout@v4`).
+      2. Node.js 22 setup with npm cache.
+      3. Root dependency installation (`npm ci`).
+      4. UI5 dependency installation (`cd app/fiori-app && npm ci`).
+      5. Root backend ESLint verification (`npm run lint`).
+      6. UI5 linter check (`cd app/fiori-app && npm run lint`).
+      7. Automated Jest test suites (`npm test`).
+      8. UI5 application build with Component-preload (`cd app/fiori-app && npm run build`).
+      9. MTA descriptor validation (`npm run validate:mta`).
+  - **Root Package Configuration (`package.json`)**:
+    - Added `"engines": { "node": ">=22.0.0" }`.
+    - Added `"lint": "eslint ."` under `scripts`.
+    - Added `eslint`, `globals`, and `mbt` to `devDependencies`.
+  - **Root ESLint Configuration (`eslint.config.js`)**:
+    - Modern flat configuration for Node.js 22 backend (`srv/`, `config/`, `server.js`) and Jest test suites (`test/`).
+    - Configured `@eslint/js` recommended rules, CommonJS module parsing, Node globals (`globals.node`), CAP CQL query globals (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `cds`), and Jest globals (`globals.jest`, `fail`).
+    - Excluded UI5 frontend (`app/**`), build artifacts (`dist/**`, `gen/**`, `mta_archives/**`), and logs (`logs/**`, `coverage/**`).
+  - **Test File Hygiene**:
+    - `test/unit/ewm/warehouseCockpitController.test.js`: Declared `let WarehouseCockpitController;` to prevent implicit global leakage under ESLint `no-undef`.
+  - **Validation**:
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm test`: **72 passed, 72 total test suites; 956 passed, 956 total tests (100% green)** in 54.7 s.
+    - `cd app/fiori-app && npm run build`: Build succeeded in 949 ms; `Component-preload.js` generated cleanly.
+    - `npm run validate:mta`: Succeeded with `[INFO] validating the MTA project` (exit code 0).
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit CI pipeline, ESLint configuration, and Node 22 engines declaration to `feature/CL01`.
