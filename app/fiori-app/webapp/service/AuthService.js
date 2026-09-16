@@ -71,7 +71,8 @@ sap.ui.define([
 
         /**
          * Synchronizes authentication Authorization header (Bearer token)
-         * to UI5 OData V4 framework models (default model and fiService).
+         * to all UI5 OData V4 framework models (default purchase-order, fiService,
+         * salesInquiry, goodsIssue, goodsReceipt, warehouseMgmt).
          *
          * @param {sap.ui.core.UIComponent} [oComponent]
          */
@@ -92,39 +93,20 @@ sap.ui.define([
                 "Authorization": sAuthHeader
             };
 
-            var oDefaultModel = oComp.getModel();
-            if (oDefaultModel && typeof oDefaultModel.changeHttpHeaders === "function") {
-                try {
-                    oDefaultModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
+            var aModelNames = ["", "fiService", "salesInquiry", "goodsIssue", "goodsReceipt", "warehouseMgmt"];
+            aModelNames.forEach(function (sModelName) {
+                var oModel = sModelName ? oComp.getModel(sModelName) : oComp.getModel();
+                if (oModel && typeof oModel.changeHttpHeaders === "function") {
+                    try {
+                        oModel.changeHttpHeaders(mHeaders);
+                    } catch (err) {
+                        // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
+                        if (Log && typeof Log.warning === "function") {
+                            Log.warning("AuthService: Unable to update " + (sModelName || "default") + " model headers: " + (err && err.message));
+                        }
                     }
                 }
-            }
-
-            var oFiModel = oComp.getModel("fiService");
-            if (oFiModel && typeof oFiModel.changeHttpHeaders === "function") {
-                try {
-                    oFiModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
-                    }
-                }
-            }
-
-            var oSdModel = oComp.getModel("salesInquiry");
-            if (oSdModel && typeof oSdModel.changeHttpHeaders === "function") {
-                try {
-                    oSdModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update salesInquiry headers: " + (err && err.message));
-                    }
-                }
-            }
+            });
 
             this._sLastSyncedAuthHeader = sAuthHeader;
         },

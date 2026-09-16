@@ -78,6 +78,13 @@ sap.ui.define([
          * Load open Inbound Deliveries from SAP
          */
         _loadOpenDeliveries: function () {
+            var oAuthModel = this.getModel("auth");
+            if (!oAuthModel && this.getOwnerComponent()) {
+                oAuthModel = this.getOwnerComponent().getModel("auth");
+            }
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return;
+            }
             var oModel = this.getView().getModel("grView");
             var oDataModel = this.getModel("goodsReceipt");
             GoodsReceiptService.fetchOpenInboundDeliveries(oDataModel)

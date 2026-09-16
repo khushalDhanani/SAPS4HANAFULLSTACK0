@@ -113,7 +113,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('AuthService.syncModelHeaders', () => {
-        it('should synchronize authorization header to default, fiService, and salesInquiry models', () => {
+        it('should synchronize authorization header to all 6 models (default, fiService, salesInquiry, goodsIssue, goodsReceipt, warehouseMgmt)', () => {
             const defaultModel = {
                 changeHttpHeaders: jest.fn()
             };
@@ -123,10 +123,22 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             const sdModel = {
                 changeHttpHeaders: jest.fn()
             };
+            const giModel = {
+                changeHttpHeaders: jest.fn()
+            };
+            const grModel = {
+                changeHttpHeaders: jest.fn()
+            };
+            const wmModel = {
+                changeHttpHeaders: jest.fn()
+            };
             const mockComponent = {
                 getModel: jest.fn((name) => {
                     if (name === "fiService") return fiModel;
                     if (name === "salesInquiry") return sdModel;
+                    if (name === "goodsIssue") return giModel;
+                    if (name === "goodsReceipt") return grModel;
+                    if (name === "warehouseMgmt") return wmModel;
                     return defaultModel;
                 }),
                 setModel: jest.fn()
@@ -144,6 +156,15 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                 Authorization: "Bearer sample-jwt-token"
             });
             expect(sdModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
+            expect(giModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
+            expect(grModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
+            expect(wmModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
         });

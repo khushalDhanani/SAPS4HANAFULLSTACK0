@@ -57,7 +57,10 @@ sap.ui.define([
         },
 
         _onPatternMatched: function (oEvent) {
-            var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
+            var oAuthModel = this.getModel("auth");
+            if (!oAuthModel && this.getOwnerComponent()) {
+                oAuthModel = this.getOwnerComponent().getModel("auth");
+            }
             if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
                 return;
             }

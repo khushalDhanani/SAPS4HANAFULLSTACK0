@@ -174,3 +174,27 @@
     - `npx cds compile srv`: Succeeded with 0 errors.
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit updated documentation to `feature/CL01`.
+
+## 2026-09-16 13:45 IST
+- **Agent**: Antigravity
+- **Change**: Resolved `Component-preload.js` 404 and `warehouse-management` 401 Unauthorized issues on `/index.html#/ewm/cockpit` navigation.
+  - **Server Bootstrap (`server.js`)**:
+    - Configured `/Component-preload\.js$/` handler to serve `app/fiori-app/dist/Component-preload.js` when built, or return HTTP 200 with an empty JS comment in development, resolving browser network `net::ERR_ABORTED 404` and UI5 ModuleSystem load failure warnings.
+    - Updated `cds.middlewares.add` Bearer token authentication middleware from `{ after: 'auth' }` to `{ before: 'auth' }` to ensure `req.user` and `cds.context.user` are established prior to CAP authorization evaluation.
+  - **Authentication Header Synchronization (`AuthService.js`)**:
+    - Expanded `syncModelHeaders(oComponent)` to synchronize the `Authorization: Bearer <token>` header across all 6 declared OData V4 framework models: `["", "fiService", "salesInquiry", "goodsIssue", "goodsReceipt", "warehouseMgmt"]`.
+  - **Component Initialization (`Component.js`)**:
+    - Added `AuthService.syncModelHeaders(this)` call immediately after model-to-service wiring to ensure all models have active auth headers before routing begins.
+  - **Controller Auth Guards**:
+    - Added/strengthened authentication guards in `WarehouseCockpit.controller.js`, `RfTerminal.controller.js`, `CreateWarehouseTask.controller.js`, `GoodsIssue.controller.js`, and `GoodsReceipt.controller.js` to guard against firing unauthenticated OData requests.
+  - **Tests (`createPORefreshRouting.test.js`)**:
+    - Updated `AuthService.syncModelHeaders` test suite to assert header synchronization across all 6 models (`""`, `fiService`, `salesInquiry`, `goodsIssue`, `goodsReceipt`, `warehouseMgmt`).
+  - **Validation**:
+    - `npm run lint`: **0 errors**, 24 warnings.
+    - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm test`: **72 passed, 72 total test suites; 956 passed, 956 total tests (100% green)** in 51.2 s.
+    - `cd app/fiori-app && npm run build`: Build succeeded in 988 ms; `dist/Component-preload.js` cleanly generated.
+    - `npm run validate:mta`: Succeeded with `[INFO] validating the MTA project` (exit code 0).
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit preload and auth synchronization fixes to `feature/CL01`.

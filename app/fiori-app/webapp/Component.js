@@ -50,6 +50,9 @@ sap.ui.define([
                 SalesInquiryService.setModel(oSalesInquiryModel);
             }
 
+            // Synchronize active authentication headers across all OData V4 models before routing starts
+            AuthService.syncModelHeaders(this);
+
             // setup routing and route guard
             var oRouter = this.getRouter();
             oRouter.attachRouteMatched(this._onRouteMatched, this);

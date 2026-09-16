@@ -100,6 +100,13 @@ sap.ui.define([
         },
 
         _onPatternMatched: function () {
+            var oAuthModel = this.getModel("auth");
+            if (!oAuthModel && this.getOwnerComponent()) {
+                oAuthModel = this.getOwnerComponent().getModel("auth");
+            }
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return;
+            }
             this.loadOpenReservations();
             this._refreshQueueCount();
         },
@@ -187,6 +194,13 @@ sap.ui.define([
         // =============================================================
 
         loadOpenReservations: function (sPlant) {
+            var oAuthModel = this.getModel("auth");
+            if (!oAuthModel && this.getOwnerComponent()) {
+                oAuthModel = this.getOwnerComponent().getModel("auth");
+            }
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return Promise.resolve([]);
+            }
             var oModel = this.getView().getModel("giView");
             var that = this;
             this.setBusy(true);

@@ -66,6 +66,13 @@ sap.ui.define([
         },
 
         _onRouteMatched: function (oEvent) {
+            var oAuthModel = this.getModel("auth");
+            if (!oAuthModel && this.getOwnerComponent()) {
+                oAuthModel = this.getOwnerComponent().getModel("auth");
+            }
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return;
+            }
             this._resetModel();
             var oArgs = oEvent.getParameter("arguments");
             var sQueryWhse = oArgs && oArgs["?query"] && oArgs["?query"].warehouse;

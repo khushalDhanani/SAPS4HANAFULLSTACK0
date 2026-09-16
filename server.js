@@ -142,9 +142,16 @@ cds.on('bootstrap', (app) => {
         next();
     });
 
-    // Handle Component-preload.js in local dev to return 404 with JS MIME type, preventing strict MIME checking refusal
+    // Serve Component-preload.js from dist if available, or return empty JS comment with HTTP 200 in development
+    // to eliminate 404 net::ERR_ABORTED and module system loading failure warnings
     app.get(/Component-preload\.js$/, (req, res) => {
-        res.status(404).type('application/javascript').send('// Component-preload.js not available in development');
+        const fs = require('fs');
+        const path = require('path');
+        const preloadDist = path.resolve(__dirname, 'app/fiori-app/dist/Component-preload.js');
+        if (fs.existsSync(preloadDist)) {
+            return res.sendFile(preloadDist);
+        }
+        res.type('application/javascript').send('// Component-preload.js not available in development');
     });
 
     // Handle UI5 Layered Repository (LRep / Flexibility) requests in local dev to eliminate 404 console errors
@@ -195,7 +202,7 @@ cds.middlewares.add((req, res, next) => {
         }
     }
     next();
-}, { after: 'auth' });
+}, { before: 'auth' });
 
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;
