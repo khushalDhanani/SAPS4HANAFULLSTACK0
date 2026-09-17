@@ -19,6 +19,7 @@ function leanOrderMetadata(extended) {
     const ext = extended
         ? '<Property Name="CustomerGroup2" Type="Edm.String" MaxLength="3"/><Property Name="PortOfLoading" Type="Edm.String" MaxLength="50"/>'
           + '<Property Name="PortOfDischarge" Type="Edm.String" MaxLength="50"/><Property Name="ContactPerson" Type="Edm.String" MaxLength="10"/>'
+          + '<Property Name="BindingPeriodValidityEndDate" Type="Edm.DateTime"/>'
         : '';
     return '<edmx:Edmx><Schema>'
         + '<EntityType Name="HeaderPartner" sap:content-version="1"><Property Name="SalesOrderID" Type="Edm.String"/><Property Name="CustomerID" Type="Edm.String"/></EntityType>'
@@ -152,13 +153,13 @@ describe('Unit: quotation-readiness fields - SAP inquiry creation (LORD_ODATA_OR
     test('getInquiryCreationCapabilities reflects the live service: standard = Plant only, extended = all', async () => {
         const standard = fakeLeanOrder({ extended: false });
         await expect(salesInquiryAdapter.getInquiryCreationCapabilities({ destination, executeHttpRequest: standard.execute })).resolves.toEqual({
-            service: 'LORD_ODATA_ORDER_SRV', CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, Plant: true
+            service: 'LORD_ODATA_ORDER_SRV', CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, BindingPeriodValidityEndDate: false, Plant: true
         });
 
         salesInquiryAdapter._leanOrderFields = null;
         const extended = fakeLeanOrder({ extended: true });
         await expect(salesInquiryAdapter.getInquiryCreationCapabilities({ destination, executeHttpRequest: extended.execute })).resolves.toEqual({
-            service: 'LORD_ODATA_ORDER_SRV', CustomerGroup2: true, PortOfLoading: true, PortOfDischarge: true, ContactPerson: true, Plant: true
+            service: 'LORD_ODATA_ORDER_SRV', CustomerGroup2: true, PortOfLoading: true, PortOfDischarge: true, ContactPerson: true, BindingPeriodValidityEndDate: true, Plant: true
         });
     });
 });

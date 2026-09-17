@@ -121,6 +121,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                     SalesInquiryItemText: 'BPAO88063',
                     OrderQuantity: 1,
                     OrderQuantityUnit: 'PC',
+                    Plant: '1120',
                     NetPriceAmount: 600,
                     NetAmount: 600,
                     TransactionCurrency: 'INR'

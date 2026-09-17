@@ -59,6 +59,7 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
   describe('queue operations', () => {
     it('enqueues, reads back through another instance, updates, removes and summarizes', async () => {
       for (let i = 1; i <= 3; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2));
         const record = await manager.enqueue({
           ReservationNo: `RTS${i}`,
           ReservationItem: `${i}`,

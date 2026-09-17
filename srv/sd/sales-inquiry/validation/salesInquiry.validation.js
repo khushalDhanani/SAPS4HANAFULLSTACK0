@@ -112,7 +112,14 @@ function validateCreateSalesInquiryPayload(payload) {
                 errors.push({ field: 'OrderQuantityUnit', itemIndex: index, message: `${itemLabel}: Unit of measure is required` });
             }
 
-            if (item.Plant && String(item.Plant).trim().length > 4) {
+            if (!item.Plant || String(item.Plant).trim() === '') {
+                errors.push({
+                    field: `items[${index}].Plant`,
+                    itemIndex: index,
+                    code: 'REQUIRED_FIELD',
+                    message: 'Plant is required for each line item'
+                });
+            } else if (String(item.Plant).trim().length > 4) {
                 errors.push({ field: 'Plant', itemIndex: index, message: `${itemLabel}: Plant cannot exceed 4 characters` });
             }
 

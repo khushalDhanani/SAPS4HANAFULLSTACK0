@@ -25,12 +25,13 @@ quotation 2000435 without any problem.
 | `VBAK-ZZPORTOFL` | Port of Loading (custom) | `ZPOL` | CHAR 50 | **No** |
 | `VBAK-ZZPORTOFD` | Port of Discharge (custom) | `ZPDI` | CHAR 50 | **No** |
 | `VBPA-PARNR`, partner function `ZP` | Contact person of the sold-to party (`KNVK`) | `PARNR` | NUMC 10 | **No** (`HeaderPartnerSet` exposes `CustomerID` only, and is not creatable) |
+| `VBAK-BNDDT` | Binding Period Validity End Date (inquiry "Valid To") | `BNDDT` | DATS 8 | **No** |
 | `VBAP-WERKS` | Plant | `WERKS_EXT` | CHAR 4 | Yes (`ItemSet.Plant`); please confirm it is honoured on create |
 
 ## Requested change
 
 Extend the **`Header`** entity of `LORD_ODATA_ORDER_SRV` (project `LORD_ODATA_ORDER`, or a Z redefinition
-if the standard project must stay untouched) with four creatable properties. **The property names below
+if the standard project must stay untouched) with five creatable and readable properties. **The property names below
 are what the application already sends; please use them exactly.**
 
 | Property (exact name) | Type | Maps to |
@@ -39,6 +40,7 @@ are what the application already sends; please use them exactly.**
 | `PortOfLoading` | `Edm.String`, MaxLength 50 | `VBAK-ZZPORTOFL` |
 | `PortOfDischarge` | `Edm.String`, MaxLength 50 | `VBAK-ZZPORTOFD` |
 | `ContactPerson` | `Edm.String`, MaxLength 10 | header partner `ZP` → `VBPA-PARNR` (ALPHA-padded) |
+| `BindingPeriodValidityEndDate` | `Edm.DateTime` | `VBAK-BNDDT` |
 
 Behaviour:
 
@@ -49,6 +51,13 @@ Behaviour:
 3. No defaults: if a property is not sent, leave the field empty (the application never invents values).
 4. Optional but valuable: a read-only value-help entity set for `TVV2T` (Customer Group 2) and one for
    the sold-to party's contact persons (`KNVK`: `PARNR`, `NAME1`, `NAMEV`) so the UI can offer choices.
+5. **MANDATORY REQUIREMENT: Fields must be READABLE as well as CREATABLE.**
+   The properties (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, `ContactPerson`, `BindingPeriodValidityEndDate`)
+   must also be exposed for **READ/GET** on the `Header` entity of `LORD_ODATA_ORDER_SRV` (and, if SAP prefers,
+   on the `C_Inquiryfs` factsheet entity in `SD_F2369_INQY_FS_SRV`).
+   If the properties are only creatable on POST `HeaderSet` but omitted from GET/read responses, the application
+   can never read them back or verify document completeness post-transport, leaving the field-level incompletion
+   pre-flight blind and forcing it to rely strictly on aggregate `SD_F2430_INCOMP_SRV`.
 
 ## How the application uses it (no redeployment needed)
 
@@ -75,3 +84,25 @@ must list the four properties on `EntityType Name="Header"`. Then in the applica
   registered without a System Alias. Assigning alias `S4SD` (client 220 — **not** `LOCAL`, which points
   to client 110) would allow single-request quotation creation without the stateful-session issues
   observed with `UI_SALESQUOTATIONMANAGE`.
+- **Copy control `VTAA` (`ZIN` → `ZQT`) missing data transfer routine for custom `ZZ*` append fields**:
+  Quotation creation with reference to an inquiry (`CreateWithRefFromSlsInquiry`) creates a quotation draft,
+  but during `SaveChanges` SAP rejects with `SLS_LORD/009 Document is incomplete`.
+  **Root cause**: Standard data transfer routine `001` in copy control `VTAA` (`ZIN` → `ZQT`) does NOT copy
+  `ZZ*` append fields (`VBAK-ZZPORTOFL` and `VBAK-ZZPORTOFD`) from the reference inquiry to the quotation header.
+  Because incompletion procedure `Z2` on `ZQT` requires both port fields, every quotation created by reference
+  is incomplete upon creation.
+  **Required SAP-side solution**:
+  In transaction `VTAA` (`ZIN` → `ZQT`), assign a custom data transfer routine (VOFM Data Transfer, e.g. `9xx`)
+  or add logic in `USEREXIT_MOVE_FIELD_TO_VBAK` (include `MV45AFZZ`):
+  ```abap
+  " Copy custom port fields from preceding inquiry into quotation header
+  IF vbak-auart = 'ZQT' AND cvbak-auart = 'ZIN'.
+    IF vbak-zzportofl IS INITIAL.
+      vbak-zzportofl = cvbak-zzportofl.
+    ENDIF.
+    IF vbak-zzportofd IS INITIAL.
+      vbak-zzportofd = cvbak-zzportofd.
+    ENDIF.
+  ENDIF.
+  ```
+  Without this routine/exit, no quotation created with reference to an inquiry can ever satisfy incompletion procedure `Z2`.

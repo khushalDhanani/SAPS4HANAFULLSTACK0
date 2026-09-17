@@ -478,6 +478,21 @@ sap.ui.define([
             var oModel = this.getView().getModel("newInquiry");
             var bValid = SalesInquiryModel.validateForm(oModel);
 
+            // Validate Plant per item on submit before calling backend
+            var aItems = oModel.getProperty("/items") || [];
+            var bItemsPlantValid = true;
+            aItems.forEach(function (itm) {
+                if (!itm.Plant || String(itm.Plant).trim() === "") {
+                    itm.errors = itm.errors || {};
+                    itm.errors.Plant = { state: "Error", text: "Plant is required for each line item" };
+                    bItemsPlantValid = false;
+                }
+            });
+            if (!bItemsPlantValid) {
+                oModel.setProperty("/items", aItems);
+                bValid = false;
+            }
+
             if (!bValid) {
                 this.onMessageButtonPress();
                 return;
@@ -558,6 +573,59 @@ sap.ui.define([
             oModel.setProperty(sPath + "/OrderQuantityUnit", sKey);
             oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
             this.onItemFieldChange();
+        },
+
+        onItemPlantChange: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext) return;
+
+            var sVal = oSource.getValue() ? oSource.getValue().trim().toUpperCase() : "";
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/Plant", sVal);
+
+            if (!sVal) {
+                oModel.setProperty(sPath + "/errors/Plant", { state: "Error", text: "Plant is required for each line item" });
+            } else if (sVal.length > 4) {
+                oModel.setProperty(sPath + "/errors/Plant", { state: "Error", text: "Plant cannot exceed 4 characters" });
+            } else {
+                oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+            }
+            SalesInquiryModel.updateStatus(oModel);
+        },
+
+        onItemPlantLiveChange: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext) return;
+
+            var sVal = oEvent.getParameter("value");
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/Plant", sVal ? sVal.toUpperCase() : "");
+            if (sVal && sVal.trim() !== "") {
+                if (sVal.trim().length <= 4) {
+                    oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+                }
+            }
+        },
+
+        onItemPlantSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext || !oItem) return;
+
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/Plant", sKey);
+            oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+            SalesInquiryModel.updateStatus(oModel);
         },
 
         onSuggest: function (oEvent) {
@@ -648,6 +716,10 @@ sap.ui.define([
                     } else if (sValPath === "OrderQuantityUnit") {
                         oModel.setProperty(sRowPath + "/OrderQuantityUnit", sKey);
                         oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+                        SalesInquiryModel.updateStatus(oModel);
+                    } else if (sValPath === "Plant" || sId.indexOf("Plant") !== -1) {
+                        oModel.setProperty(sRowPath + "/Plant", sKey);
+                        oModel.setProperty(sRowPath + "/errors/Plant", { state: "None", text: "" });
                         SalesInquiryModel.updateStatus(oModel);
                     }
                     return;

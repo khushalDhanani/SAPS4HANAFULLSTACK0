@@ -295,15 +295,6 @@ sap.ui.define([
         _checkInquiryQuotationReadiness: function (oDialogModel, oHeader) {
             if (!oDialogModel || !oHeader) return;
             var aMissing = [];
-            if (!oHeader.CustomerGroup2 || String(oHeader.CustomerGroup2).trim() === "") {
-                aMissing.push("Customer Group 2");
-            }
-            if (!oHeader.PortOfLoading || String(oHeader.PortOfLoading).trim() === "") {
-                aMissing.push("Port of Loading");
-            }
-            if (!oHeader.PortOfDischarge || String(oHeader.PortOfDischarge).trim() === "") {
-                aMissing.push("Port of Discharge");
-            }
             var sContactPerson = oHeader.ContactPerson ? String(oHeader.ContactPerson).trim() : "";
             var bHasContact = sContactPerson !== "" && /^\d+$/.test(sContactPerson);
             if (!bHasContact) {
@@ -323,6 +314,13 @@ sap.ui.define([
                 oDialogModel.setProperty("/missingFields", []);
                 oDialogModel.setProperty("/incompletionMessage", "");
             }
+        },
+
+        onQuoteFieldChange: function () {
+            var oDialogModel = this.getView().getModel("quoteDialog");
+            if (!oDialogModel) return;
+            var oData = oDialogModel.getData();
+            this._checkInquiryQuotationReadiness(oDialogModel, oData);
         },
 
         onConfirmCreateSalesQuote: function () {
@@ -385,7 +383,11 @@ sap.ui.define([
                 SalesQuotationDate: oData.SalesQuotationDate,
                 BindingPeriodValidityEndDate: oData.BindingPeriodValidityEndDate,
                 PurchaseOrderByCustomer: oData.PurchaseOrderByCustomer,
-                CustomerPurchaseOrderDate: oData.CustomerPurchaseOrderDate
+                CustomerPurchaseOrderDate: oData.CustomerPurchaseOrderDate,
+                CustomerGroup2: oData.CustomerGroup2 || "",
+                PortOfLoading: oData.PortOfLoading || "",
+                PortOfDischarge: oData.PortOfDischarge || "",
+                ContactPerson: oData.ContactPerson || ""
             };
 
             return SalesInquiryService.createSalesQuote(oCreatePayload)
@@ -489,11 +491,16 @@ sap.ui.define([
                         var aMissing = (result && result.missingFields) || [];
                         oModel.setProperty("/isIncomplete", true);
                         oModel.setProperty("/missingFields", aMissing);
-                        oModel.setProperty("/incompletionMessage",
-                            "Inquiry " + sCleanId + " is incomplete in SAP (missing: " + aMissing.join(", ") + "). " +
-                            "Maintain these fields in SAP before creating a Sales Quotation."
-                        );
-                        MessageToast.show("Inquiry " + sCleanId + " is still incomplete in SAP (missing: " + aMissing.join(", ") + ").");
+                        var sIncompMsg = (result && result.message) ? result.message :
+                            (aMissing.length > 0 ?
+                                "Inquiry " + sCleanId + " is incomplete in SAP (missing: " + aMissing.join(", ") + "). Maintain these fields in SAP before creating a Sales Quotation." :
+                                "Inquiry " + sCleanId + " is incomplete in SAP. Maintain the missing fields in SAP, then re-check.");
+                        oModel.setProperty("/incompletionMessage", sIncompMsg);
+                        var sToastMsg = (result && result.message) ? result.message :
+                            (aMissing.length > 0 ?
+                                "Inquiry " + sCleanId + " is still incomplete in SAP (missing: " + aMissing.join(", ") + ")." :
+                                "Inquiry " + sCleanId + " is still incomplete in SAP.");
+                        MessageToast.show(sToastMsg);
                     }
                 })
                 .catch(function (err) {

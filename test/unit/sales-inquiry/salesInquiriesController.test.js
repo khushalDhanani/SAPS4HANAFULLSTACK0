@@ -438,19 +438,16 @@ describe("SalesInquiries.controller", () => {
             expect(mockDialog.open).toHaveBeenCalled();
         });
 
-        it("_checkInquiryQuotationReadiness flags incomplete fields in business language", () => {
+        it("_checkInquiryQuotationReadiness flags missing Contact Person in business language", () => {
             const oModel = new MockJSONModel({ SalesInquiry: "1000537" });
-            const oHeader = { SalesInquiry: "1000537" }; // lacks all 4 fields
+            const oHeader = { SalesInquiry: "1000537" }; // lacks ContactPerson
             controller._checkInquiryQuotationReadiness(oModel, oHeader);
 
             expect(oModel.getProperty("/isIncomplete")).toBe(true);
             expect(oModel.getProperty("/missingFields")).toEqual([
-                "Customer Group 2",
-                "Port of Loading",
-                "Port of Discharge",
                 "Contact Person"
             ]);
-            expect(oModel.getProperty("/incompletionMessage")).toContain("Inquiry 1000537 is incomplete in SAP (missing: Customer Group 2, Port of Loading, Port of Discharge, Contact Person).");
+            expect(oModel.getProperty("/incompletionMessage")).toContain("Inquiry 1000537 is incomplete in SAP (missing: Contact Person).");
         });
 
         it("onConfirmCreateSalesQuote blocks creation and shows error when inquiry is incomplete", () => {
@@ -546,7 +543,11 @@ describe("SalesInquiries.controller", () => {
                 SalesQuotationDate: "2026-03-14",
                 BindingPeriodValidityEndDate: "2026-04-14",
                 PurchaseOrderByCustomer: "PO-REF-100",
-                CustomerPurchaseOrderDate: "2026-03-14"
+                CustomerPurchaseOrderDate: "2026-03-14",
+                CustomerGroup2: "",
+                PortOfLoading: "",
+                PortOfDischarge: "",
+                ContactPerson: ""
             });
 
             await promise;
@@ -794,6 +795,24 @@ describe("SalesInquiries.controller", () => {
                     expect.objectContaining({ title: "Incomplete Inquiry" })
                 );
                 expect(mockSalesInquiryService.createSalesQuote).not.toHaveBeenCalled();
+            });
+
+            it("onQuoteFieldChange re-evaluates readiness and clears incompletion when contact person is supplied", () => {
+                const oDialogModel = new MockJSONModel({
+                    SalesInquiry: "1000540",
+                    isIncomplete: true,
+                    missingFields: ["Contact Person"],
+                    ContactPerson: ""
+                });
+                controller.getView().setModel(oDialogModel, "quoteDialog");
+
+                // User types numeric contact person
+                oDialogModel.setProperty("/ContactPerson", "24789");
+                controller.onQuoteFieldChange();
+
+                expect(oDialogModel.getProperty("/isIncomplete")).toBe(false);
+                expect(oDialogModel.getProperty("/missingFields")).toEqual([]);
+                expect(oDialogModel.getProperty("/incompletionMessage")).toBe("");
             });
         });
     });

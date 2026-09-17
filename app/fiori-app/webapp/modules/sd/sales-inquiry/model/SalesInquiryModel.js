@@ -542,6 +542,12 @@ sap.ui.define([
                         var msgPlant = "Item " + (idx + 1) + ": Plant is required by SAP for a quotation";
                         if (!sFirstError) sFirstError = msgPlant;
                         aErrorList.push({ type: "Error", title: "Plant is required by SAP for a quotation", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
+                    } else if (item.Plant && String(item.Plant).trim().length > 4) {
+                        item.errors.Plant = { state: "Error", text: "Plant cannot exceed 4 characters" };
+                        iErrorCount++;
+                        var msgPlantLen = "Item " + (idx + 1) + ": Plant cannot exceed 4 characters";
+                        if (!sFirstError) sFirstError = msgPlantLen;
+                        aErrorList.push({ type: "Error", title: "Plant cannot exceed 4 characters", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
                     }
                 });
                 oModel.setProperty("/items", aItems);

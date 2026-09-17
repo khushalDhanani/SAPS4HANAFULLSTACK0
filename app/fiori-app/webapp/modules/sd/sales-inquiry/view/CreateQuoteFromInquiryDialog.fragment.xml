@@ -75,16 +75,16 @@
                             <Text text="{= (${quoteDialog>/SalesOrganization} || '') + ' / ' + (${quoteDialog>/DistributionChannel} || '') + ' / ' + (${quoteDialog>/OrganizationDivision} || '') }" />
 
                             <Label text="{i18n>quoteDialogCustomerGroup2Label}" design="Bold" />
-                            <Text text="{= ${quoteDialog>/CustomerGroup2} ? ${quoteDialog>/CustomerGroup2} : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+                            <Text text="{= ${quoteDialog>/CustomerGroup2} ? ${quoteDialog>/CustomerGroup2} : ${i18n>quoteDialogFieldNotMaintained} }" />
 
                             <Label text="{i18n>quoteDialogPortOfLoadingLabel}" design="Bold" />
-                            <Text text="{= ${quoteDialog>/PortOfLoading} ? ${quoteDialog>/PortOfLoading} : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+                            <Text text="{= ${quoteDialog>/PortOfLoading} ? ${quoteDialog>/PortOfLoading} : ${i18n>quoteDialogFieldNotMaintained} }" />
 
                             <Label text="{i18n>quoteDialogPortOfDischargeLabel}" design="Bold" />
-                            <Text text="{= ${quoteDialog>/PortOfDischarge} ? ${quoteDialog>/PortOfDischarge} : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+                            <Text text="{= ${quoteDialog>/PortOfDischarge} ? ${quoteDialog>/PortOfDischarge} : ${i18n>quoteDialogFieldNotMaintained} }" />
 
                             <Label text="{i18n>quoteDialogContactPersonLabel}" design="Bold" />
-                            <Text text="{= ${quoteDialog>/ContactPerson} ? (${quoteDialog>/ContactPersonName} ? (${quoteDialog>/ContactPersonName} + ' (' + ${quoteDialog>/ContactPerson} + ')') : ${quoteDialog>/ContactPerson}) : ('(' + ${i18n>quoteDialogFieldNotMaintained} + ')') }" />
+                            <Text text="{= ${quoteDialog>/ContactPerson} ? (${quoteDialog>/ContactPersonName} ? (${quoteDialog>/ContactPersonName} + ' (' + ${quoteDialog>/ContactPerson} + ')') : ${quoteDialog>/ContactPerson}) : ${i18n>quoteDialogFieldNotMaintained} }" />
 
                             <Label text="{i18n>quoteDialogNetAmountLabel}" design="Bold" />
                             <ObjectNumber
@@ -155,6 +155,42 @@
                                 value="{quoteDialog>/CustomerPurchaseOrderDate}"
                                 valueFormat="yyyy-MM-dd"
                                 displayFormat="yyyy-MM-dd"
+                                width="100%" />
+
+                            <Label text="{i18n>quoteDialogContactPersonLabel}" design="Bold" />
+                            <Input
+                                id="inQuoteContactPerson"
+                                value="{quoteDialog>/ContactPerson}"
+                                placeholder="{i18n>salesInquiryPlaceholderContactPerson}"
+                                maxLength="10"
+                                liveChange=".onQuoteFieldChange"
+                                width="100%" />
+
+                            <Label text="{i18n>quoteDialogCustomerGroup2Label}" design="Bold" />
+                            <Input
+                                id="inQuoteCustomerGroup2"
+                                value="{quoteDialog>/CustomerGroup2}"
+                                placeholder="{i18n>salesInquiryPlaceholderCustomerGroup2}"
+                                maxLength="3"
+                                change=".onQuoteFieldChange"
+                                width="100%" />
+
+                            <Label text="{i18n>quoteDialogPortOfLoadingLabel}" design="Bold" />
+                            <Input
+                                id="inQuotePortOfLoading"
+                                value="{quoteDialog>/PortOfLoading}"
+                                placeholder="{i18n>salesInquiryPlaceholderPortLoading}"
+                                maxLength="50"
+                                change=".onQuoteFieldChange"
+                                width="100%" />
+
+                            <Label text="{i18n>quoteDialogPortOfDischargeLabel}" design="Bold" />
+                            <Input
+                                id="inQuotePortOfDischarge"
+                                value="{quoteDialog>/PortOfDischarge}"
+                                placeholder="{i18n>salesInquiryPlaceholderPortDischarge}"
+                                maxLength="50"
+                                change=".onQuoteFieldChange"
                                 width="100%" />
                         </form:content>
                     </form:SimpleForm>

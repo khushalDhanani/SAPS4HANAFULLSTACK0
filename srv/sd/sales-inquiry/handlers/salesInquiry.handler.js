@@ -108,7 +108,11 @@ function registerSalesInquiryHandlers(srv) {
                 SalesQuotationDate: req.data?.SalesQuotationDate,
                 BindingPeriodValidityEndDate: req.data?.BindingPeriodValidityEndDate,
                 PurchaseOrderByCustomer: req.data?.PurchaseOrderByCustomer,
-                CustomerPurchaseOrderDate: req.data?.CustomerPurchaseOrderDate
+                CustomerPurchaseOrderDate: req.data?.CustomerPurchaseOrderDate,
+                CustomerGroup2: req.data?.CustomerGroup2,
+                PortOfLoading: req.data?.PortOfLoading,
+                PortOfDischarge: req.data?.PortOfDischarge,
+                ContactPerson: req.data?.ContactPerson
             });
             return result.SalesQuote || result.SalesQuotation || result;
         } catch (error) {
@@ -138,13 +142,15 @@ function registerSalesInquiryHandlers(srv) {
             });
             return {
                 complete: true,
-                missingFields: []
+                missingFields: [],
+                message: ''
             };
         } catch (error) {
             if (error.name === 'SapQuotationIncompleteError') {
                 return {
                     complete: false,
-                    missingFields: error.missingFields || []
+                    missingFields: error.missingFields || [],
+                    message: error.message
                 };
             }
             LOG.error('Error checking inquiry completeness:', error.message);

@@ -59,6 +59,31 @@ describe('Unit: createSalesQuote handler', () => {
         }));
     });
 
+    test('forwards optional missing fields to adapter when provided in dialog', async () => {
+        salesInquiryAdapter.createSalesQuoteFromInquiry.mockResolvedValue({ SalesQuote: '2000502' });
+        const req = {
+            data: {
+                SalesInquiry: '1000540',
+                SalesQuotationType: 'ZQT',
+                CustomerGroup2: '01',
+                PortOfLoading: 'ROTTERDAM',
+                PortOfDischarge: 'SINGAPORE',
+                ContactPerson: '10005'
+            },
+            user: { id: 'alice' },
+            error: jest.fn()
+        };
+
+        await expect(handler()(req)).resolves.toBe('2000502');
+        expect(req.error).not.toHaveBeenCalled();
+        expect(salesInquiryAdapter.createSalesQuoteFromInquiry).toHaveBeenCalledWith('1000540', expect.objectContaining({
+            CustomerGroup2: '01',
+            PortOfLoading: 'ROTTERDAM',
+            PortOfDischarge: 'SINGAPORE',
+            ContactPerson: '10005'
+        }));
+    });
+
     test('shows an SAP business rejection with SAP wording and HTTP 400', async () => {
         const message = 'Inquiry 1000540 is incomplete in SAP and cannot be converted to a Sales Quotation. Complete the inquiry in VA22 before creating the quotation.';
         salesInquiryAdapter.createSalesQuoteFromInquiry.mockRejectedValue(Object.assign(new Error(message), { status: 400, sapCode: 'SLS_LORD/166' }));
@@ -93,7 +118,7 @@ describe('Unit: getInquiryCompleteness handler', () => {
         const req = { data: { SalesInquiry: '1000540' }, user: { id: 'alice' }, error: jest.fn() };
 
         const result = await getInquiryCompletenessHandler()(req);
-        expect(result).toEqual({ complete: true, missingFields: [] });
+        expect(result).toEqual({ complete: true, missingFields: [], message: '' });
         expect(req.error).not.toHaveBeenCalled();
         expect(salesInquiryAdapter.validateInquiryForQuotation).toHaveBeenCalledWith('1000540', 'ZQT', {
             user: 'alice'
@@ -112,7 +137,8 @@ describe('Unit: getInquiryCompleteness handler', () => {
         const result = await getInquiryCompletenessHandler()(req);
         expect(result).toEqual({
             complete: false,
-            missingFields: ['Customer Group 2', 'Port of Loading']
+            missingFields: ['Customer Group 2', 'Port of Loading'],
+            message: 'Incomplete inquiry'
         });
         expect(req.error).not.toHaveBeenCalled();
         expect(salesInquiryAdapter.createSalesQuoteFromInquiry).not.toHaveBeenCalled();

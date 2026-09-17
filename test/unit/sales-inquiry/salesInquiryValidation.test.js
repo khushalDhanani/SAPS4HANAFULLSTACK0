@@ -21,6 +21,7 @@ describe('Unit: Sales Inquiry Validation', () => {
             SalesInquiryItemText: 'Active Formulation API',
             OrderQuantity: 50,
             OrderQuantityUnit: 'KG',
+            Plant: '1120',
             NetPriceAmount: 1200,
             NetAmount: 60000
         }
@@ -154,13 +155,36 @@ describe('Unit: Sales Inquiry Validation', () => {
         expect(result.errors.some(e => e.field === 'OrderQuantityUnit')).toBe(true);
     });
 
-    test('should reject negative net price', () => {
-        const badItems = [{ ...validItems[0], NetPriceAmount: -10 }];
+    test('should reject item with missing or whitespace plant', () => {
+        const missingPlant = [{ ...validItems[0] }];
+        delete missingPlant[0].Plant;
+        const result1 = validateCreateSalesInquiryPayload({
+            header: validHeader,
+            items: missingPlant
+        });
+        expect(result1.isValid).toBe(false);
+        expect(result1.message).toBe('Plant is required for each line item');
+        const plantErr = result1.errors.find(e => e.field === 'items[0].Plant');
+        expect(plantErr).toBeDefined();
+        expect(plantErr.code).toBe('REQUIRED_FIELD');
+        expect(plantErr.message).toBe('Plant is required for each line item');
+
+        const whitespacePlant = [{ ...validItems[0], Plant: '   ' }];
+        const result2 = validateCreateSalesInquiryPayload({
+            header: validHeader,
+            items: whitespacePlant
+        });
+        expect(result2.isValid).toBe(false);
+        expect(result2.errors.some(e => e.field === 'items[0].Plant' && e.code === 'REQUIRED_FIELD')).toBe(true);
+    });
+
+    test('should reject item with plant exceeding 4 characters', () => {
+        const badPlant = [{ ...validItems[0], Plant: '11200' }];
         const result = validateCreateSalesInquiryPayload({
             header: validHeader,
-            items: badItems
+            items: badPlant
         });
         expect(result.isValid).toBe(false);
-        expect(result.errors.some(e => e.field === 'NetPriceAmount')).toBe(true);
+        expect(result.errors.some(e => e.field === 'Plant' && e.message.includes('cannot exceed 4 characters'))).toBe(true);
     });
 });

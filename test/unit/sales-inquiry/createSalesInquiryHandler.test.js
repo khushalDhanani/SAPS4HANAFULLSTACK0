@@ -33,6 +33,7 @@ describe('Unit: createSalesInquiry handler', () => {
                 Material: '4000000091',
                 OrderQuantity: 10,
                 OrderQuantityUnit: 'KG',
+                Plant: '1120',
                 NetPriceAmount: 250.00
             }
         ]

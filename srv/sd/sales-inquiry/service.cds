@@ -1,6 +1,7 @@
 using { SD_F2370_INQY_WL_SRV as externalWL } from '../../external/SD_F2370_INQY_WL_SRV';
 using { SD_F2369_INQY_FS_SRV as externalFS } from '../../external/SD_F2369_INQY_FS_SRV';
 using { C_PURCHASEORDER_FS_SRV as externalPO } from '../../external/C_PURCHASEORDER_FS_SRV';
+using { MM_PUR_PO_MAINT_V2_SRV as maint } from '../../external/MM_PUR_PO_MAINT_V2_SRV';
 
 @(requires: 'authenticated-user')
 service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
@@ -96,6 +97,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
     };
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity CurrencyVH as projection on externalWL.I_CurrencyStdVH;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity UnitOfMeasureVH as projection on externalPO.I_UnitOfMeasure;
+    @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity PlantVH as projection on maint.C_MM_PlantValueHelp;
 
     type InquiryItem {
         SalesInquiryItem: String;
@@ -145,13 +147,18 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesQuotationDate: Date,
         BindingPeriodValidityEndDate: Date,
         PurchaseOrderByCustomer: String,
-        CustomerPurchaseOrderDate: Date
+        CustomerPurchaseOrderDate: Date,
+        CustomerGroup2: String,
+        PortOfLoading: String,
+        PortOfDischarge: String,
+        ContactPerson: String
     ) returns String;
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getInquiryCompleteness(SalesInquiry: String) returns {
         complete      : Boolean;
         missingFields : array of String;
+        message       : String;
     };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])

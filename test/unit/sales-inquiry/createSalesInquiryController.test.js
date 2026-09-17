@@ -497,11 +497,29 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockSalesInquiryService.createSalesInquiry).not.toHaveBeenCalled();
         });
 
+        it("onSave blocks when item Plant is empty and highlights Plant with error state", () => {
+            mockModel.setProperty("/header/SoldToParty", "10135");
+            mockModel.setProperty("/items/0/Material", "1000000003");
+            mockModel.setProperty("/items/0/OrderQuantity", 10);
+            mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "");
+            const popoverSpy = jest.spyOn(controller, "onMessageButtonPress");
+
+            controller.onSave();
+
+            expect(popoverSpy).toHaveBeenCalled();
+            expect(mockSalesInquiryService.createSalesInquiry).not.toHaveBeenCalled();
+            const aItems = mockModel.getProperty("/items");
+            expect(aItems[0].errors.Plant.state).toBe("Error");
+            expect(aItems[0].errors.Plant.text).toContain("Plant is required for each line item");
+        });
+
         it("onSave dispatches payload and presents success dialog with Create Another option", async () => {
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
             mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
             mockModel.setProperty("/items/0/NetPriceAmount", "50.00");
 
             mockSalesInquiryService.createSalesInquiry.mockResolvedValue("10000005");
@@ -532,6 +550,7 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
             mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
 
             mockSalesInquiryService.createSalesInquiry.mockRejectedValue(new Error("Customer credit limit exceeded"));
 
@@ -550,6 +569,7 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
             mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
 
             const partialErrMsg = "Sales Inquiry 1000529 was created in SAP S/4HANA, but adding item 000010 failed: Material blocked. Do not retry: check or complete inquiry 1000529 in SAP.";
             const partialError = new Error(partialErrMsg);

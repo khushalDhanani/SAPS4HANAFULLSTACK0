@@ -243,7 +243,7 @@
                             <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="{i18n>salesInquiryColDescription}" /></Column>
                             <Column width="6rem" hAlign="End" importance="High"><Text text="{i18n>salesInquiryColQuantity}" /></Column>
                             <Column width="5rem" importance="High"><Text text="{i18n>salesInquiryColUnit}" /></Column>
-                            <Column width="5.5rem" importance="High"><Label text="{i18n>salesInquiryColPlant}" required="{newInquiry>/capabilities/Plant}" /></Column>
+                            <Column width="5.5rem" importance="High"><Label text="{i18n>salesInquiryColPlant}" required="true" /></Column>
                             <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="{i18n>salesInquiryColNetPrice}" /></Column>
                             <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesInquiryColNetAmount}" /></Column>
                         </columns>
@@ -291,12 +291,20 @@
                                             <core:ListItem key="{salesInquiry>UnitOfMeasure}" text="{salesInquiry>UnitOfMeasure}" additionalText="{salesInquiry>UnitOfMeasure_Text}" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newInquiry>Plant}" placeholder="{i18n>salesInquiryPlaceholderPlant}" maxLength="4"
+                                    <Input value="{newInquiry>Plant}" placeholder="{i18n>salesInquiryPlaceholderPlant}" maxLength="4" required="true"
                                         enabled="{newInquiry>/capabilities/Plant}"
                                         tooltip="{i18n>salesInquiryTooltipPlant}"
                                         valueState="{newInquiry>errors/Plant/state}"
                                         valueStateText="{newInquiry>errors/Plant/text}"
-                                        change=".onItemFieldChange" />
+                                        change=".onItemPlantChange"
+                                        liveChange=".onItemPlantLiveChange"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false"
+                                        suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItemSelected=".onItemPlantSelect"
+                                        suggestionItems="{path: 'salesInquiry>/PlantVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{salesInquiry>Plant}" text="{salesInquiry>Plant}" additionalText="{salesInquiry>PlantName}" />
+                                        </suggestionItems>
+                                    </Input>
                                     <Input value="{newInquiry>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End" change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
                                     <ObjectNumber number="{newInquiry>NetAmount}" unit="{newInquiry>/header/TransactionCurrency}" state="Success" />
                                 </cells>

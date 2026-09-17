@@ -160,7 +160,11 @@ describe('Unit: SalesQuotationManageClient - business errors', () => {
     test('an explicit SAP rejection of SaveChanges is reported with the SAP code and releases the lock', async () => {
         const { execute, calls } = fakeSap([csrfOk, createdOk, sessionCheckOk, patchedOk, () => { throw odataError(400, 'SLS_LORD/009', 'Document is incomplete'); }, discardOk]);
 
-        await expect(run(execute)).rejects.toMatchObject({ message: 'Document is incomplete (SAP SLS_LORD/009)', status: 400, sapCode: 'SLS_LORD/009' });
+        await expect(run(execute)).rejects.toMatchObject({
+            message: expect.stringContaining('Sales Quotation created from Inquiry 1000536 is incomplete in SAP (SAP SLS_LORD/009: Document is incomplete). SAP copy control (VTAA) does not copy custom port fields to quotations.'),
+            status: 400,
+            sapCode: 'SLS_LORD/009'
+        });
         expect(calls[5].request).toMatchObject({ method: 'post', url: `${SERVICE_PATH}/DiscardChanges` });
     });
 });

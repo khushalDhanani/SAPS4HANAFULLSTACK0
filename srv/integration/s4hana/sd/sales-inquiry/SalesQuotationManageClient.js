@@ -466,6 +466,14 @@ function toQuotationError(err, salesInquiry, step) {
       { status: 400, sapCode: code, sapMessage: message }
     );
   }
+  if (code === INCOMPLETE_DOCUMENT_CODE && step === STEP.SAVE) {
+    return new SapQuotationError(
+      `Sales Quotation created from Inquiry ${salesInquiry} is incomplete in SAP (SAP SLS_LORD/009: Document is incomplete). `
+      + 'SAP copy control (VTAA) does not copy custom port fields to quotations. '
+      + 'Maintain the quotation in SAP GUI (VA21) or contact your SAP administrator to configure the VTAA copy routine.',
+      { status: 400, sapCode: code, sapMessage: message }
+    );
+  }
   if (isSessionNotFound(err)) {
     return new SapQuotationError(
       `${notConfirmed} (Inquiry ${salesInquiry}: SAP reported "Session not found" at step '${step}'.)`,

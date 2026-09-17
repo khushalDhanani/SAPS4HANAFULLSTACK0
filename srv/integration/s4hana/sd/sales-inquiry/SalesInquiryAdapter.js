@@ -14,7 +14,7 @@ const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
  * $metadata of the service exposes the property, so the application works unchanged before and
  * after the SAP-side extension. See docs/sap-inquiry-service-extension-spec.md.
  */
-const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'];
+const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson', 'BindingPeriodValidityEndDate'];
 
 /**
  * Error thrown when a multi-step Sales Inquiry creation partially succeeds (header persisted in SAP,
@@ -59,11 +59,19 @@ class SapQuotationIncompleteError extends Error {
  * Mandatory fields required by SAP incompletion procedures Z1 (Sales Inquiry)
  * and Z2 (Sales Quotation). Source of truth in SAP S/4HANA: transactions OVA2 / TVUVF table.
  * If incomplete on the reference inquiry, SAP SLS_LORD/009 blocks CreateWithRefFromSlsInquiry.
+ *
+ * NOTE: A field may only be listed in MANDATORY_INCOMPLETION_FIELDS if it is
+ * readable in a service getInquiry() actually queries (SD_F2370_INQY_WL_SRV or
+ * SD_F2369_INQY_FS_SRV).
+ * Fields that are NOT readable in those services must NOT be listed here:
+ *   - CustomerGroup2 (VBAK-KVGR2)
+ *   - PortOfLoading (VBAK-ZZPORTOFL)
+ *   - PortOfDischarge (VBAK-ZZPORTOFD)
+ * Checking unreadable fields results in a guaranteed false positive because header[property]
+ * is always undefined. Document completeness for unreadable fields is governed by
+ * SD_F2430_INCOMP_SRV.
  */
 const MANDATORY_INCOMPLETION_FIELDS = Object.freeze([
-  { property: 'CustomerGroup2', tableField: 'VBAK-KVGR2', label: 'Customer Group 2', type: 'string' },
-  { property: 'PortOfLoading', tableField: 'VBAK-ZZPORTOFL', label: 'Port of Loading', type: 'string' },
-  { property: 'PortOfDischarge', tableField: 'VBAK-ZZPORTOFD', label: 'Port of Discharge', type: 'string' },
   { property: 'ContactPerson', tableField: 'VBPA-PARNR', label: 'Contact Person', type: 'numericPartner' }
 ]);
 
@@ -1209,13 +1217,11 @@ class SalesInquiryAdapter {
    * inquiries never reach SAP and never persist incomplete quotations.
    *
    * Strategy:
-   * 1. Query SAP's SD_F2430_INCOMP_SRV service for document-level incompletion status.
-   *    Note: SD_F2430_INCOMP_SRV delivers aggregate status and count (NumberOfIncompleteFields),
-   *    but cannot deliver individual field names.
-   * 2. Execute documented fallback inspection of the inquiry data for mandatory incompletion fields
-   *    required by procedure Z1/Z2 (VBAK-KVGR2, VBAK-ZZPORTOFL, VBAK-ZZPORTOFD, VBPA-PARNR/ZP).
-   * 3. Report missing fields in business language ("Customer Group 2", "Port of Loading",
-   *    "Port of Discharge", "Contact Person").
+   * Strategy:
+   * 1. SD_F2430_INCOMP_SRV is the authority for document completeness. If it reports the
+   *    document incomplete, block immediately with count of issues without naming unseen fields.
+   * 2. Inspect readable mandatory incompletion fields (ContactPerson via F2369 partner card).
+   * 3. Report missing readable fields in business language.
    *
    * @param {string} salesInquiry
    * @param {string} salesQuotationType
@@ -1229,7 +1235,7 @@ class SalesInquiryAdapter {
       throw err;
     }
 
-    // 1. Query SAP incompletion worklist service if enabled
+    // 1. Query SAP incompletion worklist service (authority for document completeness)
     let incompResult = null;
     if (options.incompletionLogResult !== undefined) {
       incompResult = options.incompletionLogResult;
@@ -1237,14 +1243,25 @@ class SalesInquiryAdapter {
       incompResult = await this._checkIncompletionLog(salesInquiry, options);
     }
 
-    // 2. Inspection of mandatory incompletion fields (OVA2 / TVUVF)
+    if (incompResult && incompResult.isIncomplete) {
+      const nIssues = incompResult.count || 1;
+      throw new SapQuotationIncompleteError(
+        `Inquiry ${salesInquiry} is incomplete in SAP (${nIssues} incompletion issues). ` +
+        `Maintain the missing fields in SAP, then re-check.`,
+        []
+      );
+    }
+
+    // 2. Inspection of readable mandatory incompletion fields (currently ContactPerson via F2369)
     const header = inquiryData.header || {};
     const missing = [];
 
     for (const field of MANDATORY_INCOMPLETION_FIELDS) {
-      const val = header[field.property];
+      const val = (options && options[field.property] !== undefined && String(options[field.property]).trim() !== '')
+        ? options[field.property]
+        : header[field.property];
       if (field.type === 'numericPartner') {
-        // Task 1: SAP VBPA-PARNR requires a numeric partner number. A name alone is missing.
+        // SAP VBPA-PARNR requires a numeric partner number. A name alone is missing.
         const isNumeric = /^\d+$/.test(String(val || '').trim());
         if (!isNumeric) {
           missing.push(field.label);
@@ -1261,16 +1278,6 @@ class SalesInquiryAdapter {
         `Inquiry ${salesInquiry} is incomplete in SAP (missing: ${missing.join(', ')}). ` +
         `Maintain these fields in SAP before creating a Sales Quotation.`,
         missing
-      );
-    }
-
-    // 3. If mandatory fields are filled, but SAP SD_F2430_INCOMP_SRV still flags the document as incomplete
-    if (incompResult && incompResult.isIncomplete) {
-      const countStr = incompResult.count ? `${incompResult.count} ` : '';
-      throw new SapQuotationIncompleteError(
-        `Inquiry ${salesInquiry} is incomplete in SAP (${countStr}incompletion issues flagged by SAP). ` +
-        `Maintain these fields in SAP before creating a Sales Quotation.`,
-        ['Incomplete document in SAP']
       );
     }
   }
