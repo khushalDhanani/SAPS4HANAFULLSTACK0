@@ -786,15 +786,30 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+- **Change**: Purge Obsolete `/IWFND/MED/170` Error Artifact & Align Gateway Remediation Evidence:
+  1. **Deleted Corrupt Model**: Removed `srv/external/API_JOURNALENTRYITEMBASIC_SRV.edmx` — a 980-byte SAP Gateway error response (`<error><code>/IWFND/MED/170</code>`) committed on 5 September 2026 as if it were a valid OData EDMX model. Gateway transaction ID `E6A502D9234E0250E006A8C148CF75C3`, timestamp `20260905090032`.
+     - Verified zero references across `srv/`, `db/`, `app/`, `test/` and `package.json`; the file was inert, but declaring the service under `cds.requires` would have caused CAP to parse error XML as a model and fail.
+     - Verified all 6 remaining `.edmx` models and `simple_inb_dlv_metadata.xml` are genuine metadata (byte-size and root-element checks).
+  2. **Catalog Verification**: `./catalog.py JOURNALENTRY` returns only `FAC_GL_JOURNALENTRY_VER_SRV` and `UI_JOURNALENTRY_OTA_O2` on client 220; `API_JOURNALENTRYITEMBASIC_SRV` was never registered on the Gateway hub.
+  3. **Ticket Evidence Aligned**: `docs/ticket-gateway-remediation-ds4.md` Item 2 now cites `API_JOURNALENTRYITEMBASIC_SRV` as independent corroboration that `/IWFND/MED/170` denotes a registration fault, not an authorisation one — two unrelated services, two engineers, two weeks apart, identical error code. Registration of this service is explicitly NOT requested; no development depends on it.
+  4. **Audit Figures Corrected**: Summary table updated from the 90-second retry results — 1,256 healthy (was 1,219 plus 40 unclassified timeouts), 83 missing system alias, 2 unregistered, 3 exceeding 90s (`UI_TRAVELEXPENSEMANAGEV2`, `MDC_PROCESS_SRV__194`, `PLMI_CHANGE_RECORD_MANAGEMENT`), 3 unresolvable.
+  - **Files Modified**:
+    - `srv/external/API_JOURNALENTRYITEMBASIC_SRV.edmx`: **Deleted** (git rm).
+    - `docs/ticket-gateway-remediation-ds4.md`: Summary table corrected; Item 2 corroborating-evidence section added.
+    - `WORKSTATUS.md`: This entry.
+  - **Validation & Quality Gates**: See Current Status — `npm test`, `npx cds compile srv`, `npx cds build --production`, `npx mbt validate` and `git diff --check` to be re-run on the developer workstation.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: Green (100% test pass rate across 69 suites, 904 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
 - **Vulnerability Status**: All critical vulnerabilities eliminated; 7 dev-only transitive vulnerabilities accepted with documented justification.
 - **Goods Issue Posting Pipeline**: Fully multi-tiered for both single-item (`postGoodsIssue`) and batch (`submitGoodsIssueRequest`). Both methods attempt Tier 1 (`ZUI_GI_ORDER_RSV_O4`), fall back to Tier 2 (`API_MATERIAL_DOCUMENT_SRV` deep insert), and return transparent HTTP 501 diagnostics distinguishing 404 (ABAP/Basis) from 403 (Security) when both tiers fail.
+- **External Model Integrity**: All models in `srv/external/` verified as genuine metadata. The sole corrupt artifact (`API_JOURNALENTRYITEMBASIC_SRV.edmx`, a saved `/IWFND/MED/170` error page) has been purged.
 - **Service Catalog & Audit Tooling**: Fully integrated. Baseline catalog (`srv/external/all_catalog_services.json`) and audit evidence (`catalog-audit.csv`) are tracked in git; `./refresh-catalog.sh` and `./audit-catalog.sh` regenerate them on demand.
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
-  2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).
+  2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`). A second service, `API_JOURNALENTRYITEMBASIC_SRV`, is confirmed unregistered with the same fault but is not requested — cited as evidence only.
   3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps

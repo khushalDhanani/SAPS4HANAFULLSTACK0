@@ -14,11 +14,17 @@ A full probe of the Gateway service catalog found **three distinct configuration
 
 | State | Count | Symptom | Action required |
 |---|---|---|---|
-| Registered with system alias | 1219 | HTTP 200 | None — healthy |
+| Registered with system alias | 1,256 | HTTP 200 | None — healthy |
 | Registered **without** system alias | 83 | HTTP 500 `/IWFND/CM_COS/064` | **Item 1** — assign alias |
-| Not registered at all | 1 known | HTTP 403 `/IWFND/MED/170` | **Item 2** — register service |
-| Request timeout (large `$metadata`) | 40 | No response in 20s | None — confirmed healthy on retry |
+| Not registered at all | 2 known | HTTP 403 / saved `/IWFND/MED/170` | **Item 2** — register service |
+| Very slow `$metadata` | 3 | No response within 90s | Low priority — see note below |
 | Not resolvable | 3 | HTTP 404 | Low priority — SuccessFactors payroll only |
+
+Of the 40 services that first timed out at 20s, **37 returned HTTP 200 when retried with a 90s timeout**
+and are counted as healthy above. Three did not respond even at 90s — `UI_TRAVELEXPENSEMANAGEV2`,
+`MDC_PROCESS_SRV__194` and `PLMI_CHANGE_RECORD_MANAGEMENT`. These are draft-enabled applications with
+very large metadata documents. No current development depends on them, but a metadata load exceeding
+90 seconds is a poor user experience for anyone using those Fiori apps, so they may warrant a look.
 
 ---
 
@@ -145,6 +151,26 @@ HTTP 403
 Gateway transaction ID `E6A502D9234E0220E006AA12E6AD9423`, timestamp `20260918105510` — visible in `/IWFND/ERROR_LOG`.
 
 The service is also absent from the service catalog entirely, consistent with it never having been registered.
+
+### Corroborating evidence — a second service in the same state
+
+`API_JOURNALENTRYITEMBASIC_SRV` is independently confirmed to be unregistered on this hub, and was
+encountered by our team almost two weeks before the goods-issue investigation began:
+
+- On **5 September 2026** an engineer requested `$metadata` for `API_JOURNALENTRYITEMBASIC_SRV` and
+  received the identical fault: `/IWFND/MED/170 — "No service found for namespace '', name
+  'API_JOURNALENTRYITEMBASIC_SRV', version '0001'"`.
+  Gateway transaction ID `E6A502D9234E0250E006A8C148CF75C3`, timestamp `20260905090032`.
+- The catalog contains only two Journal Entry services on client 220 — `FAC_GL_JOURNALENTRY_VER_SRV`
+  and `UI_JOURNALENTRY_OTA_O2`. `API_JOURNALENTRYITEMBASIC_SRV` appears in neither.
+
+This matters for two reasons. It confirms `/IWFND/MED/170` is a **registration** fault rather than an
+authorisation one — two unrelated services, two engineers, two weeks apart, same code. And it suggests
+unregistered A2X `API_*` services are a recurring gap on DS4 rather than a single oversight, so it is
+worth reviewing which standard A2X APIs this landscape is expected to expose.
+
+We are not requesting `API_JOURNALENTRYITEMBASIC_SRV` be registered at this time — no current
+development depends on it. It is cited as evidence only.
 
 **If "Get Services" returns no rows**, the service is not available in the backend on this release —
 please confirm, as that closes the question and we will pursue the OData V4 route instead.
