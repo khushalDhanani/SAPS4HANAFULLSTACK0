@@ -130,7 +130,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       } catch (v2Err) {
         // In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.
         const postingError = new Error(
-          `SAP S/4HANA Backend Posting Capability Unavailable: Neither custom RAP service 'ZUI_GI_ORDER_RSV_O4' nor standard service 'API_MATERIAL_DOCUMENT_SRV' is registered/activated on Gateway client ${s4Config.getClient()} (${v4Err.message}). Catalog service 'ZMMIM_MATDOC_SRV' (sap_all_services.json L1863) exists on client ${s4Config.getClient()} but is restricted to MBND_CLOUD Stock Transfers (returns HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`
+          `SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${s4Config.getClient()}. Two distinct causes, each needing a different SAP team (verified against $metadata 2026-09-18): (1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 404 - NOT PUBLISHED on this system; ABAP/Basis must publish it in /IWFND/V4_ADMIN (${v4Err.message}). (2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 - IS registered, but this user lacks authorization; Security must grant S_SERVICE for it (${v2Err.message}). Fixing (2) alone unblocks posting and is the smaller request. Catalog service 'ZMMIM_MATDOC_SRV' is registered but restricted to MBND_CLOUD Stock Transfers (HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`
         );
         postingError.status = 501;
         throw postingError;
@@ -210,7 +210,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       return response;
     } catch (err) {
       // In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.
-      const postingError = new Error(`SAP S/4HANA Backend Posting Capability Unavailable: Neither standard service 'API_MATERIAL_DOCUMENT_SRV' nor custom RAP service 'ZUI_GI_ORDER_RSV_O4' is registered/activated on Gateway client ${s4Config.getClient()} (${err.message}). In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`);
+      const postingError = new Error(`SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${s4Config.getClient()}: custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 404 - NOT PUBLISHED on this system; ABAP/Basis must publish it in /IWFND/V4_ADMIN (${err.message}). Note submitRequest has no standard-service fallback, unlike single-item posting. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`);
       postingError.status = 501;
       throw postingError;
     }

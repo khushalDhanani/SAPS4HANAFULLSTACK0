@@ -680,12 +680,51 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-18 15:35 IST
+- **Agent**: Antigravity
+- **Change**: Aligned `package.json` `cds.requires` with Fully-Wired Services — removed unused `LORD_ODATA_ORDER_SRV` declaration from `cds.requires`. Achieved 1:1 alignment between declared remote services (5), `server.js` development destination registrations (5), and `srv/` `cds.connect.to()` invocations (5: `C_PURCHASEORDER_FS_SRV`, `MM_PUR_PO_MAINT_V2_SRV`, `FAC_GL_JOURNALENTRY_VER_SRV`, `SD_F2370_INQY_WL_SRV`, `SD_F2369_INQY_FS_SRV`). `LORD_ODATA_ORDER_SRV` is invoked directly via raw HTTP (`S4HttpClient` / `executeHttpRequest`) without requiring CAP remote service wiring.
+  - **Files Modified**:
+    - `package.json`: Removed unused `LORD_ODATA_ORDER_SRV` block under `cds.requires`.
+  - **Validation & Quality Gates**:
+    - `npm test`: **69 passed, 69 total test suites; 898 passed, 898 total tests (100% green)** in 47.5 s.
+    - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+    - `cd app/fiori-app && npm run build`: **Build succeeded in 765 ms** (`ui5 build --all`).
+    - `npm run lint`: **0 errors**, 19 warnings in unchanged code.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
+## 2026-09-18 15:50 IST
+- **Agent**: Antigravity
+- **Change**: Added `[production]` credentials destination blocks for `SD_F2370_INQY_WL_SRV` and `SD_F2369_INQY_FS_SRV` in `package.json`. All 5 declared CAP remote services (`C_PURCHASEORDER_FS_SRV`, `MM_PUR_PO_MAINT_V2_SRV`, `FAC_GL_JOURNALENTRY_VER_SRV`, `SD_F2370_INQY_WL_SRV`, `SD_F2369_INQY_FS_SRV`) are now fully and symmetrically wired for both local development (`server.js`) and BTP production deployment (`package.json` `[production]` blocks targeting destination `S4HANA_PO_API`).
+  - **Files Modified**:
+    - `package.json`: Added `[production].credentials` destination and path definitions for `SD_F2370_INQY_WL_SRV` and `SD_F2369_INQY_FS_SRV`.
+  - **Validation & Quality Gates**:
+    - `npm test`: **69 passed, 69 total test suites; 898 passed, 898 total tests (100% green)** in 53.4 s.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
+## 2026-09-18 15:52 IST
+- **Agent**: Antigravity
+- **Change**: Purged stale `gen/` build directory via clean `npx cds build --production` to remove obsolete quotation build output (`gen/srv/.../SalesQuotationManageClient.js`). Verified zero quotation references remain in generated build output. Preserved user's diagnostic error message refinements in `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js` distinguishing HTTP 404 (`ZUI_GI_ORDER_RSV_O4` unpublished) from HTTP 403 (`API_MATERIAL_DOCUMENT_SRV` authorization).
+  - **Files Modified**:
+    - `gen/`: Cleanly regenerated via `npx cds build --production` (zero quotation residue).
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`: Refined backend capability error diagnostics.
+  - **Validation & Quality Gates**:
+    - `find gen -iname "*quotation*"`: Returned 0 matches (clean).
+    - `npx jest test/unit/wm/goodsIssueService.test.js`: **41 passed, 41 total tests (100% green)**.
+    - `npm test`: **69 passed, 69 total test suites; 898 passed, 898 total tests (100% green)**.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: Green (100% test pass rate across 69 suites, 898 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
-- **Service Registrations**: Clean. Removed dead `SD_F2430_INCOMP_SRV` and `UI_SALESQUOTATIONMANAGE` registrations from `package.json` and deleted orphaned external models from `srv/external/`.
-- **Sales Quotation Purge**: Complete. All quotation code, metadata, dialogs, actions, adapters, configuration, and tests have been completely removed from the repository.
-- **Sales Inquiry Full-Stack**: 100% operational (Fiori UI, OData V4 catalog & detail, creation, SAP S/4HANA OData V2 integration with procedure Z1 extension fields).
+- **Service Declarations & Wiring**: 100% fully wired. All 5 services in `cds.requires` (`C_PURCHASEORDER_FS_SRV`, `MM_PUR_PO_MAINT_V2_SRV`, `FAC_GL_JOURNALENTRY_VER_SRV`, `SD_F2370_INQY_WL_SRV`, `SD_F2369_INQY_FS_SRV`) possess complete credentials mappings for both local development (`server.js`) and production (`[production]` block in `package.json` targeting `S4HANA_PO_API`).
+- **Direct HTTP Integrations**: `LORD_ODATA_ORDER_SRV` and all other transactional/analytical REST services are cleanly executed via `S4HttpClient` / `executeHttpRequest` on the configured SAP destination.
+- **Sales Quotation Purge**: 100% complete across both source code and generated build outputs (`gen/`).
+- **Sales Inquiry Full-Stack**: 100% operational.
 - **Other Modules**: MM (Purchase Order), WM (Goods Issue/Receipt), EWM (Warehouse Cockpit/RF Terminal), FI (Journal Entries), Auth, and Core Infrastructure 100% intact and passing all tests.
 
 ## Next Steps
