@@ -382,3 +382,33 @@ describe('Unit: EWM Mapping (EwmMapper)', () => {
     });
   });
 });
+
+describe('EwmMapper — SAP field names verified against live $metadata (2026-09-18)', () => {
+  // API_WHSE_INBOUND_DELIVERY / API_WHSE_OUTB_DLV_ORDER expose GoodsReceiptStatus,
+  // GoodsIssueStatus and PickingStatus - NOT the Overall* spellings the mapper
+  // originally read. Every delivery therefore reported the 'A' default forever.
+  it('reads GoodsReceiptStatus from the inbound delivery payload', () => {
+    const out = EwmMapper.mapInboundDelivery({ GoodsReceiptStatus: 'C' });
+    expect(out.OverallGoodsReceiptStatus).toBe('C');
+  });
+
+  it('reads GoodsIssueStatus and PickingStatus from the outbound delivery payload', () => {
+    const out = EwmMapper.mapOutboundDelivery({ GoodsIssueStatus: 'B', PickingStatus: 'C' });
+    expect(out.OverallGoodsIssueStatus).toBe('B');
+    expect(out.OverallPickingStatus).toBe('C');
+  });
+
+  it('still honours the Overall* names if a landscape does expose them', () => {
+    expect(EwmMapper.mapInboundDelivery({ OverallGoodsReceiptStatus: 'B' }).OverallGoodsReceiptStatus).toBe('B');
+    expect(EwmMapper.mapOutboundDelivery({ OverallGoodsIssueStatus: 'C' }).OverallGoodsIssueStatus).toBe('C');
+  });
+
+  it('defaults to A only when SAP sends no status at all', () => {
+    expect(EwmMapper.mapInboundDelivery({}).OverallGoodsReceiptStatus).toBe('A');
+    expect(EwmMapper.mapOutboundDelivery({}).OverallGoodsIssueStatus).toBe('A');
+  });
+
+  it('reads EWMStorageBinFixedBinType for the bin type', () => {
+    expect(EwmMapper.mapStorageBin({ EWMStorageBinFixedBinType: 'PAL' }).StorageBinType).toBe('PAL');
+  });
+});

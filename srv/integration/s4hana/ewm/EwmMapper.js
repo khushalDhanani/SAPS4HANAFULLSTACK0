@@ -48,7 +48,9 @@ class EwmMapper {
       StorageBin: s4Bin.StorageBin || '',
       StorageType: s4Bin.StorageType || '',
       StorageSection: s4Bin.StorageSection || '',
-      StorageBinType: s4Bin.StorageBinType || '',
+      StorageBinType: s4Bin.EWMStorageBinFixedBinType || s4Bin.StorageBinType || '',
+      // API_WAREHOUSE_STORAGE_BIN has no maximum-weight capacity field (only
+      // WeightOfMaterialsInStorageBin, which is current load). MaxWeight stays 0.
       MaxWeight: s4Bin.MaximumWeight || 0,
       WeightUnit: s4Bin.WeightUnit || 'KG',
       IsBlockedForPutaway: Boolean(s4Bin.StorageBinIsBlockedForPutaway),
@@ -65,6 +67,8 @@ class EwmMapper {
       Warehouse: s4Order.Warehouse || '',
       WarehouseOrder: s4Order.WarehouseOrder || '',
       WarehouseOrderStatus: s4Order.WarehouseOrderStatus || 'O', // O = Open, C = Confirmed, I = In Process
+      // API_WAREHOUSE_ORDER_TASK exposes no queue or assigned-user field; both stay
+      // empty until sourced from an EWM service such as C_EWM_WAREHOUSEORDERQ_CDS.
       WarehouseOrderQueue: s4Order.WarehouseOrderQueue || '',
       ActivityArea: s4Order.ActivityArea || '',
       AssignedUser: s4Order.WarehouseOrderAssignedUser || '',
@@ -126,7 +130,8 @@ class EwmMapper {
       Supplier: s4Head.ShipFromParty || s4Head.Supplier || '',
       SupplierName: supplierName,
       DeliveryDocumentType: s4Head.DeliveryType || s4Head.DeliveryDocumentType || 'INB',
-      OverallGoodsReceiptStatus: s4Head.OverallGoodsReceiptStatus || 'A', // A = Not Yet Started, B = Partially, C = Completely
+      // API_WHSE_INBOUND_DELIVERY exposes GoodsReceiptStatus, not OverallGoodsReceiptStatus.
+      OverallGoodsReceiptStatus: s4Head.GoodsReceiptStatus || s4Head.OverallGoodsReceiptStatus || 'A', // A = Not Yet Started, B = Partially, C = Completely
       DeliveryDate: s4Head.PlannedDeliveryUTCDateTime ? EwmMapper.formatDate(s4Head.PlannedDeliveryUTCDateTime) : (s4Head.DeliveryDate ? EwmMapper.formatDate(s4Head.DeliveryDate) : null),
       Items: items
     };
@@ -178,8 +183,9 @@ class EwmMapper {
       ShipToParty: s4Head.ShipToParty || '',
       ShipToPartyName: shipToName,
       OutboundDeliveryOrderType: s4Head.DeliveryType || s4Head.OutboundDeliveryOrderType || 'OUT',
-      OverallGoodsIssueStatus: s4Head.OverallGoodsIssueStatus || 'A', // A = Not Started, B = Partial, C = Completed
-      OverallPickingStatus: s4Head.OverallPickingStatus || 'A',
+      // API_WHSE_OUTB_DLV_ORDER exposes GoodsIssueStatus / PickingStatus, not the Overall* names.
+      OverallGoodsIssueStatus: s4Head.GoodsIssueStatus || s4Head.OverallGoodsIssueStatus || 'A', // A = Not Started, B = Partial, C = Completed
+      OverallPickingStatus: s4Head.PickingStatus || s4Head.OverallPickingStatus || 'A',
       PlannedGoodsIssueDate: s4Head.PlannedDeliveryUTCDateTime ? EwmMapper.formatDate(s4Head.PlannedDeliveryUTCDateTime) : (s4Head.PlannedGoodsIssueDate ? EwmMapper.formatDate(s4Head.PlannedGoodsIssueDate) : null),
       Items: items
     };
@@ -247,6 +253,7 @@ class EwmMapper {
     return {
       Warehouse: s4Rsrc.Warehouse || '',
       Resource: s4Rsrc.WarehouseResource || s4Rsrc.Resource || '',
+      // API_WAREHOUSE_RESOURCE exposes no resource-type field; always falls back to CART.
       ResourceType: s4Rsrc.ResourceType || 'CART',
       AssignedQueue: s4Rsrc.AssignedQueue || s4Rsrc.Queue || '',
       LogonStatus: s4Rsrc.UserName ? 'LOGGED_ON' : 'AVAILABLE',
