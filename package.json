@@ -36,6 +36,9 @@
     "jest": "^30.5.1",
     "mbt": "^1.2.49"
   },
+  "overrides": {
+    "@sigstore/core": "^4.0.1"
+  },
   "cds": {
     "requires": {
       "auth": {
