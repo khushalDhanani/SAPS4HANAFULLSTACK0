@@ -4,6 +4,7 @@
 **Date:** 18 September 2026
 **System:** DS4, client 220 (`172.27.100.32:8000`)
 **Evidence:** `catalog-audit.csv` — all 1345 catalogued services probed live on 18-Sep-2026
+**Baseline Catalog:** `srv/external/all_catalog_services.json` (all 1345 services, regenerated via `./refresh-catalog.sh`)
 
 ---
 
@@ -188,6 +189,26 @@ sourcing-project functionality, plus the eight AIL custom services listed above.
 Once the service is registered, a separate authorisation check may be required for user `KHUSHAL`:
 `S_SERVICE` for the service, and `M_MSEG_BWA` for movement type 261. This cannot be tested until
 the service exists.
+
+---
+
+## Repository Evidence & Reproduction Tooling
+
+All findings in this request are reproducible using scripts checked into the repository:
+
+1. **Baseline Catalog Dump (`srv/external/all_catalog_services.json`)**:
+   - Contains all 1,345 Gateway services registered on DS4 Client 220.
+   - Checked into Git to enable offline analysis and immediate execution by any team member.
+   - Can be re-fetched from live Gateway at any time by running `./refresh-catalog.sh`.
+2. **Catalog Probe Results (`catalog-audit.csv`)**:
+   - Contains the HTTP status and path for each of the 1,345 services probed on 18-Sep-2026.
+   - Checked into Git as the primary audit record for this remediation request.
+   - Can be re-probed and refreshed against live Gateway by running `./audit-catalog.sh`.
+3. **Offline Catalog Query Tool (`catalog.py`)**:
+   - Allows querying the catalog without live SAP connectivity:
+     `./catalog.py quotation delivery` or `./catalog.py -p API_` or `./catalog.py --stats`.
+4. **Postable Goods Movement Probe (`find-postable.sh`)**:
+   - Probes candidate service `$metadata` for creatable entity sets and POST function imports.
 
 ---
 

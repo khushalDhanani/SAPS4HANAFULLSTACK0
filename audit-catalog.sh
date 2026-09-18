@@ -15,8 +15,6 @@ for x in json.load(open("srv/external/all_catalog_services.json")):
 
 TOTAL=$(wc -l < /tmp/cat_paths.txt)
 echo "probing $TOTAL services, $PAR at a time — expect a few minutes"
-echo "status,service,path" > "$OUT"
-
 export H C S4_USERNAME S4_PASSWORD
 probe() {
   path=${1%% |*}; name=${1##*| }
@@ -29,7 +27,12 @@ probe() {
   echo "$code,$name,$path"
 }
 export -f probe
-tr -d '\r' < /tmp/cat_paths.txt | xargs -P "$PAR" -I{} bash -c 'probe "$@"' _ {} >> "$OUT"
+
+TMP_PROBES=$(mktemp)
+tr -d '\r' < /tmp/cat_paths.txt | xargs -P "$PAR" -I{} bash -c 'probe "$@"' _ {} > "$TMP_PROBES"
+echo "status,service,path" > "$OUT"
+sort -t, -k2,2 "$TMP_PROBES" >> "$OUT"
+rm -f "$TMP_PROBES"
 
 echo; echo "=== by status ==="
 tail -n +2 "$OUT" | cut -d, -f1 | sort | uniq -c | sort -rn

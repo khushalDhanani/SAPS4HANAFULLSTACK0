@@ -745,17 +745,40 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-18 17:35 IST
+- **Agent**: Antigravity
+- **Change**: Gateway Catalog Metadata & Audit Evidence Alignment:
+  1. **Unignored Baseline Catalog**: Removed `srv/external/all_catalog_services.json` from `.gitignore` so fresh clones have immediate access to the 1,345 Gateway service definitions required by `catalog.py`, `audit-catalog.sh`, and `find-postable.sh` without requiring live SAP connectivity.
+  2. **Cleaned Git Tracking & Ignored Backups**: Removed accidental backup `srv/external/all_catalog_services.json.20260918-1610.bak` from git tracking. Added `srv/external/*.bak`, `srv/external/all_catalog_services.json.*`, and `*.bak` to `.gitignore` to prevent backup clutter from `./refresh-catalog.sh`.
+  3. **Deterministic Audit Scripting**: Updated `audit-catalog.sh` to collect parallel probe outputs into a temporary buffer and sort deterministically by service name before writing to `catalog-audit.csv`, preventing noisy diffs across re-runs.
+  4. **Preserved Evidence CSV**: Formatted and tracked `catalog-audit.csv` with deterministic alphabetical ordering, preserving offline evidence of all 1,345 Gateway service states (1,219 active, 83 unassigned alias, 1 unregistered, 40 timeouts, 3 unresolvable) cited by the CIO Gateway remediation ticket.
+  5. **Documented Regeneration Tooling**: Updated `docs/ticket-gateway-remediation-ds4.md` to reference the baseline catalog file and document `./refresh-catalog.sh` and `./audit-catalog.sh` as reproduction tooling.
+  - **Files Modified**:
+    - `.gitignore`: Unignored `all_catalog_services.json`; ignored `*.bak`.
+    - `audit-catalog.sh`: Added deterministic sorting by service name.
+    - `catalog-audit.csv`: Alphabetized data rows for reproducible diffs.
+    - `docs/ticket-gateway-remediation-ds4.md`: Added baseline catalog and tooling documentation.
+    - `srv/external/all_catalog_services.json`: Tracked canonical baseline catalog.
+    - `srv/external/all_catalog_services.json.20260918-1610.bak`: Removed from git tracking.
+  - **Validation & Quality Gates**:
+    - `git diff --check`: Clean (0 errors).
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run lint`: Succeeded with 0 errors (18 warnings in unchanged code).
+    - `npm test`: **69 passed, 69 total test suites; 904 passed, 904 total tests (100% green)**.
+    - `./catalog.py quotation`: Verified offline catalog lookup works out of the box (16 matches).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: Green (100% test pass rate across 69 suites, 902 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
+- **Build Status**: Green (100% test pass rate across 69 suites, 904 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
 - **Goods Issue Posting Pipeline**: Fully multi-tiered for both single-item (`postGoodsIssue`) and batch (`submitGoodsIssueRequest`). Both methods attempt Tier 1 (`ZUI_GI_ORDER_RSV_O4`), fall back to Tier 2 (`API_MATERIAL_DOCUMENT_SRV` deep insert), and return transparent HTTP 501 diagnostics distinguishing 404 (ABAP/Basis) from 403 (Security) when both tiers fail.
-- **Service Declarations & Wiring**: 100% fully wired across all 5 CAP remote services.
-- **Direct HTTP Integrations**: `LORD_ODATA_ORDER_SRV`, `API_MATERIAL_DOCUMENT_SRV`, `LO_BM_BATCH_SRV`, etc., cleanly executed via `S4HttpClient`.
+- **Service Catalog & Audit Tooling**: Fully integrated. Baseline catalog (`srv/external/all_catalog_services.json`) and audit evidence (`catalog-audit.csv`) are tracked in git; `./refresh-catalog.sh` and `./audit-catalog.sh` regenerate them on demand.
 - **Pending SAP Backend Actions**:
-  1. Security: Grant `S_SERVICE` on `API_MATERIAL_DOCUMENT_SRV` for user `KHUSHAL` (ticket: `docs/ticket-auth-api-material-document-srv.md`).
-  2. ABAP/Basis: Publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
-  3. SD/ABAP: Implement copy control user exit for custom port fields (ticket: `docs/ticket-vtaa-copy-control-zin-zqt.md`).
+  1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
+  2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).
+  3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps
 1. Stage and commit changes to `feature/CL01`.
-2. Await SAP Security team action on `API_MATERIAL_DOCUMENT_SRV` authorization ticket.
+2. Push commits to `origin/feature/CL01`.
+3. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.

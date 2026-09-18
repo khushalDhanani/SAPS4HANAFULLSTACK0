@@ -9,7 +9,9 @@ dist/
 gen/
 .mbtbuild/
 *.mtar
-srv/external/all_catalog_services.json
+srv/external/*.bak
+srv/external/all_catalog_services.json.*
+*.bak
 *.trc
 
 # Development screenshots
