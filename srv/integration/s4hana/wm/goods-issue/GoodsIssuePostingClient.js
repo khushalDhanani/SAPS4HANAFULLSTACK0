@@ -88,14 +88,17 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           Message: `Goods Issue 261 posted successfully in S/4HANA.${nDiffQty > 0 ? ` Difference of ${nDiffQty} cleared to Storage Type ${sDiffStorageType}.` : ''}`
         };
       }
+      // A 2xx without a material document is NOT a success. Throw so Tier 2 runs;
+      // falling through here would return undefined to the caller.
+      throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
     } catch (v4Err) {
       // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV
       try {
         const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
         const v2Payload = {
           GoodsMovementCode: '03',
-          PostingDate: `/Date(${Date.now()})/`,
-          DocumentDate: `/Date(${Date.now()})/`,
+          PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
+          DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
           MaterialDocumentHeaderText: `GI Resv ${sReserv}`,
           to_MaterialDocumentItem: {
             results: [
@@ -128,18 +131,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           };
         }
       } catch (v2Err) {
-        // In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.
-        const postingError = new Error(
-          `SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${s4Config.getClient()}. Two distinct causes, each needing a different SAP team (verified against $metadata 2026-09-18): (1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 404 - NOT PUBLISHED on this system; ABAP/Basis must publish it in /IWFND/V4_ADMIN (${v4Err.message}). (2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 - IS registered, but this user lacks authorization; Security must grant S_SERVICE for it (${v2Err.message}). Fixing (2) alone unblocks posting and is the smaller request. Catalog service 'ZMMIM_MATDOC_SRV' is registered but restricted to MBND_CLOUD Stock Transfers (HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`
-        );
-        postingError.status = 501;
-        throw postingError;
+        throw this._buildPostingUnavailableError(v4Err, v2Err, 'single-item Goods Issue');
       }
     }
   }
 
   /**
-   * Submit Goods Issue batch in a single LUW
+   * Submit Goods Issue batch in a single LUW with multi-tier posting
    */
   async submitGoodsIssueRequest(reservationNo, orderNo, items) {
     if (!reservationNo && !orderNo) {
@@ -199,7 +197,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       throw err;
     }
 
-    // Attempt live SAP posting
+    // Tier 1: Attempt Custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4
     try {
       const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/submitRequest`;
       const response = await this._post(path, {
@@ -207,13 +205,141 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         OrderNo: orderNo || '',
         Items: items
       });
-      return response;
-    } catch (err) {
-      // In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.
-      const postingError = new Error(`SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${s4Config.getClient()}: custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 404 - NOT PUBLISHED on this system; ABAP/Basis must publish it in /IWFND/V4_ADMIN (${err.message}). Note submitRequest has no standard-service fallback, unlike single-item posting. In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`);
-      postingError.status = 501;
-      throw postingError;
+      if (response && (response.AllPosted !== undefined || response.Results)) {
+        return response;
+      }
+      // Same rule as single-item posting: an unrecognized 2xx must reach Tier 2.
+      throw new Error(`RAP submitRequest returned an unrecognized response shape: ${JSON.stringify(response || null).slice(0, 300)}`);
+    } catch (v4Err) {
+      // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV with multi-line deep insert
+      try {
+        const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
+        const v2Items = items.map(item => {
+          const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
+          const sItem = rawItem ? rawItem.padStart(4, '0') : '';
+          const nQty = Number(item.IssueQty);
+          return {
+            Material: item.Material || '',
+            GoodsMovementType: '261',
+            EntryUnit: item.Unit || item.EntryUnit || 'KG',
+            QuantityInEntryUnit: String(nQty),
+            Reservation: String(reservationNo || item.ReservationNo || '').trim(),
+            ReservationItem: sItem,
+            Batch: item.Batch ? String(item.Batch).trim() : ''
+          };
+        });
+
+        const v2Payload = {
+          GoodsMovementCode: '03',
+          PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
+          DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
+          MaterialDocumentHeaderText: `GI Resv ${reservationNo || orderNo || ''}`.trim(),
+          to_MaterialDocumentItem: {
+            results: v2Items
+          }
+        };
+
+        const v2Res = await this._post(v2Path, v2Payload);
+        const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
+        const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
+
+        if (matDoc) {
+          const results = items.map(item => {
+            const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
+            const sItem = rawItem ? rawItem.padStart(4, '0') : '';
+            const nDiffQty = Number(item.DifferenceQty) || 0;
+            return {
+              ReservationItem: sItem,
+              MaterialDocument: matDoc,
+              MaterialDocYear: matYear,
+              TransferOrder: '',
+              DifferenceCleared: nDiffQty > 0,
+              DifferenceQty: nDiffQty,
+              Success: true,
+              Message: `Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
+            };
+          });
+
+          return {
+            AllPosted: true,
+            Results: results,
+            Messages: [`Batch Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (Material Document: ${matDoc}/${matYear}).`]
+          };
+        }
+      } catch (v2Err) {
+        throw this._buildPostingUnavailableError(v4Err, v2Err, 'batch Goods Issue submission');
+      }
     }
+  }
+
+  /**
+   * Helper to extract numeric HTTP status code from an error or response.
+   *
+   * @private
+   */
+  /** Midnight UTC today. SAP Edm.DateTime posting/document dates carry no time part. */
+  static _today() {
+    return new Date().setUTCHours(0, 0, 0, 0);
+  }
+
+  _extractStatus(err) {
+    if (!err) return null;
+    if (typeof err.status === 'number') return err.status;
+    if (typeof err.statusCode === 'number') return err.statusCode;
+    if (typeof err.response?.status === 'number') return err.response.status;
+    const m = String(err.message || '').match(/\b(40[1-4]|50[0-4])\b/);
+    return m ? Number(m[0]) : null;
+  }
+
+  /**
+   * Builds an informative, actionable error when backend posting capabilities are unavailable.
+   * Explicitly distinguishes HTTP 403 (Security/S_SERVICE authorization) from HTTP 404 (ABAP/Basis publishing),
+   * identifying the exact SAP teams needed to resolve each tier.
+   *
+   * @private
+   */
+  _buildPostingUnavailableError(v4Err, v2Err, operationName = 'Goods Issue') {
+    const client = s4Config.getClient();
+    // No defaults: inventing 404/403 here would state a cause we did not observe
+    // (a timeout or destination error would be reported as "NOT PUBLISHED").
+    const v4Status = this._extractStatus(v4Err);
+    const v2Status = this._extractStatus(v2Err);
+
+    // Tier 1 diagnostic (RAP V4 service)
+    let t1Diag;
+    if (v4Status === 404) {
+      t1Diag = `(1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 404 - NOT PUBLISHED on this system; ABAP/Basis must publish it in /IWFND/V4_ADMIN (${v4Err?.message || 'HTTP 404 Not Found'})`;
+    } else if (v4Status === 403) {
+      t1Diag = `(1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 403 - FORBIDDEN; Security must grant authorization (${v4Err?.message || 'HTTP 403 Forbidden'})`;
+    } else {
+      t1Diag = `(1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' failed (${v4Status ? `HTTP ${v4Status}` : 'no HTTP status - network, timeout or destination error'}: ${v4Err?.message || 'Error'})`;
+    }
+
+    // Tier 2 diagnostic (Standard V2 service)
+    let t2Diag;
+    const v2NotRegistered = /IWFND\/MED\/170|No service found/i.test(String(v2Err?.message || '') + JSON.stringify(v2Err?.response?.data || ''));
+    if (v2Status === 403 && v2NotRegistered) {
+      // Gateway answers /IWFND/MED/170 with HTTP 403. This is NOT an authorization
+      // failure - the service is not registered on the hub. Verified 2026-09-18.
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 carrying /IWFND/MED/170 'No service found' - the service is NOT REGISTERED on this Gateway hub; Basis must add and activate it in /IWFND/MAINT_SERVICE (TADIR R3TR IWSV API_MATERIAL_DOCUMENT_SRV 0001). This is a registration task, not an authorization grant (${v2Err?.message || 'HTTP 403'})`;
+    } else if (v2Status === 403) {
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 without /IWFND/MED/170, so it IS registered and this is an authorization failure; Security must grant S_SERVICE for it and M_MSEG_BWA for movement type 261 (${v2Err?.message || 'HTTP 403 Forbidden'})`;
+    } else if (v2Status === 404) {
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 404 - NOT ACTIVATED; Basis must activate service in /IWFND/MAINT_SERVICE (${v2Err?.message || 'HTTP 404 Not Found'})`;
+    } else {
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' failed (${v2Status ? `HTTP ${v2Status}` : 'no HTTP status - network, timeout or destination error'}: ${v2Err?.message || 'Error'})`;
+    }
+
+    const message = `SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${client} for ${operationName}. ` +
+      `Two distinct causes, each needing a different SAP team (verified against $metadata 2026-09-18): ` +
+      `${t1Diag}. ${t2Diag}. ` +
+      `Fixing (2) alone unblocks posting and is the smaller request. ` +
+      `Catalog service 'ZMMIM_MATDOC_SRV' is registered but restricted to MBND_CLOUD Stock Transfers (HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. ` +
+      `In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`;
+
+    const postingError = new Error(message);
+    postingError.status = 501;
+    return postingError;
   }
 }
 

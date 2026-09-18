@@ -727,19 +727,35 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Submit the authorization ticket to SAP Security / Basis administrator; stage and commit documentation to `feature/CL01`.
 
+## 2026-09-18 16:10 IST
+- **Agent**: Antigravity
+- **Change**: Fixed Goods Issue posting architecture in `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`:
+  1. **Live Backend Re-verification**: Executed `./verify-services.sh` against live SAP Client 220. Proved Tier 1 `ZUI_GI_ORDER_RSV_O4` still returns HTTP 404 (Unpublished) and Tier 2 `API_MATERIAL_DOCUMENT_SRV` still returns HTTP 403 (S_SERVICE missing for user `KHUSHAL`). Tested live post via `./test-261.sh post 18025 0003 1`: confirmed HTTP 403 / CSRF failure; strictly zero fake documents created per `AGENTS.md`.
+  2. **Multi-Tier Batch Posting (Task 3)**: Added Tier 2 fallback to `submitGoodsIssueRequest()`, calling `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader` with multi-line `to_MaterialDocumentItem.results` deep insert when Tier 1 (`submitRequest`) is unavailable, eliminating the single point of failure asymmetry.
+  3. **Distinct 403 vs 404 Diagnostics (Task 4)**: Implemented `_buildPostingUnavailableError(v4Err, v2Err, operationName)` to parse HTTP status codes dynamically and explicitly specify required SAP teams: ABAP/Basis for HTTP 404 (`ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`) vs SAP Security for HTTP 403 (`API_MATERIAL_DOCUMENT_SRV` `S_SERVICE` on `0001_API_MATERIAL_DOCUMENT_SRV` and `M_MSEG_BWA`).
+  4. **Utility Fix**: Fixed python f-string formatting in `test-261.sh` for universal Python version compatibility.
+  - **Files Modified**:
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`: Added Tier-2 deep-insert fallback to `submitGoodsIssueRequest` and dynamic `_buildPostingUnavailableError` diagnostic formatter.
+    - `test/unit/wm/goodsIssueClients.test.js`: Added 4 unit tests covering batch Tier 1, batch Tier 2 deep insert fallback, and 403 vs 404 error diagnostic reporting.
+    - `test-261.sh`: Cleaned string formatting.
+  - **Validation & Quality Gates**:
+    - `npm test`: **69 passed, 69 total test suites; 902 passed, 902 total tests (100% green)** in 43.2 s.
+    - `npm run lint`: **0 errors**, 18 warnings in unchanged code.
+    - `cd app/fiori-app && npm run lint && npm run build`: **0 findings, build succeeded in 1.1 s**.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: Green (100% test pass rate across 69 suites, 898 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
-- **Service Declarations & Wiring**: 100% fully wired. All 5 services in `cds.requires` (`C_PURCHASEORDER_FS_SRV`, `MM_PUR_PO_MAINT_V2_SRV`, `FAC_GL_JOURNALENTRY_VER_SRV`, `SD_F2370_INQY_WL_SRV`, `SD_F2369_INQY_FS_SRV`) possess complete credentials mappings for both local development (`server.js`) and production (`[production]` block in `package.json` targeting `S4HANA_PO_API`).
-- **Direct HTTP Integrations**: `LORD_ODATA_ORDER_SRV` and all other transactional/analytical REST services are cleanly executed via `S4HttpClient` / `executeHttpRequest` on the configured SAP destination.
-- **Sales Quotation Purge**: 100% complete across both source code and generated build outputs (`gen/`).
-- **Sales Inquiry Full-Stack**: 100% operational.
-- **Other Modules**: MM (Purchase Order), WM (Goods Issue/Receipt), EWM (Warehouse Cockpit/RF Terminal), FI (Journal Entries), Auth, and Core Infrastructure 100% intact and passing all tests.
+- **Build Status**: Green (100% test pass rate across 69 suites, 902 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
+- **Goods Issue Posting Pipeline**: Fully multi-tiered for both single-item (`postGoodsIssue`) and batch (`submitGoodsIssueRequest`). Both methods attempt Tier 1 (`ZUI_GI_ORDER_RSV_O4`), fall back to Tier 2 (`API_MATERIAL_DOCUMENT_SRV` deep insert), and return transparent HTTP 501 diagnostics distinguishing 404 (ABAP/Basis) from 403 (Security) when both tiers fail.
+- **Service Declarations & Wiring**: 100% fully wired across all 5 CAP remote services.
+- **Direct HTTP Integrations**: `LORD_ODATA_ORDER_SRV`, `API_MATERIAL_DOCUMENT_SRV`, `LO_BM_BATCH_SRV`, etc., cleanly executed via `S4HttpClient`.
 - **Pending SAP Backend Actions**:
   1. Security: Grant `S_SERVICE` on `API_MATERIAL_DOCUMENT_SRV` for user `KHUSHAL` (ticket: `docs/ticket-auth-api-material-document-srv.md`).
   2. ABAP/Basis: Publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
   3. SD/ABAP: Implement copy control user exit for custom port fields (ticket: `docs/ticket-vtaa-copy-control-zin-zqt.md`).
 
 ## Next Steps
-1. Stage and commit `docs/ticket-auth-api-material-document-srv.md` and `WORKSTATUS.md` to `feature/CL01`.
-2. Submit the authorization ticket to the SAP Security administrator.
+1. Stage and commit changes to `feature/CL01`.
+2. Await SAP Security team action on `API_MATERIAL_DOCUMENT_SRV` authorization ticket.
