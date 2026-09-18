@@ -188,7 +188,6 @@
       "division": "52",
       "currency": "INR",
       "inquiryType": "ZIN",
-      "quotationType": "ZQT",
       "conditionType": "ZPR1",
       "shippingPoints": [
         "1120",

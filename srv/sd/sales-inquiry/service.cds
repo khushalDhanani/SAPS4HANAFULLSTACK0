@@ -129,7 +129,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         BindingPeriodValidityEndDate: Date;
         TransactionCurrency: String;
         TotalNetAmount: Decimal;
-        // Required by SAP (incompletion procedure Z1 / partner ZP) before the inquiry can become a quotation.
+        // Incompletion fields required by SAP (procedure Z1 / partner ZP).
         // Transmitted only when the SAP inquiry service exposes the field; see getInquiryCreationCapabilities.
         CustomerGroup2: String;
         PortOfLoading: String;
@@ -139,27 +139,6 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])
     action createSalesInquiry(header: InquiryHeader, items: array of InquiryItem) returns String;
-
-    @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])
-    action createSalesQuote(
-        SalesInquiry: String,
-        SalesQuotationType: String,
-        SalesQuotationDate: Date,
-        BindingPeriodValidityEndDate: Date,
-        PurchaseOrderByCustomer: String,
-        CustomerPurchaseOrderDate: Date,
-        CustomerGroup2: String,
-        PortOfLoading: String,
-        PortOfDischarge: String,
-        ContactPerson: String
-    ) returns String;
-
-    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
-    function getInquiryCompleteness(SalesInquiry: String) returns {
-        complete      : Boolean;
-        missingFields : array of String;
-        message       : String;
-    };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getCustomerDefaults(Customer: String, SalesOrganization: String, DistributionChannel: String, Division: String) returns {

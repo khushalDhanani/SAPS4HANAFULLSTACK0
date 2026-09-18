@@ -178,34 +178,6 @@ sap.ui.define([
         },
 
         /**
-         * Dispatches createSalesQuote action to the CAP OData service for a given Inquiry.
-         * Accepts either an inquiry ID string or a configuration object with prompted quotation parameters.
-         *
-         * @param {string|Object} vInput Inquiry ID string or payload object
-         * @returns {Promise<string>} Resolves to created Sales Quote ID
-         */
-        createSalesQuote: function (vInput) {
-            var sUrl = SERVICE_BASE + "/createSalesQuote";
-            var oPayload;
-            if (vInput && typeof vInput === "object") {
-                oPayload = {
-                    SalesInquiry: String(vInput.SalesInquiry || "").trim(),
-                    SalesQuotationType: vInput.SalesQuotationType || "ZQT",
-                    SalesQuotationDate: vInput.SalesQuotationDate || undefined,
-                    BindingPeriodValidityEndDate: vInput.BindingPeriodValidityEndDate || undefined,
-                    PurchaseOrderByCustomer: vInput.PurchaseOrderByCustomer !== undefined ? String(vInput.PurchaseOrderByCustomer).trim() : undefined,
-                    CustomerPurchaseOrderDate: vInput.CustomerPurchaseOrderDate || undefined
-                };
-            } else {
-                oPayload = { SalesInquiry: String(vInput || "").trim() };
-            }
-            return ODataClient.post(sUrl, oPayload).then(function (result) {
-                if (!result) return "";
-                return result.value || result.SalesQuote || result.SalesQuotation || result;
-            });
-        },
-
-        /**
          * Queries Sales Inquiries list from CAP OData service.
          *
          * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrQuery]
@@ -368,7 +340,7 @@ sap.ui.define([
          * Retrieves standard initial defaults for VA11 Sales Inquiry creation.
          */
         /**
-         * Which quotation-required fields the SAP inquiry creation service accepts right now.
+         * Which extension fields the SAP inquiry creation service accepts right now.
          * Falls back to "none" so the form never requires a value that cannot reach SAP.
          *
          * @returns {Promise<Object>}
@@ -380,22 +352,6 @@ sap.ui.define([
                 return Object.assign({}, oNone, result || {});
             }).catch(function () {
                 return oNone;
-            });
-        },
-
-        /**
-         * Server-side pre-flight inquiry completeness check for quotation creation.
-         * Runs the identical validation as createSalesQuote without opening a quotation session.
-         *
-         * @param {string} sInquiryId
-         * @returns {Promise<{ complete: boolean, missingFields: string[] }>}
-         */
-        getInquiryCompleteness: function (sInquiryId) {
-            var sCleanId = String(sInquiryId || "").trim();
-            var sUrl = SERVICE_BASE + "/getInquiryCompleteness(SalesInquiry='" + encodeURIComponent(sCleanId) + "')";
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return { complete: false, missingFields: [] };
-                return result.value || result;
             });
         },
 

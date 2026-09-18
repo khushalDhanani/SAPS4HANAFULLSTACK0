@@ -360,7 +360,7 @@ Time:        ~54 s
   - **Materials Management (`purchase-order/`)**: Validation rules, domain normalization, S/4 payload mapping, identity derivation, date conversions, quantity/price conversions, item numbering, and formatter tests.
   - **Warehouse Management (`wm/`)**: Goods Issue service & controller operations, Goods Receipt service & controller operations, batch SLED classification, storage location resolution, and barcode parsing.
   - **Extended Warehouse Management (`ewm/`)**: EwmService V4 model operations, EwmAdapter task lifecycle, WarehouseCockpit controller, CreateWarehouseTask controller, and RfTerminal controller.
-  - **Sales & Distribution (`sales-inquiry/`)**: Sales Inquiry creation payload contract validation, SalesInquiryAdapter query tests, and createSalesQuote handler execution.
+  - **Sales & Distribution (`sales-inquiry/`)**: Sales Inquiry creation payload contract validation, SalesInquiryAdapter query tests, and createSalesInquiry handler execution.
   - **Financial Accounting (`fi/`)**: Journal entry formatting, debit/credit classification, and balance state computation.
   - **Security & Authentication (`auth/`)**: AuthService presentation state, LocalTokenUtil token parsing, and user identity resolution.
   - **Core Infrastructure & Controllers (`common/`, `controller/`, `dashboard/`)**: `batchUtils`, `dateUtils`, `filterUtils`, `TtlCache`, `logger`, `BaseController`, `AppController`, `LoginController`, `DashboardController`, `SessionContext`, `S4ErrorMapper`, `S4HttpClient`, and `AuthAdapter`.

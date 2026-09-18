@@ -19,3 +19,7 @@ docs/*.png
 # SAP RFC trace & dev files
 dev_*
 rfc*.trc
+
+# Claude outputs
+Claude outputs/
+claude output/

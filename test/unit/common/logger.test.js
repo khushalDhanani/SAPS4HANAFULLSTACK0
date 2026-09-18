@@ -155,9 +155,9 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       cds.context = { id: 'TRACE-001' };
 
       const log = getLogger('jest-compat-corr');
-      log.warn('S4_QUOTATION_USERNAME is the same user as S4_USERNAME');
+      log.warn('S4_TECHNICAL_USERNAME is the same user as S4_USERNAME');
 
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('S4_QUOTATION_USERNAME is the same user as S4_USERNAME'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('S4_TECHNICAL_USERNAME is the same user as S4_USERNAME'));
       warnSpy.mockRestore();
     });
   });

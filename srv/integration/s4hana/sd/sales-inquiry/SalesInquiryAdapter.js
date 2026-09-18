@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
-const { SalesQuotationManageClient } = require('./SalesQuotationManageClient');
 const { S4HttpClient } = require('../../S4HttpClient');
 const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
@@ -8,11 +7,10 @@ const TtlCache = require('../../../../common/TtlCache');
 const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
 
 /**
- * Header values SAP requires (incompletion procedure Z1 and partner function ZP) before an inquiry
- * can be referenced by a quotation, keyed by the property names agreed for the LORD_ODATA_ORDER_SRV
- * Header extension. The standard service has none of them; each is sent only when the live
- * $metadata of the service exposes the property, so the application works unchanged before and
- * after the SAP-side extension. See docs/sap-inquiry-service-extension-spec.md.
+ * Header extension values for LORD_ODATA_ORDER_SRV (incompletion procedure Z1 and partner function ZP),
+ * keyed by the property names agreed for the Header extension. The standard service has none of them;
+ * each is sent only when the live $metadata of the service exposes the property, so the application works
+ * unchanged before and after the SAP-side extension. See docs/sap-inquiry-service-extension-spec.md.
  */
 const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson', 'BindingPeriodValidityEndDate'];
 
@@ -42,45 +40,10 @@ class PartialSalesInquiryError extends Error {
 }
 
 /**
- * Error thrown when an inquiry is incomplete according to SAP incompletion procedures
- * (Z1 / Z2) and therefore cannot be converted into a Sales Quotation.
- * Carries missing field names in business language and status 400.
- */
-class SapQuotationIncompleteError extends Error {
-  constructor(message, missingFields = []) {
-    super(message);
-    this.name = 'SapQuotationIncompleteError';
-    this.status = 400;
-    this.missingFields = missingFields;
-  }
-}
-
-/**
- * Mandatory fields required by SAP incompletion procedures Z1 (Sales Inquiry)
- * and Z2 (Sales Quotation). Source of truth in SAP S/4HANA: transactions OVA2 / TVUVF table.
- * If incomplete on the reference inquiry, SAP SLS_LORD/009 blocks CreateWithRefFromSlsInquiry.
- *
- * NOTE: A field may only be listed in MANDATORY_INCOMPLETION_FIELDS if it is
- * readable in a service getInquiry() actually queries (SD_F2370_INQY_WL_SRV or
- * SD_F2369_INQY_FS_SRV).
- * Fields that are NOT readable in those services must NOT be listed here:
- *   - CustomerGroup2 (VBAK-KVGR2)
- *   - PortOfLoading (VBAK-ZZPORTOFL)
- *   - PortOfDischarge (VBAK-ZZPORTOFD)
- * Checking unreadable fields results in a guaranteed false positive because header[property]
- * is always undefined. Document completeness for unreadable fields is governed by
- * SD_F2430_INCOMP_SRV.
- */
-const MANDATORY_INCOMPLETION_FIELDS = Object.freeze([
-  { property: 'ContactPerson', tableField: 'VBPA-PARNR', label: 'Contact Person', type: 'numericPartner' }
-]);
-
-/**
  * Adapter class to encapsulate communication with SAP S/4HANA Sales Inquiry services:
  * - SD_F2370_INQY_WL_SRV (Manage Sales Inquiries Worklist & Configuration Value Helps)
  * - SD_F2369_INQY_FS_SRV (Sales Inquiry Factsheet & Line Items)
  * - LORD_ODATA_ORDER_SRV (Lean Order OData Service for Sales Document Creation)
- * - UI_SALESQUOTATIONMANAGE (OData V4, Sales Quotation creation with reference to an inquiry)
  */
 class SalesInquiryAdapter {
   constructor(options = {}) {
@@ -911,7 +874,7 @@ class SalesInquiryAdapter {
       PurchaseOrderNumber: custRef
     };
 
-    // Quotation-readiness fields: only those the service exposes can be transmitted.
+    // Extension fields: only those the service exposes can be transmitted.
     const notTransmitted = [];
     const provided = INQUIRY_EXTENSION_FIELDS.filter(f => String(header[f] ?? '').trim() !== '');
     if (provided.length > 0) {
@@ -922,7 +885,7 @@ class SalesInquiryAdapter {
       }
       if (notTransmitted.length > 0) {
         LOG.warn(`LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
-          + ' the inquiry will stay incomplete for quotation until these are maintained in VA22 or the service is extended.');
+          + ' the inquiry will stay incomplete until these are maintained in VA22 or the service is extended.');
       }
     }
 
@@ -1090,7 +1053,7 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Reports which quotation-required fields the SAP inquiry creation service can accept right now.
+   * Reports which extension fields the SAP inquiry creation service can accept right now.
    * The UI marks accepted fields as required and tells the user to maintain the others in VA22.
    */
   async getInquiryCreationCapabilities(options = {}) {
@@ -1159,217 +1122,11 @@ class SalesInquiryAdapter {
     }
     return { openOrdersCount, totalOrdersCount };
   }
-
-  /**
-   * Creates a Sales Quotation with reference to a Sales Inquiry in SAP, through the verified
-   * OData V4 service UI_SALESQUOTATIONMANAGE (action CreateWithRefFromSlsInquiry, then SaveChanges
-   * in the same sticky session). SAP's copy control from the inquiry supplies the document data;
-   * only the header values the user entered in the create dialog are changed before saving.
-   *
-   * Call only when the user has confirmed creation: this persists a real SAP quotation.
-   *
-   * @param {string} sInquiryId
-   * @param {Object} [options]
-   * @param {string} [options.SalesQuotationType]
-   * @param {string} [options.SalesQuotationDate]
-   * @param {string} [options.BindingPeriodValidityEndDate]
-   * @param {string} [options.PurchaseOrderByCustomer]
-   * @returns {Promise<{ SalesQuote: string, SalesQuotation: string, createdVia: string }>}
-   */
-  /**
-   * Queries SAP S/4HANA's Incomplete Sales Documents service (SD_F2430_INCOMP_SRV).
-   * Note: SD_F2430_INCOMP_SRV (entity set C_Incompl_SalesDocWL_F2430) is an aggregate
-   * CDS worklist view. It provides document-level incompletion statuses and count
-   * (NumberOfIncompleteFields), but does not expose individual missing field names.
-   *
-   * @param {string} salesInquiry
-   * @param {Object} [options]
-   * @returns {Promise<{ isIncomplete: boolean, count?: number, status?: string }>}
-   */
-  async _checkIncompletionLog(salesInquiry, options = {}) {
-    const servicePath = '/sap/opu/odata/sap/SD_F2430_INCOMP_SRV';
-    try {
-      const dest = options.destination || await this._getDestination(options);
-      const executeFn = options.executeHttpRequest || this.client._execute;
-      const res = await executeFn(dest, {
-        method: 'get',
-        url: `${servicePath}/C_Incompl_SalesDocWL_F2430('${encodeURIComponent(salesInquiry)}')`,
-        headers: { 'Accept': 'application/json', ...(options.headers || {}) }
-      });
-      const data = res?.data?.d || res?.data || {};
-      const count = Number(data.NumberOfIncompleteFields || 0);
-      const status = data.HdrGeneralIncompletionStatus || '';
-      const isIncomplete = count > 0 || status === 'A';
-      return { isIncomplete, count, status };
-    } catch (e) {
-      if (e?.response?.status === 404) {
-        // 404 confirms the document is not present in SAP's incomplete sales documents worklist
-        return { isIncomplete: false, count: 0 };
-      }
-      LOG.warn(`Could not read incompletion log for inquiry ${salesInquiry} from SD_F2430_INCOMP_SRV: ${e.message}`);
-      return { isIncomplete: null, error: e };
-    }
-  }
-
-  /**
-   * Pre-flight completeness validation for a Sales Inquiry before quotation creation.
-   * Runs BEFORE CreateWithRefFromSlsInquiry under all circumstances to ensure incomplete
-   * inquiries never reach SAP and never persist incomplete quotations.
-   *
-   * Strategy:
-   * Strategy:
-   * 1. SD_F2430_INCOMP_SRV is the authority for document completeness. If it reports the
-   *    document incomplete, block immediately with count of issues without naming unseen fields.
-   * 2. Inspect readable mandatory incompletion fields (ContactPerson via F2369 partner card).
-   * 3. Report missing readable fields in business language.
-   *
-   * @param {string} salesInquiry
-   * @param {string} salesQuotationType
-   * @param {Object} [options]
-   */
-  async validateInquiryForQuotation(salesInquiry, salesQuotationType, options = {}) {
-    const inquiryData = options.inquiry || await this.getInquiry(salesInquiry);
-    if (!inquiryData || !inquiryData.header) {
-      const err = new Error(`Sales Inquiry ${salesInquiry} could not be found in SAP.`);
-      err.status = 404;
-      throw err;
-    }
-
-    // 1. Query SAP incompletion worklist service (authority for document completeness)
-    let incompResult = null;
-    if (options.incompletionLogResult !== undefined) {
-      incompResult = options.incompletionLogResult;
-    } else if (options.checkIncompletionLog !== false) {
-      incompResult = await this._checkIncompletionLog(salesInquiry, options);
-    }
-
-    if (incompResult && incompResult.isIncomplete) {
-      const nIssues = incompResult.count || 1;
-      throw new SapQuotationIncompleteError(
-        `Inquiry ${salesInquiry} is incomplete in SAP (${nIssues} incompletion issues). ` +
-        `Maintain the missing fields in SAP, then re-check.`,
-        []
-      );
-    }
-
-    // 2. Inspection of readable mandatory incompletion fields (currently ContactPerson via F2369)
-    const header = inquiryData.header || {};
-    const missing = [];
-
-    for (const field of MANDATORY_INCOMPLETION_FIELDS) {
-      const val = (options && options[field.property] !== undefined && String(options[field.property]).trim() !== '')
-        ? options[field.property]
-        : header[field.property];
-      if (field.type === 'numericPartner') {
-        // SAP VBPA-PARNR requires a numeric partner number. A name alone is missing.
-        const isNumeric = /^\d+$/.test(String(val || '').trim());
-        if (!isNumeric) {
-          missing.push(field.label);
-        }
-      } else {
-        if (!val || String(val).trim() === '') {
-          missing.push(field.label);
-        }
-      }
-    }
-
-    if (missing.length > 0) {
-      throw new SapQuotationIncompleteError(
-        `Inquiry ${salesInquiry} is incomplete in SAP (missing: ${missing.join(', ')}). ` +
-        `Maintain these fields in SAP before creating a Sales Quotation.`,
-        missing
-      );
-    }
-  }
-
-  async createSalesQuoteFromInquiry(sInquiryId, options = {}) {
-    const salesInquiry = String(sInquiryId ?? '').trim();
-    if (salesInquiry === '') {
-      throw new Error('Sales Inquiry number is required.');
-    }
-
-    const salesQuotationType = String(
-      options.SalesQuotationType || options.quotationType || s4Config.getQuotationType()
-    ).trim();
-
-    // Pre-flight check: reject incomplete inquiries before invoking CreateWithRefFromSlsInquiry
-    await this.validateInquiryForQuotation(salesInquiry, salesQuotationType, options);
-
-    const client = options.quotationClient || new SalesQuotationManageClient({
-      destination: options.destination || await this._getQuotationDestination(),
-      executeHttpRequest: options.executeHttpRequest
-    });
-
-    try {
-      const headerPayload = {
-        SalesQuotationDate: options.SalesQuotationDate,
-        BindingPeriodValidityEndDate: options.BindingPeriodValidityEndDate,
-        PurchaseOrderByCustomer: options.PurchaseOrderByCustomer
-      };
-
-      const { SalesQuotation, verified } = await client.createFromInquiry({
-        salesInquiry,
-        salesQuotationType,
-        header: headerPayload
-      });
-      LOG.info(`Sales Quotation ${SalesQuotation} created in SAP from Inquiry ${salesInquiry}.`);
-      return { SalesQuote: SalesQuotation, SalesQuotation, verified: verified === true, createdVia: 'UI_SALESQUOTATIONMANAGE' };
-    } catch (err) {
-      LOG.error(`Sales Quotation creation from Inquiry ${salesInquiry} failed:`,
-        err.sapCode ? `${err.sapCode} ${err.sapMessage || err.message}` : err.message);
-      throw err;
-    }
-  }
-
-  /**
-   * Destination for Sales Quotation creation. SAP holds the quotation in a stateful HTTP session, so
-   * this flow should run as a dedicated technical SAP user that nothing else (SAP GUI, browsers, other
-   * applications or integrations) uses at the same time. Configure one of:
-   *   S4_QUOTATION_DESTINATION_NAME          a BTP / registered destination for that user
-   *   S4_QUOTATION_USERNAME + S4_QUOTATION_PASSWORD   credentials for that user on S4_DESTINATION_URL
-   * Without either, the shared destination is used and a warning is logged on every creation.
-   */
-  async _getQuotationDestination(options = {}) {
-    const destinationName = String(process.env.S4_QUOTATION_DESTINATION_NAME || '').trim();
-    if (destinationName) {
-      return this.client.resolveDestination({
-        ...options,
-        destinationName
-      });
-    }
-
-    const username = String(process.env.S4_QUOTATION_USERNAME || '').trim();
-    const password = process.env.S4_QUOTATION_PASSWORD || '';
-    if (username || password) {
-      if (!username || !password || !process.env.S4_DESTINATION_URL) {
-        throw new Error('[SalesInquiryAdapter] Dedicated quotation user is incomplete: set S4_QUOTATION_USERNAME,'
-          + ' S4_QUOTATION_PASSWORD and S4_DESTINATION_URL.');
-      }
-      if (username.toUpperCase() === String(process.env.S4_USERNAME || '').trim().toUpperCase()) {
-        LOG.warn(`S4_QUOTATION_USERNAME '${username}' is the same user as S4_USERNAME;`
-          + ' it is not a dedicated technical user.');
-      }
-      return {
-        url: process.env.S4_DESTINATION_URL,
-        username,
-        password,
-        headers: { 'sap-client': s4Config.getClient() }
-      };
-    }
-
-    LOG.warn('Sales Quotation creation is using the shared SAP destination, not a dedicated'
-      + ' technical user. Configure S4_QUOTATION_DESTINATION_NAME or S4_QUOTATION_USERNAME/S4_QUOTATION_PASSWORD.');
-    return this._getDestination(options);
-  }
 }
 
 const defaultAdapter = new SalesInquiryAdapter();
 defaultAdapter.SalesInquiryAdapter = SalesInquiryAdapter;
 defaultAdapter.PartialSalesInquiryError = PartialSalesInquiryError;
-defaultAdapter.SapQuotationIncompleteError = SapQuotationIncompleteError;
-defaultAdapter.MANDATORY_INCOMPLETION_FIELDS = MANDATORY_INCOMPLETION_FIELDS;
 
 module.exports = defaultAdapter;
 module.exports.PartialSalesInquiryError = PartialSalesInquiryError;
-module.exports.SapQuotationIncompleteError = SapQuotationIncompleteError;
-module.exports.MANDATORY_INCOMPLETION_FIELDS = MANDATORY_INCOMPLETION_FIELDS;

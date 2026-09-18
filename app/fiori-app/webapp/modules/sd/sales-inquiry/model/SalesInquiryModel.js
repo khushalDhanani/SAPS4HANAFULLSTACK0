@@ -5,9 +5,9 @@ sap.ui.define([
 
     var CURRENCY_REGEX = /^[A-Z]{3}$/;
 
-    // Header values SAP requires (incompletion procedure Z1 / partner ZP) before an inquiry can become a quotation
+    // Header values SAP requires (incompletion procedure Z1 / partner ZP)
 
-    var QUOTATION_HEADER_FIELDS = [
+    var INCOMPLETION_HEADER_FIELDS = [
 
         { field: "CustomerGroup2", label: "Customer Group 2" },
 
@@ -370,39 +370,39 @@ sap.ui.define([
          * Updates status indicator based on completeness.
          */
         /**
-         * Records which quotation-required fields the SAP inquiry service can accept. Accepted fields
+         * Records which incompletion extension fields the SAP inquiry service can accept. Accepted fields
          * become mandatory on this screen; the others are shown disabled with a notice to maintain
-         * them in VA22, because SAP will not allow a quotation until they are filled.
+         * them in SAP after creation.
          */
         applyCapabilities: function (oModel, oCaps) {
             if (!oModel) return;
             var oMerged = Object.assign({}, NO_CAPABILITIES, oCaps || {});
             oModel.setProperty("/capabilities", oMerged);
 
-            var aUnsupported = QUOTATION_HEADER_FIELDS.filter(function (f) { return !oMerged[f.field]; }).map(function (f) { return f.label; });
+            var aUnsupported = INCOMPLETION_HEADER_FIELDS.filter(function (f) { return !oMerged[f.field]; }).map(function (f) { return f.label; });
             if (!oMerged.Plant) aUnsupported.push("Plant");
             var sNotice = aUnsupported.length === 0 ? "" :
-                "SAP requires Customer Group 2, Port of Loading, Port of Discharge, a Contact Person and a Plant before an inquiry can be turned into a quotation. " +
+                "SAP requires Customer Group 2, Port of Loading, Port of Discharge, a Contact Person and a Plant. " +
                 "The SAP inquiry service does not yet accept: " + aUnsupported.join(", ") + ". Maintain these in SAP (VA22) after creation.";
             oModel.setProperty("/readinessNotice", sNotice);
             oModel.setProperty("/showReadinessNotice", sNotice !== "");
         },
 
         /**
-         * Lists the quotation-required values still missing on the document, regardless of whether
+         * Lists the incompletion-required values still missing on the document, regardless of whether
          * this application can send them, so the incompletion check mirrors SAP's own.
          */
-        getQuotationReadinessGaps: function (oModel) {
+        getIncompletionGaps: function (oModel) {
             if (!oModel) return [];
             var oHeader = oModel.getProperty("/header") || {};
             var aItems = oModel.getProperty("/items") || [];
             var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
             var aGaps = [];
             var sHint = function (bSupported) {
-                return bSupported ? "Required by SAP for a quotation" : "Required by SAP for a quotation; not yet supported by the SAP inquiry service, maintain in VA22 after creation";
+                return bSupported ? "Required by SAP" : "Required by SAP; not yet supported by the SAP inquiry service, maintain in VA22 after creation";
             };
 
-            QUOTATION_HEADER_FIELDS.forEach(function (f) {
+            INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
                 if (!oHeader[f.field] || String(oHeader[f.field]).trim() === "") {
                     aGaps.push({ type: "Warning", title: f.label + " is missing", subtitle: sHint(oCaps[f.field]), field: f.field });
                 }
@@ -491,11 +491,11 @@ sap.ui.define([
                 addError("TransactionCurrency", "Currency must be a valid 3-letter ISO code (e.g. INR, USD)");
             }
 
-            // Quotation-required fields are mandatory whenever the SAP inquiry service can accept them
+            // Incompletion-required fields are mandatory whenever the SAP inquiry service can accept them
             var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
-            QUOTATION_HEADER_FIELDS.forEach(function (f) {
+            INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
                 if (oCaps[f.field] && (!oHeader[f.field] || String(oHeader[f.field]).trim() === "")) {
-                    addError(f.field, f.label + " is required by SAP for a quotation");
+                    addError(f.field, f.label + " is required by SAP");
                 }
             });
 
@@ -537,11 +537,11 @@ sap.ui.define([
                         aErrorList.push({ type: "Error", title: "Unit is required", subtitle: "Item " + (idx + 1) + ": OrderQuantityUnit", field: "OrderQuantityUnit", itemIndex: idx });
                     }
                     if (oCaps.Plant && (!item.Plant || String(item.Plant).trim() === "")) {
-                        item.errors.Plant = { state: "Error", text: "Plant is required by SAP for a quotation" };
+                        item.errors.Plant = { state: "Error", text: "Plant is required by SAP" };
                         iErrorCount++;
-                        var msgPlant = "Item " + (idx + 1) + ": Plant is required by SAP for a quotation";
+                        var msgPlant = "Item " + (idx + 1) + ": Plant is required by SAP";
                         if (!sFirstError) sFirstError = msgPlant;
-                        aErrorList.push({ type: "Error", title: "Plant is required by SAP for a quotation", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
+                        aErrorList.push({ type: "Error", title: "Plant is required by SAP", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
                     } else if (item.Plant && String(item.Plant).trim().length > 4) {
                         item.errors.Plant = { state: "Error", text: "Plant cannot exceed 4 characters" };
                         iErrorCount++;
@@ -630,7 +630,7 @@ sap.ui.define([
             if (oHeader.ShipToParty) {
                 oCleanHeader.ShipToParty = String(oHeader.ShipToParty).trim();
             }
-            QUOTATION_HEADER_FIELDS.forEach(function (f) {
+            INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
                 if (oHeader[f.field] && String(oHeader[f.field]).trim() !== "") {
                     oCleanHeader[f.field] = String(oHeader[f.field]).trim();
                 }

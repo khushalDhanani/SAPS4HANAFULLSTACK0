@@ -129,11 +129,6 @@ class S4Config {
     return this._requireString('inquiryType', ['CDS_S4_INQUIRY_TYPE', 'S4_INQUIRY_TYPE']);
   }
 
-  /** Sales Quotation Document Type (e.g. 'ZQT') */
-  getQuotationType() {
-    return this._requireString('quotationType', ['CDS_S4_QUOTATION_TYPE', 'S4_QUOTATION_TYPE']);
-  }
-
   /** Pricing Condition Type (e.g. 'ZPR1') */
   getConditionType() {
     return this._requireString('conditionType', ['CDS_S4_CONDITION_TYPE', 'S4_CONDITION_TYPE']);
@@ -154,7 +149,6 @@ class S4Config {
   get division() { return this.getDivision(); }
   get currency() { return this.getCurrency(); }
   get inquiryType() { return this.getInquiryType(); }
-  get quotationType() { return this.getQuotationType(); }
   get conditionType() { return this.getConditionType(); }
   get shippingPoints() { return this.getShippingPoints(); }
 
@@ -172,7 +166,6 @@ class S4Config {
       division: this.getDivision(),
       currency: this.getCurrency(),
       inquiryType: this.getInquiryType(),
-      quotationType: this.getQuotationType(),
       conditionType: this.getConditionType(),
       shippingPoints: this.getShippingPoints()
     };

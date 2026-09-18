@@ -41,7 +41,7 @@ sap.ui.define([
         },
 
         /**
-         * Asks the backend which quotation-required fields the SAP inquiry service accepts, so the
+         * Asks the backend which incompletion extension fields the SAP inquiry service accepts, so the
          * form can require those and warn about the rest (to be maintained in VA22).
          */
         _loadCapabilities: function () {
@@ -464,8 +464,8 @@ sap.ui.define([
         onCheckIncompletion: function () {
             var oModel = this.getView().getModel("newInquiry");
             var bValid = SalesInquiryModel.validateForm(oModel);
-            // Mirror SAP's own incompletion log: values SAP needs before a quotation can be created
-            var aGaps = SalesInquiryModel.getQuotationReadinessGaps(oModel);
+            // Mirror SAP's own incompletion log: values SAP needs for complete inquiry document
+            var aGaps = SalesInquiryModel.getIncompletionGaps(oModel);
             if (bValid && aGaps.length === 0) {
                 MessageToast.show("Document is complete. No incompletions detected.");
             } else {

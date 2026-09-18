@@ -39,7 +39,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.getDivision()).toBe('52');
       expect(s4Config.getCurrency()).toBe('INR');
       expect(s4Config.getInquiryType()).toBe('ZIN');
-      expect(s4Config.getQuotationType()).toBe('ZQT');
       expect(s4Config.getConditionType()).toBe('ZPR1');
       expect(s4Config.getShippingPoints()).toEqual(['1120', '1112', '1108', '1109']);
     });
@@ -54,7 +53,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.division).toBe(s4Config.getDivision());
       expect(s4Config.currency).toBe(s4Config.getCurrency());
       expect(s4Config.inquiryType).toBe(s4Config.getInquiryType());
-      expect(s4Config.quotationType).toBe(s4Config.getQuotationType());
       expect(s4Config.conditionType).toBe(s4Config.getConditionType());
       expect(s4Config.shippingPoints).toEqual(s4Config.getShippingPoints());
     });
@@ -71,7 +69,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
         division: '52',
         currency: 'INR',
         inquiryType: 'ZIN',
-        quotationType: 'ZQT',
         conditionType: 'ZPR1',
         shippingPoints: ['1120', '1112', '1108', '1109']
       });
@@ -114,7 +111,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       { key: 'division', getter: () => s4Config.getDivision(), envs: ['CDS_S4_DIVISION', 'S4_DIVISION'] },
       { key: 'currency', getter: () => s4Config.getCurrency(), envs: ['CDS_S4_CURRENCY', 'S4_CURRENCY'] },
       { key: 'inquiryType', getter: () => s4Config.getInquiryType(), envs: ['CDS_S4_INQUIRY_TYPE', 'S4_INQUIRY_TYPE'] },
-      { key: 'quotationType', getter: () => s4Config.getQuotationType(), envs: ['CDS_S4_QUOTATION_TYPE', 'S4_QUOTATION_TYPE'] },
       { key: 'conditionType', getter: () => s4Config.getConditionType(), envs: ['CDS_S4_CONDITION_TYPE', 'S4_CONDITION_TYPE'] },
       { key: 'shippingPoints', getter: () => s4Config.getShippingPoints(), envs: ['CDS_S4_SHIPPING_POINTS', 'S4_SHIPPING_POINTS'] }
     ];

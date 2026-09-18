@@ -51,6 +51,7 @@ module.exports = [
       "mta_archives/**",
       "logs/**",
       "docs/**",
+      "Claude outputs/**",
       "node_modules/**",
       "coverage/**",
     ],

@@ -585,16 +585,86 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-18 13:45 IST
+- **Agent**: Antigravity
+- **Change**: Path A Implementation — Post-Creation Custom Field Update Client (`SalesQuotationPostUpdateClient`), Adapter Orchestration, and Graceful Degradation Architecture.
+  - **Context & Architecture Discovery**:
+    - Evaluated proposed switch from `UI_SALESQUOTATIONMANAGE` (OData V4 stateful) to `API_SALES_QUOTATION_SRV` (OData V2 A2X).
+    - API discovery revealed that `API_SALES_QUOTATION_SRV` returns HTTP 500 (`/IWFND/CM_COS/064`: No System Alias found for Service `ZAPI_SALES_QUOTATION_SRV_0001` on DS4 client 220), neither service exposes `CustomerGroup2`, `PortOfLoading`, or `PortOfDischarge` in standard `$metadata`, and a direct V2 POST would forfeit SAP VTAA copy control (dropping items, pricing, and partners).
+    - Implemented **Path A** architecture: Preserved proven `UI_SALESQUOTATIONMANAGE` stateful flow with SAP copy control, and introduced `SalesQuotationPostUpdateClient` for stateless post-creation PATCH of custom fields (`CustomerGroup2` / `KVGR2`, `PortOfLoading` / `ZZPORTOFL`, `PortOfDischarge` / `ZZPORTOFD`) with graceful degradation when the service or fields are not yet operational in Gateway.
+  - **Files Created / Modified**:
+    1. `srv/integration/s4hana/sd/sales-inquiry/SalesQuotationPostUpdateClient.js` [NEW]:
+       - Stateless OData V2 client targeting `API_SALES_QUOTATION_SRV/A_SalesQuotation('{id}')`.
+       - Implemented cached `$metadata` introspection to detect available fields and service availability (skips gracefully if HTTP 500/404).
+       - Implemented CSRF fetch, field length truncation (`maxLength`), and non-fatal diagnostic error handling.
+    2. `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js` [MODIFIED]:
+       - Imported `SalesQuotationPostUpdateClient`.
+       - In `createSalesQuoteFromInquiry`, added post-creation custom field update step after quotation creation succeeds.
+       - Passes `options.CustomerGroup2`, `options.PortOfLoading`, and `options.PortOfDischarge`.
+       - Treats post-update failure as non-fatal (quotation is committed in SAP); returns diagnostic `postUpdate` object in response.
+    3. `test/unit/sales-inquiry/salesQuotationPostUpdateClient.test.js` [NEW]:
+       - 12 comprehensive unit tests covering POST_UPDATE_FIELDS mapping, missing quotation ID, empty fields, HTTP 500 (no system alias), HTTP 404, schema verification, successful PATCH with CSRF, field truncation, HTTP 400 rejection, cached availability, and non-empty value filtering.
+    4. `test/unit/sales-inquiry/salesInquiryAdapter.test.js` [MODIFIED]:
+       - Added 3 unit tests covering adapter post-creation update orchestration, skip when no custom fields provided, and non-fatal error handling.
+    5. `.gitignore` & `eslint.config.js` [MODIFIED]:
+       - Added `Claude outputs/` to `.gitignore` and `eslint.config.js` ignores.
+  - **Validation & Quality Gates**:
+    - `npm test`: **73 passed, 73 total test suites; 1009 passed, 1009 total tests (100% green)** in 44.2 s.
+    - `npm run lint`: **0 errors**, 23 warnings.
+    - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+    - `cd app/fiori-app && npm run build`: **Build succeeded in 873 ms**; `Component-preload.js` generated cleanly.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit changes to `feature/CL01`.
+
+## 2026-09-18 15:15 IST
+- **Agent**: Antigravity
+- **Change**: Complete Purge and Removal of All Sales Quotation Code Across the Repository — eliminated all quotation-related integration clients, external metadata, CDS definitions, handlers, UI dialogs/actions, test suites, and configuration entries while maintaining 100% green test suite, build, and linter compliance for all remaining modules (Sales Inquiry, MM, WM, EWM, FI, Auth, Common).
+  - **Files Deleted**:
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesQuotationManageClient.js`
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesQuotationPostUpdateClient.js`
+    - `srv/external/UI_SALESQUOTATIONMANAGE.xml`
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateQuoteFromInquiryDialog.fragment.xml`
+    - `test/unit/sales-inquiry/createSalesQuoteHandler.test.js`
+    - `test/unit/sales-inquiry/quotationReadinessFields.test.js`
+    - `test/unit/sales-inquiry/salesQuotationManageClient.test.js`
+    - `test/unit/sales-inquiry/salesQuotationPostUpdateClient.test.js`
+  - **Files Modified**:
+    - `srv/sd/sales-inquiry/service.cds`: Removed `action createSalesQuote` and `function getInquiryCompleteness`.
+    - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Removed `QUOTATION_CREATION_BLOCKED` constants and handlers for `createSalesQuote` and `getInquiryCompleteness`.
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Removed quotation client dependencies, `SapQuotationIncompleteError`, `createSalesQuoteFromInquiry`, `validateInquiryForQuotation`, `_getQuotationDestination`, and quotation exports.
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`: Rephrased comments from quotation readiness to incompletion extension fields.
+    - `srv/common/s4Config.js`: Removed `getQuotationType()` and `quotationType` getter.
+    - `package.json`: Removed `"quotationType": "ZQT"` from `cds.s4`.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/SalesInquiries.view.xml`: Removed Actions column and row-level `btnCreateSalesQuote` button.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateSalesInquiry.view.xml`: Updated comments from quotation readiness to incompletion notice.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js`: Removed `onCreateSalesQuote`, `onConfirmCreateSalesQuote`, and dialog lifecycle/re-check methods; cleaned unused imports.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js`: Updated comments and called `getIncompletionGaps` instead of `getQuotationReadinessGaps`.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js`: Removed `createSalesQuote` and `getInquiryCompleteness`.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js`: Renamed `QUOTATION_HEADER_FIELDS` to `INCOMPLETION_HEADER_FIELDS`, updated `applyCapabilities`, replaced `getQuotationReadinessGaps` with `getIncompletionGaps` (with alias), and removed quotation phrasing from validation messages.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Removed all `quoteDialog*` keys, `salesInquiriesBtnCreateQuote`, and `salesInquiriesTooltipCreateQuote`; updated tooltips to reference SAP incompletion log; preserved 100% key parity.
+    - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Removed quotation describe blocks (`createSalesQuoteFromInquiry` and `_getQuotationDestination`).
+    - `test/unit/sales-inquiry/salesInquiriesController.test.js`: Removed quotation dialog describe blocks and unused mocks; verified catalog listing, search, and KPI tests.
+    - `test/unit/common/s4Config.test.js`: Removed `quotationType` test assertions.
+    - `test/unit/common/logger.test.js`: Updated dummy warning test string to `S4_TECHNICAL_USERNAME`.
+    - `README.md`: Updated test suite description to reference `createSalesInquiry`.
+    - `eslint.config.js` & `.gitignore`: Added `Claude outputs/` to ignores.
+  - **Validation & Quality Gates**:
+    - `npm test`: **69 passed, 69 total test suites; 898 passed, 898 total tests (100% green)** in 47.0 s.
+    - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+    - `cd app/fiori-app && npm run build`: **Build succeeded in 795 ms** (`ui5 build --all`).
+    - `npm run lint`: **0 errors**, 19 warnings in unchanged code.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+    - Project-wide grep verification: Zero quotation references in active `srv/`, `app/`, `test/` code.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: Green (100% test pass rate across 72 suites, 994 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
-- **Quotation Dialog Flexibility**: The "Create Sales Quotation with Reference" dialog now allows users to view, edit, and enter `Contact Person`, `Customer Group 2`, `Port of Loading`, and `Port of Discharge`.
-- **Dynamic Readiness Check**: Real-time evaluation clears pre-flight incompletion warnings and enables document creation dynamically when valid data is entered in the dialog.
-- **Incompletion Pre-Flight**: Governed by `SD_F2430_INCOMP_SRV` with guard unit tests in place.
-- **Quotation Incompletion Handling**: Clear actionable guidance for SAP copy control `VTAA` routine `001` limitations on append fields.
-- **SAP Ticket Handover**: [`docs/ticket-vtaa-copy-control-zin-zqt.md`](docs/ticket-vtaa-copy-control-zin-zqt.md) ready for SAP ABAP/SD team.
+- **Build Status**: Green (100% test pass rate across 69 suites, 898 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
+- **Sales Quotation Purge**: Complete. All quotation code, metadata, dialogs, actions, adapters, configuration, and tests have been completely removed from the repository.
+- **Sales Inquiry Full-Stack**: 100% operational (Fiori UI, OData V4 catalog & detail, creation, SAP S/4HANA OData V2 integration with incompletion procedure Z1 validation).
+- **Other Modules**: MM (Purchase Order), WM (Goods Issue/Receipt), EWM (Warehouse Cockpit/RF Terminal), FI (Journal Entries), Auth, and Core Infrastructure 100% intact and passing all tests.
 
 ## Next Steps
-1. Hand off [`docs/ticket-vtaa-copy-control-zin-zqt.md`](docs/ticket-vtaa-copy-control-zin-zqt.md) to the SAP SD/ABAP team for `VTAA` routine / `MV45AFZZ` user exit implementation.
-2. Stage and commit changes to `feature/CL01`.
-3. Follow up on SAP transport for the 5 Class B fields (creatable AND readable).
+1. Stage and commit changes to `feature/CL01`.

@@ -133,14 +133,15 @@
                         <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesInquiriesColDocDate}" /></Column>
                         <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiriesColNetAmount}" /></Column>
                         <Column width="6rem" hAlign="Center"><Text text="{i18n>salesInquiriesColStatus}" /></Column>
-                        <Column width="11rem" minScreenWidth="Tablet" demandPopin="true" hAlign="Center"><Text text="{i18n>salesInquiriesColActions}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation">
                             <cells>
-                                <ObjectIdentifier title="{salesInquiry>SalesInquiry}" />
+                                <ObjectIdentifier
+                                    title="{salesInquiry>SalesInquiry}"
+                                    text="{salesInquiry>ExternalDocumentID}" />
                                 <Text text="{salesInquiry>SalesInquiryType}" />
-                                <Text text="{salesInquiry>PurchaseOrderByCustomer}" />
+                                <Text text="{salesInquiry>SalesInquiryDescription}" />
                                 <ObjectIdentifier
                                     title="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>SoldToParty} || '' }"
                                     text="{= ${salesInquiry>OrganizationBPName1} ? ${salesInquiry>SoldToParty} : '' }" />
@@ -150,14 +151,6 @@
                                 <ObjectStatus
                                     text="{path: 'salesInquiry>OverallSDProcessStatus', formatter: '.formatter.statusText'}"
                                     state="{path: 'salesInquiry>OverallSDProcessStatus', formatter: '.formatter.statusState'}" />
-                                <Button
-                                    id="btnCreateSalesQuote"
-                                    text="{i18n>salesInquiriesBtnCreateQuote}"
-                                    icon="sap-icon://request"
-                                    type="Emphasized"
-                                    enabled="true"
-                                    press=".onCreateSalesQuote"
-                                    tooltip="{i18n>salesInquiriesTooltipCreateQuote}" />
                             </cells>
                         </ColumnListItem>
                     </items>

@@ -8,14 +8,6 @@ const { resolveUserIdentity } = require('../../../auth/userIdentity');
 const { extractFilterParam } = require('../../../common/filterUtils');
 
 /**
- * Safety switch for Sales Quotation creation. Re-enabled on explicit instruction; the UI requires the
- * user to confirm that a real SAP quotation will be created. Set to true to block creation again.
- */
-const QUOTATION_CREATION_BLOCKED = false;
-const QUOTATION_CREATION_BLOCKED_MESSAGE = 'Sales Quotation creation is temporarily disabled while an SAP session issue is'
-    + ' being investigated. No quotation was created. Create the quotation in SAP (VA21) if it is needed now.';
-
-/**
  * Registers Sales Inquiry business handlers on the CAP service.
  *
  * @param {import('@sap/cds').Service} srv
@@ -53,7 +45,7 @@ function registerSalesInquiryHandlers(srv) {
         }
     });
 
-    // 3. Action createSalesInquiry
+// 3. Action createSalesInquiry
     srv.on('createSalesInquiry', async (req) => {
         const validation = validateCreateSalesInquiryPayload(req.data);
         if (!validation.isValid) {
@@ -82,79 +74,6 @@ function registerSalesInquiryHandlers(srv) {
                 return;
             }
             req.error(500, `Failed to create Sales Inquiry: ${error.message}`);
-        }
-    });
-
-    // 3b. Action createSalesQuote
-    srv.on('createSalesQuote', async (req) => {
-        // Optional safety block: SAP has lost the stateful quotation session intermittently ("Session not
-        // found"), and the create action has persisted a quotation without SaveChanges (2000434).
-        if (QUOTATION_CREATION_BLOCKED) {
-            req.error(503, QUOTATION_CREATION_BLOCKED_MESSAGE);
-            return;
-        }
-
-        const sInquiryId = req.data?.SalesInquiry;
-        if (!sInquiryId || String(sInquiryId).trim() === '') {
-            req.error(400, 'Sales Inquiry number is required to create a Sales Quote');
-            return;
-        }
-
-        const authenticatedUser = resolveUserIdentity(req);
-        try {
-            const result = await salesInquiryAdapter.createSalesQuoteFromInquiry(String(sInquiryId).trim(), {
-                user: authenticatedUser,
-                SalesQuotationType: req.data?.SalesQuotationType,
-                SalesQuotationDate: req.data?.SalesQuotationDate,
-                BindingPeriodValidityEndDate: req.data?.BindingPeriodValidityEndDate,
-                PurchaseOrderByCustomer: req.data?.PurchaseOrderByCustomer,
-                CustomerPurchaseOrderDate: req.data?.CustomerPurchaseOrderDate,
-                CustomerGroup2: req.data?.CustomerGroup2,
-                PortOfLoading: req.data?.PortOfLoading,
-                PortOfDischarge: req.data?.PortOfDischarge,
-                ContactPerson: req.data?.ContactPerson
-            });
-            return result.SalesQuote || result.SalesQuotation || result;
-        } catch (error) {
-            LOG.error('Error creating Sales Quote from Inquiry:', error.message);
-            // SAP business rejections (e.g. SLS_LORD/166) and unconfirmed outcomes ("verify in SAP, do not
-            // retry") already carry a message for the user; show it unchanged.
-            if (error.name === 'SapQuotationError' || error.name === 'SapQuotationIncompleteError' || error.status === 400) {
-                req.error(error.status || 400, error.message);
-                return;
-            }
-            req.error(error.status || 500, `Failed to create Sales Quote: ${error.message}`);
-        }
-    });
-
-    // 3c. Function getInquiryCompleteness (read-only pre-flight validation check)
-    srv.on('getInquiryCompleteness', async (req) => {
-        const sInquiryId = req.data?.SalesInquiry;
-        if (!sInquiryId || String(sInquiryId).trim() === '') {
-            req.error(400, 'Sales Inquiry number is required');
-            return;
-        }
-
-        const authenticatedUser = resolveUserIdentity(req);
-        try {
-            await salesInquiryAdapter.validateInquiryForQuotation(String(sInquiryId).trim(), 'ZQT', {
-                user: authenticatedUser
-            });
-            return {
-                complete: true,
-                missingFields: [],
-                message: ''
-            };
-        } catch (error) {
-            if (error.name === 'SapQuotationIncompleteError') {
-                return {
-                    complete: false,
-                    missingFields: error.missingFields || [],
-                    message: error.message
-                };
-            }
-            LOG.error('Error checking inquiry completeness:', error.message);
-            req.error(error.status || 500, error.message);
         }
     });
 
