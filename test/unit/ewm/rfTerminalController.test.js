@@ -190,29 +190,39 @@ describe('Unit: RfTerminal Controller', () => {
         });
     });
 
-    describe('Resource and Queue Fallback Provisioning', () => {
-        it('should populate fallback EWM resources when SAP returns empty list', async () => {
+    describe('Resource and Queue Provisioning — no invented data', () => {
+        // A resource or queue that does not exist in SAP cannot be logged on to, so
+        // offering one only moves the failure to the logon step and hides the real cause.
+        it('should show no resources, and say why, when SAP returns an empty list', async () => {
             mockEwmService.getResources.mockResolvedValue({ value: [] });
 
             await controller._loadResources('0001');
 
             const model = controller.getView().getModel('rfView');
-            const resources = model.getProperty('/availableResources');
-            expect(resources.length).toBeGreaterThan(0);
-            expect(resources[0].Resource).toBe('CART-01');
-            expect(model.getProperty('/resource')).toBe('CART-01');
+            expect(model.getProperty('/availableResources')).toEqual([]);
+            expect(model.getProperty('/resource')).toBe('');
+            expect(model.getProperty('/resourceLoadError')).toContain('No warehouse resources');
         });
 
-        it('should populate fallback EWM queues when SAP returns empty list', async () => {
+        it('should show no queues, and say why, when SAP returns an empty list', async () => {
             mockEwmService.getQueues.mockResolvedValue([]);
 
             await controller._loadQueues('0001');
 
             const model = controller.getView().getModel('rfView');
-            const queues = model.getProperty('/availableQueues');
-            expect(queues.length).toBeGreaterThan(0);
-            expect(queues[0].Queue).toBe('OUTBOUND');
-            expect(model.getProperty('/queue')).toBe('OUTBOUND');
+            expect(model.getProperty('/availableQueues')).toEqual([]);
+            expect(model.getProperty('/queue')).toBe('');
+            expect(model.getProperty('/queueLoadError')).toContain('No queues');
+        });
+
+        it('should surface the error, not substitute data, when the read fails', async () => {
+            mockEwmService.getResources.mockRejectedValue(new Error('S/4HANA unreachable'));
+
+            await controller._loadResources('0001');
+
+            const model = controller.getView().getModel('rfView');
+            expect(model.getProperty('/availableResources')).toEqual([]);
+            expect(model.getProperty('/resourceLoadError')).toContain('S/4HANA unreachable');
         });
 
         it('should preserve live SAP resources and queues when available', async () => {

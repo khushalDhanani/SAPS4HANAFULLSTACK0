@@ -93,6 +93,12 @@
                                 class="sapUiTinyMarginBottom">
                                 <core:Item key="{rfView>Resource}" text="{rfView>Resource} ({rfView>ResourceType})" />
                             </ComboBox>
+                            <MessageStrip
+                                text="{rfView>/resourceLoadError}"
+                                type="Warning"
+                                showIcon="true"
+                                visible="{= !!${rfView>/resourceLoadError} }"
+                                class="sapUiTinyMarginBottom" />
 
                             <Label text="{i18n>rfQueueLabel}:" required="true" />
                             <ComboBox
@@ -105,6 +111,12 @@
                                 class="sapUiSmallMarginBottom">
                                 <core:Item key="{rfView>Queue}" text="{rfView>Queue}" />
                             </ComboBox>
+                            <MessageStrip
+                                text="{rfView>/queueLoadError}"
+                                type="Warning"
+                                showIcon="true"
+                                visible="{= !!${rfView>/queueLoadError} }"
+                                class="sapUiSmallMarginBottom" />
 
                             <Button
                                 id="btnRfLogon"

@@ -143,35 +143,29 @@ sap.ui.define([
 
             return EwmService.getResources(sWhse)
                 .then(function (oData) {
+                    // No invented resources. A resource that does not exist in SAP cannot be
+                    // logged on to, so offering one only moves the failure to the logon step.
                     var aResources = (oData && oData.value) ? oData.value : [];
-                    if (aResources.length === 0) {
-                        // Standard EWM RF resources for interactive cart picking
-                        aResources = [
-                            { Resource: "CART-01", ResourceType: "CART", AssignedQueue: "OUTBOUND" },
-                            { Resource: "CART-02", ResourceType: "CART", AssignedQueue: "OUTBOUND" },
-                            { Resource: "FORKLIFT-01", ResourceType: "FORK", AssignedQueue: "INTERNAL" },
-                            { Resource: "MANUAL-01", ResourceType: "HAND", AssignedQueue: "PUTAWAY" }
-                        ];
-                    }
                     oModel.setProperty("/availableResources", aResources);
+                    oModel.setProperty("/resourceLoadError", "");
                     var sCurrRsrc = oModel.getProperty("/resource");
                     var bExists = aResources.some(function (r) { return r.Resource === sCurrRsrc; });
-                    if (!sCurrRsrc || !bExists) {
+                    if (aResources.length === 0) {
+                        oModel.setProperty("/resource", "");
+                        oModel.setProperty("/resourceLoadError",
+                            "No warehouse resources are defined in SAP for warehouse " + sWhse + ".");
+                    } else if (!sCurrRsrc || !bExists) {
                         oModel.setProperty("/resource", aResources[0].Resource);
                         if (aResources[0].AssignedQueue && !oModel.getProperty("/queue")) {
                             oModel.setProperty("/queue", aResources[0].AssignedQueue);
                         }
                     }
                 })
-                .catch(function () {
-                    var aFallback = [
-                        { Resource: "CART-01", ResourceType: "CART", AssignedQueue: "OUTBOUND" },
-                        { Resource: "CART-02", ResourceType: "CART", AssignedQueue: "OUTBOUND" }
-                    ];
-                    oModel.setProperty("/availableResources", aFallback);
-                    if (!oModel.getProperty("/resource")) {
-                        oModel.setProperty("/resource", aFallback[0].Resource);
-                    }
+                .catch(function (err) {
+                    oModel.setProperty("/availableResources", []);
+                    oModel.setProperty("/resource", "");
+                    oModel.setProperty("/resourceLoadError",
+                        "Could not read warehouse resources from SAP: " + ((err && err.message) || err));
                 });
         },
 
@@ -186,29 +180,23 @@ sap.ui.define([
             return EwmService.getQueues(sWhse)
                 .then(function (aQueues) {
                     var aSafeQueues = Array.isArray(aQueues) ? aQueues : [];
-                    if (aSafeQueues.length === 0) {
-                        aSafeQueues = [
-                            { Queue: "OUTBOUND" },
-                            { Queue: "PUTAWAY" },
-                            { Queue: "INTERNAL" }
-                        ];
-                    }
                     oModel.setProperty("/availableQueues", aSafeQueues);
+                    oModel.setProperty("/queueLoadError", "");
                     var sCurrQueue = oModel.getProperty("/queue");
                     var bExists = aSafeQueues.some(function (q) { return q.Queue === sCurrQueue; });
-                    if (!sCurrQueue || !bExists) {
+                    if (aSafeQueues.length === 0) {
+                        oModel.setProperty("/queue", "");
+                        oModel.setProperty("/queueLoadError",
+                            "No queues are defined in SAP for warehouse " + sWhse + ".");
+                    } else if (!sCurrQueue || !bExists) {
                         oModel.setProperty("/queue", aSafeQueues[0].Queue);
                     }
                 })
-                .catch(function () {
-                    var aFallback = [
-                        { Queue: "OUTBOUND" },
-                        { Queue: "PUTAWAY" }
-                    ];
-                    oModel.setProperty("/availableQueues", aFallback);
-                    if (!oModel.getProperty("/queue")) {
-                        oModel.setProperty("/queue", aFallback[0].Queue);
-                    }
+                .catch(function (err) {
+                    oModel.setProperty("/availableQueues", []);
+                    oModel.setProperty("/queue", "");
+                    oModel.setProperty("/queueLoadError",
+                        "Could not read queues from SAP: " + ((err && err.message) || err));
                 });
         },
 

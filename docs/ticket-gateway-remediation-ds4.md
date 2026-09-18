@@ -15,8 +15,10 @@ A full probe of the Gateway service catalog found **three distinct configuration
 | State | Count | Symptom | Action required |
 |---|---|---|---|
 | Registered with system alias | 1,256 | HTTP 200 | None — healthy |
-| Registered **without** system alias | 83 | HTTP 500 `/IWFND/CM_COS/064` | **Item 1** — assign alias |
-| Not registered at all | 2 known | HTTP 403 / saved `/IWFND/MED/170` | **Item 2** — register service |
+| Registered **without** system alias | 74 | HTTP 500 `/IWFND/CM_COS/064` | **Item 1** — assign alias |
+| Alias assigned but blank | 1 | HTTP 500 `/IWFND/CM_COS/002` | **Item 1b** |
+| Inherited service, not directly callable | 1 | HTTP 500 `/IWFND/CM_COS/086` | none — by design |
+| Not registered at all | 9 | `/IWFND/MED/170` / "No service found" | **Item 2** — register service |
 | Very slow `$metadata` | 3 | No response within 90s | Low priority — see note below |
 | Not resolvable | 3 | HTTP 404 | Low priority — SuccessFactors payroll only |
 
@@ -28,22 +30,39 @@ very large metadata documents. No current development depends on them, but a met
 
 ---
 
-## Item 1 — Assign system aliases (83 services)
+## Item 1 — Assign system aliases (74 services)
 
 **Transaction:** `/IWFND/MAINT_SERVICE` → select service → assign System Alias
 
-These services are registered on the hub but have no backend system alias, so every call fails with
-`/IWFND/CM_COS/064 "No System Alias found"`. This is a single class of fault with a single class of fix.
+Every service listed here was called individually and its **error body read** on 18-Sep-2026 — not
+inferred from the HTTP status. All 74 return `/IWFND/CM_COS/064`. Verbatim example:
 
-### Business-critical subset (29) — please prioritise
+```xml
+<code>/IWFND/CM_COS/064</code>
+<message xml:lang="en">No System Alias found for Service '/BDTS/COMMAND_SRV_0001' and user 'KHUSHAL'</message>
+```
+
+Gateway transaction ID `E6A502D9234E0200E006AA64AC28AB84`, timestamp `20260918124446`.
+
+The message is qualified by user. Please confirm whether alias determination fails for these services
+generally or only in this user's context, as that changes the fix.
+
+### Business-critical subset (36) — please prioritise
 
 | Service | Path |
 |---|---|
 | `API_SALES_ORDER_SRV` | `/sap/opu/odata/sap/API_SALES_ORDER_SRV` |
 | `API_SALES_QUOTATION_SRV` | `/sap/opu/odata/sap/API_SALES_QUOTATION_SRV` |
+| `C_BILLGPROCDOCWORKFLOWVH_CDS` | `/sap/opu/odata/sap/C_BILLGPROCDOCWORKFLOWVH_CDS` |
+| `C_LQDYFORECASTOVERVIEW_CDS` | `/sap/opu/odata/sap/C_LQDYFORECASTOVERVIEW_CDS` |
+| `C_MAINTOBJBREAKDOWNQUERY_CDS` | `/sap/opu/odata/sap/C_MAINTOBJBREAKDOWNQUERY_CDS` |
+| `EAM_BACKLOG_MANAGE` | `/sap/opu/odata/sap/EAM_BACKLOG_MANAGE` |
+| `EAM_OBJPG_PURCH_SRV` | `/sap/opu/odata/sap/EAM_OBJPG_PURCH_SRV` |
+| `EAM_ORDER_ACTUALCOST_MONITOR` | `/sap/opu/odata/sap/EAM_ORDER_ACTUALCOST_MONITOR` |
+| `EAM_ORD_MASS_CONFIRMATION_SRV` | `/sap/opu/odata/sap/EAM_ORD_MASS_CONFIRMATION_SRV` |
+| `EAM_PLNGBUCKET_MANAGE` | `/sap/opu/odata/sap/EAM_PLNGBUCKET_MANAGE` |
 | `LE_SHP_DELIVERY_PICK` | `/sap/opu/odata/sap/LE_SHP_DELIVERY_PICK` |
 | `LE_SHP_INBOUND_DELIVERY_OBJPG_SRV` | `/sap/opu/odata/sap/LE_SHP_INBOUND_DELIVERY_OBJPG_SRV` |
-| `LE_SHP_OD_CREATE_SRV` | `/sap/opu/odata/sap/LE_SHP_OD_CREATE_SRV` |
 | `LE_SHP_OD_LOGS_SRV` | `/sap/opu/odata/sap/LE_SHP_OD_LOGS_SRV` |
 | `LE_SHP_OUTBOUND_DELIVERY_FS` | `/sap/opu/odata/sap/LE_SHP_OUTBOUND_DELIVERY_FS` |
 | `MM_PUR_REQUIREMENT_TRACKING_SRV` | `/sap/opu/odata/sap/MM_PUR_REQUIREMENT_TRACKING_SRV` |
@@ -52,30 +71,27 @@ These services are registered on the hub but have no backend system alias, so ev
 | `SD_DEBITMEMOREQ_WORKFLOW_SRV` | `/sap/opu/odata/sap/SD_DEBITMEMOREQ_WORKFLOW_SRV` |
 | `SD_F3014_CMR_WORKFLOW_SRV` | `/sap/opu/odata/sap/SD_F3014_CMR_WORKFLOW_SRV` |
 | `SD_SLSORDWTHOUTCHRG_WORKFLOW_SRV` | `/sap/opu/odata/sap/SD_SLSORDWTHOUTCHRG_WORKFLOW_SRV` |
+| `SLL_PROD_CMDTYCD_CLASSIFY` | `/sap/opu/odata/sap/SLL_PROD_CMDTYCD_CLASSIFY` |
+| `SLL_PROD_CMDTYCD_RECLASSIFY` | `/sap/opu/odata/sap/SLL_PROD_CMDTYCD_RECLASSIFY` |
+| `SLL_PROD_LEGCTRL_CLASSIFY` | `/sap/opu/odata/sap/SLL_PROD_LEGCTRL_CLASSIFY` |
+| `TSW_MYEVENTS_SRV` | `/sap/opu/odata/sap/TSW_MYEVENTS_SRV` |
+| `TSW_MYNOMINATIONS_SRV_01` | `/sap/opu/odata/sap/TSW_MYNOMINATIONS_SRV_01` |
+| `TSW_REGIONAL_INVENTORY_SRV_01` | `/sap/opu/odata/sap/TSW_REGIONAL_INVENTORY_SRV_01` |
 | `UI_SRCGPROJNEGTTN_MANAGE` | `/sap/opu/odata/sap/UI_SRCGPROJNEGTTN_MANAGE` |
 | `UI_SRCGPROJQTN_MANAGE` | `/sap/opu/odata/sap/UI_SRCGPROJQTN_MANAGE` |
-| `ZANA_PAI_PS_SRV` | `/sap/opu/odata/sap/ANA_PAI_PS_SRV` |
-| `ZANA_PAI_REPOSITORY_SRV` | `/sap/opu/odata/sap/ANA_PAI_REPOSITORY_SRV` |
 | `ZCREATE_SO_SRV` | `/sap/opu/odata/sap/ZCREATE_SO_SRV` |
 | `ZEASY_ACCESS_MENU` | `/sap/opu/odata/ui2/EASY_ACCESS_MENU` |
-| `ZFARP_MANAGE_INTEREST_RUNS_SRV` | `/sap/opu/odata/sap/FARP_MANAGE_INTEREST_RUNS_SRV` |
-| `ZFARR_CONFLICTED_CONTRACT_WL_SRV` | `/sap/opu/odata/sap/FARR_CONFLICTED_CONTRACT_WL_SRV` |
-| `ZFIN_RE_LOG_DETAIL_SRV` | `/sap/opu/odata/sap/FIN_RE_LOG_DETAIL_SRV` |
 | `ZSD_CDS_050_Q_CDS` | `/sap/opu/odata/sap/ZSD_CDS_050_Q_CDS` |
 | `ZTARGET_TV_CDS` | `/sap/opu/odata/sap/ZTARGET_TV_CDS` |
-| `ZUI_ENGINEERING_REDLINE` | `/sap/opu/odata/sap/UI_ENGINEERING_REDLINE` |
 | `ZUSER_MENU` | `/sap/opu/odata/ui2/USER_MENU` |
 | `ZVKR_PO_SRV` | `/sap/opu/odata/sap/ZVKR_PO_SRV` |
 | `ZZSALES1_SRV` | `/sap/opu/odata/sap/ZZSALES1_SRV` |
 | `ZZSALES_SRV` | `/sap/opu/odata/sap/ZZSALES_SRV` |
 
-`ZCREATE_SO_SRV`, `ZZSALES_SRV`, `ZZSALES1_SRV`, `ZVKR_PO_SRV`, `ZUSER_MENU`, `ZEASY_ACCESS_MENU`,
-`ZUI_ENGINEERING_REDLINE` and `ZFIN_RE_LOG_DETAIL_SRV` are **AIL's own developments** currently
-non-functional on this system. These may represent work that was delivered and silently never worked.
+`ZCREATE_SO_SRV`, `ZZSALES_SRV`, `ZZSALES1_SRV`, `ZVKR_PO_SRV`, `ZUSER_MENU`, `ZEASY_ACCESS_MENU`
+are **AIL's own developments** currently non-functional on this system.
 
-### Remainder (54) — SAP demo, framework and unused modules
-
-Lower priority. Listed for completeness; assign aliases if it is no more effort than doing the subset above.
+### Remainder (38) — SAP demo, framework and unused modules
 
 | Service | Path |
 |---|---|
@@ -91,7 +107,6 @@ Lower priority. Listed for completeness; assign aliases if it is no more effort 
 | `/IWBEP/BATCH_AT_ONCE_TEST` | `/sap/opu/odata/iwbep/BATCH_AT_ONCE_TEST` |
 | `/IWBEP/MESSAGE_TEXT` | `/sap/opu/odata/iwbep/MESSAGE_TEXT` |
 | `/IWBEP/TEA_TEST_COMP_APP` | `/sap/opu/odata/iwbep/TEA_TEST_COMP_APP` |
-| `/IWBEP/TEA_TEST_REUSE_APP` | `/sap/opu/odata/iwbep/TEA_TEST_REUSE_APP` |
 | `/IWFND/GWDEMO_SP2` | `/sap/opu/odata/iwbep/GWDEMO_SP2` |
 | `/IWFND/SG_MGW_NOTIF_STORE` | `/sap/opu/odata/iwfnd/NOTIFICATIONSTORE` |
 | `/IWFND/SUBSCRIPTIONMANAGEMENT` | `/sap/opu/odata/iwbep/SUBSCRIPTIONMANAGEMENT;v=0002` |
@@ -101,14 +116,6 @@ Lower priority. Listed for completeness; assign aliases if it is no more effort 
 | `/SOMO/MA_ODATA_SRV` | `/sap/opu/odata/somo/MA_ODATA_SRV` |
 | `ADT_SRV` | `/sap/opu/odata/sap/ADT_SRV` |
 | `BSANLY_APF_RUNTIME_SRV` | `/sap/opu/odata/sap/BSANLY_APF_RUNTIME_SRV` |
-| `C_BILLGPROCDOCWORKFLOWVH_CDS` | `/sap/opu/odata/sap/C_BILLGPROCDOCWORKFLOWVH_CDS` |
-| `C_LQDYFORECASTOVERVIEW_CDS` | `/sap/opu/odata/sap/C_LQDYFORECASTOVERVIEW_CDS` |
-| `C_MAINTOBJBREAKDOWNQUERY_CDS` | `/sap/opu/odata/sap/C_MAINTOBJBREAKDOWNQUERY_CDS` |
-| `EAM_BACKLOG_MANAGE` | `/sap/opu/odata/sap/EAM_BACKLOG_MANAGE` |
-| `EAM_OBJPG_PURCH_SRV` | `/sap/opu/odata/sap/EAM_OBJPG_PURCH_SRV` |
-| `EAM_ORDER_ACTUALCOST_MONITOR` | `/sap/opu/odata/sap/EAM_ORDER_ACTUALCOST_MONITOR` |
-| `EAM_ORD_MASS_CONFIRMATION_SRV` | `/sap/opu/odata/sap/EAM_ORD_MASS_CONFIRMATION_SRV` |
-| `EAM_PLNGBUCKET_MANAGE` | `/sap/opu/odata/sap/EAM_PLNGBUCKET_MANAGE` |
 | `GFD_CONFIG_SRV` | `/sap/opu/odata/sap/GFD_CONFIG_SRV` |
 | `HRSFEC_ECP_INFO_SRV` | `/sap/opu/odata/sap/HRSFEC_ECP_INFO_SRV` |
 | `HRSFEC_INFOTYPE_SRV` | `/sap/opu/odata/sap/HRSFEC_INFOTYPE_SRV` |
@@ -124,15 +131,29 @@ Lower priority. Listed for completeness; assign aliases if it is no more effort 
 | `PYD_CONT_SRV` | `/sap/opu/odata/sap/PYD_CONT_SRV` |
 | `PYD_FRW_SRV` | `/sap/opu/odata/sap/PYD_FRW_SRV` |
 | `SAP_BW_INA_SRV` | `/sap/opu/odata/sap/SAP_BW_INA_SRV` |
-| `SBLE_BADI_CTX_REGISTRY_SRV` | `/sap/opu/odata/sap/SBLE_BADI_CTX_REGISTRY_SRV` |
-| `SLL_PROD_CMDTYCD_CLASSIFY` | `/sap/opu/odata/sap/SLL_PROD_CMDTYCD_CLASSIFY` |
-| `SLL_PROD_CMDTYCD_RECLASSIFY` | `/sap/opu/odata/sap/SLL_PROD_CMDTYCD_RECLASSIFY` |
-| `SLL_PROD_LEGCTRL_CLASSIFY` | `/sap/opu/odata/sap/SLL_PROD_LEGCTRL_CLASSIFY` |
 | `SR_APS_FLP_SETTINGS_ODATA_SRV` | `/sap/opu/odata/sap/SR_APS_FLP_SETTINGS_ODATA_SRV` |
 | `SSB_UIAD_DESIGNTIME_SRV` | `/sap/opu/odata/sap/SSB_UIAD_DESIGNTIME_SRV` |
-| `TSW_MYEVENTS_SRV` | `/sap/opu/odata/sap/TSW_MYEVENTS_SRV` |
-| `TSW_MYNOMINATIONS_SRV_01` | `/sap/opu/odata/sap/TSW_MYNOMINATIONS_SRV_01` |
-| `TSW_REGIONAL_INVENTORY_SRV_01` | `/sap/opu/odata/sap/TSW_REGIONAL_INVENTORY_SRV_01` |
+
+---
+
+## Item 1b — One service has an empty alias assigned (1)
+
+| Service | SAP message |
+|---|---|
+| `LE_SHP_OD_CREATE_SRV` | System alias '' does not exist |
+
+`/IWFND/CM_COS/002` is a different fault from the 74 above: an alias **is** assigned, but it is
+blank. Needs correcting rather than adding.
+
+---
+
+## Item 1c — Not a fault, listed for completeness (1)
+
+| Service | SAP message |
+|---|---|
+| `/IWBEP/TEA_TEST_REUSE_APP` | Direct execution of inherited service '/IWBEP/TEA_TEST_REUSE_APP_0001' is not allowed |
+
+Expected behaviour for an inherited service. **No action required.**
 
 ---
 
@@ -171,6 +192,24 @@ worth reviewing which standard A2X APIs this landscape is expected to expose.
 
 We are not requesting `API_JOURNALENTRYITEMBASIC_SRV` be registered at this time — no current
 development depends on it. It is cited as evidence only.
+
+### A further 7 catalogued services are also unregistered
+
+Found by reading all 83 error bodies. These appear in the service catalog yet SAP reports no such
+service. Note the catalogued name carries a `Z` prefix the real service name does not:
+
+| Catalogued as | SAP message |
+|---|---|
+| `SBLE_BADI_CTX_REGISTRY_SRV` | No service found for namespace /SAP/; name SBLE_BADI_CTX_REGISTRY_SRV; version 0001 |
+| `ZANA_PAI_PS_SRV` | No service found for namespace /SAP/; name ANA_PAI_PS_SRV; version 0001. |
+| `ZANA_PAI_REPOSITORY_SRV` | No service found for namespace /SAP/; name ANA_PAI_REPOSITORY_SRV; version 0001. |
+| `ZFARP_MANAGE_INTEREST_RUNS_SRV` | No service found for namespace /SAP/; name FARP_MANAGE_INTEREST_RUNS_SRV; version 0001. |
+| `ZFARR_CONFLICTED_CONTRACT_WL_SRV` | No service found for namespace /SAP/; name FARR_CONFLICTED_CONTRACT_WL_SRV; version 0001. |
+| `ZFIN_RE_LOG_DETAIL_SRV` | No service found for namespace /SAP/; name FIN_RE_LOG_DETAIL_SRV; version 0001. |
+| `ZUI_ENGINEERING_REDLINE` | No service found for namespace /SAP/; name UI_ENGINEERING_REDLINE; version 0001. |
+
+These share the root cause of `API_MATERIAL_DOCUMENT_SRV` — registration, not authorisation. We are
+not requesting them be registered; they are listed so the catalog can be reconciled.
 
 **If "Get Services" returns no rows**, the service is not available in the backend on this release —
 please confirm, as that closes the question and we will pursue the OData V4 route instead.
