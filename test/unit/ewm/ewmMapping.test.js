@@ -81,7 +81,6 @@ describe('Unit: EWM Mapping (EwmMapper)', () => {
         StorageType: '0010',
         StorageSection: '0001',
         StorageBinType: 'B01',
-        MaxWeight: '1000.500',
         WeightUnit: 'KG',
         IsBlockedForPutaway: true,
         IsBlockedForRemoval: false
@@ -314,7 +313,6 @@ describe('Unit: EWM Mapping (EwmMapper)', () => {
         StorageType: 'FG01',
         StorageSection: '0001',
         StorageBinType: 'STD',
-        MaxWeight: 1000,
         WeightUnit: 'KG',
         IsBlockedForPutaway: false,
         IsBlockedForRemoval: false

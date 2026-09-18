@@ -70,11 +70,16 @@ for dp, _, fns in os.walk('srv'):
             ls = line.lstrip()
             if ls.startswith('*') or ls.startswith('//'): continue
             written = set(ASSIGN.findall(line))
-            for nm in READ.findall(line):
-                if nm in known or nm in written: continue
+            reads = [nm for nm in READ.findall(line) if nm not in written]
+            # A `a.Foo || a.Bar` chain resolves as long as ONE name is real. Only a line
+            # where NO read resolves is a silent-default bug. (Line-granular: these
+            # chains are written one property per line in this codebase.)
+            if any(nm in known for nm in reads): continue
+            for nm in reads:
+                if nm in known: continue
                 unknown[nm].add(f"{os.path.basename(p)}:{i}")
 
-print(f"{len(unknown)} field names read off SAP objects but absent from SAP metadata:\n")
+print(f"{len(unknown)} reads with NO valid field anywhere in their fallback chain:\n")
 for nm, locs in sorted(unknown.items(), key=lambda kv: (-len(kv[1]), kv[0])):
     print(f"  {nm:44} {len(locs):3}x  {sorted(locs)[0]}")
 PY

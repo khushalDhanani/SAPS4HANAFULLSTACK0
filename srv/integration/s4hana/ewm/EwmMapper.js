@@ -49,9 +49,6 @@ class EwmMapper {
       StorageType: s4Bin.StorageType || '',
       StorageSection: s4Bin.StorageSection || '',
       StorageBinType: s4Bin.EWMStorageBinFixedBinType || s4Bin.StorageBinType || '',
-      // API_WAREHOUSE_STORAGE_BIN has no maximum-weight capacity field (only
-      // WeightOfMaterialsInStorageBin, which is current load). MaxWeight stays 0.
-      MaxWeight: s4Bin.MaximumWeight || 0,
       WeightUnit: s4Bin.WeightUnit || 'KG',
       IsBlockedForPutaway: Boolean(s4Bin.StorageBinIsBlockedForPutaway),
       IsBlockedForRemoval: Boolean(s4Bin.StorageBinIsBlockedForRemoval)
@@ -214,7 +211,6 @@ class EwmMapper {
       StorageType: s4Loc.StorageLocation || '',
       StorageSection: '0001',
       StorageBinType: 'STD',
-      MaxWeight: 1000,
       WeightUnit: 'KG',
       IsBlockedForPutaway: false,
       IsBlockedForRemoval: false

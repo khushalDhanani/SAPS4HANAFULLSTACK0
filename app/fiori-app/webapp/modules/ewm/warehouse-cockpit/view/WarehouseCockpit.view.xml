@@ -377,7 +377,6 @@
                                         <Column><Text text="{i18n>ewmColStorageBin}" /></Column>
                                         <Column><Text text="{i18n>ewmColStorageType}" /></Column>
                                         <Column><Text text="{i18n>ewmColSection}" /></Column>
-                                        <Column><Text text="{i18n>ewmColMaxWeight}" /></Column>
                                         <Column><Text text="{i18n>ewmColPutawayBlocked}" /></Column>
                                         <Column><Text text="{i18n>ewmColRemovalBlocked}" /></Column>
                                     </columns>
@@ -387,7 +386,6 @@
                                                 <ObjectIdentifier title="{ewmView>StorageBin}" />
                                                 <Text text="{ewmView>StorageType}" />
                                                 <Text text="{ewmView>StorageSection}" />
-                                                <Text text="{ewmView>MaxWeight} {ewmView>WeightUnit}" />
                                                 <ObjectStatus
                                                     text="{= ${ewmView>IsBlockedForPutaway} ? 'Blocked' : 'Active' }"
                                                     state="{= ${ewmView>IsBlockedForPutaway} ? 'Error' : 'Success' }" />

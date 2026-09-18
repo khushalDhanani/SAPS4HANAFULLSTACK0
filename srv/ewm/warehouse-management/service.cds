@@ -35,7 +35,10 @@ service WarehouseManagementService @(path: '/odata/v4/warehouse-management') {
             StorageType         : String(4);
             StorageSection      : String(4);
             StorageBinType      : String(4);
-            MaxWeight           : Decimal(15, 3);
+            // MaxWeight removed 2026-09-18: no registered service exposes storage-bin
+            // weight capacity. API_WAREHOUSE_STORAGE_BIN has only
+            // WeightOfMaterialsInStorageBin (current load), and PACK_OUTBDLV_SRV
+            // HandlingUnitMaxWeight is a handling-unit limit, not a bin limit.
             WeightUnit          : String(3);
             IsBlockedForPutaway : Boolean;
             IsBlockedForRemoval : Boolean;
