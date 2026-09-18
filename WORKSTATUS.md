@@ -768,9 +768,28 @@
     - `./catalog.py quotation`: Verified offline catalog lookup works out of the box (16 matches).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-18 17:38 IST
+- **Agent**: Antigravity
+- **Change**: Dependency Vulnerability Remediation & Package Lock Closure:
+  1. **Transitive Vulnerability Remediation**: Executed `npm update` to refresh installed packages within semver ranges, resolving 2 critical vulnerabilities in `@sap/cds-mtxs` (`GHSA-955m-rr6m-2f9v` multitenant credential disclosure) and `qs` DoS advisories in `@sap/cds-dk`.
+  2. **Vulnerability Assessment & Acceptance**:
+     - Audited remaining 7 advisories (3 moderate, 4 high; 0 critical).
+     - Verified upstream dead end: `cds-plugin-ui5` is already at latest `0.17.4`, `@ui5/project` is at latest `4.0.17` (advisory covers 3.0.0-alpha.0 – 5.0.0-alpha.2), and `pacote`/`sigstore` pin to v2/v3 while `@sigstore/core` is patched at v4.
+     - Documented justification: Dev-only dependency chain, not installed or deployed in production BTP MTA containers; strictly exploitable only via local untrusted packages. Transitive major version override avoided to prevent destabilizing `cds watch` live reloading.
+     - Retained `cds-plugin-ui5` as required for local Fiori development server integration.
+  3. **Committed Lockfile**: Preserved updated `package-lock.json`.
+  - **Files Modified**:
+    - `package-lock.json`: Upgraded transitive packages to clear criticals and align dependencies.
+  - **Validation & Quality Gates**:
+    - `npm test`: **69 passed, 69 total test suites; 904 passed, 904 total tests (100% green)** in 42.4 s.
+    - `npm audit`: 7 vulnerabilities (3 moderate, 4 high; 0 critical, down from 12 total / 2 critical).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: Green (100% test pass rate across 69 suites, 904 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
+- **Vulnerability Status**: All critical vulnerabilities eliminated; 7 dev-only transitive vulnerabilities accepted with documented justification.
 - **Goods Issue Posting Pipeline**: Fully multi-tiered for both single-item (`postGoodsIssue`) and batch (`submitGoodsIssueRequest`). Both methods attempt Tier 1 (`ZUI_GI_ORDER_RSV_O4`), fall back to Tier 2 (`API_MATERIAL_DOCUMENT_SRV` deep insert), and return transparent HTTP 501 diagnostics distinguishing 404 (ABAP/Basis) from 403 (Security) when both tiers fail.
 - **Service Catalog & Audit Tooling**: Fully integrated. Baseline catalog (`srv/external/all_catalog_services.json`) and audit evidence (`catalog-audit.csv`) are tracked in git; `./refresh-catalog.sh` and `./audit-catalog.sh` regenerate them on demand.
 - **Pending SAP Backend Actions**:
@@ -779,6 +798,5 @@
   3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps
-1. Stage and commit changes to `feature/CL01`.
-2. Push commits to `origin/feature/CL01`.
-3. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
+1. Push commits to `origin/feature/CL01`.
+2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
