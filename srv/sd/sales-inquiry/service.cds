@@ -129,7 +129,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         BindingPeriodValidityEndDate: Date;
         TransactionCurrency: String;
         TotalNetAmount: Decimal;
-        // Incompletion fields required by SAP (procedure Z1 / partner ZP).
+        // Commercial & logistics extension fields required by SAP (procedure Z1 / partner ZP).
         // Transmitted only when the SAP inquiry service exposes the field; see getInquiryCreationCapabilities.
         CustomerGroup2: String;
         PortOfLoading: String;

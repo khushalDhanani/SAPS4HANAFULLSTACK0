@@ -44,7 +44,7 @@ function mapToS4InquiryPayload(header, items, options = {}) {
     if (header.ShipToPartyName) {
         s4Header.ShipToPartyName = String(header.ShipToPartyName).trim();
     }
-    // Incompletion extension fields: passed through when present, never defaulted
+    // Commercial & logistics extension fields: passed through when present, never defaulted
     ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'].forEach(field => {
         if (header[field] && String(header[field]).trim() !== '') {
             s4Header[field] = String(header[field]).trim();

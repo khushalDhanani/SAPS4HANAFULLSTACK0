@@ -28,7 +28,7 @@
                     </link>
                 </MessageStrip>
 
-                <!-- Incompletion notice: SAP-required fields this application cannot send yet -->
+                <!-- Extension field notice: SAP-required fields this application cannot send yet -->
                 <MessageStrip
                     id="createInquiryReadinessStrip"
                     text="{newInquiry>/readinessNotice}"

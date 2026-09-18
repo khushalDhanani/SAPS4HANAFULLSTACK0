@@ -158,10 +158,6 @@
       "LORD_ODATA_ORDER_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/LORD_ODATA_ORDER_SRV"
-      },
-      "SD_F2430_INCOMP_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/SD_F2430_INCOMP_SRV"
       }
     },
     "log": {

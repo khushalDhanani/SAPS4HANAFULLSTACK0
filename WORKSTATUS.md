@@ -659,11 +659,33 @@
     - Project-wide grep verification: Zero quotation references in active `srv/`, `app/`, `test/` code.
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-18 15:30 IST
+- **Agent**: Antigravity
+- **Change**: Removed Dead `SD_F2430_INCOMP_SRV` Registration & Artifacts — purged dead external model files `srv/external/SD_F2430_INCOMP_SRV.csn` and `srv/external/SD_F2430_INCOMP_SRV.edmx`, removed dead `SD_F2430_INCOMP_SRV` registration from `package.json` under `cds.requires`, cleaned obsolete comments in `SalesInquiryMapper.js`, `service.cds`, and `CreateSalesInquiry.view.xml`, and refined extension field tooltips in `i18n.properties` / `i18n_en.properties`.
+  - **Files Deleted**:
+    - `srv/external/SD_F2430_INCOMP_SRV.csn`
+    - `srv/external/SD_F2430_INCOMP_SRV.edmx`
+  - **Files Modified**:
+    - `package.json`: Removed dead `SD_F2430_INCOMP_SRV` block under `cds.requires`.
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`: Rephrased comment to "Commercial & logistics extension fields".
+    - `srv/sd/sales-inquiry/service.cds`: Rephrased comment to "Commercial & logistics extension fields required by SAP (procedure Z1 / partner ZP)".
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateSalesInquiry.view.xml`: Updated comment to "Extension field notice".
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Refined tooltips for `CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, `ContactPerson`, and `Plant` to clean description text.
+  - **Validation & Quality Gates**:
+    - `npm test`: **69 passed, 69 total test suites; 898 passed, 898 total tests (100% green)** in 45.3 s.
+    - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+    - `cd app/fiori-app && npm run build`: **Build succeeded in 765 ms** (`ui5 build --all`).
+    - `npm run lint`: **0 errors**, 19 warnings in unchanged code.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: Green (100% test pass rate across 69 suites, 898 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
+- **Service Registrations**: Clean. Removed dead `SD_F2430_INCOMP_SRV` and `UI_SALESQUOTATIONMANAGE` registrations from `package.json` and deleted orphaned external models from `srv/external/`.
 - **Sales Quotation Purge**: Complete. All quotation code, metadata, dialogs, actions, adapters, configuration, and tests have been completely removed from the repository.
-- **Sales Inquiry Full-Stack**: 100% operational (Fiori UI, OData V4 catalog & detail, creation, SAP S/4HANA OData V2 integration with incompletion procedure Z1 validation).
+- **Sales Inquiry Full-Stack**: 100% operational (Fiori UI, OData V4 catalog & detail, creation, SAP S/4HANA OData V2 integration with procedure Z1 extension fields).
 - **Other Modules**: MM (Purchase Order), WM (Goods Issue/Receipt), EWM (Warehouse Cockpit/RF Terminal), FI (Journal Entries), Auth, and Core Infrastructure 100% intact and passing all tests.
 
 ## Next Steps
