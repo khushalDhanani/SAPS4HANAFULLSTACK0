@@ -718,6 +718,15 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-18 15:58 IST
+- **Agent**: Antigravity
+- **Change**: Formally documented SAP Security authorization ticket specification in `docs/ticket-auth-api-material-document-srv.md`. Formulates the exact technical requirements (`S_SERVICE` for TADIR `R3TR IWSV API_MATERIAL_DOCUMENT_SRV 0001`, `M_MSEG_BWA` for movement 261, `M_MSEG_WMB`) to unblock Goods Issue posting independently of the custom RAP service activation.
+  - **Files Added**:
+    - `docs/ticket-auth-api-material-document-srv.md`: Complete SAP ticket specification with evidence, PFCG authorization objects, validation curl commands, and business impact analysis.
+  - **Validation & Quality Gates**:
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Submit the authorization ticket to SAP Security / Basis administrator; stage and commit documentation to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: Green (100% test pass rate across 69 suites, 898 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
@@ -726,6 +735,11 @@
 - **Sales Quotation Purge**: 100% complete across both source code and generated build outputs (`gen/`).
 - **Sales Inquiry Full-Stack**: 100% operational.
 - **Other Modules**: MM (Purchase Order), WM (Goods Issue/Receipt), EWM (Warehouse Cockpit/RF Terminal), FI (Journal Entries), Auth, and Core Infrastructure 100% intact and passing all tests.
+- **Pending SAP Backend Actions**:
+  1. Security: Grant `S_SERVICE` on `API_MATERIAL_DOCUMENT_SRV` for user `KHUSHAL` (ticket: `docs/ticket-auth-api-material-document-srv.md`).
+  2. ABAP/Basis: Publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
+  3. SD/ABAP: Implement copy control user exit for custom port fields (ticket: `docs/ticket-vtaa-copy-control-zin-zqt.md`).
 
 ## Next Steps
-1. Stage and commit changes to `feature/CL01`.
+1. Stage and commit `docs/ticket-auth-api-material-document-srv.md` and `WORKSTATUS.md` to `feature/CL01`.
+2. Submit the authorization ticket to the SAP Security administrator.
