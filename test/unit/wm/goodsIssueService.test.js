@@ -443,6 +443,100 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(retryRes).toBeDefined();
       expect(retryRes.QueueReference).toBe(item.QueueReference);
     });
+
+    it('should enqueue transaction with full context fields to Dispatch Queue', async () => {
+      const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+      const req = {
+        data: {
+          ReservationNo: '18025',
+          ReservationItem: '0001',
+          OrderNo: '1000040',
+          Material: '1000000204',
+          MaterialDesc: 'High-Grade Solvent',
+          Plant: '1120',
+          StorageLocation: 'CS01',
+          StorageBin: 'BIN-01-A',
+          IssueQty: 100.0,
+          Unit: 'KG',
+          Batch: 'BATCH-01'
+        },
+        error: jest.fn((code, msg) => ({ code, message: msg }))
+      };
+
+      const result = await handlers['postGoodsIssue'](req);
+      expect(result.Queued).toBe(true);
+      expect(result.QueueReference).toBeDefined();
+
+      const record = await GoodsIssueQueueManager.get(result.QueueReference);
+      expect(record).toBeDefined();
+      expect(record.OrderNo).toBe('1000040');
+      expect(record.MaterialDesc).toBe('High-Grade Solvent');
+      expect(record.Plant).toBe('1120');
+      expect(record.StorageLocation).toBe('CS01');
+      expect(record.StorageBin).toBe('BIN-01-A');
+    });
+
+    it('should fallback to Dispatch Queue on batch submitGoodsIssueRequest when posting is unavailable', async () => {
+      const req = {
+        data: {
+          ReservationNo: '18025',
+          OrderNo: '1000040',
+          Items: [
+            { ReservationItem: '0001', Material: '1000000204', IssueQty: 10, Unit: 'KG', Batch: 'BATCH-01' },
+            { ReservationItem: '0002', Material: '1000000373', IssueQty: 20, Unit: 'KG', Batch: 'BATCH-02' }
+          ]
+        },
+        error: jest.fn((code, msg) => ({ code, message: msg }))
+      };
+
+      const result = await handlers['submitGoodsIssueRequest'](req);
+      expect(result).toBeDefined();
+      expect(result.AllPosted).toBe(false);
+      expect(result.Results.length).toBe(2);
+      expect(result.Results[0].Message).toContain('Queued in dispatch queue');
+      expect(result.Results[1].Message).toContain('Queued in dispatch queue');
+    });
+
+    it('should handle drainQueue action reporting synced vs failed counts', async () => {
+      const drainResult = await handlers['drainQueue']({});
+      expect(drainResult).toBeDefined();
+      expect(typeof drainResult.TotalQueued).toBe('number');
+      expect(typeof drainResult.Attempted).toBe('number');
+      expect(typeof drainResult.SyncedToSap).toBe('number');
+      expect(typeof drainResult.Failed).toBe('number');
+      expect(Array.isArray(drainResult.Items)).toBe(true);
+    });
+
+    it('should update queue item to POSTED_IN_SAP when adapter successfully posts in drainQueue', async () => {
+      const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+      const testRecord = await GoodsIssueQueueManager.enqueue({
+        ReservationNo: '99999',
+        ReservationItem: '0001',
+        Material: 'TEST-MAT',
+        IssueQty: 10,
+        Unit: 'EA',
+        Batch: 'VALID-B1'
+      });
+
+      const mockAdapter = {
+        postGoodsIssue: jest.fn().mockResolvedValue({
+          MaterialDocument: '4900009999',
+          MaterialDocYear: '2026',
+          Success: true
+        })
+      };
+
+      const drainRes = await GoodsIssueQueueManager.drainQueue(mockAdapter);
+      expect(drainRes.SyncedToSap).toBeGreaterThanOrEqual(1);
+
+      const updated = await GoodsIssueQueueManager.get(testRecord.QueueReference);
+      expect(updated.SyncStatus).toBe('POSTED_IN_SAP');
+      expect(updated.SapMaterialDocument).toBe('4900009999');
+      expect(updated.SapMaterialDocYear).toBe('2026');
+
+      // Cleanup
+      await GoodsIssueQueueManager.remove(testRecord.QueueReference);
+    });
   });
 
   describe('Real SU/HU (SSCC / Handling Unit) Resolution — Wired via Discovered SAP EWM (/SCWM/) HU Service', () => {

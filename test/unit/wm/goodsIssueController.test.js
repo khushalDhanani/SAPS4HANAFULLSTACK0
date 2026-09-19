@@ -68,7 +68,8 @@ const mockGoodsIssueService = {
     resolveIdentifier: jest.fn(),
     getQueueSummary: jest.fn().mockResolvedValue({ QueuedCount: 0, Items: [] }),
     retryQueuedGoodsIssue: jest.fn().mockResolvedValue({ Success: true, MaterialDocument: '4900000001', MaterialDocYear: '2026' }),
-    clearQueuedGoodsIssue: jest.fn().mockResolvedValue(true)
+    clearQueuedGoodsIssue: jest.fn().mockResolvedValue(true),
+    drainQueue: jest.fn().mockResolvedValue({ SyncedToSap: 2, Failed: 0, TotalQueued: 2, Message: 'Sync complete' })
 };
 
 const mockRouter = {
@@ -925,20 +926,24 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             );
         });
 
-        it('should synchronize all pending items in onSyncAllQueued', async () => {
+        it('should synchronize all pending items in onSyncAllQueued via drainQueue', async () => {
             const oQueueModel = new MockJSONModel({
                 items: [
                     { QueueReference: 'GI-QUEUE-A', SyncStatus: 'QUEUED' },
-                    { QueueReference: 'GI-QUEUE-B', SyncStatus: 'FAILED' },
-                    { QueueReference: 'GI-QUEUE-C', SyncStatus: 'POSTED_IN_SAP' }
+                    { QueueReference: 'GI-QUEUE-B', SyncStatus: 'FAILED' }
                 ],
                 queuedCount: 2
             });
             controller.getView().setModel(oQueueModel, 'giQueue');
 
-            mockGoodsIssueService.retryQueuedGoodsIssue
-                .mockResolvedValueOnce({ Success: true, MaterialDocument: '4900000001' })
-                .mockResolvedValueOnce({ Success: true, MaterialDocument: '4900000002' });
+            mockGoodsIssueService.drainQueue.mockResolvedValueOnce({
+                TotalQueued: 2,
+                Attempted: 2,
+                SyncedToSap: 2,
+                Failed: 0,
+                RemainingQueued: 0,
+                Message: 'Successfully synchronized all 2 queued item(s) to SAP S/4HANA.'
+            });
 
             mockGoodsIssueService.getQueueSummary.mockResolvedValueOnce({
                 QueuedCount: 0,
@@ -947,10 +952,8 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
 
             await controller.onSyncAllQueued();
 
-            expect(mockGoodsIssueService.retryQueuedGoodsIssue).toHaveBeenCalledWith('GI-QUEUE-A');
-            expect(mockGoodsIssueService.retryQueuedGoodsIssue).toHaveBeenCalledWith('GI-QUEUE-B');
-            expect(mockGoodsIssueService.retryQueuedGoodsIssue).not.toHaveBeenCalledWith('GI-QUEUE-C');
-            expect(mockMessageBox.information).toHaveBeenCalledWith(expect.stringContaining('Sync complete'));
+            expect(mockGoodsIssueService.drainQueue).toHaveBeenCalled();
+            expect(mockMessageBox.success).toHaveBeenCalledWith(expect.stringContaining('Successfully synchronized'));
         });
     });
 

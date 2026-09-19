@@ -1120,7 +1120,12 @@ sap.ui.define([
                 DifferenceQty: Number(oModel.getProperty("/differenceQty")) || 0,
                 DifferenceReason: oModel.getProperty("/differenceReason") || "",
                 DifferenceStorageType: "999",
-                FinalIssue: Boolean(oModel.getProperty("/finalIssue"))
+                FinalIssue: Boolean(oModel.getProperty("/finalIssue")),
+                OrderNo: oResolved.OrderNo || "",
+                MaterialDesc: oActive.MaterialDesc || "",
+                Plant: oActive.Plant || oResolved.Plant || "",
+                StorageLocation: oActive.StorageLocation || "",
+                StorageBin: oActive.StorageBin || ""
             };
 
             // ── Pre-posting SAP stock revalidation ──
@@ -1190,9 +1195,13 @@ sap.ui.define([
                             ReservationNo: oPayload.ReservationNo,
                             ReservationItem: oPayload.ReservationItem,
                             Material: oPayload.Material,
+                            MaterialDesc: oPayload.MaterialDesc,
                             IssueQty: nIssueQty,
                             Unit: oPayload.Unit,
                             Batch: oPayload.Batch,
+                            Plant: oPayload.Plant,
+                            StorageLocation: oPayload.StorageLocation,
+                            StorageBin: oPayload.StorageBin,
                             MaterialDocument: "",
                             MaterialDocYear: "",
                             TransferOrder: "",
@@ -1401,45 +1410,31 @@ sap.ui.define([
         },
 
         onSyncAllQueued: function () {
-            var oQueueModel = this.getView().getModel("giQueue");
-            var aItems = (oQueueModel && oQueueModel.getProperty("/items")) || [];
-            var aPending = aItems.filter(function (it) {
-                return it.SyncStatus === "QUEUED" || it.SyncStatus === "FAILED";
-            });
-
-            if (aPending.length === 0) {
-                MessageToast.show("No pending items to synchronize");
-                return Promise.resolve();
-            }
-
             var that = this;
             this.setBusy(true);
 
-            var p = Promise.resolve();
-            var nSuccess = 0;
-            var nFailed = 0;
+            return GoodsIssueService.drainQueue()
+                .then(function (oDrainResult) {
+                    that.setBusy(false);
+                    var nSynced = oDrainResult ? (oDrainResult.SyncedToSap || 0) : 0;
+                    var nFailed = oDrainResult ? (oDrainResult.Failed || 0) : 0;
+                    var sMsg = (oDrainResult && oDrainResult.Message) ||
+                        ("Sync complete. " + nSynced + " posted to SAP, " + nFailed + " remained in queue.");
 
-            aPending.forEach(function (it) {
-                p = p.then(function () {
-                    return GoodsIssueService.retryQueuedGoodsIssue(it.QueueReference)
-                        .then(function (res) {
-                            if (res.Success && res.MaterialDocument) {
-                                nSuccess++;
-                            } else {
-                                nFailed++;
-                            }
-                        })
-                        .catch(function () {
-                            nFailed++;
-                        });
+                    if (nSynced > 0 && nFailed === 0) {
+                        MessageBox.success(sMsg);
+                    } else if (nSynced > 0) {
+                        MessageBox.warning(sMsg);
+                    } else {
+                        MessageBox.information(sMsg);
+                    }
+                    return that.onRefreshQueueTray();
+                })
+                .catch(function (err) {
+                    that.setBusy(false);
+                    MessageBox.error("Queue synchronization failed: " + (err.message || "Unknown error"));
+                    return that.onRefreshQueueTray();
                 });
-            });
-
-            return p.then(function () {
-                that.setBusy(false);
-                MessageBox.information("Sync complete. " + nSuccess + " posted to SAP, " + nFailed + " remained in queue.");
-                return that.onRefreshQueueTray();
-            });
         }
     });
 });

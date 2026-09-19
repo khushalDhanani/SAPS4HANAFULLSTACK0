@@ -89,7 +89,12 @@ class GoodsIssueHandler {
         DifferenceQty,
         DifferenceReason,
         DifferenceStorageType,
-        FinalIssue
+        FinalIssue,
+        OrderNo,
+        MaterialDesc,
+        Plant,
+        StorageLocation,
+        StorageBin
       } = req.data;
 
       if (!ReservationNo || !ReservationItem) {
@@ -131,18 +136,23 @@ class GoodsIssueHandler {
           let queueRecord;
           try {
             queueRecord = await GoodsIssueQueueManager.enqueue({
-            ReservationNo,
-            ReservationItem,
-            Material,
-            IssueQty: nQty,
-            Unit,
-            Batch,
-            DifferenceQty,
-            DifferenceReason,
-            DifferenceStorageType,
-            FinalIssue,
-            LastSyncError: err.message
-          });
+              ReservationNo,
+              ReservationItem,
+              OrderNo,
+              Material,
+              MaterialDesc,
+              Plant,
+              StorageLocation,
+              StorageBin,
+              IssueQty: nQty,
+              Unit,
+              Batch,
+              DifferenceQty,
+              DifferenceReason,
+              DifferenceStorageType,
+              FinalIssue,
+              LastSyncError: err.message
+            });
           } catch (queueErr) {
             return req.error(
               err.status || 503,
@@ -170,7 +180,7 @@ class GoodsIssueHandler {
       }
     });
 
-    // ACTION: submitGoodsIssueRequest (Batch scan-then-submit multi-line posting)
+    // ACTION: submitGoodsIssueRequest (Batch scan-then-submit multi-line posting with Dispatch Queue fallback)
     srv.on('submitGoodsIssueRequest', async (req) => {
       const { ReservationNo, OrderNo, Items } = req.data;
 
@@ -190,6 +200,59 @@ class GoodsIssueHandler {
         );
         return batchResult;
       } catch (err) {
+        if (err.status === 400) {
+          return req.error(400, err.message || 'Batch Goods Issue submission failed');
+        }
+
+        // If backend posting capability is unavailable (501 / 403 / 404), route all items to Dispatch Queue
+        if (err.status === 501 || err.status === 403 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
+          const lineResults = [];
+          for (const it of Items) {
+            try {
+              const qRecord = await GoodsIssueQueueManager.enqueue({
+                ReservationNo,
+                ReservationItem: it.ReservationItem,
+                OrderNo,
+                Material: it.Material,
+                IssueQty: Number(it.IssueQty) || 0,
+                Unit: it.Unit || 'PC',
+                Batch: it.Batch,
+                DifferenceQty: Number(it.DifferenceQty) || 0,
+                DifferenceReason: it.DifferenceReason,
+                DifferenceStorageType: it.DifferenceStorageType || '999',
+                FinalIssue: it.FinalIssue,
+                LastSyncError: err.message
+              });
+              lineResults.push({
+                ReservationItem: String(it.ReservationItem).padStart(4, '0'),
+                MaterialDocument: '',
+                MaterialDocYear: '',
+                TransferOrder: '',
+                DifferenceCleared: Number(it.DifferenceQty) > 0,
+                DifferenceQty: Number(it.DifferenceQty) || 0,
+                Message: `Queued in dispatch queue (${qRecord.QueueReference})`,
+                Success: true
+              });
+            } catch (qErr) {
+              lineResults.push({
+                ReservationItem: String(it.ReservationItem).padStart(4, '0'),
+                MaterialDocument: '',
+                MaterialDocYear: '',
+                TransferOrder: '',
+                DifferenceCleared: false,
+                DifferenceQty: 0,
+                Message: `Queue error: ${qErr.message}`,
+                Success: false
+              });
+            }
+          }
+          return {
+            AllPosted: false,
+            Results: lineResults,
+            Messages: [`Batch safely recorded in local Dispatch Queue: ${err.message}`]
+          };
+        }
+
         return req.error(err.status || 400, err.message || 'Batch Goods Issue submission failed');
       }
     });
@@ -272,6 +335,22 @@ class GoodsIssueHandler {
         return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
       }
       return GoodsIssueQueueManager.remove(QueueReference);
+    });
+
+    // ACTION: drainQueue (Batch retry all pending queued transactions against S/4HANA)
+    srv.on('drainQueue', async () => {
+      if (!GoodsIssueQueueManager.isAvailable()) {
+        return {
+          TotalQueued: 0,
+          Attempted: 0,
+          SyncedToSap: 0,
+          Failed: 0,
+          RemainingQueued: 0,
+          Message: 'Goods Issue dispatch queue is not available: no database is bound to this deployment',
+          Items: []
+        };
+      }
+      return GoodsIssueQueueManager.drainQueue(GoodsIssueAdapter);
     });
 
     // ──────────────────────────────────────────────────────────

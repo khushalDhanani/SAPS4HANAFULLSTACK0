@@ -131,6 +131,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                         if (query.includes("DeliveryDocument eq '180000001'") ||
                             query.includes("PurchaseOrder eq '400000011'") ||
                             query.includes("Material eq '1000000045'") ||
+                            query.includes('$top=50') ||
                             !query || query === '$format=json') {
                             return [{
                                 DeliveryDocument: '180000001',
@@ -319,6 +320,10 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
         });
 
         it('should fail with transparent SAP backend error without mock persistence when posting fails', async () => {
+            const failErr = new Error('Posting rejected by Gateway');
+            failErr.status = 500;
+            jest.spyOn(GoodsReceiptAdapter, '_post').mockRejectedValueOnce(failErr);
+
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 DeliveryDocument: '180000001',
@@ -327,7 +332,120 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 StorageLocation: 'CS01',
                 Batch: 'IN25000133',
                 Quantity: 10
-            })).rejects.toThrow(/SAP S\/4HANA Backend Posting Capability Error/);
+            })).rejects.toThrow(/Posting Goods Receipt for Inbound Delivery '180000001' via MMIM_GR4PO_DL_SRV failed/);
+        });
+
+        it('should construct MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers deep insert payload and return posted MaterialDocument', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '180000001',
+                SourceOfGR: 'INBDELIV',
+                MaterialDocument: '5000000347',
+                MaterialDocumentYear: '2026'
+            });
+
+            const result = await GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Batch: 'IN25000133',
+                Quantity: 15,
+                Unit: 'KG'
+            });
+
+            expect(postSpy).toHaveBeenCalledWith(
+                '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers',
+                expect.objectContaining({
+                    InboundDelivery: '180000001',
+                    SourceOfGR: 'INBDELIV',
+                    Header2Items: expect.arrayContaining([
+                        expect.objectContaining({
+                            InboundDelivery: '180000001',
+                            DeliveryDocumentItem: '000010',
+                            SourceOfGR: 'INBDELIV',
+                            Material: '1000000045',
+                            Plant: '1120',
+                            StorageLocation: 'CS01',
+                            Batch: 'IN25000133',
+                            QuantityInEntryUnit: '15',
+                            EntryUnit: 'KG',
+                            GoodsMovementType: '101'
+                        })
+                    ])
+                })
+            );
+
+            expect(result.Success).toBe(true);
+            expect(result.MaterialDocument).toBe('5000000347');
+            expect(result.DeliveryDocument).toBe('180000001');
+            expect(result.Message).toContain('5000000347');
+
+            postSpy.mockRestore();
+        });
+
+        it('should extract MaterialDocument from Header2Refs when header MaterialDocument is empty', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '180000001',
+                SourceOfGR: 'INBDELIV',
+                Header2Refs: {
+                    results: [
+                        { DocNo: '5000000348', DocYear: '2026', DocTypeTxt: 'Material Document' }
+                    ]
+                }
+            });
+
+            const result = await GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 5
+            });
+
+            expect(result.Success).toBe(true);
+            expect(result.MaterialDocument).toBe('5000000348');
+            expect(result.DeliveryDocument).toBe('180000001');
+
+            postSpy.mockRestore();
+        });
+
+        it('should pass SourceOfGR PURORD when posting Goods Receipt for a Purchase Order', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '400000011',
+                SourceOfGR: 'PURORD',
+                MaterialDocument: '5000000349'
+            });
+
+            const result = await GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '400000011',
+                PurchaseOrder: '400000011',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 20
+            });
+
+            expect(postSpy).toHaveBeenCalledWith(
+                '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers',
+                expect.objectContaining({
+                    InboundDelivery: '400000011',
+                    SourceOfGR: 'PURORD',
+                    Header2Items: expect.arrayContaining([
+                        expect.objectContaining({
+                            SourceOfGR: 'PURORD',
+                            QuantityInEntryUnit: '20'
+                        })
+                    ])
+                })
+            );
+
+            expect(result.Success).toBe(true);
+            expect(result.MaterialDocument).toBe('5000000349');
+
+            postSpy.mockRestore();
         });
 
         it('should have getStorageUnitDetails handler registered on GoodsReceiptService class', async () => {

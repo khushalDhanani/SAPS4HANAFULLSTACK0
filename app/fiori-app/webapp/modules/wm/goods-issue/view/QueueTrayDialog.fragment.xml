@@ -81,15 +81,26 @@
                                         text="{giQueue>MaterialDesc}"
                                         class="sapThemeLightText"
                                         maxLines="1" />
+                                    <Text
+                                        text="{= ${giQueue>Plant} ? 'Plant ' + ${giQueue>Plant} + (${giQueue>StorageLocation} ? ' / ' + ${giQueue>StorageLocation} : '') : '' }"
+                                        visible="{= !!${giQueue>Plant} }"
+                                        class="sapUiTinyMarginTop sapThemeLightText" />
                                 </VBox>
                                 <ObjectNumber
                                     number="{giQueue>IssueQty}"
                                     unit="{giQueue>Unit}" />
                                 <Text text="{= ${giQueue>Batch} || 'N/A'}" />
-                                <ObjectStatus
-                                    text="{giQueue>SyncStatus}"
-                                    state="{= ${giQueue>SyncStatus} === 'POSTED_IN_SAP' ? 'Success' : (${giQueue>SyncStatus} === 'FAILED' ? 'Error' : 'Warning')}"
-                                    icon="{= ${giQueue>SyncStatus} === 'POSTED_IN_SAP' ? 'sap-icon://sys-enter-2' : (${giQueue>SyncStatus} === 'FAILED' ? 'sap-icon://error' : 'sap-icon://pending')}" />
+                                <VBox alignItems="Center">
+                                    <ObjectStatus
+                                        text="{giQueue>SyncStatus}"
+                                        state="{= ${giQueue>SyncStatus} === 'POSTED_IN_SAP' ? 'Success' : (${giQueue>SyncStatus} === 'FAILED' ? 'Error' : 'Warning')}"
+                                        icon="{= ${giQueue>SyncStatus} === 'POSTED_IN_SAP' ? 'sap-icon://sys-enter-2' : (${giQueue>SyncStatus} === 'FAILED' ? 'sap-icon://error' : 'sap-icon://pending')}"
+                                        tooltip="{giQueue>LastSyncError}" />
+                                    <Text
+                                        text="{= ${giQueue>SapMaterialDocument} ? 'Doc ' + ${giQueue>SapMaterialDocument} : '' }"
+                                        visible="{= !!${giQueue>SapMaterialDocument} }"
+                                        class="sapUiTinyMarginTop fontBold" />
+                                </VBox>
                                 <HBox justifyContent="Center">
                                     <Button
                                         icon="sap-icon://refresh"

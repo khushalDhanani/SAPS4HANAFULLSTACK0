@@ -89,14 +89,20 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsReceipt(
-        StorageUnit     : String(20),
-        DeliveryDocument: String(12),
-        Material        : String(40),
-        Plant           : String(4),
-        StorageLocation : String(4),
-        Batch           : String(10),
-        Quantity        : Decimal(13, 3),
-        ExpiryDate      : String(10)
+        StorageUnit          : String(20),
+        DeliveryDocument     : String(12),
+        Material             : String(40),
+        Plant                : String(4),
+        StorageLocation      : String(4),
+        Batch                : String(10),
+        Quantity             : Decimal(13, 3),
+        ExpiryDate           : String(10),
+        DeliveryDocumentItem : String(6),
+        PurchaseOrder        : String(10),
+        PurchaseOrderItem    : String(5),
+        Unit                 : String(3),
+        GoodsMovementType    : String(3),
+        DocumentItemText     : String(50)
     ) returns GRPostResult;
 }
 

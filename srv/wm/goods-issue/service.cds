@@ -213,6 +213,16 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Items          : array of QueueItem;
     };
 
+    type QueueDrainResult {
+        TotalQueued     : Integer;
+        Attempted       : Integer;
+        SyncedToSap     : Integer;
+        Failed          : Integer;
+        RemainingQueued : Integer;
+        Message         : String(500);
+        Items           : array of QueueItem;
+    };
+
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function resolveIdentifier(barcode: String(40)) returns GoodsIssueResolution;
 
@@ -230,7 +240,12 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DifferenceQty         : Decimal(13, 3),
         DifferenceReason      : String(4),
         DifferenceStorageType : String(3),
-        FinalIssue            : Boolean
+        FinalIssue            : Boolean,
+        OrderNo               : String(12),
+        MaterialDesc          : String(80),
+        Plant                 : String(4),
+        StorageLocation       : String(4),
+        StorageBin            : String(18)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -249,6 +264,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     action clearQueuedGoodsIssue(
         QueueReference : String(40)
     ) returns Boolean;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action drainQueue() returns QueueDrainResult;
 
     // ──────────────────────────────────────────────────────────
     // Stock Unit (SU) Barcode → Batch Determination

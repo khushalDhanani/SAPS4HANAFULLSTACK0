@@ -191,6 +191,119 @@ class GoodsIssueQueueManager {
   }
 
   /**
+   * Drain the queue by attempting to post all pending (QUEUED / FAILED) items against SAP S/4HANA.
+   *
+   * @param {Object} adapter - GoodsIssueAdapter instance
+   * @returns {Promise<{
+   *   TotalQueued: number,
+   *   Attempted: number,
+   *   SyncedToSap: number,
+   *   Failed: number,
+   *   RemainingQueued: number,
+   *   Message: string,
+   *   Items: Array<Object>
+   * }>}
+   */
+  async drainQueue(adapter) {
+    if (!this.isAvailable()) {
+      return {
+        TotalQueued: 0,
+        Attempted: 0,
+        SyncedToSap: 0,
+        Failed: 0,
+        RemainingQueued: 0,
+        Message: 'Dispatch queue is unavailable: no database is bound.',
+        Items: []
+      };
+    }
+
+    if (!adapter || typeof adapter.postGoodsIssue !== 'function') {
+      throw new Error('Valid GoodsIssueAdapter is required to drain the queue.');
+    }
+
+    const allItems = await this.getAll();
+    const pendingItems = allItems.filter(i => PENDING_STATUSES.includes(i.SyncStatus));
+
+    if (pendingItems.length === 0) {
+      return {
+        TotalQueued: 0,
+        Attempted: 0,
+        SyncedToSap: 0,
+        Failed: 0,
+        RemainingQueued: 0,
+        Message: 'No pending items in the dispatch queue to synchronize.',
+        Items: allItems
+      };
+    }
+
+    let syncedCount = 0;
+    let failedCount = 0;
+
+    for (const item of pendingItems) {
+      try {
+        const result = await adapter.postGoodsIssue(
+          item.ReservationNo,
+          item.ReservationItem,
+          item.Material,
+          item.IssueQty,
+          item.Unit,
+          item.Batch,
+          item.DifferenceQty,
+          item.DifferenceReason,
+          item.DifferenceStorageType,
+          item.FinalIssue
+        );
+
+        if (result && result.MaterialDocument) {
+          await this.update(item.QueueReference, {
+            SyncStatus: 'POSTED_IN_SAP',
+            SapMaterialDocument: result.MaterialDocument,
+            SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+            SyncedAt: new Date().toISOString()
+          });
+          syncedCount++;
+        } else {
+          await this.update(item.QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 1) + 1,
+            LastSyncError: (result && result.Message) || 'Posting completed without material document',
+            SyncStatus: 'FAILED'
+          });
+          failedCount++;
+        }
+      } catch (err) {
+        await this.update(item.QueueReference, {
+          SyncAttempts: (item.SyncAttempts || 1) + 1,
+          LastSyncError: String(err.message || 'Posting rejected by SAP Gateway').slice(0, 500),
+          SyncStatus: 'FAILED'
+        });
+        failedCount++;
+      }
+    }
+
+    const updatedAll = await this.getAll();
+    const remainingPending = updatedAll.filter(i => PENDING_STATUSES.includes(i.SyncStatus)).length;
+
+    let message;
+    if (syncedCount === pendingItems.length) {
+      message = `Successfully synchronized all ${syncedCount} queued item(s) to SAP S/4HANA.`;
+    } else if (syncedCount > 0) {
+      message = `Partial synchronization: ${syncedCount} posted to SAP, ${failedCount} failed and remain in queue.`;
+    } else {
+      message = `Sync attempted for ${pendingItems.length} item(s). 0 posted to SAP (Gateway posting service unavailable); ${failedCount} item(s) remain in queue.`;
+    }
+
+    return {
+      TotalQueued: pendingItems.length,
+      Attempted: pendingItems.length,
+      SyncedToSap: syncedCount,
+      Failed: failedCount,
+      RemainingQueued: remainingPending,
+      Message: message,
+      Items: updatedAll
+    };
+  }
+
+  /**
    * Removes every record (tests).
    */
   async clear() {

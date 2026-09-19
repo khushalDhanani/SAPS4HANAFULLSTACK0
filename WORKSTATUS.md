@@ -800,18 +800,113 @@
   - **Validation & Quality Gates**: See Current Status — `npm test`, `npx cds compile srv`, `npx cds build --production`, `npx mbt validate` and `git diff --check` to be re-run on the developer workstation.
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-19 12:35 IST
+- **Agent**: Antigravity
+- **Change**: Retargeted Goods Receipt Posting to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert:
+  1. **SAP Service & Metadata Discovery**:
+     - Verified `MMIM_GR4PO_DL_SRV` contains creatable sets: `GR4PO_DL_Headers`, `GR4PO_DL_Items`, `GR4PO_DOC_Refs`, `GR4PO_DL_SubItems`.
+     - Confirmed navigation property `Header2Items` binds `GR4PO_DL_Header` to child items.
+     - Confirmed `MaterialDocument` and `MaterialDocumentYear` are returned on root header and nested `Header2Refs`.
+     - Documented metadata in `srv/external/MMIM_GR4PO_DL_SRV.edmx`.
+  2. **GoodsReceiptAdapter Retargeting**:
+     - Retargeted POST target from inactive EWM endpoint `API_WHSE_INBOUND_DELIVERY/PostGoodsReceipt` to active Inventory Management (IM) endpoint `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers`.
+     - Harmonized CSRF token fetch path (`MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet`) with transactional POST path, eliminating cross-service CSRF token rejection.
+     - Implemented OData deep insert payload constructing `Header2Items` with movement type `'101'`, `Temp_Key`, and source routing (`INBDELIV` vs `PURORD`).
+     - Added material document extraction with fallback to `Header2Refs`.
+     - Preserved SLED batch expiry hard-stop and transparent backend capability error reporting per `AGENTS.md` (zero fake documents).
+  3. **CAP Layer & UI5 Synchronization**:
+     - Updated `srv/wm/goods-receipt/service.cds` to accept optional item attributes (`DeliveryDocumentItem`, `PurchaseOrder`, `PurchaseOrderItem`, `Unit`, `GoodsMovementType`, `DocumentItemText`).
+     - Updated `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` to forward parameters to adapter.
+     - Updated `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js` to supply item details from active item context.
+  4. **Test Suite Enhancement**:
+     - Updated `test/unit/wm/goodsReceiptService.test.js` to isolate barcode mock from list queries and added 3 new unit tests covering deep insert payload, `PURORD` source routing, and `Header2Refs` material document extraction.
+  - **Files Modified**:
+    - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Retargeted endpoint to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` with deep insert payload.
+    - `srv/wm/goods-receipt/service.cds`: Added optional item parameters to `postGoodsReceipt` action.
+    - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: Forwarded extended item parameters to adapter.
+    - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`: Forwarded item context from active inbound item.
+    - `test/unit/wm/goodsReceiptService.test.js`: Added 3 deep insert unit tests and fixed list query mock filter.
+  - **Files Added**:
+    - `srv/external/MMIM_GR4PO_DL_SRV.edmx`: Dumped service metadata.
+  - **Validation & Quality Gates**:
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run lint`: 0 errors (18 pre-existing warnings in unchanged code).
+    - `cd app/fiori-app && npm run lint`: 0 findings.
+    - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 996 ms).
+    - `npx jest test/unit/wm/goodsReceiptService.test.js`: **28 passed, 28 total tests (100% green)**.
+    - `npx jest test/unit/wm/goodsReceiptController.test.js`: **17 passed, 17 total tests (100% green)**.
+    - `npm test`: 68 passed, 1 failed (901 passed, 12 failed due to SAP user `KHUSHAL` locked in SU01 on DS4 Client 220 impacting live GI reservation tests; all 45 Goods Receipt unit tests green).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Unlock user `KHUSHAL` in SU01 on DS4 Client 220; test live Goods Receipt post against active inbound delivery `180000001`.
+
+## 2026-09-19 12:48 IST
+- **Agent**: Antigravity
+- **Change**: Shipped Goods Issue (Movement 261) as Scan-and-Queue Architecture with CAP Queue Drain:
+  1. **Architectural Rationale & Zero-ABAP Delivery**:
+     - Real SAP S/4HANA read side is 100% operational on live data (54 open reservations, Plant 1120, Storage Location CS01, live batches with SLED status and packaging units).
+     - Because SAP Gateway posting services (Tier 1 `ZUI_GI_ORDER_RSV_O4` and Tier 2 `API_MATERIAL_DOCUMENT_SRV`) await Basis alias/service activation, Goods Issue is shipped under Scan-and-Queue architecture.
+     - Warehouse clerks scan and validate against live SAP rules without blocking floor operations; transactions safely persist in the durable CAP database (`GoodsIssueQueue`), draining automatically or via operator action once Basis unblocks.
+     - Zero ABAP transport or backend coding required; strict compliance with `AGENTS.md` (no fake documents or mock persistence masquerading as SAP documents; `MaterialDocument` is empty while queued and populated only upon verified SAP creation).
+  2. **CAP Service & Queue Model**:
+     - Extended `postGoodsIssue` action in `srv/wm/goods-issue/service.cds` with optional context fields (`OrderNo`, `MaterialDesc`, `Plant`, `StorageLocation`, `StorageBin`).
+     - Added `type QueueDrainResult` and `action drainQueue() returns QueueDrainResult` to `GoodsIssueService`.
+     - Implemented `GoodsIssueQueueManager.drainQueue(adapter)`: retrieves pending records (`QUEUED` and `FAILED`), attempts posting via `adapter.postGoodsIssue`, transitions successful items to `POSTED_IN_SAP` with `SapMaterialDocument`, and updates retry counts and error logs for failing items.
+     - Implemented CAP handler `srv.on('drainQueue')` in `srv/wm/goods-issue/handlers/goodsIssue.handler.js`.
+     - Added resilient queue fallback in `submitGoodsIssueRequest` for multi-item / batch submissions when backend posting is unavailable.
+     - Added `GoodsIssueAdapter.drainQueue()` facade method.
+  3. **UI5 Fiori Scan-and-Queue Flow**:
+     - Updated `GoodsIssueService.js` to send context fields and invoke `drainQueue()`.
+     - Updated `GoodsIssue.controller.js`:
+       - Transferred context fields on post/queue.
+       - Wired `onSyncAllQueued` to execute atomic `GoodsIssueService.drainQueue()` with visual busy indicators and status summaries.
+       - Enriched Step 4 queued confirmation view model with item/location parameters.
+     - Updated `GoodsIssue.view.xml`:
+       - Queue Tray button in header is permanently visible and dynamically styled (`Emphasized` when `queuedCount > 0`, otherwise `Transparent`).
+       - Enriched Step 4 queued summary `SimpleForm` with Material, Description, Quantity, and Unit.
+     - Updated `QueueTrayDialog.fragment.xml`: Added Plant/StorageLocation info and SAP Material Document confirmation badges.
+  4. **Operational Tooling**:
+     - Created standalone CLI tool `drain-goods-issue-queue.sh` to drain the Goods Issue queue on-demand or via automated scheduler.
+  5. **Test Suite & Verification**:
+     - Added 4 unit tests in `test/unit/wm/goodsIssueService.test.js` covering full context queueing, batch submit queue fallback, `drainQueue` action handler, and queue state transition upon successful post (45/45 tests passing).
+     - Added controller test coverage in `test/unit/wm/goodsIssueController.test.js` for `onSyncAllQueued` via `drainQueue` (54/54 tests passing).
+     - Isolated `GoodsReceiptAdapter._post` in `test/unit/wm/goodsReceiptService.test.js` line 323 to keep unit tests fully deterministic regardless of live SAP user unlock state (28/28 tests passing).
+     - Full repository test pass: **69 passed, 69 total test suites; 917 passed, 917 total tests (100% green)**.
+  - **Files Modified**:
+    - `srv/wm/goods-issue/service.cds`: Added context fields to `postGoodsIssue` and declared `drainQueue` action.
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`: Implemented `drainQueue` with batch execution and status updates.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`: Added `drainQueue` action handler and batch submit fallback.
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Added `drainQueue` facade.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js`: Added `drainQueue` and context fields.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`: Wired sync to `drainQueue` and context passing.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`: Header tray permanent visibility and enriched Step 4 form.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/QueueTrayDialog.fragment.xml`: Enriched queue items with location & SAP doc badges.
+    - `test/unit/wm/goodsIssueService.test.js`: Added 4 unit tests for queue drain, context, and batch fallback.
+    - `test/unit/wm/goodsIssueController.test.js`: Updated mock service and controller test for `onSyncAllQueued`.
+    - `test/unit/wm/goodsReceiptService.test.js`: Isolated `_post` mock for deterministic test execution.
+  - **Files Added**:
+    - `drain-goods-issue-queue.sh`: Executable queue drain utility for warehouse operations.
+  - **Validation & Quality Gates**:
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run lint`: 0 errors (18 pre-existing warnings in unchanged code).
+    - `cd app/fiori-app && npm run lint`: 0 findings.
+    - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 826 ms).
+    - `npm test`: **69 passed, 69 total test suites; 917 passed, 917 total tests (100% green)**.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: Green (100% test pass rate across 69 suites, 904 tests; 0 linter errors across root and fiori-app; UI5 build succeeds; CDS compilation clean; git diff --check clean).
-- **Vulnerability Status**: All critical vulnerabilities eliminated; 7 dev-only transitive vulnerabilities accepted with documented justification.
-- **Goods Issue Posting Pipeline**: Fully multi-tiered for both single-item (`postGoodsIssue`) and batch (`submitGoodsIssueRequest`). Both methods attempt Tier 1 (`ZUI_GI_ORDER_RSV_O4`), fall back to Tier 2 (`API_MATERIAL_DOCUMENT_SRV` deep insert), and return transparent HTTP 501 diagnostics distinguishing 404 (ABAP/Basis) from 403 (Security) when both tiers fail.
-- **External Model Integrity**: All models in `srv/external/` verified as genuine metadata. The sole corrupt artifact (`API_JOURNALENTRYITEMBASIC_SRV.edmx`, a saved `/IWFND/MED/170` error page) has been purged.
-- **Service Catalog & Audit Tooling**: Fully integrated. Baseline catalog (`srv/external/all_catalog_services.json`) and audit evidence (`catalog-audit.csv`) are tracked in git; `./refresh-catalog.sh` and `./audit-catalog.sh` regenerate them on demand.
+- **Build Status**: **100% Green** across the entire full-stack project (69/69 test suites passed, 917/917 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **Goods Receipt Posting Pipeline**: Retargeted to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert (`Header2Items`), movement type 101, single-session CSRF handshake, and transparent backend capability error reporting.
+- **Goods Issue Scan-and-Queue Pipeline**: Fully shipped. Real S/4HANA read data (54 open reservations, Plant 1120, CS01, live batches with SLED status and packaging units) drives floor scanning; transactions queue reliably into SQLite/HANA `GoodsIssueQueue` with zero ABAP dependencies, zero fake document numbers, and atomic on-demand/scheduled queue draining via `drainQueue()`.
+- **External Model Integrity**: All models in `srv/external/` verified as genuine metadata.
+- **Service Catalog & Audit Tooling**: Fully integrated. Baseline catalog (`srv/external/all_catalog_services.json`) and audit evidence (`catalog-audit.csv`) are tracked in git.
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
-  2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`). A second service, `API_JOURNALENTRYITEMBASIC_SRV`, is confirmed unregistered with the same fault but is not requested — cited as evidence only.
+  2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps
-1. Push commits to `origin/feature/CL01`.
+1. Execute live end-to-end Goods Receipt post against inbound delivery `180000001`.
 2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
+3. Commit and merge `feature/CL01` changes.

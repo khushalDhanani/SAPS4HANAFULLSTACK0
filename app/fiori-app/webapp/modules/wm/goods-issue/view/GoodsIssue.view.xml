@@ -29,9 +29,9 @@
                     id="btnOpenQueueTray"
                     text="{i18n>wmGIQueueTrayBtn} ({giView>/queuedCount})"
                     icon="sap-icon://inbox"
-                    type="Transparent"
+                    type="{= (${giView>/queuedCount} || 0) > 0 ? 'Emphasized' : 'Transparent' }"
+                    tooltip="{i18n>wmGIQueueTrayBtn}"
                     press=".onOpenQueueTray"
-                    visible="{= (${giView>/queuedCount} || 0) > 0 }"
                     class="sapUiTinyMarginEnd" />
                 <Button
                     id="btnResetWorkflow"
@@ -598,7 +598,13 @@
                                     <Text text="{giView>/postResult/QueueReference}" class="fontBold" />
 
                                     <Label text="{i18n>giReservationLabel}" />
-                                    <Text text="{giView>/postResult/ReservationNo}" />
+                                    <Text text="{giView>/postResult/ReservationNo} (Item {giView>/postResult/ReservationItem})" />
+
+                                    <Label text="{i18n>giColMaterial}" />
+                                    <Text text="{giView>/postResult/Material} {= ${giView>/postResult/MaterialDesc} ? '— ' + ${giView>/postResult/MaterialDesc} : '' }" />
+
+                                    <Label text="{i18n>giIssueQuantityLabel}" />
+                                    <ObjectNumber number="{giView>/postResult/IssueQty}" unit="{giView>/postResult/Unit}" />
 
                                     <Label text="{i18n>wmGIQueueColStatus}" />
                                     <ObjectStatus text="{giView>/postResult/SyncStatus}" state="Warning" icon="sap-icon://pending" />

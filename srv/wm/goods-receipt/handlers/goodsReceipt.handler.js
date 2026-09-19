@@ -85,7 +85,14 @@ const init = (srv) => {
             StorageLocation,
             Batch,
             Quantity,
-            ExpiryDate
+            ExpiryDate,
+            DeliveryDocumentItem,
+            PurchaseOrder,
+            PurchaseOrderItem,
+            Unit,
+            GoodsMovementType,
+            DocumentItemText,
+            SourceOfGR
         } = req.data;
 
         if (!StorageUnit && !DeliveryDocument) {
@@ -113,7 +120,14 @@ const init = (srv) => {
                 StorageLocation,
                 Batch,
                 Quantity,
-                ExpiryDate
+                ExpiryDate,
+                DeliveryDocumentItem,
+                PurchaseOrder,
+                PurchaseOrderItem,
+                Unit,
+                GoodsMovementType,
+                DocumentItemText,
+                SourceOfGR
             });
         } catch (err) {
             LOG.error('postGoodsReceipt failed:', err.message);

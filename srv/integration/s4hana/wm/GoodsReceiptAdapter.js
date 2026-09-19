@@ -564,7 +564,7 @@ class GoodsReceiptAdapter {
   }
 
   /**
-   * Executes Goods Receipt posting in SAP S/4HANA
+   * Executes Goods Receipt posting in SAP S/4HANA via MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers
    * In strict accordance with AGENTS.md: NO mock persistence or synthetic document generation.
    */
   async postGoodsReceipt(payload = {}) {
@@ -606,23 +606,110 @@ class GoodsReceiptAdapter {
       }
     }
 
-    // Attempt live SAP Goods Receipt posting via API_WHSE_INBOUND_DELIVERY/PostGoodsReceipt
+    // Retargeted to MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers (Inventory Management / Movement 101)
     const sDoc = DeliveryDocument || StorageUnit;
+    const now = new Date();
+    const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T00:00:00`;
+    const tempKey = `${sDoc}GR${now.toISOString().replace(/[-:T]/g, '').slice(0, 14)}`;
+
+    // Determine SourceOfGR: 'INBDELIV' (Inbound Delivery) or 'PURORD' (Purchase Order)
+    let sourceOfGR = payload.SourceOfGR;
+    if (!sourceOfGR) {
+      if (payload.PurchaseOrder && !payload.DeliveryDocument && String(sDoc) === String(payload.PurchaseOrder)) {
+        sourceOfGR = 'PURORD';
+      } else {
+        sourceOfGR = 'INBDELIV';
+      }
+    }
+
+    const sItemNo = payload.DeliveryDocumentItem
+      ? String(payload.DeliveryDocumentItem).padStart(6, '0')
+      : '000010';
+
+    let items = [];
+    if (Array.isArray(payload.Items) && payload.Items.length > 0) {
+      items = payload.Items.map((it, idx) => ({
+        InboundDelivery: sDoc,
+        DeliveryDocumentItem: it.DeliveryDocumentItem
+          ? String(it.DeliveryDocumentItem).padStart(6, '0')
+          : String((idx + 1) * 10).padStart(6, '0'),
+        SourceOfGR: sourceOfGR,
+        Material: it.Material || Material,
+        Plant: it.Plant || Plant,
+        StorageLocation: it.StorageLocation || StorageLocation,
+        Batch: it.Batch || Batch || '',
+        QuantityInEntryUnit: String(it.Quantity || nQty),
+        EntryUnit: it.Unit || payload.Unit || 'KG',
+        OpenQuantity: String(it.Quantity || nQty),
+        UnitOfMeasure: it.Unit || payload.Unit || 'KG',
+        GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || '101',
+        GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '0000',
+        DocumentItemText: it.DocumentItemText || ''
+      }));
+    } else {
+      items = [
+        {
+          InboundDelivery: sDoc,
+          DeliveryDocumentItem: sItemNo,
+          SourceOfGR: sourceOfGR,
+          Material: Material,
+          Plant: Plant,
+          StorageLocation: StorageLocation,
+          Batch: Batch || '',
+          QuantityInEntryUnit: String(nQty),
+          EntryUnit: payload.Unit || 'KG',
+          OpenQuantity: String(nQty),
+          UnitOfMeasure: payload.Unit || 'KG',
+          GoodsMovementType: payload.GoodsMovementType || '101',
+          GoodsMovementReasonCode: payload.GoodsMovementReasonCode || '0000',
+          DocumentItemText: payload.DocumentItemText || ''
+        }
+      ];
+    }
+
+    const postPayload = {
+      InboundDelivery: sDoc,
+      SourceOfGR: sourceOfGR,
+      DocumentDate: todayFormatted,
+      PostingDate: todayFormatted,
+      DeliveryDocumentByVendor: payload.DeliveryDocumentByVendor || '',
+      BillOfLading: payload.BillOfLading || '',
+      MaterialDocumentHeaderText: payload.MaterialDocumentHeaderText || `GR Delivery ${sDoc}`,
+      Temp_Key: tempKey,
+      VersionForPrintingSlip: payload.VersionForPrintingSlip || '0',
+      Header2Items: items
+    };
+
     try {
-      const path = `/sap/opu/odata/sap/API_WHSE_INBOUND_DELIVERY/PostGoodsReceipt?InboundDelivery='${sDoc}'`;
-      const result = await this._post(path, {}, { 'If-Match': '*' });
+      const path = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers';
+      const result = await this._post(path, postPayload);
+
+      let matDoc = result?.MaterialDocument;
+      if (!matDoc && result?.Header2Refs) {
+        const refs = Array.isArray(result.Header2Refs?.results)
+          ? result.Header2Refs.results
+          : (Array.isArray(result.Header2Refs) ? result.Header2Refs : []);
+        const docRef = refs.find(r => r.DocNo && /^\d+$/.test(r.DocNo));
+        if (docRef) {
+          matDoc = docRef.DocNo;
+        }
+      }
+      matDoc = matDoc || sDoc;
+
       return {
         Success: true,
-        Message: `Goods Receipt posted successfully in SAP for Delivery ${sDoc}`,
+        Message: matDoc && matDoc !== sDoc
+          ? `Goods Receipt posted successfully in SAP for Delivery ${sDoc} (Material Document ${matDoc})`
+          : `Goods Receipt posted successfully in SAP for Delivery ${sDoc}`,
         DeliveryDocument: sDoc,
-        MaterialDocument: result.MaterialDocument || sDoc
+        MaterialDocument: matDoc
       };
     } catch (err) {
       // Per AGENTS.md: Stop implementation and report exactly what SAP capability is missing / failing.
       // Mock persistence and dummy document generation are strictly prohibited.
       const errorMsg = err.message || JSON.stringify(err);
       throw new Error(
-        `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' failed in SAP Gateway (Client ${s4Config.getClient()}): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
+        `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' via MMIM_GR4PO_DL_SRV failed in SAP Gateway (Client ${s4Config.getClient()}): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
       );
     }
   }

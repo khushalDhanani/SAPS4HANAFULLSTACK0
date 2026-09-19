@@ -185,7 +185,12 @@ sap.ui.define([
                 DifferenceQty: Number(oPayload.DifferenceQty) || 0,
                 DifferenceReason: oPayload.DifferenceReason || "",
                 DifferenceStorageType: oPayload.DifferenceStorageType || "999",
-                FinalIssue: Boolean(oPayload.FinalIssue)
+                FinalIssue: Boolean(oPayload.FinalIssue),
+                OrderNo: oPayload.OrderNo ? String(oPayload.OrderNo).trim() : "",
+                MaterialDesc: oPayload.MaterialDesc ? String(oPayload.MaterialDesc).trim() : "",
+                Plant: oPayload.Plant ? String(oPayload.Plant).trim() : "",
+                StorageLocation: oPayload.StorageLocation ? String(oPayload.StorageLocation).trim() : "",
+                StorageBin: oPayload.StorageBin ? String(oPayload.StorageBin).trim() : ""
             };
 
             return ODataClient.post(BASE_PATH + "/postGoodsIssue", oBody);
@@ -289,6 +294,14 @@ sap.ui.define([
             return ODataClient.post(BASE_PATH + "/clearQueuedGoodsIssue", {
                 QueueReference: sQueueReference
             });
+        },
+
+        /**
+         * Drain the entire Goods Issue dispatch queue to SAP S/4HANA
+         * @returns {Promise<Object>} QueueDrainResult
+         */
+        drainQueue: function () {
+            return ODataClient.post(BASE_PATH + "/drainQueue", {});
         },
 
         // ──────────────────────────────────────────────────────────

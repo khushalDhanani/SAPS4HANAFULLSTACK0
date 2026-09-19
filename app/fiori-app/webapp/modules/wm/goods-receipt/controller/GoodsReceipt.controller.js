@@ -131,7 +131,7 @@ sap.ui.define([
                     osc.start();
                     osc.stop(audioCtx.currentTime + 0.3);
                 }
-            } catch (_) {}
+            } catch (_) { }
         },
 
         /**
