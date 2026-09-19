@@ -26,7 +26,7 @@ import csv, json, os, re, sys, threading, queue, time
 import urllib.request, urllib.error, base64
 from xml.etree import ElementTree as ET
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT  = os.path.join(ROOT, "catalog-data-reality.csv")
 PAR   = int(os.environ.get("PAR", "6"))
 LIMIT = int(os.environ.get("LIMIT", "0"))

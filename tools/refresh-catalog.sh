@@ -1,8 +1,11 @@
 #!/bin/bash
 # Re-pull the Gateway service catalog. Verifies before overwriting the baseline.
 set -euo pipefail
-cd "$(dirname "$0")"
-set -a; . ./.env.local; set +a
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 DEST=srv/external/all_catalog_services.json
 TMP=$(mktemp)

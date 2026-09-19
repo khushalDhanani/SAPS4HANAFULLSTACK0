@@ -1,6 +1,10 @@
 #!/bin/bash
 # Find OData V4 services. The v=2 catalog cannot see these.
-set -a; . "$(dirname "$0")/.env.local"; set +a
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 A=(-u "$S4_USERNAME:$S4_PASSWORD" -H "sap-client: $C" -H 'Accept: application/json')
 

@@ -1,8 +1,11 @@
 #!/bin/bash
 # Existence is not reality. This counts ROWS behind every entity set the code reads.
 # A service can answer 200 on $metadata and hold nothing - EWM does exactly that.
-set -a; . "$(dirname "$0")/.env.local"; set +a
-cd "$(dirname "$0")"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 OUT=data-reality.csv
 

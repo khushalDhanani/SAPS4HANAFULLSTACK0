@@ -1,8 +1,11 @@
 #!/bin/bash
 # Which registered EWM service exposes warehouse-order queue, assigned user,
 # bin max weight, or resource type? Searches candidates from the live catalog.
-set -a; . "$(dirname "$0")/.env.local"; set +a
-cd "$(dirname "$0")"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 M=$(mktemp -d)
 

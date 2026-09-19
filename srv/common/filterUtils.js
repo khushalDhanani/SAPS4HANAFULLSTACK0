@@ -147,8 +147,21 @@ function applyPaging(items, req) {
   return result;
 }
 
+/**
+ * Formats a value as an OData string literal (Edm.String).
+ * Encloses the value in single quotes and escapes embedded single quotes by doubling them (' -> '').
+ *
+ * @param {any} val - The input value to format as an OData string literal
+ * @returns {string} The escaped OData string literal, e.g. "'O''Neill'"
+ */
+function odataString(val) {
+  if (val === undefined || val === null) return "''";
+  return `'${String(val).replace(/'/g, "''")}'`;
+}
+
 module.exports = {
   extractFilterParam,
   extractFilterParams,
-  applyPaging
+  applyPaging,
+  odataString
 };

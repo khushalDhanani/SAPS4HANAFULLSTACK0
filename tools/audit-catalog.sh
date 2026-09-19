@@ -1,8 +1,11 @@
 #!/bin/bash
 # Probe every service in all_catalog_services.json. Writes catalog-audit.csv.
 # Uses the service root (small) and retries non-200 against $metadata.
-set -a; . "$(dirname "$0")/.env.local"; set +a
-cd "$(dirname "$0")"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 PAR=${PAR:-8}          # PAR=4 ./audit-catalog.sh to go gentler on the system
 OUT=catalog-audit.csv

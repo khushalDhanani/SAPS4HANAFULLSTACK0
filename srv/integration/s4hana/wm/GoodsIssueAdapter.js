@@ -4,6 +4,7 @@ const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
 const s4Config = require('../s4Config');
 const { enrichBatchStatus } = require('../../../common/batchUtils');
 const { formatDateToYMD } = require('../../../common/dateUtils');
+const { odataString } = require('../../../common/filterUtils');
 const {
   GoodsIssueReservationsClient,
   GoodsIssueBatchesClient,
@@ -183,7 +184,7 @@ class GoodsIssueAdapter {
     try {
       const resvClean = sClean.replace(/^0+/, '');
       const resvPadded = sClean.padStart(10, '0');
-      const filter = `(Reservation eq '${resvClean}' or Reservation eq '${resvPadded}') and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
+      const filter = `(Reservation eq ${odataString(resvClean)} or Reservation eq ${odataString(resvPadded)}) and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
       const res = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(filter)}&$top=50&$format=json`);
       if (Array.isArray(res) && res.length > 0) {
         scannedType = 'RESERVATION';
@@ -206,7 +207,7 @@ class GoodsIssueAdapter {
       try {
         const orderClean = sClean.replace(/^0+/, '');
         const orderPadded = sClean.padStart(12, '0');
-        const filter = `(OrderID eq '${orderClean}' or OrderID eq '${orderPadded}') and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
+        const filter = `(OrderID eq ${odataString(orderClean)} or OrderID eq ${odataString(orderPadded)}) and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
         const res = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(filter)}&$top=50&$format=json`);
         if (Array.isArray(res) && res.length > 0) {
           scannedType = 'PRODUCTION_ORDER';
@@ -215,7 +216,8 @@ class GoodsIssueAdapter {
           resolvedOrder = res[0].OrderID;
         } else {
           // Check MMIMProductionOrderVH
-          const prodRes = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/MMIMProductionOrderVH', `$filter=ManufacturingOrder eq '${sClean}'&$top=1&$format=json`);
+          const filter = `ManufacturingOrder eq ${odataString(sClean)}`;
+          const prodRes = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/MMIMProductionOrderVH', `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`);
           if (Array.isArray(prodRes) && prodRes.length > 0) {
             scannedType = 'PRODUCTION_ORDER';
             scannedTypeLabel = 'Production Order';
@@ -240,7 +242,8 @@ class GoodsIssueAdapter {
     // TIER 3: Check Batch via LO_BM_BATCH_SRV/I_Batch
     if (!scannedType) {
       try {
-        const batchRes = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=Batch eq '${encodeURIComponent(sClean)}'&$top=5&$format=json`);
+        const filter = `Batch eq ${odataString(sClean)}`;
+        const batchRes = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=${encodeURIComponent(filter)}&$top=5&$format=json`);
         if (Array.isArray(batchRes) && batchRes.length > 0) {
           const b = batchRes[0];
           scannedType = 'BATCH';
@@ -249,7 +252,7 @@ class GoodsIssueAdapter {
           targetMaterial = b.Material;
 
           // Search open reservations requiring this material
-          const filter = `Product eq '${encodeURIComponent(targetMaterial)}' and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
+          const filter = `Product eq ${odataString(targetMaterial)} and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
           const resvItems = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(filter)}&$top=20&$format=json`);
           if (Array.isArray(resvItems) && resvItems.length > 0) {
             const batchMatch = resvItems.find(it => it.Batch === targetBatch) || resvItems[0];
@@ -272,7 +275,7 @@ class GoodsIssueAdapter {
     if (!scannedType) {
       try {
         const matClean = sClean.replace(/^0+/, '');
-        const filter = `(Product eq '${encodeURIComponent(sClean)}' or Product eq '${encodeURIComponent(matClean)}') and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
+        const filter = `(Product eq ${odataString(sClean)} or Product eq ${odataString(matClean)}) and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
         const resvItems = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(filter)}&$top=20&$format=json`);
         if (Array.isArray(resvItems) && resvItems.length > 0) {
           scannedType = 'MATERIAL';
@@ -295,13 +298,14 @@ class GoodsIssueAdapter {
     // TIER 5: Check Storage Unit / Inbound Delivery via HMmimGr4inbdelSet
     if (!scannedType) {
       try {
-        const delRes = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet', `$filter=DeliveryDocument eq '${encodeURIComponent(sClean)}'&$top=1&$format=json`);
+        const filter = `DeliveryDocument eq ${odataString(sClean)}`;
+        const delRes = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet', `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`);
         if (Array.isArray(delRes) && delRes.length > 0) {
           const d = delRes[0];
           scannedType = 'STORAGE_UNIT';
           scannedTypeLabel = 'Storage Unit / Delivery';
           targetMaterial = d.Material;
-          const filter = `Product eq '${encodeURIComponent(targetMaterial)}' and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
+          const filter = `Product eq ${odataString(targetMaterial)} and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
           const resvItems = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`);
           if (Array.isArray(resvItems) && resvItems.length > 0) {
             resolvedResv = resvItems[0].Reservation;

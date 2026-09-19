@@ -25,3 +25,10 @@ rfc*.trc
 # Claude outputs
 Claude outputs/
 claude output/
+
+# Analysis & Reality CSVs
+*.csv
+
+# Python bytecode cache
+__pycache__/
+*.pyc

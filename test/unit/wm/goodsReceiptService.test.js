@@ -124,15 +124,16 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 try {
                     return await origGet(servicePath, query);
                 } catch (err) {
+                    const q = decodeURIComponent(query);
                     if (servicePath.includes('HMmimGr4inbdelSet')) {
-                        if (query.includes('1000055885') || query.includes('NON_EXISTENT')) {
+                        if (q.includes('1000055885') || q.includes('NON_EXISTENT')) {
                             return [];
                         }
-                        if (query.includes("DeliveryDocument eq '180000001'") ||
-                            query.includes("PurchaseOrder eq '400000011'") ||
-                            query.includes("Material eq '1000000045'") ||
-                            query.includes('$top=50') ||
-                            !query || query === '$format=json') {
+                        if (q.includes("DeliveryDocument eq '180000001'") ||
+                            q.includes("PurchaseOrder eq '400000011'") ||
+                            q.includes("Material eq '1000000045'") ||
+                            q.includes('$top=50') ||
+                            !q || q === '$format=json') {
                             return [{
                                 DeliveryDocument: '180000001',
                                 DeliveryDocumentItem: '000010',
@@ -158,10 +159,10 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                         }];
                     }
                     if (servicePath.includes('I_Batch')) {
-                        if (query.includes('1000055885') || query.includes('NON_EXISTENT')) {
+                        if (q.includes('1000055885') || q.includes('NON_EXISTENT')) {
                             return [];
                         }
-                        if (query.includes("Batch eq 'IN25000133'") || query.includes("Material eq '1000000045'")) {
+                        if (q.includes("Batch eq 'IN25000133'") || q.includes("Material eq '1000000045'")) {
                             return [{
                                 Batch: 'IN25000133',
                                 Material: '1000000045',
@@ -174,10 +175,10 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                         return [];
                     }
                     if (servicePath.includes('PoHelpSet')) {
-                        if (query.includes('1000055885') || query.includes('NON_EXISTENT')) {
+                        if (q.includes('1000055885') || q.includes('NON_EXISTENT')) {
                             return [];
                         }
-                        if (query.includes("PurchaseOrder eq '300001007'")) {
+                        if (q.includes("PurchaseOrder eq '300001007'")) {
                             return [{
                                 PurchaseOrder: '300001007',
                                 PurchaseOrderItem: '00010',
@@ -187,7 +188,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                                 Supplier: '101245'
                             }];
                         }
-                        if (query.includes("PurchaseOrder eq '400000011'")) {
+                        if (q.includes("PurchaseOrder eq '400000011'")) {
                             return [{
                                 PurchaseOrder: '400000011',
                                 PurchaseOrderItem: '00010',

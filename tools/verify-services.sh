@@ -1,7 +1,11 @@
 #!/bin/bash
 # Verify every SAP OData service this project calls, by fetching $metadata.
 # 200 = live | 500 = registered, no system alias | 404 = not there | 401 = bad creds
-set -a; . "$(dirname "$0")/.env.local"; set +a
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 
 probe() { # $1 = full path after host

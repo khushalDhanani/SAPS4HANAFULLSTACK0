@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 
 echo "=== SAP S/4HANA Goods Issue Dispatch Queue Drain ==="
 echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"

@@ -6,6 +6,7 @@ const s4Config = require('../s4Config');
 
 const { enrichBatchStatus } = require('../../../common/batchUtils');
 const { formatDateToYMD } = require('../../../common/dateUtils');
+const { odataString } = require('../../../common/filterUtils');
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA for Goods Receipt (Movement 101):
@@ -110,9 +111,9 @@ class GoodsReceiptAdapter {
   async getOpenInboundDeliveries(plant = '') {
     let filter = '';
     if (plant) {
-      filter = `$filter=Plant eq '${plant}'`;
+      filter = `Plant eq ${odataString(plant)}`;
     }
-    const query = `${filter ? filter + '&' : ''}$top=50&$format=json`;
+    const query = `${filter ? `$filter=${encodeURIComponent(filter)}&` : ''}$top=50&$format=json`;
 
     try {
       const results = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet', query);
@@ -143,13 +144,13 @@ class GoodsReceiptAdapter {
    */
   async getMaterialStorageLocations(material, plant) {
     if (!material) return [];
-    let filter = `Material eq '${material}'`;
+    let filter = `Material eq ${odataString(material)}`;
     if (plant) {
-      filter += ` and Plant eq '${plant}'`;
+      filter += ` and Plant eq ${odataString(plant)}`;
     }
 
     try {
-      const results = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${filter}&$format=json`);
+      const results = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${encodeURIComponent(filter)}&$format=json`);
       const list = Array.isArray(results) ? results : (results ? [results] : []);
 
       return list.map(r => ({
@@ -171,16 +172,16 @@ class GoodsReceiptAdapter {
     if (!material) return [];
 
     try {
-      const filter = `Material eq '${material}'`;
-      const rawBatches = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=${filter}&$format=json`);
+      const filter = `Material eq ${odataString(material)}`;
+      const rawBatches = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=${encodeURIComponent(filter)}&$format=json`);
       const list = Array.isArray(rawBatches) ? rawBatches : (rawBatches ? [rawBatches] : []);
 
       // Query SLoc stock & bins
       let slocMap = new Map();
       try {
-        let slocFilter = `Material eq '${material}'`;
-        if (plant) slocFilter += ` and Plant eq '${plant}'`;
-        if (storageLocation) slocFilter += ` and StorageLocation eq '${storageLocation}'`;
+        let slocFilter = `Material eq ${odataString(material)}`;
+        if (plant) slocFilter += ` and Plant eq ${odataString(plant)}`;
+        if (storageLocation) slocFilter += ` and StorageLocation eq ${odataString(storageLocation)}`;
         const slocRes = await this._get(
           '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
           `$filter=${encodeURIComponent(slocFilter)}&$format=json`
@@ -292,9 +293,10 @@ class GoodsReceiptAdapter {
 
     // --- TIER 1: Inbound Delivery check (HMmimGr4inbdelSet) ---
     try {
+      const filter = `DeliveryDocument eq ${odataString(sCleanScan)}`;
       const delRes = await this._get(
         '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-        `$filter=DeliveryDocument eq '${sCleanScan}'&$format=json`
+        `$filter=${encodeURIComponent(filter)}&$format=json`
       );
       const delList = Array.isArray(delRes) ? delRes : (delRes ? [delRes] : []);
       if (delList.length > 0) {
@@ -318,9 +320,10 @@ class GoodsReceiptAdapter {
     // --- TIER 2: Purchase Order check (PoHelpSet) ---
     if (!scannedType) {
       try {
+        const filter = `PurchaseOrder eq ${odataString(sCleanScan)}`;
         const poRes = await this._get(
           '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/PoHelpSet',
-          `$filter=PurchaseOrder eq '${sCleanScan}'&$top=5&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=5&$format=json`
         );
         const poList = Array.isArray(poRes) ? poRes : (poRes ? [poRes] : []);
         if (poList.length > 0) {
@@ -339,9 +342,10 @@ class GoodsReceiptAdapter {
 
           // Look for an open Inbound Delivery for this PO
           try {
+            const linkedFilter = `PurchaseOrder eq ${odataString(sCleanScan)}`;
             const linkedDelRes = await this._get(
               '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-              `$filter=PurchaseOrder eq '${sCleanScan}'&$top=1&$format=json`
+              `$filter=${encodeURIComponent(linkedFilter)}&$top=1&$format=json`
             );
             const linkedDelList = Array.isArray(linkedDelRes) ? linkedDelRes : (linkedDelRes ? [linkedDelRes] : []);
             if (linkedDelList.length > 0) {
@@ -356,9 +360,10 @@ class GoodsReceiptAdapter {
     // --- TIER 3: Batch check (LO_BM_BATCH_SRV/I_Batch) ---
     if (!scannedType) {
       try {
+        const filter = `Batch eq ${odataString(sCleanScan)}`;
         const batchRes = await this._get(
           '/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch',
-          `$filter=Batch eq '${sCleanScan}'&$top=5&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=5&$format=json`
         );
         const batchList = Array.isArray(batchRes) ? batchRes : (batchRes ? [batchRes] : []);
         if (batchList.length > 0) {
@@ -375,9 +380,10 @@ class GoodsReceiptAdapter {
 
           // Search open deliveries for this batch's material
           try {
+            const matFilter = `Material eq ${odataString(resolvedMaterial)}`;
             const matDelRes = await this._get(
               '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-              `$filter=Material eq '${resolvedMaterial}'&$top=1&$format=json`
+              `$filter=${encodeURIComponent(matFilter)}&$top=1&$format=json`
             );
             const matDelList = Array.isArray(matDelRes) ? matDelRes : (matDelRes ? [matDelRes] : []);
             if (matDelList.length > 0) {
@@ -394,9 +400,10 @@ class GoodsReceiptAdapter {
               resolvedSupplierCity = md.SupplierCityName || '';
             } else {
               // Search POs for this batch's material
+              const poFilter = `Material eq ${odataString(resolvedMaterial)}`;
               const poRes = await this._get(
                 '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/PoHelpSet',
-                `$filter=Material eq '${resolvedMaterial}'&$top=1&$format=json`
+                `$filter=${encodeURIComponent(poFilter)}&$top=1&$format=json`
               );
               const poList = Array.isArray(poRes) ? poRes : (poRes ? [poRes] : []);
               if (poList.length > 0) {
@@ -419,9 +426,10 @@ class GoodsReceiptAdapter {
     // --- TIER 4: Material check (HMmimGr4inbdelSet / PoHelpSet / MaterialHeaders) ---
     if (!scannedType) {
       try {
+        const filter = `Material eq ${odataString(sCleanScan)}`;
         const matDelRes = await this._get(
           '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-          `$filter=Material eq '${sCleanScan}'&$top=1&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
         );
         const matDelList = Array.isArray(matDelRes) ? matDelRes : (matDelRes ? [matDelRes] : []);
         if (matDelList.length > 0) {
@@ -441,9 +449,10 @@ class GoodsReceiptAdapter {
           resolvedSupplierCity = md.SupplierCityName || '';
         } else {
           // Check PoHelpSet by Material
+          const filter = `Material eq ${odataString(sCleanScan)}`;
           const poRes = await this._get(
             '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/PoHelpSet',
-            `$filter=Material eq '${sCleanScan}'&$top=1&$format=json`
+            `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
           );
           const poList = Array.isArray(poRes) ? poRes : (poRes ? [poRes] : []);
           if (poList.length > 0) {
@@ -467,9 +476,10 @@ class GoodsReceiptAdapter {
     // --- TIER 5: Production Order check (MMIMProductionOrderVH) ---
     if (!scannedType) {
       try {
+        const filter = `ManufacturingOrder eq ${odataString(sCleanScan)}`;
         const prodRes = await this._get(
           '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/MMIMProductionOrderVH',
-          `$filter=ManufacturingOrder eq '${sCleanScan}'&$top=1&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
         );
         const prodList = Array.isArray(prodRes) ? prodRes : (prodRes ? [prodRes] : []);
         if (prodList.length > 0) {

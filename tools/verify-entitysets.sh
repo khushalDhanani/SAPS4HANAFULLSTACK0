@@ -1,8 +1,11 @@
 #!/bin/bash
 # Verify every service/entity-set path the code calls actually exists in that
 # service's $metadata. Catches renamed or invented entity sets and function imports.
-set -a; . "$(dirname "$0")/.env.local"; set +a
-cd "$(dirname "$0")"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 META=$(mktemp -d)
 

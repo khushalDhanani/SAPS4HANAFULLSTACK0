@@ -2,7 +2,11 @@
 # Which goods-movement services actually accept a backend POST?
 # Parses $metadata: EntitySets not marked sap:creatable="false", and
 # FunctionImports with m:HttpMethod="POST".
-set -a; . "$(dirname "$0")/.env.local"; set +a
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 OUT=$(mktemp -d)
 

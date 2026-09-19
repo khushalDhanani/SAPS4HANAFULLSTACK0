@@ -2,7 +2,11 @@
 # Test goods issue 261 posting.
 #   ./test-261.sh find                     -> read-only: list open reservation items
 #   ./test-261.sh post <RESV> <ITEM> <QTY> -> REAL POST, creates a material document
-set -a; . "$(dirname "$0")/.env.local"; set +a
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 SVC="/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV"   # swap per find-postable.sh results
 AUTH=(-u "$S4_USERNAME:$S4_PASSWORD" -H "sap-client: $C")

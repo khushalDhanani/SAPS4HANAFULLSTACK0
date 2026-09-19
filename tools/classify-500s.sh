@@ -1,8 +1,11 @@
 #!/bin/bash
 # Read the ERROR BODY of every service that returned 500, and group by SAP error
 # code. A status code alone does not identify the fault - proven twice today.
-set -a; . "$(dirname "$0")/.env.local"; set +a
-cd "$(dirname "$0")"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+set -a
+[ -f "$ROOT_DIR/.env.local" ] && . "$ROOT_DIR/.env.local" || { [ -f "$ROOT_DIR/.env" ] && . "$ROOT_DIR/.env"; }
+set +a
+cd "$ROOT_DIR"
 H="${S4_DESTINATION_URL%/}"; C="${S4_CLIENT:-220}"
 OUT=catalog-500-classified.csv
 

@@ -6,8 +6,8 @@
   ./catalog.py --stats                 # what's in here, by prefix
 """
 import json, re, sys, os, collections
-F = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                 'srv/external/all_catalog_services.json')
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+F = os.path.join(ROOT, 'srv/external/all_catalog_services.json')
 cat = json.load(open(F))
 rows = [(x['TechnicalServiceName'],
          x.get('Description', ''),

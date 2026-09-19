@@ -1,4 +1,4 @@
-const { extractFilterParam, extractFilterParams } = require('../../../srv/common/filterUtils');
+const { extractFilterParam, extractFilterParams, odataString } = require('../../../srv/common/filterUtils');
 
 describe('Unit: filterUtils', () => {
   describe('extractFilterParam', () => {
@@ -158,6 +158,31 @@ describe('Unit: filterUtils', () => {
       const res = applyPaging(items, req);
       expect([...res]).toEqual([2, 3]);
       expect(res.$count).toBe(5);
+    });
+  });
+
+  describe('odataString', () => {
+    it('should enclose standard string values in single quotes', () => {
+      expect(odataString('1000000045')).toBe("'1000000045'");
+      expect(odataString('CS01')).toBe("'CS01'");
+    });
+
+    it('should escape single quotes by doubling them', () => {
+      expect(odataString("O'Neill")).toBe("'O''Neill'");
+      expect(odataString("Item's and other's")).toBe("'Item''s and other''s'");
+      expect(odataString("'''")).toBe("''''''''");
+    });
+
+    it('should return empty string literal for null, undefined, or empty string', () => {
+      expect(odataString(null)).toBe("''");
+      expect(odataString(undefined)).toBe("''");
+      expect(odataString('')).toBe("''");
+    });
+
+    it('should convert numbers and booleans to quoted strings', () => {
+      expect(odataString(123)).toBe("'123'");
+      expect(odataString(0)).toBe("'0'");
+      expect(odataString(false)).toBe("'false'");
     });
   });
 });
