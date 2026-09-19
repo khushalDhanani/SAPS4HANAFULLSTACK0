@@ -1238,12 +1238,37 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-19 15:42 IST
+- **Agent**: Antigravity
+- **Change**: Repository hygiene & root reorganization — moved 18 one-off diagnostic scripts into `tools/`, updated path resolution, added `*.csv` & `__pycache__/` to `.gitignore`, and untracked ~17.3 MB of analysis CSVs and pyc files.
+  - **Script Migration to `tools/`**:
+    - Moved 13 shell scripts and 5 python scripts from the repository root into `tools/` using `git mv` (`audit-catalog.sh`, `catalog.py`, `classify-500s.sh`, `discover-v4.sh`, `drain-goods-issue-queue.sh`, `find-ewm-fields.sh`, `find-postable.sh`, `find-queue-source.sh`, `probe-cap-drilldown.py`, `probe-cap.py`, `reclassify.py`, `refresh-catalog.sh`, `test-261.sh`, `verify-catalog-depth.py`, `verify-data.sh`, `verify-entitysets.sh`, `verify-fields.sh`, `verify-services.sh`).
+    - Staged `tools/find-creatable.py`.
+  - **Script Path Normalization**:
+    - Updated environment and working directory resolution in all `.sh` scripts to derive `ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"`, source `.env.local` / `.env` from repo root, and `cd "$ROOT_DIR"`.
+    - Updated `tools/catalog.py` and `tools/verify-catalog-depth.py` to calculate `ROOT` from parent directory.
+    - Updated `tools/drain-goods-issue-queue.sh` to run from project root so Node `require('./srv/...')` resolves.
+    - Verified execution via `python3 tools/catalog.py --stats`, `bash -n tools/*.sh`, and `python3 -m py_compile tools/*.py`.
+  - **CSV & Cache Gitignore & Untracking**:
+    - Audited all 6 CSV files (`catalog-data-reality.csv`, `catalog-data-reality-classified.csv`, `cap-endpoint-reality.csv`, `catalog-500-classified.csv`, `catalog-audit.csv`, `data-reality.csv`): confirmed they contain only endpoint status codes, error strings, and `$count` tallies, with zero transactional business records or customer PII.
+    - Added `*.csv`, `__pycache__/`, and `*.pyc` to `.gitignore`.
+    - Untracked all 6 CSV files (~17.3 MB) and deleted tracked `__pycache__/verify-catalog-depth.cpython-310.pyc` from git index.
+  - **Validation & Quality Gates**:
+    - `npm test`: **59 passed, 59 total test suites; 738 passed, 738 total tests (100% green)** in 65.2 s.
+    - `cd app/fiori-app && npm run lint`: Success! 0 findings detected.
+    - `npm run lint`: **0 errors**, 17 pre-existing warnings.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run validate:mta`: Succeeded with exit code 0 (`mbt validate`).
+    - `git diff --check`: Clean (0 errors).
+    - `git status`: Working tree clean.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 738/738 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
 - **Goods Receipt (101)**: **100% PROVEN DIRECTLY AGAINST LIVE SAP S/4HANA (CLIENT 220)** in strict accordance with the non-negotiable `AGENTS.md` SAP API Discovery Protocol. Authentic Material Documents (`5000005496`, `5000005497`, `5000005498`, `5000005499`) generated in SAP S/4HANA via `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` deep insert with CSRF handshake, read back and verified via `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`. Zero mock persistence, zero fake fallback numbers.
 - **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. `StorageBin` removed from entire flow (SAP holds no bin data). Paging loop implemented. ItemCount now single-source-of-truth with `getOpenItems` (both use `OpenQty > 0`).
 - **OData Filter Escaping & Normalization**: All filter values properly escaped (`' -> ''`) via shared `odataString()` helper, URL encoding applied consistently, double URL encoding eliminated.
+- **Repository Hygiene**: Root cleared of 18 one-off scripts (moved to `tools/`), ~17.3 MB of analysis CSVs untracked from git index and ignored, `__pycache__` ignored and cleaned.
 - **Defect Resolutions**: 8 defects FIXED, GR posting PROVEN, StorageBin NOT A CODE DEFECT (removed), GI posting STILL BLOCKED (no reachable 261 endpoint on DS4).
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
@@ -1251,6 +1276,5 @@
   3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps
-1. Stage and commit changes to `feature/CL01`.
-2. Push `feature/CL01` to remote repository.
-3. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
+1. Push any outstanding commits to remote repository (`origin/feature/CL01`).
+2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
