@@ -1,5 +1,6 @@
 const LOG = require('../../logger')('goods-issue-batches');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
+const s4Config = require('../../s4Config');
 
 /**
  * Domain client for SAP S/4HANA Goods Issue Batches, Packaging Units, and Stock Revalidation.
@@ -57,17 +58,43 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
     const sPlant = plant ? String(plant).trim() : '';
     const sSLoc = storageLocation ? String(storageLocation).trim() : '';
 
-    // 1. Fetch real storage location stock & bin from MMIM_MATERIAL_DATA_SRV if plant and sloc provided
+    // 1. Fetch real storage location stock & bin from MMIM_MATERIAL_DATA_SRV
     let slocInfo = null;
-    if (sPlant && sSLoc) {
+    try {
+      let slocFilter = `Material eq '${encodeURIComponent(sMat)}'`;
+      if (sPlant) {
+        slocFilter += ` and Plant eq '${encodeURIComponent(sPlant)}'`;
+      }
+      if (sSLoc) {
+        slocFilter += ` and StorageLocation eq '${encodeURIComponent(sSLoc)}'`;
+      }
+      const slocRes = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${encodeURIComponent(slocFilter)}&$format=json`);
+      if (Array.isArray(slocRes) && slocRes.length > 0) {
+        slocInfo = slocRes[0];
+      }
+    } catch (err) {
+      LOG.warn(`Storage location help lookup failed for material ${sMat}, plant ${sPlant}, sloc ${sSLoc}: ${err.message}`);
+    }
+
+    if (!slocInfo && sPlant) {
       try {
-        const slocFilter = `Material eq '${encodeURIComponent(sMat)}' and Plant eq '${encodeURIComponent(sPlant)}' and StorageLocation eq '${encodeURIComponent(sSLoc)}'`;
-        const slocRes = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${slocFilter}&$format=json`);
-        if (Array.isArray(slocRes) && slocRes.length > 0) {
-          slocInfo = slocRes[0];
+        let stockFilter = `Material eq '${encodeURIComponent(sMat)}' and Plant eq '${encodeURIComponent(sPlant)}'`;
+        if (sSLoc) {
+          stockFilter += ` and StorageLocation eq '${encodeURIComponent(sSLoc)}'`;
+        }
+        const stockRes = await this._get(
+          '/sap/opu/odata/sap/C_STOCKQUANTITYVALUEBYTYPE_CDS/C_STOCKQUANTITYVALUEBYTYPE',
+          `$filter=${encodeURIComponent(stockFilter)}&$top=1&$format=json`
+        );
+        if (Array.isArray(stockRes) && stockRes.length > 0) {
+          slocInfo = {
+            CurrentStock: stockRes[0].MatlWrhsStkQtyInMatlBaseUnit,
+            BaseUnit: stockRes[0].MaterialBaseUnit,
+            StorageLocation: stockRes[0].StorageLocation || sSLoc
+          };
         }
       } catch (err) {
-        LOG.warn(`Storage location help lookup failed for material ${sMat}, plant ${sPlant}, sloc ${sSLoc}: ${err.message}`);
+        LOG.warn(`C_STOCKQUANTITYVALUEBYTYPE query failed for material ${sMat}: ${err.message}`);
       }
     }
 
@@ -102,7 +129,22 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
         }
       }
 
-      // 4. Filter usable batches: exclude deleted, restricted, and expired batches
+      // 4. If slocInfo wasn't found initially, attempt lookup using inferred batch plant
+      if (!slocInfo) {
+        const inferredPlant = sPlant || Array.from(batchMap.values()).find(b => b.Plant)?.Plant || (s4Config ? s4Config.getPlant() : '1120');
+        if (inferredPlant) {
+          try {
+            let slocFilter = `Material eq '${encodeURIComponent(sMat)}' and Plant eq '${encodeURIComponent(inferredPlant)}'`;
+            if (sSLoc) slocFilter += ` and StorageLocation eq '${encodeURIComponent(sSLoc)}'`;
+            const slocRes = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${encodeURIComponent(slocFilter)}&$format=json`);
+            if (Array.isArray(slocRes) && slocRes.length > 0) {
+              slocInfo = slocRes[0];
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 5. Filter usable batches: exclude deleted, restricted, and expired batches
       const usableBatches = [];
       for (const b of batchMap.values()) {
         if (b.BatchIsMarkedForDeletion) continue;
@@ -123,7 +165,9 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           Batch: b.Batch,
           ExpiryDate: formattedExp,
           ManufactDate: formattedMfg,
-          AvailableStock: slocInfo && slocInfo.CurrentStock !== undefined ? Number(slocInfo.CurrentStock) : (b.AvailableStock !== undefined ? Number(b.AvailableStock) : null),
+          AvailableStock: slocInfo && slocInfo.CurrentStock !== undefined && slocInfo.CurrentStock !== null
+            ? Number(slocInfo.CurrentStock)
+            : (b.AvailableStock !== undefined && b.AvailableStock !== null ? Number(b.AvailableStock) : 0),
           Unit: (slocInfo && slocInfo.BaseUnit) || b.Unit || 'KG',
           StorageBin: (slocInfo && slocInfo.WarehouseStorageBin) ? slocInfo.WarehouseStorageBin : (b.StorageBin || '-'),
           StorageLocation: (slocInfo && slocInfo.StorageLocation) || sSLoc || b.StorageLocation || '',

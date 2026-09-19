@@ -1,7 +1,7 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
-const { extractFilterParam, extractFilterParams } = require('../../../common/filterUtils');
+const { extractFilterParam, extractFilterParams, applyPaging } = require('../../../common/filterUtils');
 
 const init = (srv) => {
     /**
@@ -11,10 +11,11 @@ const init = (srv) => {
     srv.on('READ', 'OpenInboundDeliveries', async (req) => {
         try {
             const sPlant = extractFilterParam(req, 'Plant') || '';
-            return await GoodsReceiptAdapter.getOpenInboundDeliveries(sPlant);
+            const deliveries = await GoodsReceiptAdapter.getOpenInboundDeliveries(sPlant);
+            return applyPaging(deliveries, req);
         } catch (err) {
             LOG.error('READ OpenInboundDeliveries failed:', err.message);
-            req.reject(err.statusCode || 502, err.message || 'Failed to retrieve open inbound deliveries from SAP');
+            req.reject(err.status || err.statusCode || 502, err.message || 'Failed to retrieve open inbound deliveries from SAP');
         }
     });
 
@@ -23,16 +24,17 @@ const init = (srv) => {
      * Queries authentic storage locations and bins from MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps
      */
     srv.on('READ', 'MaterialStorageLocations', async (req) => {
+        const { Material: sMaterial, Plant: sPlant } = extractFilterParams(req, ['Material', 'Plant']);
+
+        if (!sMaterial) {
+            return req.reject(400, 'Material parameter is required to query storage locations.');
+        }
+
         try {
-            const { Material: sMaterial, Plant: sPlant } = extractFilterParams(req, ['Material', 'Plant']);
-
-            if (!sMaterial) {
-                return req.reject(400, 'Material parameter is required to query storage locations.');
-            }
-
-            return await GoodsReceiptAdapter.getMaterialStorageLocations(sMaterial, sPlant);
+            const locations = await GoodsReceiptAdapter.getMaterialStorageLocations(sMaterial, sPlant);
+            return applyPaging(locations, req);
         } catch (err) {
-            req.reject(err.statusCode || 502, err.message || 'Failed to retrieve storage locations from SAP');
+            req.reject(err.status || err.statusCode || 502, err.message || 'Failed to retrieve storage locations from SAP');
         }
     });
 
@@ -41,16 +43,17 @@ const init = (srv) => {
      * Queries authentic batches and SLED from LO_BM_BATCH_SRV/I_Batch
      */
     srv.on('READ', 'MaterialBatches', async (req) => {
+        const { Material: sMaterial, Plant: sPlant, StorageLocation: sStorageLocation } = extractFilterParams(req, ['Material', 'Plant', 'StorageLocation']);
+
+        if (!sMaterial) {
+            return req.reject(400, 'Material parameter is required to query batches.');
+        }
+
         try {
-            const { Material: sMaterial, Plant: sPlant, StorageLocation: sStorageLocation } = extractFilterParams(req, ['Material', 'Plant', 'StorageLocation']);
-
-            if (!sMaterial) {
-                return req.reject(400, 'Material parameter is required to query batches.');
-            }
-
-            return await GoodsReceiptAdapter.getMaterialBatches(sMaterial, sPlant, sStorageLocation);
+            const batches = await GoodsReceiptAdapter.getMaterialBatches(sMaterial, sPlant, sStorageLocation);
+            return applyPaging(batches, req);
         } catch (err) {
-            req.reject(err.statusCode || 502, err.message || 'Failed to retrieve batches from SAP');
+            req.reject(err.status || err.statusCode || 502, err.message || 'Failed to retrieve batches from SAP');
         }
     });
 

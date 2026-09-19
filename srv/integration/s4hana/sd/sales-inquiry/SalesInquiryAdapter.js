@@ -215,7 +215,15 @@ class SalesInquiryAdapter {
         }
 
         if (query.SELECT.limit) {
-          execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
+          const lRows = typeof query.SELECT.limit.rows === 'object' && query.SELECT.limit.rows !== null && 'val' in query.SELECT.limit.rows
+            ? Number(query.SELECT.limit.rows.val)
+            : Number(query.SELECT.limit.rows);
+          const lOffset = typeof query.SELECT.limit.offset === 'object' && query.SELECT.limit.offset !== null && 'val' in query.SELECT.limit.offset
+            ? Number(query.SELECT.limit.offset.val)
+            : (query.SELECT.limit.offset ? Number(query.SELECT.limit.offset) : 0);
+          if (!isNaN(lRows) && lRows >= 0) {
+            execQuery.limit(lRows, lOffset || 0);
+          }
         }
         if (query.SELECT.count) {
           execQuery.SELECT.count = true;
@@ -291,7 +299,15 @@ class SalesInquiryAdapter {
           .where([{ ref: ['SDDocumentCategory'] }, '=', { val: 'A' }])
           .orderBy('SalesDocumentType asc');
         if (query && query.SELECT && query.SELECT.limit) {
-          execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
+          const lRows = typeof query.SELECT.limit.rows === 'object' && query.SELECT.limit.rows !== null && 'val' in query.SELECT.limit.rows
+            ? Number(query.SELECT.limit.rows.val)
+            : Number(query.SELECT.limit.rows);
+          const lOffset = typeof query.SELECT.limit.offset === 'object' && query.SELECT.limit.offset !== null && 'val' in query.SELECT.limit.offset
+            ? Number(query.SELECT.limit.offset.val)
+            : (query.SELECT.limit.offset ? Number(query.SELECT.limit.offset) : 0);
+          if (!isNaN(lRows) && lRows >= 0) {
+            execQuery.limit(lRows, lOffset || 0);
+          }
         }
         const raw = await this.s4hanaFS.run(execQuery);
         rawList = Array.isArray(raw) ? raw : (raw?.value || raw?.d?.results || []);
@@ -303,7 +319,22 @@ class SalesInquiryAdapter {
 
     if (rawList.length === 0 && this.s4hanaWL) {
       try {
-        const rawWl = await this.s4hanaWL.run(SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp'));
+        const wlQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp');
+        if (query && query.SELECT && query.SELECT.limit) {
+          const lRows = typeof query.SELECT.limit.rows === 'object' && query.SELECT.limit.rows !== null && 'val' in query.SELECT.limit.rows
+            ? Number(query.SELECT.limit.rows.val)
+            : Number(query.SELECT.limit.rows);
+          const lOffset = typeof query.SELECT.limit.offset === 'object' && query.SELECT.limit.offset !== null && 'val' in query.SELECT.limit.offset
+            ? Number(query.SELECT.limit.offset.val)
+            : (query.SELECT.limit.offset ? Number(query.SELECT.limit.offset) : 0);
+          if (!isNaN(lRows) && lRows >= 0) {
+            wlQuery.limit(lRows, lOffset || 0);
+          }
+        }
+        if (query && query.SELECT && query.SELECT.count) {
+          wlQuery.SELECT.count = true;
+        }
+        const rawWl = await this.s4hanaWL.run(wlQuery);
         rawList = Array.isArray(rawWl) ? rawWl : (rawWl?.value || rawWl?.d?.results || []);
       } catch (wlError) {
         failures.push(`SD_F2370_INQY_WL_SRV: ${wlError.message}`);

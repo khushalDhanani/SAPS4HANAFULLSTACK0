@@ -954,21 +954,79 @@
     - `app/fiori-app/webapp/controller/App.controller.js`: Cleaned shell routing and title bindings.
     - `app/fiori-app/webapp/view/Dashboard.view.xml`: Removed EWM cockpit tile and button.
     - `app/fiori-app/webapp/controller/Dashboard.controller.js`: Removed onNavigateToEwmCockpit.
-  - **Next recommended action**: Push feature branch `feature/CL01` to origin.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
+## 2026-09-19 13:20 IST
+- **Agent**: Antigravity
+- **Change**: Resolved All 7 Verification Defects Across Paging, Batch Stock, Reservation Items, Storage Bin, Error Handling, Supplier Defaults, and Value Help:
+  1. **Defect 1: Paging & Count Ignored on Custom Handlers**:
+     - Root cause: Custom `READ` handlers returned arrays directly without slicing by `req.query.SELECT.limit` or attaching `@odata.count`.
+     - Created `applyPaging(items, req)` in `srv/common/filterUtils.js` supporting AST `{ val: N }` limit objects, raw `$top`/`$skip`, and `@odata.count`.
+     - Integrated `applyPaging` in `srv/handlers/valueHelp.handler.js` (`MaterialVH`, `SalesInquiryTypeVH`, `DocumentTypeVH`), `srv/wm/goods-issue/handlers/goodsIssue.handler.js` (`GIItems`, `OpenReservations`, `MaterialBatches`), and `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` (`OpenInboundDeliveries`, `MaterialStorageLocations`, `MaterialBatches`).
+     - Added AST limit parsing in `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js` (`getMaterials`, `getInquiryTypes`).
+     - Verified: `OpenReservations?$top=1&$count=true` returns 1 item with `@odata.count: 109`; `OpenInboundDeliveries?$top=1&$count=true` returns 1 item with `@odata.count: 18`; `MaterialVH?$top=3&$count=true` returns 3 items with `@odata.count: 132`; `SalesInquiryTypeVH?$top=3&$count=true` returns 3 items with `@odata.count: 3`.
+  2. **Defect 2: Stock Disagreement Between MaterialBatches & resolveIdentifier**:
+     - Root cause: Querying `MaterialBatches` with material alone returned `AvailableStock: null` because plant/sloc was absent in query params, skipping `MaterialStorLocHelps` lookup.
+     - Enriched `getMaterialBatches` in `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js` and `srv/integration/s4hana/wm/GoodsReceiptAdapter.js` to infer plant from batch headers (e.g. `1120`) and fetch unrestricted stock via `MaterialStorLocHelps`.
+     - Verified: `MaterialBatches?$filter=Material eq '3000000200'` returns `AvailableStock: 5000` (identical to `resolveIdentifier`).
+  3. **Defect 3: ItemCount Off-by-One in OpenReservations**:
+     - Root cause: Reservation 168779 has 6 items and 168778 has 4 items, but movement type `'531'` ("Receipt by-product") was excluded from `getOpenReservations` filter (`261` or `201`).
+     - Added `GoodsMovementType eq '531'` to OData filter in `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js` and capped query at `$top=200` to prevent Gateway socket timeouts.
+     - Verified: `OpenReservations?$filter=ReservationNo eq '168779'` returns `ItemCount: 6` (reconciled with all 6 items returned by `GIItems`).
+  4. **Defect 4: StorageBin Carrying "Raw Material" Description**:
+     - Root cause: `GoodsIssueReservationsClient.js` mapped `StorageBin: r.StorageLocationName || ''`, placing storage location description into the bin field.
+     - Corrected mapping: `StorageBin: r.StorageBin || r.WarehouseStorageBin || ''` and `StorageLocationName: r.StorageLocationName || ''`. Harmonized in `GoodsIssueStockUnitClient.js` and `GoodsIssueAdapter.js`.
+     - Verified: `GIItems?$filter=ReservationNo eq '168779'` returns `StorageBin: ""` (clean) and `StorageLocationName: "Raw Material"`.
+  5. **Defect 5: Goods Receipt Validation Returning 502 Instead of 400**:
+     - Root cause: `req.reject(400)` throws with `err.status = 400`, but catch block evaluated `err.statusCode || 502`, misclassifying 400 validation rejections as 502 Bad Gateway.
+     - Extracted input validation before `try/catch` block in `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` and updated error handler to check `err.status || err.statusCode || 502`.
+     - Verified: `MaterialStorageLocations` and `MaterialBatches` without `Material` return HTTP 400 with descriptive error payload.
+  6. **Defect 6: getSupplierDefaults Returning Empty Commercial Defaults**:
+     - Root cause: Real supplier 1110 in SAP belongs to Purchasing Organization `AE01`; when UI sent default `PurchasingOrganization: '1000'`, S/4 returned 0 records.
+     - Implemented 4-tier query fallback hierarchy (`PurchOrg + CompCode` -> `CompCode` -> `PurchOrg` -> `Supplier alone`) in `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`.
+     - Verified: `getSupplierDefaults(Supplier='1110',PurchasingOrganization='1000',CompanyCode='1000')` derives `Currency: "INR"`, `PaymentTerms: "AT01"`, `derived: true`.
+  7. **Defect 7: DocumentTypeVH Empty with $top=3&$count=true**:
+     - Root cause: Remote S/4 query fetched first 3 unfiltered records from `A_PurchasingDocumentType` (category `'A'`), which in-memory category `'F'` filtering discarded, returning 0 rows.
+     - Injected `PurchasingDocumentCategory: 'F'` filter into `req.query` before the S/4 call in `srv/handlers/valueHelp.handler.js`.
+     - Verified: `DocumentTypeVH?$top=3&$count=true` returns 3 rows of Category 'F' (`DB`, `ENB`, `EUB`) with `@odata.count: 14`.
+  - **Files Modified**:
+    - `srv/common/filterUtils.js`: Implemented `applyPaging` helper.
+    - `srv/handlers/valueHelp.handler.js`: Injected Category 'F' filter and added paging to value helps.
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Added AST limit parsing.
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Sanitized storage bin fallback.
+    - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Added batch plant stock lookup and paging.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`: Added batch plant stock lookup and imported `s4Config`.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: Added movement 531 filter and corrected StorageBin mapping.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`: Sanitized storage bin mapping.
+    - `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`: Implemented 4-tier commercial defaults fallback.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`: Added paging on GI items, reservations, batches.
+    - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: Fixed 400 vs 502 error status and added paging.
+    - `test/unit/common/filterUtils.test.js`: Added 16 unit tests for `applyPaging`.
+  - **Validation & Quality Gates**:
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run lint`: 0 errors (17 pre-existing warnings in unchanged code).
+    - `cd app/fiori-app && npm run lint`: 0 findings (100% clean).
+    - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 1.18 s).
+    - `npx jest test/unit/common/filterUtils.test.js`: **16 passed, 16 total tests (100% green)**.
+    - `npm test`: **59 passed, 59 total test suites; 724 passed, 724 total tests (100% green)** in 60.1 s.
+    - `git diff --check`: Clean (0 errors).
+    - Live Gateway Probes: All 7 defect fixes verified against live SAP DS4 client 220 via localhost:4004.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 718/718 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 724/724 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
 - **EWM Cockpit Removal**: Completely expunged (1,489 backend lines, 7 UI files, 10 test suites) with zero dead code and zero broken routes.
 - **Warehouse Management Active Pipeline**:
   - **Goods Receipt (101)**: Retargeted to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert (`Header2Items`), movement type 101, single-session CSRF handshake.
   - **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. Real S/4HANA read data (54 open reservations, Plant 1120, CS01, live batches with SLED status and packaging units) drives floor scanning; transactions queue reliably into SQLite/HANA `GoodsIssueQueue` with zero ABAP dependencies and atomic on-demand/scheduled queue draining via `drainQueue()`.
+- **Defect Resolutions**: All 7 verification defects resolved, tested, and validated against live SAP S/4HANA backend.
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps
-1. Execute live end-to-end Goods Receipt post against inbound delivery `180000001`.
-2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
-3. Push `feature/CL01` to remote repository.
+1. Stage and commit changes to `feature/CL01`.
+2. Push `feature/CL01` to remote repository.
+3. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.

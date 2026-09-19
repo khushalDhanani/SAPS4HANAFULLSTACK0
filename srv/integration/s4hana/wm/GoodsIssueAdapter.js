@@ -389,7 +389,7 @@ class GoodsIssueAdapter {
       AvailableBatches: availableBatches,
       AvailableStock: availableStock,
       DefaultStorageLocation: activeItem.StorageLocation || s4Config.getStorageLocation(),
-      DefaultStorageLocationName: activeItem.StorageBin || 'Raw Material',
+      DefaultStorageLocationName: activeItem.StorageLocationName || 'Raw Material',
       DefaultStorageBin: activeItem.StorageBin || s4Config.getStorageBin()
     };
   }

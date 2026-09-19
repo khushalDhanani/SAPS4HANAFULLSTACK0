@@ -105,4 +105,59 @@ describe('Unit: filterUtils', () => {
       });
     });
   });
+
+  describe('applyPaging', () => {
+    const { applyPaging } = require('../../../srv/common/filterUtils');
+
+    it('should return non-array inputs unmodified', () => {
+      expect(applyPaging(null, {})).toBeNull();
+      expect(applyPaging('abc', {})).toBe('abc');
+    });
+
+    it('should slice array when SELECT.limit is provided with numbers', () => {
+      const items = [1, 2, 3, 4, 5];
+      const req = { query: { SELECT: { limit: { rows: 2, offset: 1 } } } };
+      const res = applyPaging(items, req);
+      expect(res).toEqual([2, 3]);
+    });
+
+    it('should slice array when SELECT.limit contains { val: N } AST objects', () => {
+      const items = ['a', 'b', 'c', 'd', 'e'];
+      const req = { query: { SELECT: { limit: { rows: { val: 3 }, offset: { val: 0 } } } } };
+      const res = applyPaging(items, req);
+      expect(res).toEqual(['a', 'b', 'c']);
+    });
+
+    it('should attach $count when count: true is requested in query', () => {
+      const items = [10, 20, 30, 40, 50, 60];
+      const req = {
+        query: {
+          SELECT: {
+            count: true,
+            limit: { rows: { val: 2 }, offset: { val: 0 } }
+          }
+        }
+      };
+      const res = applyPaging(items, req);
+      expect([...res]).toEqual([10, 20]);
+      expect(res.$count).toBe(6);
+    });
+
+    it('should preserve existing $count if items already has it set', () => {
+      const items = [1, 2];
+      items.$count = 100;
+      const req = { query: { SELECT: { limit: { rows: 1 } } } };
+      const res = applyPaging(items, req);
+      expect([...res]).toEqual([1]);
+      expect(res.$count).toBe(100);
+    });
+
+    it('should support raw query options $top and $skip', () => {
+      const items = [1, 2, 3, 4, 5];
+      const req = { _queryOptions: { $top: '2', $skip: '1', $count: 'true' } };
+      const res = applyPaging(items, req);
+      expect([...res]).toEqual([2, 3]);
+      expect(res.$count).toBe(5);
+    });
+  });
 });

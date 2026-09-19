@@ -21,7 +21,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     const sPlant = plant ? String(plant).trim() : '';
     let filter = `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
     if (movementType) {
-      filter += ` and (GoodsMovementType eq '${encodeURIComponent(movementType)}' or GoodsMovementType eq '261' or GoodsMovementType eq '201')`;
+      filter += ` and (GoodsMovementType eq '${encodeURIComponent(movementType)}' or GoodsMovementType eq '261' or GoodsMovementType eq '201' or GoodsMovementType eq '531')`;
     }
     if (sPlant) {
       filter += ` and Plant eq '${encodeURIComponent(sPlant)}'`;
@@ -30,7 +30,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     try {
       const results = await this._get(
         '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
-        `$filter=${encodeURIComponent(filter)}&$top=100&$format=json`
+        `$filter=${encodeURIComponent(filter)}&$top=200&$format=json`
       );
 
       if (Array.isArray(results) && results.length > 0) {
@@ -181,7 +181,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           MaterialDesc: r.ProductName || '',
           Plant: r.Plant || '',
           StorageLocation: r.StorageLocation || '',
-          StorageBin: r.StorageLocationName || '',
+          StorageLocationName: r.StorageLocationName || '',
+          StorageBin: r.StorageBin || r.WarehouseStorageBin || '',
           Batch: r.Batch || '',
           ExpiryDate: expiryDate,
           BatchStatusState: batchStatus.StatusState,

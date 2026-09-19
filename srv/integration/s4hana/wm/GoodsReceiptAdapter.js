@@ -173,16 +173,17 @@ class GoodsReceiptAdapter {
 
       // Query SLoc stock & bins
       let slocMap = new Map();
-      if (storageLocation && plant) {
-        try {
-          const slocRes = await this._get(
-            '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
-            `$filter=Material eq '${material}' and Plant eq '${plant}' and StorageLocation eq '${storageLocation}'&$format=json`
-          );
-          const slocs = Array.isArray(slocRes) ? slocRes : (slocRes ? [slocRes] : []);
-          slocs.forEach(s => slocMap.set(s.StorageLocation, s));
-        } catch (_) {}
-      }
+      try {
+        let slocFilter = `Material eq '${material}'`;
+        if (plant) slocFilter += ` and Plant eq '${plant}'`;
+        if (storageLocation) slocFilter += ` and StorageLocation eq '${storageLocation}'`;
+        const slocRes = await this._get(
+          '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
+          `$filter=${encodeURIComponent(slocFilter)}&$format=json`
+        );
+        const slocs = Array.isArray(slocRes) ? slocRes : (slocRes ? [slocRes] : []);
+        slocs.forEach(s => slocMap.set(s.StorageLocation, s));
+      } catch (_) {}
 
       // Deduplicate client-level (Plant: "") and plant-level records
       const batchMap = new Map();
@@ -211,15 +212,16 @@ class GoodsReceiptAdapter {
 
         if (statusInfo.DaysToExpiry < 0) continue; // Exclude expired batches
 
-        const slocObj = slocMap.get(storageLocation);
-        const availStock = slocObj ? (Number(slocObj.CurrentStock) || 0) : null;
+        const slocObj = slocMap.get(storageLocation) || (slocMap.size > 0 ? slocMap.values().next().value : null);
+        const availStock = slocObj ? (Number(slocObj.CurrentStock) || 0) : 0;
         const bin = slocObj?.WarehouseStorageBin || '';
+        const sLoc = storageLocation || slocObj?.StorageLocation || '';
 
         processed.push({
           Material: material,
           Batch: b.Batch,
           Plant: b.Plant || plant || '',
-          StorageLocation: storageLocation || '',
+          StorageLocation: sLoc,
           StorageBin: bin,
           AvailableStock: availStock,
           ExpiryDate: expiryFormatted,

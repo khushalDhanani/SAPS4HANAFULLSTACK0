@@ -79,29 +79,44 @@ function registerPurchaseOrderHandlers(srv) {
         }
 
         const sSupplier = String(Supplier).trim();
+        const sPurchOrg = PurchasingOrganization ? String(PurchasingOrganization).trim() : '';
+        const sCompCode = CompanyCode ? String(CompanyCode).trim() : '';
 
         try {
-            // Check PurchaseOrders in S/4HANA FS service for confirmed commercial defaults
-            const s4Query = SELECT.from('C_PURCHASEORDER_FS_SRV.C_PurchaseOrderFs')
-                .columns(
-                    'DocumentCurrency',
-                    'PaymentTerms',
-                    'IncotermsClassification',
-                    'IncotermsTransferLocation'
-                )
-                .where({ Supplier: sSupplier });
+            const findPoWithDefaults = async (filterObj) => {
+                const s4Query = SELECT.from('C_PURCHASEORDER_FS_SRV.C_PurchaseOrderFs')
+                    .columns(
+                        'DocumentCurrency',
+                        'PaymentTerms',
+                        'IncotermsClassification',
+                        'IncotermsTransferLocation',
+                        'PurchasingOrganization',
+                        'CompanyCode'
+                    )
+                    .where(filterObj)
+                    .limit(1);
+                const result = await purchaseOrderAdapter.readFsData(s4Query);
+                const aOrders = Array.isArray(result) ? result : (result?.value || []);
+                return aOrders.length > 0 ? aOrders[0] : null;
+            };
 
-            if (PurchasingOrganization && String(PurchasingOrganization).trim() !== '') {
-                s4Query.where({ PurchasingOrganization: String(PurchasingOrganization).trim() });
+            let po = null;
+            // Attempt 1: Supplier + PurchOrg + CompCode (if both supplied)
+            if (sPurchOrg && sCompCode) {
+                po = await findPoWithDefaults({ Supplier: sSupplier, PurchasingOrganization: sPurchOrg, CompanyCode: sCompCode });
             }
-            if (CompanyCode && String(CompanyCode).trim() !== '') {
-                s4Query.where({ CompanyCode: String(CompanyCode).trim() });
+            // Attempt 2: Supplier + CompCode (if CompCode supplied)
+            if (!po && sCompCode) {
+                po = await findPoWithDefaults({ Supplier: sSupplier, CompanyCode: sCompCode });
             }
-            s4Query.limit(1);
-
-            const result = await purchaseOrderAdapter.readFsData(s4Query);
-            const aOrders = Array.isArray(result) ? result : (result?.value || []);
-            const po = aOrders.length > 0 ? aOrders[0] : null;
+            // Attempt 3: Supplier + PurchOrg (if PurchOrg supplied)
+            if (!po && sPurchOrg) {
+                po = await findPoWithDefaults({ Supplier: sSupplier, PurchasingOrganization: sPurchOrg });
+            }
+            // Attempt 4: Supplier alone (broadest commercial history for this vendor)
+            if (!po) {
+                po = await findPoWithDefaults({ Supplier: sSupplier });
+            }
 
             if (po && (po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification)) {
                 return {

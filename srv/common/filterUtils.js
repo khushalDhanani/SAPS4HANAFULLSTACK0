@@ -94,7 +94,61 @@ function extractFilterParams(req, fieldNames) {
   return result;
 }
 
+/**
+ * Applies pagination ($top, $skip) and @odata.count to an array of results based on req.query.
+ *
+ * @param {Array} items
+ * @param {import('@sap/cds').Request} req
+ * @returns {Array}
+ */
+function applyPaging(items, req) {
+  if (!Array.isArray(items)) return items;
+
+  const totalCount = items.$count !== undefined ? items.$count : items.length;
+
+  const limitObj = req?.query?.SELECT?.limit;
+  let rows = null;
+  let offset = 0;
+
+  if (limitObj) {
+    if (limitObj.rows !== undefined) {
+      rows = typeof limitObj.rows === 'object' && limitObj.rows !== null && 'val' in limitObj.rows
+        ? Number(limitObj.rows.val)
+        : Number(limitObj.rows);
+    }
+    if (limitObj.offset !== undefined) {
+      offset = typeof limitObj.offset === 'object' && limitObj.offset !== null && 'val' in limitObj.offset
+        ? Number(limitObj.offset.val)
+        : Number(limitObj.offset);
+    }
+  }
+
+  // Also check raw query options if limit was not in SELECT.limit
+  if (rows === null && req?._queryOptions?.$top) {
+    rows = parseInt(req._queryOptions.$top, 10);
+  }
+  if (!offset && req?._queryOptions?.$skip) {
+    offset = parseInt(req._queryOptions.$skip, 10) || 0;
+  }
+
+  let result = items;
+  if (rows !== null && !isNaN(rows) && rows >= 0) {
+    const start = Math.max(0, offset || 0);
+    result = items.slice(start, start + rows);
+  } else if (offset > 0) {
+    result = items.slice(offset);
+  }
+
+  // Preserve or set $count if count was requested or already present
+  if (req?.query?.SELECT?.count || req?._queryOptions?.$count === 'true' || items.$count !== undefined) {
+    result.$count = totalCount;
+  }
+
+  return result;
+}
+
 module.exports = {
   extractFilterParam,
-  extractFilterParams
+  extractFilterParams,
+  applyPaging
 };

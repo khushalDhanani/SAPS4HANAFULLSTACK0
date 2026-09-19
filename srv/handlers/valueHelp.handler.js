@@ -1,3 +1,5 @@
+const { applyPaging } = require('../common/filterUtils');
+
 /**
  * Generic Value Help Handler Registration
  *
@@ -18,6 +20,13 @@ function registerValueHelpHandlers(srv, groups) {
         if (!entities || entities.length === 0 || typeof read !== 'function') continue;
 
         srv.on('READ', entities, async (req) => {
+            const entityName = req.target ? req.target.name.split('.').pop() : '';
+
+            // For Purchase Order DocumentTypeVH, restrict query at source to category 'F' (Purchase Orders)
+            if (entityName === 'DocumentTypeVH' && req.query) {
+                req.query.where({ PurchasingDocumentCategory: 'F' });
+            }
+
             let results;
             try {
                 results = await read(req.query);
@@ -25,30 +34,28 @@ function registerValueHelpHandlers(srv, groups) {
                 return req.error(err.status || 502, err.message);
             }
 
-            const entityName = req.target ? req.target.name.split('.').pop() : '';
-
-            // For Purchase Order DocumentTypeVH, restrict to category 'F' (Purchase Orders)
+            // Safety guard: For Purchase Order DocumentTypeVH, ensure category 'F'
             if (entityName === 'DocumentTypeVH' && Array.isArray(results)) {
                 results = results.filter(item => !item || !item.PurchasingDocumentCategory || item.PurchasingDocumentCategory === 'F');
             }
 
             const dedupeKey = (group.entityDeduplicateBy && group.entityDeduplicateBy[entityName]) || deduplicateBy;
 
+            let finalResults = results;
             if (dedupeKey && Array.isArray(results)) {
                 const seen = new Set();
-                const filtered = results.filter(item => {
+                finalResults = results.filter(item => {
                     if (!item || item[dedupeKey] === undefined || item[dedupeKey] === null) return true;
                     if (seen.has(item[dedupeKey])) return false;
                     seen.add(item[dedupeKey]);
                     return true;
                 });
                 if (results.$count !== undefined) {
-                    filtered.$count = results.$count;
+                    finalResults.$count = results.$count;
                 }
-                return filtered;
             }
 
-            return results;
+            return applyPaging(finalResults, req);
         });
     }
 }

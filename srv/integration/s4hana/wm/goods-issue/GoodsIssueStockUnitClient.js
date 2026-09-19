@@ -705,7 +705,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         MaterialDesc: resvItem.ProductName || '',
         Plant: resvPlant,
         StorageLocation: resvSLoc,
-        StorageBin: batchDirectMatch.StorageBin || resvItem.StorageLocationName || '',
+        StorageBin: batchDirectMatch.StorageBin || resvItem.StorageBin || resvItem.WarehouseStorageBin || '',
         CurrentStock: batchDirectMatch.AvailableStock != null ? batchDirectMatch.AvailableStock : currentStock,
         SuStockQty: currentStock,
         BaseUnit: baseUnit,

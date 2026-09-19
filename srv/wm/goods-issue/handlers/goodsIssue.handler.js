@@ -1,6 +1,6 @@
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
-const { extractFilterParam } = require('../../../common/filterUtils');
+const { extractFilterParam, applyPaging } = require('../../../common/filterUtils');
 
 const _extractFilterParam = extractFilterParam;
 
@@ -13,7 +13,7 @@ class GoodsIssueHandler {
 
       try {
         const items = await GoodsIssueAdapter.getOpenItems(orderNo, reservNo);
-        return items;
+        return applyPaging(items, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read Goods Issue items');
       }
@@ -23,10 +23,15 @@ class GoodsIssueHandler {
     srv.on('READ', 'OpenReservations', async (req) => {
       const plant = _extractFilterParam(req, 'Plant') || '';
       const mvtType = _extractFilterParam(req, 'MovementType') || '261';
+      const reservNo = _extractFilterParam(req, 'ReservationNo');
 
       try {
-        const reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant);
-        return reservations;
+        let reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant);
+        if (reservNo && Array.isArray(reservations)) {
+          const sResClean = reservNo.replace(/^0+/, '');
+          reservations = reservations.filter(r => r.ReservationNo === reservNo || r.ReservationNo === sResClean);
+        }
+        return applyPaging(reservations, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read open reservations from S/4HANA');
       }
@@ -44,7 +49,7 @@ class GoodsIssueHandler {
 
       try {
         const batches = await GoodsIssueAdapter.getMaterialBatches(material, plant, storageLoc);
-        return batches;
+        return applyPaging(batches, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read material batches');
       }
