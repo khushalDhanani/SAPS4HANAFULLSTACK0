@@ -509,26 +509,12 @@
                             text="{i18n>tabEWMTitle}"
                             tooltip="{i18n>tabEWMTooltip}">
                             <VBox class="sapUiSmallMarginTop">
-                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
-                                    <VBox class="sapUiTinyMarginBottom">
-                                        <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
-                                        <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
-                                    </VBox>
-                                    <Button
-                                        id="btnOpenEwmCockpit"
-                                        text="{i18n>ewmLaunchCockpitBtn}"
-                                        icon="sap-icon://inventory"
-                                        type="Emphasized"
-                                        press=".onNavigateToEwmCockpit"
-                                        class="sapUiTinyMarginBottom" />
-                                </HBox>
+                                <VBox class="sapUiTinyMarginBottom">
+                                    <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
+                                    <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
+                                </VBox>
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile id="tileEwmCockpit" header="Warehouse Cockpit" subheader="EWM Warehouses" press=".onNavigateToEwmCockpit" state="{path: 'dashboardView>/warehouseCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Warehouses">
-                                            <NumericContent value="{path: 'dashboardView>/warehouseCount', formatter: '.formatMetricValue'}" icon="sap-icon://inventory" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
                                     <GenericTile id="tileGoodsIssue" header="Goods Issue (261)" subheader="Open Reservation Items" press=".onNavigateToGoodsIssue" state="{path: 'dashboardView>/openReservationCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="Reservation Items">
                                             <NumericContent value="{path: 'dashboardView>/openReservationCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />

@@ -49,14 +49,6 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
-      },
-      "warehouseManagementService": {
-        "uri": "/odata/v4/warehouse-management/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
       }
     }
   },
@@ -121,13 +113,6 @@
       },
       "goodsReceipt": {
         "dataSource": "goodsReceiptService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "warehouseMgmt": {
-        "dataSource": "warehouseManagementService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -202,21 +187,6 @@
           "target": "TargetSalesInquiryDetail"
         },
         {
-          "name": "ewmWarehouseCockpit",
-          "pattern": "ewm/cockpit",
-          "target": "TargetWarehouseCockpit"
-        },
-        {
-          "name": "ewmRfTerminal",
-          "pattern": "ewm/rf-terminal",
-          "target": "TargetRfTerminal"
-        },
-        {
-          "name": "createWarehouseTask",
-          "pattern": "ewm/tasks/create",
-          "target": "TargetCreateWarehouseTask"
-        },
-        {
           "name": "wmGoodsIssue",
           "pattern": "wm/goods-issue",
           "target": "TargetGoodsIssue"
@@ -270,21 +240,6 @@
           "id": "salesInquiryDetail",
           "name": "SalesInquiryDetail",
           "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
-        },
-        "TargetWarehouseCockpit": {
-          "id": "warehouseCockpit",
-          "name": "WarehouseCockpit",
-          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
-        },
-        "TargetRfTerminal": {
-          "id": "rfTerminal",
-          "name": "RfTerminal",
-          "path": "saps4hana.fiori.modules.ewm.rf-terminal.view"
-        },
-        "TargetCreateWarehouseTask": {
-          "id": "createWarehouseTask",
-          "name": "CreateWarehouseTask",
-          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
         },
         "TargetGoodsIssue": {
           "id": "goodsIssue",

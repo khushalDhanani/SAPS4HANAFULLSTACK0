@@ -51,12 +51,6 @@ sap.ui.define([
                 this._updateShell("salesInquiries");
             } else if (sHash.indexOf("wm/goods-issue") === 0) {
                 this._updateShell("wmGoodsIssue");
-            } else if (sHash.indexOf("ewm/tasks/create") === 0) {
-                this._updateShell("createWarehouseTask");
-            } else if (sHash.indexOf("ewm/rf-terminal") === 0) {
-                this._updateShell("ewmRfTerminal");
-            } else if (sHash.indexOf("ewm/warehouse-cockpit") === 0 || sHash.indexOf("ewm/cockpit") === 0) {
-                this._updateShell("ewmWarehouseCockpit");
             } else if (sHash.indexOf("dashboard") === 0) {
                 this._updateShell("dashboard");
             }
@@ -132,18 +126,6 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
                     bShowNav = true;
                     break;
-                case "ewmWarehouseCockpit":
-                    sTitle = oBundle ? oBundle.getText("ewmCockpitTitle") : "Warehouse Management Cockpit (EWM)";
-                    bShowNav = true;
-                    break;
-                case "ewmRfTerminal":
-                    sTitle = "RF Barcode Terminal (EWM)";
-                    bShowNav = true;
-                    break;
-                case "createWarehouseTask":
-                    sTitle = oBundle ? oBundle.getText("ewmCreateTaskBtn") : "Create Warehouse Task";
-                    bShowNav = true;
-                    break;
                 case "login":
                 case "default":
                 default:
@@ -176,9 +158,7 @@ sap.ui.define([
                 this.onNavBack("purchaseOrders");
             } else if (sRoute === "salesInquiryDetail" || sRoute === "createSalesInquiry") {
                 this.onNavBack("salesInquiries");
-            } else if (sRoute === "createWarehouseTask" || sRoute === "ewmRfTerminal") {
-                this.onNavBack("ewmWarehouseCockpit");
-            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "ewmWarehouseCockpit" || sRoute === "wmGoodsIssue" || sRoute === "wmGoodsReceipt") {
+            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "wmGoodsIssue" || sRoute === "wmGoodsReceipt") {
                 this.onNavBack("dashboard");
             } else {
                 this.onNavBack("dashboard");

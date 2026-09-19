@@ -246,10 +246,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("createSalesInquiry");
         },
 
-        onNavigateToEwmCockpit: function () {
-            this.getOwnerComponent().getRouter().navTo("ewmWarehouseCockpit");
-        },
-
         onNavigateToGoodsIssue: function () {
             this.getOwnerComponent().getRouter().navTo("wmGoodsIssue");
         },
