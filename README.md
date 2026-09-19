@@ -16,7 +16,7 @@ The solution delivers a unified, resilient multi-module enterprise workspace spa
 - **Materials Management (MM)**: Two-phase Purchase Order creation, draft activation, dynamic calculations, and real-time catalog value helps.
 - **Warehouse Management (WM)**: Reservation-driven and ad-hoc Goods Issue with batch SLED tracking, storage unit / GS1 barcode parsing, HDI-backed resilient dispatch queue, and multi-tier Goods Receipt inbound delivery processing.
 - **Extended Warehouse Management (EWM)**: Real-time Warehouse Cockpit KPI dashboard, two-step warehouse task management, and scanner-optimized RF Terminal emulation.
-- **Sales & Distribution (SD)**: Sales Inquiry worklists with KPI metrics, partner/commercial factsheets, and dialog-driven quotation generation.
+- **Sales & Distribution (SD)**: Sales Inquiry worklists with KPI metrics, partner/commercial factsheets, and creation workflows.
 - **Financial Accounting (FI)**: General Ledger journal entry verification, line item debit/credit analysis, and balance validation.
 
 ---
@@ -32,7 +32,7 @@ flowchart TD
         MM_UI["MM: Purchase Orders\n(Worklist, Create, Detail Dialog)"]
         WM_UI["WM: Goods Movements\n(Goods Issue, Goods Receipt)"]
         EWM_UI["EWM: Warehouse Operations\n(Cockpit, Tasks, RF Terminal)"]
-        SD_UI["SD: Sales Inquiries\n(Worklist, Details, Quotation Dialog)"]
+        SD_UI["SD: Sales Inquiries\n(Worklist, Details, Create Dialog)"]
         FI_UI["FI: Financial Accounting\n(Journal Entry Verification)"]
         ClientCore["Frontend Core\n(ODataClient, V4 Model Bindings, BaseController, i18n)"]
 
@@ -57,7 +57,7 @@ flowchart TD
         GIAdapter["GoodsIssueAdapter\n(Stock Units & Posting)"]
         GRAdapter["GoodsReceiptAdapter\n(Inbound Deliveries & Slocs)"]
         EWMAdapter["EwmAdapter\n(Tasks & Orders)"]
-        SDAdapter["SalesInquiryAdapter\n(Inquiries & Quotations)"]
+        SDAdapter["SalesInquiryAdapter\n(Sales Inquiries)"]
         CoreInfra["Core Infrastructure\n(SessionContext CSRF, AuthAdapter, S4HttpClient, S4ErrorMapper)"]
 
         MMSrv --> POAdapter
@@ -149,9 +149,8 @@ flowchart TD
 - **Inquiry Details & Partner Factsheets**:
   - Deep factsheet navigation displaying sold-to, ship-to, payer, and bill-to parties (`SD_F2369_INQY_FS_SRV`).
   - Item pricing conditions and schedule line tracking.
-- **Quotation Generation**:
-  - Modal dialog to create quotations directly referencing sales inquiry line items (`LORD_ODATA_ORDER_SRV`).
-  - Validity date controls and condition value adjustments.
+- **Sales Quotation Note**:
+  - Sales Quotation creation was removed on 2026-09-18 - blocked in SAP, see docs/ticket-vtaa-copy-control-zin-zqt.md.
 
 ### 5. Financial Accounting (FI) — Journal Entries
 - **Journal Entry Verification**:
@@ -194,8 +193,8 @@ The application enforces fine-grained authorization via **SAP BTP XSUAA** (`xs-s
 | **`Admin`** | `SAPS4HANA_Admin` | `$XSAPPNAME.Admin` | Full administrative access to all modules, including document creation, postings, task cancellations, and configuration. |
 | **`PurchasingManager`** | `SAPS4HANA_PurchasingManager` | `$XSAPPNAME.PurchasingManager` | Materials Management: Create draft Purchase Orders, maintain line items, activate documents in S/4, and manage procurement workflows. |
 | **`FinanceViewer`** | `SAPS4HANA_FinanceViewer` | `$XSAPPNAME.FinanceViewer` | Financial Accounting: View general ledger journal entries, line item debits/credits, and balance verification data. |
-| **`SalesRepresentative`**| `SAPS4HANA_SalesRepresentative`| `$XSAPPNAME.SalesRepresentative`| Sales & Distribution: Create Sales Inquiries, configure inquiry parameters, and generate Sales Quotations. |
-| **`SalesManager`** | `SAPS4HANA_SalesManager` | `$XSAPPNAME.SalesManager` | Sales & Distribution: Manage and approve Sales Inquiries and Sales Quotations across sales organizations. |
+| **`SalesRepresentative`**| `SAPS4HANA_SalesRepresentative`| `$XSAPPNAME.SalesRepresentative`| Sales & Distribution: Create and manage Sales Inquiries. |
+| **`SalesManager`** | `SAPS4HANA_SalesManager` | `$XSAPPNAME.SalesManager` | Sales & Distribution: Manage and oversee Sales Inquiries across sales organizations. |
 | **`WarehouseClerk`** | `SAPS4HANA_WarehouseClerk` | `$XSAPPNAME.WarehouseClerk` | Warehouse Management: Post Goods Issue, confirm Goods Receipt inbound deliveries, execute warehouse tasks, and operate RF Terminal. |
 | **`WarehouseManager`** | `SAPS4HANA_WarehouseManager`| `$XSAPPNAME.WarehouseManager`| Extended Warehouse Management: Warehouse Cockpit monitoring, resource management, task dispatching, and queue exception handling. |
 
@@ -310,7 +309,7 @@ Activate the following Gateway OData services in transaction `/IWFND/MAINT_SERVI
 | `PICKCART_SRV` | 0001 | OData V2 | `/sap/opu/odata/sap/PICKCART_SRV` | EWM: Warehouse pick cart & RF picking |
 | `SD_F2370_INQY_WL_SRV` | 0001 | OData V2 | `/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV` | SD: Sales Inquiry worklist & analytics |
 | `SD_F2369_INQY_FS_SRV` | 0001 | OData V2 | `/sap/opu/odata/sap/SD_F2369_INQY_FS_SRV` | SD: Sales Inquiry factsheet & partner cards |
-| `LORD_ODATA_ORDER_SRV` | 0001 | OData V2 | `/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV` | SD: Sales Quotation creation from inquiry |
+| `LORD_ODATA_ORDER_SRV` | 0001 | OData V2 | `/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV` | SD: Sales Inquiry creation |
 | `FAC_GL_JOURNALENTRY_VER_SRV`| 0001 | OData V2 | `/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV`| FI: General Ledger journal entry verification |
 
 ---
@@ -444,9 +443,9 @@ SAPS4HANAFULLSTACK/
 │   │       │   ├── mm/                   # Materials Management (Purchase Orders)
 │   │       │   ├── wm/                   # Warehouse Management (Goods Issue, Goods Receipt)
 │   │       │   ├── ewm/                  # Extended Warehouse Management (Cockpit, RF Terminal)
-│   │       │   ├── sd/                   # Sales & Distribution (Sales Inquiries, Quotations)
+│   │       │   ├── sd/                   # Sales & Distribution (Sales Inquiries)
 │   │       │   └── fi/                   # Financial Accounting (Journal Entries)
-│   │       ├── fragment/                 # Reusable Dialogs (Quotes, Batches, Details, User Profile)
+│   │       ├── fragment/                 # Reusable Dialogs (Batches, Details, User Profile)
 │   │       ├── model/                    # Shared View Models & Formatters
 │   │       ├── service/                  # Frontend Infrastructure (AuthService, ODataClient, ValueHelpService)
 │   │       └── i18n/

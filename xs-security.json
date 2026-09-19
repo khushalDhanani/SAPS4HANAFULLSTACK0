@@ -21,11 +21,11 @@
     },
     {
       "name": "$XSAPPNAME.SalesRepresentative",
-      "description": "Create and manage sales inquiries and sales quotations"
+      "description": "Create and manage sales inquiries"
     },
     {
       "name": "$XSAPPNAME.SalesManager",
-      "description": "Manage sales inquiries and sales quotations"
+      "description": "Manage sales inquiries"
     },
     {
       "name": "$XSAPPNAME.WarehouseClerk",
@@ -77,7 +77,7 @@
     },
     {
       "name": "SalesRepresentative",
-      "description": "Sales inquiry and quotation processing",
+      "description": "Sales inquiry processing",
       "scope-references": [
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.SalesRepresentative"
@@ -141,7 +141,7 @@
     },
     {
       "name": "SAPS4HANA_SalesRepresentative",
-      "description": "SAP S/4HANA Full-Stack: sales inquiry and quotation processing",
+      "description": "SAP S/4HANA Full-Stack: sales inquiry processing",
       "role-template-references": [
         "$XSAPPNAME.SalesRepresentative"
       ]

@@ -67,7 +67,7 @@ function validateCreateSalesInquiryPayload(payload) {
         errors.push({ field: 'TransactionCurrency', message: 'Currency must be a valid 3-character ISO currency code (e.g. INR, USD)' });
     }
 
-    // Quotation-readiness fields (optional here; SAP requires them before a quotation can be created)
+    // Commercial & logistics extension fields (optional here; SAP incompletion procedure Z1 fields)
     if (header.CustomerGroup2 && String(header.CustomerGroup2).trim().length > 3) {
         errors.push({ field: 'CustomerGroup2', message: 'Customer Group 2 cannot exceed 3 characters' });
     }

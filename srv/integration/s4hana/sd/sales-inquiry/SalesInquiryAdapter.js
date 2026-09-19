@@ -916,7 +916,7 @@ class SalesInquiryAdapter {
       }
       if (notTransmitted.length > 0) {
         LOG.warn(`LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
-          + ' the inquiry will stay incomplete until these are maintained in VA22 or the service is extended.');
+          + ' the inquiry will stay incomplete until these are maintained directly in SAP or the service is extended.');
       }
     }
 
@@ -1085,7 +1085,7 @@ class SalesInquiryAdapter {
 
   /**
    * Reports which extension fields the SAP inquiry creation service can accept right now.
-   * The UI marks accepted fields as required and tells the user to maintain the others in VA22.
+   * The UI marks accepted fields as required and tells the user to maintain the others directly in SAP.
    */
   async getInquiryCreationCapabilities(options = {}) {
     const destination = options.destination || await this._getDestination(options);

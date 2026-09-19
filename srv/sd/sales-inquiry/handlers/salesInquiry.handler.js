@@ -83,7 +83,7 @@ function registerSalesInquiryHandlers(srv) {
         return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
     });
 
-    // 4b. Function getInquiryCreationCapabilities: which quotation-required fields SAP can accept at creation
+    // 4b. Function getInquiryCreationCapabilities: which incompletion procedure Z1 fields SAP can accept at creation
     srv.on('getInquiryCreationCapabilities', async () => {
         return await salesInquiryAdapter.getInquiryCreationCapabilities();
     });

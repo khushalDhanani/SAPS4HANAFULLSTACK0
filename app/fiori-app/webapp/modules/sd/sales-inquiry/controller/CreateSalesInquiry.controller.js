@@ -42,7 +42,7 @@ sap.ui.define([
 
         /**
          * Asks the backend which incompletion extension fields the SAP inquiry service accepts, so the
-         * form can require those and warn about the rest (to be maintained in VA22).
+         * form can require those and warn about the rest (to be maintained directly in SAP).
          */
         _loadCapabilities: function () {
             var that = this;

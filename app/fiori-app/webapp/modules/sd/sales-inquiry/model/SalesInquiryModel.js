@@ -383,7 +383,7 @@ sap.ui.define([
             if (!oMerged.Plant) aUnsupported.push("Plant");
             var sNotice = aUnsupported.length === 0 ? "" :
                 "SAP requires Customer Group 2, Port of Loading, Port of Discharge, a Contact Person and a Plant. " +
-                "The SAP inquiry service does not yet accept: " + aUnsupported.join(", ") + ". Maintain these in SAP (VA22) after creation.";
+                "The SAP inquiry service does not yet accept: " + aUnsupported.join(", ") + ". Maintain these directly in SAP after creation.";
             oModel.setProperty("/readinessNotice", sNotice);
             oModel.setProperty("/showReadinessNotice", sNotice !== "");
         },
@@ -399,7 +399,7 @@ sap.ui.define([
             var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
             var aGaps = [];
             var sHint = function (bSupported) {
-                return bSupported ? "Required by SAP" : "Required by SAP; not yet supported by the SAP inquiry service, maintain in VA22 after creation";
+                return bSupported ? "Required by SAP" : "Required by SAP; not yet supported by the SAP inquiry service, maintain directly in SAP after creation";
             };
 
             INCOMPLETION_HEADER_FIELDS.forEach(function (f) {

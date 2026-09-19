@@ -1280,9 +1280,33 @@
   - **Known limits**: module assignment is by name/description rules in the script, not SAP application component. Metadata shows what a service declares; authorisations/backend checks can still reject a POST.
   - **Next recommended action**: call `ActivateIncompletenessInfo` on a quotation draft to get SAP's own list of missing fields before sending the VTAA ticket; decide whether `creatable-services.xlsx` / `catalog-creatable.csv` / `docs/quotation-metadata/` should be committed or git-ignored.
 
+## 2026-09-19 16:38 IST
+- **Agent**: Antigravity
+- **Change**: Complete removal of all remaining configuration, wording, documentation references, and comments for the abandoned "Create Sales Quotation from Sales Inquiry" feature. Kept all Sales Inquiry functionality intact (fields CustomerGroup2, PortOfLoading, PortOfDischarge, ContactPerson, Plant and function getInquiryCreationCapabilities retained with refreshed doc comments; MM purchasing supplier quotations and external metadata preserved).
+  - **Files modified**:
+    - `.env.example`: Removed unused `S4_QUOTATION_TYPE`, `S4_QUOTATION_DESTINATION_NAME`, `S4_QUOTATION_USERNAME`, `S4_QUOTATION_PASSWORD` and associated commentary.
+    - `xs-security.json`: Reworded descriptions for `SalesRepresentative` and `SalesManager` scopes, `SalesRepresentative` role template, and `SAPS4HANA_SalesRepresentative` role collection to describe sales inquiry processing.
+    - `README.md`: Updated architecture diagram nodes, SD feature summary, role-to-scope mapping table, and OData catalog table (`LORD_ODATA_ORDER_SRV` labeled for Sales Inquiry creation). Replaced "Quotation Generation" section with note referencing `docs/ticket-vtaa-copy-control-zin-zqt.md`.
+    - `srv/sd/sales-inquiry/service.cds`: Reworded comments for `Plant` item field and `getInquiryCreationCapabilities` to reference incompletion procedure Z1 and maintaining missing fields directly in SAP.
+    - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Reworded comment for `getInquiryCreationCapabilities` registration.
+    - `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`: Reworded comment describing commercial & logistics extension fields.
+    - `srv/sd/sales-inquiry/validation/salesInquiry.validation.js`: Reworded comment describing commercial & logistics extension fields.
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Replaced `VA22` with `directly in SAP` in logger warning and `getInquiryCreationCapabilities` JSDoc.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js`: Replaced `(to be maintained in VA22)` with `(to be maintained directly in SAP)` in `_loadCapabilities` JSDoc.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js`: Replaced `maintain in VA22` with `maintain directly in SAP` in `applyCapabilities` readiness notice and `getIncompletionGaps` hint text.
+  - **Executed and results**:
+    - `git diff --check`: Succeeded with code 0 (clean formatting, zero whitespace issues).
+    - `npx cds compile srv`: Succeeded with code 0 (valid CSN emitted).
+    - `npm run lint`: Succeeded with code 0 (0 errors, 17 pre-existing warnings in unrelated modules).
+    - `npm test`: 59/59 test suites passed, 738/738 unit and integration tests passed.
+    - `cd app/fiori-app && npm run lint && npm run build`: Succeeded with code 0 (ComponentPreload generated, 0 UI5 linter errors).
+    - Grep verification across entire repository: Proved zero active quotation variables, methods, routes, or UI elements exist. All remaining quotation matches verified and accounted for (historical doc tickets, discovery scripts, MM supplier quotations, and git-ignored scratch files).
+  - **Next recommended action**: Inform user of remaining git-ignored scratch files in `Claude outputs/` for manual cleanup. Do not commit or push unless explicitly requested.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 738/738 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **Sales Inquiry**: 100% operational (list, detail, create, incompletion procedure Z1 capabilities, customer defaults). All leftover quotation configurations, environment variables, security descriptions, and comments cleanly removed or reworded.
 - **Goods Receipt (101)**: **100% PROVEN DIRECTLY AGAINST LIVE SAP S/4HANA (CLIENT 220)** in strict accordance with the non-negotiable `AGENTS.md` SAP API Discovery Protocol. Authentic Material Documents (`5000005496`, `5000005497`, `5000005498`, `5000005499`) generated in SAP S/4HANA via `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` deep insert with CSRF handshake, read back and verified via `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`. Zero mock persistence, zero fake fallback numbers.
 - **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. `StorageBin` removed from entire flow (SAP holds no bin data). Paging loop implemented. ItemCount now single-source-of-truth with `getOpenItems` (both use `OpenQty > 0`).
 - **OData Filter Escaping & Normalization**: All filter values properly escaped (`' -> ''`) via shared `odataString()` helper, URL encoding applied consistently, double URL encoding eliminated.
@@ -1294,7 +1318,8 @@
   3. ABAP/Basis: Confirm and publish custom RAP service `ZUI_GI_ORDER_RSV_O4` in `/IWFND/V4_ADMIN`.
 
 ## Next Steps
-1. Push any outstanding commits to remote repository (`origin/feature/CL01`).
-2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
-3. Run the `ActivateIncompletenessInfo` diagnostic on a quotation draft (GET/draft only, discard afterwards) and attach SAP's missing-field list to `docs/ticket-vtaa-copy-control-zin-zqt.md`.
-4. After any new service scan, rebuild `creatable-services.xlsx` with `python3 tools/build-creatable-xlsx.py` (see AGENTS.md).
+1. Push any outstanding commits to remote repository (`origin/feature/CL01`) when requested by user.
+2. User to optionally remove the 6 scratch files in `Claude outputs/`.
+3. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
+4. Run the `ActivateIncompletenessInfo` diagnostic on a quotation draft (GET/draft only, discard afterwards) and attach SAP's missing-field list to `docs/ticket-vtaa-copy-control-zin-zqt.md`.
+5. After any new service scan, rebuild `creatable-services.xlsx` with `python3 tools/build-creatable-xlsx.py` (see AGENTS.md).

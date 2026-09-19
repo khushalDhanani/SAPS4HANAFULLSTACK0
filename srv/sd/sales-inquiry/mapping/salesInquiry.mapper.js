@@ -81,7 +81,7 @@ function normalizeSalesInquiryData(data, options = {}) {
         TotalNetAmount: rawHeader.TotalNetAmount !== undefined && rawHeader.TotalNetAmount !== null
             ? parseFloat(rawHeader.TotalNetAmount)
             : calculatedTotal,
-        // Quotation-readiness fields (SAP incompletion procedure Z1 / partner ZP)
+        // Commercial & logistics extension fields (SAP incompletion procedure Z1 / partner ZP)
         CustomerGroup2: rawHeader.CustomerGroup2 ? String(rawHeader.CustomerGroup2).trim().toUpperCase() : '',
         PortOfLoading: rawHeader.PortOfLoading ? String(rawHeader.PortOfLoading).trim() : '',
         PortOfDischarge: rawHeader.PortOfDischarge ? String(rawHeader.PortOfDischarge).trim() : '',

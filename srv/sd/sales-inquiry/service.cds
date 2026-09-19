@@ -108,7 +108,7 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         NetPriceAmount: Decimal;
         NetAmount: Decimal;
         TransactionCurrency: String;
-        // Required by SAP (incompletion procedure) before the inquiry can become a quotation
+        // Required by SAP (incompletion procedure Z1) for the sales inquiry
         Plant: String;
     }
 
@@ -156,8 +156,8 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         derived: Boolean;
     };
 
-    // Which quotation-required fields the SAP inquiry creation service can currently accept.
-    // False means the value cannot be sent from this application and must be maintained in VA22.
+    // Which incompletion procedure Z1 fields the SAP inquiry creation service can currently accept.
+    // False means the value cannot be sent from this application and must be maintained directly in SAP.
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getInquiryCreationCapabilities() returns {
         CustomerGroup2: Boolean;
