@@ -159,15 +159,19 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           continue;
         }
 
+        const nStock = slocInfo && slocInfo.CurrentStock !== undefined && slocInfo.CurrentStock !== null
+          ? Number(slocInfo.CurrentStock)
+          : (b.AvailableStock !== undefined && b.AvailableStock !== null ? Number(b.AvailableStock) : 0);
+        const isSelectable = nStock > 0 && status.StatusState !== 'Error' && status.StatusText !== 'EXPIRED';
+
         usableBatches.push({
           Material: sMat,
           Plant: b.Plant || sPlant,
           Batch: b.Batch,
           ExpiryDate: formattedExp,
           ManufactDate: formattedMfg,
-          AvailableStock: slocInfo && slocInfo.CurrentStock !== undefined && slocInfo.CurrentStock !== null
-            ? Number(slocInfo.CurrentStock)
-            : (b.AvailableStock !== undefined && b.AvailableStock !== null ? Number(b.AvailableStock) : 0),
+          AvailableStock: nStock,
+          IsSelectable: isSelectable,
           Unit: (slocInfo && slocInfo.BaseUnit) || b.Unit || 'KG',
           StorageBin: (slocInfo && slocInfo.WarehouseStorageBin) ? slocInfo.WarehouseStorageBin : (b.StorageBin || '-'),
           StorageLocation: (slocInfo && slocInfo.StorageLocation) || sSLoc || b.StorageLocation || '',

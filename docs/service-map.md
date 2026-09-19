@@ -26,7 +26,7 @@ service catalog alone. Where a fact was not measured, the cell says so.
 |`LORD_ODATA_ORDER_SRV`|V2|Sales Inquiry|200|— (no entity set in code)| not measured |
 |`LO_BM_BATCH_SRV`|V2|Goods Issue / Receipt|200|`I_Batch`| I_Batch: 39989 |
 |`MMIM_GR4PO_DL_SRV`|V2|Goods Issue / Receipt, Purchase Order|200|`HMmimGr4inbdelSet`, `MMIMProductionOrderVH`, `PoHelpSet`| PoHelpSet: 6112, MMIMProductionOrderVH: 891, HMmimGr4inbdelSet: 17 |
-|`MMIM_MATERIAL_DATA_SRV`|V2|Goods Issue / Receipt|200|`MaterialHeaders`, `MaterialStorLocHelps`| has data — requires a filter; unfiltered $count returns 0 |
+|`MMIM_MATERIAL_DATA_SRV`|V2|Goods Issue / Receipt|200|`MaterialHeaders`, `MaterialStorLocHelps`| **0 rows** — empty filtered and unfiltered (corrected 19-Sep-2026) |
 |`MM_PUR_PO_MAINT_V2_SRV`|V2|Purchase Order|200|`C_MM_CompanyCodeValueHelp`, `C_MM_MaterialGroupValueHelp`, `C_MM_MaterialValueHelp`, `C_MM_PlantValueHelp`, `C_MM_StorLocValueHelp`, `C_MM_SupplierValueHelp`, `C_PurchasingGroupValueHelp`, `C_PurchasingOrgValueHelp`| C_MM_MaterialValueHelp: 151988, C_MM_SupplierValueHelp: 4376, C_MM_StorLocValueHelp: 696, C_MM_MaterialGroupVa |
 |`SD_F1873_SO_WL_SRV`|V2|Purchase Order, Sales Inquiry|200|`C_SalesOrderWl_F1873`| C_SalesOrderWl_F1873: 883 |
 |`SD_F2369_INQY_FS_SRV`|V2|shared / core|200|— (no entity set in code)| not measured |
@@ -56,8 +56,8 @@ Either one unblocks goods issue movement 261. See `ticket-gateway-remediation-ds
 
 **Verified 19-Sep-2026 with a valid filter**, not an unfiltered count. `Warehouse eq '0001'` against
 storage bins, warehouse orders and resources each returns `{"d":{"results":[]}}` — an empty result set,
-not an error. An earlier unfiltered `$count` was not sufficient evidence: `MMIM_MATERIAL_DATA_SRV`
-returns `0` unfiltered yet holds data when filtered, so unfiltered zeros must always be re-tested.
+not an error. Unfiltered zeros must always be re-tested with a valid filter before being believed —
+though re-testing can also confirm the zero, as it did for `MMIM_MATERIAL_DATA_SRV` (see correction below).
 
 `API_WAREHOUSE` returns exactly one warehouse, `0001` — the SAP-delivered sample, with no
 text and no storage types. Storage bins, inbound deliveries, outbound deliveries, warehouse
@@ -83,5 +83,32 @@ reservations at plant 1120, storage location CS01 — which is a different compo
 ```
 
 Re-run after any S/4HANA upgrade, Gateway transport or system refresh.
+
+## Corrections
+
+**19 September 2026 — `MMIM_MATERIAL_DATA_SRV` does not hold data.**
+This map previously claimed the service "has data — requires a filter". That was an inference, and it
+was wrong. Three independent observations contradict it:
+
+1. `MaterialStorLocHelps?$filter=Material eq '1000000045'` through the application layer → `200`, **0 rows**,
+   for a material that returned 2 batches on the same screen. Same for material 1000000458 (0 locations, 5 batches).
+2. The full catalogue depth scan (19-Sep-2026, all 1,236 live services, 71,119 entity sets) counted both
+   `MaterialHeaders` and `MaterialStorLocHelps` at **0**.
+3. No filter combination tried has returned a row.
+
+Consequence: the storage-location picker on the Goods Receipt screen has nothing to show, and no code
+change fixes it. Either MM maintains this data or the field is removed from the screen.
+
+**19 September 2026 — the EWM services are no longer called.**
+The warehouse cockpit and RF terminal modules were removed (commits `95b8054`, `834816d`, `c4b2d48`)
+after the scan confirmed 0 warehouse orders, 0 tasks, 0 resources and 0 outbound deliveries across all
+26 warehouses, with 4 storage bins in total. The EWM rows above are retained as the evidence behind that
+removal, not as a description of services in use.
+
+**19 September 2026 — catalogue names differ from path names.**
+The warehouse services are registered under `Z`-prefixed technical names (`ZAPI_WAREHOUSE`,
+`ZAPI_WHSE_INBOUND_DELIVERY`, `ZPICKCART_SRV` …) on their original `/sap/opu/odata/sap/API_*` paths.
+Matching the catalogue by service name rather than path makes them look absent when they are not.
+`API_MATERIAL_DOCUMENT_SRV` is the only service the code references that is genuinely not in the catalogue.
 
 *Internal Document / Confidential*

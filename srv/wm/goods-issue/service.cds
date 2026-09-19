@@ -156,6 +156,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         StatusState         : String(10);
         StatusText          : String(20);
         DaysToExpiry        : Integer;
+        IsSelectable        : Boolean;
     };
 
     type GoodsIssueResolution {

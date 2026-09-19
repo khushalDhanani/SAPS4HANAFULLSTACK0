@@ -1013,14 +1013,54 @@
     - Live Gateway Probes: All 7 defect fixes verified against live SAP DS4 client 220 via localhost:4004.
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-19 13:42 IST
+- **Agent**: Antigravity
+- **Change**: Resolved Zero-Stock Batch Issuance & Verified Authentic StorageBin Behavior on IM Reservations:
+  1. **Zero-Stock Batch Elimination & Selection Guard**:
+     - Added `IsSelectable : Boolean;` to `type GIBatchItem` in `srv/wm/goods-issue/service.cds`.
+     - Computed `IsSelectable = (nStock > 0 && status.StatusState !== 'Error' && status.StatusText !== 'EXPIRED')` in `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js` and `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`.
+     - In `srv/integration/s4hana/wm/GoodsIssueAdapter.js` (`resolveIdentifier`), filtered `AvailableBatches` returned in `resolveIdentifier` to strictly batches with positive stock (`AvailableStock > 0`), ensuring zero-stock batches are never offered as issuable. Stopped auto-assigning `activeItem.Batch` when all batches have 0 stock (sets `Batch = ''`, `StatusText = 'NO BATCH'`, `AvailableStock = 0`).
+     - In `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+       - Fixed `onSelectComponentForValidation` so `availableStock` never falls back to `OpenQty` when stock is 0.
+       - Enforced stock validation in `_validateInputs` so `bAllPassed` is false and error/warning is displayed when available stock is 0.
+       - Added hard-stop warning in `onSelectBatch` blocking zero-stock batch selection (`Zero-Stock Batch Selection Blocked`).
+     - In `app/fiori-app/webapp/modules/wm/goods-issue/view/BatchSelectionDialog.fragment.xml`: disabled Select button with `enabled="{= Number(${giBatchSelection>AvailableStock}) > 0 && ${giBatchSelection>StatusState} !== 'Error' }"`, dynamic text "{= Number(${giBatchSelection>AvailableStock}) > 0 ? ${i18n>btnSelect} : 'No Stock' }", and transparent styling for 0-stock rows.
+  2. **StorageBin Clarification on IM Reservations**:
+     - Verified `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` has no `StorageBin` property.
+     - Confirmed Plant 1120 (CS01, PT01) is managed under standard Inventory Management (IM) without Warehouse Management bin configuration (`MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` has `WarehouseStorageBin: ""` for 100% of rows).
+     - Confirmed empty `StorageBin` (`'-'`) is authentic SAP reality and intended behavior, not a regression.
+  3. **Files Modified**:
+     - `srv/wm/goods-issue/service.cds`: Added `IsSelectable` to `GIBatchItem`.
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`: Set `IsSelectable` based on positive stock and SLED status.
+     - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Filtered zero-stock batches from `AvailableBatches` and auto-selection in `resolveIdentifier`.
+     - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Harmonized `IsSelectable` calculation.
+     - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`: Blocked zero-stock selection and quantity bypass.
+     - `app/fiori-app/webapp/modules/wm/goods-issue/view/BatchSelectionDialog.fragment.xml`: Disabled Select button on zero-stock batches.
+     - `test/unit/wm/goodsIssueClients.test.js`: Added 2 unit tests covering `IsSelectable` and `resolveIdentifier` zero-stock batch filtering.
+     - `test/unit/wm/goodsIssueController.test.js`: Added 2 unit tests covering zero-stock batch selection blocking and stock validation.
+  4. **Validation & Quality Gates**:
+     - `npx cds compile srv`: Succeeded with code 0.
+     - `npm run lint`: 0 errors (17 pre-existing warnings in unchanged code).
+     - `cd app/fiori-app && npm run lint`: 0 findings (100% clean).
+     - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 691 ms).
+     - `npx jest test/unit/wm/goodsIssueClients.test.js`: **31 passed, 31 total tests (100% green)**.
+     - `npx jest test/unit/wm/goodsIssueController.test.js`: **47 passed, 47 total tests (100% green)**.
+     - `npm test`: **59 passed, 59 total test suites; 728 passed, 728 total tests (100% green)** in 55.7 s.
+     - `git diff --check`: Clean (0 errors).
+     - Live Gateway Probes:
+       - `resolveIdentifier(barcode='3000000297')` -> `ActiveItem.Batch: ''`, `AvailableStock: 0`, `AvailableBatches: []` (0 zero-stock batches offered).
+       - `MaterialBatches?$filter=Material eq '3000000297'` -> all 26 batches return with `AvailableStock: 0` and `IsSelectable: false`.
+       - `MaterialBatches?$filter=Material eq '3000000200'` -> returns positive stock with `IsSelectable: true`.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 724/724 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 728/728 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
 - **EWM Cockpit Removal**: Completely expunged (1,489 backend lines, 7 UI files, 10 test suites) with zero dead code and zero broken routes.
 - **Warehouse Management Active Pipeline**:
   - **Goods Receipt (101)**: Retargeted to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert (`Header2Items`), movement type 101, single-session CSRF handshake.
   - **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. Real S/4HANA read data (54 open reservations, Plant 1120, CS01, live batches with SLED status and packaging units) drives floor scanning; transactions queue reliably into SQLite/HANA `GoodsIssueQueue` with zero ABAP dependencies and atomic on-demand/scheduled queue draining via `drainQueue()`.
-- **Defect Resolutions**: All 7 verification defects resolved, tested, and validated against live SAP S/4HANA backend.
+- **Defect Resolutions**: All 7 initial verification defects plus 2 follow-up batch/bin findings resolved, tested, and validated against live SAP S/4HANA backend.
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).

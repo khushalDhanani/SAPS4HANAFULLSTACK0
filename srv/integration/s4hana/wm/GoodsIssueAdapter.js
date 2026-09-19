@@ -352,24 +352,37 @@ class GoodsIssueAdapter {
     }
 
     // Retrieve batches for active item's material and plant
-    const availableBatches = await this.getMaterialBatches(activeItem.Material, activeItem.Plant, activeItem.StorageLocation);
+    const allBatches = await this.getMaterialBatches(activeItem.Material, activeItem.Plant, activeItem.StorageLocation);
 
-    // If active item has no batch assigned, pick top FEFO unexpired batch if available
-    if (!activeItem.Batch && availableBatches.length > 0) {
-      const topBatch = availableBatches[0];
+    // Only unexpired batches with positive available stock are issuable
+    const issuableBatches = allBatches.filter(b => Number(b.AvailableStock) > 0 && b.StatusState !== 'Error');
+
+    // If active item has no batch assigned, pick top FEFO unexpired batch if available with stock > 0
+    if (!activeItem.Batch && issuableBatches.length > 0) {
+      const topBatch = issuableBatches[0];
       activeItem.Batch = topBatch.Batch;
       activeItem.ExpiryDate = topBatch.ExpiryDate;
       activeItem.BatchStatusState = topBatch.StatusState;
       activeItem.BatchStatusText = topBatch.StatusText;
+    } else if (!activeItem.Batch) {
+      activeItem.Batch = '';
+      activeItem.ExpiryDate = null;
+      activeItem.BatchStatusState = 'None';
+      activeItem.BatchStatusText = 'NO BATCH';
     }
 
     // Determine confirmed stock from batches or storage location
     let availableStock = 0;
-    if (availableBatches.length > 0) {
-      const selBatchObj = availableBatches.find(b => b.Batch === activeItem.Batch);
+    if (activeItem.Batch) {
+      const selBatchObj = allBatches.find(b => b.Batch === activeItem.Batch);
       availableStock = selBatchObj && selBatchObj.AvailableStock !== null && selBatchObj.AvailableStock !== undefined
-        ? selBatchObj.AvailableStock
-        : availableBatches.reduce((acc, b) => acc + (Number(b.AvailableStock) || 0), 0);
+        ? Number(selBatchObj.AvailableStock)
+        : 0;
+    } else if (issuableBatches.length > 0) {
+      availableStock = issuableBatches.reduce((acc, b) => acc + (Number(b.AvailableStock) || 0), 0);
+    } else if (allBatches.length > 0) {
+      // All existing batches have zero stock
+      availableStock = 0;
     } else {
       availableStock = activeItem.OpenQty;
     }
@@ -386,7 +399,7 @@ class GoodsIssueAdapter {
       MovementTypeName: activeItem.MovementTypeName || 'GI for order',
       ActiveItem: activeItem,
       Items: openItems,
-      AvailableBatches: availableBatches,
+      AvailableBatches: issuableBatches,
       AvailableStock: availableStock,
       DefaultStorageLocation: activeItem.StorageLocation || s4Config.getStorageLocation(),
       DefaultStorageLocationName: activeItem.StorageLocationName || 'Raw Material',

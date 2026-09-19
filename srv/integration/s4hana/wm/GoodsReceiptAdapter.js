@@ -224,6 +224,7 @@ class GoodsReceiptAdapter {
           StorageLocation: sLoc,
           StorageBin: bin,
           AvailableStock: availStock,
+          IsSelectable: availStock > 0 && statusInfo.StatusState !== 'Error',
           ExpiryDate: expiryFormatted,
           ManufactureDate: mfdFormatted,
           StatusState: statusInfo.StatusState,

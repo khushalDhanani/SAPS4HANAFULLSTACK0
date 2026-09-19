@@ -430,12 +430,10 @@ sap.ui.define([
                 if (oMatchedBatch && oMatchedBatch.AvailableStock !== null && oMatchedBatch.AvailableStock !== undefined) {
                     nStock = Number(oMatchedBatch.AvailableStock);
                 }
-            }
-            if (!nStock && oResolved) {
-                nStock = Number(oResolved.AvailableStock) || Number(oItem.OpenQty);
-            }
-            if (!nStock) {
-                nStock = Number(oItem.OpenQty);
+            } else if (oResolved && oResolved.AvailableStock !== null && oResolved.AvailableStock !== undefined) {
+                nStock = Number(oResolved.AvailableStock);
+            } else {
+                nStock = Number(oItem.OpenQty) || 0;
             }
             oModel.setProperty("/availableStock", nStock);
 
@@ -735,13 +733,15 @@ sap.ui.define([
             aChecks.push({ label: "Issue quantity does not exceed open requirement (" + nIssueQty + " \u2264 " + nOpenQty + ")", passed: bQtyWithinOpen });
             if (!bQtyWithinOpen) bAllPassed = false;
 
-            // Check 5: Issue Qty <= Available Stock (if stock is known and > 0)
-            var bQtyWithinStock = true;
-            if (nStock > 0) {
-                bQtyWithinStock = nIssueQty <= nStock;
-                aChecks.push({ label: "Issue quantity does not exceed confirmed SAP stock (" + nIssueQty + " \u2264 " + nStock + ")", passed: bQtyWithinStock });
-                if (!bQtyWithinStock) bAllPassed = false;
-            }
+            // Check 5: Issue Qty <= Available Stock
+            var bQtyWithinStock = nIssueQty <= nStock;
+            aChecks.push({
+                label: nStock > 0
+                    ? "Issue quantity does not exceed confirmed SAP stock (" + nIssueQty + " \u2264 " + nStock + ")"
+                    : "Zero available stock in SAP (0 " + (oActive.Unit || "") + " available)",
+                passed: bQtyWithinStock
+            });
+            if (!bQtyWithinStock) bAllPassed = false;
 
             // Check 6: SU stock sufficiency (if SU scanned)
             if (oSuResolution && oSuResolution.CurrentStock !== undefined) {
@@ -786,9 +786,11 @@ sap.ui.define([
             } else if (nIssueQty > nOpenQty) {
                 sQtyState = "Error";
                 sQtyStateText = "Issue quantity (" + nIssueQty + ") exceeds open requirement (" + nOpenQty + " " + (oActive.Unit || "") + ")";
-            } else if (nStock > 0 && nIssueQty > nStock) {
+            } else if (nIssueQty > nStock) {
                 sQtyState = "Warning";
-                sQtyStateText = "Issue quantity (" + nIssueQty + ") exceeds confirmed SAP stock (" + nStock + " " + (oActive.Unit || "") + ")";
+                sQtyStateText = nStock > 0
+                    ? "Issue quantity (" + nIssueQty + ") exceeds confirmed SAP stock (" + nStock + " " + (oActive.Unit || "") + ")"
+                    : "Zero available stock in SAP (0 " + (oActive.Unit || "") + " available)";
             } else {
                 sQtyState = "Success";
                 sQtyStateText = "";
@@ -921,6 +923,16 @@ sap.ui.define([
                            " (SLED exceeded).\n\nIssuing expired chemicals or ingredients to production orders is strictly prohibited by quality control rules.";
                 MessageBox.error(sMsg, {
                     title: "Expired Batch Selection Blocked"
+                });
+                return;
+            }
+
+            // HARD-STOP: Zero-stock batch cannot be issued
+            if (Number(oBatch.AvailableStock) <= 0 || oBatch.IsSelectable === false) {
+                this._playBeep(false);
+                var sZeroMsg = "Batch " + oBatch.Batch + " has zero available stock in SAP (0 " + (oBatch.Unit || "") + ").\n\nGoods Issue cannot be posted for an empty batch. Please select a batch with positive available stock.";
+                MessageBox.warning(sZeroMsg, {
+                    title: "Zero-Stock Batch Selection Blocked"
                 });
                 return;
             }

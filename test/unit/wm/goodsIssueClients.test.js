@@ -194,7 +194,35 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
 
       expect(batches).toHaveLength(2);
       expect(batches[0].Batch).toBe('B_SOONER');
+      expect(batches[0].IsSelectable).toBe(true);
       expect(batches[1].Batch).toBe('B_LATER');
+      expect(batches[1].IsSelectable).toBe(true);
+    });
+
+    it('should mark zero-stock batches as IsSelectable: false in getMaterialBatches', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('MaterialStorLocHelps')) {
+            return Promise.resolve([{ CurrentStock: '0', BaseUnit: 'KG', WarehouseStorageBin: '' }]);
+          }
+          if (path.includes('I_Batch')) {
+            return Promise.resolve([
+              { Batch: 'B_ZERO_STOCK', ShelfLifeExpirationDate: '/Date(1893456000000)/', Plant: '1120' }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        _enrichBatchStatus: (d) => GoodsIssueAdapter._enrichBatchStatus(d),
+        _formatDate: (d) => GoodsIssueAdapter._formatDate(d)
+      };
+
+      const batchesClient = new GoodsIssueBatchesClient({ adapter: mockAdapter });
+      const batches = await batchesClient.getMaterialBatches('MAT02', '1120', 'CS01');
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].Batch).toBe('B_ZERO_STOCK');
+      expect(batches[0].AvailableStock).toBe(0);
+      expect(batches[0].IsSelectable).toBe(false);
     });
 
     it('should validate batch and detect expired or deleted batch', async () => {
@@ -607,6 +635,39 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.Success).toBe(true);
       expect(spy).toHaveBeenCalledWith('10001', '1', 'MAT01', 10, 'KG', undefined, undefined, undefined, undefined, undefined);
       spy.mockRestore();
+    });
+
+    it('should filter zero-stock batches from AvailableBatches and avoid auto-picking empty batch in resolveIdentifier', async () => {
+      const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
+        {
+          ReservationNo: '375047',
+          ReservationItem: '0001',
+          OrderNo: '1001952',
+          Material: '3000000297',
+          Plant: '1120',
+          StorageLocation: 'CS01',
+          OpenQty: 100,
+          Batch: ''
+        }
+      ]);
+      const spyBatches = jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue([
+        {
+          Batch: '345B250001',
+          AvailableStock: 0,
+          IsSelectable: false,
+          StatusState: 'Success',
+          StatusText: 'VALID',
+          ExpiryDate: '2026-12-19'
+        }
+      ]);
+
+      const res = await GoodsIssueAdapter.resolveIdentifier('375047');
+      expect(res.AvailableBatches).toHaveLength(0);
+      expect(res.ActiveItem.Batch).toBe('');
+      expect(res.AvailableStock).toBe(0);
+
+      spyOpen.mockRestore();
+      spyBatches.mockRestore();
     });
   });
 });

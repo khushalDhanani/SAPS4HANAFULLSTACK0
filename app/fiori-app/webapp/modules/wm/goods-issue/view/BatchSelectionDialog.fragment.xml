@@ -66,9 +66,10 @@
                                     state="{= ${giBatchSelection>StorageBin} &amp;&amp; ${giBatchSelection>StorageBin} !== '-' ? 'Warning' : 'None' }" />
                                 <Text text="{= ${giBatchSelection>AvailableStock} !== null &amp;&amp; ${giBatchSelection>AvailableStock} !== undefined ? (${giBatchSelection>AvailableStock} + ' ' + ${giBatchSelection>Unit}) : '-' }" />
                                 <Button
-                                    text="{i18n>btnSelect}"
-                                    icon="sap-icon://accept"
-                                    type="{= ${giBatchSelection>StatusState} === 'Error' ? 'Reject' : 'Emphasized' }"
+                                    text="{= Number(${giBatchSelection>AvailableStock}) > 0 ? ${i18n>btnSelect} : 'No Stock' }"
+                                    icon="{= Number(${giBatchSelection>AvailableStock}) > 0 ? 'sap-icon://accept' : 'sap-icon://decline' }"
+                                    enabled="{= Number(${giBatchSelection>AvailableStock}) > 0 &amp;&amp; ${giBatchSelection>StatusState} !== 'Error' }"
+                                    type="{= Number(${giBatchSelection>AvailableStock}) &lt;= 0 ? 'Transparent' : (${giBatchSelection>StatusState} === 'Error' ? 'Reject' : 'Emphasized') }"
                                     press=".onSelectBatch" />
                             </cells>
                         </ColumnListItem>

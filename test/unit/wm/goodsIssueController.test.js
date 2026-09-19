@@ -426,6 +426,34 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             controller.onSelectComponentForValidation(mockEvent);
             expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('already completed'));
         });
+
+        it('should preserve available stock as 0 when resolved stock is 0 and fail stock validation', () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/resolved', {
+                ReservationNo: '375047',
+                AvailableStock: 0,
+                AvailableBatches: []
+            });
+
+            const mockEvent = {
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getObject: () => ({
+                            ReservationNo: '375047',
+                            ReservationItem: '0001',
+                            Material: '3000000297',
+                            OpenQty: 100,
+                            Batch: ''
+                        })
+                    })
+                })
+            };
+
+            controller.onSelectComponentForValidation(mockEvent);
+            expect(oModel.getProperty('/availableStock')).toBe(0);
+            expect(oModel.getProperty('/issueQtyState')).toBe('Warning');
+            expect(oModel.getProperty('/isValid')).toBe(false);
+        });
     });
 
     // =================================================================
@@ -773,6 +801,29 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(mockMessageBox.error).toHaveBeenCalledWith(
                 expect.stringContaining('expired'),
                 expect.objectContaining({ title: 'Expired Batch Selection Blocked' })
+            );
+        });
+
+        it('should block selection of zero-stock batch', () => {
+            const mockEvent = {
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getObject: () => ({
+                            Batch: 'ZERO_STOCK_1',
+                            ExpiryDate: '2027-01-01',
+                            StatusState: 'Success',
+                            StatusText: 'VALID',
+                            AvailableStock: 0,
+                            IsSelectable: false
+                        })
+                    })
+                })
+            };
+
+            controller.onSelectBatch(mockEvent);
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                expect.stringContaining('zero available stock'),
+                expect.objectContaining({ title: 'Zero-Stock Batch Selection Blocked' })
             );
         });
 
