@@ -88,7 +88,6 @@ class GoodsIssueQueueManager {
       MaterialDesc: String(data.MaterialDesc || '').trim(),
       Plant: String(data.Plant || '').trim(),
       StorageLocation: String(data.StorageLocation || '').trim(),
-      StorageBin: String(data.StorageBin || '').trim(),
       Batch: String(data.Batch || '').trim(),
       ExpiryDate: data.ExpiryDate || null,
       IssueQty: Number(data.IssueQty) || 0,

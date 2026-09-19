@@ -74,7 +74,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
             GoodsMovementType: '261',
             GoodsMovementTypeName: 'GI for order',
             Product: 'MAT01',
-            ProductName: 'Material 1'
+            ProductName: 'Material 1',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '20'
           },
           {
             Reservation: '10001',
@@ -83,7 +85,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
             GoodsMovementType: '261',
             GoodsMovementTypeName: 'GI for order',
             Product: 'MAT02',
-            ProductName: 'Material 2'
+            ProductName: 'Material 2',
+            ResvnItmRequiredQtyInBaseUnit: '50',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
           },
           {
             Reservation: '10002',
@@ -92,7 +96,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
             GoodsMovementType: '201',
             GoodsMovementTypeName: 'GI for cost center',
             Product: 'MAT03',
-            ProductName: 'Material 3'
+            ProductName: 'Material 3',
+            ResvnItmRequiredQtyInBaseUnit: '200',
+            ResvnItmWithdrawnQtyInBaseUnit: '50'
           }
         ])
       };
@@ -116,7 +122,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         GoodsMovementType: '261',
         GoodsMovementTypeName: 'GI for order',
         Product: `MAT_${i}`,
-        ProductName: `Material ${i}`
+        ProductName: `Material ${i}`,
+        ResvnItmRequiredQtyInBaseUnit: '100',
+        ResvnItmWithdrawnQtyInBaseUnit: '10'
       }));
       page1.push({
         Reservation: '20001',
@@ -125,7 +133,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         GoodsMovementType: '261',
         GoodsMovementTypeName: 'GI for order',
         Product: 'MAT_SPLIT_1',
-        ProductName: 'Split Material 1'
+        ProductName: 'Split Material 1',
+        ResvnItmRequiredQtyInBaseUnit: '50',
+        ResvnItmWithdrawnQtyInBaseUnit: '0'
       });
 
       // Page 2: 1 item for Resv 20001 (straddling the page boundary)
@@ -137,7 +147,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
           GoodsMovementType: '261',
           GoodsMovementTypeName: 'GI for order',
           Product: 'MAT_SPLIT_2',
-          ProductName: 'Split Material 2'
+          ProductName: 'Split Material 2',
+          ResvnItmRequiredQtyInBaseUnit: '75',
+          ResvnItmWithdrawnQtyInBaseUnit: '5'
         }
       ];
 
@@ -171,6 +183,100 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const otherResv = result.find(r => r.ReservationNo === '20002');
       expect(otherResv).toBeDefined();
       expect(otherResv.ItemCount).toBe(99);
+    });
+
+    it('should exclude items with OpenQty <= 0 from ItemCount (single source of truth)', async () => {
+      // Simulate SAP reality: items not-finally-issued but with Req=0 / Wdn=0
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '516233',
+            OrderID: '1000040',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '20'
+          },
+          {
+            Reservation: '516233',
+            OrderID: '1000040',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order',
+            Product: 'MAT02',
+            ProductName: 'Material 2',
+            ResvnItmRequiredQtyInBaseUnit: '50',
+            ResvnItmWithdrawnQtyInBaseUnit: '10'
+          },
+          {
+            Reservation: '516233',
+            OrderID: '1000040',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order',
+            Product: 'MAT03',
+            ProductName: 'Material 3',
+            ResvnItmRequiredQtyInBaseUnit: '75',
+            ResvnItmWithdrawnQtyInBaseUnit: '25'
+          },
+          {
+            // Item 11: Req=0, Wdn=0, Final=false — should be EXCLUDED
+            Reservation: '516233',
+            OrderID: '1000040',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order',
+            Product: 'MAT04',
+            ProductName: 'Material 4 (zero-qty line)',
+            ResvnItmRequiredQtyInBaseUnit: '0',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
+          }
+        ])
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120');
+
+      expect(result).toHaveLength(1);
+      // ItemCount = 3, not 4 — the zero-qty line is excluded
+      expect(result[0].ItemCount).toBe(3);
+      expect(result[0].DisplayText).toContain('3 items');
+    });
+
+    it('should return empty array for a reservation where all items have OpenQty <= 0', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '99999',
+            OrderID: '1000099',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            ResvnItmRequiredQtyInBaseUnit: '0',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
+          },
+          {
+            Reservation: '99999',
+            OrderID: '1000099',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            Product: 'MAT02',
+            ProductName: 'Material 2',
+            ResvnItmRequiredQtyInBaseUnit: '50',
+            ResvnItmWithdrawnQtyInBaseUnit: '50'
+          }
+        ])
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120');
+
+      // No items have OpenQty > 0, so the reservation is not listed
+      expect(result).toHaveLength(0);
     });
 
     it('should calculate openQty and attach packaging units in getOpenItems', async () => {
@@ -214,6 +320,90 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const reservationsClient = new GoodsIssueReservationsClient();
       const items = await reservationsClient.getOpenItems('', '');
       expect(items).toEqual([]);
+    });
+
+    it('should not include StorageBin in returned items (field removed — SAP holds no bin data)', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            StorageLocationName: 'Raw Material',
+            BaseUnit: 'KG',
+            Batch: 'BATCH_A',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '20',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order'
+          }
+        ]),
+        getMaterialPackagingUnits: jest.fn().mockResolvedValue([
+          { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1, IsBaseUnit: true }
+        ]),
+        getMaterialBatches: jest.fn().mockResolvedValue([
+          {
+            Batch: 'BATCH_A',
+            ExpiryDate: '2030-06-15',
+            StatusState: 'Success',
+            StatusText: 'VALID',
+            AvailableStock: 500
+          }
+        ]),
+        _enrichBatchStatus: jest.fn()
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const items = await reservationsClient.getOpenItems('40001', '10001');
+
+      expect(items).toHaveLength(1);
+      // StorageBin field was removed — SAP holds no material-to-bin data
+      expect(items[0].StorageBin).toBeUndefined();
+    });
+
+    it('should return strictly open lines — no fallback to closed items', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            BaseUnit: 'KG',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '100',
+            GoodsMovementType: '261'
+          },
+          {
+            Reservation: '10001',
+            ReservationItem: '2',
+            OrderID: '40001',
+            Product: 'MAT02',
+            ProductName: 'Material 2',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            BaseUnit: 'KG',
+            ResvnItmRequiredQtyInBaseUnit: '0',
+            ResvnItmWithdrawnQtyInBaseUnit: '0',
+            GoodsMovementType: '261'
+          }
+        ]),
+        getMaterialPackagingUnits: jest.fn().mockResolvedValue([]),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const items = await reservationsClient.getOpenItems('40001', '10001');
+
+      // Both items have OpenQty = 0 — should return empty, not fall back to all items
+      expect(items).toHaveLength(0);
     });
   });
 

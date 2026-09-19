@@ -11,7 +11,6 @@ entity GoodsIssueQueue : cuid, managed {
     MaterialDesc          : String(80);
     Plant                 : String(4);
     StorageLocation       : String(4);
-    StorageBin            : String(18);
     Batch                 : String(10);
     ExpiryDate            : Date;
     IssueQty              : Decimal(13, 3);

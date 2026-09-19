@@ -98,8 +98,7 @@ class GoodsIssueHandler {
         OrderNo,
         MaterialDesc,
         Plant,
-        StorageLocation,
-        StorageBin
+        StorageLocation
       } = req.data;
 
       if (!ReservationNo || !ReservationItem) {
@@ -148,7 +147,6 @@ class GoodsIssueHandler {
               MaterialDesc,
               Plant,
               StorageLocation,
-              StorageBin,
               IssueQty: nQty,
               Unit,
               Batch,
@@ -403,7 +401,6 @@ class GoodsIssueHandler {
             MaterialDesc: err.details?.materialDesc || '',
             Plant: err.details?.plant || '',
             StorageLocation: err.details?.storageLocation || '',
-            StorageBin: '',
             CurrentStock: err.details?.currentStock || 0,
             SuStockQty: err.details?.currentStock || 0,
             BaseUnit: err.details?.baseUnit || '',

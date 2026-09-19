@@ -29,36 +29,32 @@ with real expiry and status (`IN25000963`, exp 2026-12-11, VALID). Reservation 1
 batch flagged EXPIRING SOON. Goods Receipt traced on storage unit **180000001** → delivery 180000001,
 PO 400000011, material 1000000045, 10 KG, batch INS2500000, supplier Dowpol Chemical International.
 
-### Open defects
+### Defect status (verified live 19-Sep-2026)
 
-**1. `$top` and `$count` are ignored by every custom-handler entity.**
-`$top=3` returned 132 rows from `sales-inquiry/MaterialVH`; `$top=1` returned 1,040 inbound deliveries.
-`@odata.count` returns `0` while 54 / 18 / 132 rows are delivered. No server-side paging; every such
-table shows a wrong total and pulls the full set.
+**FIXED:**
 
-**2. Goods Receipt returns HTTP 502 for its own validation errors.**
-`MaterialStorageLocations` and `MaterialBatches` without a `Material` filter answer
-`502 Material parameter is required`. A missing caller parameter is a `400`. As written, a user mistake
-is indistinguishable from an SAP outage in the logs. Goods Issue returns `400` correctly — copy it.
+1. **Reservation list truncation at `$top=200`** → paging loop implemented, 217 reservations returned,
+   count correct.
+2. **`ItemCount` mismatch** → 10/10 match after counting post-OpenQty filter.
+3. **Zero-stock batches offered as issuable** → 0 of 52 offered batches have no stock.
+4. **`$top` / `$count` ignored** → paging and `@odata.count` correct on all custom handlers.
+5. **Goods Receipt validation returning 502** → now returns 400.
+6. **`MaterialBatches` `AvailableStock` null** → populated, agrees with `resolveIdentifier`.
+7. **`getSupplierDefaults` empty** → returns INR / AT01 / derived:true.
+8. **`DocumentTypeVH` 0 rows** → 33 rows.
 
-**3. Stock disagrees between two endpoints on the same screen.**
-`MaterialBatches` returned `AvailableStock: null` for batch IN25000963 while `resolveIdentifier`
-returned `5000` for the same reservation and material. The operator sees both.
+**PROVEN:** Goods Receipt posting via `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` created real SAP
+MaterialDocument **5000005499** / year 2026 / item 0001.
 
-**4. `OpenReservations.ItemCount` does not match the item list.**
-168779: `ItemCount` 5, `GIItems` returned 6. 168778: `ItemCount` 3, returned 4. Off by one on both.
+**NOT A CODE DEFECT:** `StorageBin` — SAP holds no material-to-bin data
+(`MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` is empty, 0 rows; confirmed filtered, unfiltered, and
+by full catalogue scan). The field was removed from the Goods Issue CDS model, integration clients,
+Fiori views/controllers, and the dispatch queue schema. Same root cause as the empty Goods Receipt
+storage-location picker.
 
-**5. `StorageBin` on a goods-issue item carries a description, not a bin.**
-Observed value `"Raw Material"`. Will not scan and will not match.
-
-**6. `getSupplierDefaults` delivers nothing.**
-Supplier 1110 returned `Currency: ""`, `PaymentTerms: ""`, `IncotermsClassification: ""`,
-`derived: false`. The sales-side `getCustomerDefaults` returned a full record for the same partner.
-
-**7. `DocumentTypeVH` is empty.** 0 rows. The PO document-type dropdown has nothing in it.
-
-Defects 3, 4 and 5 were each observed on two samples and had not been re-confirmed after the
-19-Sep account lockout. Re-check before fixing.
+**STILL BLOCKED:** Goods Issue posting for movement 261. No reachable endpoint exists on DS4
+(`ZUI_GI_ORDER_RSV_O4` 404; `API_MATERIAL_DOCUMENT_SRV` not registered;
+`MMIM_MATDOC_SRV` `creatable=false`). Needs Basis/ABAP. Module ships as scan-and-queue.
 
 ---
 

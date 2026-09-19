@@ -31,7 +31,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             MaterialDesc    : String(80);
             Plant           : String(4);
             StorageLocation : String(4);
-            StorageBin      : String(18);
             Batch           : String(10);
             ExpiryDate      : Date;
             BatchStatusState: String(10);
@@ -55,7 +54,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             ManufactDate        : Date;
             AvailableStock      : Decimal(13, 3);
             Unit                : String(3);
-            StorageBin          : String(18);
             StorageLocation     : String(4);
             StorageLocationName : String(40);
             StatusState         : String(10);
@@ -128,7 +126,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         MaterialDesc    : String(80);
         Plant           : String(4);
         StorageLocation : String(4);
-        StorageBin      : String(18);
         Batch           : String(10);
         ExpiryDate      : Date;
         BatchStatusState: String(10);
@@ -150,7 +147,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         ManufactDate        : Date;
         AvailableStock      : Decimal(13, 3);
         Unit                : String(3);
-        StorageBin          : String(18);
         StorageLocation     : String(4);
         StorageLocationName : String(40);
         StatusState         : String(10);
@@ -175,7 +171,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         AvailableStock             : Decimal(13, 3);
         DefaultStorageLocation     : String(4);
         DefaultStorageLocationName : String(60);
-        DefaultStorageBin          : String(18);
     };
 
     type QueueItem {
@@ -188,7 +183,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         MaterialDesc          : String(80);
         Plant                 : String(4);
         StorageLocation       : String(4);
-        StorageBin            : String(18);
         Batch                 : String(10);
         ExpiryDate            : Date;
         IssueQty              : Decimal(13, 3);
@@ -245,8 +239,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         OrderNo               : String(12),
         MaterialDesc          : String(80),
         Plant                 : String(4),
-        StorageLocation       : String(4),
-        StorageBin            : String(18)
+        StorageLocation       : String(4)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -281,7 +274,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         ManufactDate        : Date;
         AvailableStock      : Decimal(13, 3);
         Unit                : String(3);
-        StorageBin          : String(18);
         StorageLocation     : String(4);
         StorageLocationName : String(40);
         StatusState         : String(10);
@@ -303,7 +295,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         MaterialDesc                : String(80);
         Plant                       : String(4);
         StorageLocation             : String(4);
-        StorageBin                  : String(18);
         CurrentStock                : Decimal(13, 3);
         SuStockQty                  : Decimal(13, 3);
         BaseUnit                    : String(3);

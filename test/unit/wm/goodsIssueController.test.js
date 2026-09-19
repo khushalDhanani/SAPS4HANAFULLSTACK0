@@ -168,7 +168,6 @@ const mockResolution = {
         MaterialDesc: 'Test Chemical',
         Plant: '1120',
         StorageLocation: 'CS01',
-        StorageBin: 'BIN-01',
         Batch: 'IN25000963',
         ExpiryDate: '2027-06-24',
         BatchStatusState: 'Success',
@@ -190,7 +189,6 @@ const mockResolution = {
             MaterialDesc: 'Test Chemical',
             Plant: '1120',
             StorageLocation: 'CS01',
-            StorageBin: 'BIN-01',
             Batch: 'IN25000963',
             ExpiryDate: '2027-06-24',
             BatchStatusState: 'Success',
@@ -218,8 +216,7 @@ const mockResolution = {
     ],
     AvailableStock: 800,
     DefaultStorageLocation: 'CS01',
-    DefaultStorageLocationName: 'Raw Material',
-    DefaultStorageBin: 'BIN-01'
+    DefaultStorageLocationName: 'Raw Material'
 };
 
 describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
@@ -770,7 +767,6 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
                             ExpiryDate: '2027-12-31',
                             StatusState: 'Success',
                             StatusText: 'VALID',
-                            StorageBin: 'BIN-02',
                             AvailableStock: 500
                         })
                     })
@@ -830,8 +826,8 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
         it('should filter batches on search', () => {
             const oBatchModel = controller.getView().getModel('giBatchSelection');
             oBatchModel.setProperty('/rawBatches', [
-                { Batch: 'IN25000963', ExpiryDate: '2027-06-24', StatusText: 'VALID', StorageBin: 'BIN-01', StorageLocation: 'CS01', Plant: '1120' },
-                { Batch: 'IN25000970', ExpiryDate: '2027-12-31', StatusText: 'VALID', StorageBin: 'BIN-02', StorageLocation: 'CS01', Plant: '1120' }
+                { Batch: 'IN25000963', ExpiryDate: '2027-06-24', StatusText: 'VALID', StorageLocation: 'CS01', Plant: '1120' },
+                { Batch: 'IN25000970', ExpiryDate: '2027-12-31', StatusText: 'VALID', StorageLocation: 'CS01', Plant: '1120' }
             ]);
 
             controller.onSearchBatches({ getParameter: (p) => p === 'newValue' ? '970' : undefined });

@@ -189,8 +189,7 @@ sap.ui.define([
                 OrderNo: oPayload.OrderNo ? String(oPayload.OrderNo).trim() : "",
                 MaterialDesc: oPayload.MaterialDesc ? String(oPayload.MaterialDesc).trim() : "",
                 Plant: oPayload.Plant ? String(oPayload.Plant).trim() : "",
-                StorageLocation: oPayload.StorageLocation ? String(oPayload.StorageLocation).trim() : "",
-                StorageBin: oPayload.StorageBin ? String(oPayload.StorageBin).trim() : ""
+                StorageLocation: oPayload.StorageLocation ? String(oPayload.StorageLocation).trim() : ""
             };
 
             return ODataClient.post(BASE_PATH + "/postGoodsIssue", oBody);

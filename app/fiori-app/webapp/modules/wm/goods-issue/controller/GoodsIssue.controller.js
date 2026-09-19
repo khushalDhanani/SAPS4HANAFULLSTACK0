@@ -396,8 +396,7 @@ sap.ui.define([
                 var aFilters = [
                     new Filter("ReservationItem", FilterOperator.Contains, sQuery),
                     new Filter("Material", FilterOperator.Contains, sQuery),
-                    new Filter("MaterialDesc", FilterOperator.Contains, sQuery),
-                    new Filter("StorageBin", FilterOperator.Contains, sQuery)
+                    new Filter("MaterialDesc", FilterOperator.Contains, sQuery)
                 ];
                 oBinding.filter(new Filter({
                     filters: aFilters,
@@ -894,13 +893,11 @@ sap.ui.define([
                 var sBatch = (b.Batch || "").toLowerCase();
                 var sExp = (b.ExpiryDate || "").toLowerCase();
                 var sStatus = (b.StatusText || "").toLowerCase();
-                var sBin = (b.StorageBin || "").toLowerCase();
                 var sSLoc = (b.StorageLocation || "").toLowerCase();
                 var sPlant = (b.Plant || "").toLowerCase();
                 return sBatch.indexOf(sQuery) !== -1 ||
                        sExp.indexOf(sQuery) !== -1 ||
                        sStatus.indexOf(sQuery) !== -1 ||
-                       sBin.indexOf(sQuery) !== -1 ||
                        sSLoc.indexOf(sQuery) !== -1 ||
                        sPlant.indexOf(sQuery) !== -1;
             });
@@ -946,9 +943,6 @@ sap.ui.define([
                     BatchStatusState: oBatch.StatusState,
                     BatchStatusText: oBatch.StatusText
                 });
-                if (oBatch.StorageBin) {
-                    oUpdated.StorageBin = oBatch.StorageBin;
-                }
                 oModel.setProperty("/activeItem", oUpdated);
 
                 // Update available stock from batch
@@ -1136,8 +1130,7 @@ sap.ui.define([
                 OrderNo: oResolved.OrderNo || "",
                 MaterialDesc: oActive.MaterialDesc || "",
                 Plant: oActive.Plant || oResolved.Plant || "",
-                StorageLocation: oActive.StorageLocation || "",
-                StorageBin: oActive.StorageBin || ""
+                StorageLocation: oActive.StorageLocation || ""
             };
 
             // ── Pre-posting SAP stock revalidation ──
@@ -1213,7 +1206,6 @@ sap.ui.define([
                             Batch: oPayload.Batch,
                             Plant: oPayload.Plant,
                             StorageLocation: oPayload.StorageLocation,
-                            StorageBin: oPayload.StorageBin,
                             MaterialDocument: "",
                             MaterialDocYear: "",
                             TransferOrder: "",

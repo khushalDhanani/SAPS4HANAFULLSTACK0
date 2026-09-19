@@ -1104,12 +1104,116 @@
        - Verified persistence by reading back `5000005499` live from `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`.
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-19 14:22 IST
+- **Agent**: Antigravity
+- **Change**: ItemCount Single-Source-of-Truth Alignment, StorageBin Batch Enrichment, and getOpenItems No-Fallback Fix:
+  1. **ItemCount Overcounting Fix** (`getOpenReservations`):
+     - Root cause: `ItemCount` counted every SAP item where `ReservationItemIsFinallyIssued eq false`, but `getOpenItems` only returns lines with `OpenQty > 0`. Items with `Req=0 / Wdn=0 / Final=false` (e.g., Reservation `516233` item 11, Reservation `18025` items 6+7) were counted but never shown.
+     - Fix: Derive `openQty = Math.max(0, reqQty - wdnQty)` per item during aggregation in `getOpenReservations`. Items with `openQty <= 0` are skipped (`continue`). `ItemCount` now uses the identical filter as `getOpenItems`, achieving 100% parity: Reservation `516233` goes from ItemCount=4 to ItemCount=3, Reservation `18025` from ItemCount=7 to ItemCount=5.
+  2. **getOpenItems No-Fallback** (line 211):
+     - Removed `openLines.length > 0 ? openLines : mappedItems` fallback that showed all closed lines when nothing was open. Now strictly returns `mappedItems.filter(i => i.OpenQty > 0)`. A reservation with 0 open items returns `[]`, matching `ItemCount = 0`.
+  3. **StorageBin Batch Enrichment**:
+     - `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` carries no `StorageBin` or `WarehouseStorageBin` for IM plants — confirmed empty on 100% of rows.
+     - When a pre-assigned batch resolves via `getMaterialBatches`, the matched batch's `StorageBin` is now wired into the item (`batchBin`), filtering out the IM placeholder dash (`'-'`).
+     - Fallback chain: `r.StorageBin || r.WarehouseStorageBin || batchBin || ''`.
+  4. **Files Modified**:
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: OpenQty filter in `getOpenReservations`, `batchBin` enrichment in `getOpenItems`, removed closed-line fallback.
+     - `test/unit/wm/goodsIssueClients.test.js`: Added 5 new tests (ItemCount exclusion, all-zero reservation, StorageBin enrichment, dash-bin filtering, no-fallback behavior). Updated existing mock data with quantity fields.
+  5. **Validation & Quality Gates**:
+     - `npx cds compile srv`: Succeeded with code 0.
+     - `cd app/fiori-app && npm run lint`: 0 findings (100% clean).
+     - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 2.23 s).
+     - `npx jest test/unit/wm/goodsIssueClients.test.js`: **37 passed, 37 total tests (100% green)**.
+     - `npm test`: **59 passed, 59 total test suites; 737 passed, 737 total tests (100% green)**.
+     - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
+## 2026-09-19 14:45 IST
+- **Agent**: Antigravity
+- **Change**: Removed structurally-empty `StorageBin` field from the entire Goods Issue flow and updated `docs/delivery-verification.md` with verified defect statuses.
+  - **Reason**: SAP holds no material-to-bin data. `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` returns 0 rows (confirmed filtered, unfiltered, and by full catalogue scan). All 29 sampled GIItems had `StorageBin: ''`, reservation items carry no bin field, every batch returned the sentinel `'-'`. The field was always empty; removing it is the fix.
+  - **Files modified**:
+    - `srv/wm/goods-issue/service.cds`: Removed `StorageBin` from 7 types/entities and `DefaultStorageBin` from `GoodsIssueResolution`, `StorageBin` parameter from `postGoodsIssue` action (9 total removals).
+    - `db/wm/goods-issue-queue.cds`: Removed `StorageBin` column from `GoodsIssueQueue` entity.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: Removed `batchBin` variable, enrichment block, `StorageBin` from mapped item return, and `StorageLocationName` from return (was orphaned).
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`: Removed `StorageBin` sentinel `'-'` from batch result object.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`: Removed `StorageBin` from BATCH/GS1 direct-match return, HANDLING_UNIT return, and diagnostic log.
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Removed `DefaultStorageBin` (populated from `s4Config.getStorageBin()`) from `resolveIdentifier` return.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`: Removed `StorageBin` from `postGoodsIssue` destructuring, enqueue payload, and `resolveStockUnit` error fallback.
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`: Removed `StorageBin` from queue record builder.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`: Removed Bin column header + cell from components table, updated 2 text bindings.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/BatchSelectionDialog.fragment.xml`: Removed Bin column header + ObjectStatus cell.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/ShortPickDialog.fragment.xml`: Updated label from `StorageBin / Plant` to `Plant / Storage Location`, removed `StorageBin` from text binding.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`: Removed `StorageBin` from 5 locations (search filter, batch search filter, batch-select enrichment, posting payload, queue-display record).
+    - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js`: Removed `StorageBin` from `postGoodsIssue` payload.
+    - `app/fiori-app/webapp/i18n/i18n.properties` + `i18n_en.properties`: Removed dead keys `giColStorageBin`, `giStorageBinLabel`, `giLabelStorageBinPlant`; updated `giLabelLocationBin` from `Location & Bin` to `Location`.
+    - `docs/delivery-verification.md`: Rewrote defects section — 8 FIXED, GR PROVEN (MaterialDocument 5000005499), StorageBin NOT A CODE DEFECT (field removed), GI posting STILL BLOCKED.
+    - `test/unit/wm/goodsIssueClients.test.js`: Replaced 2 dead StorageBin enrichment tests with 1 test confirming field is absent.
+    - `test/unit/wm/goodsIssueService.test.js`: Removed 3 `StorageBin` assertions and request data.
+    - `test/unit/wm/goodsIssueController.test.js`: Removed `StorageBin`/`DefaultStorageBin` from all fixture data.
+    - `test/unit/wm/fixtures/goodsIssueFixtures.js`: Removed `StorageBin` from 7 mock objects.
+    - `test/unit/wm/fixtures/suResolution.fixture.js`: Removed `StorageBin` from 4 fixture objects (EWM metadata XML left intact).
+  - **Scope exclusions**: Goods Receipt `WarehouseStorageBin` untouched. EWM `StorageBin` / `ewmColStorageBin` untouched. `s4Config.getStorageBin()` call removed but function left (dead but harmless).
+  - **Validation**:
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `grep -rn "StorageBin" srv/wm/goods-issue srv/integration/s4hana/wm/goods-issue app/fiori-app/webapp/modules/wm/goods-issue`: Only EWM field vocabulary in `GoodsIssueStockUnitClient.js:128` (correct, out-of-scope).
+    - `grep -rn "StorageBin" srv/integration/s4hana/wm/GoodsIssueAdapter.js`: 0 matches (exit code 1).
+    - `grep -rn "WarehouseStorageBin" app/fiori-app/webapp/modules/wm/goods-receipt`: 5 matches (all untouched, GR module unaffected).
+    - `npm test`: **59 passed, 59 total test suites; 736 passed, 736 total tests (100% green)** in 78.7 s.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
+## 2026-09-19 14:58 IST
+- **Agent**: Antigravity
+- **Change**: Cleaned up 165 orphaned EWM and RF Terminal i18n keys and verified `GoodsIssueStockUnitClient.js` bin alias isolation.
+  - **i18n Cleanup (`app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`)**:
+    - Removed 104 dead `ewm*` keys and 61 dead `rf*` keys, plus 5 EWM/RF section header comments leftover from the deleted EWM module.
+    - Verified zero live references across all views, fragments, controllers, and services.
+    - Preserved 100% exact key-for-key parity between `i18n.properties` and `i18n_en.properties`.
+  - **Stock Unit Resolution Code Verification (`GoodsIssueStockUnitClient.js`)**:
+    - Investigated `specs.bin` (line 128) and `m.bin` (lines 264, 535, 553).
+    - Confirmed that `specs.bin` is only used for metadata discovery heuristics and `_suDiag` diagnostic logging.
+    - Confirmed `resolveStockUnitForGoodsIssue()` does not expose `StorageBin` or `bin` in its returned object, and no downstream callers in Goods Issue consume any bin field.
+  - **Validation & Quality Gates**:
+    - `npm test`: **59 passed, 59 total test suites; 736 passed, 736 total tests (100% green)** in 78.7 s.
+    - `cd app/fiori-app && npm run lint`: Success! 0 findings detected (0 errors, 0 warnings).
+    - `cd app/fiori-app && npm run build`: Build succeeded in 1.14 s (`Component-preload.js` generated cleanly).
+    - `npm run lint`: **0 errors**, 17 pre-existing warnings.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run validate:mta`: Succeeded with exit code 0 (`mbt validate`).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
+## 2026-09-19 15:06 IST
+- **Agent**: Antigravity
+- **Change**: Eliminated dead weight in `GoodsIssueStockUnitClient.js` (`bin` field alias chain) and decommissioned `s4Config.getStorageBin()` / `storageBin` configuration tripwire.
+  - **Stock Unit Resolution Cleanup (`srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`)**:
+    - Deleted line 128 `bin` field spec alias list from `_huFieldSpecs()`.
+    - Deleted line 264 `bin: this._pickField(names, specs.bin)` from candidate entity resolution.
+    - Deleted line 535 `bin: str(it, itemFields.bin)` from `_readHuContents` mapping.
+    - Deleted line 553 `storageBin: mapped.filter((m) => m.bin)...` from `_suDiag` logging payload.
+    - Result: Entire dead computation chain for `bin` in Stock Unit client eliminated.
+  - **S4 Configuration Tripwire Decommissioning (`srv/common/s4Config.js`, `package.json`, `.env.example`, `test/unit/common/s4Config.test.js`)**:
+    - `s4Config.js`: Removed `getStorageBin()` method, `get storageBin()` getter, and `storageBin` property from `getAll()`. Prevents `s4Config.getAll()` from failing loudly with `ConfigurationError: Missing required S/4HANA configuration: s4.storageBin` on fresh checkouts where `S4_STORAGE_BIN` is commented out.
+    - `package.json`: Removed `"storageBin": "CS01-BIN"` from `cds.s4` defaults.
+    - `.env.example`: Removed commented `# S4_STORAGE_BIN=CS01-BIN`.
+    - `test/unit/common/s4Config.test.js`: Removed `storageBin` assertions from defaults test, getter test, `getAll()` / `validate()` test, and `requiredKeys` test (28/28 tests passing).
+  - **Validation & Quality Gates**:
+    - `npm test`: **59 passed, 59 total test suites; 734 passed, 734 total tests (100% green)** in 82.7 s.
+    - `npx jest test/unit/common/s4Config.test.js`: **28 passed, 28 total tests (100% green)** in 0.43 s.
+    - `cd app/fiori-app && npm run lint`: Success! 0 findings detected (0 errors, 0 warnings).
+    - `cd app/fiori-app && npm run build`: Build succeeded in 990 ms (`Component-preload.js` generated cleanly).
+    - `npm run lint`: **0 errors**, 17 pre-existing warnings.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run validate:mta`: Succeeded with exit code 0 (`mbt validate`).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 732/732 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 734/734 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
 - **Goods Receipt (101)**: **100% PROVEN DIRECTLY AGAINST LIVE SAP S/4HANA (CLIENT 220)** in strict accordance with the non-negotiable `AGENTS.md` SAP API Discovery Protocol. Authentic Material Documents (`5000005496`, `5000005497`, `5000005498`, `5000005499`) generated in SAP S/4HANA via `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` deep insert with CSRF handshake, read back and verified via `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`. Zero mock persistence, zero fake fallback numbers.
-- **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. Paging loop implemented across `ReservationDocumentItem`, accumulating all records and preserving multi-item reservations across page boundaries.
-- **Defect Resolutions**: All defects resolved, tested, and validated against live SAP S/4HANA backend.
+- **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. `StorageBin` removed from entire flow (SAP holds no bin data). Paging loop implemented. ItemCount now single-source-of-truth with `getOpenItems` (both use `OpenQty > 0`).
+- **Defect Resolutions**: 8 defects FIXED, GR posting PROVEN, StorageBin NOT A CODE DEFECT (removed), GI posting STILL BLOCKED (no reachable 261 endpoint on DS4).
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).

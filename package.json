@@ -189,7 +189,6 @@
       "client": "220",
       "plant": "1120",
       "storageLocation": "CS01",
-      "storageBin": "CS01-BIN",
       "salesOrganization": "1000",
       "distributionChannel": "10",
       "division": "52",

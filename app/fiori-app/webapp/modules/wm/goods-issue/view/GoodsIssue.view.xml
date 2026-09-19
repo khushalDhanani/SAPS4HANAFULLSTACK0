@@ -170,7 +170,6 @@
                                 <columns>
                                     <Column width="4rem"><Text text="{i18n>giColItem}" /></Column>
                                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giColMaterial}" /></Column>
-                                    <Column width="7rem"><Text text="{i18n>giColStorageBin}" /></Column>
                                     <Column hAlign="End" width="6rem"><Text text="{i18n>giColRequiredQty}" /></Column>
                                     <Column hAlign="End" width="6rem"><Text text="{i18n>giColWithdrawnQty}" /></Column>
                                     <Column hAlign="End" width="6rem"><Text text="{i18n>giColOpenQty}" /></Column>
@@ -181,7 +180,6 @@
                                         <cells>
                                             <Text text="{giView>ReservationItem}" />
                                             <ObjectIdentifier title="{giView>Material}" text="{giView>MaterialDesc}" />
-                                            <ObjectStatus text="{= ${giView>StorageBin} || '-' }" state="{= ${giView>StorageBin} ? 'Warning' : 'None' }" />
                                             <ObjectNumber number="{giView>RequiredQty}" unit="{giView>Unit}" />
                                             <ObjectNumber number="{giView>WithdrawnQty}" unit="{giView>Unit}" />
                                             <ObjectNumber number="{giView>OpenQty}" unit="{giView>Unit}" state="{= ${giView>OpenQty} > 0 ? 'Information' : 'Success' }" />
@@ -232,7 +230,7 @@
                                     text="{giView>/activeItem/MaterialDesc}" />
 
                                 <Label text="{i18n>giLabelPlantLocation}" />
-                                <Text text="{giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation} (Bin: {= ${giView>/activeItem/StorageBin} || '-' })" />
+                                <Text text="{giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation}" />
 
                                 <Label text="{i18n>giConfirmedStockLabel}" />
                                 <ObjectNumber
@@ -487,7 +485,7 @@
                                     text="{giView>/activeItem/MaterialDesc}" />
 
                                 <Label text="{i18n>giLabelLocationBin}" />
-                                <Text text="{giView>/activeItem/StorageLocation} / Bin {= ${giView>/activeItem/StorageBin} || '-' }" />
+                                <Text text="{giView>/activeItem/StorageLocation}" />
 
                                 <Label text="{i18n>giBatchLabel}" />
                                 <HBox alignItems="Center">

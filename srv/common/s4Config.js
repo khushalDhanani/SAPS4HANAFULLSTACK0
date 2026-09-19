@@ -99,11 +99,6 @@ class S4Config {
     return this._requireString('storageLocation', ['CDS_S4_STORAGE_LOCATION', 'S4_STORAGE_LOCATION', 'S4_SLOC']);
   }
 
-  /** Default Storage Bin (e.g. 'CS01-BIN') */
-  getStorageBin() {
-    return this._requireString('storageBin', ['CDS_S4_STORAGE_BIN', 'S4_STORAGE_BIN', 'S4_BIN']);
-  }
-
   /** Default Sales Organization (e.g. '1000') */
   getSalesOrganization() {
     return this._requireString('salesOrganization', ['CDS_S4_SALES_ORGANIZATION', 'S4_SALES_ORGANIZATION', 'S4_SALES_ORG']);
@@ -143,7 +138,6 @@ class S4Config {
   get client() { return this.getClient(); }
   get plant() { return this.getPlant(); }
   get storageLocation() { return this.getStorageLocation(); }
-  get storageBin() { return this.getStorageBin(); }
   get salesOrganization() { return this.getSalesOrganization(); }
   get distributionChannel() { return this.getDistributionChannel(); }
   get division() { return this.getDivision(); }
@@ -160,7 +154,6 @@ class S4Config {
       client: this.getClient(),
       plant: this.getPlant(),
       storageLocation: this.getStorageLocation(),
-      storageBin: this.getStorageBin(),
       salesOrganization: this.getSalesOrganization(),
       distributionChannel: this.getDistributionChannel(),
       division: this.getDivision(),

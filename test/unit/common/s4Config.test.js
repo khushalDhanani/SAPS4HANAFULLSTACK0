@@ -33,7 +33,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.getClient()).toBe('220');
       expect(s4Config.getPlant()).toBe('1120');
       expect(s4Config.getStorageLocation()).toBe('CS01');
-      expect(s4Config.getStorageBin()).toBe('CS01-BIN');
       expect(s4Config.getSalesOrganization()).toBe('1000');
       expect(s4Config.getDistributionChannel()).toBe('10');
       expect(s4Config.getDivision()).toBe('52');
@@ -47,7 +46,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.client).toBe(s4Config.getClient());
       expect(s4Config.plant).toBe(s4Config.getPlant());
       expect(s4Config.storageLocation).toBe(s4Config.getStorageLocation());
-      expect(s4Config.storageBin).toBe(s4Config.getStorageBin());
       expect(s4Config.salesOrganization).toBe(s4Config.getSalesOrganization());
       expect(s4Config.distributionChannel).toBe(s4Config.getDistributionChannel());
       expect(s4Config.division).toBe(s4Config.getDivision());
@@ -63,7 +61,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
         client: '220',
         plant: '1120',
         storageLocation: 'CS01',
-        storageBin: 'CS01-BIN',
         salesOrganization: '1000',
         distributionChannel: '10',
         division: '52',
@@ -105,7 +102,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       { key: 'client', getter: () => s4Config.getClient(), envs: ['CDS_S4_CLIENT', 'S4_CLIENT'] },
       { key: 'plant', getter: () => s4Config.getPlant(), envs: ['CDS_S4_PLANT', 'S4_PLANT'] },
       { key: 'storageLocation', getter: () => s4Config.getStorageLocation(), envs: ['CDS_S4_STORAGE_LOCATION', 'S4_STORAGE_LOCATION', 'S4_SLOC'] },
-      { key: 'storageBin', getter: () => s4Config.getStorageBin(), envs: ['CDS_S4_STORAGE_BIN', 'S4_STORAGE_BIN', 'S4_BIN'] },
       { key: 'salesOrganization', getter: () => s4Config.getSalesOrganization(), envs: ['CDS_S4_SALES_ORGANIZATION', 'S4_SALES_ORGANIZATION', 'S4_SALES_ORG'] },
       { key: 'distributionChannel', getter: () => s4Config.getDistributionChannel(), envs: ['CDS_S4_DISTRIBUTION_CHANNEL', 'S4_DISTRIBUTION_CHANNEL', 'S4_CHANNEL'] },
       { key: 'division', getter: () => s4Config.getDivision(), envs: ['CDS_S4_DIVISION', 'S4_DIVISION'] },

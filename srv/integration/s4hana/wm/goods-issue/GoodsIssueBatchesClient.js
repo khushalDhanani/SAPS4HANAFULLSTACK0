@@ -173,7 +173,6 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           AvailableStock: nStock,
           IsSelectable: isSelectable,
           Unit: (slocInfo && slocInfo.BaseUnit) || b.Unit || 'KG',
-          StorageBin: (slocInfo && slocInfo.WarehouseStorageBin) ? slocInfo.WarehouseStorageBin : (b.StorageBin || '-'),
           StorageLocation: (slocInfo && slocInfo.StorageLocation) || sSLoc || b.StorageLocation || '',
           StorageLocationName: (slocInfo && slocInfo.StorageLocationName) || '',
           StatusState: status.StatusState,

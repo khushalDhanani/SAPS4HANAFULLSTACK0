@@ -125,7 +125,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       batch: { names: ['Batch', 'CHARG', 'Charg'], re: /^(batch|charg)$/i },
       plant: { names: ['Plant', 'Werks', 'WERKS'], re: /^(plant|werks)$/i },
       sloc: { names: ['StorageLocation', 'Lgort', 'LGORT', 'SLoc'], re: /^(storagelocation|lgort|sloc)$/i },
-      bin: { names: ['EWMStorageBin', 'StorageBin', 'SourceStorageBin', 'VLPLA', 'LGPLA', 'Lgpla'], re: /^(ewmstoragebin|storagebin|sourcestoragebin|vlpla|lgpla)$/i },
       qty: { names: ['ItemQuantity', 'Quantity', 'QUAN', 'Quan', 'NISTM', 'Menge', 'HuQty', 'AvailableQty'], re: /^(itemquantity|quantity|qty|quan|nistm|menge|huqty|availableqty)$/i },
       unit: { names: ['ItemQuantityUnit', 'BaseUnit', 'MEINS', 'Meins', 'Unit', 'Uom', 'UoM'], re: /^(itemquantityunit|baseunit|meins|unit|uom)$/i }
     };
@@ -261,7 +260,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
             batch: this._pickField(names, specs.batch),
             plant: this._pickField(names, specs.plant),
             sloc: this._pickField(names, specs.sloc),
-            bin: this._pickField(names, specs.bin),
             qty,
             unit: this._pickField(names, specs.unit)
           },
@@ -532,7 +530,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       batch: str(it, itemFields.batch),
       plant: str(it, itemFields.plant),
       sloc: str(it, itemFields.sloc),
-      bin: str(it, itemFields.bin),
       qty: itemFields.qty ? Number(it[itemFields.qty]) || 0 : 0,
       unit: str(it, itemFields.unit)
     }));
@@ -550,7 +547,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       batch: mapped.filter((m) => m.batch).map((m) => m.batch).join(','),
       plant: mapped.filter((m) => m.plant).map((m) => m.plant).join(','),
       storageLocation: mapped.filter((m) => m.sloc).map((m) => m.sloc).join(','),
-      storageBin: mapped.filter((m) => m.bin).map((m) => m.bin).join(','),
       stock: mapped.reduce((sum, m) => sum + (m.qty || 0), 0)
     });
 
@@ -705,7 +701,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         MaterialDesc: resvItem.ProductName || '',
         Plant: resvPlant,
         StorageLocation: resvSLoc,
-        StorageBin: batchDirectMatch.StorageBin || resvItem.StorageBin || resvItem.WarehouseStorageBin || '',
         CurrentStock: batchDirectMatch.AvailableStock != null ? batchDirectMatch.AvailableStock : currentStock,
         SuStockQty: currentStock,
         BaseUnit: baseUnit,
@@ -894,7 +889,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const suMaterial = suPrimary.material || '';
     const suPlant = suPrimary.plant || '';
     const suSLoc = suPrimary.sloc || '';
-    const suBin = suPrimary.bin || '';
     const suQty = Number(suPrimary.qty) > 0 ? Number(suPrimary.qty) : 0;
     const suUnit = suPrimary.unit || '';
     const suExternalId = String(huObject[huModel.huIdField] || sSu).trim();
@@ -1030,7 +1024,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       batch: determinedBatch,
       plant: effectivePlant,
       storageLocation: effectiveSLoc,
-      storageBin: suBin,
       stock: currentStock,
       maxIssueQty
     });
@@ -1049,7 +1042,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       MaterialDesc: resvItem.ProductName || '',
       Plant: effectivePlant,
       StorageLocation: effectiveSLoc,
-      StorageBin: suBin || resvItem.StorageLocationName || '',
       CurrentStock: currentStock,
       SuStockQty: suQty,
       BaseUnit: baseUnit,

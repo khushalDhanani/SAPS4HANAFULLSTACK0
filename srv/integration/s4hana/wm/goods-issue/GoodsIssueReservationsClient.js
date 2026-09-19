@@ -48,6 +48,12 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           const sResv = r.Reservation || '';
           if (!sResv) continue;
 
+          // Derive OpenQty — only count items the clerk will actually see
+          const reqQty = Number(r.ResvnItmRequiredQtyInBaseUnit) || 0;
+          const wdnQty = Number(r.ResvnItmWithdrawnQtyInBaseUnit) || 0;
+          const openQty = Math.max(0, reqQty - wdnQty);
+          if (openQty <= 0) continue;
+
           if (!resvMap.has(sResv)) {
             resvMap.set(sResv, {
               ReservationNo: sResv,
@@ -190,8 +196,6 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           MaterialDesc: r.ProductName || '',
           Plant: r.Plant || '',
           StorageLocation: r.StorageLocation || '',
-          StorageLocationName: r.StorageLocationName || '',
-          StorageBin: r.StorageBin || r.WarehouseStorageBin || '',
           Batch: r.Batch || '',
           ExpiryDate: expiryDate,
           BatchStatusState: batchStatus.StatusState,
@@ -206,9 +210,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
         };
       }));
 
-      // Return open lines
-      const openLines = mappedItems.filter(i => i.OpenQty > 0);
-      return openLines.length > 0 ? openLines : mappedItems;
+      // Return strictly open lines — no fallback to closed items
+      return mappedItems.filter(i => i.OpenQty > 0);
     }
 
     return [];

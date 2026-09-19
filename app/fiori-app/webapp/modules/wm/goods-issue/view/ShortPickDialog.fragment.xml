@@ -30,8 +30,8 @@
                         <Label text="{i18n>giActiveItemHeader}" design="Bold" />
                         <Text text="{giView>/activeItem/Material} - {giView>/activeItem/MaterialDesc}" />
 
-                        <Label text="{i18n>giLabelStorageBinPlant}" />
-                        <Text text="{giView>/activeItem/StorageBin} • Plant {giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation}" />
+                        <Label text="{i18n>giLabelPlantLocation}" />
+                        <Text text="Plant {giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation}" />
 
                         <Label text="{i18n>giShortPickExpectedQty}" />
                         <Text text="{giView>/activeItem/OpenQty} {giView>/activeItem/Unit}" />

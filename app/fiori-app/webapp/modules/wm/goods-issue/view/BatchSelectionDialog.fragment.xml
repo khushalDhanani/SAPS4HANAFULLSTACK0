@@ -47,7 +47,6 @@
                         <Column width="8rem"><Text text="{i18n>giColSledStatus}" /></Column>
                         <Column width="5rem"><Text text="{i18n>giColPlant}" /></Column>
                         <Column width="5rem"><Text text="{i18n>giColStorageLocation}" /></Column>
-                        <Column width="6rem"><Text text="{i18n>giColStorageBin}" /></Column>
                         <Column hAlign="End" width="8rem"><Text text="{i18n>giColAvailableStock}" /></Column>
                         <Column width="6rem" hAlign="Center"><Text text="{i18n>giColAction}" /></Column>
                     </columns>
@@ -61,9 +60,6 @@
                                     state="{giBatchSelection>StatusState}" />
                                 <Text text="{giBatchSelection>Plant}" />
                                 <Text text="{= ${giBatchSelection>StorageLocation} || '-' }" />
-                                <ObjectStatus
-                                    text="{= ${giBatchSelection>StorageBin} || '-' }"
-                                    state="{= ${giBatchSelection>StorageBin} &amp;&amp; ${giBatchSelection>StorageBin} !== '-' ? 'Warning' : 'None' }" />
                                 <Text text="{= ${giBatchSelection>AvailableStock} !== null &amp;&amp; ${giBatchSelection>AvailableStock} !== undefined ? (${giBatchSelection>AvailableStock} + ' ' + ${giBatchSelection>Unit}) : '-' }" />
                                 <Button
                                     text="{= Number(${giBatchSelection>AvailableStock}) > 0 ? ${i18n>btnSelect} : 'No Stock' }"

@@ -455,7 +455,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           MaterialDesc: 'High-Grade Solvent',
           Plant: '1120',
           StorageLocation: 'CS01',
-          StorageBin: 'BIN-01-A',
           IssueQty: 100.0,
           Unit: 'KG',
           Batch: 'BATCH-01'
@@ -473,7 +472,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(record.MaterialDesc).toBe('High-Grade Solvent');
       expect(record.Plant).toBe('1120');
       expect(record.StorageLocation).toBe('CS01');
-      expect(record.StorageBin).toBe('BIN-01-A');
     });
 
     it('should fallback to Dispatch Queue on batch submitGoodsIssueRequest when posting is unavailable', async () => {
@@ -636,7 +634,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       // Live HUItem carries no plant / SLoc / bin: reservation values apply, bin stays empty
       expect(result.Plant).toBe('1120');
       expect(result.StorageLocation).toBe('CS01');
-      expect(result.StorageBin).toBe('');
       expect(result.SuStockQty).toBe(1200);
       expect(result.CurrentStock).toBe(1200);
       expect(result.PlantMatch).toBe(true);
@@ -721,7 +718,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result.HuExternalId).toBe('180000001');
       expect(result.HuInternalNumber).toBe('180000001');
       expect(result.Material).toBe('1000000355');      // MATID GUID resolved via product-base value help
-      expect(result.StorageBin).toBe('A1-01-02');      // VLPLA from the HU contents value help
       expect(result.SuStockQty).toBe(1200);
       expect(result.NoBatchAvailable).toBe(true);      // TO_CONF_HU_COMP exposes no batch
       expect(result.DeterminedBatch).toBe('');
