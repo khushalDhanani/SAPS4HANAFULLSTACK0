@@ -894,13 +894,75 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-19 12:55 IST
+- **Agent**: Antigravity
+- **Change**: Deleted Defunct EWM Cockpit & RF Terminal (1,489 Backend Lines, 7 UI Files, 10 Test Suites):
+  1. **Backend Elimination (1,489 lines)**:
+     - Permanently removed defunct EWM warehouse management service, handler, adapter, and mapper built on 0 tasks / 0 orders / 0 resources / 0 outbound deliveries across all 26 warehouses:
+       - `srv/ewm/warehouse-management/handlers/warehouseManagement.handler.js` (388 lines)
+       - `srv/ewm/warehouse-management/service.cds` (236 lines)
+       - `srv/ewm/warehouse-management/service.js` (17 lines)
+       - `srv/integration/s4hana/ewm/EwmAdapter.js` (573 lines)
+       - `srv/integration/s4hana/ewm/EwmMapper.js` (275 lines)
+     - Removed service declaration from `srv/service.cds` (`using from './ewm/warehouse-management/service';`).
+  2. **Frontend UI Elimination (7 files)**:
+     - Removed defunct cockpit and RF terminal views, controllers, and service under `app/fiori-app/webapp/modules/ewm/`:
+       - `CreateWarehouseTask.controller.js`, `WarehouseCockpit.controller.js`, `CreateWarehouseTask.view.xml`, `WarehouseCockpit.view.xml`, `EwmService.js`, `RfTerminal.controller.js`, `RfTerminal.view.xml`.
+     - Removed data source `warehouseManagementService`, model `warehouseMgmt`, and routes/targets (`ewmWarehouseCockpit`, `ewmRfTerminal`, `createWarehouseTask`) from `app/fiori-app/webapp/manifest.json`.
+     - Removed `EwmService` import and model initialization from `app/fiori-app/webapp/Component.js`.
+     - Cleaned shell navigation hash handlers and route title mappings in `app/fiori-app/webapp/controller/App.controller.js`.
+     - Cleaned `btnOpenEwmCockpit` and `tileEwmCockpit` from `app/fiori-app/webapp/view/Dashboard.view.xml` while preserving warehouse tab (`key="ewm"`) displaying live Goods Issue (261) and Goods Receipt (101).
+     - Removed `onNavigateToEwmCockpit` from `app/fiori-app/webapp/controller/Dashboard.controller.js`.
+  3. **Test Suites Pruned (10 suites)**:
+     - Deleted 9 unit test suites in `test/unit/ewm/` and 1 integration test suite in `test/integration/ewm/`:
+       - `createWarehouseTask.test.js`, `ewmAdapter.test.js`, `ewmMapping.test.js`, `ewmService.test.js`, `ewmValidation.test.js`, `rfTerminal.test.js`, `rfTerminalController.test.js`, `warehouseCockpitController.test.js`, `warehouseManagementSapOnly.test.js`, `ewmAuthorization.test.js`.
+  4. **Validation & Quality Gates**:
+     - `npx cds compile srv`: Succeeded with code 0.
+     - `cd app/fiori-app && npm run lint`: 0 findings.
+     - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 802 ms).
+     - `npm run lint`: 0 errors (17 warnings in unchanged code, down from 18).
+     - `npx jest test/unit/dashboard/dashboardMetrics.test.js`: **29 passed, 29 total (100% green)**.
+     - `npm test`: **59 passed, 59 total test suites; 718 passed, 718 total tests (100% green)** in 52.0 s.
+     - `git diff --check`: Clean (0 errors).
+  - **Files Deleted**:
+    - `srv/ewm/warehouse-management/handlers/warehouseManagement.handler.js`
+    - `srv/ewm/warehouse-management/service.cds`
+    - `srv/ewm/warehouse-management/service.js`
+    - `srv/integration/s4hana/ewm/EwmAdapter.js`
+    - `srv/integration/s4hana/ewm/EwmMapper.js`
+    - `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/controller/CreateWarehouseTask.controller.js`
+    - `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/controller/WarehouseCockpit.controller.js`
+    - `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/view/CreateWarehouseTask.view.xml`
+    - `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/view/WarehouseCockpit.view.xml`
+    - `app/fiori-app/webapp/modules/ewm/warehouse-cockpit/service/EwmService.js`
+    - `app/fiori-app/webapp/modules/ewm/rf-terminal/controller/RfTerminal.controller.js`
+    - `app/fiori-app/webapp/modules/ewm/rf-terminal/view/RfTerminal.view.xml`
+    - `test/unit/ewm/createWarehouseTask.test.js`
+    - `test/unit/ewm/ewmAdapter.test.js`
+    - `test/unit/ewm/ewmMapping.test.js`
+    - `test/unit/ewm/ewmService.test.js`
+    - `test/unit/ewm/ewmValidation.test.js`
+    - `test/unit/ewm/rfTerminal.test.js`
+    - `test/unit/ewm/rfTerminalController.test.js`
+    - `test/unit/ewm/warehouseCockpitController.test.js`
+    - `test/unit/ewm/warehouseManagementSapOnly.test.js`
+    - `test/integration/ewm/ewmAuthorization.test.js`
+  - **Files Modified**:
+    - `srv/service.cds`: Removed EWM service import.
+    - `app/fiori-app/webapp/manifest.json`: Removed EWM data source, model, routes, and targets.
+    - `app/fiori-app/webapp/Component.js`: Removed EwmService import and model wiring.
+    - `app/fiori-app/webapp/controller/App.controller.js`: Cleaned shell routing and title bindings.
+    - `app/fiori-app/webapp/view/Dashboard.view.xml`: Removed EWM cockpit tile and button.
+    - `app/fiori-app/webapp/controller/Dashboard.controller.js`: Removed onNavigateToEwmCockpit.
+  - **Next recommended action**: Push feature branch `feature/CL01` to origin.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (69/69 test suites passed, 917/917 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
-- **Goods Receipt Posting Pipeline**: Retargeted to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert (`Header2Items`), movement type 101, single-session CSRF handshake, and transparent backend capability error reporting.
-- **Goods Issue Scan-and-Queue Pipeline**: Fully shipped. Real S/4HANA read data (54 open reservations, Plant 1120, CS01, live batches with SLED status and packaging units) drives floor scanning; transactions queue reliably into SQLite/HANA `GoodsIssueQueue` with zero ABAP dependencies, zero fake document numbers, and atomic on-demand/scheduled queue draining via `drainQueue()`.
-- **External Model Integrity**: All models in `srv/external/` verified as genuine metadata.
-- **Service Catalog & Audit Tooling**: Fully integrated. Baseline catalog (`srv/external/all_catalog_services.json`) and audit evidence (`catalog-audit.csv`) are tracked in git.
+- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 718/718 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **EWM Cockpit Removal**: Completely expunged (1,489 backend lines, 7 UI files, 10 test suites) with zero dead code and zero broken routes.
+- **Warehouse Management Active Pipeline**:
+  - **Goods Receipt (101)**: Retargeted to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert (`Header2Items`), movement type 101, single-session CSRF handshake.
+  - **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. Real S/4HANA read data (54 open reservations, Plant 1120, CS01, live batches with SLED status and packaging units) drives floor scanning; transactions queue reliably into SQLite/HANA `GoodsIssueQueue` with zero ABAP dependencies and atomic on-demand/scheduled queue draining via `drainQueue()`.
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).
@@ -909,4 +971,4 @@
 ## Next Steps
 1. Execute live end-to-end Goods Receipt post against inbound delivery `180000001`.
 2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
-3. Commit and merge `feature/CL01` changes.
+3. Push `feature/CL01` to remote repository.
