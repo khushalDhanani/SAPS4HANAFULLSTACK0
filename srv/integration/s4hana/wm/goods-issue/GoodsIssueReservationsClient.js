@@ -28,14 +28,23 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     }
 
     try {
-      const results = await this._get(
-        '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
-        `$filter=${encodeURIComponent(filter)}&$top=200&$format=json`
-      );
+      const pageSize = 100;
+      let skip = 0;
+      const allResults = [];
+      while (true) {
+        const page = await this._get(
+          '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
+          `$filter=${encodeURIComponent(filter)}&$top=${pageSize}&$skip=${skip}&$format=json`
+        );
+        const items = Array.isArray(page) ? page : [];
+        allResults.push(...items);
+        if (items.length < pageSize || allResults.length >= 2000) break;
+        skip += pageSize;
+      }
 
-      if (Array.isArray(results) && results.length > 0) {
+      if (allResults.length > 0) {
         const resvMap = new Map();
-        for (const r of results) {
+        for (const r of allResults) {
           const sResv = r.Reservation || '';
           if (!sResv) continue;
 

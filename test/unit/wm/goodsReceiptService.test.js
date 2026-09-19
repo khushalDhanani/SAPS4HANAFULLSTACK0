@@ -448,6 +448,81 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             postSpy.mockRestore();
         });
 
+        it('should throw an error when sap-message contains an error', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '180000001',
+                SourceOfGR: 'INBDELIV',
+                MaterialDocument: '',
+                _headers: {
+                    'sap-message': JSON.stringify({
+                        code: 'MBND_CLOUD/002',
+                        message: 'Purchase order 0001800000 was already changed',
+                        severity: 'error'
+                    })
+                }
+            });
+
+            await expect(GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 5
+            })).rejects.toThrow('Purchase order 0001800000 was already changed');
+
+            postSpy.mockRestore();
+        });
+
+        it('should throw an error when SAP does not return a material document number', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '180000001',
+                SourceOfGR: 'INBDELIV',
+                MaterialDocument: ''
+            });
+
+            await expect(GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 5
+            })).rejects.toThrow('SAP did not generate or return a material document number.');
+
+            postSpy.mockRestore();
+        });
+
+        it('should extract material document number from sap-message when not present in body', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '180000006',
+                SourceOfGR: 'INBDELIV',
+                MaterialDocument: '',
+                _headers: {
+                    'sap-message': JSON.stringify({
+                        code: 'MIGO/012',
+                        message: 'Material document 5000005496 2026 posted',
+                        severity: 'success'
+                    })
+                }
+            });
+
+            const result = await GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000006',
+                DeliveryDocument: '180000006',
+                Material: '1000000562',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 1
+            });
+
+            expect(result.Success).toBe(true);
+            expect(result.MaterialDocument).toBe('5000005496');
+            expect(result.Message).toContain('5000005496');
+
+            postSpy.mockRestore();
+        });
+
         it('should have getStorageUnitDetails handler registered on GoodsReceiptService class', async () => {
             const GoodsReceiptService = require('../../../srv/wm/goods-receipt/service');
             const srv = new GoodsReceiptService('GoodsReceiptService');

@@ -89,12 +89,16 @@ class GoodsReceiptAdapter {
    */
   async _post(servicePath, body = {}, customHeaders = {}) {
     try {
-      const { data } = await this.client.post(servicePath, {
+      const { data, headers } = await this.client.post(servicePath, {
         data: body,
         headers: customHeaders,
         csrfPath: GoodsReceiptAdapter.CSRF_FETCH_PATH
       });
-      return (data && typeof data === 'object') ? (data.d || data) : data;
+      const res = (data && typeof data === 'object') ? (data.d || data) : data;
+      if (res && typeof res === 'object' && headers) {
+        res._headers = headers;
+      }
+      return res;
     } catch (err) {
       throw GoodsReceiptAdapter._toGatewayError(err);
     }
@@ -687,6 +691,19 @@ class GoodsReceiptAdapter {
       const path = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers';
       const result = await this._post(path, postPayload);
 
+      // Check sap-message response header for business errors or posted document text
+      const rawSapMsg = result?._headers?.['sap-message'];
+      let sapMsgObj = null;
+      if (rawSapMsg) {
+        try {
+          sapMsgObj = JSON.parse(rawSapMsg);
+        } catch (_) {}
+      }
+
+      if (sapMsgObj && sapMsgObj.severity === 'error') {
+        throw new Error(sapMsgObj.message || 'SAP S/4HANA rejected Goods Receipt posting');
+      }
+
       let matDoc = result?.MaterialDocument;
       if (!matDoc && result?.Header2Refs) {
         const refs = Array.isArray(result.Header2Refs?.results)
@@ -697,13 +714,21 @@ class GoodsReceiptAdapter {
           matDoc = docRef.DocNo;
         }
       }
-      matDoc = matDoc || sDoc;
+      if (!matDoc && sapMsgObj?.message) {
+        const match = sapMsgObj.message.match(/Material document\s+(\d+)/i);
+        if (match) {
+          matDoc = match[1];
+        }
+      }
+
+      if (!matDoc) {
+        const errDetail = sapMsgObj?.message || 'SAP did not generate or return a material document number.';
+        throw new Error(errDetail);
+      }
 
       return {
         Success: true,
-        Message: matDoc && matDoc !== sDoc
-          ? `Goods Receipt posted successfully in SAP for Delivery ${sDoc} (Material Document ${matDoc})`
-          : `Goods Receipt posted successfully in SAP for Delivery ${sDoc}`,
+        Message: `Goods Receipt posted successfully in SAP for Delivery ${sDoc} (Material Document ${matDoc})`,
         DeliveryDocument: sDoc,
         MaterialDocument: matDoc
       };

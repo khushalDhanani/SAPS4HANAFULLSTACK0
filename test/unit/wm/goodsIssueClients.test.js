@@ -107,6 +107,72 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(result[1].DisplayText).toContain('Reservation 10001 (Order 40001 • Plant 1120 • 2 items)');
     });
 
+    it('should page through reservations and aggregate a reservation spanning page boundary whole', async () => {
+      // Page 1: 100 items - 99 items for Resv 20002, and 1 item for Resv 20001
+      const page1 = Array.from({ length: 99 }, (_, i) => ({
+        Reservation: '20002',
+        OrderID: '40002',
+        Plant: '1120',
+        GoodsMovementType: '261',
+        GoodsMovementTypeName: 'GI for order',
+        Product: `MAT_${i}`,
+        ProductName: `Material ${i}`
+      }));
+      page1.push({
+        Reservation: '20001',
+        OrderID: '40001',
+        Plant: '1120',
+        GoodsMovementType: '261',
+        GoodsMovementTypeName: 'GI for order',
+        Product: 'MAT_SPLIT_1',
+        ProductName: 'Split Material 1'
+      });
+
+      // Page 2: 1 item for Resv 20001 (straddling the page boundary)
+      const page2 = [
+        {
+          Reservation: '20001',
+          OrderID: '40001',
+          Plant: '1120',
+          GoodsMovementType: '261',
+          GoodsMovementTypeName: 'GI for order',
+          Product: 'MAT_SPLIT_2',
+          ProductName: 'Split Material 2'
+        }
+      ];
+
+      const mockAdapter = {
+        _get: jest.fn()
+          .mockResolvedValueOnce(page1)
+          .mockResolvedValueOnce(page2)
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120');
+
+      expect(mockAdapter._get).toHaveBeenCalledTimes(2);
+      expect(mockAdapter._get).toHaveBeenNthCalledWith(
+        1,
+        '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
+        expect.stringContaining('$top=100&$skip=0')
+      );
+      expect(mockAdapter._get).toHaveBeenNthCalledWith(
+        2,
+        '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
+        expect.stringContaining('$top=100&$skip=100')
+      );
+
+      // Verify reservation spanning page boundary comes back whole
+      const splitResv = result.find(r => r.ReservationNo === '20001');
+      expect(splitResv).toBeDefined();
+      expect(splitResv.ItemCount).toBe(2);
+      expect(splitResv.DisplayText).toContain('2 items');
+
+      const otherResv = result.find(r => r.ReservationNo === '20002');
+      expect(otherResv).toBeDefined();
+      expect(otherResv.ItemCount).toBe(99);
+    });
+
     it('should calculate openQty and attach packaging units in getOpenItems', async () => {
       const mockAdapter = {
         _get: jest.fn().mockResolvedValue([

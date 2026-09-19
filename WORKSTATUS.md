@@ -1053,14 +1053,63 @@
        - `MaterialBatches?$filter=Material eq '3000000200'` -> returns positive stock with `IsSelectable: true`.
   - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+## 2026-09-19 13:54 IST
+- **Agent**: Antigravity
+- **Change**: Goods Issue Reservations Paging Loop ($top=200 Elimination) & Authentic Goods Receipt Live Posting Proof:
+  1. **Goods Issue Reservations Paging Loop ($top=200 Truncation Fix)**:
+     - Replaced static `$top=200` query in `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js` (`getOpenReservations`) with an autonomous `while` paging loop querying `$top=100&$skip=${skip}`.
+     - Accumulated all pages until returned items < `pageSize` (with a 2,000 safety boundary) before aggregating into `resvMap`.
+     - Preserves multi-item reservations whole when their items straddle page boundaries.
+     - Added assert-based unit test in `test/unit/wm/goodsIssueClients.test.js` validating two-page pagination where reservation items span page 1 and page 2, proving the reservation is aggregated whole with total combined item count.
+  2. **Authentic Goods Receipt Live Posting & Verification against SAP S/4HANA (Client 220)**:
+     - Uncovered that SAP Gateway OData create returns HTTP 201 Created even when backend BAPI/posting encounters business errors, communicating the business outcome via the `sap-message` response header.
+     - Enhanced `GoodsReceiptAdapter._post` to attach HTTP response headers (`_headers`) to the returned result.
+     - Enhanced `GoodsReceiptAdapter.postGoodsReceipt` to parse the `sap-message` header. If `severity === 'error'`, throws an authentic error with the exact SAP backend message (e.g. `Purchase order was already changed`, `Inbound delivery batch cannot be changed to here`, `Putaway quantity cannot be less than GR posted quantity`).
+     - Eliminated the fallback `matDoc = matDoc || sDoc` that masked SAP failures by reusing the delivery document number. Enforced strict extraction of the real SAP-generated material document number from `result.MaterialDocument`, `Header2Refs`, or regex match on `sap-message`.
+     - Executed live posting against SAP S/4HANA Client 220 for active Inbound Delivery `180000006` (Material `1000000562`, Plant `1120`, SLoc `CS01`, Movement `101`).
+     - SAP S/4HANA successfully posted authentic consecutive material documents:
+       - `5000005496` (Year 2026)
+       - `5000005497` (Year 2026)
+       - `5000005498` (Year 2026)
+       - `5000005499` (Year 2026)
+     - Directly proved persistence by reading back Material Document `5000005499` from SAP Gateway service `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`:
+       - `MaterialDocument`: `5000005499`
+       - `MaterialDocumentYear`: `2026`
+       - `MaterialDocumentItem`: `0001`
+       - `Material`: `1000000562` (`AEREA-IS`)
+       - `QuantityInEntryUnit`: `1.000 KG`
+       - `Plant`: `1120` (`Genesis`)
+       - `StorageLocation`: `CS01` (`Raw Material`)
+       - `GoodsmovementType`: `101` (`GR goods receipt`)
+       - `InventoryStockType`: `02` (`Stock in Quality Inspection`)
+     - Added unit tests in `test/unit/wm/goodsReceiptService.test.js` validating `sap-message` error handling, material document extraction, and absence of fake fallback numbers.
+  3. **Files Modified**:
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: Implemented autonomous paging loop.
+     - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Added response header capture, `sap-message` parsing, strict error propagation, and eliminated fake fallback.
+     - `test/unit/wm/goodsIssueClients.test.js`: Added assert-based unit test for split-page reservation boundary aggregation.
+     - `test/unit/wm/goodsReceiptService.test.js`: Added 3 unit tests for `sap-message` error rejection and document number extraction.
+  4. **Validation & Quality Gates**:
+     - `npx cds compile srv`: Succeeded with code 0.
+     - `npm run lint`: 0 errors (17 pre-existing warnings in unchanged code).
+     - `cd app/fiori-app && npm run lint`: 0 findings (100% clean).
+     - `cd app/fiori-app && npm run build`: Build succeeded (Component-preload generated in 774 ms).
+     - `npx jest test/unit/wm/goodsIssueClients.test.js`: **32 passed, 32 total tests (100% green)**.
+     - `npx jest test/unit/wm/goodsReceiptService.test.js`: **31 passed, 31 total tests (100% green)**.
+     - `npm test`: **59 passed, 59 total test suites; 732 passed, 732 total tests (100% green)** in 64.2 s.
+     - `git diff --check`: Clean (0 errors).
+     - Live SAP Backend Probes:
+       - Tested 18 inbound deliveries from `HMmimGr4inbdelSet`.
+       - Delivery `180000001` correctly throws SAP backend error `Purchase order 0001800000 was already changed` (no fake success).
+       - Delivery `180000006` successfully posts real SAP Material Documents `5000005496` through `5000005499`.
+       - Verified persistence by reading back `5000005499` live from `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`.
+  - **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 728/728 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
-- **EWM Cockpit Removal**: Completely expunged (1,489 backend lines, 7 UI files, 10 test suites) with zero dead code and zero broken routes.
-- **Warehouse Management Active Pipeline**:
-  - **Goods Receipt (101)**: Retargeted to `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` via OData Deep Insert (`Header2Items`), movement type 101, single-session CSRF handshake.
-  - **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. Real S/4HANA read data (54 open reservations, Plant 1120, CS01, live batches with SLED status and packaging units) drives floor scanning; transactions queue reliably into SQLite/HANA `GoodsIssueQueue` with zero ABAP dependencies and atomic on-demand/scheduled queue draining via `drainQueue()`.
-- **Defect Resolutions**: All 7 initial verification defects plus 2 follow-up batch/bin findings resolved, tested, and validated against live SAP S/4HANA backend.
+- **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 732/732 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
+- **Goods Receipt (101)**: **100% PROVEN DIRECTLY AGAINST LIVE SAP S/4HANA (CLIENT 220)** in strict accordance with the non-negotiable `AGENTS.md` SAP API Discovery Protocol. Authentic Material Documents (`5000005496`, `5000005497`, `5000005498`, `5000005499`) generated in SAP S/4HANA via `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` deep insert with CSRF handshake, read back and verified via `MMIM_MATDOC_OV_SRV/F_Mmim_Matdoc_Item`. Zero mock persistence, zero fake fallback numbers.
+- **Goods Issue (261)**: Shipped under Scan-and-Queue architecture. Paging loop implemented across `ReservationDocumentItem`, accumulating all records and preserving multi-item reservations across page boundaries.
+- **Defect Resolutions**: All defects resolved, tested, and validated against live SAP S/4HANA backend.
 - **Pending SAP Backend Actions**:
   1. Basis: Assign system aliases to 83 hub services returning 500 `/IWFND/CM_COS/064` (ticket: `docs/ticket-gateway-remediation-ds4.md`).
   2. Basis: Register `API_MATERIAL_DOCUMENT_SRV` on Gateway Client 220 (ticket: `docs/ticket-gateway-remediation-ds4.md`).
