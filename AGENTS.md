@@ -237,3 +237,12 @@ Before finishing:
    - known limitations, skipped checks, unresolved failures, and required follow-up.
 
 Never describe a change as complete, working, deployed, secure, or production-ready when relevant validation has not passed.
+
+## Creatable-services workbook (`creatable-services.xlsx`)
+
+`creatable-services.xlsx` is the single reference for which SAP OData services are creatable (Summary, All, one sheet per module).
+It is generated — never hand-edit it. Whenever service/creatable findings change:
+
+1. `python3 tools/find-creatable.py` — re-scan live `$metadata` (GET only) → `catalog-creatable.csv`
+2. `python3 tools/build-creatable-xlsx.py` — rebuild the workbook
+3. Wrong module for a service → add it to `OVERRIDES` (or adjust `RULES`) in `tools/build-creatable-xlsx.py`, then rebuild.

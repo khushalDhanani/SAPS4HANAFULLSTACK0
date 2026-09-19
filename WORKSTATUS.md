@@ -1262,6 +1262,24 @@
     - `git diff --check`: Clean (0 errors).
     - `git status`: Working tree clean.
 
+## 2026-09-19 17:10 IST
+- **Agent**: Claude (Cowork)
+- **Change**: Catalog-wide creatable-service analysis and module-wise workbook. No application code (`srv/`, `app/`) changed.
+  - **Files added**:
+    - `tools/find-creatable.py` — GET-only scan of `$metadata` for every HTTP-200 service in `catalog-audit.csv` → `catalog-creatable.csv`.
+    - `tools/verify-quotation-services.py` — GET-only evidence scan for Sales Quotation creation → `docs/quotation-metadata/` (raw metadata + `REPORT.txt`).
+    - `tools/build-creatable-xlsx.py` — generates `creatable-services.xlsx` (Summary, All, one sheet per module) from `catalog-creatable.csv`.
+    - `creatable-services.xlsx`, `catalog-creatable.csv` (generated outputs).
+  - **Files modified**: `AGENTS.md` (new section: workbook is generated, how to refresh it), `WORKSTATUS.md`.
+  - **Executed and results**:
+    - `python3 tools/find-creatable.py --selftest` → `selftest ok`.
+    - `PAR=4 python3 tools/find-creatable.py` (live, DS4 client 220) → 1,237 scanned, 1 timeout; 495 services with ≥1 creatable business entity set, 523 with POST function imports, 634 either, 602 read-only.
+    - `PAR=5 python3 tools/verify-quotation-services.py` (live) → 1,240 metadata fetched, 3 non-200. Only `UI_SALESQUOTATIONMANAGE` (V4) declares quotation creation (actions `CreateWithRefFromSlsInquiry`, `CreateWithSalesQuotationType`; all entity sets `Insertable=false`). `API_SALES_QUOTATION_SRV` → HTTP 500 `/IWFND/CM_COS/064`; V4 `api_salesquotation` → HTTP 404 not published; V4 catalog listing → HTTP 404 on all three paths tried (V4 coverage limited to direct probes).
+    - `python3 tools/build-creatable-xlsx.py` → 495 rows, 19 module sheets, built-in assertion that sheet totals add up passed.
+  - **Not run**: `npm test` (jest could not resolve `test/setupEnv.js` in the agent sandbox — environment issue, not investigated), no POST against SAP.
+  - **Known limits**: module assignment is by name/description rules in the script, not SAP application component. Metadata shows what a service declares; authorisations/backend checks can still reject a POST.
+  - **Next recommended action**: call `ActivateIncompletenessInfo` on a quotation draft to get SAP's own list of missing fields before sending the VTAA ticket; decide whether `creatable-services.xlsx` / `catalog-creatable.csv` / `docs/quotation-metadata/` should be committed or git-ignored.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (59/59 test suites passed, 738/738 tests passed, CDS compilation clean, UI5 build clean, ui5lint clean, root lint 0 errors, git diff --check clean).
@@ -1278,3 +1296,5 @@
 ## Next Steps
 1. Push any outstanding commits to remote repository (`origin/feature/CL01`).
 2. Submit `docs/ticket-gateway-remediation-ds4.md` to SAP Basis and CIO.
+3. Run the `ActivateIncompletenessInfo` diagnostic on a quotation draft (GET/draft only, discard afterwards) and attach SAP's missing-field list to `docs/ticket-vtaa-copy-control-zin-zqt.md`.
+4. After any new service scan, rebuild `creatable-services.xlsx` with `python3 tools/build-creatable-xlsx.py` (see AGENTS.md).
