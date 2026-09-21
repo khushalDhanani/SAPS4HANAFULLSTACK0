@@ -43,6 +43,15 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(true);
         });
+
+        it('should be disabled when NODE_ENV is production even if flags are set', () => {
+            process.env.NODE_ENV = 'production';
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
+
+            expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
+            expect(() => localTokenUtil.issueToken('alice')).toThrow(/disabled/i);
+        });
     });
 
     describe('Token Issuance and Verification', () => {

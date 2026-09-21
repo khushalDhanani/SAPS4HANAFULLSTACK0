@@ -77,16 +77,55 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     }
 
     const { username, password } = req.data || {};
-    const sUserLower = (username || "").trim().toLowerCase();
+    const sUser = (username || "").trim();
+    const sUserLower = sUser.toLowerCase();
+    const sPass = (password || "").trim();
+
+    if (!sUser) {
+      return {
+        authenticated: false,
+        message: "Username is required."
+      };
+    }
+    if (!sPass) {
+      return {
+        authenticated: false,
+        message: "Password is required."
+      };
+    }
+
     const sEnvDevUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
 
     let authResult;
-    if (sUserLower === "alice" || sUserLower === "bob" || sUserLower === "khushal" || (sEnvDevUser && sUserLower === sEnvDevUser)) {
-      authResult = {
-        authenticated: true,
-        message: "Authentication successful (Local Development User).",
-        system: "DEV - Client 220"
-      };
+    const isMockUser = sUserLower === "alice" || sUserLower === "bob" || sUserLower === "khushal";
+
+    if (isMockUser) {
+      const expectedPass = process.env.LOCAL_DEV_PASSWORD || sUserLower;
+      const isMatch = localTokenUtil.timingSafeEqual(sPass.toLowerCase(), expectedPass.toLowerCase());
+      if (isMatch) {
+        authResult = {
+          authenticated: true,
+          message: "Authentication successful (Local Development User).",
+          system: "DEV - Client 220"
+        };
+      } else {
+        authResult = {
+          authenticated: false,
+          message: "Invalid username or password."
+        };
+      }
+    } else if (sEnvDevUser && sUserLower === sEnvDevUser) {
+      const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
+      if (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)) {
+        authResult = {
+          authenticated: true,
+          message: "Authentication successful (S/4 Development User).",
+          system: "DEV - Client 220"
+        };
+      } else {
+        // Validate against S/4 Gateway if local password doesn't match
+        authResult = await authAdapter.validateCredentials(username, password);
+      }
     } else {
       authResult = await authAdapter.validateCredentials(username, password);
     }
@@ -94,11 +133,10 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     if (!authResult.authenticated) {
       return {
         authenticated: false,
-        message: authResult.message
+        message: authResult.message || "Invalid username or password."
       };
     }
 
-    const sUser = (username || "").trim();
     const sCapitalized = sUser.charAt(0).toUpperCase() + sUser.slice(1);
     const sInitials = sCapitalized.substring(0, 2).toUpperCase();
     const sTimestamp = new Date().toLocaleTimeString([], {
@@ -106,9 +144,20 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
       minute: "2-digit",
     });
 
-    const devRoles = sUserLower === "bob"
-      ? ["Viewer"]
-      : ["Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
+    const configuredUsers = cds.env?.requires?.auth?.users || {};
+    let devRoles;
+    if (configuredUsers[sUserLower]?.roles) {
+      devRoles = configuredUsers[sUserLower].roles;
+    } else if (configuredUsers[sUser]?.roles) {
+      devRoles = configuredUsers[sUser].roles;
+    } else if (sUserLower === "bob") {
+      devRoles = ["Viewer"];
+    } else if (sUserLower === "alice" || sUserLower === "khushal" || (sEnvDevUser && sUserLower === sEnvDevUser)) {
+      devRoles = ["Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
+    } else {
+      // Unconfigured or external S/4 users receive least-privilege Viewer role by default
+      devRoles = ["Viewer"];
+    }
     const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
 
     return {

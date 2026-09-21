@@ -26,7 +26,8 @@ function timingSafeEqual(a, b) {
  * @returns {boolean}
  */
 function isDevTokenIssuerEnabled() {
-    return process.env.ENABLE_DEV_TOKEN_ISSUER === 'true' &&
+    return process.env.NODE_ENV !== 'production' &&
+           process.env.ENABLE_DEV_TOKEN_ISSUER === 'true' &&
            typeof process.env.LOCAL_AUTH_SECRET === 'string' &&
            process.env.LOCAL_AUTH_SECRET.trim().length > 0;
 }
@@ -169,6 +170,7 @@ module.exports = {
     issueToken,
     verifyToken,
     isDevTokenIssuerEnabled,
+    timingSafeEqual,
     LOCAL_DEV_ISSUER,
     LOCAL_DEV_EXPIRY_SECONDS
 };

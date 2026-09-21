@@ -104,12 +104,12 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining('SAP BTP XSUAA Single Sign-On'));
         });
 
-        it('should allow dev login for alice when dev token issuer is explicitly enabled', async () => {
+        it('should allow dev login for alice when valid password provided and dev issuer enabled', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
 
             const req = {
-                data: { username: 'alice', password: 'any' }
+                data: { username: 'alice', password: 'alice' }
             };
 
             const res = await service._handleLogin(req);
@@ -120,13 +120,33 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res.scopes).toEqual(expect.arrayContaining(['$XSAPPNAME.PurchasingManager']));
         });
 
-        it('should allow dev login for khushal and configured S4_USERNAME when dev token issuer is explicitly enabled', async () => {
+        it('should reject login for alice when password is missing or wrong', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+
+            const req1 = {
+                data: { username: 'alice', password: '' }
+            };
+            const res1 = await service._handleLogin(req1);
+            expect(res1.authenticated).toBe(false);
+            expect(res1.message).toContain('Password is required');
+
+            const req2 = {
+                data: { username: 'alice', password: 'wrongpassword' }
+            };
+            const res2 = await service._handleLogin(req2);
+            expect(res2.authenticated).toBe(false);
+            expect(res2.message).toContain('Invalid username or password');
+        });
+
+        it('should allow dev login for khushal and configured S4_USERNAME with valid passwords', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
             process.env.S4_USERNAME = 'custom_dev_user';
+            process.env.S4_PASSWORD = 'devPassword123';
 
             const req1 = {
-                data: { username: 'KHUSHAL', password: 'any' }
+                data: { username: 'KHUSHAL', password: 'khushal' }
             };
             const res1 = await service._handleLogin(req1);
             expect(res1.authenticated).toBe(true);
@@ -134,7 +154,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res1.system).toBe('DEV - Client 220');
 
             const req2 = {
-                data: { username: 'CUSTOM_DEV_USER', password: 'any' }
+                data: { username: 'CUSTOM_DEV_USER', password: 'devPassword123' }
             };
             const res2 = await service._handleLogin(req2);
             expect(res2.authenticated).toBe(true);
@@ -160,7 +180,23 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res.authenticated).toBe(true);
             expect(res.username).toBe('REAL_SAP_USER');
             expect(res.token).toBeDefined();
+            // Unconfigured external user receives least-privilege Viewer role only
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
             expect(authAdapter.validateCredentials).toHaveBeenCalledWith('REAL_SAP_USER', 'realpassword');
+        });
+
+        it('should grant only Viewer role to bob', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+
+            const req = {
+                data: { username: 'bob', password: 'bob' }
+            };
+
+            const res = await service._handleLogin(req);
+            expect(res.authenticated).toBe(true);
+            expect(res.username).toBe('bob');
+            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
         });
     });
 });

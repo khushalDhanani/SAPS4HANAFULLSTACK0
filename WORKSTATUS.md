@@ -1944,13 +1944,41 @@
     - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
     - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
     - `npx jest test/unit/auth/ test/unit/purchase-order/ test/unit/sales-inquiry/ test/unit/wm/goodsIssueController.test.js test/integration/purchase-order/`: 36 passed, 36 total suites; 405 passed, 405 total tests (100% green).
-    - `git diff --check`: Clean (0 errors).
-- **Next recommended action**: Review with user and commit to `feature/CL01`.
+  ## 2026-09-21 10:30 IST
+- **Agent**: Antigravity
+- **Change**: Security Hardening for Local Dev Token Issuer and Authentication Service:
+  1. **Dev-Token Issuer Production Guarding**:
+     - In `srv/auth/localTokenUtil.js`, added `process.env.NODE_ENV !== 'production'` guard to `isDevTokenIssuerEnabled()` so that dev token issuance is strictly impossible in production/BTP regardless of environment flag misconfigurations. Exported `timingSafeEqual` for secure string comparison.
+     - In `server.js`, reinforced both Express bearer token verification middleware and CAP OData middleware chain with `process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()`, guaranteeing that locally signed tokens cannot bypass XSUAA in deployed BTP environments.
+  2. **Auth Service Password Enforcement & Least-Privilege Role Assignment**:
+     - In `srv/auth-service.js`, added non-empty validation for both `username` and `password`. Missing credentials immediately return `{ authenticated: false, message: "Username/Password is required." }`.
+     - Replaced no-check mock logins with `timingSafeEqual` constant-time password comparisons for mock personas (`alice`, `bob`, `khushal`) against `LOCAL_DEV_PASSWORD` (defaulting to username in local test environments).
+     - Protected configured S/4 user (`S4_USERNAME`) by verifying password against `S4_PASSWORD` via `timingSafeEqual`, with fallback to `authAdapter.validateCredentials(username, password)`.
+     - Replaced blanket role assignment with least-privilege defaults: external/unconfigured S/4 users receive `["Viewer"]` rather than all administrative roles; `bob` receives `["Viewer"]`; `alice`, `khushal`, and explicit development accounts receive configured roles or development defaults.
+  3. **Automated Unit Tests**:
+     - In `test/unit/auth/localTokenUtil.test.js`, added unit test asserting `isDevTokenIssuerEnabled()` returns `false` and `issueToken()` throws when `NODE_ENV === 'production'`.
+     - In `test/unit/auth/authService.test.js`, updated tests with valid credentials, added assertions for rejection on empty or incorrect passwords, and verified that unconfigured external users receive least-privilege `["$XSAPPNAME.Viewer"]`.
+- **Files Modified**:
+  - `srv/auth/localTokenUtil.js`
+  - `server.js`
+  - `srv/auth-service.js`
+  - `test/unit/auth/localTokenUtil.test.js`
+  - `test/unit/auth/authService.test.js`
+- **Executed Commands and Results**:
+  - `npx jest test/unit/auth/`: 3 passed, 3 total test suites; 37 passed, 37 total tests (100% green).
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm test`: **68 passed, 68 total test suites; 835 passed, 835 total tests (100% green)** in 68.2 s.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review with user and commit security hardening to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **LE & SD Unit Tests**: 94/94 passed across 9 test suites (100% green); full suite 831/831 passed (100% green).
+- **Test Suite**: **835/835 passed across 68 test suites (100% green)**.
+- **Security Hardening**:
+  - Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`) across `localTokenUtil.js` and `server.js` middlewares.
+  - `AuthService._handleLogin` requires non-empty passwords, validates mock/dev credentials in constant time (`timingSafeEqual`), validates external credentials against S/4 Gateway, and enforces least-privilege `["Viewer"]` default role assignment.
 - **Outbound Delivery Phase 0**: **COMPLETED & PROVEN** (`13000526` created live).
 - **Outbound Delivery Phase 1 (Backend)**: **100% COMPLETE, TESTED & LIVE VERIFIED**.
 - **Outbound Delivery Phase 2 (Screen & Integration)**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
@@ -1962,8 +1990,7 @@
   - Role checks: `SalesRepresentative` role authorized for action; UI visibility conditioned on `AuthService.canCreateDelivery()`.
   - Shell: Dashboard tile under Overview, SD, and Warehouse; route `le/orders-due`; full i18n parity.
   - Preload: `Component-preload.js` rebuilt and verified.
-  - Approval Lookup Capacity & Safety Guarantee: In `OutboundDeliveryAdapter._fetchApprovalStatusMap`, query uses filter `(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')&$top=1000`. This retrieves only non-released orders (currently <10 across the system out of 883 total sales orders). Even in extreme volume scenarios beyond 1,000 pending/rejected orders, SAP backend Gateway enforces approval workflow and rejects delivery creation with message `V2/478` ("Subsequent documents not possible due to approval status of the document"), providing defense-in-depth protection against invalid document creation.
 
 ## Next Steps
-1. User review of Outbound Delivery creation messages, VL03N warning handling, and worklist features.
+1. User review of security hardening and Outbound Delivery capabilities.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.

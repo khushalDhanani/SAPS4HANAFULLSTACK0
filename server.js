@@ -129,7 +129,7 @@ cds.on('bootstrap', (app) => {
 
     // In local development, verify Bearer tokens (JWT with standard XSUAA claims) when dev issuer is explicitly enabled
     app.use((req, res, next) => {
-        if (localTokenUtil.isDevTokenIssuerEnabled()) {
+        if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
             const auth = req.headers.authorization;
             if (auth && auth.match(/^bearer\s+/i)) {
                 const token = auth.replace(/^bearer\s+/i, '').trim();
@@ -188,7 +188,7 @@ cds.on('serving', (srv) => {
 
 // Register local development Bearer token verification into CAP OData middleware chain when dev issuer is enabled
 cds.middlewares.add((req, res, next) => {
-    if (localTokenUtil.isDevTokenIssuerEnabled()) {
+    if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
         const auth = req.headers.authorization;
         if (auth && auth.match(/^bearer\s+/i)) {
             const token = auth.replace(/^bearer\s+/i, '').trim();
