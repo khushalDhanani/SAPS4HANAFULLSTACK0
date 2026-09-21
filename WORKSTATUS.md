@@ -2552,14 +2552,40 @@
   - `cd app/fiori-app && npm run build`: **Build succeeded in 1.00 s; Component-preload.js generated**.
   - `npx eslint srv/ test/`: **Clean (0 errors, 0 warnings)**.
   - `git diff --check`: **Clean (0 errors)**.
-- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+### 2026-09-21 15:52 IST — Label Supplier Defaults as "from last PO" and Order by Most Recent PO (Audit Item 10)
+- **Change**: Resolved assumed data lineage on PO creation where supplier commercial terms (Currency, PaymentTerms, Incoterms, IncotermsLocation1) were derived from an unordered `limit(1)` historical PO and presented without source attribution:
+  1. **Backend CAP Service & Handler**:
+     - `srv/mm/purchase-order/service.cds`: Added `source: String;` and `lastPurchaseOrder: String;` to `getSupplierDefaults` return type.
+     - `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`: Updated `findPoWithDefaults` to query `'PurchaseOrder'` and sort `.orderBy({ ref: ['PurchaseOrder'], sort: 'desc' })`, guaranteeing that terms are derived from the most recent historical PO. Returns `source: 'from last PO'` and `lastPurchaseOrder: po.PurchaseOrder || ''`.
+  2. **Frontend Service, Model & View**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`: Propagated `source` and `lastPurchaseOrder`; updated resilient fallback historical PO query to sort by `$orderby=PurchaseOrder desc` and return `source: 'from last PO'`.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`:
+       - Added `supplierDefaultsDerived`, `supplierDefaultsSource`, `supplierDefaultsLastPo`, and `supplierDefaultsMessage` to initial model.
+       - In `deriveSupplierDefaults`, populates `supplierDefaultsSource` (e.g. "from last PO 4500000001") and `supplierDefaultsMessage` ("Commercial terms derived from last PO (4500000001). Verify before submitting.").
+       - In `markUserModified`, automatically resets `configDerived[sField] = false` when user manually edits a derived field, clearing the derived label.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`: Updated toast notification in `_deriveSupplierData` to include `(from last PO)`.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`:
+       - Added `ObjectStatus id="statusSupplierDefaults"` in `panelSupplierTerms` header toolbar displaying `{newPO>/supplierDefaultsSource}`.
+       - Added `MessageStrip id="msgStripSupplierDefaults"` informing user that terms were derived from the last PO.
+       - Dynamic field labels for Currency, Payment Terms, Incoterms, and Incoterms Location annotated with `(from last PO)` via expression binding while `configDerived` is active.
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added `labelFromLastPo=from last PO` and `msgSupplierDefaultsFromLastPo`.
+  3. **Unit Tests & Documentation**:
+     - `test/unit/purchase-order/getSupplierDefaultsHandler.test.js`: Added 3 tests verifying CAP handler query ordering by `PurchaseOrder desc`, selection of `PurchaseOrder`, and source attribution.
+     - `test/unit/purchase-order/poConfigDefaulting.test.js`: Added tests verifying fallback query ordering by `PurchaseOrder desc`, model source/message setting, and `markUserModified` resetting `configDerived`.
+     - `docs/data-lineage-audit.md`: Marked audit item 10 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/purchase-order/`: **16 passed, 16 total test suites; 189 passed, 189 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.3 s; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Implement Audit Item 11: PO line "Net Amount" on create screen (label as estimate).
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
   - `npx jest test/unit/fi/`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
   - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
-  - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **16 passed, 16 total test suites; 189 passed, 189 total tests (100% green)**.
   - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
   - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 137 passed, 137 total tests (100% green)**.
   - `npx jest test/unit/dashboard/`: **1 passed, 1 total test suite; 30 passed, 30 total tests (100% green)**.
@@ -2569,6 +2595,10 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **PO Supplier Defaults Lineage (Audit Row 10)**:
+  - Backend query ordered by `PurchaseOrder desc`, ensuring commercial defaults reflect the latest historical PO.
+  - Returns explicit `source: 'from last PO'` and document number `lastPurchaseOrder`.
+  - Frontend prominently labels derived terms with header status badge, informative message strip, and `(from last PO)` label suffixes until user-modified.
 - **Sales Order & Inquiry Order Total Lineage (Audit Row 26)**:
   - Local `qty x price` arithmetic formula eliminated as primary amount.
   - Reads authentic `NetAmount`, `TotalAmount`, `TaxAmount`, and `DocumentCurrency` directly from S/4HANA `LORD_ODATA_ORDER_SRV` response and read-back.
@@ -2604,6 +2634,7 @@
   - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
 
 ## Next Steps
-1. Stage, commit, and push changes to `origin/feature/CL01`.
-2. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.
+1. Implement Audit Item 11: PO line "Net Amount" on create screen (label as estimate).
+2. Validate with unit tests and UI5 lint/build.
+3. Update `docs/data-lineage-audit.md` and `WORKSTATUS.md`.
 

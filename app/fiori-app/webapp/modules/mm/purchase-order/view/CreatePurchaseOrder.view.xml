@@ -130,8 +130,22 @@
                         <headerToolbar>
                             <Toolbar>
                                 <Title text="{i18n>poPanelSupplierTerms}" level="H3" />
+                                <ToolbarSpacer />
+                                <ObjectStatus
+                                    id="statusSupplierDefaults"
+                                    text="{newPO>/supplierDefaultsSource}"
+                                    state="Information"
+                                    icon="sap-icon://history"
+                                    visible="{newPO>/supplierDefaultsDerived}" />
                             </Toolbar>
                         </headerToolbar>
+                        <MessageStrip
+                            id="msgStripSupplierDefaults"
+                            text="{newPO>/supplierDefaultsMessage}"
+                            type="Information"
+                            showIcon="true"
+                            visible="{newPO>/supplierDefaultsDerived}"
+                            class="sapUiTinyMarginBottom" />
                         <f:SimpleForm
                             id="poSupplierTermsForm"
                             editable="true"
@@ -153,7 +167,7 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="{i18n>labelCurrency}" required="true" />
+                                <Label text="{= ${newPO>/configDerived/Currency} ? ${i18n>labelCurrency} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelCurrency} }" required="true" />
                                 <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="{i18n>poPlaceholderCurrency}" maxLength="5"
                                     valueState="{newPO>/errors/Currency/state}"
                                     valueStateText="{newPO>/errors/Currency/text}"
@@ -164,7 +178,7 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="{i18n>labelPaymentTerms}" />
+                                <Label text="{= ${newPO>/configDerived/PaymentTerms} ? ${i18n>labelPaymentTerms} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelPaymentTerms} }" />
                                 <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="{i18n>poPlaceholderPaymentTerms}" maxLength="4"
                                     valueState="{newPO>/errors/PaymentTerms/state}"
                                     valueStateText="{newPO>/errors/PaymentTerms/text}"
@@ -175,7 +189,7 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="{i18n>labelIncoterms}" />
+                                <Label text="{= ${newPO>/configDerived/IncotermsClassification} ? ${i18n>labelIncoterms} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelIncoterms} }" />
                                 <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="{i18n>poPlaceholderIncoterms}" maxLength="3"
                                     valueState="{newPO>/errors/IncotermsClassification/state}"
                                     valueStateText="{newPO>/errors/IncotermsClassification/text}"
@@ -186,7 +200,7 @@
                                     </suggestionItems>
                                 </Input>
 
-                                <Label text="{i18n>labelIncotermsLoc}" />
+                                <Label text="{= ${newPO>/configDerived/IncotermsLocation1} ? ${i18n>labelIncotermsLoc} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelIncotermsLoc} }" />
                                 <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="{i18n>poPlaceholderIncotermsLoc}" maxLength="70"
                                     valueState="{newPO>/errors/IncotermsLocation1/state}"
                                     valueStateText="{newPO>/errors/IncotermsLocation1/text}"

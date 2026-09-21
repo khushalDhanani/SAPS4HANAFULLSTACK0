@@ -74,7 +74,9 @@ function registerPurchaseOrderHandlers(srv) {
                 PaymentTerms: '',
                 IncotermsClassification: '',
                 IncotermsLocation1: '',
-                derived: false
+                derived: false,
+                source: '',
+                lastPurchaseOrder: ''
             };
         }
 
@@ -86,6 +88,7 @@ function registerPurchaseOrderHandlers(srv) {
             const findPoWithDefaults = async (filterObj) => {
                 const s4Query = SELECT.from('C_PURCHASEORDER_FS_SRV.C_PurchaseOrderFs')
                     .columns(
+                        'PurchaseOrder',
                         'DocumentCurrency',
                         'PaymentTerms',
                         'IncotermsClassification',
@@ -94,6 +97,7 @@ function registerPurchaseOrderHandlers(srv) {
                         'CompanyCode'
                     )
                     .where(filterObj)
+                    .orderBy({ ref: ['PurchaseOrder'], sort: 'desc' })
                     .limit(1);
                 const result = await purchaseOrderAdapter.readFsData(s4Query);
                 const aOrders = Array.isArray(result) ? result : (result?.value || []);
@@ -125,7 +129,9 @@ function registerPurchaseOrderHandlers(srv) {
                     PaymentTerms: po.PaymentTerms || '',
                     IncotermsClassification: po.IncotermsClassification || '',
                     IncotermsLocation1: po.IncotermsTransferLocation || '',
-                    derived: true
+                    derived: true,
+                    source: 'from last PO',
+                    lastPurchaseOrder: po.PurchaseOrder || ''
                 };
             }
         } catch (error) {
@@ -138,7 +144,9 @@ function registerPurchaseOrderHandlers(srv) {
             PaymentTerms: '',
             IncotermsClassification: '',
             IncotermsLocation1: '',
-            derived: false
+            derived: false,
+            source: '',
+            lastPurchaseOrder: ''
         };
     });
 

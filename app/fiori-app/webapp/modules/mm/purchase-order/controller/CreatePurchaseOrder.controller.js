@@ -213,7 +213,8 @@ sap.ui.define([
                         var aAppliedFields = Object.keys(oReport.applied).map(function (k) {
                             return k + ": " + oReport.applied[k];
                         });
-                        MessageToast.show("Supplier defaults applied: " + aAppliedFields.join(", "));
+                        var sSourceInfo = oReport.source ? (" (" + oReport.source + ")") : " (from last PO)";
+                        MessageToast.show("Supplier defaults applied" + sSourceInfo + ": " + aAppliedFields.join(", "));
                     }
                 })
                 .catch(function (err) {

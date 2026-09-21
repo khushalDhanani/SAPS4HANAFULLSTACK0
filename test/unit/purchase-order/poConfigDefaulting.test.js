@@ -389,6 +389,33 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(defaults.PaymentTerms).toBe('AT01');
             expect(defaults.IncotermsClassification).toBe('CIF');
             expect(defaults.derived).toBe(true);
+            expect(defaults.source).toBe('from last PO');
+        });
+
+        it('getSupplierDefaults should query fallback ordered by PurchaseOrder desc and return source', async () => {
+            // First call fails (function import)
+            mockODataClient.get.mockResolvedValueOnce({ value: null });
+            // Fallback query succeeds
+            mockODataClient.get.mockResolvedValueOnce({
+                value: [{
+                    PurchaseOrder: '4500000999',
+                    DocumentCurrency: 'EUR',
+                    PaymentTerms: '0001',
+                    IncotermsClassification: 'FOB',
+                    IncotermsTransferLocation: 'HAMBURG'
+                }]
+            });
+
+            const defaults = await PurchaseOrderService.getSupplierDefaults('10300001', '1010', '1010');
+
+            expect(mockODataClient.get).toHaveBeenCalledWith(
+                expect.stringContaining('$orderby=PurchaseOrder desc')
+            );
+            expect(defaults.Currency).toBe('EUR');
+            expect(defaults.PaymentTerms).toBe('0001');
+            expect(defaults.derived).toBe(true);
+            expect(defaults.source).toBe('from last PO');
+            expect(defaults.lastPurchaseOrder).toBe('4500000999');
         });
 
         it('getSupplierDefaults should gracefully fall back to empty when unconfigured', async () => {
@@ -400,6 +427,54 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(defaults.Currency).toBe('');
             expect(defaults.PaymentTerms).toBe('');
             expect(defaults.derived).toBe(false);
+            expect(defaults.source).toBe('');
+            expect(defaults.lastPurchaseOrder).toBe('');
+        });
+    });
+
+    describe('8. Supplier Defaults Derivation Labeling & Resetting on User Modification', () => {
+        it('should populate supplierDefaultsSource and message with last PO document number', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
+            const oDefaults = {
+                Currency: 'USD',
+                PaymentTerms: '0002',
+                IncotermsClassification: 'FCA',
+                IncotermsLocation1: 'NEW YORK',
+                derived: true,
+                source: 'from last PO',
+                lastPurchaseOrder: '4500012345'
+            };
+
+            const oReport = PurchaseOrderModel.deriveSupplierDefaults(oModel, '10300001', oDefaults);
+
+            expect(oReport.derived).toBe(true);
+            expect(oReport.source).toBe('from last PO 4500012345');
+            expect(oReport.lastPurchaseOrder).toBe('4500012345');
+
+            expect(oModel.getProperty('/supplierDefaultsDerived')).toBe(true);
+            expect(oModel.getProperty('/supplierDefaultsSource')).toBe('from last PO 4500012345');
+            expect(oModel.getProperty('/supplierDefaultsMessage')).toContain('from last PO (4500012345)');
+            expect(oModel.getProperty('/configDerived/Currency')).toBe(true);
+            expect(oModel.getProperty('/configDerived/PaymentTerms')).toBe(true);
+        });
+
+        it('should clear configDerived flag when user manually modifies a derived field', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
+            const oDefaults = {
+                Currency: 'EUR',
+                PaymentTerms: '0001',
+                derived: true,
+                source: 'from last PO',
+                lastPurchaseOrder: '4500011111'
+            };
+
+            PurchaseOrderModel.deriveSupplierDefaults(oModel, '10300001', oDefaults);
+            expect(oModel.getProperty('/configDerived/Currency')).toBe(true);
+
+            // User changes Currency manually
+            PurchaseOrderModel.markUserModified(oModel, 'Currency', true);
+            expect(oModel.getProperty('/userModified/Currency')).toBe(true);
+            expect(oModel.getProperty('/configDerived/Currency')).toBe(false);
         });
     });
 

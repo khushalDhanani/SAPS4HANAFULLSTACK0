@@ -243,7 +243,9 @@ sap.ui.define([
                         PaymentTerms: result.PaymentTerms || "",
                         IncotermsClassification: result.IncotermsClassification || "",
                         IncotermsLocation1: result.IncotermsLocation1 || "",
-                        derived: true
+                        derived: true,
+                        source: result.source || "from last PO",
+                        lastPurchaseOrder: result.lastPurchaseOrder || ""
                     };
                 }
                 // If function returned no data, try fallback
@@ -254,24 +256,27 @@ sap.ui.define([
             }).then(function (oResult) {
                 if (oResult) return oResult;
 
-                // Resilient Fallback: Query historical PurchaseOrders for this supplier
+                // Resilient Fallback: Query historical PurchaseOrders for this supplier (sorted by most recent PO)
                 var sFilter = "Supplier eq '" + encodeURIComponent(sCleanSupplier) + "'";
                 if (sCleanPurchOrg) {
                     sFilter += " and PurchasingOrganization eq '" + encodeURIComponent(sCleanPurchOrg) + "'";
                 }
-                var sPoUrl = SERVICE_BASE + "/PurchaseOrders?$filter=" + sFilter + "&$top=1&$select=DocumentCurrency,PaymentTerms,IncotermsClassification,IncotermsTransferLocation";
+                var sPoUrl = SERVICE_BASE + "/PurchaseOrders?$filter=" + sFilter + "&$top=1&$orderby=PurchaseOrder desc&$select=PurchaseOrder,DocumentCurrency,PaymentTerms,IncotermsClassification,IncotermsTransferLocation";
 
                 return ODataClient.get(sPoUrl).then(function (res) {
                     var aItems = (res && res.value) || [];
                     if (aItems.length > 0) {
                         var po = aItems[0];
+                        var bHasData = !!(po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification);
                         return {
                             Supplier: sCleanSupplier,
                             Currency: po.DocumentCurrency || "",
                             PaymentTerms: po.PaymentTerms || "",
                             IncotermsClassification: po.IncotermsClassification || "",
                             IncotermsLocation1: po.IncotermsTransferLocation || "",
-                            derived: !!(po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification)
+                            derived: bHasData,
+                            source: bHasData ? "from last PO" : "",
+                            lastPurchaseOrder: po.PurchaseOrder || ""
                         };
                     }
                     return {
@@ -280,7 +285,9 @@ sap.ui.define([
                         PaymentTerms: "",
                         IncotermsClassification: "",
                         IncotermsLocation1: "",
-                        derived: false
+                        derived: false,
+                        source: "",
+                        lastPurchaseOrder: ""
                     };
                 }).catch(function () {
                     return {
@@ -289,7 +296,9 @@ sap.ui.define([
                         PaymentTerms: "",
                         IncotermsClassification: "",
                         IncotermsLocation1: "",
-                        derived: false
+                        derived: false,
+                        source: "",
+                        lastPurchaseOrder: ""
                     };
                 });
             });

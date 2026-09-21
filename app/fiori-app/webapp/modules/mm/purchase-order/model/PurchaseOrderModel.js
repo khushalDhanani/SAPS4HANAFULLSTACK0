@@ -89,6 +89,10 @@ sap.ui.define([
                     IncotermsClassification: false,
                     IncotermsLocation1: false
                 },
+                supplierDefaultsDerived: false,
+                supplierDefaultsSource: "",
+                supplierDefaultsLastPo: "",
+                supplierDefaultsMessage: "",
                 configDerived: {
                     PurchaseOrderType: false,
                     CompanyCode: false,
@@ -1116,11 +1120,17 @@ sap.ui.define([
             var bVal = bModified !== undefined ? bModified : true;
             if (typeof oModel.setProperty === "function") {
                 oModel.setProperty("/userModified/" + sField, bVal);
+                if (bVal) {
+                    oModel.setProperty("/configDerived/" + sField, false);
+                }
             } else {
                 var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
                 if (oData) {
                     oData.userModified = oData.userModified || {};
                     oData.userModified[sField] = bVal;
+                    if (bVal && oData.configDerived) {
+                        oData.configDerived[sField] = false;
+                    }
                 }
             }
         },
@@ -1345,12 +1355,35 @@ sap.ui.define([
                 this.setFieldValidation(oModel, "IncotermsLocation1", "Error", "Incoterms Location 1 is required when Incoterms is specified.");
             }
 
+            var bAnyApplied = Object.keys(oReport.applied).length > 0;
+            var bDerivedFlag = bAnyApplied || !!oDefs.derived;
+            var sLastPo = oDefs.lastPurchaseOrder || "";
+            var sSourceText = "";
+            var sMessageText = "";
+            if (bDerivedFlag) {
+                sSourceText = sLastPo ? ("from last PO " + sLastPo) : (oDefs.source || "from last PO");
+                sMessageText = "Commercial terms derived from last PO" + (sLastPo ? " (" + sLastPo + ")" : "") + ". Verify before submitting.";
+            }
+
             // Update model
             if (typeof oModel.setProperty === "function") {
                 oModel.setProperty("/header", oHeader);
                 oModel.setProperty("/userModified", oUserModified);
                 oModel.setProperty("/configDerived", oConfigDerived);
+                oModel.setProperty("/supplierDefaultsDerived", bDerivedFlag);
+                oModel.setProperty("/supplierDefaultsSource", sSourceText);
+                oModel.setProperty("/supplierDefaultsLastPo", sLastPo);
+                oModel.setProperty("/supplierDefaultsMessage", sMessageText);
+            } else {
+                oData.supplierDefaultsDerived = bDerivedFlag;
+                oData.supplierDefaultsSource = sSourceText;
+                oData.supplierDefaultsLastPo = sLastPo;
+                oData.supplierDefaultsMessage = sMessageText;
             }
+
+            oReport.derived = bDerivedFlag;
+            oReport.source = sSourceText;
+            oReport.lastPurchaseOrder = sLastPo;
 
             this.updateStatus(oModel);
             return oReport;

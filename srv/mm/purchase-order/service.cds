@@ -139,6 +139,8 @@ service PurchaseOrderService {
         IncotermsClassification: String;
         IncotermsLocation1: String;
         derived: Boolean;
+        source: String;
+        lastPurchaseOrder: String;
     };
 
     @(requires: ['Viewer', 'PurchasingManager', 'Admin'])
