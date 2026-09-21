@@ -706,6 +706,43 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(mockCustRun).toHaveBeenCalledTimes(2);
     });
 
+    test('getCustomerDefaults returns authentic Country without defaulting to IN when country is absent or present', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        // Case 1: Customer without Country in SAP
+        const mockCustNoCountry = jest.fn().mockResolvedValue([
+            { Customer: '10084', CustomerName: 'Global Client', CityName: 'Berlin', Country: null }
+        ]);
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('I_Customer_VH')) return mockCustNoCountry(q);
+                return Promise.resolve([]);
+            })
+        };
+
+        const resNoCountry = await adapter.getCustomerDefaults('10084', '1000', '10', '52');
+        expect(resNoCountry.CustomerName).toBe('Global Client');
+        expect(resNoCountry.City).toBe('Berlin');
+        expect(resNoCountry.Country).toBe(''); // Should NOT default to 'IN'
+
+        // Case 2: Customer with authentic non-IN Country in SAP (e.g. 'DE')
+        adapter.clearCache();
+        const mockCustWithCountry = jest.fn().mockResolvedValue([
+            { Customer: '10085', CustomerName: 'German Pharma', CityName: 'Munich', Country: 'DE' }
+        ]);
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('I_Customer_VH')) return mockCustWithCountry(q);
+                return Promise.resolve([]);
+            })
+        };
+
+        const resWithCountry = await adapter.getCustomerDefaults('10085', '1000', '10', '52');
+        expect(resWithCountry.CustomerName).toBe('German Pharma');
+        expect(resWithCountry.Country).toBe('DE');
+    });
+
     test('getInquiry fetches WL header, FS header, and FS items concurrently and caches value helps', async () => {
         const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
         let wlCalled = false;

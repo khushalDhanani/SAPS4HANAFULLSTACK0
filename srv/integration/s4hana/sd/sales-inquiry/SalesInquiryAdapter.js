@@ -842,7 +842,7 @@ class SalesInquiryAdapter {
               return {
                 Name: cust.CustomerName || cust.OrganizationBPName1 || cust.BusinessPartnerName1 || '',
                 City: cust.CityName || cust.BPAddrCityName || '',
-                Country: cust.Country || 'IN'
+                Country: cust.Country || ''
               };
             }
             return null;
@@ -861,7 +861,7 @@ class SalesInquiryAdapter {
         if (custResult.status === 'fulfilled' && custResult.value) {
           sName = custResult.value.Name || '';
           sCity = custResult.value.City || '';
-          sCountry = custResult.value.Country || 'IN';
+          sCountry = custResult.value.Country || '';
         }
 
         const rawInqs = inqResult.status === 'fulfilled' ? inqResult.value : [];

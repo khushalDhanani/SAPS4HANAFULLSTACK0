@@ -2631,16 +2631,39 @@
   - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
   - `cd app/fiori-app && npm run build`: **Build succeeded in 728 ms; Component-preload.js generated**.
   - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Implement Audit Item 23: Customer defaults on create screens (remove 'IN').
+
+### 2026-09-21 16:30 IST — Eliminate Hardcoded 'IN' Country Fallback in Customer Defaults (Audit Item 23)
+- **Change**: Resolved assumed data lineage in `SalesInquiryAdapter.js` where customer master queries defaulted `Country` to `'IN'` when `cust.Country` was absent or empty in SAP `I_Customer_VH`:
+  1. **Adapter Customer Defaults**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`:
+       - Changed `Country: cust.Country || 'IN'` to `Country: cust.Country || ''`.
+       - Changed `sCountry = custResult.value.Country || 'IN';` to `sCountry = custResult.value.Country || '';`.
+       - Authentic country from S/4HANA customer master is preserved and returned; when absent or null in S/4HANA, empty string is returned without assuming `'IN'`.
+  2. **Unit Tests & Documentation**:
+     - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Added unit test verifying `getCustomerDefaults` returns `Country: ''` when customer has no country in SAP master data, and returns authentic non-IN country (`'DE'`) when present.
+     - `docs/data-lineage-audit.md`: Updated Audit Item 23 reflecting removal of hardcoded `'IN'`.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **1 passed, 1 total test suite; 27 passed, 27 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 140 passed, 140 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 920 passed, 920 total tests (100% green)** in 96.7 s.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 969 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **71 passed, 71 total test suites; 919 passed, 919 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 920 passed, 920 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 140 passed, 140 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Customer Defaults Authentic Country (Audit Row 23)**:
+  - Hardcoded `'IN'` fallback eliminated from `SalesInquiryAdapter.js` (`getCustomerDefaults`).
+  - Returns authentic `Country` from `I_Customer_VH`, or empty string when absent in SAP master data.
 - **PO Document Type Required (Audit Row 12)**:
   - Hardcoded `"NB"` eliminated from initial UI model and backend normalization mapper.
   - `PurchaseOrderType` strictly required in UI input (`required="true"`), UI model validation (`validateForm`), and backend mapper (`normalizePurchaseOrderData`).
