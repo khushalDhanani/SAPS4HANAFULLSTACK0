@@ -66,6 +66,7 @@ const mockGoodsIssueService = {
     postGoodsIssue: jest.fn(),
     submitGoodsIssueRequest: jest.fn(),
     resolveIdentifier: jest.fn(),
+    resolveStockUnit: jest.fn(),
     getQueueSummary: jest.fn().mockResolvedValue({ QueuedCount: 0, Items: [] }),
     retryQueuedGoodsIssue: jest.fn().mockResolvedValue({ Success: true, MaterialDocument: '4900000001', MaterialDocYear: '2026' }),
     clearQueuedGoodsIssue: jest.fn().mockResolvedValue(true),
@@ -585,6 +586,31 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
 
             controller.onProceedToReview();
             expect(oModel.getProperty('/currentStep')).toBe(3);
+        });
+
+        it('should default auto-determined batch status to unknown and None when missing', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/activeItem', Object.assign({}, mockResolution.ActiveItem));
+            oModel.setProperty('/resolved', mockResolution);
+            oModel.setProperty('/suBarcode', 'SU-12345');
+
+            mockGoodsIssueService.resolveStockUnit.mockResolvedValueOnce({
+                SuExists: true,
+                Material: '1000000355',
+                DeterminedBatch: 'BATCH-UNDEF',
+                DeterminedBatchExpiry: '',
+                DeterminedBatchStatusState: '',
+                DeterminedBatchStatusText: '',
+                CurrentStock: 500,
+                BaseUnit: 'KG'
+            });
+
+            await controller._resolveSuBarcode();
+
+            const active = oModel.getProperty('/activeItem');
+            expect(active.Batch).toBe('BATCH-UNDEF');
+            expect(active.BatchStatusText).toBe('unknown');
+            expect(active.BatchStatusState).toBe('None');
         });
     });
 

@@ -599,8 +599,8 @@ sap.ui.define([
                         var oUpdated = Object.assign({}, oActiveNow, {
                             Batch: oResult.DeterminedBatch,
                             ExpiryDate: oResult.DeterminedBatchExpiry || "",
-                            BatchStatusState: oResult.DeterminedBatchStatusState || "Success",
-                            BatchStatusText: oResult.DeterminedBatchStatusText || "VALID"
+                            BatchStatusState: oResult.DeterminedBatchStatusState || "None",
+                            BatchStatusText: oResult.DeterminedBatchStatusText || "unknown"
                         });
                         oModel.setProperty("/activeItem", oUpdated);
                         oModel.setProperty("/batchLockedBySu", true);

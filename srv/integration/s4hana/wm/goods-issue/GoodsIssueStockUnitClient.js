@@ -710,9 +710,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         Batches: usableBatches,
         DeterminedBatch: batchDirectMatch.Batch,
         DeterminedBatchExpiry: batchDirectMatch.ExpiryDate || null,
-        DeterminedBatchStatusState: batchDirectMatch.StatusState || 'Success',
-        DeterminedBatchStatusText: batchDirectMatch.StatusText || 'VALID',
-        DeterminedBatchDaysToExpiry: batchDirectMatch.DaysToExpiry || 9999,
+        DeterminedBatchStatusState: batchDirectMatch.StatusState || 'None',
+        DeterminedBatchStatusText: batchDirectMatch.StatusText || 'unknown',
+        DeterminedBatchDaysToExpiry: batchDirectMatch.DaysToExpiry !== undefined ? batchDirectMatch.DaysToExpiry : null,
         MultipleBatches: false,
         NoBatchAvailable: false,
         ReservationNo: sResv,
@@ -1010,8 +1010,8 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       determinedBatchExpiry = candidate.ExpiryDate || null;
       determinedBatchStatus = {
         StatusState: candidate.StatusState || 'None',
-        StatusText: candidate.StatusText || 'VALID',
-        DaysToExpiry: candidate.DaysToExpiry || 9999
+        StatusText: candidate.StatusText || 'unknown',
+        DaysToExpiry: candidate.DaysToExpiry !== undefined ? candidate.DaysToExpiry : null
       };
     }
 

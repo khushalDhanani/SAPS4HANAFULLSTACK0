@@ -411,9 +411,12 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           const batches = await getBatchesFn(sMat, sPlant, sSLoc);
           const found = batches.find(b => b.Batch && b.Batch.toUpperCase() === sBatch.toUpperCase());
           if (found) {
-            batchStatusState = found.StatusState || 'Success';
-            batchStatusText = found.StatusText || 'VALID';
-            batchExpiry = found.ExpiryDate;
+            batchStatusState = found.StatusState || 'None';
+            batchStatusText = found.StatusText || 'unknown';
+            batchExpiry = found.ExpiryDate || null;
+          } else {
+            batchStatusState = 'None';
+            batchStatusText = 'unknown';
           }
         }
       } catch (err) {

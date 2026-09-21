@@ -365,6 +365,39 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(items[0].StorageBin).toBeUndefined();
     });
 
+    it('should set BatchStatusText to unknown when batch lookup fails, never defaulting to NO SLED', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            BaseUnit: 'KG',
+            ResvnItmRequiredQtyInBaseUnit: '50.000',
+            ResvnItmWithdrawnQtyInBaseUnit: '10.000',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order',
+            Batch: 'BATCH_PREASSIGNED'
+          }
+        ]),
+        getMaterialPackagingUnits: jest.fn().mockResolvedValue([]),
+        getMaterialBatches: jest.fn().mockRejectedValue(new Error('Batch service unavailable')),
+        _enrichBatchStatus: jest.fn()
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const items = await reservationsClient.getOpenItems('40001', '10001');
+
+      expect(items).toHaveLength(1);
+      expect(items[0].Batch).toBe('BATCH_PREASSIGNED');
+      expect(items[0].BatchStatusText).toBe('unknown');
+      expect(items[0].BatchStatusState).toBe('None');
+    });
+
     it('should return strictly open lines — no fallback to closed items', async () => {
       const mockAdapter = {
         _get: jest.fn().mockResolvedValue([
@@ -864,6 +897,61 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.SuStockQty).toBe(50);
       expect(res.MaxIssueQty).toBe(50);
       expect(res.ReservationRemainingQty).toBe(80);
+    });
+
+    it('should default missing determined batch status to unknown and None, never VALID or Success', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '10001',
+                ReservationItem: '0001',
+                OrderID: '40001',
+                Product: 'MAT01',
+                ProductName: 'Material 1',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                BaseUnit: 'KG',
+                ResvnItmRequiredQtyInBaseUnit: '100',
+                ResvnItmWithdrawnQtyInBaseUnit: '20'
+              }
+            ]);
+          }
+          if (path.includes('MaterialStorLocHelps')) {
+            return Promise.resolve([{ CurrentStock: '50', BaseUnit: 'KG' }]);
+          }
+          return Promise.resolve([]);
+        }),
+        getOpenItems: jest.fn().mockResolvedValue([
+          {
+            ReservationNo: '10001',
+            ReservationItem: '0001',
+            Material: 'MAT01',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            OpenQty: 50,
+            RequiredQty: 50,
+            BaseUnit: 'KG'
+          }
+        ]),
+        getMaterialBatches: jest.fn().mockResolvedValue([
+          {
+            Batch: 'BATCH_NO_STATUS',
+            ExpiryDate: null,
+            StatusState: '',
+            StatusText: '',
+            AvailableStock: 50
+          }
+        ])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      const res = await stockUnitClient.resolveStockUnitForGoodsIssue('BATCH_NO_STATUS', '10001', '0001');
+
+      expect(res.DeterminedBatch).toBe('BATCH_NO_STATUS');
+      expect(res.DeterminedBatchStatusText).toBe('unknown');
+      expect(res.DeterminedBatchStatusState).toBe('None');
     });
 
     it('should preserve null for unknown stock in resolveStockUnitForGoodsIssue and not clamp MaxIssueQty to 0', async () => {

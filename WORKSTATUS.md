@@ -2305,24 +2305,57 @@
   - `npx jest test/integration/wm/`: **1 passed, 1 total test suite; 5 passed, 5 total tests (100% green)**.
   - `git diff --check`: **Clean (0 errors)**.
 
+### 2026-09-21 — Fix Goods Issue Batch Status & SLED Handling: Eliminate Optimistic VALID/Success Default & Show "unknown" (Audit Row 41)
+- **Change**: Eliminated optimistic default assumptions where missing batch status fell back to `'VALID'` / `'Success'` / `9999` days to expiry, and failed batch SLED lookups showed `"NO SLED"`. Updated handling across backend clients and UI5 controller so:
+  1. A failed SAP batch lookup or missing pre-assigned batch sets `StatusText: 'unknown'`, `StatusState: 'None'`, and `DaysToExpiry: null` instead of falsely reporting `"NO SLED"`. The label `"NO SLED"` is strictly reserved for batches confirmed by SAP S/4HANA to exist with an empty shelf life expiration date (`ExpiryDate: null`).
+  2. Missing status on determined/candidate batches defaults to `StatusText: 'unknown'` and `StatusState: 'None'`, never assumed as `'VALID'` or `'Success'`.
+  3. UI5 controller auto-determined batch fallback maps missing `DeterminedBatchStatusText` to `"unknown"` and `DeterminedBatchStatusState` to `"None"`.
+- **Affected files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`:
+    - Initialized pre-assigned batch status to `r.Batch ? 'unknown' : 'NO BATCH'` (with `DaysToExpiry: null`).
+    - In `catch (err)` (failed SAP batch lookup) and when `!matchedBatch` (batch not found in SAP), sets `batchStatus` to `{ StatusState: 'None', StatusText: 'unknown', DaysToExpiry: null }`.
+    - `'NO SLED'` is only assigned when `matchedBatch` is found from SAP and SAP confirms `ExpiryDate` is null/empty.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+    - Scanned barcode direct match (`batchDirectMatch`): defaults changed from `'Success'` / `'VALID'` / `9999` to `StatusState: 'None'`, `StatusText: 'unknown'`, `DaysToExpiry: null`.
+    - Usable candidate batch determination (`candidate`): fallback changed from `'None'` / `'VALID'` to `StatusState: 'None'`, `StatusText: 'unknown'`, `DaysToExpiry: null`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`:
+    - In `revalidateStockBeforePosting`: fallback for missing status changed from `'Success'` / `'VALID'` to `'None'` / `'unknown'`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+    - In `_resolveSuBarcode`: fallback for missing auto-determined batch status changed from `"Success"` / `"VALID"` to `"None"` / `"unknown"`.
+  - `test/unit/wm/goodsIssueClients.test.js`:
+    - Added test verifying `BatchStatusText: 'unknown'` and `BatchStatusState: 'None'` when batch lookup fails (never defaulting to `"NO SLED"`).
+    - Added test verifying `DeterminedBatchStatusText: 'unknown'` and `DeterminedBatchStatusState: 'None'` when determined batch has missing status (never defaulting to `"VALID"` or `"Success"`).
+  - `test/unit/wm/goodsIssueController.test.js`:
+    - Added test verifying auto-determined batch defaults missing status to `"unknown"` and `"None"`.
+- **Validation Commands Executed & Results**:
+  - `npx eslint srv/integration/s4hana/wm/ test/unit/wm/`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 815 ms; Component-preload.js generated cleanly**.
+  - `npx jest test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueController.test.js`: **92 passed, 92 total tests (100% green)**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 206 passed, 206 total tests (100% green)**.
+  - `npm test` (full project test suite): **68 passed, 68 total test suites; 871 passed, 871 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
-  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 203 passed, 203 total tests (100% green)**.
-  - `npx jest test/integration/wm/`: **1 passed, 1 total test suite; 5 passed, 5 total tests (100% green)**.
+  - `npx jest`: **68 passed, 68 total test suites; 871 passed, 871 total tests (100% green)**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 206 passed, 206 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Goods Issue Batch Status / SLED Defaults (Audit Row 41)**:
+  - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
+  - Failed batch lookups show `'unknown'`, never masquerading as `'NO SLED'`.
 - **Goods Issue Batch Submit Fallback (Audit Row 44)**:
   - Queued lines return `Success: false`, `Queued: true`, `DifferenceCleared: false`, and `QueueReference`.
-  - Zero false claims of SAP success or SAP difference clearing before authentic posting.
 - **Goods Issue Authentic Material Document Requirement (Audit Row 43)**:
   - Non-queued responses must contain an authentic SAP `MaterialDocument` to be marked `POSTED_IN_SAP`.
-  - Missing material document sets `Success: false`, `SyncStatus: "FAILED"`, and informs user.
 
 ## Next Steps
-1. Stage and commit Item 44 changes (`goodsIssue.handler.js`, `service.cds`, `goodsIssueService.test.js`, `WORKSTATUS.md`).
+1. Stage and commit Item 41 changes to `feature/CL01`.
 2. Push to `origin/feature/CL01`.
-3. Continue through remaining items in `docs/data-lineage-audit.md` (e.g. Item 41: Goods Issue batch status/SLED optimistic defaults).
+3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.

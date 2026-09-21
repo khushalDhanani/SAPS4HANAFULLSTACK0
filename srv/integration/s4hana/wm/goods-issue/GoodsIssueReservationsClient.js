@@ -175,18 +175,31 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
         }
 
         // Batch status evaluation if item has a pre-assigned batch
-        let batchStatus = { StatusState: 'None', StatusText: r.Batch ? 'NO SLED' : 'NO BATCH', DaysToExpiry: 9999 };
+        let batchStatus = { StatusState: 'None', StatusText: r.Batch ? 'unknown' : 'NO BATCH', DaysToExpiry: null };
         let expiryDate = null;
         if (r.Batch) {
           try {
             const batchList = await getBatchesFn(r.Product, r.Plant);
-            const matchedBatch = batchList.find(b => b.Batch === r.Batch);
+            const matchedBatch = batchList && batchList.find(b => b.Batch === r.Batch);
             if (matchedBatch) {
-              expiryDate = matchedBatch.ExpiryDate;
-              batchStatus = this._enrichBatchStatus(matchedBatch.ExpiryDate);
+              expiryDate = matchedBatch.ExpiryDate || null;
+              if (matchedBatch.StatusText) {
+                batchStatus = {
+                  StatusState: matchedBatch.StatusState || 'None',
+                  StatusText: matchedBatch.StatusText,
+                  DaysToExpiry: matchedBatch.DaysToExpiry !== undefined ? matchedBatch.DaysToExpiry : null
+                };
+              } else if (matchedBatch.ExpiryDate) {
+                batchStatus = this._enrichBatchStatus(matchedBatch.ExpiryDate);
+              } else {
+                batchStatus = { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
+              }
+            } else {
+              batchStatus = { StatusState: 'None', StatusText: 'unknown', DaysToExpiry: null };
             }
           } catch (err) {
             LOG.warn(`Could not enrich batch status for item ${r.ReservationItem} batch ${r.Batch}: ${err.message}`);
+            batchStatus = { StatusState: 'None', StatusText: 'unknown', DaysToExpiry: null };
           }
         }
 
