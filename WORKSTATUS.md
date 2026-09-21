@@ -1736,19 +1736,112 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Review with user, test in browser runtime, and commit Phase 2 delivery screen to `feature/CL01`.
 
+## 2026-09-21 09:45 IST
+- **Agent**: Antigravity
+- **Change**: Outbound Delivery Adapter Paging Fix — deleted $top/$skip handling from the CAP-request branch in `OutboundDeliveryAdapter.js`:
+  - **Root Cause**: CAP OData V4 passes pagination limits as `{ rows: { val: 50 }, offset: { val: 0 } }`. The adapter was running `Number(...)` on the inner object, yielding `NaN`, which caused `$top` and `$skip` to never be appended to the SAP Gateway URL. The adapter returned all due lines and `applyPaging(orders, req)` sliced them afterwards. If `$top`/`$skip` were ever passed to SAP, both SAP and `applyPaging` would skip rows, resulting in page 2 returning empty.
+  - **Fix**: Initialized `top = null; skip = null;` by default. Removed the `$top`/`$skip` extraction block from the CAP-request branch (`query.req || query.query || query.data`) so that all matching due orders are fetched from SAP and client/UI pagination is handled cleanly by `applyPaging(orders, req)` without double-skipping.
+  - **Automated Tests**: Added test in `test/unit/le/outboundDeliveryAdapter.test.js` verifying that CAP requests do not send `$top` or `$skip` to S/4HANA Gateway.
+- **Files Modified**:
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+  - `test/unit/le/outboundDeliveryAdapter.test.js`
+- **Executed Commands and Results**:
+  - `npx jest test/unit/le/`: 4 passed, 4 total test suites; 37 passed, 37 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review with user and commit fix to `feature/CL01`.
+
+## 2026-09-21 09:55 IST
+- **Agent**: Antigravity
+- **Change**: Outbound Delivery Role Alignment, Delivery Block Visibility, and In-Approval Guarding:
+  1. **Role Alignment**:
+     - Added `'SalesRepresentative'` to `@(requires: ['SalesRepresentative', 'WarehouseClerk', 'WarehouseManager', 'SalesManager', 'Admin']) action createOutboundDelivery` in `srv/le/outbound-delivery/service.cds`.
+     - Added `hasAnyRole(aRoles)` and `canCreateDelivery()` helper methods to `AuthService.js`.
+     - Added `visible="{= ${salesOrdersView>/canCreateDelivery} !== false }"` to `btnSalesOrderCreateDelivery` on the Sales Orders screen.
+     - Added `visible="{= ${ordersDueView>/canCreateDelivery} !== false }"` to the Create Delivery row button on the Orders Due for Delivery screen.
+  2. **Delivery Block Visibility & Disabled Button**:
+     - Removed `DelivBlockReasonForSchedLine eq ''` filter from `OutboundDeliveryAdapter.js` so orders with delivery blocks are visible in the worklist instead of being silently hidden.
+     - In `OrdersDueForDelivery.view.xml`, displayed `DelivBlockReasonForSchedLine` in the Delivery Block column with Error state when present.
+     - Disabled the Create Delivery button when `DelivBlockReasonForSchedLine` is set, with tooltip informing the user that the order has a delivery block.
+     - In `OrdersDueForDelivery.controller.js`, added defensive validation in `onCreateDeliveryPress` warning that the order has a delivery block.
+  3. **In-Approval Order Handling**:
+     - Enriched `getOrdersDueForDelivery` in `OutboundDeliveryAdapter.js` by looking up unapproved orders from `SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873` (`SalesDocApprovalStatus eq 'A' or SalesDocApprovalStatus eq 'C'`) and mapping `SalesDocApprovalStatus`.
+     - Added `SalesDocApprovalStatus: String(1);` to entity `OrdersDueForDelivery` in `srv/le/outbound-delivery/service.cds`.
+     - Added `DeliveryBlockReason` to entity `SalesOrders` projection in `srv/sd/sales-order/service.cds`.
+     - Added "Approval Status" column to `OrdersDueForDelivery.view.xml` showing "In Approval" (Warning), "Rejected" (Error), or "Approved" (Success).
+     - Disabled the Create Delivery button on both `OrdersDueForDelivery.view.xml` and `SalesOrders.view.xml` when `SalesDocApprovalStatus === 'A'` or `SalesDocApprovalStatus === 'C'`, with tooltip informing the user that the order is in approval.
+     - In `SalesOrders.controller.js` and `OrdersDueForDelivery.controller.js`, added defensive validation in `onCreateDeliveryPress` warning that the order is currently in approval.
+     - Added i18n keys for tooltips and warning messages to `i18n.properties` and `i18n_en.properties` with 100% parity.
+  4. **Preload Rebuild & Automated Tests**:
+     - Rebuilt `Component-preload.js` via `cd app/fiori-app && npm run build`.
+     - Updated unit tests in `test/unit/le/outboundDeliveryAdapter.test.js` to verify delivery block retention and approval status enrichment.
+- **Files Modified**:
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+  - `srv/le/outbound-delivery/service.cds`
+  - `srv/sd/sales-order/service.cds`
+  - `app/fiori-app/webapp/service/AuthService.js`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/view/SalesOrders.view.xml`
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/le/outboundDeliveryAdapter.test.js`
+- **Executed Commands and Results**:
+  - `npx cds compile srv > /dev/null`: Succeeded with code 0.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 795 ms (`Component-preload.js` updated).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `diff -u app/fiori-app/webapp/i18n/i18n.properties app/fiori-app/webapp/i18n/i18n_en.properties`: Clean (0 differences).
+  - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total test suites; 82 passed, 82 total tests (100% green).
+  - `npx jest test/unit/auth/`: 3 passed, 3 total test suites; 34 passed, 34 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review with user and commit to `feature/CL01`.
+
+## 2026-09-21 10:05 IST
+- **Agent**: Antigravity
+- **Change**: Prevent Misleading Success Message When SAP Returns No Delivery Number:
+  - **Issue**: If SAP returns HTTP 201 Created but does not return an `OutboundDelivery` number in the response body, `outboundDelivery.handler.js` was returning the fallback text `'Delivery created'`. In the UI, `sDeliveryNo` was interpolated into `Delivery {0} created`, resulting in `"Delivery Delivery created created"`, misleading the user into thinking "Delivery created" was a valid document number.
+  - **Handler Fix**: In `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`, changed `return result.OutboundDelivery || 'Delivery created'` to `return result.OutboundDelivery || ''` so that no fake or placeholder document number is returned.
+  - **UI Warning & VL03N Guidance**:
+    - In `OrdersDueForDelivery.controller.js` and `SalesOrders.controller.js`, updated `onConfirmCreateDelivery` callback: if `sDeliveryNo` is empty or equals `'Delivery created'`, the system displays `MessageBox.warning` with message `msgDeliveryCreatedNoNumberWarning`:
+      `"Delivery created in SAP S/4HANA for Sales Order {0}, but no delivery number was returned. Please check transaction VL03N."`
+    - If a valid delivery document number is returned, it continues to show `MessageBox.success` with `"Delivery {0} created"`.
+  - **i18n**: Added `msgDeliveryCreatedNoNumberWarning` to both `i18n.properties` and `i18n_en.properties` with 100% key parity.
+  - **Preload & Tests**:
+    - Rebuilt `Component-preload.js` via `cd app/fiori-app && npm run build`.
+    - Added unit test in `test/unit/le/ordersDueForDeliveryController.test.js` verifying that `MockMessageBox.warning` is shown with VL03N instructions when no delivery number is returned.
+    - Added unit test in `test/unit/sales-order/salesOrdersController.test.js` verifying the same warning and VL03N instruction behavior.
+- **Files Modified**:
+  - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/le/ordersDueForDeliveryController.test.js`
+  - `test/unit/sales-order/salesOrdersController.test.js`
+- **Executed Commands and Results**:
+  - `npx cds compile srv > /dev/null`: Succeeded with code 0.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 989 ms (`Component-preload.js` updated).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `diff -u app/fiori-app/webapp/i18n/i18n.properties app/fiori-app/webapp/i18n/i18n_en.properties`: Clean (0 differences).
+  - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total test suites; 85 passed, 85 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review with user and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root lint 0 errors, git diff --check clean).
-- **Test Suite**: **LE & Sales Order Unit Tests**: 79/79 passed (100% green).
+- **Test Suite**: **LE, SD & Auth Unit Tests**: 119/119 passed across 12 test suites (100% green).
 - **Outbound Delivery Phase 0**: **COMPLETED & PROVEN** (`13000526` created live).
 - **Outbound Delivery Phase 1 (Backend)**: **100% COMPLETE, TESTED & LIVE VERIFIED**.
 - **Outbound Delivery Phase 2 (Screen & Integration)**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
   - Worklist: "Orders Due for Delivery" view and controller in `modules/le/outbound-delivery/`.
-  - Dialog: `CreateDeliveryDialog.fragment.xml` confirming shipping point and delivery date.
-  - Sales Order integration: Create Delivery button on `SalesOrders.view.xml` calling the same action.
+  - Delivery Block & Approval Transparency: Delivery blocked orders visible with block reason; in-approval orders identified with status badge; Create Delivery button disabled on blocked or in-approval orders.
+  - Sales Order integration: Create Delivery button on `SalesOrders.view.xml` calling the same action, disabled when order has delivery block or is in approval.
+  - Success/Warning message accuracy: Returns clean delivery numbers on success; displays explicit warning to check VL03N if SAP creates delivery without returning a document number.
+  - Role checks: `SalesRepresentative` role authorized for action; UI visibility conditioned on `AuthService.canCreateDelivery()`.
   - Shell: Dashboard tile under Overview, SD, and Warehouse; route `le/orders-due`; full i18n parity.
   - Preload: `Component-preload.js` rebuilt and verified.
 
 ## Next Steps
-1. User review of Phase 2 Outbound Delivery frontend screen and Sales Order integration.
+1. User review of Outbound Delivery creation messages, VL03N warning handling, and worklist features.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.

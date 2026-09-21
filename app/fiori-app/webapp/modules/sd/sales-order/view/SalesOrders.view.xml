@@ -155,7 +155,9 @@
                                     icon="sap-icon://shipping-status"
                                     type="Transparent"
                                     press=".onCreateDeliveryPress"
-                                    tooltip="{i18n>tooltipCreateDelivery}" />
+                                    visible="{= ${salesOrdersView>/canCreateDelivery} !== false }"
+                                    enabled="{= ${salesOrder>SalesDocApprovalStatus} !== 'A' &amp;&amp; ${salesOrder>SalesDocApprovalStatus} !== 'C' &amp;&amp; !${salesOrder>DeliveryBlockReason} }"
+                                    tooltip="{= ${salesOrder>DeliveryBlockReason} ? ${i18n>tooltipOrderDeliveryBlocked} : (${salesOrder>SalesDocApprovalStatus} === 'A' ? ${i18n>tooltipOrderInApproval} : ${i18n>tooltipCreateDelivery}) }" />
                             </cells>
                         </ColumnListItem>
                     </items>

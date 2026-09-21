@@ -65,7 +65,8 @@ const MockBaseController = {
 
 const MockMessageBox = {
     error: jest.fn(),
-    success: jest.fn()
+    success: jest.fn(),
+    warning: jest.fn()
 };
 
 const MockAuthService = {
@@ -277,5 +278,26 @@ describe("OrdersDueForDelivery Controller", () => {
         controller.onConfirmCreateDelivery();
         expect(MockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Sales Order is required"));
         expect(MockOutboundDeliveryService.createOutboundDelivery).not.toHaveBeenCalled();
+    });
+
+    test("onConfirmCreateDelivery shows warning to check VL03N when no delivery number returned", async () => {
+        controller.onInit();
+        const dialogModel = mockView.getModel("deliveryDialog");
+        dialogModel.setProperty("/salesOrder", "5000104");
+        dialogModel.setProperty("/shippingPoint", "1120");
+        dialogModel.setProperty("/deliveryDate", "2026-09-20");
+
+        MockOutboundDeliveryService.createOutboundDelivery.mockResolvedValueOnce("");
+        controller.onCancelCreateDelivery = jest.fn();
+        controller.onRefresh = jest.fn();
+        controller._setDialogBusy = jest.fn();
+
+        await controller.onConfirmCreateDelivery();
+
+        expect(controller.onCancelCreateDelivery).toHaveBeenCalled();
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(
+            expect.stringContaining("VL03N"),
+            expect.any(Object)
+        );
     });
 });

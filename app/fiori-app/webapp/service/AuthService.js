@@ -329,6 +329,38 @@ sap.ui.define([
                 }
             } catch (e) {}
             return null;
+        },
+
+        /**
+         * Checks whether the current user has any of the specified roles / scopes.
+         *
+         * @param {string[]} aRoles
+         * @returns {boolean}
+         */
+        hasAnyRole: function (aRoles) {
+            var oUser = this.getCurrentUser();
+            if (!oUser) {
+                return false;
+            }
+            var aScopes = oUser.scopes || [];
+            if (!Array.isArray(aRoles) || aRoles.length === 0) {
+                return true;
+            }
+            if (aScopes.indexOf("Admin") !== -1) {
+                return true;
+            }
+            return aRoles.some(function (sRole) {
+                return aScopes.indexOf(sRole) !== -1;
+            });
+        },
+
+        /**
+         * Convenience helper to determine whether current user can create deliveries.
+         *
+         * @returns {boolean}
+         */
+        canCreateDelivery: function () {
+            return this.hasAnyRole(["SalesRepresentative", "WarehouseClerk", "WarehouseManager", "SalesManager", "Admin"]);
         }
     });
 

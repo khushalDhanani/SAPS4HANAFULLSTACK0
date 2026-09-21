@@ -17,6 +17,7 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
             GoodsIssueDate              : Date;
             ShipToParty                 : String(10);
             DelivBlockReasonForSchedLine: String(2);
+            SalesDocApprovalStatus      : String(1);
     };
 
     @readonly
@@ -28,7 +29,7 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
             ActiveDepartureCountry : String(3);
     };
 
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'SalesManager', 'Admin'])
+    @(requires: ['SalesRepresentative', 'WarehouseClerk', 'WarehouseManager', 'SalesManager', 'Admin'])
     action createOutboundDelivery(
         SalesOrder   : String,
         ShippingPoint: String,

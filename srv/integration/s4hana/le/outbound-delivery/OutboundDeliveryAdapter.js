@@ -57,8 +57,8 @@ class OutboundDeliveryAdapter {
   async getOrdersDueForDelivery(query = {}, options = {}) {
     try {
       let filterClauses = [];
-      let top = 50;
-      let skip = 0;
+      let top = null;
+      let skip = null;
 
       if (typeof query === 'string') {
         const url = `${this.servicePath}/C_SalesOrderDueForDeliveryVH?${query}`;
@@ -71,14 +71,10 @@ class OutboundDeliveryAdapter {
       let so = null;
 
       if (query.req || query.query || query.data) {
+        // CAP request branch: read all matching due orders from SAP and let the handler's
+        // applyPaging handle pagination, avoiding double-skipping across pages.
         sp = extractFilterParam(query, 'ShippingPoint');
         so = extractFilterParam(query, 'SalesOrder');
-        if (query.query?.SELECT?.limit?.rows) {
-          top = Number(query.query.SELECT.limit.rows);
-        }
-        if (query.query?.SELECT?.limit?.offset) {
-          skip = Number(query.query.SELECT.limit.offset);
-        }
       } else {
         sp = query.shippingPoint || query.ShippingPoint || null;
         so = query.salesOrder || query.SalesOrder || null;
@@ -105,9 +101,6 @@ class OutboundDeliveryAdapter {
         filterClauses.push(`SalesOrder eq ${odataString(so)}`);
       }
 
-      // Only schedule lines without delivery block
-      filterClauses.push("DelivBlockReasonForSchedLine eq ''");
-
       const queryParts = [];
       if (filterClauses.length > 0) {
         queryParts.push(`$filter=${filterClauses.join(' and ')}`);
@@ -125,7 +118,12 @@ class OutboundDeliveryAdapter {
       LOG.info(`Reading due orders from: ${url}`);
       const res = await this.client.get(url, options);
       const rawResults = res.data?.d?.results || res.data?.results || res.data?.value || [];
-      return this._formatOrderResults(rawResults);
+
+      let approvalMap = new Map();
+      if (!options.skipApprovalCheck) {
+        approvalMap = await this._fetchApprovalStatusMap(so, options);
+      }
+      return this._formatOrderResults(rawResults, approvalMap);
     } catch (err) {
       const sapErr = mapS4Error(err);
       LOG.error(`Failed to read due orders (${sapErr.status}): ${sapErr.message}`);
@@ -245,11 +243,37 @@ class OutboundDeliveryAdapter {
   }
 
   /**
+   * Fetches unapproved / in-approval sales order statuses from SD_F1873_SO_WL_SRV.
+   *
+   * @private
+   */
+  async _fetchApprovalStatusMap(so, options = {}) {
+    const map = new Map();
+    try {
+      let filter = "(SalesDocApprovalStatus eq 'A' or SalesDocApprovalStatus eq 'C')";
+      if (so) {
+        filter = `SalesOrder eq ${odataString(so)} and ${filter}`;
+      }
+      const url = `/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$select=SalesOrder,SalesDocApprovalStatus&$filter=${filter}&$top=1000`;
+      const res = await this.client.get(url, options);
+      const items = res.data?.d?.results || res.data?.results || res.data?.value || [];
+      items.forEach(item => {
+        if (item.SalesOrder && item.SalesDocApprovalStatus) {
+          map.set(item.SalesOrder, item.SalesDocApprovalStatus);
+        }
+      });
+    } catch (err) {
+      LOG.warn(`Could not fetch sales order approval status map: ${err.message}`);
+    }
+    return map;
+  }
+
+  /**
    * Helper to format raw OData v2 C_SalesOrderDueForDeliveryVH records.
    *
    * @private
    */
-  _formatOrderResults(rawResults) {
+  _formatOrderResults(rawResults, approvalStatusMap = new Map()) {
     return rawResults.map(r => ({
       SalesOrder: r.SalesOrder,
       SalesOrderItem: r.SalesOrderItem,
@@ -261,7 +285,8 @@ class OutboundDeliveryAdapter {
       ForwardingAgent: r.ForwardingAgent || '',
       GoodsIssueDate: _parseODataV2Date(r.GoodsIssueDate),
       ShipToParty: r.ShipToParty || '',
-      DelivBlockReasonForSchedLine: r.DelivBlockReasonForSchedLine || ''
+      DelivBlockReasonForSchedLine: r.DelivBlockReasonForSchedLine || '',
+      SalesDocApprovalStatus: (approvalStatusMap && typeof approvalStatusMap.get === 'function' ? approvalStatusMap.get(r.SalesOrder) : '') || ''
     }));
   }
 }

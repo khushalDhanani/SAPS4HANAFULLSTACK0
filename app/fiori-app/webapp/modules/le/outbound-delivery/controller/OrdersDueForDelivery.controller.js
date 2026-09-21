@@ -34,9 +34,11 @@ sap.ui.define([
                 AuthService.syncModelHeaders(this.getOwnerComponent(), true);
             }
 
+            var bCanCreateDelivery = (AuthService && typeof AuthService.canCreateDelivery === "function") ? AuthService.canCreateDelivery() : true;
             var oViewModel = new JSONModel({
                 totalCount: 0,
-                shippingPointCount: 0
+                shippingPointCount: 0,
+                canCreateDelivery: bCanCreateDelivery
             });
             this.getView().setModel(oViewModel, "ordersDueView");
 
@@ -59,6 +61,12 @@ sap.ui.define([
         _onRouteMatched: function () {
             if (AuthService && typeof AuthService.syncModelHeaders === "function") {
                 AuthService.syncModelHeaders(this.getOwnerComponent(), true);
+            }
+            if (AuthService && typeof AuthService.canCreateDelivery === "function") {
+                var oVm = this.getView().getModel("ordersDueView");
+                if (oVm) {
+                    oVm.setProperty("/canCreateDelivery", AuthService.canCreateDelivery());
+                }
             }
             var oTable = this.byId("ordersDueTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
@@ -165,6 +173,18 @@ sap.ui.define([
             if (!oCtx) return;
 
             var sSalesOrder = oCtx.getProperty("SalesOrder");
+            var sDelivBlock = oCtx.getProperty("DelivBlockReasonForSchedLine");
+            var sApprovalStatus = oCtx.getProperty("SalesDocApprovalStatus");
+
+            if (sApprovalStatus === "A") {
+                MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval and cannot be delivered.", [sSalesOrder]));
+                return;
+            }
+            if (sDelivBlock) {
+                MessageBox.warning(this._text("msgOrderDeliveryBlocked", "Sales Order {0} has a delivery block ({1}) and cannot be delivered.", [sSalesOrder, sDelivBlock]));
+                return;
+            }
+
             var sShippingPoint = oCtx.getProperty("ShippingPoint") || "1120";
             var sGoodsIssueDate = oCtx.getProperty("GoodsIssueDate") || this._getTodayDateString();
 
@@ -232,13 +252,26 @@ sap.ui.define([
             })
                 .then(function (sDeliveryNo) {
                     that.onCancelCreateDelivery();
-                    var sSuccessTemplate = that._text("msgDeliveryCreatedSuccess", "Delivery {0} created");
-                    var sSuccessMessage = sSuccessTemplate.replace("{0}", sDeliveryNo);
-                    MessageBox.success(sSuccessMessage, {
-                        onClose: function () {
-                            that.onRefresh();
-                        }
-                    });
+                    if (sDeliveryNo && String(sDeliveryNo).trim() !== "" && sDeliveryNo !== "Delivery created") {
+                        var sSuccessTemplate = that._text("msgDeliveryCreatedSuccess", "Delivery {0} created");
+                        var sSuccessMessage = sSuccessTemplate.replace("{0}", sDeliveryNo);
+                        MessageBox.success(sSuccessMessage, {
+                            onClose: function () {
+                                that.onRefresh();
+                            }
+                        });
+                    } else {
+                        var sWarningTemplate = that._text(
+                            "msgDeliveryCreatedNoNumberWarning",
+                            "Delivery created in SAP S/4HANA for Sales Order {0}, but no delivery number was returned. Please check transaction VL03N."
+                        );
+                        var sWarningMessage = sWarningTemplate.replace("{0}", sSalesOrder);
+                        MessageBox.warning(sWarningMessage, {
+                            onClose: function () {
+                                that.onRefresh();
+                            }
+                        });
+                    }
                 })
                 .catch(function (err) {
                     // Show SAP's own message on failure

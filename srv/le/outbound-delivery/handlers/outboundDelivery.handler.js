@@ -50,7 +50,7 @@ function registerOutboundDeliveryHandlers(srv) {
         shippingPoint: resolvedSP,
         deliveryDate: DeliveryDate
       });
-      return result.OutboundDelivery || 'Delivery created';
+      return result.OutboundDelivery || '';
     } catch (err) {
       LOG.error(`Error in createOutboundDelivery (${err.status || 500}): ${err.message}`);
       return req.error(err.status || 500, err.message);

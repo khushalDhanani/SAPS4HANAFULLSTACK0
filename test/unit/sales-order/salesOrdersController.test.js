@@ -61,9 +61,27 @@ const MockBaseController = {
         function Controller() {
             Object.assign(this, proto);
         }
-        Controller.prototype = proto;
         return Controller;
     }
+};
+
+const MockMessageBox = {
+    error: jest.fn(),
+    success: jest.fn(),
+    warning: jest.fn()
+};
+
+const MockAuthService = {
+    syncModelHeaders: jest.fn(),
+    canCreateDelivery: jest.fn().mockReturnValue(true)
+};
+
+const MockOutboundDeliveryService = {
+    getDefaultShippingPoint: jest.fn().mockResolvedValue({
+        ShippingPoint: "1120",
+        ShippingPoints: ["1120", "1112", "1108", "1109"]
+    }),
+    createOutboundDelivery: jest.fn().mockResolvedValue("13000526")
 };
 
 beforeAll(() => {
@@ -75,7 +93,11 @@ beforeAll(() => {
                     MockJSONModel,
                     MockFilter,
                     MockFilterOperator,
-                    MockFilterType
+                    MockFilterType,
+                    {}, // Fragment
+                    MockMessageBox,
+                    MockAuthService,
+                    MockOutboundDeliveryService
                 );
             }
         }
@@ -255,5 +277,51 @@ describe("SalesOrders Controller", () => {
         return controller._pCreateDeliveryDialog.then(() => {
             expect(mockDialog.close).toHaveBeenCalled();
         });
+    });
+
+    test("onConfirmCreateDelivery validates and creates outbound delivery", async () => {
+        controller.onInit();
+        const dialogModel = mockView.getModel("deliveryDialog");
+        dialogModel.setProperty("/salesOrder", "5000104");
+        dialogModel.setProperty("/shippingPoint", "1120");
+        dialogModel.setProperty("/deliveryDate", "2026-09-20");
+
+        controller.onCancelCreateDelivery = jest.fn();
+        controller.onRefresh = jest.fn();
+        controller._setDialogBusy = jest.fn();
+
+        await controller.onConfirmCreateDelivery();
+
+        expect(MockOutboundDeliveryService.createOutboundDelivery).toHaveBeenCalledWith({
+            salesOrder: "5000104",
+            shippingPoint: "1120",
+            deliveryDate: "2026-09-20"
+        });
+        expect(controller.onCancelCreateDelivery).toHaveBeenCalled();
+        expect(MockMessageBox.success).toHaveBeenCalledWith(
+            expect.stringContaining("13000526"),
+            expect.any(Object)
+        );
+    });
+
+    test("onConfirmCreateDelivery shows warning to check VL03N when no delivery number returned", async () => {
+        controller.onInit();
+        const dialogModel = mockView.getModel("deliveryDialog");
+        dialogModel.setProperty("/salesOrder", "5000104");
+        dialogModel.setProperty("/shippingPoint", "1120");
+        dialogModel.setProperty("/deliveryDate", "2026-09-20");
+
+        MockOutboundDeliveryService.createOutboundDelivery.mockResolvedValueOnce("");
+        controller.onCancelCreateDelivery = jest.fn();
+        controller.onRefresh = jest.fn();
+        controller._setDialogBusy = jest.fn();
+
+        await controller.onConfirmCreateDelivery();
+
+        expect(controller.onCancelCreateDelivery).toHaveBeenCalled();
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(
+            expect.stringContaining("VL03N"),
+            expect.any(Object)
+        );
     });
 });

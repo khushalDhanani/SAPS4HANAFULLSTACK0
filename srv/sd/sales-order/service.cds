@@ -26,6 +26,7 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         OverallSDDocumentRejectionSts,
         OverallBillingBlockStatus,
         SalesDocApprovalStatus,
+        DeliveryBlockReason,
         TotalNetAmount,
         TransactionCurrency,
         SalesOrganization,

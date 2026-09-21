@@ -64,16 +64,88 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
       const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
 
-      expect(mockClient.get).toHaveBeenCalledTimes(1);
+      expect(mockClient.get).toHaveBeenCalledTimes(2);
       const url = mockClient.get.mock.calls[0][0];
       expect(url).toContain('/C_SalesOrderDueForDeliveryVH');
       expect(url).toContain("ShippingPoint eq '1120'");
-      expect(url).toContain("DelivBlockReasonForSchedLine eq ''");
+      expect(url).not.toContain("DelivBlockReasonForSchedLine eq ''");
 
       expect(orders).toHaveLength(1);
       expect(orders[0].SalesOrder).toBe('5000104');
       expect(orders[0].DeliveryCreationDate).toBe('2025-08-14');
       expect(orders[0].ShipToParty).toBe('10082');
+    });
+
+    test('retains delivery blocked orders with their block reason', async () => {
+      mockClient.get.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              {
+                SalesOrder: '5000999',
+                SalesOrderItem: '000010',
+                ScheduleLine: '0001',
+                ShippingPoint: '1120',
+                DeliveryCreationDate: '/Date(1755129600000)/',
+                DeliveryPriority: '00',
+                Route: 'Z00001',
+                ForwardingAgent: '',
+                GoodsIssueDate: '/Date(1755129600000)/',
+                ShipToParty: '10082',
+                DelivBlockReasonForSchedLine: '01'
+              }
+            ]
+          }
+        }
+      }).mockResolvedValueOnce({
+        status: 200,
+        data: { d: { results: [] } }
+      });
+
+      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      expect(orders).toHaveLength(1);
+      expect(orders[0].SalesOrder).toBe('5000999');
+      expect(orders[0].DelivBlockReasonForSchedLine).toBe('01');
+    });
+
+    test('enriches due orders with SalesDocApprovalStatus from SD_F1873_SO_WL_SRV', async () => {
+      mockClient.get.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              {
+                SalesOrder: '5000461',
+                SalesOrderItem: '000010',
+                ScheduleLine: '0001',
+                ShippingPoint: '1120',
+                DeliveryCreationDate: '/Date(1755129600000)/',
+                DeliveryPriority: '00',
+                Route: 'Z00001',
+                ForwardingAgent: '',
+                GoodsIssueDate: '/Date(1755129600000)/',
+                ShipToParty: '10082',
+                DelivBlockReasonForSchedLine: ''
+              }
+            ]
+          }
+        }
+      }).mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              { SalesOrder: '5000461', SalesDocApprovalStatus: 'A' }
+            ]
+          }
+        }
+      });
+
+      const orders = await adapter.getOrdersDueForDelivery({ salesOrder: '5000461' });
+      expect(orders).toHaveLength(1);
+      expect(orders[0].SalesOrder).toBe('5000461');
+      expect(orders[0].SalesDocApprovalStatus).toBe('A');
     });
 
     test('escapes embedded quotes in filters using odataString', async () => {
@@ -95,6 +167,25 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       } else {
         expect(url).toContain(`ShippingPoint eq '${configuredSPs[0]}'`);
       }
+    });
+
+    test('does not append $top or $skip for CAP requests so applyPaging manages pagination', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+
+      const capReq = {
+        query: {
+          SELECT: {
+            limit: { rows: { val: 50 }, offset: { val: 50 } },
+            where: [{ ref: ['ShippingPoint'] }, '=', { val: '1120' }]
+          }
+        }
+      };
+
+      await adapter.getOrdersDueForDelivery(capReq);
+      const url = mockClient.get.mock.calls[0][0];
+      expect(url).not.toContain('$top=');
+      expect(url).not.toContain('$skip=');
+      expect(url).toContain("ShippingPoint eq '1120'");
     });
 
     test('propagates mapped S/4 error when Gateway request fails', async () => {
