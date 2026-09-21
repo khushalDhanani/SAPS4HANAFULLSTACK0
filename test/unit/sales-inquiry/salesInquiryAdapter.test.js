@@ -215,7 +215,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(condCall[1].data.AmountInternal).toBe('250.00');
     });
 
-    test('should fallback PurchaseOrderByCustomer to first item text if reference is empty', async () => {
+    test('should leave PurchaseOrderNumber empty if reference is empty instead of inventing customer reference', async () => {
         const header = {
             SalesInquiryType: 'ZIN',
             SoldToParty: '10135',
@@ -248,7 +248,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
         expect(created.SalesInquiry).toBe('1000523');
         const headerCall = mockExecuteHttpRequest.mock.calls[0];
-        expect(headerCall[1].data.PurchaseOrderNumber).toBe('High Grade Chemical Reagent');
+        expect(headerCall[1].data.PurchaseOrderNumber).toBe('');
     });
 
     test('should propagate SAP S/4HANA backend error message when creation fails', async () => {

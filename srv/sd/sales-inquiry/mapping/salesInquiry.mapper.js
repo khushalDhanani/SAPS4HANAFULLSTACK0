@@ -56,11 +56,8 @@ function normalizeSalesDocumentData(data, options = {}) {
         };
     });
 
-    const firstItemDesc = normalizedItems.length > 0 && (normalizedItems[0].SalesOrderItemText || normalizedItems[0].SalesInquiryItemText)
-        ? (normalizedItems[0].SalesOrderItemText || normalizedItems[0].SalesInquiryItemText)
-        : '';
     const poRef = rawHeader.PurchaseOrderNumber || rawHeader.PurchaseOrderByCustomer;
-    const description = poRef ? String(poRef).trim() : firstItemDesc;
+    const description = poRef ? String(poRef).trim() : '';
 
     const isOrder = Boolean(rawHeader.SalesOrderType || options.isOrder);
     const docType = isOrder

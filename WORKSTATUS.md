@@ -2089,21 +2089,46 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit the date default elimination to `feature/CL01`.
 
+### 2026-09-21: Audit Finding A — Elimination of Invented Customer Reference Defaults ('SALES ORDER' / 'SALES INQUIRY' / First Item Text)
+- **Problem**: Audit flagged that customer reference defaulted to the first item's text, or `'SALES ORDER'` / `'SALES INQUIRY'` (`SalesInquiryAdapter.js` line 1052 and `salesInquiry.mapper.js` line 63), storing an invented dummy PO reference in SAP S/4HANA when left blank by the customer.
+- **Changes Applied**:
+  1. `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`:
+     - Removed `firstItemText` and fallback to `(docType === 'ZIN' ? 'SALES INQUIRY' : 'SALES ORDER')`.
+     - `custRef` now strictly resolves to `header.PurchaseOrderNumber || header.PurchaseOrderByCustomer` (trimmed) or empty string `''`.
+     - In both Sales Order deep insert and Sales Inquiry header creation, `PurchaseOrderNumber` sends authentic user reference or `''` if omitted.
+  2. `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`:
+     - Removed `firstItemDesc` fallback from item text.
+     - `description` now resolves strictly to `rawHeader.PurchaseOrderNumber || rawHeader.PurchaseOrderByCustomer` (trimmed) or empty string `''`.
+     - `PurchaseOrderByCustomer` and `PurchaseOrderNumber` are no longer contaminated with item descriptions when omitted.
+  3. `test/unit/sales-inquiry/salesInquiryAdapter.test.js`:
+     - Updated test to assert `PurchaseOrderNumber` remains empty string `''` when customer reference is omitted, rather than defaulting to item text.
+  4. `test/unit/sales-inquiry/salesInquiryMapping.test.js`:
+     - Updated test to assert `PurchaseOrderByCustomer` and `PurchaseOrderNumber` remain empty strings when omitted, rather than taking item text.
+  5. `test/unit/sales-order/salesOrderAdapter.test.js`:
+     - Added test asserting `PurchaseOrderNumber` in sales order deep insert payload remains empty string `''` when reference is omitted, never defaulting to item text or `'SALES ORDER'`.
+- **Executed Commands and Results**:
+  - `npx jest test/unit/sales-inquiry/salesInquiryAdapter.test.js test/unit/sales-inquiry/salesInquiryMapping.test.js test/unit/sales-order/salesOrderAdapter.test.js`: **3 passed, 3 total test suites; 50 passed, 50 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/ test/unit/sales-order/ test/unit/purchase-order/ test/unit/wm/`: **37 passed, 37 total test suites; 550 passed, 550 total tests (100% green)**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit customer reference default elimination to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 549 tests 100% green)**.
+- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 550 tests 100% green)**.
 - **Security & Data Integrity Hardening (Audit Finding A)**:
   - **Zero Default Units**: Removed all hardcoded `'PC'` and `'KG'` fallbacks across Sales Inquiry, Sales Order, Purchase Order, Goods Receipt, and Goods Issue. All interfaces strictly require authentic units from SAP master data or reject invalid requests with descriptive errors.
   - **Zero Default Quantities**: Removed all `|| 1` fallbacks in `SalesInquiryAdapter.js` and `purchaseOrder.mapper.js`. Blank, non-numeric, zero, or negative quantities throw explicit validation errors upfront before SAP document creation.
   - **Zero Default Item Numbers**: Removed all 13 `'000010'` and `'00010'` defaults in `GoodsReceiptAdapter.js`. Replaced synthetic item numbering with strict validation requiring authentic SAP item numbers.
   - **Zero Default Reason Codes**: Removed `'0000'` fallback for `GoodsMovementReasonCode` in `GoodsReceiptAdapter.js`. Standard movements post with authentic reason or empty string.
   - **Zero Default Dates**: Removed manufactured `today`, `today + 7 days`, and `today + 30 days` fallbacks across `salesInquiry.mapper.js` and `SalesInquiryMapper.js`. Customer PO date, document date, validity periods, and requested delivery dates preserve authentic user inputs or remain empty string when omitted.
+  - **Zero Default Customer References**: Removed fallback to first item text and `'SALES ORDER'` / `'SALES INQUIRY'` across `SalesInquiryAdapter.js` and `salesInquiry.mapper.js`. Customer PO reference remains empty string when omitted.
   - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
   - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
-- **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
+  - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
 
 ## Next Steps
 1. Review eliminated invented value defaults with user.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.
-

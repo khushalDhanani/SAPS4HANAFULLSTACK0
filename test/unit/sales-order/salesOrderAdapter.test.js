@@ -89,6 +89,46 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(payload.ItemSet[0].PriceCondSet[0].RateUnitExternal).toBe('INR');
         });
 
+        test('leaves PurchaseOrderNumber empty when omitted instead of defaulting to item text or SALES ORDER', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000461',
+                        NetValue: '500.00',
+                        Currency: 'INR'
+                    }
+                }
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SoldToParty: '10135',
+                PurchaseOrderNumber: '',
+                PurchaseOrderByCustomer: ''
+            };
+
+            const items = [
+                {
+                    SalesOrderItem: '000010',
+                    Material: '4000000123',
+                    SalesOrderItemText: 'Some Material Text',
+                    OrderQuantity: 2,
+                    OrderQuantityUnit: 'PC',
+                    NetPriceAmount: 250.00
+                }
+            ];
+
+            const result = await adapter.createSalesOrder(header, items, {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000461');
+            const callConfig = mockExecute.mock.calls[0][1];
+            expect(callConfig.data.PurchaseOrderNumber).toBe('');
+        });
+
         test('propagates SAP error message when Deep Insert fails', async () => {
             const mockExecute = jest.fn().mockRejectedValue({
                 response: {

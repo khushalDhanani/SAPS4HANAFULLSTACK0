@@ -170,7 +170,7 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.items[0].TransactionCurrency).toBe('INR');
         });
 
-        test('should preserve CustomerName and ShipToPartyName and fallback description from item text', () => {
+        test('should preserve CustomerName and ShipToPartyName and leave customer reference empty when omitted', () => {
             const raw = {
                 header: {
                     SoldToParty: '10135',
@@ -184,6 +184,7 @@ describe('Unit: Sales Inquiry Mapping', () => {
                         Material: '4000000091',
                         SalesInquiryItemText: 'Industrial Grade Chemical Inquiry',
                         OrderQuantity: 10,
+                        OrderQuantityUnit: 'PC',
                         NetPriceAmount: 100
                     }
                 ]
@@ -192,7 +193,8 @@ describe('Unit: Sales Inquiry Mapping', () => {
             const result = normalizeSalesInquiryData(raw);
             expect(result.header.CustomerName).toBe("Divi's Laboratories Limited");
             expect(result.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
-            expect(result.header.PurchaseOrderByCustomer).toBe('Industrial Grade Chemical Inquiry');
+            expect(result.header.PurchaseOrderByCustomer).toBe('');
+            expect(result.header.PurchaseOrderNumber).toBe('');
         });
 
         test('should throw error if header is null or missing', () => {

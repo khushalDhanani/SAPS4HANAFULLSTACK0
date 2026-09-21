@@ -1049,8 +1049,9 @@ class SalesInquiryAdapter {
     const servicePath = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
     const executeFn = options.executeHttpRequest || this.client._execute;
 
-    const firstItemText = (items && items[0] && (items[0].SalesOrderItemText || items[0].SalesInquiryItemText || items[0].MaterialName)) || '';
-    const custRef = header.PurchaseOrderNumber || header.PurchaseOrderByCustomer || firstItemText || (docType === 'ZIN' ? 'SALES INQUIRY' : 'SALES ORDER');
+    const custRef = (header.PurchaseOrderNumber || header.PurchaseOrderByCustomer)
+      ? String(header.PurchaseOrderNumber || header.PurchaseOrderByCustomer).trim()
+      : '';
     const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || s4Config.getInquiryType()).trim();
     const isOrder = effectiveDocType !== 'ZIN';
 
