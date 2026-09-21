@@ -489,6 +489,14 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
     });
 
     describe("Submission & Save Flow", () => {
+        function setupValidHeader(m) {
+            m.setProperty("/header/SalesInquiryType", "ZIN");
+            m.setProperty("/header/SalesOrganization", "1000");
+            m.setProperty("/header/DistributionChannel", "10");
+            m.setProperty("/header/OrganizationDivision", "52");
+            m.setProperty("/header/TransactionCurrency", "INR");
+        }
+
         it("onSave blocks when incomplete and opens message popover", () => {
             mockModel.setProperty("/header/SoldToParty", "");
             const popoverSpy = jest.spyOn(controller, "onMessageButtonPress");
@@ -498,6 +506,7 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
         });
 
         it("onSave blocks when item Plant is empty and highlights Plant with error state", () => {
+            setupValidHeader(mockModel);
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
@@ -515,6 +524,7 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
         });
 
         it("onSave dispatches payload and presents success dialog with Create Another option", async () => {
+            setupValidHeader(mockModel);
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
@@ -546,6 +556,7 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
         });
 
         it("onSave handles backend rejection gracefully", async () => {
+            setupValidHeader(mockModel);
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
@@ -565,6 +576,7 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
         });
 
         it("onSave handles partial backend creation with warning and navigation to detail", async () => {
+            setupValidHeader(mockModel);
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);

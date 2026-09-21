@@ -90,6 +90,16 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
     expect(res.ShippingPoints).toContain('1120');
   });
 
+  it('returns empty shipping point and points array when backend returns null or rejects', async () => {
+    mockODataClient.get.mockResolvedValueOnce(null);
+    const res = await FrontendOutboundDeliveryService.getDefaultShippingPoint();
+    expect(res).toEqual({ ShippingPoint: '', ShippingPoints: [] });
+
+    mockODataClient.get.mockRejectedValueOnce(new Error('Network error'));
+    const resCatch = await FrontendOutboundDeliveryService.getDefaultShippingPoint();
+    expect(resCatch).toEqual({ ShippingPoint: '', ShippingPoints: [] });
+  });
+
   it('rejects createOutboundDelivery when salesOrder is missing', async () => {
     await expect(FrontendOutboundDeliveryService.createOutboundDelivery({}))
       .rejects.toThrow('Sales Order is required');

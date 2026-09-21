@@ -55,14 +55,9 @@ sap.ui.define([
 
             var oDialogModel = new JSONModel({
                 salesOrder: "",
-                shippingPoint: "1120",
+                shippingPoint: "",
                 deliveryDate: this._getTodayDateString(),
-                shippingPoints: [
-                    { key: "1120", text: "1120 - 1130-FG Loading Area" },
-                    { key: "1112", text: "1112 - Shipping Point 1112" },
-                    { key: "1108", text: "1108 - Shipping Point 1108" },
-                    { key: "1109", text: "1109 - Shipping Point 1109" }
-                ]
+                shippingPoints: []
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
             this._loadShippingPoints();
@@ -179,13 +174,16 @@ sap.ui.define([
             }
             OutboundDeliveryService.getDefaultShippingPoint()
                 .then(function (result) {
-                    var aPoints = (result && result.ShippingPoints) || ["1120", "1112", "1108", "1109"];
+                    var aPoints = (result && result.ShippingPoints) || [];
                     var aFormatted = aPoints.map(function (sPt) {
                         return { key: sPt, text: sPt };
                     });
                     var oDialogModel = that.getView().getModel("deliveryDialog");
                     if (oDialogModel) {
                         oDialogModel.setProperty("/shippingPoints", aFormatted);
+                        if (result && result.ShippingPoint) {
+                            oDialogModel.setProperty("/shippingPoint", result.ShippingPoint);
+                        }
                     }
                 })
                 .catch(function () {});
@@ -217,9 +215,12 @@ sap.ui.define([
             }
 
             var oDialogModel = this.getView().getModel("deliveryDialog");
-            oDialogModel.setProperty("/salesOrder", sSalesOrder);
-            oDialogModel.setProperty("/shippingPoint", "1120");
-            oDialogModel.setProperty("/deliveryDate", this._getTodayDateString());
+            var sShippingPoint = oCtx.getProperty("ShippingPoint") || (oDialogModel && oDialogModel.getProperty("/shippingPoint")) || "";
+            if (oDialogModel) {
+                oDialogModel.setProperty("/salesOrder", sSalesOrder);
+                oDialogModel.setProperty("/shippingPoint", sShippingPoint);
+                oDialogModel.setProperty("/deliveryDate", this._getTodayDateString());
+            }
 
             this._openCreateDeliveryDialog();
         },

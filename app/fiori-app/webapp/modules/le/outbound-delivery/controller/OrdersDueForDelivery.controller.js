@@ -44,9 +44,9 @@ sap.ui.define([
 
             var oDialogModel = new JSONModel({
                 salesOrder: "",
-                shippingPoint: "1120",
+                shippingPoint: "",
                 deliveryDate: this._getTodayDateString(),
-                shippingPoints: DEFAULT_SHIPPING_POINTS
+                shippingPoints: []
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
 
@@ -94,7 +94,7 @@ sap.ui.define([
             }
             OutboundDeliveryService.getDefaultShippingPoint()
                 .then(function (result) {
-                    var aPoints = (result && result.ShippingPoints) || ["1120", "1112", "1108", "1109"];
+                    var aPoints = (result && result.ShippingPoints) || [];
                     var aFormatted = aPoints.map(function (sPt) {
                         var oFound = DEFAULT_SHIPPING_POINTS.find(function (p) { return p.key === sPt; });
                         return oFound || { key: sPt, text: sPt };
@@ -102,6 +102,9 @@ sap.ui.define([
                     var oDialogModel = that.getView().getModel("deliveryDialog");
                     if (oDialogModel) {
                         oDialogModel.setProperty("/shippingPoints", aFormatted);
+                        if (result && result.ShippingPoint) {
+                            oDialogModel.setProperty("/shippingPoint", result.ShippingPoint);
+                        }
                     }
                 })
                 .catch(function () {
@@ -193,13 +196,15 @@ sap.ui.define([
                 return;
             }
 
-            var sShippingPoint = oCtx.getProperty("ShippingPoint") || "1120";
+            var oDialogModel = this.getView().getModel("deliveryDialog");
+            var sShippingPoint = oCtx.getProperty("ShippingPoint") || (oDialogModel && oDialogModel.getProperty("/shippingPoint")) || "";
             var sGoodsIssueDate = oCtx.getProperty("GoodsIssueDate") || this._getTodayDateString();
 
-            var oDialogModel = this.getView().getModel("deliveryDialog");
-            oDialogModel.setProperty("/salesOrder", sSalesOrder);
-            oDialogModel.setProperty("/shippingPoint", sShippingPoint);
-            oDialogModel.setProperty("/deliveryDate", sGoodsIssueDate);
+            if (oDialogModel) {
+                oDialogModel.setProperty("/salesOrder", sSalesOrder);
+                oDialogModel.setProperty("/shippingPoint", sShippingPoint);
+                oDialogModel.setProperty("/deliveryDate", sGoodsIssueDate);
+            }
 
             this._openCreateDeliveryDialog();
         },

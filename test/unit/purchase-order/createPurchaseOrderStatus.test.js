@@ -272,6 +272,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             oModel.setProperty('/items/0/Plant', '1010');
             oModel.setProperty('/items/0/StorageLocation', '101A');
             oModel.setProperty('/items/0/OrderQuantity', '2');
+            oModel.setProperty('/items/0/UnitOfMeasure', 'PC');
 
             PurchaseOrderModel.updateStatus(oModel);
 

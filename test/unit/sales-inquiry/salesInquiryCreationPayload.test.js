@@ -142,4 +142,28 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         expect(s4Payload.header.CustomerCity).toBeUndefined();
         expect(s4Payload.items[0].OrderQuantity).toBe('1.000');
     });
+
+    test('SalesInquiryService.getCustomerDefaults should return empty currency and ship-to on empty or failed lookup', async () => {
+        const emptyRes = await SalesInquiryService.getCustomerDefaults('');
+        expect(emptyRes.Currency).toBe('');
+        expect(emptyRes.ShipToParty).toBe('');
+        expect(emptyRes.derived).toBe(false);
+
+        mockODataClient.get.mockRejectedValueOnce(new Error('Network error'));
+        const failRes = await SalesInquiryService.getCustomerDefaults('10135');
+        expect(failRes.Currency).toBe('');
+        expect(failRes.ShipToParty).toBe('');
+        expect(failRes.derived).toBe(false);
+    });
+
+    test('SalesInquiryService.getSalesInquiryDefaults should return empty org and currency values on failure', async () => {
+        mockODataClient.get.mockRejectedValueOnce(new Error('Backend error'));
+        const defaults = await SalesInquiryService.getSalesInquiryDefaults();
+        expect(defaults.SalesInquiryType).toBe('');
+        expect(defaults.SalesOrganization).toBe('');
+        expect(defaults.DistributionChannel).toBe('');
+        expect(defaults.OrganizationDivision).toBe('');
+        expect(defaults.TransactionCurrency).toBe('');
+        expect(defaults.derived).toBe(false);
+    });
 });

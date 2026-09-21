@@ -298,7 +298,7 @@ sap.ui.define([
                     CustomerName: "",
                     City: "",
                     Country: "",
-                    Currency: "INR",
+                    Currency: "",
                     ShipToParty: "",
                     ShipToPartyName: "",
                     derived: false
@@ -317,8 +317,8 @@ sap.ui.define([
                     CustomerName: "",
                     City: "",
                     Country: "",
-                    Currency: "INR",
-                    ShipToParty: sCustomer,
+                    Currency: "",
+                    ShipToParty: "",
                     ShipToPartyName: "",
                     derived: false
                 };
@@ -328,8 +328,8 @@ sap.ui.define([
                     CustomerName: "",
                     City: "",
                     Country: "",
-                    Currency: "INR",
-                    ShipToParty: sCustomer,
+                    Currency: "",
+                    ShipToParty: "",
                     ShipToPartyName: "",
                     derived: false
                 };
@@ -361,15 +361,15 @@ sap.ui.define([
                 var today = new Date().toISOString().split("T")[0];
                 var validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
                 return {
-                    SalesInquiryType: "ZIN",
-                    SalesOrganization: "1000",
-                    DistributionChannel: "10",
-                    OrganizationDivision: "52",
+                    SalesInquiryType: "",
+                    SalesOrganization: "",
+                    DistributionChannel: "",
+                    OrganizationDivision: "",
                     SalesInquiryDate: today,
                     BindingPeriodValidityStartDate: today,
                     BindingPeriodValidityEndDate: validityEnd,
-                    TransactionCurrency: "INR",
-                    derived: true
+                    TransactionCurrency: "",
+                    derived: false
                 };
             });
         },

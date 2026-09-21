@@ -64,10 +64,10 @@ sap.ui.define([
 
             return new JSONModel({
                 header: {
-                    SalesInquiryType: "ZIN",
-                    SalesOrganization: "1000",
-                    DistributionChannel: "10",
-                    OrganizationDivision: "52",
+                    SalesInquiryType: "",
+                    SalesOrganization: "",
+                    DistributionChannel: "",
+                    OrganizationDivision: "",
                     SoldToParty: "",
                     CustomerName: "",
                     CustomerCity: "",
@@ -79,7 +79,7 @@ sap.ui.define([
                     SalesInquiryDate: today,
                     BindingPeriodValidityStartDate: today,
                     BindingPeriodValidityEndDate: validityEnd,
-                    TransactionCurrency: "INR",
+                    TransactionCurrency: "",
                     TotalNetAmount: "0.00",
                     CustomerGroup2: "",
                     PortOfLoading: "",
@@ -95,8 +95,8 @@ sap.ui.define([
                         SalesInquiryItem: "000010",
                         Material: "",
                         SalesInquiryItemText: "",
-                        OrderQuantity: 1,
-                        OrderQuantityUnit: "PC",
+                        OrderQuantity: "",
+                        OrderQuantityUnit: "",
                         Plant: "",
                         NetPriceAmount: "",
                         NetAmount: "0.00",
@@ -267,8 +267,8 @@ sap.ui.define([
                 SalesInquiryItem: sItemNum,
                 Material: "",
                 SalesInquiryItemText: "",
-                OrderQuantity: 1,
-                OrderQuantityUnit: "PC",
+                OrderQuantity: "",
+                OrderQuantityUnit: "",
                 Plant: "",
                 NetPriceAmount: "",
                 NetAmount: "0.00",
@@ -610,17 +610,17 @@ sap.ui.define([
             var aItems = oModel.getProperty("/items") || [];
 
             var oCleanHeader = {
-                SalesInquiryType: oHeader.SalesInquiryType ? String(oHeader.SalesInquiryType).trim() : "ZIN",
-                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "1000",
-                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "10",
-                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "52",
+                SalesInquiryType: oHeader.SalesInquiryType ? String(oHeader.SalesInquiryType).trim() : "",
+                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "",
+                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "",
+                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "",
                 SoldToParty: oHeader.SoldToParty ? String(oHeader.SoldToParty).trim() : "",
                 PurchaseOrderByCustomer: oHeader.PurchaseOrderByCustomer ? String(oHeader.PurchaseOrderByCustomer).trim() : "",
                 CustomerPurchaseOrderDate: oHeader.CustomerPurchaseOrderDate || null,
                 SalesInquiryDate: oHeader.SalesInquiryDate || null,
                 BindingPeriodValidityStartDate: oHeader.BindingPeriodValidityStartDate || null,
                 BindingPeriodValidityEndDate: oHeader.BindingPeriodValidityEndDate || null,
-                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "INR",
+                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "",
                 TotalNetAmount: oHeader.TotalNetAmount !== undefined && oHeader.TotalNetAmount !== null ? Number(oHeader.TotalNetAmount) : 0
             };
 
@@ -646,7 +646,7 @@ sap.ui.define([
                     Material: item.Material ? String(item.Material).trim() : "",
                     SalesInquiryItemText: item.SalesInquiryItemText ? String(item.SalesInquiryItemText).trim() : "",
                     OrderQuantity: parseFloat(item.OrderQuantity) || 0,
-                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "PC",
+                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "",
                     NetAmount: parseFloat(item.NetAmount) || 0,
                     TransactionCurrency: oCleanHeader.TransactionCurrency
                 };

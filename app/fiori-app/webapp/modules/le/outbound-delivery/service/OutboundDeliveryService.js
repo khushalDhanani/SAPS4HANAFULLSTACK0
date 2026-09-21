@@ -123,7 +123,16 @@ sap.ui.define([
          */
         getDefaultShippingPoint: function () {
             return ODataClient.get(SERVICE_BASE + "/getDefaultShippingPoint()").then(function (result) {
-                return (result && result.value) || result || { ShippingPoint: "1120", ShippingPoints: ["1120", "1112", "1108", "1109"] };
+                var oData = (result && result.value) || result;
+                if (!oData || typeof oData !== "object") {
+                    return { ShippingPoint: "", ShippingPoints: [] };
+                }
+                return {
+                    ShippingPoint: oData.ShippingPoint || "",
+                    ShippingPoints: Array.isArray(oData.ShippingPoints) ? oData.ShippingPoints : []
+                };
+            }).catch(function () {
+                return { ShippingPoint: "", ShippingPoints: [] };
             });
         },
 
@@ -132,7 +141,7 @@ sap.ui.define([
          *
          * @param {Object} mParams
          * @param {string} mParams.salesOrder Reference sales order document number
-         * @param {string} [mParams.shippingPoint] Shipping point (defaults to 1120 if omitted)
+         * @param {string} [mParams.shippingPoint] Shipping point
          * @param {string} [mParams.deliveryDate] Delivery date (YYYY-MM-DD)
          * @returns {Promise<string>} Created Outbound Delivery document number
          */
