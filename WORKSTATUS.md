@@ -2416,6 +2416,20 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 — Eliminate Derived Item Net Price in Sales Inquiry Detail (Audit Item 17)
+- **Change**: Eliminated synthetic `NetPriceAmount` calculation (`NetAmount / OrderQuantity`, else `'0.00'`) in `SalesInquiryAdapter.js` (`getInquiry`). Previously, when SAP S/4HANA sent no `NetPriceAmount` on the line items, the adapter divided net amount by quantity or defaulted to `'0.00'`.
+  1. **Backend Integration**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Removed `qty > 0 ? (net / qty).toFixed(2) : '0.00'`. Leaves `NetPriceAmount` blank (`''`) when SAP sends no net price.
+  2. **Unit Tests**:
+     - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Updated assertion in `getInquiry fetches WL header, FS header, and FS items concurrently` to assert `items[0].NetPriceAmount === ''` when SAP returns no net price on line items.
+     - `docs/data-lineage-audit.md`: Marked audit item 17 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx eslint srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **0 errors, 0 warnings (100% clean)**.
+  - `npx jest test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **28 passed, 28 total (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
@@ -2426,7 +2440,8 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
-- **Sales Inquiry Authentic Data Lineage (Audit Rows 15 & 16)**:
+- **Sales Inquiry Authentic Data Lineage (Audit Rows 15, 16 & 17)**:
+  - Item net price left blank (`''`) when SAP sends none; synthetic `NetAmount / Qty` division and `'0.00'` fallback eliminated.
   - Sales Office and Sales Group show strictly what SAP holds; no borrowing from other customer inquiries or value help defaults.
   - Ship-to party remains blank (`'-'`) when SAP partner read returns no 'WE' partner, eliminating Sold-to party substitution.
 - **Goods Issue Packaging Units (Audit Row 42)**:

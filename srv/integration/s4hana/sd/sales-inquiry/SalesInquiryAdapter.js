@@ -593,9 +593,9 @@ class SalesInquiryAdapter {
     const itemRes = fsItemsResult.status === 'fulfilled' ? fsItemsResult.value : [];
     const rawItems = Array.isArray(itemRes) ? itemRes : (itemRes?.value || itemRes?.d?.results || []);
     items = rawItems.map(item => {
-      const qty = Number(item.OrderQuantity) || 0;
-      const net = Number(item.NetAmount) || 0;
-      const price = item.NetPriceAmount || (qty > 0 ? (net / qty).toFixed(2) : '0.00');
+      const price = (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && item.NetPriceAmount !== '')
+        ? String(item.NetPriceAmount)
+        : '';
       return {
         ...item,
         NetPriceAmount: price

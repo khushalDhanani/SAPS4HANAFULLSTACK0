@@ -709,7 +709,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(result.header.SalesOfficeName).toBe('Surat Office');
         expect(result.header.SalesGroupName).toBe('Surat Group');
         expect(result.items).toHaveLength(1);
-        expect(result.items[0].NetPriceAmount).toBe('50.00');
+        expect(result.items[0].NetPriceAmount).toBe('');
 
         // Reading a second inquiry with the same SalesOffice & SalesGroup should hit the VH caches
         const vhCallsBefore = adapter.s4hanaWL.run.mock.calls.filter(c =>
