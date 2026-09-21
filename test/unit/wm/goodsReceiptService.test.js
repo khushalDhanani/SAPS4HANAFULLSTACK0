@@ -18,7 +18,9 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 10
+                Quantity: 10,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow('Storage Unit / Inbound Delivery is required to post Goods Receipt.');
         });
 
@@ -27,7 +29,9 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 StorageUnit: '180000001',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 10
+                Quantity: 10,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow('Material is required to post Goods Receipt.');
         });
 
@@ -36,14 +40,18 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 StorageUnit: '180000001',
                 Material: '1000000045',
                 StorageLocation: 'CS01',
-                Quantity: 10
+                Quantity: 10,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow('Plant is required to post Goods Receipt.');
 
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 Material: '1000000045',
                 Plant: '1120',
-                Quantity: 10
+                Quantity: 10,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow('Storage Location is required to post Goods Receipt.');
         });
 
@@ -53,7 +61,9 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 0
+                Quantity: 0,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow('Quantity must be a positive number.');
 
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
@@ -61,8 +71,22 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: -5
+                Quantity: -5,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow('Quantity must be a positive number.');
+        });
+
+        it('should reject postGoodsReceipt when DeliveryDocumentItem and PurchaseOrderItem are missing', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 10,
+                Unit: 'KG'
+            })).rejects.toThrow('Delivery Document Item (or Purchase Order Item) is required to post Goods Receipt.');
         });
 
         it('should block goods receipt with hard-stop when batch is expired', async () => {
@@ -73,7 +97,9 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 StorageLocation: 'CS01',
                 Batch: 'EXPIRED_B1',
                 ExpiryDate: '2020-01-01',
-                Quantity: 10
+                Quantity: 10,
+                DeliveryDocumentItem: '000010',
+                Unit: 'KG'
             })).rejects.toThrow(/Expired Batch Blocked/);
         });
     });
@@ -311,6 +337,19 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(poDetails.Supplier).toBe('101245');
         });
 
+        it('should preserve empty item numbers when SAP does not return them during resolveStorageUnit', async () => {
+            jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce([{
+                DeliveryDocument: '180000099',
+                Material: '1000000045',
+                Plant: '1120',
+                BaseUnit: 'KG'
+            }]);
+
+            const suDetails = await GoodsReceiptAdapter.resolveStorageUnit('180000099');
+            expect(suDetails.DeliveryDocumentItem).toBe('');
+            expect(suDetails.PurchaseOrderItem).toBe('');
+        });
+
         it('should fetch a CSRF token and session cookie from MMIM_GR4PO_DL_SRV through the shared S/4 client, without caching them on the adapter', async () => {
             const session = await GoodsReceiptAdapter.client.fetchCsrfSession(GoodsReceiptAdapter.constructor.CSRF_FETCH_PATH);
             expect(session.token).toBeTruthy();
@@ -328,6 +367,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
@@ -341,6 +381,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
@@ -412,6 +453,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const result = await GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
@@ -436,6 +478,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const result = await GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '400000011',
                 PurchaseOrder: '400000011',
+                PurchaseOrderItem: '00010',
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
@@ -480,6 +523,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
@@ -500,6 +544,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             await expect(GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000001',
                 DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
@@ -527,6 +572,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const result = await GoodsReceiptAdapter.postGoodsReceipt({
                 StorageUnit: '180000006',
                 DeliveryDocument: '180000006',
+                DeliveryDocumentItem: '000010',
                 Material: '1000000562',
                 Plant: '1120',
                 StorageLocation: 'CS01',

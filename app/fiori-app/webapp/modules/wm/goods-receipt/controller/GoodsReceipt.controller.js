@@ -409,6 +409,10 @@ sap.ui.define([
                             var oPayload = {
                                 StorageUnit: oActive.StorageUnit,
                                 DeliveryDocument: oActive.DeliveryDocument,
+                                DeliveryDocumentItem: oActive.DeliveryDocumentItem,
+                                PurchaseOrder: oActive.PurchaseOrder,
+                                PurchaseOrderItem: oActive.PurchaseOrderItem,
+                                Unit: oActive.Unit,
                                 Material: oActive.Material,
                                 Plant: oActive.Plant,
                                 StorageLocation: oActive.StorageLocation,

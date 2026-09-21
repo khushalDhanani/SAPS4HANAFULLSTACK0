@@ -2029,18 +2029,42 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Review with user and commit fixes for Audit Finding A.
 
+### 2026-09-21: Audit Finding A — Elimination of Invented Item Numbers (Default to '000010' / '00010') in GoodsReceiptAdapter.js
+- **Problem**: Audit flagged that item numbers defaulted to `'000010'` / `'00010'` across 13 places in `GoodsReceiptAdapter.js`, allowing a goods receipt to post against item 10 when SAP did not return the real item.
+- **Changes Applied**:
+  1. `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`:
+     - In `resolveStorageUnit`: Initialized `resolvedDeliveryItem = ''` and `resolvedPOItem = ''` (previously `'000010'` and `'00010'`).
+     - Removed all 12 `|| '000010'` and `|| '00010'` fallback defaults across Tier 1 (Inbound Delivery), Tier 2 (PO), Tier 3 (Batch), Tier 4 (Material), and Tier 6 (Storage Unit broad match). Only preserves authentic SAP-returned item numbers.
+     - In `postGoodsReceipt`: Validates that `DeliveryDocumentItem` or `PurchaseOrderItem` is non-empty before posting. Throws descriptive error `Delivery Document Item (or Purchase Order Item) is required to post Goods Receipt.` instead of defaulting to `'000010'`.
+     - In `payload.Items` multi-item mapping: Validates that each item has a valid `DeliveryDocumentItem` or `PurchaseOrderItem`. Removed synthetic `String((idx + 1) * 10).padStart(6, '0')` generation.
+  2. `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`:
+     - Added `DeliveryDocumentItem: oActive.DeliveryDocumentItem`, `PurchaseOrder: oActive.PurchaseOrder`, `PurchaseOrderItem: oActive.PurchaseOrderItem`, and `Unit: oActive.Unit` to `oPayload` in `onPostGoodsReceipt` so authentic SAP-resolved document items and units are always forwarded to the backend.
+  3. `test/unit/wm/goodsReceiptService.test.js`:
+     - Added test asserting `postGoodsReceipt` rejects when `DeliveryDocumentItem` and `PurchaseOrderItem` are missing.
+     - Added test asserting `resolveStorageUnit` preserves empty item numbers when SAP does not return item numbers.
+     - Updated mock tests to supply authentic line item identifiers.
+- **Executed Commands and Results**:
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 195 passed, 195 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/ test/unit/sales-inquiry/ test/unit/sales-order/ test/unit/journal-entry/ test/unit/outbound-delivery/`: **30 passed, 30 total test suites; 348 passed, 348 total tests (100% green)**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Review with user and commit fixes for Audit Finding A item numbers.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **All targeted suites in PO, SD, and WM pass (32 test suites, 492 tests 100% green)**.
+- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 543 tests 100% green)**.
 - **Security & Data Integrity Hardening (Audit Finding A)**:
   - **Zero Default Units**: Removed all hardcoded `'PC'` and `'KG'` fallbacks across Sales Inquiry, Sales Order, Purchase Order, Goods Receipt, and Goods Issue. All interfaces strictly require authentic units from SAP master data or reject invalid requests with descriptive errors.
   - **Zero Default Quantities**: Removed all `|| 1` fallbacks in `SalesInquiryAdapter.js` and `purchaseOrder.mapper.js`. Blank, non-numeric, zero, or negative quantities throw explicit validation errors upfront before SAP document creation.
+  - **Zero Default Item Numbers**: Removed all 13 `'000010'` and `'00010'` defaults in `GoodsReceiptAdapter.js`. Replaced synthetic item numbering with strict validation requiring authentic SAP item numbers.
   - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
   - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
 - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
 
 ## Next Steps
-1. Review eliminated invented value defaults with user.
+1. Review eliminated invented item number defaults with user.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.
+
 

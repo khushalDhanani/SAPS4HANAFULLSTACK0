@@ -276,9 +276,9 @@ class GoodsReceiptAdapter {
     let scannedType = '';
     let scannedTypeLabel = '';
     let resolvedDelivery = '';
-    let resolvedDeliveryItem = '000010';
+    let resolvedDeliveryItem = '';
     let resolvedPO = '';
-    let resolvedPOItem = '00010';
+    let resolvedPOItem = '';
     let resolvedMaterial = '';
     let resolvedMaterialName = '';
     let resolvedPlant = '';
@@ -305,9 +305,9 @@ class GoodsReceiptAdapter {
         scannedType = 'INBOUND_DELIVERY';
         scannedTypeLabel = 'Inbound Delivery';
         resolvedDelivery = d.DeliveryDocument;
-        resolvedDeliveryItem = d.DeliveryDocumentItem || '000010';
+        resolvedDeliveryItem = d.DeliveryDocumentItem || '';
         resolvedPO = d.PurchaseOrder || '';
-        resolvedPOItem = d.PurchaseOrderItem || '00010';
+        resolvedPOItem = d.PurchaseOrderItem || '';
         resolvedMaterial = d.Material;
         resolvedMaterialName = d.DeliveryDocumentItemText || ('Material ' + d.Material);
         resolvedPlant = d.Plant;
@@ -335,7 +335,7 @@ class GoodsReceiptAdapter {
           scannedType = 'PURCHASE_ORDER';
           scannedTypeLabel = 'Purchase Order';
           resolvedPO = po.PurchaseOrder;
-          resolvedPOItem = po.PurchaseOrderItem || '00010';
+          resolvedPOItem = po.PurchaseOrderItem || '';
           resolvedMaterial = po.Material;
           resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
           resolvedPlant = po.Plant;
@@ -357,7 +357,7 @@ class GoodsReceiptAdapter {
             const linkedDelList = Array.isArray(linkedDelRes) ? linkedDelRes : (linkedDelRes ? [linkedDelRes] : []);
             if (linkedDelList.length > 0) {
               resolvedDelivery = linkedDelList[0].DeliveryDocument;
-              resolvedDeliveryItem = linkedDelList[0].DeliveryDocumentItem || '000010';
+              resolvedDeliveryItem = linkedDelList[0].DeliveryDocumentItem || '';
             }
           } catch (_) {}
         }
@@ -396,9 +396,9 @@ class GoodsReceiptAdapter {
             if (matDelList.length > 0) {
               const md = matDelList[0];
               resolvedDelivery = md.DeliveryDocument;
-              resolvedDeliveryItem = md.DeliveryDocumentItem || '000010';
+              resolvedDeliveryItem = md.DeliveryDocumentItem || '';
               resolvedPO = md.PurchaseOrder || '';
-              resolvedPOItem = md.PurchaseOrderItem || '00010';
+              resolvedPOItem = md.PurchaseOrderItem || '';
               resolvedMaterialName = md.DeliveryDocumentItemText || ('Material ' + md.Material);
               resolvedPlant = md.Plant;
               resolvedPlantName = md.PlantName || ('Plant ' + md.Plant);
@@ -416,7 +416,7 @@ class GoodsReceiptAdapter {
               if (poList.length > 0) {
                 const po = poList[0];
                 resolvedPO = po.PurchaseOrder;
-                resolvedPOItem = po.PurchaseOrderItem || '00010';
+                resolvedPOItem = po.PurchaseOrderItem || '';
                 resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
                 resolvedPlant = po.Plant;
                 resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
@@ -446,9 +446,9 @@ class GoodsReceiptAdapter {
           resolvedMaterial = md.Material;
           resolvedMaterialName = md.DeliveryDocumentItemText || ('Material ' + md.Material);
           resolvedDelivery = md.DeliveryDocument;
-          resolvedDeliveryItem = md.DeliveryDocumentItem || '000010';
+          resolvedDeliveryItem = md.DeliveryDocumentItem || '';
           resolvedPO = md.PurchaseOrder || '';
-          resolvedPOItem = md.PurchaseOrderItem || '00010';
+          resolvedPOItem = md.PurchaseOrderItem || '';
           resolvedPlant = md.Plant;
           resolvedPlantName = md.PlantName || ('Plant ' + md.Plant);
           resolvedSupplier = md.Supplier || '';
@@ -469,7 +469,7 @@ class GoodsReceiptAdapter {
             resolvedMaterial = po.Material;
             resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
             resolvedPO = po.PurchaseOrder;
-            resolvedPOItem = po.PurchaseOrderItem || '00010';
+            resolvedPOItem = po.PurchaseOrderItem || '';
             resolvedPlant = po.Plant;
             resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
             resolvedSupplier = po.Supplier || '';
@@ -513,9 +513,9 @@ class GoodsReceiptAdapter {
           scannedType = 'STORAGE_UNIT';
           scannedTypeLabel = 'Storage Unit';
           resolvedDelivery = matched.DeliveryDocument;
-          resolvedDeliveryItem = matched.DeliveryDocumentItem || '000010';
+          resolvedDeliveryItem = matched.DeliveryDocumentItem || '';
           resolvedPO = matched.PurchaseOrder || '';
-          resolvedPOItem = matched.PurchaseOrderItem || '00010';
+          resolvedPOItem = matched.PurchaseOrderItem || '';
           resolvedMaterial = matched.Material;
           resolvedMaterialName = matched.DeliveryDocumentItemText || ('Material ' + matched.Material);
           resolvedPlant = matched.Plant;
@@ -648,9 +648,11 @@ class GoodsReceiptAdapter {
       }
     }
 
-    const sItemNo = payload.DeliveryDocumentItem
-      ? String(payload.DeliveryDocumentItem).padStart(6, '0')
-      : '000010';
+    const rawItemNo = payload.DeliveryDocumentItem || payload.PurchaseOrderItem;
+    if (!rawItemNo && (!Array.isArray(payload.Items) || payload.Items.length === 0)) {
+      throw new Error('Delivery Document Item (or Purchase Order Item) is required to post Goods Receipt.');
+    }
+    const sItemNo = rawItemNo ? String(rawItemNo).padStart(6, '0') : '';
 
     let items = [];
     if (Array.isArray(payload.Items) && payload.Items.length > 0) {
@@ -659,12 +661,14 @@ class GoodsReceiptAdapter {
         if (!itemUnit || !String(itemUnit).trim()) {
           throw new Error(`Unit of Measure (EntryUnit) is required for Goods Receipt item ${it.DeliveryDocumentItem || idx + 1}`);
         }
+        const itItemNo = it.DeliveryDocumentItem || it.PurchaseOrderItem || rawItemNo;
+        if (!itItemNo || !String(itItemNo).trim()) {
+          throw new Error(`Delivery Document Item is required for Goods Receipt item ${idx + 1}`);
+        }
         const cleanUnit = String(itemUnit).trim().toUpperCase();
         return {
           InboundDelivery: sDoc,
-          DeliveryDocumentItem: it.DeliveryDocumentItem
-            ? String(it.DeliveryDocumentItem).padStart(6, '0')
-            : String((idx + 1) * 10).padStart(6, '0'),
+          DeliveryDocumentItem: String(itItemNo).padStart(6, '0'),
           SourceOfGR: sourceOfGR,
           Material: it.Material || Material,
           Plant: it.Plant || Plant,
