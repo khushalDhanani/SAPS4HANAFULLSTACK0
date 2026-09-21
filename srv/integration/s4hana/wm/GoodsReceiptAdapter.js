@@ -756,6 +756,7 @@ class GoodsReceiptAdapter {
     const {
       StorageUnit,
       DeliveryDocument,
+      PurchaseOrder,
       Material,
       Plant,
       StorageLocation,
@@ -764,8 +765,8 @@ class GoodsReceiptAdapter {
       ExpiryDate
     } = payload;
 
-    if (!StorageUnit && !DeliveryDocument) {
-      throw new Error('Storage Unit / Inbound Delivery is required to post Goods Receipt.');
+    if (!StorageUnit && !DeliveryDocument && !PurchaseOrder) {
+      throw new Error('Inbound Delivery or Purchase Order is required to post Goods Receipt.');
     }
     if (!Material) {
       throw new Error('Material is required to post Goods Receipt.');
@@ -792,7 +793,7 @@ class GoodsReceiptAdapter {
     }
 
     // Retargeted to MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers (Inventory Management / Movement 101)
-    const sDoc = DeliveryDocument || StorageUnit;
+    const sDoc = DeliveryDocument || PurchaseOrder || StorageUnit;
     const now = new Date();
     const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T00:00:00`;
     const tempKey = `${sDoc}GR${now.toISOString().replace(/[-:T]/g, '').slice(0, 14)}`;

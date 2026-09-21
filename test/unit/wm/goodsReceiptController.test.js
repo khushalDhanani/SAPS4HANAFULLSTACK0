@@ -250,7 +250,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
         it('should show error when scanning with empty input', () => {
             controller.onScanStorageUnit();
-            expect(mockMessageBox.error).toHaveBeenCalledWith('Please scan or enter a Storage Unit Number.');
+            expect(mockMessageBox.error).toHaveBeenCalledWith('Please scan or enter an Inbound Delivery, Purchase Order, or Material Number.');
         });
 
         it('should resolve Storage Unit and auto-populate form on successful scan', async () => {
@@ -476,7 +476,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             await controller.onPostGoodsReceipt();
 
             expect(mockMessageBox.confirm).toHaveBeenCalledWith(
-                expect.stringContaining('Post Goods Receipt (101) in SAP for Storage Unit 180000001'),
+                expect.stringContaining('Post Goods Receipt (101) in SAP for Inbound Delivery 180000001'),
                 expect.any(Object)
             );
             expect(mockGoodsReceiptService.postGoodsReceipt).toHaveBeenCalledWith(

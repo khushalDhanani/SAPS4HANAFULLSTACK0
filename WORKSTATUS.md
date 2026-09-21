@@ -2337,16 +2337,52 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 — Eliminate Assumed Storage Unit (SU) Data & Reconcile with Authentic SAP Warehouse Objects (Inbound Delivery, Purchase Order, and Batch)
+- **Change**: Eliminated assumed "Storage Unit (SU)" terminology and data mapping across Goods Receipt and Goods Issue modules. Live S/4HANA probes against Client 220 proved that warehouse `0001` operates on standard MM-IM with 0 active EWM Handling Units (`/SCWM/PACK_OUTBDLV_SRV/HUSet` is empty `[]`, `WarehouseStorageBin` is `[]`, `WarehouseTask` is `[]`). Scanned identifiers are authentic Inbound Deliveries (`DeliveryDocument`), Purchase Orders (`PurchaseOrder`), or Batches (`Batch`).
+  1. **Goods Receipt presentation layer**:
+     - `app/fiori-app/webapp/i18n/i18n.properties`: Replaced "Storage Unit (101)" with "Inbound Delivery / PO (101)", "Storage Unit Barcode Scanning & Lookup" with "Inbound Document Barcode Scanning & Lookup", "Scan Material Barcode / Storage Unit Number" with "Scan Inbound Delivery / PO / Material Barcode", "Storage Unit Details" with "Receipt Details", and "Storage Unit:" with "Document Number:".
+     - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`:
+       - Camera scan prompt updated to "Scan Inbound Delivery / PO Barcode".
+       - Empty scan validation updated to "Please scan or enter an Inbound Delivery, Purchase Order, or Material Number."
+       - `ScannedTypeLabel` and `ScannedType` default to authentic Inbound Delivery / Purchase Order.
+       - Posting confirmation dialog updated: "Post Goods Receipt (101) in SAP for Inbound Delivery <doc> / Purchase Order <doc>?" instead of "Storage Unit <doc>".
+  2. **Goods Issue presentation layer**:
+     - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+       - When a scanned barcode resolves to a Batch (`ResolvedType === 'BATCH'` or `'GS1_BARCODE'`), lock text and toast report "Auto-detected from Batch <batch>" instead of falsely reporting "Auto-detected from Stock Unit".
+       - Step 3 Review check label reports "Batch <batch> auto-detected from scanned batch and SLED verified".
+  3. **Backend Adapter & Handlers**:
+     - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`:
+       - In `postGoodsReceipt`: directly accepts `PurchaseOrder` in payload along with `DeliveryDocument`.
+       - Validation error updated: "Inbound Delivery or Purchase Order is required to post Goods Receipt."
+       - Resolves `sDoc = DeliveryDocument || PurchaseOrder || StorageUnit`.
+  4. **Unit Tests**:
+     - `test/unit/wm/goodsReceiptController.test.js`: Updated assertions for empty input error message and confirmation dialog text.
+     - `test/unit/wm/goodsReceiptService.test.js`: Updated assertion for postGoodsReceipt missing document error message.
+     - `test/unit/wm/goodsIssueController.test.js`: Added test asserting lock text and success message report "Auto-detected from Batch" when barcode resolves to a Batch.
+- **Validation Commands Executed & Results**:
+  - `npx eslint srv/integration/s4hana/wm/ test/unit/wm/`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.6 s; Component-preload.js generated cleanly**.
+  - `npx jest test/unit/wm/goodsReceiptController.test.js test/unit/wm/goodsReceiptService.test.js test/unit/wm/goodsIssueController.test.js`: **105 passed, 105 total (100% green)**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
+  - `npm test` (full project test suite): **68 passed, 68 total test suites; 872 passed, 872 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
-  - `npx jest`: **68 passed, 68 total test suites; 871 passed, 871 total tests (100% green)**.
-  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 206 passed, 206 total tests (100% green)**.
+  - `npx jest`: **68 passed, 68 total test suites; 872 passed, 872 total tests (100% green)**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Storage Unit (SU) Assumed Data Elimination**:
+  - Eliminated assumed "Storage Unit" labeling across Goods Receipt and Goods Issue.
+  - Scanned objects accurately presented as authentic Inbound Deliveries, Purchase Orders, and Batches.
+  - Zero false claims of Storage Unit / Handling Unit persistence where standard MM-IM documents apply.
 - **Goods Issue Batch Status / SLED Defaults (Audit Row 41)**:
   - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
   - Failed batch lookups show `'unknown'`, never masquerading as `'NO SLED'`.
@@ -2356,6 +2392,6 @@
   - Non-queued responses must contain an authentic SAP `MaterialDocument` to be marked `POSTED_IN_SAP`.
 
 ## Next Steps
-1. Stage and commit Item 41 changes to `feature/CL01`.
+1. Stage and commit changes to `feature/CL01`.
 2. Push to `origin/feature/CL01`.
 3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.

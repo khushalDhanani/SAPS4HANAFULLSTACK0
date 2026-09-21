@@ -21,7 +21,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Quantity: 10,
                 DeliveryDocumentItem: '000010',
                 Unit: 'KG'
-            })).rejects.toThrow('Storage Unit / Inbound Delivery is required to post Goods Receipt.');
+            })).rejects.toThrow('Inbound Delivery or Purchase Order is required to post Goods Receipt.');
         });
 
         it('should reject postGoodsReceipt when Material is missing', async () => {

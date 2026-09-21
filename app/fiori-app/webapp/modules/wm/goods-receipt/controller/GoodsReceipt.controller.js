@@ -142,7 +142,7 @@ sap.ui.define([
          */
         onCameraScanStorageUnit: function () {
             var that = this;
-            BarcodeScanService.openCameraScanner("Scan Storage Unit Barcode", function (sScanned) {
+            BarcodeScanService.openCameraScanner("Scan Inbound Delivery / PO Barcode", function (sScanned) {
                 if (sScanned && sScanned.trim()) {
                     that.getView().getModel("grView").setProperty("/storageUnitBarcode", sScanned.trim());
                     that.onScanStorageUnit();
@@ -243,7 +243,7 @@ sap.ui.define([
 
             if (!sBarcode) {
                 this._playBeep(false);
-                MessageBox.error("Please scan or enter a Storage Unit Number.");
+                MessageBox.error("Please scan or enter an Inbound Delivery, Purchase Order, or Material Number.");
                 return Promise.resolve();
             }
 
@@ -256,8 +256,8 @@ sap.ui.define([
                     oModel.setProperty("/activeSU", {
                         StorageUnit: oSU.StorageUnit || sBarcode,
                         ScannedBarcode: oSU.ScannedBarcode || sBarcode,
-                        ScannedType: oSU.ScannedType || "STORAGE_UNIT",
-                        ScannedTypeLabel: oSU.ScannedTypeLabel || "Storage Unit",
+                        ScannedType: oSU.ScannedType || (oSU.DeliveryDocument ? "INBOUND_DELIVERY" : (oSU.PurchaseOrder ? "PURCHASE_ORDER" : "DOCUMENT")),
+                        ScannedTypeLabel: oSU.ScannedTypeLabel || (oSU.DeliveryDocument ? "Inbound Delivery" : (oSU.PurchaseOrder ? "Purchase Order" : "Document")),
                         DeliveryDocument: oSU.DeliveryDocument || "",
                         DeliveryDocumentItem: oSU.DeliveryDocumentItem || "",
                         PurchaseOrder: oSU.PurchaseOrder || "",
@@ -287,7 +287,7 @@ sap.ui.define([
                     oModel.setProperty("/availableBatches", oSU.AvailableBatches || []);
                     oModel.setProperty("/hasActiveSU", true);
 
-                    var sLabel = oSU.ScannedTypeLabel || "Storage Unit";
+                    var sLabel = oSU.ScannedTypeLabel || (oSU.DeliveryDocument ? "Inbound Delivery" : (oSU.PurchaseOrder ? "Purchase Order" : "Document"));
                     var sToastTpl = that.getText("grResolvedToast");
                     var sToastMsg = (sToastTpl && sToastTpl.includes("{0}"))
                         ? sToastTpl.replace("{0}", sLabel).replace("{1}", sBarcode).replace("{2}", oSU.Material || "")
@@ -376,9 +376,9 @@ sap.ui.define([
             var oModel = this.getView().getModel("grView");
             var oActive = oModel.getProperty("/activeSU");
 
-            if (!oActive.StorageUnit && !oActive.DeliveryDocument) {
+            if (!oActive.StorageUnit && !oActive.DeliveryDocument && !oActive.PurchaseOrder) {
                 this._playBeep(false);
-                MessageBox.error("No active Storage Unit selected for Goods Receipt.");
+                MessageBox.error("No active Inbound Delivery or Purchase Order selected for Goods Receipt.");
                 return Promise.resolve();
             }
 
@@ -400,10 +400,11 @@ sap.ui.define([
             }
 
             var that = this;
-            var sDoc = oActive.DeliveryDocument || oActive.StorageUnit;
+            var sDoc = oActive.DeliveryDocument || oActive.PurchaseOrder || oActive.StorageUnit;
+            var sDocType = oActive.DeliveryDocument ? "Inbound Delivery " : (oActive.PurchaseOrder ? "Purchase Order " : "Document ");
 
             return new Promise(function (resolve) {
-                MessageBox.confirm("Post Goods Receipt (101) in SAP for Storage Unit " + oActive.StorageUnit + " (Delivery " + sDoc + ")?", {
+                MessageBox.confirm("Post Goods Receipt (101) in SAP for " + sDocType + sDoc + "?", {
                     title: "Confirm Goods Receipt",
                     actions: [MessageBox.Action.YES, MessageBox.Action.NO],
                     emphasizedAction: MessageBox.Action.YES,

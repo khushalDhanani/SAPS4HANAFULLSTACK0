@@ -612,6 +612,30 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(active.BatchStatusText).toBe('unknown');
             expect(active.BatchStatusState).toBe('None');
         });
+
+        it('should label lock text as Auto-detected from Batch when ResolvedType is BATCH', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/activeItem', Object.assign({}, mockResolution.ActiveItem));
+            oModel.setProperty('/resolved', mockResolution);
+            oModel.setProperty('/suBarcode', 'IN25000133');
+
+            mockGoodsIssueService.resolveStockUnit.mockResolvedValueOnce({
+                SuExists: true,
+                ResolvedType: 'BATCH',
+                Material: '1000000355',
+                DeterminedBatch: 'IN25000133',
+                DeterminedBatchExpiry: '2026-12-31',
+                DeterminedBatchStatusState: 'Success',
+                DeterminedBatchStatusText: 'VALID',
+                CurrentStock: 500,
+                BaseUnit: 'KG'
+            });
+
+            await controller._resolveSuBarcode();
+
+            expect(oModel.getProperty('/suBatchLockText')).toBe('🔒 Auto-detected from Batch IN25000133');
+            expect(oModel.getProperty('/suSuccessMessage')).toContain('Batch IN25000133 resolved');
+        });
     });
 
     // =================================================================

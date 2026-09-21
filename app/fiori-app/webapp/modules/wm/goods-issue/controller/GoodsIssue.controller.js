@@ -603,12 +603,13 @@ sap.ui.define([
                             BatchStatusText: oResult.DeterminedBatchStatusText || "unknown"
                         });
                         oModel.setProperty("/activeItem", oUpdated);
-                        oModel.setProperty("/batchLockedBySu", true);
-                        oModel.setProperty("/suBatchLockText", "\uD83D\uDD12 Auto-detected from Stock Unit " + sSuBarcode);
+                        var isDirectBatch = oResult.ResolvedType === "BATCH" || oResult.ResolvedType === "GS1_BARCODE";
+                        var sLockSource = isDirectBatch ? "Batch " : "Stock Unit ";
+                        oModel.setProperty("/suBatchLockText", "\uD83D\uDD12 Auto-detected from " + sLockSource + (oResult.DeterminedBatch || sSuBarcode));
 
                         oModel.setProperty("/suSuccess", true);
                         oModel.setProperty("/suSuccessMessage",
-                            "Stock Unit " + sSuBarcode + " resolved: Material " + oResult.Material +
+                            (isDirectBatch ? "Batch " : "Stock Unit ") + sSuBarcode + " resolved: Material " + oResult.Material +
                             ", Batch " + oResult.DeterminedBatch +
                             ", Stock " + oResult.CurrentStock + " " + oResult.BaseUnit);
 
@@ -756,7 +757,9 @@ sap.ui.define([
                 bBatchValid = sBatchState !== "Error";
                 var sBatchLabel = "Batch " + sBatch + " is valid and unexpired (SLED verified)";
                 if (bBatchLockedBySu) {
-                    sBatchLabel = "Batch " + sBatch + " auto-detected from Stock Unit and SLED verified";
+                    var oRes = oModel.getProperty("/resolvedSu") || oModel.getProperty("/resolved");
+                    var isDirectBatch = oRes && (oRes.ResolvedType === "BATCH" || oRes.ResolvedType === "GS1_BARCODE");
+                    sBatchLabel = "Batch " + sBatch + " auto-detected from " + (isDirectBatch ? "scanned batch" : "Stock Unit") + " and SLED verified";
                 }
                 aChecks.push({ label: sBatchLabel, passed: bBatchValid });
                 if (!bBatchValid) bAllPassed = false;
