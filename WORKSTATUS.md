@@ -1987,6 +1987,10 @@
   - Sales Order integration: Create Delivery button on `SalesOrders.view.xml` calling the same action, disabled when order has delivery block or is not released.
   - Success/Warning message accuracy: Returns clean delivery numbers on success; displays explicit warning to check VL03N if SAP creates delivery without returning a document number.
   - Performance & Caching: 60-second in-memory TTL caching for approval map prevents extra SAP calls on successive list reads and paging.
+  - Operational & Architectural Characteristics:
+    - **Approval Lookup Cap ($top=1000)**: In `OutboundDeliveryAdapter._fetchApprovalStatusMap`, the query filters for `(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')&$top=1000`. With 883 total sales orders currently in the system, the unapproved subset is <10, making the 1,000 cap completely harmless. Defense-in-depth guarantee: if an unapproved order were ever beyond 1,000 items, SAP Gateway authoritatively rejects delivery creation with message `V2/478` ("Subsequent documents not possible due to approval status of the document").
+    - **Cache Delay (60s TTL)**: An order released in SAP may still display as "In Approval" in the UI for up to 60 seconds if cached immediately before approval. Re-querying after the 60-second TTL expires automatically fetches the updated status from SAP Gateway.
+    - **Multi-Instance App Processes**: In Cloud Foundry / SAP BTP environments with multiple scaled runtime instances, the 60-second in-memory cache is held per server process. Each instance refreshes independently based on its own traffic. Correctness is fully preserved because transactional execution is always validated directly by live SAP Gateway.
   - Role checks: `SalesRepresentative` role authorized for action; UI visibility conditioned on `AuthService.canCreateDelivery()`.
   - Shell: Dashboard tile under Overview, SD, and Warehouse; route `le/orders-due`; full i18n parity.
   - Preload: `Component-preload.js` rebuilt and verified.
