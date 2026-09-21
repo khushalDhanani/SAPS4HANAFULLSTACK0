@@ -195,6 +195,61 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(condCall[1].data.AmountInternal).toBe('250.00');
     });
 
+    test('should read authentic NetAmount, TotalAmount, TaxAmount and DocumentCurrency from readBack', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
+            TransactionCurrency: 'INR'
+        };
+        const items = [
+            {
+                SalesInquiryItem: '000010',
+                Material: '4000000091',
+                OrderQuantity: 1,
+                OrderQuantityUnit: 'KG',
+                NetPriceAmount: 250.00
+            }
+        ];
+
+        const mockExecuteHttpRequest = jest.fn()
+            // 1st: HeaderSet POST
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000599' } } })
+            // 2nd: ItemSet POST
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000599', ItemID: '000010' } } })
+            // 3rd: PriceCondSet POST
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000599', ItemID: '000010' } } })
+            // 4th: HeaderSet GET read-back
+            .mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    d: {
+                        SalesOrderID: '1000599',
+                        NetAmount: '250.00',
+                        TotalAmount: '295.00',
+                        TaxAmount: '45.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
+            });
+
+        const created = await salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' },
+            executeHttpRequest: mockExecuteHttpRequest,
+            readBack: true
+        });
+
+        expect(created.SalesInquiry).toBe('1000599');
+        expect(created.TotalNetAmount).toBe('250.00');
+        expect(created.NetAmount).toBe('250.00');
+        expect(created.TotalAmount).toBe('295.00');
+        expect(created.TaxAmount).toBe('45.00');
+        expect(created.TransactionCurrency).toBe('INR');
+        expect(mockExecuteHttpRequest).toHaveBeenCalledTimes(4);
+    });
+
     test('should leave PurchaseOrderNumber empty if reference is empty instead of inventing customer reference', async () => {
         const header = {
             SalesInquiryType: 'ZIN',

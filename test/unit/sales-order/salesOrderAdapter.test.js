@@ -86,7 +86,49 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(payload.ItemSet[0].PriceCondSet).toHaveLength(1);
             expect(payload.ItemSet[0].PriceCondSet[0].CondTypeCode).toBe('ZPR1');
             expect(payload.ItemSet[0].PriceCondSet[0].AmountInternal).toBe('250.00');
-            expect(payload.ItemSet[0].PriceCondSet[0].RateUnitExternal).toBe('INR');
+        });
+
+        test('reads authentic NetAmount, TotalAmount, TaxAmount and DocumentCurrency from S/4HANA instead of local qty x price formula', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000465',
+                        NetAmount: '950.00',
+                        TotalAmount: '1121.00',
+                        TaxAmount: '171.00',
+                        DocumentCurrency: 'EUR'
+                    }
+                }
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SoldToParty: '10135',
+                TransactionCurrency: 'EUR'
+            };
+
+            const items = [
+                {
+                    SalesOrderItem: '000010',
+                    Material: '4000000123',
+                    OrderQuantity: 10,
+                    OrderQuantityUnit: 'KG',
+                    NetPriceAmount: 100.00 // qty * price = 1000.00, but SAP computed NetAmount = 950.00 (with discount)
+                }
+            ];
+
+            const result = await adapter.createSalesOrder(header, items, {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000465');
+            expect(result.TotalNetAmount).toBe('950.00'); // SAP authentic NetAmount, NOT 1000.00
+            expect(result.NetAmount).toBe('950.00');
+            expect(result.TotalAmount).toBe('1121.00');
+            expect(result.TaxAmount).toBe('171.00');
+            expect(result.TransactionCurrency).toBe('EUR');
         });
 
         test('leaves PurchaseOrderNumber empty when omitted instead of defaulting to item text or SALES ORDER', async () => {

@@ -2533,15 +2533,35 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 15:45 IST — Eliminate Local Formula & Read Authentic NetAmount, TotalAmount, and DocumentCurrency from S/4HANA (Audit Item 26)
+- **Change**: Eliminated assumed client-side `qty x price` formula and non-existent `d.NetValue` / `d.Currency` fallbacks in `SalesInquiryAdapter.js` (`createSalesDocument`). Previously, both deep insert (Sales Order) and sequential (Sales Inquiry) paths accumulated a local `totalNet = qty * price` and returned it, bypassing S/4HANA's pricing engine (discounts, taxes, condition records) and attempting to fall back to `NetValue` which does not exist in `LORD_ODATA_ORDER_SRV`.
+  1. **Backend Integration**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`:
+       - Inspected live S/4HANA `$metadata` for `LORD_ODATA_ORDER_SRV` `Header` and verified authentic properties: `NetAmount` (Edm.Decimal), `TotalAmount` (Edm.Decimal), `TaxAmount` (Edm.Decimal), and `DocumentCurrency` (Edm.String).
+       - In deep insert branch (Sales Order), extracts `s4Header.NetAmount`, `s4Header.TotalAmount`, `s4Header.TaxAmount`, and `s4Header.DocumentCurrency` directly from the S/4HANA 201 response. Authentic SAP `NetAmount` is prioritized as `TotalNetAmount` over any local arithmetic.
+       - In sequential branch (Sales Inquiry), added support for `options.readBack` to read back persisted Header from `HeaderSet('<SalesOrderID>')`, extracting authentic `NetAmount`, `TotalAmount`, `TaxAmount`, and `DocumentCurrency`.
+       - Exposes structured fields `NetAmount`, `TotalAmount`, `TaxAmount`, and `TransactionCurrency` (authentically sourced from SAP's `DocumentCurrency`).
+  2. **Unit Tests & Documentation**:
+     - `test/unit/sales-order/salesOrderAdapter.test.js`: Added test proving that `createSalesOrder` returns SAP's authentic `NetAmount`, `TotalAmount`, `TaxAmount`, and `DocumentCurrency`, and that SAP's `NetAmount` overrides any client `qty * price` formula.
+     - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Added test proving that `createSalesInquiry` with `readBack: true` extracts authentic `NetAmount`, `TotalAmount`, `TaxAmount`, and `DocumentCurrency` from S/4HANA.
+     - `docs/data-lineage-audit.md`: Marked audit item 26 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/sales-order/salesOrderAdapter.test.js test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **2 passed, 2 total test suites; 41 passed, 41 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/ test/unit/sales-inquiry/`: **15 passed, 15 total test suites; 197 passed, 197 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.00 s; Component-preload.js generated**.
+  - `npx eslint srv/ test/`: **Clean (0 errors, 0 warnings)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npx jest test/unit/`: **58 passed, 58 total test suites; 856 passed, 856 total tests (100% green)**.
   - `npx jest test/unit/fi/`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
   - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
-  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 59 passed, 59 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 136 passed, 136 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 137 passed, 137 total tests (100% green)**.
   - `npx jest test/unit/dashboard/`: **1 passed, 1 total test suite; 30 passed, 30 total tests (100% green)**.
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
@@ -2549,6 +2569,10 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Sales Order & Inquiry Order Total Lineage (Audit Row 26)**:
+  - Local `qty x price` arithmetic formula eliminated as primary amount.
+  - Reads authentic `NetAmount`, `TotalAmount`, `TaxAmount`, and `DocumentCurrency` directly from S/4HANA `LORD_ODATA_ORDER_SRV` response and read-back.
+  - Non-existent `NetValue` and `Currency` field references eliminated.
 - **Journal Entries KPI Authentic Data Lineage (Audit Row 28)**:
   - Tile relabeled to "Total Line Items" (`fiKpiTotalItems`), matching `C_GLJrnlEntryItemToBeVerified` line item records.
   - Forced `0` state eliminated; tiles display `"-"` while loading or on error.

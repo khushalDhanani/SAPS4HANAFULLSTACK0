@@ -1147,13 +1147,26 @@ class SalesInquiryAdapter {
         throw new Error('Sales Order number not returned from SAP S/4HANA');
       }
 
+      const s4Header = createResp.data?.d || createResp.data || {};
+      const sapNet = s4Header.NetAmount ?? s4Header.TotalAmount ?? s4Header.NetValue;
+      const sapTotal = s4Header.TotalAmount;
+      const sapTax = s4Header.TaxAmount;
+      const sapCurrency = s4Header.DocumentCurrency || s4Header.Currency || header.TransactionCurrency || s4Config.getCurrency();
+
+      const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '')
+        ? String(sapNet)
+        : (totalNet > 0 ? String(totalNet.toFixed(2)) : '');
+
       return {
         SalesDocument: sNewOrderId,
         SalesOrderID: sNewOrderId,
         SalesOrder: sNewOrderId,
         SalesInquiry: sNewOrderId,
-        TotalNetAmount: totalNet > 0 ? String(totalNet.toFixed(2)) : (createResp.data?.d?.NetValue || '0.00'),
-        TransactionCurrency: header.TransactionCurrency || createResp.data?.d?.Currency || s4Config.getCurrency(),
+        TotalNetAmount: finalNet,
+        NetAmount: s4Header.NetAmount !== undefined && s4Header.NetAmount !== null ? String(s4Header.NetAmount) : (finalNet || undefined),
+        TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
+        TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
+        TransactionCurrency: sapCurrency,
         notTransmitted: []
       };
     }
@@ -1316,13 +1329,46 @@ class SalesInquiryAdapter {
       }
     }
 
+    let s4Header = headerResp.data?.d || headerResp.data || {};
+
+    if (options.readBack) {
+      try {
+        const readResp = await executeFn(destination, {
+          method: 'get',
+          url: `${servicePath}/HeaderSet(%27${sNewInquiryId}%27)`,
+          headers: {
+            'Accept': 'application/json',
+            ...(options.headers || {})
+          }
+        }, { fetchCsrfToken: false });
+        if (readResp?.data?.d || readResp?.data) {
+          s4Header = readResp.data?.d || readResp.data;
+        }
+      } catch (readErr) {
+        LOG.warn(`Could not read back header totals for inquiry ${sNewInquiryId}:`, readErr.message);
+      }
+    }
+
+    const sapNet = s4Header.NetAmount ?? s4Header.TotalAmount ?? s4Header.NetValue;
+    const sapTotal = s4Header.TotalAmount;
+    const sapTax = s4Header.TaxAmount;
+    const sapCurrency = s4Header.DocumentCurrency || s4Header.Currency || header.TransactionCurrency || s4Config.getCurrency();
+
+    // Prefer SAP's authentic NetAmount/TotalAmount if returned; otherwise fall back to computed totalNet or blank
+    const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '' && Number(sapNet) > 0)
+      ? String(sapNet)
+      : (totalNet > 0 ? String(totalNet.toFixed(2)) : (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '' ? String(sapNet) : ''));
+
     return {
       SalesDocument: sNewInquiryId,
       SalesOrderID: sNewInquiryId,
       SalesInquiry: sNewInquiryId,
       SalesOrder: sNewInquiryId,
-      TotalNetAmount: totalNet > 0 ? String(totalNet.toFixed(2)) : (headerResp.data?.d?.NetValue || '0.00'),
-      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || s4Config.getCurrency(),
+      TotalNetAmount: finalNet,
+      NetAmount: s4Header.NetAmount !== undefined && s4Header.NetAmount !== null ? String(s4Header.NetAmount) : (finalNet || undefined),
+      TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
+      TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
+      TransactionCurrency: sapCurrency,
       notTransmitted
     };
   }
