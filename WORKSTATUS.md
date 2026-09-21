@@ -2448,10 +2448,31 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 — Eliminate Assumed PO KPIs: Server Count for Suppliers, Remove Completeness Rate, Live Total Count (Audit Items 5, 6 & 7)
+- **Change**: Eliminated assumed and page-scoped KPI calculations in `BaseController.js`, `PurchaseOrders.view.xml`, and `PurchaseOrders.controller.js`. Previously, supplier count was counted only among loaded rows (falling back to the PO count when 0), completeness rate was calculated over loaded rows (defaulting to 100 when empty), and total count fell back to loaded rows when `$count` was absent.
+  1. **BaseController**:
+     - `app/fiori-app/webapp/controller/BaseController.js`: Refactored `calculateKpiMetrics` to extract `total` strictly from `oEvent.getParameter("total")` (or `"-"` if absent), eliminating loaded-row fallbacks, page-scoped supplier counting, and client completeness rate formulas.
+  2. **View Cleanup**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`: Removed synthetic `<GenericTile id="kpiComplete">` (Completeness Rate). Retained authentic live KPIs: `kpiTotalOrders` and `kpiSuppliers`.
+  3. **Controller Integration**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`: Injected `ODataClient` and implemented `_loadServerSupplierCount()`, querying live S/4HANA unique supplier count via `/odata/v4/purchase-order/getDashboardMetrics()` (cached master data from `C_MM_SupplierValueHelp`). Wired `_loadServerSupplierCount()` into `onInit`, `_onRouteMatched`, and `onRefresh`. Removed `completeRate` from `viewModel`.
+  4. **Unit Tests & Documentation**:
+     - `test/unit/controller/BaseController.test.js`: Added unit tests verifying authentic total count extraction and absence of synthetic supplier/completeness counts.
+     - `test/unit/purchase-order/purchaseOrdersFilterSort.test.js`: Updated controller tests with `mockODataClient` to test `_loadServerSupplierCount`, error fallback to `"-"`, `_updateKpiMetrics`, and absence of `completeRate`.
+     - `docs/data-lineage-audit.md`: Marked audit items 5, 6, and 7 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/controller/BaseController.test.js test/unit/purchase-order/purchaseOrdersFilterSort.test.js`: **2 passed, 2 total test suites; 41 passed, 41 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.23 s; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
-  - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 177 passed, 177 total tests (100% green)**.
+  - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
   - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
@@ -2459,6 +2480,10 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Purchase Order Authentic KPI Lineage (Audit Rows 5, 6 & 7)**:
+  - Total Orders reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
+  - Suppliers reflects authentic S/4HANA server supplier count (`getDashboardMetrics()`); page-scoped counting and PO-count fallback eliminated.
+  - Completeness Rate synthetic calculation and assumed default 100 eliminated; misleading tile removed from view.
 - **Purchase Order Status Authentic Data Lineage (Audit Row 4)**:
   - Shows SAP's authentic status name (`sStatusName`); no overriding of `"Sent"` or `"Follow-On Documents"` with `"Approved"`.
   - Deletion code `'L'` accurately mapped to `"Deleted"` instead of `"Rejected"`.

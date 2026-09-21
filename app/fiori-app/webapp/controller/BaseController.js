@@ -77,40 +77,25 @@ sap.ui.define([
         },
 
         /**
-         * Computes procurement KPI metrics (totalCount, supplierCount, completeRate)
-         * from a sap.m.Table updateFinished event.
+         * Computes procurement KPI metrics from a sap.m.Table updateFinished event.
+         * Shows live total count from the binding's $count parameter (or '-' if absent).
+         * Eliminates synthetic / page-scoped supplier counts and completeness rates.
          *
          * @param {sap.m.Table} oTable
          * @param {sap.ui.base.Event} [oEvent]
-         * @returns {{ totalCount: number, supplierCount: number, completeRate: number }}
+         * @returns {{ totalCount: number|string }}
          */
         calculateKpiMetrics: function (oTable, oEvent) {
-            var aItems = oTable ? oTable.getItems() : [];
-            var iTotal = (oEvent && oEvent.getParameter("total")) || aItems.length;
-
-            var oSuppliers = {};
-            var iCompleted = 0;
-
-            aItems.forEach(function (oItem) {
-                var oContext = oItem.getBindingContext();
-                if (oContext) {
-                    var sSupplier = oContext.getProperty("Supplier");
-                    if (sSupplier) {
-                        oSuppliers[sSupplier] = true;
-                    }
-                    if (oContext.getProperty("PurchasingCompletenessStatus")) {
-                        iCompleted++;
-                    }
+            var iTotal = null;
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var vTotal = oEvent.getParameter("total");
+                if (typeof vTotal === "number" && !isNaN(vTotal)) {
+                    iTotal = vTotal;
                 }
-            });
-
-            var iSupplierCount = Object.keys(oSuppliers).length;
-            var iRate = aItems.length > 0 ? Math.round((iCompleted / aItems.length) * 100) : 100;
+            }
 
             return {
-                totalCount: iTotal,
-                supplierCount: iSupplierCount > 0 ? iSupplierCount : iTotal,
-                completeRate: iRate
+                totalCount: iTotal !== null ? iTotal : "-"
             };
         },
 

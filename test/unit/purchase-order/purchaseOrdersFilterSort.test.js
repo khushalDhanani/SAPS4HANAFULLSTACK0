@@ -56,6 +56,10 @@ const mockValueHelpService = {
     applySuggestionFilter: jest.fn()
 };
 
+const mockODataClient = {
+    get: jest.fn().mockResolvedValue({ supplierCount: 4376 })
+};
+
 // Setup sap.ui.define mock
 global.sap = {
     ui: {
@@ -89,7 +93,8 @@ global.sap = {
                 MockSorter,
                 coreLibrary,
                 { error: jest.fn(), information: jest.fn() },
-                mockValueHelpService
+                mockValueHelpService,
+                mockODataClient
             );
         }
     }
@@ -620,6 +625,57 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
 
             controller.onItemPress(oEvent);
             expect(mockNavTo).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Authentic Procurement KPI Metrics', () => {
+        it('should initialize viewModel with authentic placeholders and no completeRate', () => {
+            controller.onInit();
+            expect(mockView.setModel).toHaveBeenCalled();
+            const oModel = mockView.setModel.mock.calls[0][0];
+            expect(oModel.data.totalCount).toBe("-");
+            expect(oModel.data.supplierCount).toBe("-");
+            expect(oModel.data.completeRate).toBeUndefined();
+        });
+
+        it('should load authentic supplierCount from server getDashboardMetrics', async () => {
+            mockODataClient.get.mockResolvedValueOnce({ supplierCount: 4376 });
+            await controller._loadServerSupplierCount();
+
+            expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/purchase-order/getDashboardMetrics()");
+            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", 4376);
+        });
+
+        it('should handle string JSON and string value from server getDashboardMetrics', async () => {
+            mockODataClient.get.mockResolvedValueOnce(JSON.stringify({ value: JSON.stringify({ supplierCount: 150 }) }));
+            await controller._loadServerSupplierCount();
+
+            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", 150);
+        });
+
+        it('should fallback to "-" when server metrics request fails', async () => {
+            mockODataClient.get.mockRejectedValueOnce(new Error("Network failure"));
+            await controller._loadServerSupplierCount();
+
+            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", "-");
+        });
+
+        it('should update totalCount from binding updateFinished total parameter', () => {
+            controller.calculateKpiMetrics = jest.fn().mockReturnValue({ totalCount: 2788 });
+            const oEvent = { getSource: jest.fn().mockReturnValue({}) };
+
+            controller._updateKpiMetrics(oEvent);
+
+            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/totalCount", 2788);
+            expect(mockViewModel.setProperty).not.toHaveBeenCalledWith("/completeRate", expect.anything());
+        });
+
+        it('should refresh server supplier count on table refresh', () => {
+            controller._loadServerSupplierCount = jest.fn();
+            controller.onRefresh();
+
+            expect(mockBinding.refresh).toHaveBeenCalled();
+            expect(controller._loadServerSupplierCount).toHaveBeenCalled();
         });
     });
 });

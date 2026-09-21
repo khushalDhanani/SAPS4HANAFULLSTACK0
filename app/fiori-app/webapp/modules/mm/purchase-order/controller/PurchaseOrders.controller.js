@@ -6,7 +6,8 @@ sap.ui.define([
     "sap/ui/model/Sorter",
     "sap/ui/core/library",
     "sap/m/MessageBox",
-    "saps4hana/fiori/service/ValueHelpService"
+    "saps4hana/fiori/service/ValueHelpService",
+    "saps4hana/fiori/service/ODataClient"
 ], function (
     BaseController,
     JSONModel,
@@ -15,7 +16,8 @@ sap.ui.define([
     Sorter,
     coreLibrary,
     MessageBox,
-    ValueHelpService
+    ValueHelpService,
+    ODataClient
 ) {
     "use strict";
 
@@ -27,13 +29,14 @@ sap.ui.define([
             this._bCurrentSortDescending = true;
 
             var oViewModel = new JSONModel({
-                totalCount: 0,
-                supplierCount: 0,
-                completeRate: 100,
+                totalCount: "-",
+                supplierCount: "-",
                 sortProperty: this._sCurrentSortProperty,
                 sortDescending: this._bCurrentSortDescending
             });
             this.getView().setModel(oViewModel, "viewModel");
+
+            this._loadServerSupplierCount();
 
             var oTable = this.byId("purchaseOrdersTable");
             oTable.attachEventOnce("updateFinished", this._updateKpiMetrics, this);
@@ -55,6 +58,7 @@ sap.ui.define([
             if (oBinding) {
                 oBinding.refresh();
             }
+            this._loadServerSupplierCount();
         },
 
         onAfterRendering: function () {
@@ -101,9 +105,40 @@ sap.ui.define([
             var oViewModel = this.getView().getModel("viewModel");
             if (oViewModel) {
                 oViewModel.setProperty("/totalCount", oKpis.totalCount);
-                oViewModel.setProperty("/supplierCount", oKpis.supplierCount);
-                oViewModel.setProperty("/completeRate", oKpis.completeRate);
             }
+        },
+
+        _loadServerSupplierCount: function () {
+            var oViewModel = this.getView().getModel("viewModel");
+            if (!oViewModel) {
+                return Promise.resolve();
+            }
+            return ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
+                .then(function (res) {
+                    var oMetrics = res;
+                    if (typeof oMetrics === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics);
+                        } catch (e) {
+                            oMetrics = null;
+                        }
+                    }
+                    if (oMetrics && typeof oMetrics.value === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics.value);
+                        } catch (e) {
+                            oMetrics = null;
+                        }
+                    }
+                    if (oMetrics && oMetrics.supplierCount != null) {
+                        oViewModel.setProperty("/supplierCount", oMetrics.supplierCount);
+                    } else {
+                        oViewModel.setProperty("/supplierCount", "-");
+                    }
+                })
+                .catch(function () {
+                    oViewModel.setProperty("/supplierCount", "-");
+                });
         },
 
         _buildFilterBarContextFilters: function (oSource) {
@@ -402,6 +437,7 @@ sap.ui.define([
                 // oBinding.refresh() reloads data while retaining active filters ($filter) and sorters ($orderby)
                 oBinding.refresh();
             }
+            this._loadServerSupplierCount();
         },
 
         onNavBack: function () {

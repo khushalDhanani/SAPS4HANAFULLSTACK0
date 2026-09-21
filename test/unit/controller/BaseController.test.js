@@ -122,4 +122,47 @@ describe('BaseController Unit Tests', () => {
             expect(mockRouter.navTo).toHaveBeenCalledWith("fallbackRoute", {}, true);
         });
     });
+
+    describe('KPI Metrics Calculation (calculateKpiMetrics)', () => {
+        it('should extract authentic totalCount from event total parameter', () => {
+            const oEvent = {
+                getParameter: jest.fn(param => param === "total" ? 2788 : null)
+            };
+            const result = controller.calculateKpiMetrics(null, oEvent);
+
+            expect(result.totalCount).toBe(2788);
+            expect(result.supplierCount).toBeUndefined();
+            expect(result.completeRate).toBeUndefined();
+        });
+
+        it('should handle zero totalCount correctly as 0 rather than falling back', () => {
+            const oEvent = {
+                getParameter: jest.fn(param => param === "total" ? 0 : null)
+            };
+            const result = controller.calculateKpiMetrics(null, oEvent);
+
+            expect(result.totalCount).toBe(0);
+        });
+
+        it('should return "-" when event total parameter is absent or not a number', () => {
+            const oEvent = {
+                getParameter: jest.fn(() => undefined)
+            };
+            const mockTable = {
+                getItems: () => [{}, {}, {}]
+            };
+            const result = controller.calculateKpiMetrics(mockTable, oEvent);
+
+            expect(result.totalCount).toBe("-");
+        });
+
+        it('should return "-" when oEvent is null or undefined without falling back to loaded rows', () => {
+            const mockTable = {
+                getItems: () => [{}, {}]
+            };
+            const result = controller.calculateKpiMetrics(mockTable, null);
+
+            expect(result.totalCount).toBe("-");
+        });
+    });
 });

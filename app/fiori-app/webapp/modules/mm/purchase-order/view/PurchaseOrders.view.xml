@@ -41,21 +41,6 @@
                                     valueColor="Good" />
                             </TileContent>
                         </GenericTile>
-
-                        <GenericTile
-                            id="kpiComplete"
-                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-                            header="{i18n>kpiComplete}"
-                            subheader="{i18n>kpiCompleteDesc}">
-                            <TileContent>
-                                <NumericContent
-                                    id="kpiCompleteVal"
-                                    value="{viewModel>/completeRate}"
-                                    scale="%"
-                                    icon="sap-icon://accept"
-                                    valueColor="Good" />
-                            </TileContent>
-                        </GenericTile>
                     </HBox>
                 </Panel>
 
