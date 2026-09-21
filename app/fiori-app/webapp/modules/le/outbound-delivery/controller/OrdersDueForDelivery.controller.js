@@ -21,13 +21,6 @@ sap.ui.define([
 ) {
     "use strict";
 
-    var DEFAULT_SHIPPING_POINTS = [
-        { key: "1120", text: "1120 - 1130-FG Loading Area" },
-        { key: "1112", text: "1112 - Shipping Point 1112" },
-        { key: "1108", text: "1108 - Shipping Point 1108" },
-        { key: "1109", text: "1109 - Shipping Point 1109" }
-    ];
-
     return BaseController.extend("saps4hana.fiori.modules.le.outbound-delivery.controller.OrdersDueForDelivery", {
         onInit: function () {
             if (AuthService && typeof AuthService.syncModelHeaders === "function") {
@@ -89,27 +82,28 @@ sap.ui.define([
 
         _loadShippingPoints: function () {
             var that = this;
-            if (!OutboundDeliveryService || typeof OutboundDeliveryService.getDefaultShippingPoint !== "function") {
+            if (!OutboundDeliveryService || typeof OutboundDeliveryService.getShippingPoints !== "function") {
                 return;
             }
-            OutboundDeliveryService.getDefaultShippingPoint()
-                .then(function (result) {
-                    var aPoints = (result && result.ShippingPoints) || [];
-                    var aFormatted = aPoints.map(function (sPt) {
-                        var oFound = DEFAULT_SHIPPING_POINTS.find(function (p) { return p.key === sPt; });
-                        return oFound || { key: sPt, text: sPt };
-                    });
-                    var oDialogModel = that.getView().getModel("deliveryDialog");
-                    if (oDialogModel) {
-                        oDialogModel.setProperty("/shippingPoints", aFormatted);
-                        if (result && result.ShippingPoint) {
-                            oDialogModel.setProperty("/shippingPoint", result.ShippingPoint);
+            OutboundDeliveryService.getShippingPoints()
+                .then(function (aPoints) {
+                    if (Array.isArray(aPoints)) {
+                        var aFormatted = aPoints.map(function (oSp) {
+                            var sKey = oSp.ShippingPoint || "";
+                            var sName = oSp.ShippingPointName || oSp.ShippingPoint_Text || "";
+                            return {
+                                key: sKey,
+                                text: sName ? (sKey + " - " + sName) : sKey,
+                                name: sName
+                            };
+                        });
+                        var oDialogModel = that.getView().getModel("deliveryDialog");
+                        if (oDialogModel) {
+                            oDialogModel.setProperty("/shippingPoints", aFormatted);
                         }
                     }
                 })
-                .catch(function () {
-                    // Fall back to pre-set default shipping points
-                });
+                .catch(function () {});
         },
 
         onUpdateFinished: function (oEvent) {
@@ -197,7 +191,7 @@ sap.ui.define([
             }
 
             var oDialogModel = this.getView().getModel("deliveryDialog");
-            var sShippingPoint = oCtx.getProperty("ShippingPoint") || (oDialogModel && oDialogModel.getProperty("/shippingPoint")) || "";
+            var sShippingPoint = oCtx.getProperty("ShippingPoint") || "";
             var sGoodsIssueDate = oCtx.getProperty("GoodsIssueDate") || this._getTodayDateString();
 
             if (oDialogModel) {

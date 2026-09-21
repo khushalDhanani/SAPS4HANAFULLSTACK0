@@ -74,6 +74,10 @@ const MockAuthService = {
 };
 
 const MockOutboundDeliveryService = {
+    getShippingPoints: jest.fn().mockResolvedValue([
+        { ShippingPoint: "1120", ShippingPointName: "1130-FG Loading Area" },
+        { ShippingPoint: "1112", ShippingPointName: "Packaging Area 1112" }
+    ]),
     getDefaultShippingPoint: jest.fn().mockResolvedValue({
         ShippingPoint: "1120",
         ShippingPoints: ["1120", "1112", "1108", "1109"]
@@ -233,6 +237,47 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(dialogModel.getProperty("/salesOrder")).toBe("5000104");
         expect(dialogModel.getProperty("/shippingPoint")).toBe("1120");
         expect(dialogModel.getProperty("/deliveryDate")).toBe("2026-09-20");
+        expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
+    });
+
+    test("_loadShippingPoints loads authentic shipping points from getShippingPoints without hardcoded table", async () => {
+        MockOutboundDeliveryService.getShippingPoints.mockResolvedValueOnce([
+            { ShippingPoint: "1120", ShippingPointName: "1130-FG Loading Area" },
+            { ShippingPoint: "1112", ShippingPointName: "Packaging Area 1112" }
+        ]);
+
+        controller.onInit();
+        await Promise.resolve(); // wait for getShippingPoints promise
+
+        const dialogModel = mockView.getModel("deliveryDialog");
+        const aPoints = dialogModel.getProperty("/shippingPoints");
+        expect(MockOutboundDeliveryService.getShippingPoints).toHaveBeenCalled();
+        expect(aPoints).toEqual([
+            { key: "1120", text: "1120 - 1130-FG Loading Area", name: "1130-FG Loading Area" },
+            { key: "1112", text: "1112 - Packaging Area 1112", name: "Packaging Area 1112" }
+        ]);
+    });
+
+    test("onCreateDeliveryPress leaves shippingPoint empty when row has no ShippingPoint", () => {
+        controller.onInit();
+        controller._openCreateDeliveryDialog = jest.fn();
+
+        const mockEvent = {
+            getSource: () => ({
+                getBindingContext: () => ({
+                    getProperty: (p) => {
+                        if (p === "SalesOrder") return "5000105";
+                        if (p === "ShippingPoint") return "";
+                        return null;
+                    }
+                })
+            })
+        };
+
+        controller.onCreateDeliveryPress(mockEvent);
+
+        const dialogModel = mockView.getModel("deliveryDialog");
+        expect(dialogModel.getProperty("/shippingPoint")).toBe("");
         expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
     });
 

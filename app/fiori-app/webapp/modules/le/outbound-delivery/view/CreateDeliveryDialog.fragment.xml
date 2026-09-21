@@ -38,10 +38,16 @@
                         <ComboBox
                             id="comboDeliveryShippingPoint"
                             selectedKey="{deliveryDialog>/shippingPoint}"
-                            items="{deliveryDialog>/shippingPoints}"
+                            items="{
+                                path: 'outboundDelivery>/ShippingPointVH',
+                                sorter: { path: 'ShippingPoint' }
+                            }"
                             placeholder="{i18n>dlgDeliveryShippingPointPlaceholder}"
                             width="100%">
-                            <core:Item key="{deliveryDialog>key}" text="{deliveryDialog>text}" />
+                            <core:ListItem
+                                key="{outboundDelivery>ShippingPoint}"
+                                text="{= ${outboundDelivery>ShippingPointName} ? ${outboundDelivery>ShippingPoint} + ' - ' + ${outboundDelivery>ShippingPointName} : ${outboundDelivery>ShippingPoint} }"
+                                additionalText="{outboundDelivery>ShippingPointName}" />
                         </ComboBox>
 
                         <Label text="{i18n>dlgDeliveryDate}" required="true" />

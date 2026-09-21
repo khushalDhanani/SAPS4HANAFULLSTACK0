@@ -202,20 +202,24 @@ sap.ui.define([
 
         _loadShippingPoints: function () {
             var that = this;
-            if (!OutboundDeliveryService || typeof OutboundDeliveryService.getDefaultShippingPoint !== "function") {
+            if (!OutboundDeliveryService || typeof OutboundDeliveryService.getShippingPoints !== "function") {
                 return;
             }
-            OutboundDeliveryService.getDefaultShippingPoint()
-                .then(function (result) {
-                    var aPoints = (result && result.ShippingPoints) || [];
-                    var aFormatted = aPoints.map(function (sPt) {
-                        return { key: sPt, text: sPt };
-                    });
-                    var oDialogModel = that.getView().getModel("deliveryDialog");
-                    if (oDialogModel) {
-                        oDialogModel.setProperty("/shippingPoints", aFormatted);
-                        if (result && result.ShippingPoint) {
-                            oDialogModel.setProperty("/shippingPoint", result.ShippingPoint);
+            OutboundDeliveryService.getShippingPoints()
+                .then(function (aPoints) {
+                    if (Array.isArray(aPoints)) {
+                        var aFormatted = aPoints.map(function (oSp) {
+                            var sKey = oSp.ShippingPoint || "";
+                            var sName = oSp.ShippingPointName || oSp.ShippingPoint_Text || "";
+                            return {
+                                key: sKey,
+                                text: sName ? (sKey + " - " + sName) : sKey,
+                                name: sName
+                            };
+                        });
+                        var oDialogModel = that.getView().getModel("deliveryDialog");
+                        if (oDialogModel) {
+                            oDialogModel.setProperty("/shippingPoints", aFormatted);
                         }
                     }
                 })
@@ -248,7 +252,7 @@ sap.ui.define([
             }
 
             var oDialogModel = this.getView().getModel("deliveryDialog");
-            var sShippingPoint = oCtx.getProperty("ShippingPoint") || (oDialogModel && oDialogModel.getProperty("/shippingPoint")) || "";
+            var sShippingPoint = oCtx.getProperty("ShippingPoint") || "";
             if (oDialogModel) {
                 oDialogModel.setProperty("/salesOrder", sSalesOrder);
                 oDialogModel.setProperty("/shippingPoint", sShippingPoint);

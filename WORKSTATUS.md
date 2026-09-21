@@ -2679,16 +2679,46 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 — Eliminate Literal Shipping Point Table and Bind Dialog to ShippingPointVH (Audit Item 32)
+- **Change**: Eliminated hardcoded shipping point literal table (`DEFAULT_SHIPPING_POINTS` with invented names like `"1112 - Shipping Point 1112"`) in `OrdersDueForDelivery.controller.js` and bound the create delivery dialog ComboBox directly to `outboundDelivery>/ShippingPointVH`.
+  1. **Frontend View Fragment**:
+     - `app/fiori-app/webapp/modules/le/outbound-delivery/view/CreateDeliveryDialog.fragment.xml`: Bound `comboDeliveryShippingPoint` items directly to `outboundDelivery>/ShippingPointVH` with `sorter: { path: 'ShippingPoint' }`. Uses `core:ListItem` displaying authentic SAP `ShippingPoint` and `ShippingPointName` from `C_ShippingPointVH` (`text="{= ${outboundDelivery>ShippingPointName} ? ${outboundDelivery>ShippingPoint} + ' - ' + ${outboundDelivery>ShippingPointName} : ${outboundDelivery>ShippingPoint} }"` and `additionalText="{outboundDelivery>ShippingPointName}"`).
+  2. **Controller Logic**:
+     - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`:
+       - Removed literal array `DEFAULT_SHIPPING_POINTS`.
+       - Updated `_loadShippingPoints` to call `OutboundDeliveryService.getShippingPoints()` (which queries `/ShippingPointVH`), formatting entries dynamically from `ShippingPoint` and `ShippingPointName` / `ShippingPoint_Text`.
+       - In `onCreateDeliveryPress`, eliminated fallback to config shipping point (`oDialogModel.getProperty("/shippingPoint")`). If the due order row has no `ShippingPoint`, the selection remains empty, requiring user selection.
+     - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`:
+       - Updated `_loadShippingPoints` to call `OutboundDeliveryService.getShippingPoints()`.
+       - In `onCreateDeliveryPress`, eliminated fallback to config shipping point.
+  3. **Unit Tests & Documentation**:
+     - `test/unit/le/ordersDueForDeliveryController.test.js`: Added `getShippingPoints` mock returning authentic shipping points and names. Added tests verifying `_loadShippingPoints` loads from `getShippingPoints` without literal array and `onCreateDeliveryPress` leaves `shippingPoint` empty when row has no shipping point.
+     - `test/unit/sales-order/salesOrdersController.test.js`: Added `getShippingPoints` mock to `MockOutboundDeliveryService`.
+     - `docs/data-lineage-audit.md`: Updated Audit Item 32 to `RESOLVED`.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/le/ordersDueForDeliveryController.test.js test/unit/sales-order/salesOrdersController.test.js`: **2 passed, 2 total test suites; 31 passed, 31 total tests (100% green)**.
+  - `npx jest test/unit/le/`: **4 passed, 4 total test suites; 48 passed, 48 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 928 passed, 928 total tests (100% green)** in 70.9 s.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 840 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **71 passed, 71 total test suites; 926 passed, 926 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 928 passed, 928 total tests (100% green)**.
+  - `npx jest test/unit/le/`: **4 passed, 4 total test suites; 48 passed, 48 total tests (100% green)**.
   - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 144 passed, 144 total tests (100% green)**.
   - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Shipping Point List and Names Bound to ShippingPointVH (Audit Row 32)**:
+  - Literal table `DEFAULT_SHIPPING_POINTS` with invented names eliminated from `OrdersDueForDelivery.controller.js`.
+  - Create delivery dialog ComboBox bound directly to `outboundDelivery>/ShippingPointVH`, displaying authentic S/4HANA `ShippingPoint` and `ShippingPointName` from `C_ShippingPointVH`.
+  - Fallback to pre-set config shipping point eliminated when due order row lacks shipping point.
 - **Validate and Reject Blank Org Values (Audit Row 25)**:
   - Silent `cds.s4` fallbacks eliminated across all three layers (`salesInquiry.mapper.js`, `SalesInquiryMapper.js`, `SalesInquiryAdapter.js`).
   - Blank or missing `SalesOrganization`, `DistributionChannel`, `OrganizationDivision`/`Division`, `SalesInquiryType`/`SalesOrderType`, and `TransactionCurrency` strictly validated and rejected.

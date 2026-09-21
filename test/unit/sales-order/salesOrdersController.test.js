@@ -101,6 +101,10 @@ const MockODataClient = {
 };
 
 const MockOutboundDeliveryService = {
+    getShippingPoints: jest.fn().mockResolvedValue([
+        { ShippingPoint: "1120", ShippingPointName: "1130-FG Loading Area" },
+        { ShippingPoint: "1112", ShippingPointName: "Packaging Area 1112" }
+    ]),
     getDefaultShippingPoint: jest.fn().mockResolvedValue({
         ShippingPoint: "1120",
         ShippingPoints: ["1120", "1112", "1108", "1109"]
