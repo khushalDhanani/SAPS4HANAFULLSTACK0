@@ -1190,8 +1190,9 @@ sap.ui.define([
 
             return GoodsIssueService.postGoodsIssue(oPayload)
                 .then(function (oResult) {
-                    that._playBeep(true);
+                    var sMatDoc = (oResult && oResult.MaterialDocument && String(oResult.MaterialDocument).trim()) || "";
                     if (oResult && oResult.Queued) {
+                        that._playBeep(true);
                         oModel.setProperty("/postResult", {
                             Success: true,
                             Queued: true,
@@ -1215,18 +1216,35 @@ sap.ui.define([
                         });
                         that._refreshQueueCount();
                         MessageToast.show("Queued in Dispatch Queue (" + oResult.QueueReference + ")");
-                    } else {
+                    } else if (sMatDoc) {
+                        that._playBeep(true);
                         oModel.setProperty("/postResult", {
                             Success: true,
                             Queued: false,
                             QueueReference: "",
                             SyncStatus: "POSTED_IN_SAP",
-                            MaterialDocument: oResult.MaterialDocument || "",
+                            MaterialDocument: sMatDoc,
                             MaterialDocYear: oResult.MaterialDocYear || "",
                             TransferOrder: oResult.TransferOrder || "",
                             DifferenceCleared: oResult.DifferenceCleared || false,
                             DifferenceQty: oResult.DifferenceQty || 0,
                             Message: oResult.Message || "Goods Issue 261 posted successfully in S/4HANA."
+                        });
+                    } else {
+                        that._playBeep(false);
+                        oModel.setProperty("/postResult", {
+                            Success: false,
+                            Queued: false,
+                            QueueReference: "",
+                            SyncStatus: "FAILED",
+                            MaterialDocument: "",
+                            MaterialDocYear: "",
+                            TransferOrder: "",
+                            DifferenceCleared: false,
+                            DifferenceQty: 0,
+                            Message: (oResult && oResult.Success === false && oResult.Message)
+                                ? oResult.Message
+                                : "Posting response did not include an authentic SAP Material Document number. Goods issue not confirmed in SAP."
                         });
                     }
                 })
@@ -1235,6 +1253,8 @@ sap.ui.define([
                     oModel.setProperty("/postResult", {
                         Success: false,
                         Queued: false,
+                        QueueReference: "",
+                        SyncStatus: "FAILED",
                         MaterialDocument: "",
                         MaterialDocYear: "",
                         TransferOrder: "",
@@ -1277,14 +1297,15 @@ sap.ui.define([
             return GoodsIssueService.retryQueuedGoodsIssue(sQueueRef)
                 .then(function (oResult) {
                     that.setBusy(false);
-                    that._playBeep(true);
-                    if (oResult.Success && oResult.MaterialDocument) {
+                    var sMatDoc = (oResult && oResult.MaterialDocument && String(oResult.MaterialDocument).trim()) || "";
+                    if (oResult && oResult.Success && sMatDoc) {
+                        that._playBeep(true);
                         oModel.setProperty("/postResult", {
                             Success: true,
                             Queued: false,
                             QueueReference: sQueueRef,
                             SyncStatus: "POSTED_IN_SAP",
-                            MaterialDocument: oResult.MaterialDocument,
+                            MaterialDocument: sMatDoc,
                             MaterialDocYear: oResult.MaterialDocYear || String(new Date().getFullYear()),
                             TransferOrder: oResult.TransferOrder || "",
                             DifferenceCleared: oResult.DifferenceCleared || false,
@@ -1292,10 +1313,14 @@ sap.ui.define([
                             Message: oResult.Message || "Goods Issue successfully synchronized to SAP S/4HANA!"
                         });
                         that._refreshQueueCount();
-                        MessageBox.success("Successfully synced to SAP! Material Document: " + oResult.MaterialDocument);
+                        MessageBox.success("Successfully synced to SAP! Material Document: " + sMatDoc);
                     } else {
-                        oModel.setProperty("/postResult/Message", oResult.Message || "SAP Gateway rejected retry request.");
-                        MessageBox.warning(oResult.Message || "Retry did not post to SAP. Transaction remains in Dispatch Queue.");
+                        that._playBeep(false);
+                        var sRetryMsg = (oResult && oResult.Success === false && oResult.Message)
+                            ? oResult.Message
+                            : "Retry did not post to SAP. Transaction remains in Dispatch Queue.";
+                        oModel.setProperty("/postResult/Message", sRetryMsg);
+                        MessageBox.warning(sRetryMsg);
                     }
                 })
                 .catch(function (err) {
@@ -1376,10 +1401,11 @@ sap.ui.define([
             return GoodsIssueService.retryQueuedGoodsIssue(sQueueRef)
                 .then(function (oResult) {
                     that.setBusy(false);
-                    if (oResult.Success && oResult.MaterialDocument) {
-                        MessageBox.success("Item " + sQueueRef + " successfully posted to SAP! Material Document: " + oResult.MaterialDocument);
+                    var sMatDoc = (oResult && oResult.MaterialDocument && String(oResult.MaterialDocument).trim()) || "";
+                    if (oResult && oResult.Success && sMatDoc) {
+                        MessageBox.success("Item " + sQueueRef + " successfully posted to SAP! Material Document: " + sMatDoc);
                     } else {
-                        MessageBox.warning(oResult.Message || "Retry completed with warnings. Status: " + oResult.SyncStatus);
+                        MessageBox.warning((oResult && oResult.Message) || "Retry completed with warnings. Status: " + ((oResult && oResult.SyncStatus) || "FAILED"));
                     }
                     return that.onRefreshQueueTray();
                 })

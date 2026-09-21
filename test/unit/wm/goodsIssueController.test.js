@@ -681,6 +681,25 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(oModel.getProperty('/postResult/Message')).toContain('API not released');
         });
 
+        it('should require a material document to mark as posted in SAP', async () => {
+            mockGoodsIssueService.postGoodsIssue.mockResolvedValueOnce({
+                Success: true,
+                Queued: false,
+                MaterialDocument: '',
+                Message: 'Gateway acknowledged but returned no material document'
+            });
+
+            await controller.onPostGoodsIssue();
+            const oModel = controller.getView().getModel('giView');
+            expect(oModel.getProperty('/currentStep')).toBe(4);
+            const postResult = oModel.getProperty('/postResult');
+            expect(postResult.Success).toBe(false);
+            expect(postResult.Queued).toBe(false);
+            expect(postResult.SyncStatus).toBe('FAILED');
+            expect(postResult.MaterialDocument).toBe('');
+            expect(postResult.Message).toContain('authentic SAP Material Document number');
+        });
+
         it('should block posting expired batch', () => {
             const oModel = controller.getView().getModel('giView');
             const oActive = oModel.getProperty('/activeItem');
@@ -911,6 +930,29 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(postResult.MaterialDocument).toBe('4900000001');
             expect(postResult.SyncStatus).toBe('POSTED_IN_SAP');
             expect(mockMessageBox.success).toHaveBeenCalledWith(expect.stringContaining('4900000001'));
+        });
+
+        it('should reject retry as unposted when retry response has no material document', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/postResult', {
+                Success: true,
+                Queued: true,
+                QueueReference: 'GI-QUEUE-168779-0001-ABCD',
+                SyncStatus: 'QUEUED'
+            });
+
+            mockGoodsIssueService.retryQueuedGoodsIssue.mockResolvedValueOnce({
+                Success: true,
+                MaterialDocument: '',
+                Message: 'Retry did not generate material document'
+            });
+
+            await controller.onRetrySync();
+
+            expect(mockGoodsIssueService.retryQueuedGoodsIssue).toHaveBeenCalledWith('GI-QUEUE-168779-0001-ABCD');
+            const postResult = oModel.getProperty('/postResult');
+            expect(postResult.Queued).toBe(true);
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining('Retry did not post to SAP'));
         });
 
         it('should open queue tray dialog and load items on onOpenQueueTray', async () => {
