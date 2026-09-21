@@ -679,7 +679,7 @@ class GoodsReceiptAdapter {
           OpenQuantity: String(it.Quantity || nQty),
           UnitOfMeasure: cleanUnit,
           GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || '101',
-          GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '0000',
+          GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '',
           DocumentItemText: it.DocumentItemText || ''
         };
       });
@@ -703,7 +703,7 @@ class GoodsReceiptAdapter {
           OpenQuantity: String(nQty),
           UnitOfMeasure: cleanUnit,
           GoodsMovementType: payload.GoodsMovementType || '101',
-          GoodsMovementReasonCode: payload.GoodsMovementReasonCode || '0000',
+          GoodsMovementReasonCode: payload.GoodsMovementReasonCode || '',
           DocumentItemText: payload.DocumentItemText || ''
         }
       ];

@@ -2051,20 +2051,36 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Review with user and commit fixes for Audit Finding A item numbers.
 
+### 2026-09-21: Audit Finding A — Elimination of Invented Movement Reason Code Defaults ('0000') in GoodsReceiptAdapter.js
+- **Problem**: Audit flagged that movement reason code defaulted to `'0000'` in `GoodsReceiptAdapter.js` (lines 663 and 681 in original file, lines 682 and 706 in current file), causing an invented dummy reason code to post to SAP S/4HANA.
+- **Changes Applied**:
+  1. `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`:
+     - In `payload.Items` multi-item mapping: Mapped `GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || ''`. Removed `'0000'` fallback.
+     - In single item mapping: Mapped `GoodsMovementReasonCode: payload.GoodsMovementReasonCode || ''`. Removed `'0000'` fallback.
+     - Reason code now remains blank (`''`) for standard movement postings unless an authentic reason code is explicitly provided by the caller or business workflow.
+  2. `test/unit/wm/goodsReceiptService.test.js`:
+     - Added assertion verifying `GoodsMovementReasonCode: ''` on standard Goods Receipt posting.
+     - Added dedicated unit test asserting authentic `GoodsMovementReasonCode` is passed through when provided and empty string when omitted, never inventing `'0000'`.
+- **Executed Commands and Results**:
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 196 passed, 196 total tests (100% green)**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Review with user and commit fixes for Audit Finding A reason codes.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 543 tests 100% green)**.
+- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 544 tests 100% green)**.
 - **Security & Data Integrity Hardening (Audit Finding A)**:
   - **Zero Default Units**: Removed all hardcoded `'PC'` and `'KG'` fallbacks across Sales Inquiry, Sales Order, Purchase Order, Goods Receipt, and Goods Issue. All interfaces strictly require authentic units from SAP master data or reject invalid requests with descriptive errors.
   - **Zero Default Quantities**: Removed all `|| 1` fallbacks in `SalesInquiryAdapter.js` and `purchaseOrder.mapper.js`. Blank, non-numeric, zero, or negative quantities throw explicit validation errors upfront before SAP document creation.
   - **Zero Default Item Numbers**: Removed all 13 `'000010'` and `'00010'` defaults in `GoodsReceiptAdapter.js`. Replaced synthetic item numbering with strict validation requiring authentic SAP item numbers.
+  - **Zero Default Reason Codes**: Removed `'0000'` fallback for `GoodsMovementReasonCode` in `GoodsReceiptAdapter.js`. Standard movements post with authentic reason or empty string.
   - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
   - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
 - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
 
 ## Next Steps
-1. Review eliminated invented item number defaults with user.
+1. Review eliminated invented value defaults with user.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.
-
-

@@ -425,7 +425,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                             Batch: 'IN25000133',
                             QuantityInEntryUnit: '15',
                             EntryUnit: 'KG',
-                            GoodsMovementType: '101'
+                            GoodsMovementType: '101',
+                            GoodsMovementReasonCode: ''
                         })
                     ])
                 })
@@ -435,6 +436,39 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(result.MaterialDocument).toBe('5000000347');
             expect(result.DeliveryDocument).toBe('180000001');
             expect(result.Message).toContain('5000000347');
+
+            postSpy.mockRestore();
+        });
+
+        it('should pass authentic GoodsMovementReasonCode when provided and empty string when omitted without inventing 0000', async () => {
+            const postSpy = jest.spyOn(GoodsReceiptAdapter, '_post').mockResolvedValueOnce({
+                InboundDelivery: '180000001',
+                SourceOfGR: 'INBDELIV',
+                MaterialDocument: '5000000350'
+            });
+
+            await GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                DeliveryDocumentItem: '000010',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 10,
+                Unit: 'KG',
+                GoodsMovementReasonCode: '0001'
+            });
+
+            expect(postSpy).toHaveBeenCalledWith(
+                '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers',
+                expect.objectContaining({
+                    Header2Items: expect.arrayContaining([
+                        expect.objectContaining({
+                            GoodsMovementReasonCode: '0001'
+                        })
+                    ])
+                })
+            );
 
             postSpy.mockRestore();
         });
