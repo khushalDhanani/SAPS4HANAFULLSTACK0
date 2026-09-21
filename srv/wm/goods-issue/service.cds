@@ -12,7 +12,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Denominator  : Integer;
         FactorToBase : Decimal(13, 3);
         IsBaseUnit   : Boolean;
-        Barcode      : String(40);
     };
 
     // Dispatch queue records persisted in the CAP database. Read-only over OData: every change goes

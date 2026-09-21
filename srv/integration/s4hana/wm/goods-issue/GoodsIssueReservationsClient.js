@@ -166,8 +166,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               Numerator: 1,
               Denominator: 1,
               FactorToBase: 1.0,
-              IsBaseUnit: true,
-              Barcode: `${r.Product}-${baseUnit}`
+              IsBaseUnit: true
             }
           ];
         } else if (!packagingUnits) {

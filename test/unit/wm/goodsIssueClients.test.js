@@ -396,6 +396,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(items[0].Batch).toBe('BATCH_PREASSIGNED');
       expect(items[0].BatchStatusText).toBe('unknown');
       expect(items[0].BatchStatusState).toBe('None');
+      expect(items[0].PackagingUnits).toHaveLength(1);
+      expect(items[0].PackagingUnits[0].Unit).toBe('KG');
+      expect(items[0].PackagingUnits[0].Barcode).toBeUndefined();
     });
 
     it('should return strictly open lines — no fallback to closed items', async () => {
@@ -455,8 +458,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(units).toHaveLength(2);
       expect(units[0].Unit).toBe('PAL');
       expect(units[0].FactorToBase).toBe(100);
-      expect(units[0].Barcode).toBe('MAT01-PAL');
+      expect(units[0].Barcode).toBeUndefined();
       expect(units[1].IsBaseUnit).toBe(true);
+      expect(units[1].Barcode).toBeUndefined();
     });
 
     it('should exclude expired batches and sort remaining by FEFO with batch-grain stock in getMaterialBatches', async () => {

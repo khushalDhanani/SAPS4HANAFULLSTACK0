@@ -30,8 +30,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
             Numerator: num,
             Denominator: den,
             FactorToBase: factor,
-            IsBaseUnit: Boolean(u.IsBaseUnit),
-            Barcode: `${sMat}-${u.AlternativeUnit}`
+            IsBaseUnit: Boolean(u.IsBaseUnit)
           };
         });
       }

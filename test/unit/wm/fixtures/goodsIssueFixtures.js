@@ -5,27 +5,27 @@
  */
 
 const mockPackagingUnitsRM4520 = [
-  { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true, Barcode: 'RM-4520-KG' },
-  { Unit: 'DRM', Description: 'Drum (50 KG)', Numerator: 50, Denominator: 1, FactorToBase: 50.0, IsBaseUnit: false, Barcode: 'DRM-4520-50' },
-  { Unit: 'CAN', Description: 'Canister (10 KG)', Numerator: 10, Denominator: 1, FactorToBase: 10.0, IsBaseUnit: false, Barcode: 'CAN-4520-10' }
+  { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true },
+  { Unit: 'DRM', Description: 'Drum (50 KG)', Numerator: 50, Denominator: 1, FactorToBase: 50.0, IsBaseUnit: false },
+  { Unit: 'CAN', Description: 'Canister (10 KG)', Numerator: 10, Denominator: 1, FactorToBase: 10.0, IsBaseUnit: false }
 ];
 
 const mockPackagingUnitsRM4831 = [
-  { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true, Barcode: 'RM-4831-KG' },
-  { Unit: 'BAG', Description: 'Bag (25 KG)', Numerator: 25, Denominator: 1, FactorToBase: 25.0, IsBaseUnit: false, Barcode: 'BAG-4831-25' },
-  { Unit: 'SCK', Description: 'Sack (10 KG)', Numerator: 10, Denominator: 1, FactorToBase: 10.0, IsBaseUnit: false, Barcode: 'SCK-4831-10' }
+  { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true },
+  { Unit: 'BAG', Description: 'Bag (25 KG)', Numerator: 25, Denominator: 1, FactorToBase: 25.0, IsBaseUnit: false },
+  { Unit: 'SCK', Description: 'Sack (10 KG)', Numerator: 10, Denominator: 1, FactorToBase: 10.0, IsBaseUnit: false }
 ];
 
 const mockPackagingUnitsRM5100 = [
-  { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true, Barcode: 'RM-5100-KG' },
-  { Unit: 'PAC', Description: 'Pack (5 KG)', Numerator: 5, Denominator: 1, FactorToBase: 5.0, IsBaseUnit: false, Barcode: 'PAC-5100-05' },
-  { Unit: 'BAG', Description: 'Bag (20 KG)', Numerator: 20, Denominator: 1, FactorToBase: 20.0, IsBaseUnit: false, Barcode: 'BAG-5100-20' }
+  { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true },
+  { Unit: 'PAC', Description: 'Pack (5 KG)', Numerator: 5, Denominator: 1, FactorToBase: 5.0, IsBaseUnit: false },
+  { Unit: 'BAG', Description: 'Bag (20 KG)', Numerator: 20, Denominator: 1, FactorToBase: 20.0, IsBaseUnit: false }
 ];
 
 const mockPackagingUnitsAlum = [
-  { Unit: 'PC', Description: 'Piece', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true, Barcode: 'RAW-ALUM-01-PC' },
-  { Unit: 'ROL', Description: 'Roll (5 PC)', Numerator: 5, Denominator: 1, FactorToBase: 5.0, IsBaseUnit: false, Barcode: 'ROL-ALUM-05' },
-  { Unit: 'CRT', Description: 'Crate (20 PC)', Numerator: 20, Denominator: 1, FactorToBase: 20.0, IsBaseUnit: false, Barcode: 'CRT-ALUM-20' }
+  { Unit: 'PC', Description: 'Piece', Numerator: 1, Denominator: 1, FactorToBase: 1.0, IsBaseUnit: true },
+  { Unit: 'ROL', Description: 'Roll (5 PC)', Numerator: 5, Denominator: 1, FactorToBase: 5.0, IsBaseUnit: false },
+  { Unit: 'CRT', Description: 'Crate (20 PC)', Numerator: 20, Denominator: 1, FactorToBase: 20.0, IsBaseUnit: false }
 ];
 
 function createMockReservationItems() {
