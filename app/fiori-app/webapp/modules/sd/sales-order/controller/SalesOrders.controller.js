@@ -203,6 +203,14 @@ sap.ui.define([
                 MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval and cannot be delivered.", [sSalesOrder]));
                 return;
             }
+            if (sApprovalStatus === "C") {
+                MessageBox.warning(this._text("msgOrderRejected", "Sales Order {0} has been rejected and cannot be delivered.", [sSalesOrder]));
+                return;
+            }
+            if (sApprovalStatus === "D") {
+                MessageBox.warning(this._text("msgOrderRework", "Sales Order {0} is being reworked and cannot be delivered.", [sSalesOrder]));
+                return;
+            }
             if (sDeliveryBlock) {
                 MessageBox.warning(this._text("msgOrderDeliveryBlocked", "Sales Order {0} has a delivery block ({1}) and cannot be delivered.", [sSalesOrder, sDeliveryBlock]));
                 return;

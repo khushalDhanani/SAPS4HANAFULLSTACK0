@@ -270,6 +270,110 @@ describe("SalesOrders Controller", () => {
         expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
     });
 
+    test("onCreateDeliveryPress warns and blocks when order is in approval (A)", () => {
+        controller.onInit();
+        controller._openCreateDeliveryDialog = jest.fn();
+
+        const mockEvent = {
+            getSource: () => ({
+                getBindingContext: (modelName) => {
+                    if (modelName === "salesOrder") {
+                        return {
+                            getProperty: (prop) => {
+                                if (prop === "SalesOrder") return "5000461";
+                                if (prop === "SalesDocApprovalStatus") return "A";
+                                return null;
+                            }
+                        };
+                    }
+                    return null;
+                }
+            })
+        };
+
+        controller.onCreateDeliveryPress(mockEvent);
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining("in approval"));
+        expect(controller._openCreateDeliveryDialog).not.toHaveBeenCalled();
+    });
+
+    test("onCreateDeliveryPress warns and blocks when order is rejected (C)", () => {
+        controller.onInit();
+        controller._openCreateDeliveryDialog = jest.fn();
+
+        const mockEvent = {
+            getSource: () => ({
+                getBindingContext: (modelName) => {
+                    if (modelName === "salesOrder") {
+                        return {
+                            getProperty: (prop) => {
+                                if (prop === "SalesOrder") return "5000013";
+                                if (prop === "SalesDocApprovalStatus") return "C";
+                                return null;
+                            }
+                        };
+                    }
+                    return null;
+                }
+            })
+        };
+
+        controller.onCreateDeliveryPress(mockEvent);
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining("rejected"));
+        expect(controller._openCreateDeliveryDialog).not.toHaveBeenCalled();
+    });
+
+    test("onCreateDeliveryPress warns and blocks when order is being reworked (D)", () => {
+        controller.onInit();
+        controller._openCreateDeliveryDialog = jest.fn();
+
+        const mockEvent = {
+            getSource: () => ({
+                getBindingContext: (modelName) => {
+                    if (modelName === "salesOrder") {
+                        return {
+                            getProperty: (prop) => {
+                                if (prop === "SalesOrder") return "5000400";
+                                if (prop === "SalesDocApprovalStatus") return "D";
+                                return null;
+                            }
+                        };
+                    }
+                    return null;
+                }
+            })
+        };
+
+        controller.onCreateDeliveryPress(mockEvent);
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining("reworked"));
+        expect(controller._openCreateDeliveryDialog).not.toHaveBeenCalled();
+    });
+
+    test("onCreateDeliveryPress warns and blocks when order has delivery block", () => {
+        controller.onInit();
+        controller._openCreateDeliveryDialog = jest.fn();
+
+        const mockEvent = {
+            getSource: () => ({
+                getBindingContext: (modelName) => {
+                    if (modelName === "salesOrder") {
+                        return {
+                            getProperty: (prop) => {
+                                if (prop === "SalesOrder") return "5000104";
+                                if (prop === "DeliveryBlockReason") return "01";
+                                return null;
+                            }
+                        };
+                    }
+                    return null;
+                }
+            })
+        };
+
+        controller.onCreateDeliveryPress(mockEvent);
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining("delivery block"));
+        expect(controller._openCreateDeliveryDialog).not.toHaveBeenCalled();
+    });
+
     test("onCancelCreateDelivery closes the dialog if loaded", () => {
         const mockDialog = { close: jest.fn() };
         controller._pCreateDeliveryDialog = Promise.resolve(mockDialog);

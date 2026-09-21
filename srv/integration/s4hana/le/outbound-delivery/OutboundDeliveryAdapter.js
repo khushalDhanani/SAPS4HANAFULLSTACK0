@@ -45,6 +45,11 @@ class OutboundDeliveryAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.servicePath = options.servicePath || SERVICE_PATH;
+    this.cacheTtlMs = options.cacheTtlMs !== undefined ? options.cacheTtlMs : 60000;
+    this._approvalCache = {
+      timestamp: 0,
+      map: new Map()
+    };
   }
 
   /**
@@ -87,7 +92,7 @@ class OutboundDeliveryAdapter {
         filterClauses.push(`ShippingPoint eq ${odataString(sp)}`);
       } else {
         // Default to configured shipping points from cds.s4.shippingPoints
-        const configuredSPs = s4Config.getShippingPoints() || ['1120'];
+        const configuredSPs = s4Config.getShippingPoints();
         if (configuredSPs.length === 1) {
           filterClauses.push(`ShippingPoint eq ${odataString(configuredSPs[0])}`);
         } else if (configuredSPs.length > 1) {
@@ -185,8 +190,7 @@ class OutboundDeliveryAdapter {
     }
 
     const cleanOrder = String(salesOrder).trim();
-    const configuredSPs = s4Config.getShippingPoints() || ['1120'];
-    const cleanSP = String(shippingPoint || configuredSPs[0] || '1120').trim();
+    const cleanSP = String(shippingPoint || s4Config.getShippingPoints()[0]).trim();
 
     const payload = {
       ReferenceSDDocument: cleanOrder,
@@ -244,13 +248,20 @@ class OutboundDeliveryAdapter {
 
   /**
    * Fetches unapproved / in-approval sales order statuses from SD_F1873_SO_WL_SRV.
+   * Caches results in-memory for `cacheTtlMs` (default 60s) to avoid extra SAP calls on worklist reads.
    *
    * @private
    */
   async _fetchApprovalStatusMap(so, options = {}) {
+    const now = Date.now();
+    // Return cached map if querying full list (no specific SO) and cache has not expired
+    if (!so && !options.forceRefresh && (now - this._approvalCache.timestamp < this.cacheTtlMs)) {
+      return this._approvalCache.map;
+    }
+
     const map = new Map();
     try {
-      let filter = "(SalesDocApprovalStatus eq 'A' or SalesDocApprovalStatus eq 'C')";
+      let filter = "(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')";
       if (so) {
         filter = `SalesOrder eq ${odataString(so)} and ${filter}`;
       }
@@ -262,8 +273,18 @@ class OutboundDeliveryAdapter {
           map.set(item.SalesOrder, item.SalesDocApprovalStatus);
         }
       });
+      // Cache global results
+      if (!so) {
+        this._approvalCache = {
+          timestamp: now,
+          map
+        };
+      }
     } catch (err) {
       LOG.warn(`Could not fetch sales order approval status map: ${err.message}`);
+      if (!so && this._approvalCache.map.size > 0) {
+        return this._approvalCache.map;
+      }
     }
     return map;
   }

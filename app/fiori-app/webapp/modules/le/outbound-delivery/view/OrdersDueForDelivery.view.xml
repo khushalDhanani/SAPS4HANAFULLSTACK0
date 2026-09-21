@@ -123,16 +123,16 @@
                                     text="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? ${outboundDelivery>DelivBlockReasonForSchedLine} : 'None' }"
                                     state="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? 'Error' : 'None' }" />
                                 <ObjectStatus
-                                    text="{= ${outboundDelivery>SalesDocApprovalStatus} === 'A' ? ${i18n>statusInApproval} : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? 'Rejected' : 'Approved') }"
-                                    state="{= ${outboundDelivery>SalesDocApprovalStatus} === 'A' ? 'Warning' : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? 'Error' : 'Success') }" />
+                                    text="{= ${outboundDelivery>SalesDocApprovalStatus} === 'A' ? ${i18n>statusInApproval} : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? 'Rejected' : (${outboundDelivery>SalesDocApprovalStatus} === 'D' ? 'To Be Reworked' : (${outboundDelivery>SalesDocApprovalStatus} === 'B' ? 'Released' : 'Not Relevant'))) }"
+                                    state="{= ${outboundDelivery>SalesDocApprovalStatus} === 'A' || ${outboundDelivery>SalesDocApprovalStatus} === 'D' ? 'Warning' : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? 'Error' : (${outboundDelivery>SalesDocApprovalStatus} === 'B' ? 'Success' : 'None')) }" />
                                 <Button
                                     text="{i18n>btnCreateDelivery}"
                                     icon="sap-icon://shipping-status"
                                     type="Emphasized"
                                     press=".onCreateDeliveryPress"
                                     visible="{= ${ordersDueView>/canCreateDelivery} !== false }"
-                                    enabled="{= !${outboundDelivery>DelivBlockReasonForSchedLine} &amp;&amp; ${outboundDelivery>SalesDocApprovalStatus} !== 'A' &amp;&amp; ${outboundDelivery>SalesDocApprovalStatus} !== 'C' }"
-                                    tooltip="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? ${i18n>tooltipOrderDeliveryBlocked} : (${outboundDelivery>SalesDocApprovalStatus} === 'A' ? ${i18n>tooltipOrderInApproval} : ${i18n>tooltipCreateDelivery}) }" />
+                                    enabled="{= !${outboundDelivery>DelivBlockReasonForSchedLine} &amp;&amp; (${outboundDelivery>SalesDocApprovalStatus} === 'B' || !${outboundDelivery>SalesDocApprovalStatus}) }"
+                                    tooltip="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? ${i18n>tooltipOrderDeliveryBlocked} : (${outboundDelivery>SalesDocApprovalStatus} === 'A' ? ${i18n>tooltipOrderInApproval} : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? ${i18n>tooltipOrderRejected} : (${outboundDelivery>SalesDocApprovalStatus} === 'D' ? ${i18n>tooltipOrderRework} : ${i18n>tooltipCreateDelivery}))) }" />
                             </cells>
                         </ColumnListItem>
                     </items>

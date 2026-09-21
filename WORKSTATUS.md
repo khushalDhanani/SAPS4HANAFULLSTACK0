@@ -1825,22 +1825,115 @@
   - `diff -u app/fiori-app/webapp/i18n/i18n.properties app/fiori-app/webapp/i18n/i18n_en.properties`: Clean (0 differences).
   - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total test suites; 85 passed, 85 total tests (100% green).
   - `git diff --check`: Clean (0 errors).
+## 2026-09-21 10:10 IST
+- **Agent**: Antigravity
+- **Change**: Live S/4HANA Verification of `SalesDocApprovalStatus` 'C' and 'D' Meanings & UI/Adapter Enforcement:
+  - **Live S/4HANA Gateway Discovery**:
+    - Queried `SD_F1873_SO_WL_SRV/I_SalesDocApprovalStatus` value help directly from SAP Gateway to establish the canonical SAP definition of all approval status codes:
+      - `''` : `"Not Relevant"` (standard sales orders created without flexible workflow approval)
+      - `'A'` : `"In Approval"` (order currently pending workflow approval)
+      - `'B'` : `"Released"` (order workflow approved and released for execution)
+      - `'C'` : `"Rejected"` (order workflow approval rejected)
+      - `'D'` : `"To Be Reworked"` (order returned to creator for rework)
+    - Queried live orders in `SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$filter=SalesDocApprovalStatus eq 'C'`:
+      - Discovered 5 live orders (`5000013`, `5000015`, `5000349`, `5000353`, `5000354`).
+      - All 5 orders have `SalesDocApprovalStatus = 'C'`, `OverallSDProcessStatus = 'C'` (Completed), and `OverallSDDocumentRejectionSts = 'C'` (Completely Rejected).
+    - Tested live delivery creation against rejected order `5000013` via `POST /sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate`:
+      - SAP rejected the request with HTTP 400: `{"lang":"en","value":"No schedule lines due for delivery up to the selected date"}`.
+      - Confirmed why: when an order is Rejected ('C'), SAP closes/cancels its schedule lines, so it is never eligible for outbound delivery.
+      - Confirmed in `C_SalesOrderDueForDeliveryVH`: order `5000013` does NOT appear because its schedule lines are closed/rejected.
+  - **Adapter Filter Update**:
+    - In `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`, updated `_fetchApprovalStatusMap` filter from `(SalesDocApprovalStatus eq 'A' or SalesDocApprovalStatus eq 'C')` to `(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')`. This dynamically captures any non-released status ('A', 'C', 'D') from SAP.
+  - **UI Views & Controllers**:
+    - In `OrdersDueForDelivery.view.xml`:
+      - Refined ObjectStatus badge: `'A'` -> `statusInApproval` (Warning), `'C'` -> `Rejected` (Error), `'D'` -> `To Be Reworked` (Warning), `'B'` -> `Released` (Success), other -> `Not Relevant` (None).
+      - Set `enabled`: `{= !${outboundDelivery>DelivBlockReasonForSchedLine} && (${outboundDelivery>SalesDocApprovalStatus} === 'B' || !${outboundDelivery>SalesDocApprovalStatus}) }`.
+      - Dynamic tooltip: distinguishes delivery block (`tooltipOrderDeliveryBlocked`), in approval (`tooltipOrderInApproval`), rejected (`tooltipOrderRejected`), rework (`tooltipOrderRework`), and default (`tooltipCreateDelivery`).
+    - In `SalesOrders.view.xml`:
+      - Set `enabled`: `{= (${salesOrder>SalesDocApprovalStatus} === 'B' || !${salesOrder>SalesDocApprovalStatus}) && !${salesOrder>DeliveryBlockReason} }`.
+      - Dynamic tooltip: handles delivery block, in approval, rejected, rework, and default.
+    - In `OrdersDueForDelivery.controller.js` and `SalesOrders.controller.js`:
+      - Added explicit controller guards for `sApprovalStatus === 'C'` (warning: `msgOrderRejected`) and `sApprovalStatus === 'D'` (warning: `msgOrderRework`).
+  - **i18n**: Added `msgOrderRejected`, `msgOrderRework`, `tooltipOrderRejected`, `tooltipOrderRework` to both `i18n.properties` and `i18n_en.properties` with 100% key parity (0 diffs).
+  - **Unit Tests & Preload**:
+    - Added unit test cases for status 'A', 'C', 'D' and delivery blocks in `test/unit/le/ordersDueForDeliveryController.test.js` and `test/unit/sales-order/salesOrdersController.test.js`.
+    - Built `Component-preload.js` cleanly via `cd app/fiori-app && npm run build`.
+- **Files Modified**:
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/view/SalesOrders.view.xml`
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/le/ordersDueForDeliveryController.test.js`
+  - `test/unit/sales-order/salesOrdersController.test.js`
+- **Executed Commands and Results**:
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.2 s (`Component-preload.js` generated cleanly).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `diff -u app/fiori-app/webapp/i18n/i18n.properties app/fiori-app/webapp/i18n/i18n_en.properties`: Clean (0 differences).
+  - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total test suites; 93 passed, 93 total tests (100% green).
+  - `npm test`: 68 passed, 68 total test suites; 831 passed, 831 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review with user and commit to `feature/CL01`.
+
+## 2026-09-21 10:12 IST
+- **Agent**: Antigravity
+- **Change**: In-Memory 60-Second TTL Caching for Approval Status Lookup in OutboundDeliveryAdapter:
+  - **Performance Optimization**: Added in-memory TTL caching (`cacheTtlMs: 60000`) for `_fetchApprovalStatusMap` on the `OutboundDeliveryAdapter` singleton.
+  - **Behavior**:
+    - When `getOrdersDueForDelivery` is called on initial worklist load, it fetches the non-released approval status map from SAP Gateway and stores it in `_approvalCache = { timestamp, map }`.
+    - On successive reads within 60 seconds (table pagination, shipping point filtering, search), the cached map is reused immediately, eliminating the redundant SAP Gateway HTTP request.
+    - If `options.forceRefresh` is specified or after 60 seconds expire, the adapter automatically refreshes the map from SAP Gateway.
+    - If a transient network error occurs while refreshing, the adapter falls back gracefully to the existing cached map if available.
+  - **Unit Test Coverage**:
+    - Added test in `test/unit/le/outboundDeliveryAdapter.test.js` verifying that successive reads within 60 seconds make only 1 SAP call (for due orders) instead of 2, and that `forceRefresh: true` triggers a fresh SAP Gateway read.
+- **Files Modified**:
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+  - `test/unit/le/outboundDeliveryAdapter.test.js`
+- **Executed Commands and Results**:
+  - `npx jest test/unit/le/outboundDeliveryAdapter.test.js`: 1 passed, 1 total suite; 15 passed, 15 total tests (100% green).
+  - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total suites; 94 passed, 94 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+## 2026-09-21 10:16 IST
+- **Agent**: Antigravity
+- **Change**: Removal of Dead-Code `|| '1120'` and `|| ['1120']` Fallbacks in Outbound Delivery Adapter and Handler:
+  - **Audit & Rationalization**: `s4Config.getShippingPoints()` executes `_requireArray('shippingPoints', ...)`, which strictly inspects `cds.env` / environment variables and throws a `ConfigurationError` if the setting is missing or empty. Because `s4Config.getShippingPoints()` guarantees a non-empty array of strings, all 7 instances of `|| '1120'` and `|| ['1120']` across the adapter and handler were dead code.
+  - **Cleaned Locations**:
+    - `OutboundDeliveryAdapter.js` (line 95): `const configuredSPs = s4Config.getShippingPoints();`
+    - `OutboundDeliveryAdapter.js` (line 194): `const cleanSP = String(shippingPoint || s4Config.getShippingPoints()[0]).trim();`
+    - `outboundDelivery.handler.js` (lines 42, 45): Resolved fallback directly to `configuredSPs[0]`.
+    - `outboundDelivery.handler.js` (lines 62, 64): `getDefaultShippingPoint` returns `{ ShippingPoint: configuredSPs[0], ShippingPoints: configuredSPs }`.
+    - `outboundDeliveryHandler.test.js` (lines 157, 191, 193): Removed redundant test assertion fallbacks.
+    - `outboundDeliveryAdapter.test.js` (line 189): Removed redundant test assertion fallbacks.
+  - **Files Modified**:
+    - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+    - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`
+    - `test/unit/le/outboundDeliveryAdapter.test.js`
+    - `test/unit/le/outboundDeliveryHandler.test.js`
+  - **Executed Commands and Results**:
+    - `npx cds compile srv > /dev/null`: Succeeded with code 0.
+    - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total suites; 94 passed, 94 total tests (100% green).
+    - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Review with user and commit to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root lint 0 errors, git diff --check clean).
-- **Test Suite**: **LE, SD & Auth Unit Tests**: 119/119 passed across 12 test suites (100% green).
+- **Test Suite**: **LE & SD Unit Tests**: 94/94 passed across 9 test suites (100% green); full suite 831/831 passed (100% green).
 - **Outbound Delivery Phase 0**: **COMPLETED & PROVEN** (`13000526` created live).
 - **Outbound Delivery Phase 1 (Backend)**: **100% COMPLETE, TESTED & LIVE VERIFIED**.
 - **Outbound Delivery Phase 2 (Screen & Integration)**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
   - Worklist: "Orders Due for Delivery" view and controller in `modules/le/outbound-delivery/`.
-  - Delivery Block & Approval Transparency: Delivery blocked orders visible with block reason; in-approval orders identified with status badge; Create Delivery button disabled on blocked or in-approval orders.
-  - Sales Order integration: Create Delivery button on `SalesOrders.view.xml` calling the same action, disabled when order has delivery block or is in approval.
+  - Delivery Block & Approval Transparency: Delivery blocked orders visible with block reason; in-approval ('A'), rejected ('C'), rework ('D'), and released ('B') orders identified with clear status badges; Create Delivery button enabled only for released or non-approval orders without delivery blocks.
+  - Sales Order integration: Create Delivery button on `SalesOrders.view.xml` calling the same action, disabled when order has delivery block or is not released.
   - Success/Warning message accuracy: Returns clean delivery numbers on success; displays explicit warning to check VL03N if SAP creates delivery without returning a document number.
+  - Performance & Caching: 60-second in-memory TTL caching for approval map prevents extra SAP calls on successive list reads and paging.
   - Role checks: `SalesRepresentative` role authorized for action; UI visibility conditioned on `AuthService.canCreateDelivery()`.
   - Shell: Dashboard tile under Overview, SD, and Warehouse; route `le/orders-due`; full i18n parity.
   - Preload: `Component-preload.js` rebuilt and verified.
+  - Approval Lookup Capacity & Safety Guarantee: In `OutboundDeliveryAdapter._fetchApprovalStatusMap`, query uses filter `(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')&$top=1000`. This retrieves only non-released orders (currently <10 across the system out of 883 total sales orders). Even in extreme volume scenarios beyond 1,000 pending/rejected orders, SAP backend Gateway enforces approval workflow and rejects delivery creation with message `V2/478` ("Subsequent documents not possible due to approval status of the document"), providing defense-in-depth protection against invalid document creation.
 
 ## Next Steps
 1. User review of Outbound Delivery creation messages, VL03N warning handling, and worklist features.

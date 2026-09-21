@@ -156,8 +156,8 @@
                                     type="Transparent"
                                     press=".onCreateDeliveryPress"
                                     visible="{= ${salesOrdersView>/canCreateDelivery} !== false }"
-                                    enabled="{= ${salesOrder>SalesDocApprovalStatus} !== 'A' &amp;&amp; ${salesOrder>SalesDocApprovalStatus} !== 'C' &amp;&amp; !${salesOrder>DeliveryBlockReason} }"
-                                    tooltip="{= ${salesOrder>DeliveryBlockReason} ? ${i18n>tooltipOrderDeliveryBlocked} : (${salesOrder>SalesDocApprovalStatus} === 'A' ? ${i18n>tooltipOrderInApproval} : ${i18n>tooltipCreateDelivery}) }" />
+                                    enabled="{= (${salesOrder>SalesDocApprovalStatus} === 'B' || !${salesOrder>SalesDocApprovalStatus}) &amp;&amp; !${salesOrder>DeliveryBlockReason} }"
+                                    tooltip="{= ${salesOrder>DeliveryBlockReason} ? ${i18n>tooltipOrderDeliveryBlocked} : (${salesOrder>SalesDocApprovalStatus} === 'A' ? ${i18n>tooltipOrderInApproval} : (${salesOrder>SalesDocApprovalStatus} === 'C' ? ${i18n>tooltipOrderRejected} : (${salesOrder>SalesDocApprovalStatus} === 'D' ? ${i18n>tooltipOrderRework} : ${i18n>tooltipCreateDelivery}))) }" />
                             </cells>
                         </ColumnListItem>
                     </items>

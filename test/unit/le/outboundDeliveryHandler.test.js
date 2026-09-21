@@ -154,7 +154,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
 
       await handlers['createOutboundDelivery'](req);
 
-      const configuredDefaultSP = s4Config.getShippingPoints()[0] || '1120';
+      const configuredDefaultSP = s4Config.getShippingPoints()[0];
       expect(outboundDeliveryAdapter.createDeliveryFromOrder).toHaveBeenCalledWith({
         salesOrder: '5000104',
         shippingPoint: configuredDefaultSP,
@@ -188,9 +188,9 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
     test('returns primary shipping point and configured list from s4Config', async () => {
       const result = await handlers['getDefaultShippingPoint']();
 
-      const expectedSPs = s4Config.getShippingPoints() || ['1120'];
+      const expectedSPs = s4Config.getShippingPoints();
       expect(result).toEqual({
-        ShippingPoint: expectedSPs[0] || '1120',
+        ShippingPoint: expectedSPs[0],
         ShippingPoints: expectedSPs
       });
     });

@@ -148,6 +148,31 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(orders[0].SalesDocApprovalStatus).toBe('A');
     });
 
+    test('caches approval status map in-memory for 60s to prevent extra SAP calls on successive reads', async () => {
+      mockClient.get.mockResolvedValue({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              { SalesOrder: '5000104', ShippingPoint: '1120', DelivBlockReasonForSchedLine: '' }
+            ]
+          }
+        }
+      });
+
+      // First call - queries C_SalesOrderDueForDeliveryVH and _fetchApprovalStatusMap
+      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      expect(mockClient.get).toHaveBeenCalledTimes(2);
+
+      // Second call immediately after - uses cached approval map, queries only C_SalesOrderDueForDeliveryVH
+      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      expect(mockClient.get).toHaveBeenCalledTimes(3); // 2 + 1 = 3 (approval map was not queried again)
+
+      // Third call with forceRefresh - bypasses cache and queries approval map again
+      await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' }, { forceRefresh: true });
+      expect(mockClient.get).toHaveBeenCalledTimes(5); // 3 + 2 = 5
+    });
+
     test('escapes embedded quotes in filters using odataString', async () => {
       mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
 
@@ -161,7 +186,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
       await adapter.getOrdersDueForDelivery({});
       const url = mockClient.get.mock.calls[0][0];
-      const configuredSPs = s4Config.getShippingPoints() || ['1120'];
+      const configuredSPs = s4Config.getShippingPoints();
       if (configuredSPs.length > 1) {
         configuredSPs.forEach(sp => expect(url).toContain(`ShippingPoint eq '${sp}'`));
       } else {

@@ -39,10 +39,10 @@ function registerOutboundDeliveryHandlers(srv) {
       return req.error(400, 'SalesOrder is required to create an outbound delivery.');
     }
 
-    const configuredSPs = s4Config.getShippingPoints() || ['1120'];
+    const configuredSPs = s4Config.getShippingPoints();
     const resolvedSP = ShippingPoint && String(ShippingPoint).trim() !== ''
       ? String(ShippingPoint).trim()
-      : configuredSPs[0] || '1120';
+      : configuredSPs[0];
 
     try {
       const result = await outboundDeliveryAdapter.createDeliveryFromOrder({
@@ -59,9 +59,9 @@ function registerOutboundDeliveryHandlers(srv) {
 
   // 4. Function getDefaultShippingPoint
   srv.on('getDefaultShippingPoint', async () => {
-    const configuredSPs = s4Config.getShippingPoints() || ['1120'];
+    const configuredSPs = s4Config.getShippingPoints();
     return {
-      ShippingPoint: configuredSPs[0] || '1120',
+      ShippingPoint: configuredSPs[0],
       ShippingPoints: configuredSPs
     };
   });
