@@ -246,12 +246,24 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("createSalesInquiry");
         },
 
+        onNavigateToSalesOrders: function () {
+            this.getOwnerComponent().getRouter().navTo("salesOrders");
+        },
+
+        onNavigateToCreateSalesOrder: function () {
+            this.getOwnerComponent().getRouter().navTo("createSalesOrder");
+        },
+
         onNavigateToGoodsIssue: function () {
             this.getOwnerComponent().getRouter().navTo("wmGoodsIssue");
         },
 
         onNavigateToGoodsReceipt: function () {
             this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt");
+        },
+
+        onNavigateToOrdersDueForDelivery: function () {
+            this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },
 
         switchToTab: function (sKey) {

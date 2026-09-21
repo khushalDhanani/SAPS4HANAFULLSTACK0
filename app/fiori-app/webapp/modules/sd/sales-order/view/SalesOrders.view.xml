@@ -1,0 +1,166 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.sales-order.controller.SalesOrders"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Page
+        id="salesOrdersPage"
+        showHeader="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Header Toolbar & Title -->
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <Title text="{i18n>salesOrdersTitle}" level="H2" titleStyle="H3" />
+                        <Text text="{i18n>salesOrdersSubtitle}" class="textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <Button
+                            id="btnCreateOrder"
+                            text="{i18n>salesOrderBtnCreate}"
+                            icon="sap-icon://add"
+                            type="Emphasized"
+                            press=".onNavigateToCreateSalesOrder"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnRefreshOrders"
+                            icon="sap-icon://refresh"
+                            text="{i18n>btnRefresh}"
+                            type="Transparent"
+                            press=".onRefresh" />
+                    </HBox>
+                </HBox>
+
+                <!-- KPI Tiles Section -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile
+                        id="kpiTotalOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>salesOrdersKpiTotal}"
+                        subheader="{i18n>salesOrdersKpiTotalSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalOrdersVal"
+                                value="{salesOrdersView>/totalCount}"
+                                icon="sap-icon://sales-order"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiOpenOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>salesOrdersKpiOpen}"
+                        subheader="{i18n>salesOrdersKpiOpenSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiOpenOrdersVal"
+                                value="{salesOrdersView>/openCount}"
+                                icon="sap-icon://document"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiActiveCustomers"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>salesOrdersKpiActiveCustomers}"
+                        subheader="{i18n>salesOrdersKpiActiveCustomersSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiActiveCustomersVal"
+                                value="{salesOrdersView>/customerCount}"
+                                icon="sap-icon://customer"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- Sales Orders Table -->
+                <Table
+                    id="salesOrdersTable"
+                    items="{
+                        path: 'salesOrder>/SalesOrders',
+                        parameters: {
+                            $count: true
+                        },
+                        sorter: [
+                            { path: 'CreationDate', descending: true },
+                            { path: 'SalesOrder', descending: true }
+                        ]
+                    }"
+                    growing="true"
+                    growingThreshold="25"
+                    growingScrollToLoad="true"
+                    noDataText="{i18n>salesOrdersNoDataText}"
+                    updateFinished=".onUpdateFinished"
+                    sticky="ColumnHeaders,HeaderToolbar">
+                    <headerToolbar>
+                        <OverflowToolbar id="tableToolbar">
+                            <Title
+                                id="tableTitle"
+                                text="{= 'Sales Orders (' + (${salesOrdersView>/totalCount} || '0') + ')' }"
+                                level="H4" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="searchOrders"
+                                width="18rem"
+                                search=".onSearch"
+                                liveChange=".onSearch"
+                                placeholder="{i18n>salesOrdersSearchPlaceholder}">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                </layoutData>
+                            </SearchField>
+                            <Button
+                                id="btnRefreshOrdersTable"
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>btnRefresh}"
+                                press=".onRefresh" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column width="8rem"><Text text="{i18n>salesOrdersColOrderNumber}" /></Column>
+                        <Column width="5rem"><Text text="{i18n>salesOrdersColType}" /></Column>
+                        <Column width="14rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesOrdersColCustomer}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesOrdersColPORef}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesOrdersColSalesArea}" /></Column>
+                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesOrdersColDocDate}" /></Column>
+                        <Column width="8rem" hAlign="End"><Text text="{i18n>salesOrdersColNetAmount}" /></Column>
+                        <Column width="7rem" hAlign="Center"><Text text="{i18n>salesOrdersColStatus}" /></Column>
+                        <Column width="8rem" hAlign="Center"><Text text="{i18n>salesOrdersColAction}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Inactive">
+                            <cells>
+                                <ObjectIdentifier
+                                    title="{salesOrder>SalesOrder}" />
+                                <Text text="{salesOrder>SalesOrderType}" />
+                                <ObjectIdentifier
+                                    title="{= ${salesOrder>SoldToPartyName} || ${salesOrder>SoldToParty} || '' }"
+                                    text="{= ${salesOrder>SoldToPartyName} ? ${salesOrder>SoldToParty} : '' }" />
+                                <Text text="{salesOrder>PurchaseOrderByCustomer}" />
+                                <Text text="{= (${salesOrder>SalesOrganization} || '') + ' / ' + (${salesOrder>DistributionChannel} || '') + ' / ' + (${salesOrder>OrganizationDivision} || '') }" />
+                                <Text text="{salesOrder>CreationDate}" />
+                                <ObjectNumber number="{salesOrder>TotalNetAmount}" unit="{salesOrder>TransactionCurrency}" state="Success" />
+                                <ObjectStatus
+                                    text="{path: 'salesOrder>OverallSDProcessStatus', formatter: '.formatter.statusText'}"
+                                    state="{path: 'salesOrder>OverallSDProcessStatus', formatter: '.formatter.statusState'}" />
+                                <Button
+                                    id="btnSalesOrderCreateDelivery"
+                                    text="{i18n>btnCreateDelivery}"
+                                    icon="sap-icon://shipping-status"
+                                    type="Transparent"
+                                    press=".onCreateDeliveryPress"
+                                    tooltip="{i18n>tooltipCreateDelivery}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

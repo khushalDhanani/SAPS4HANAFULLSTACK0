@@ -1,0 +1,316 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.sales-order.controller.CreateSalesOrder"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="createOrderPage"
+        showHeader="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Global Incompletion / Error Strip -->
+                <MessageStrip
+                    id="createOrderMessageStrip"
+                    text="{newOrder>/errorMessage}"
+                    type="Error"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{newOrder>/hasError}"
+                    close=".onDismissError"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link text="{i18n>viewIssues}" press=".onMessageButtonPress" />
+                    </link>
+                </MessageStrip>
+
+                <!-- Header Sections Grid (6/6 Layout) -->
+                <layout:Grid
+                    id="gridOrderHeaderSections"
+                    defaultSpan="XL6 L6 M6 S12"
+                    hSpacing="1"
+                    vSpacing="0"
+                    class="sapUiNoMarginTop sapUiSmallMarginBottom">
+
+                    <!-- Section 1: Organizational Data -->
+                    <Panel id="panelOrgData">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>salesOrderPanelOrgData}" level="H3" />
+                                <ToolbarSpacer />
+                                <ObjectStatus
+                                    id="headerOrderStatus"
+                                    text="{newOrder>/header/StatusText}"
+                                    state="{newOrder>/header/StatusState}"
+                                    icon="{newOrder>/header/StatusIcon}" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="orderOrgForm"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>salesOrderLabelOrderType}" required="true" />
+                                <Input id="inOrderType" value="{newOrder>/header/SalesOrderType}" placeholder="{i18n>salesOrderPlaceholderOrderType}" maxLength="4"
+                                    valueState="{newOrder>/errors/SalesOrderType/state}"
+                                    valueStateText="{newOrder>/errors/SalesOrderType/text}"
+                                    change=".onOrderTypeChange" liveChange=".onOrderTypeChange" suggestionItemSelected=".onOrderTypeSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/SalesOrderTypeVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>SalesOrderType}" text="{salesOrder>SalesOrderType}" additionalText="{salesOrder>SalesOrderTypeName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderLabelSalesOrg}" required="true" />
+                                <Input id="inSalesOrg" value="{newOrder>/header/SalesOrganization}" placeholder="{i18n>salesOrderPlaceholderSalesOrg}" maxLength="4"
+                                    valueState="{newOrder>/errors/SalesOrganization/state}"
+                                    valueStateText="{newOrder>/errors/SalesOrganization/text}"
+                                    change=".onSalesOrgChange" liveChange=".onSalesOrgChange" suggestionItemSelected=".onSalesOrgSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/SalesOrganizationVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>SalesOrganization}" text="{salesOrder>SalesOrganization}" additionalText="{salesOrder>SalesOrganization_Text}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderLabelDistChannel}" required="true" />
+                                <Input id="inDistChannel" value="{newOrder>/header/DistributionChannel}" placeholder="{i18n>salesOrderPlaceholderDistChannel}" maxLength="2"
+                                    valueState="{newOrder>/errors/DistributionChannel/state}"
+                                    valueStateText="{newOrder>/errors/DistributionChannel/text}"
+                                    change=".onDistChannelChange" liveChange=".onDistChannelChange" suggestionItemSelected=".onDistChannelSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/DistributionChannelVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>DistributionChannel}" text="{salesOrder>DistributionChannel}" additionalText="{salesOrder>DistributionChannelName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderLabelDivision}" required="true" />
+                                <Input id="inDivision" value="{newOrder>/header/OrganizationDivision}" placeholder="{i18n>salesOrderPlaceholderDivision}" maxLength="2"
+                                    valueState="{newOrder>/errors/OrganizationDivision/state}"
+                                    valueStateText="{newOrder>/errors/OrganizationDivision/text}"
+                                    change=".onDivisionChange" liveChange=".onDivisionChange" suggestionItemSelected=".onDivisionSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/DivisionVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>Division}" text="{salesOrder>Division}" additionalText="{salesOrder>DivisionName}" />
+                                    </suggestionItems>
+                                </Input>
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 2: Customer & Order Terms -->
+                    <Panel id="panelCustomerTerms">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>salesOrderPanelCustomerTerms}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="orderCustomerForm"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+                            columnsXL="1" columnsL="1" columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>salesOrderLabelSoldToParty}" required="true" />
+                                <Input id="inSoldToParty" value="{newOrder>/header/SoldToParty}" placeholder="{i18n>salesOrderPlaceholderCustomer}" maxLength="10"
+                                    valueState="{newOrder>/errors/SoldToParty/state}"
+                                    valueStateText="{newOrder>/errors/SoldToParty/text}"
+                                    change=".onSoldToPartyChange" liveChange=".onSoldToPartyLiveChange" suggestionItemSelected=".onSoldToPartySelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/SoldToPartyVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>Customer}" text="{salesOrder>Customer}" additionalText="{salesOrder>CustomerName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderPanelCustomerDetails}" />
+                                <Text id="txtCustomerName" text="{= ${newOrder>/header/CustomerName} ? (${newOrder>/header/CustomerName} + (${newOrder>/header/CustomerCity} ? ' (' + ${newOrder>/header/CustomerCity} + (${newOrder>/header/CustomerCountry} ? ', ' + ${newOrder>/header/CustomerCountry} : '') + ')' : (${newOrder>/header/CustomerCountry} ? ' (' + ${newOrder>/header/CustomerCountry} + ')' : ''))) : 'No customer selected'}" class="textMuted" />
+
+                                <Label text="{i18n>salesOrderLabelShipToParty}" />
+                                <Input id="inShipToParty" value="{newOrder>/header/ShipToParty}" placeholder="{i18n>salesOrderPlaceholderCustomer}" maxLength="10"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItemSelected=".onShipToPartySelect" suggestionItems="{path: 'salesOrder>/CustomerVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>Customer}" text="{salesOrder>Customer}" additionalText="{salesOrder>CustomerName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderLabelPONumber}" />
+                                <Input id="inPONumber" value="{newOrder>/header/PurchaseOrderNumber}" placeholder="{i18n>salesOrderPlaceholderPONumber}" maxLength="35" change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderLabelPODate}" />
+                                <DatePicker id="inCustRefDate" value="{newOrder>/header/CustomerPurchaseOrderDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderLabelReqDeliveryDate}" required="true" />
+                                <DatePicker id="inReqDeliveryDate" value="{newOrder>/header/RequestedDeliveryDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy"
+                                    valueState="{newOrder>/errors/RequestedDeliveryDate/state}"
+                                    valueStateText="{newOrder>/errors/RequestedDeliveryDate/text}"
+                                    change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>labelCurrency}" required="true" />
+                                <Input id="inCurrency" value="{newOrder>/header/TransactionCurrency}" placeholder="{i18n>salesOrderPlaceholderCurrency}" maxLength="3"
+                                    valueState="{newOrder>/errors/TransactionCurrency/state}"
+                                    valueStateText="{newOrder>/errors/TransactionCurrency/text}"
+                                    change=".onCurrencyChange" liveChange=".onCurrencyChange" suggestionItemSelected=".onCurrencySelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/CurrencyVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>Currency}" text="{salesOrder>Currency}" additionalText="{salesOrder>Currency_Text}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderCustomerGroup2}" />
+                                <Input id="inCustomerGroup2" value="{newOrder>/header/CustomerGroup2}" placeholder="{i18n>salesOrderPlaceholderCustomerGroup2}" maxLength="3" change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderPortOfLoading}" />
+                                <Input id="inPortOfLoading" value="{newOrder>/header/PortOfLoading}" placeholder="{i18n>salesOrderPlaceholderPortLoading}" maxLength="50" change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderPortOfDischarge}" />
+                                <Input id="inPortOfDischarge" value="{newOrder>/header/PortOfDischarge}" placeholder="{i18n>salesOrderPlaceholderPortDischarge}" maxLength="50" change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderContactPerson}" />
+                                <Input id="inContactPerson" value="{newOrder>/header/ContactPerson}" placeholder="{i18n>salesOrderPlaceholderContactPerson}" maxLength="10" change=".onHeaderFieldChange" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+                </layout:Grid>
+
+                <!-- Section 3: Order Line Items -->
+                <Panel id="panelOrderItems" headerText="{i18n>salesOrderPanelItems}">
+                    <headerToolbar>
+                        <Toolbar>
+                            <Title text="{i18n>salesOrderItemsCountTitle} ({= ${newOrder>/items} ? ${newOrder>/items}.length : 0 })" level="H2" />
+                            <ToolbarSpacer />
+                            <Button
+                                id="btnCheckATP"
+                                icon="sap-icon://inventory"
+                                text="{i18n>salesOrderBtnCheckATP}"
+                                tooltip="{i18n>salesOrderTooltipCheckATP}"
+                                press=".onCheckAvailability"
+                                type="Transparent"
+                                class="sapUiTinyMarginEnd" />
+                            <Button id="btnAddItem" icon="sap-icon://add" text="{i18n>salesOrderBtnAddItem}" press=".onAddItem" type="Transparent" />
+                        </Toolbar>
+                    </headerToolbar>
+                    <Table
+                        id="orderItemsTable"
+                        items="{newOrder>/items}"
+                        noDataText="{i18n>salesOrderNoItemsAdded}"
+                        mode="Delete"
+                        delete=".onDeleteItem"
+                        autoPopinMode="true"
+                        popinLayout="GridSmall">
+                        <columns>
+                            <Column width="4rem" importance="High"><Text text="{i18n>salesOrderColItem}" /></Column>
+                            <Column importance="High"><Text text="{i18n>salesOrderColMaterialProduct}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="{i18n>salesOrderColDescription}" /></Column>
+                            <Column width="6rem" hAlign="End" importance="High"><Text text="{i18n>salesOrderColQuantity}" /></Column>
+                            <Column width="5rem" importance="High"><Text text="{i18n>salesOrderColUnit}" /></Column>
+                            <Column width="5.5rem" importance="High"><Label text="{i18n>salesOrderColPlant}" required="true" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="{i18n>salesOrderColNetPrice}" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColNetAmount}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{newOrder>SalesOrderItem}" />
+                                    <Input value="{newOrder>Material}" placeholder="{i18n>salesOrderPlaceholderMaterial}" required="true"
+                                        valueState="{newOrder>errors/Material/state}"
+                                        valueStateText="{newOrder>errors/Material/text}"
+                                        change=".onItemMaterialChange" liveChange=".onItemMaterialLiveChange" suggestionItemSelected=".onItemMaterialSelect"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest"
+                                        maxSuggestionWidth="32rem"
+                                        suggestionRows="{path: 'salesOrder>/MaterialVH', templateShareable: false}">
+                                        <suggestionColumns>
+                                            <Column width="8rem"><Label text="{i18n>salesOrderColMaterial}" /></Column>
+                                            <Column minScreenWidth="Tablet" demandPopin="true"><Label text="{i18n>salesOrderColDescription}" /></Column>
+                                            <Column width="5rem"><Label text="{i18n>salesOrderColType}" /></Column>
+                                            <Column width="4rem"><Label text="{i18n>salesOrderColUnit}" /></Column>
+                                        </suggestionColumns>
+                                        <suggestionRows>
+                                            <ColumnListItem>
+                                                <cells>
+                                                    <Label text="{salesOrder>Material}" design="Bold" />
+                                                    <Text text="{salesOrder>MaterialName}" />
+                                                    <ObjectStatus text="{salesOrder>MaterialType}" state="Success" />
+                                                    <Text text="{salesOrder>MaterialBaseUnit}" />
+                                                </cells>
+                                            </ColumnListItem>
+                                        </suggestionRows>
+                                    </Input>
+                                    <Input value="{newOrder>SalesOrderItemText}" placeholder="{i18n>salesOrderPlaceholderItemDesc}" change=".onItemFieldChange" />
+                                    <Input value="{newOrder>OrderQuantity}" type="Number" required="true" textAlign="End"
+                                        valueState="{newOrder>errors/OrderQuantity/state}"
+                                        valueStateText="{newOrder>errors/OrderQuantity/text}"
+                                        change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
+                                    <Input value="{newOrder>OrderQuantityUnit}" placeholder="{i18n>salesOrderPlaceholderUnit}" maxLength="3" required="true"
+                                        valueState="{newOrder>errors/OrderQuantityUnit/state}"
+                                        valueStateText="{newOrder>errors/OrderQuantityUnit/text}"
+                                        change=".onItemFieldChange"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false"
+                                        suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItemSelected=".onItemUnitSelect"
+                                        suggestionItems="{path: 'salesOrder>/UnitOfMeasureVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{salesOrder>UnitOfMeasure}" text="{salesOrder>UnitOfMeasure}" additionalText="{salesOrder>UnitOfMeasure_Text}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newOrder>Plant}" placeholder="{i18n>salesOrderPlaceholderPlant}" maxLength="4" required="true"
+                                        tooltip="{i18n>salesOrderTooltipPlant}"
+                                        valueState="{newOrder>errors/Plant/state}"
+                                        valueStateText="{newOrder>errors/Plant/text}"
+                                        change=".onItemPlantChange"
+                                        liveChange=".onItemPlantLiveChange"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false"
+                                        suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItemSelected=".onItemPlantSelect"
+                                        suggestionItems="{path: 'salesOrder>/PlantVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{salesOrder>Plant}" text="{salesOrder>Plant}" additionalText="{salesOrder>PlantName}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input value="{newOrder>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End" change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
+                                    <ObjectNumber number="{newOrder>NetAmount}" unit="{newOrder>/header/TransactionCurrency}" state="Success" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+
+        <!-- Footer Action Bar -->
+        <footer>
+            <OverflowToolbar id="createOrderFooter">
+                <Button
+                    id="btnOrderMessages"
+                    icon="sap-icon://alert"
+                    text="{newOrder>/errorCount}"
+                    type="Negative"
+                    visible="{newOrder>/hasError}"
+                    press=".onMessageButtonPress" />
+                <ToolbarSpacer />
+                <HBox alignItems="Center" class="sapUiMediumMarginEnd">
+                    <Label text="{i18n>salesOrderTotalNetAmountLabel}" class="sapUiTinyMarginEnd" />
+                    <ObjectNumber number="{newOrder>/header/TotalNetAmount}" unit="{newOrder>/header/TransactionCurrency}" emphasized="true" state="Success" />
+                </HBox>
+                <Button id="btnCheckIncompletion" text="{i18n>salesOrderBtnCheckIncompletion}" icon="sap-icon://survey" press=".onCheckIncompletion" type="Default" />
+                <Button id="btnCancelOrder" text="{i18n>btnCancel}" press=".onCancel" type="Transparent" />
+                <Button id="btnSaveOrder" text="{i18n>salesOrderBtnSubmit}" icon="sap-icon://save" press=".onSave" type="Emphasized" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

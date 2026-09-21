@@ -7,8 +7,10 @@ sap.ui.define([
     "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
     "saps4hana/fiori/modules/wm/goods-receipt/service/GoodsReceiptService",
     "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService",
-    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService"
-], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService) {
+    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService",
+    "saps4hana/fiori/modules/sd/sales-order/service/SalesOrderService",
+    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService"
+], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService) {
     "use strict";
 
     return UIComponent.extend("saps4hana.fiori.Component", {
@@ -43,6 +45,14 @@ sap.ui.define([
             var oSalesInquiryModel = this.getModel("salesInquiry");
             if (oSalesInquiryModel && SalesInquiryService && typeof SalesInquiryService.setModel === "function") {
                 SalesInquiryService.setModel(oSalesInquiryModel);
+            }
+            var oSalesOrderModel = this.getModel("salesOrder");
+            if (oSalesOrderModel && SalesOrderService && typeof SalesOrderService.setModel === "function") {
+                SalesOrderService.setModel(oSalesOrderModel);
+            }
+            var oOutboundDeliveryModel = this.getModel("outboundDelivery");
+            if (oOutboundDeliveryModel && OutboundDeliveryService && typeof OutboundDeliveryService.setModel === "function") {
+                OutboundDeliveryService.setModel(oOutboundDeliveryModel);
             }
 
             // Synchronize active authentication headers across all OData V4 models before routing starts

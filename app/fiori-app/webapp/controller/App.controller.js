@@ -42,6 +42,10 @@ sap.ui.define([
                 this._updateShell("purchaseOrders");
             } else if (sHash.indexOf("fi/journal-entries") === 0) {
                 this._updateShell("journalEntries");
+            } else if (sHash.indexOf("sd/sales-orders/create") === 0) {
+                this._updateShell("createSalesOrder");
+            } else if (sHash.indexOf("sd/sales-orders") === 0) {
+                this._updateShell("salesOrders");
             } else if (sHash.indexOf("sd/sales-inquiries/create") === 0) {
                 this._updateShell("createSalesInquiry");
             } else if (sHash.indexOf("sd/sales-inquiries/") === 0) {
@@ -51,6 +55,8 @@ sap.ui.define([
                 this._updateShell("salesInquiries");
             } else if (sHash.indexOf("wm/goods-issue") === 0) {
                 this._updateShell("wmGoodsIssue");
+            } else if (sHash.indexOf("le/orders-due") === 0) {
+                this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("dashboard") === 0) {
                 this._updateShell("dashboard");
             }
@@ -118,12 +124,24 @@ sap.ui.define([
                     }
                     bShowNav = true;
                     break;
+                case "salesOrders":
+                    sTitle = oBundle ? oBundle.getText("salesOrdersTitle") : "Sales Orders Worklist";
+                    bShowNav = true;
+                    break;
+                case "createSalesOrder":
+                    sTitle = oBundle ? oBundle.getText("createSalesOrderTitle") : "Create Sales Order (VA01)";
+                    bShowNav = true;
+                    break;
                 case "wmGoodsIssue":
                     sTitle = oBundle ? oBundle.getText("giPageTitle") : "Goods Issue against Order / Reservation (261)";
                     bShowNav = true;
                     break;
                 case "wmGoodsReceipt":
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
+                    bShowNav = true;
+                    break;
+                case "ordersDueForDelivery":
+                    sTitle = oBundle ? oBundle.getText("ordersDueForDeliveryTitle") : "Orders Due for Delivery";
                     bShowNav = true;
                     break;
                 case "login":
@@ -158,7 +176,9 @@ sap.ui.define([
                 this.onNavBack("purchaseOrders");
             } else if (sRoute === "salesInquiryDetail" || sRoute === "createSalesInquiry") {
                 this.onNavBack("salesInquiries");
-            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "wmGoodsIssue" || sRoute === "wmGoodsReceipt") {
+            } else if (sRoute === "createSalesOrder") {
+                this.onNavBack("salesOrders");
+            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsIssue" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {
                 this.onNavBack("dashboard");

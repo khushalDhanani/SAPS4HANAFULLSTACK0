@@ -1,0 +1,137 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.le.outbound-delivery.controller.OrdersDueForDelivery"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Page
+        id="ordersDueForDeliveryPage"
+        showHeader="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Header Toolbar & Title -->
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <Title text="{i18n>ordersDueForDeliveryTitle}" level="H2" titleStyle="H3" />
+                        <Text text="{i18n>ordersDueForDeliverySubtitle}" class="textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <Button
+                            id="btnRefreshOrdersDue"
+                            icon="sap-icon://refresh"
+                            text="{i18n>btnRefresh}"
+                            type="Transparent"
+                            press=".onRefresh" />
+                    </HBox>
+                </HBox>
+
+                <!-- KPI Section -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile
+                        id="kpiDueOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiTotal}"
+                        subheader="{i18n>ordersDueKpiTotalSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiDueOrdersVal"
+                                value="{ordersDueView>/totalCount}"
+                                icon="sap-icon://shipping-status"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiShippingPoints"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiShippingPoints}"
+                        subheader="{i18n>ordersDueKpiShippingPointsSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiShippingPointsVal"
+                                value="{ordersDueView>/shippingPointCount}"
+                                icon="sap-icon://map-fill"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- Orders Due Table -->
+                <Table
+                    id="ordersDueTable"
+                    items="{
+                        path: 'outboundDelivery>/OrdersDueForDelivery',
+                        parameters: {
+                            $count: true
+                        },
+                        sorter: [
+                            { path: 'GoodsIssueDate', descending: false },
+                            { path: 'SalesOrder', descending: false }
+                        ]
+                    }"
+                    growing="true"
+                    growingThreshold="25"
+                    growingScrollToLoad="true"
+                    noDataText="{i18n>ordersDueNoDataText}"
+                    updateFinished=".onUpdateFinished"
+                    sticky="ColumnHeaders,HeaderToolbar">
+                    <headerToolbar>
+                        <OverflowToolbar id="tableToolbar">
+                            <Title
+                                id="tableTitle"
+                                text="{= 'Orders Due for Delivery (' + (${ordersDueView>/totalCount} || '0') + ')' }"
+                                level="H4" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                id="searchOrdersDue"
+                                width="18rem"
+                                search=".onSearch"
+                                liveChange=".onSearch"
+                                placeholder="{i18n>ordersDueSearchPlaceholder}">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                </layoutData>
+                            </SearchField>
+                            <Button
+                                id="btnRefreshTable"
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>btnRefresh}"
+                                press=".onRefresh" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column width="9rem"><Text text="{i18n>ordersDueColSalesOrder}" /></Column>
+                        <Column width="6rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>ordersDueColItemSchedLine}" /></Column>
+                        <Column width="14rem"><Text text="{i18n>ordersDueColShipTo}" /></Column>
+                        <Column width="8rem"><Text text="{i18n>ordersDueColShippingPoint}" /></Column>
+                        <Column width="10rem"><Text text="{i18n>ordersDueColGoodsIssueDate}" /></Column>
+                        <Column width="8rem" hAlign="Center"><Text text="{i18n>ordersDueColDeliveryBlock}" /></Column>
+                        <Column width="9rem" hAlign="Center"><Text text="{i18n>ordersDueColAction}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Inactive">
+                            <cells>
+                                <ObjectIdentifier title="{outboundDelivery>SalesOrder}" />
+                                <Text text="{= (${outboundDelivery>SalesOrderItem} || '') + ' / ' + (${outboundDelivery>ScheduleLine} || '') }" />
+                                <ObjectIdentifier title="{outboundDelivery>ShipToParty}" />
+                                <ObjectStatus text="{outboundDelivery>ShippingPoint}" state="Information" />
+                                <Text text="{outboundDelivery>GoodsIssueDate}" />
+                                <ObjectStatus
+                                    text="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? ${outboundDelivery>DelivBlockReasonForSchedLine} : 'None' }"
+                                    state="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? 'Error' : 'Success' }" />
+                                <Button
+                                    text="{i18n>btnCreateDelivery}"
+                                    icon="sap-icon://shipping-status"
+                                    type="Emphasized"
+                                    press=".onCreateDeliveryPress"
+                                    tooltip="{i18n>tooltipCreateDelivery}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

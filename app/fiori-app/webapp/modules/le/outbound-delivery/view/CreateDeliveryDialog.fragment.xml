@@ -1,0 +1,74 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog
+        id="dlgCreateDelivery"
+        title="{i18n>dlgCreateDeliveryTitle}"
+        type="Message"
+        contentWidth="28rem"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <form:SimpleForm
+                    id="formCreateDelivery"
+                    editable="true"
+                    layout="ResponsiveGridLayout"
+                    labelSpanXL="4"
+                    labelSpanL="4"
+                    labelSpanM="4"
+                    labelSpanS="12"
+                    adjustLabelSpan="false"
+                    emptySpanXL="0"
+                    emptySpanL="0"
+                    emptySpanM="0"
+                    emptySpanS="0"
+                    columnsXL="1"
+                    columnsL="1"
+                    columnsM="1"
+                    singleContainerFullSize="false">
+                    <form:content>
+                        <Label text="{i18n>dlgDeliverySalesOrder}" />
+                        <Input
+                            id="inputDeliverySalesOrder"
+                            value="{deliveryDialog>/salesOrder}"
+                            editable="false" />
+
+                        <Label text="{i18n>dlgDeliveryShippingPoint}" required="true" />
+                        <ComboBox
+                            id="comboDeliveryShippingPoint"
+                            selectedKey="{deliveryDialog>/shippingPoint}"
+                            items="{deliveryDialog>/shippingPoints}"
+                            placeholder="{i18n>dlgDeliveryShippingPointPlaceholder}"
+                            width="100%">
+                            <core:Item key="{deliveryDialog>key}" text="{deliveryDialog>text}" />
+                        </ComboBox>
+
+                        <Label text="{i18n>dlgDeliveryDate}" required="true" />
+                        <DatePicker
+                            id="datePickerDeliveryDate"
+                            value="{deliveryDialog>/deliveryDate}"
+                            valueFormat="yyyy-MM-dd"
+                            displayFormat="medium"
+                            placeholder="{i18n>dlgDeliveryDatePlaceholder}"
+                            width="100%" />
+                    </form:content>
+                </form:SimpleForm>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnConfirmDelivery"
+                text="{i18n>btnCreateDelivery}"
+                type="Emphasized"
+                press=".onConfirmCreateDelivery" />
+        </beginButton>
+        <endButton>
+            <Button
+                id="btnCancelDelivery"
+                text="{i18n>btnCancel}"
+                type="Transparent"
+                press=".onCancelCreateDelivery" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

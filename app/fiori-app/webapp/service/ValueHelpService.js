@@ -38,6 +38,7 @@ sap.ui.define([
         "/UnitOfMeasureVH": { title: "Select Unit of Measure", key: "UnitOfMeasure", desc: "UnitOfMeasure_Text" },
         "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" },
         "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName", descAlt: "SalesDocumentType_Text", info: "Classification" },
+        "/SalesOrderTypeVH": { title: "Select Order Type", key: "SalesOrderType", desc: "SalesOrderTypeName", descAlt: "SalesOrderTypeName", info: "Language key" },
         "/SalesOrganizationVH": { title: "Select Sales Organization", key: "SalesOrganization", desc: "SalesOrganization_Text" },
         "/DistributionChannelVH": { title: "Select Distribution Channel", key: "DistributionChannel", desc: "DistributionChannelName" },
         "/DivisionVH": { title: "Select Division", key: "Division", desc: "DivisionName" },
@@ -72,7 +73,7 @@ sap.ui.define([
             var oConf = this.getConfig(sPath);
             if (!oConf) return;
 
-            var oModel = oBinding.getModel() || (oView && oView.getModel("salesInquiry")) || oInput.getModel();
+            var oModel = oBinding.getModel() || (oView && (oView.getModel("salesOrder") || oView.getModel("salesInquiry"))) || oInput.getModel();
             var aActiveContextFilters = Array.isArray(aInitialFilters) ? aInitialFilters.slice() : [];
 
             // Dedicated Scannable Dialog for SAP S/4HANA Sales Inquiry Document Types
@@ -89,7 +90,6 @@ sap.ui.define([
                     contentWidth: "52rem",
                     growing: true,
                     growingThreshold: 25,
-                    growingScrollToLoad: true,
                     columns: [
                         new Column({ width: "10rem", header: new Text({ text: "Material Number" }) }),
                         new Column({ minScreenWidth: "Tablet", demandPopin: true, header: new Text({ text: "Product Description" }) }),
@@ -161,6 +161,8 @@ sap.ui.define([
 
                 if (oModel) {
                     oTableSelectDialog.setModel(oModel);
+                    oTableSelectDialog.setModel(oModel, "salesInquiry");
+                    oTableSelectDialog.setModel(oModel, "salesOrder");
                 }
 
                 oTableSelectDialog.bindAggregation("items", {
@@ -191,7 +193,6 @@ sap.ui.define([
                 contentWidth: "42rem",
                 growing: true,
                 growingThreshold: 25,
-                growingScrollToLoad: true,
                 search: function (oSearchEvent) {
                     var sValue = oSearchEvent.getParameter("value");
                     var aSearchFilters = [];
@@ -264,6 +265,8 @@ sap.ui.define([
 
             if (oModel) {
                 oSelectDialog.setModel(oModel);
+                oSelectDialog.setModel(oModel, "salesInquiry");
+                oSelectDialog.setModel(oModel, "salesOrder");
             }
 
             var oTemplateConfig = {
@@ -552,6 +555,7 @@ sap.ui.define([
             if (oModel) {
                 oDialog.setModel(oModel);
                 oDialog.setModel(oModel, "salesInquiry");
+                oDialog.setModel(oModel, "salesOrder");
             }
 
             if (oView && oView.addDependent) {

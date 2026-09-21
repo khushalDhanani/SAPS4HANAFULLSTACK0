@@ -38,6 +38,7 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.getDivision()).toBe('52');
       expect(s4Config.getCurrency()).toBe('INR');
       expect(s4Config.getInquiryType()).toBe('ZIN');
+      expect(s4Config.getOrderType()).toBe('ZDOM');
       expect(s4Config.getConditionType()).toBe('ZPR1');
       expect(s4Config.getShippingPoints()).toEqual(['1120', '1112', '1108', '1109']);
     });
@@ -51,6 +52,7 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.division).toBe(s4Config.getDivision());
       expect(s4Config.currency).toBe(s4Config.getCurrency());
       expect(s4Config.inquiryType).toBe(s4Config.getInquiryType());
+      expect(s4Config.orderType).toBe(s4Config.getOrderType());
       expect(s4Config.conditionType).toBe(s4Config.getConditionType());
       expect(s4Config.shippingPoints).toEqual(s4Config.getShippingPoints());
     });
@@ -66,6 +68,7 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
         division: '52',
         currency: 'INR',
         inquiryType: 'ZIN',
+        orderType: 'ZDOM',
         conditionType: 'ZPR1',
         shippingPoints: ['1120', '1112', '1108', '1109']
       });
