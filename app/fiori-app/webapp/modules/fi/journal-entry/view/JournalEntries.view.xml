@@ -14,7 +14,7 @@
             <VBox class="sapUiResponsiveMargin">
                 <!-- KPI Header -->
                 <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
-                    <GenericTile class="sapUiTinyMarginEnd" header="{i18n>fiKpiTotalDocs}" subheader="{i18n>fiPageSubtitle}">
+                    <GenericTile class="sapUiTinyMarginEnd" header="{i18n>fiKpiTotalItems}" subheader="{i18n>fiPageSubtitle}">
                         <TileContent>
                             <NumericContent value="{fiView>/totalCount}" icon="sap-icon://document-text" />
                         </TileContent>

@@ -2493,9 +2493,34 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 15:35 IST — Relabel Journal Entries KPI to Total Line Items and Eliminate Page-Only Calculations & Forced Zeros (Audit Item 28)
+- **Change**: Eliminated page-only scraped calculations and forced zero states in `JournalEntries.controller.js` and relabeled the KPI tile from "Total Documents" to "Total Line Items" to accurately describe the underlying S/4HANA `JournalEntryItems` projection on `C_GLJrnlEntryItemToBeVerified`.
+  1. **i18n & Presentation**:
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Relabeled `fiKpiTotalDocs=Total Line Items` and added `fiKpiTotalItems=Total Line Items` (with tooltip "Total line items awaiting verification").
+     - `app/fiori-app/webapp/modules/fi/journal-entry/view/JournalEntries.view.xml`: Updated `<GenericTile id="kpiTotalDocs">` header binding to `{i18n>fiKpiTotalItems}` and value binding to `{fiView>/totalCount}`.
+  2. **Controller Refactoring**:
+     - `app/fiori-app/webapp/modules/fi/journal-entry/controller/JournalEntries.controller.js`:
+       - Injected `ODataClient`.
+       - `onInit`: Initialized `fiView` with `totalCount: "-"` and `glAccountCount: "-"` (eliminating forced `0` initial state). Attached route pattern match listener on route `"journalEntries"`.
+       - `_onRouteMatched`: Refreshes table binding safely and triggers `_loadServerMetrics()`.
+       - `_loadServerMetrics()`: Fetches authentic unique G/L account count from `/odata/v4/purchase-order/getDashboardMetrics()` (backed by cached S/4HANA `I_GLAccountStdVH` master data). On failure/error, sets `glAccountCount: "-"`, never defaulting to `0`.
+       - `onUpdateFinished`: Uses `calculateKpiMetrics(oTable, oEvent)` to strictly extract the binding `$count` parameter for `totalCount` (displaying `"-"` if absent or not a number). Completely eliminated the loaded-row loop (`aItems.forEach(...)`) that counted unique G/L accounts only from the visible page.
+       - `onRefresh`: Refreshes table binding, re-invokes `_loadServerMetrics()`, and shows feedback message toast.
+  3. **Unit Tests & Documentation**:
+     - `test/unit/fi/journalEntriesController.test.js`: Created unit test suite covering initial `"-"` states, `_onRouteMatched` lifecycle, `onUpdateFinished` binding `$count` extraction, `_loadServerMetrics` parsing and error fallback to `"-"`, multi-field search filtering, refresh, item press toast, and nav back.
+     - `docs/data-lineage-audit.md`: Marked audit item 28 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/fi/journalEntriesController.test.js`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
+  - `npx jest test/unit/controller/ test/unit/purchase-order/ test/unit/sales-order/ test/unit/sales-inquiry/ test/unit/fi/`: **33 passed, 33 total test suites; 395 passed, 395 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 773 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
+  - `npx jest test/unit/fi/`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
   - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
   - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 57 passed, 57 total tests (100% green)**.
@@ -2507,6 +2532,11 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Journal Entries KPI Authentic Data Lineage (Audit Row 28)**:
+  - Tile relabeled to "Total Line Items" (`fiKpiTotalItems`), matching `C_GLJrnlEntryItemToBeVerified` line item records.
+  - Forced `0` state eliminated; tiles display `"-"` while loading or on error.
+  - Total count strictly extracted from binding `$count` via `calculateKpiMetrics`.
+  - G/L Account count queries authentic server count (`getDashboardMetrics()`), eliminating loaded-page row scraping.
 - **Sales Order & Inquiry KPI Authentic Data Lineage (Audit Rows 20, 21 & 22)**:
   - Total Orders / Inquiries strictly reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
   - Open Orders / Inquiries unified to authentic S/4HANA definition (`OverallSDProcessStatus ne 'C'`) via `getSalesMetrics`; loaded-row scraping eliminated.
