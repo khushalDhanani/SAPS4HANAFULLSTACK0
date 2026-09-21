@@ -2162,21 +2162,50 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 — Fix Goods Receipt Hardcoded Quantity & Implement Authentic Quantities from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items (Items 1.1-1.6)
+- **Change**: Eliminated hardcoded `Quantity: 10` (line 582) and synthetic defaults (`Quantity: 1`, `Unit: "KG"`, `DeliveryDocumentItem: "000010"`, `PurchaseOrderItem: "00010"`, `'Material ' + id`, `'Plant ' + id`, and `CS01` storage location fallback). Implemented authentic quantity and unit retrieval from live SAP S/4HANA OData service `MMIM_GR4PO_DL_SRV` entity `GR4PO_DL_Items` and `GR4PO_DL_Headers/Header2Items`.
+- **Affected files**:
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`:
+    - Added `getGoodsReceiptItem(deliveryDocument, deliveryItem, purchaseOrder, purchaseOrderItem)`: performs live key lookup on `GR4PO_DL_Items` for `INBDELIV` and navigation on `GR4PO_DL_Headers/Header2Items` for `PURORD`, extracting authentic `OpenQuantity`, `OrderedQuantity`, `QuantityInEntryUnit`, `UnitOfMeasure`, and `EntryUnit`.
+    - In `resolveStorageUnit()`: Removed hardcoded `Quantity: 10`. Proposes authentic SAP `OpenQuantity` (or `QuantityInEntryUnit`/`OrderedQuantity`) and returns `0` if none exists.
+    - Removed synthetic name prefixes (`'Material ' + id` and `'Plant ' + id`) across all 7 tiers, returning empty string `''` when SAP provides no text.
+    - Eliminated synthetic fallback to `cds.s4.storageLocation` (CS01), taking storage location from the authentic SAP item or leaving it empty for user selection.
+  - `srv/wm/goods-receipt/service.cds`: Added `OpenQuantity : Decimal(13, 3);`, `OrderedQuantity : Decimal(13, 3);`, and `QuantityInEntryUnit : Decimal(13, 3);` to `type StorageUnitDetails`.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`: Removed `Quantity: 1`, `Unit: "KG"`, and item number fallbacks. Bound authentic `OpenQuantity`, `OrderedQuantity`, and `Unit` to the view model.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/view/GoodsReceipt.view.xml`: Added Open Quantity label next to receipt quantity input so warehouse operators can verify what SAP expects to receive.
+  - `test/unit/wm/goodsReceiptService.test.js`: Added mock fallback branches for `GR4PO_DL_Items` and `GR4PO_DL_Headers` and unit test verifying authentic open quantity and unit resolution.
+  - `test/unit/wm/goodsReceiptController.test.js`: Added unit tests verifying binding of authentic open quantity and unit from SAP on scan.
+- **Commands executed & results**:
+  - Live probe against SAP Client 220:
+    - Delivery `180000008` resolved to authentic `Quantity: 1000`, `OpenQuantity: 1000`, `OrderedQuantity: 1000`, `Unit: "KG"`, Material: `1000000029 (3-Pentanone)`.
+    - PO `400000028` resolved to authentic `Quantity: 100`, `OpenQuantity: 100`, `OrderedQuantity: 100`, `Unit: "KG"`, Material: `1000000458 (Di Propylene Glycol)`.
+  - `npx eslint .`: 0 errors, 0 warnings.
+  - `npx cds compile srv`: Clean compilation (0 errors).
+  - `cd app/fiori-app && npx ui5lint`: Success! No findings detected (0 errors).
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.30 s; Component-preload.js generated cleanly.
+  - `npx jest test/unit/wm/goodsReceiptService.test.js test/unit/wm/goodsReceiptController.test.js`: All 54 tests passed (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **All 57 test suites pass (806 tests 100% green)**.
+- **Goods Receipt Authentic Quantities & No Assumed Data (Items 1.1-1.6)**:
+  - Hardcoded `Quantity: 10` eliminated from `GoodsReceiptAdapter.js`.
+  - `resolveStorageUnit()` dynamically queries `MMIM_GR4PO_DL_SRV/GR4PO_DL_Items` (key lookup) and `GR4PO_DL_Headers/Header2Items` (navigation) to resolve authentic SAP `OpenQuantity`, `OrderedQuantity`, `QuantityInEntryUnit`, and `UnitOfMeasure`.
+  - Proposes authentic SAP open quantities on scan (e.g. 1000 for delivery `180000008`, 100 for PO `400000028`) with zero hardcoded defaults.
+  - Removed all synthetic `'Material ' + id` and `'Plant ' + id` text fallbacks and `CS01` storage location fallback.
 - **Sales Orders Worklist Resolution**:
   - `SD_F1873_SO_WL_SRV` credentials configured in `server.js` for seamless local CDS remote connectivity.
   - `SalesInquiryAdapter.getSalesOrders` maps incoming queries exclusively to remote entity `SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873`, correctly forwarding sorting, paging, column selection, and `$count`.
-  - Both live CDS remote service and fallback HTTP client return authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`), allowing the UI5 table to render all order rows and populate KPI tiles accurately.
+  - Both live CDS remote service and fallback HTTP client return authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`).
 - **Security & Data Integrity Hardening (Audit Finding A)**:
   - Zero Default Units, Zero Default Quantities, Zero Default Item Numbers, Zero Default Reason Codes, Zero Default Dates, Zero Default Customer References.
   - Dev Token Guarding, Constant-Time Password Comparison.
 - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
-- **XML Defect Audit**: **7 of 9 defects fixed** across 6 files (3 dead headerText, 2 unused namespaces, 1 inconsistent binding syntax, 1 table mode mismatch). 2 items left as by-design.
+- **XML Defect Audit**: **7 of 9 defects fixed** across 6 files.
 
 ## Next Steps
-1. Stage and commit the XML defect fixes and Sales Order worklist fixes to `feature/CL01`.
-2. Review eliminated invented value defaults with user.
-3. Commit and push changes to `origin/feature/CL01` when requested by user.
+1. Stage and commit Goods Receipt authentic quantity changes to `feature/CL01`.
+2. Continue with remaining sections of `docs/no-assumed-data-changes.md` (Goods Issue, Sales Order, Outbound Delivery) as requested.
+3. Push changes to `origin/feature/CL01` when approved by user.
