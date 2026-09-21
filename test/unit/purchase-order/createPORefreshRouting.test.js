@@ -256,12 +256,12 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('Create PO Initial Model & Status Validation', () => {
-        it('should create initial model with default NB doc type and 1 item', () => {
+        it('should create initial model requiring Document Type and 1 item', () => {
             const oModel = PurchaseOrderModel.createInitialModel("TEST_USER");
             const data = oModel.getData();
 
             expect(data.header).toBeDefined();
-            expect(data.header.PurchaseOrderType).toBe("NB");
+            expect(data.header.PurchaseOrderType).toBe("");
             expect(data.header.StatusText).toBe("Draft");
             expect(data.items).toHaveLength(1);
             expect(data.items[0].PurchaseOrderItem).toBe("10");

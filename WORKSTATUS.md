@@ -2603,23 +2603,48 @@
   - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
   - `cd app/fiori-app && npm run build`: **Build succeeded in 1.11 s; Component-preload.js generated**.
   - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Implement Audit Item 12: PO document type default (require the field).
+
+### 2026-09-21 16:15 IST — Require PO Document Type and Eliminate Hardcoded "NB" Defaults (Audit Item 12)
+- **Change**: Resolved assumed data lineage where Purchase Order document type defaulted to `"NB"` in the UI initial model and fell back to `'NB'` in the backend normalization mapper:
+  1. **Backend Mapper Validation**:
+     - `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`:
+       - Removed fallback `|| 'NB'`.
+       - Added explicit validation check throwing an Error if `data.header.PurchaseOrderType` is missing or empty (`'PurchaseOrderType (Document Type) is required'`).
+       - Normalized non-empty `PurchaseOrderType` with `.trim().toUpperCase()`.
+  2. **Frontend UI & Model**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`:
+       - In `createInitialModel`: Changed default `header.PurchaseOrderType` from `"NB"` to `""`.
+       - Initial header status set to `StatusState: "Warning"`, `StatusIcon: "sap-icon://alert"` reflecting that Document Type is unpopulated and required.
+       - In `applyConfigurationDefaults`: Removed `|| sCurrentDocType === "NB"` fallback condition.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`:
+       - Marked `<Input id="inDocType" ... required="true">` to clearly indicate requirement in Fiori UI.
+  3. **Unit Tests & Documentation**:
+     - `test/unit/purchase-order/domainMapping.test.js`: Added unit test asserting `normalizePurchaseOrderData` throws an error when `PurchaseOrderType` is empty.
+     - `test/unit/purchase-order/createPORefreshRouting.test.js`: Updated initial model assertion expecting `PurchaseOrderType === ""` instead of `"NB"`.
+     - `test/unit/purchase-order/createPurchaseOrderStatus.test.js`: Updated initial model status and error handling expectations; updated valid form submission test to explicitly provide `PurchaseOrderType: 'NB'`.
+     - `docs/data-lineage-audit.md`: Updated Audit Item 12 to `RESOLVED`.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/purchase-order/createPurchaseOrderStatus.test.js`: **1 passed, 1 total test suite; 22 passed, 22 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 919 passed, 919 total tests (100% green)**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 728 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npx jest test/unit/fi/`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
-  - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
-  - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 194 passed, 194 total tests (100% green)**.
-  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 137 passed, 137 total tests (100% green)**.
-  - `npx jest test/unit/dashboard/`: **1 passed, 1 total test suite; 30 passed, 30 total tests (100% green)**.
-  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
-  - `cd app/fiori-app && npx ui5lint`: 0 findings.
+  - `npm test`: **71 passed, 71 total test suites; 919 passed, 919 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
+  - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
-  - `npx eslint srv/ test/`: 0 errors, 0 warnings.
-  - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **PO Document Type Required (Audit Row 12)**:
+  - Hardcoded `"NB"` eliminated from initial UI model and backend normalization mapper.
+  - `PurchaseOrderType` strictly required in UI input (`required="true"`), UI model validation (`validateForm`), and backend mapper (`normalizePurchaseOrderData`).
+  - Draft PO with empty document type shows Warning state in header until document type is entered.
 - **PO Line Net Amount Lineage (Audit Row 11)**:
   - Column header clearly relabeled to `Net Amount (Estimate)` (`poColNetAmount`).
   - Informative tooltips on header and cell inputs clarify that browser calculation is an estimate before S/4HANA prices the document.

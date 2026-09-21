@@ -63,7 +63,7 @@
                             singleContainerFullSize="false">
                             <f:content>
                                 <Label text="{i18n>colDocType}" required="true" />
-                                <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="{i18n>poPlaceholderDocType}" maxLength="4"
+                                <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="{i18n>poPlaceholderDocType}" maxLength="4" required="true"
                                     valueState="{newPO>/errors/PurchaseOrderType/state}"
                                     valueStateText="{newPO>/errors/PurchaseOrderType/text}"
                                     change=".onDocTypeChange" liveChange=".onDocTypeChange" suggestionItemSelected=".onDocTypeSelect"

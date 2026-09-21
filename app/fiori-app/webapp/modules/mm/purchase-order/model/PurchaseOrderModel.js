@@ -115,7 +115,7 @@ sap.ui.define([
                     PaymentTerms: { state: "None", text: "" }
                 },
                 header: {
-                    PurchaseOrderType: "NB",
+                    PurchaseOrderType: "",
                     CompanyCode: "",
                     PurchasingOrganization: "",
                     PurchasingGroup: "",
@@ -126,8 +126,8 @@ sap.ui.define([
                     IncotermsLocation1: "",
                     PaymentTerms: "",
                     StatusText: "Draft",
-                    StatusState: "Information",
-                    StatusIcon: "sap-icon://edit",
+                    StatusState: "Warning",
+                    StatusIcon: "sap-icon://alert",
                     PurchasingCompletenessStatus: false
                 },
                 items: [
@@ -1186,7 +1186,7 @@ sap.ui.define([
             });
 
             // If Document Type is not user modified, and ZDOM is available in config, select ZDOM
-            if (!oUserModified.PurchaseOrderType && bZdomAvailable && (sCurrentDocType === "" || sCurrentDocType === "NB")) {
+            if (!oUserModified.PurchaseOrderType && bZdomAvailable && sCurrentDocType === "") {
                 oHeader.PurchaseOrderType = "ZDOM";
                 sCurrentDocType = "ZDOM";
                 oConfigDerived.PurchaseOrderType = true;

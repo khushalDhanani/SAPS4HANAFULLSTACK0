@@ -83,6 +83,29 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
         expect(result.items[0].NetAmount).toBe('31.00');
     });
 
+    it('should throw an error if PurchaseOrderType (Document Type) is missing or empty', () => {
+        const rawData = {
+            header: {
+                PurchaseOrderType: '',
+                CompanyCode: '1010',
+                PurchasingOrganization: '1010',
+                PurchasingGroup: '001',
+                Supplier: '10300001',
+                Currency: 'EUR'
+            },
+            items: [
+                {
+                    Material: 'TG11',
+                    Plant: '1010',
+                    OrderQuantity: '5',
+                    UnitOfMeasure: 'PC',
+                    NetPriceAmount: '20'
+                }
+            ]
+        };
+        expect(() => normalizePurchaseOrderData(rawData)).toThrow(/PurchaseOrderType .*is required/i);
+    });
+
     it('should throw an error if an item is missing UnitOfMeasure', () => {
         const rawData = {
             header: validPayload.header,

@@ -23,8 +23,12 @@ function normalizePurchaseOrderData(data, context = {}) {
         ? String(context.user).trim()
         : 'SYSTEM';
 
+    if (!data.header.PurchaseOrderType || String(data.header.PurchaseOrderType).trim() === '') {
+        throw new Error('PurchaseOrderType (Document Type) is required');
+    }
+
     const header = {
-        PurchaseOrderType: String(data.header.PurchaseOrderType || 'NB').trim(),
+        PurchaseOrderType: String(data.header.PurchaseOrderType).trim().toUpperCase(),
         CompanyCode: String(data.header.CompanyCode || '').trim(),
         PurchasingOrganization: String(data.header.PurchasingOrganization || '').trim(),
         PurchasingGroup: String(data.header.PurchasingGroup || '').trim(),
