@@ -603,108 +603,40 @@ class SalesInquiryAdapter {
     });
 
     if (header) {
-      if (!header.ShipToParty && header.SoldToParty) {
-        header.ShipToParty = header.SoldToParty;
-        header.ShipToPartyName = header.OrganizationBPName1 || '';
-      }
+      header.ShipToParty = header.ShipToParty || '';
+      header.ShipToPartyName = header.ShipToPartyName || '';
 
-      // 4. Dynamic SAP S/4HANA resolution for SalesOffice and SalesGroup
+      // 4. Resolve descriptions (names) for authentic SalesOffice and SalesGroup present on the SAP document
+      // Never borrow SalesOffice or SalesGroup from other inquiries or value help defaults. Show what SAP holds, blank if blank.
       if (this.s4hanaWL) {
-        const sSoldTo = header.SoldToParty;
-        const sOrg = header.SalesOrganization;
+        const sOff = header.SalesOffice ? String(header.SalesOffice).trim() : '';
+        const sGrp = header.SalesGroup ? String(header.SalesGroup).trim() : '';
 
-        // If SalesOffice is not populated on this inquiry header in SAP, derive from customer historical inquiries in SAP
-        if ((!header.SalesOffice || header.SalesOffice.trim() === '') && sSoldTo && sOrg) {
-          try {
-            const custInq = await this.s4hanaWL.run(
-              SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
-                .columns('SalesOffice', 'SalesGroup')
-                .where({ SoldToParty: sSoldTo, SalesOrganization: sOrg })
-                .where("SalesOffice != ''")
-                .limit(1)
-            );
-            const cMatch = Array.isArray(custInq) ? custInq[0] : (custInq?.value?.[0] || null);
-            if (cMatch?.SalesOffice) {
-              header.SalesOffice = cMatch.SalesOffice;
-              if ((!header.SalesGroup || header.SalesGroup.trim() === '') && cMatch.SalesGroup) {
-                header.SalesGroup = cMatch.SalesGroup;
-              }
-            }
-          } catch (ce) {
-            LOG.warn('Could not derive customer sales office from SAP:', ce.message);
-          }
-        }
+        const needsOfficeName = sOff && (!header.SalesOfficeName || header.SalesOfficeName.trim() === '');
+        const needsGroupName = sGrp && (!header.SalesGroupName || header.SalesGroupName.trim() === '');
 
-        // If still unassigned, query valid Sales Office for the inquiry's Sales Area from SAP configuration
-        if ((!header.SalesOffice || header.SalesOffice.trim() === '') && sOrg) {
-          const areaKey = `${sOrg}:${header.DistributionChannel || s4Config.getDistributionChannel()}:${header.OrganizationDivision || s4Config.getDivision()}`;
-          try {
-            const oMatch = await this.salesOfficeVhCache.getOrSet(`area:${areaKey}`, async () => {
-              const orgRows = await this.s4hanaWL.run(
-                SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp')
-                  .where({
-                    SalesOrganization: sOrg,
-                    DistributionChannel: header.DistributionChannel || s4Config.getDistributionChannel(),
-                    OrganizationDivision: header.OrganizationDivision || s4Config.getDivision()
-                  })
-                  .limit(1)
-              );
-              return Array.isArray(orgRows) ? orgRows[0] : (orgRows?.value?.[0] || null);
-            });
-            if (oMatch?.SalesOffice) {
-              header.SalesOffice = oMatch.SalesOffice;
-              header.SalesOfficeName = oMatch.SalesOfficeName || '';
-            }
-          } catch (oe) {
-            LOG.warn('Could not derive sales area office from SAP:', oe.message);
-          }
-        }
-
-        // Parallel resolution of SalesOfficeName and SalesGroup if both are missing
-        const needsOfficeName = header.SalesOffice && (!header.SalesOfficeName || header.SalesOfficeName.trim() === '');
-        const needsGroup = header.SalesOffice && (!header.SalesGroup || header.SalesGroup.trim() === '');
-
-        if (needsOfficeName || needsGroup) {
-          const sOff = header.SalesOffice;
-          const [nameRes, groupRes] = await Promise.allSettled([
+        if (needsOfficeName || needsGroupName) {
+          const [nameRes, groupNameRes] = await Promise.allSettled([
             needsOfficeName ? this.salesOfficeVhCache.getOrSet(`office:${sOff}`, async () => {
               const oVH = await this.s4hanaWL.run(
                 SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp').where({ SalesOffice: sOff })
               );
               return oVH?.SalesOfficeName || '';
-            }) : Promise.resolve(header.SalesOfficeName),
+            }) : Promise.resolve(header.SalesOfficeName || ''),
 
-            needsGroup ? this.salesGroupVhCache.getOrSet(`group_by_office:${sOff}`, async () => {
-              const gRows = await this.s4hanaWL.run(
-                SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesGroupValueHelp').where({ SalesOffice: sOff }).limit(1)
+            needsGroupName ? this.salesGroupVhCache.getOrSet(`group_name:${sGrp}`, async () => {
+              const gVH = await this.s4hanaWL.run(
+                SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesGroupValueHelp').where({ SalesGroup: sGrp })
               );
-              const gRow = Array.isArray(gRows) ? gRows[0] : (gRows?.value?.[0] || null);
-              return gRow ? { SalesGroup: gRow.SalesGroup, SalesGroupName: gRow.SalesGroupName || '' } : null;
-            }) : Promise.resolve(null)
+              return gVH?.SalesGroupName || '';
+            }) : Promise.resolve(header.SalesGroupName || '')
           ]);
 
           if (needsOfficeName && nameRes.status === 'fulfilled' && nameRes.value) {
             header.SalesOfficeName = nameRes.value;
           }
-          if (needsGroup && groupRes.status === 'fulfilled' && groupRes.value) {
-            header.SalesGroup = groupRes.value.SalesGroup || '';
-            header.SalesGroupName = groupRes.value.SalesGroupName || '';
-          }
-        }
-
-        // If SalesGroup exists but SalesGroupName is not populated, resolve from cache or query
-        if (header.SalesGroup && (!header.SalesGroupName || header.SalesGroupName.trim() === '')) {
-          const sGrp = header.SalesGroup;
-          try {
-            const grpName = await this.salesGroupVhCache.getOrSet(`group_name:${sGrp}`, async () => {
-              const gVH = await this.s4hanaWL.run(
-                SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesGroupValueHelp').where({ SalesGroup: sGrp })
-              );
-              return gVH?.SalesGroupName || '';
-            });
-            if (grpName) header.SalesGroupName = grpName;
-          } catch (e) {
-            LOG.warn(`Could not resolve sales group name for ${sGrp}:`, e.message);
+          if (needsGroupName && groupNameRes.status === 'fulfilled' && groupNameRes.value) {
+            header.SalesGroupName = groupNameRes.value;
           }
         }
       }

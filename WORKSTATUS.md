@@ -2385,29 +2385,57 @@
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `npm test` (full project test suite): **68 passed, 68 total test suites; 872 passed, 872 total tests (100% green)**.
   - `git diff --check`: **Clean (0 errors)**.
-- **Next recommended action**: Implement Sales Inquiry Sales Office / Sales Group audit resolution (Item 15).
+- **Next recommended action**: Stage and commit Items 15 and 16 to `feature/CL01`.
+
+### 2026-09-21 — Eliminate Borrowed Sales Office & Sales Group in Sales Inquiry Detail (Audit Item 15)
+- **Change**: Eliminated synthetic borrowing of `SalesOffice` and `SalesGroup` in `SalesInquiryAdapter.js` (`getInquiry`). Previously, if an inquiry header in SAP had blank sales office/group fields, the adapter borrowed values from other historical inquiries of the same customer (`C_InquiryWL_F2370`) or defaulted to the first office/group in value help (`C_SalesOfficeValueHelp`, `C_SalesGroupValueHelp`).
+  1. **Backend Integration**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Removed customer historical inquiry lookup and first-match value help fallback for `SalesOffice` and `SalesGroup`. If `header.SalesOffice` or `header.SalesGroup` is empty on the SAP document, it remains blank (`''`). Authentic name resolution (`SalesOfficeName`, `SalesGroupName`) is executed only when the corresponding code is present on the document.
+  2. **Unit Tests**:
+     - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Replaced test asserting borrowed office/group with test asserting `SalesOffice: ''`, `SalesOfficeName: ''`, `SalesGroup: ''`, and `SalesGroupName: ''` when SAP returns empty fields.
+     - `docs/data-lineage-audit.md`: Marked audit item 15 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx eslint srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **0 errors, 0 warnings (100% clean)**.
+  - `npx jest test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **28 passed, 28 total (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+
+### 2026-09-21 — Eliminate Sold-to Substitution for Ship-to Party in Sales Inquiry Detail (Audit Item 16)
+- **Change**: Eliminated substitution of `SoldToParty` for `ShipToParty` in `SalesInquiryAdapter.js` (`getInquiry`). When SAP S/4HANA returns no partner card with function 'WE', the adapter previously stamped `header.ShipToParty = header.SoldToParty` and `header.ShipToPartyName = header.OrganizationBPName1`.
+  1. **Backend Integration**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Removed `if (!header.ShipToParty && header.SoldToParty)` substitution. Leaves `ShipToParty` and `ShipToPartyName` blank (`''`) when SAP partner card returns no Ship-to party.
+  2. **Frontend Presentation**:
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/view/SalesInquiryDetail.view.xml`: Updated expression binding for Ship-to party to render `'-'` when `ShipToParty` and `ShipToPartyName` are empty, ensuring consistent presentation with Sales Office and Sales Group.
+  3. **Unit Tests**:
+     - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Added assertions that `ShipToParty` and `ShipToPartyName` are `''` when SAP returns no partner function 'WE'.
+     - `docs/data-lineage-audit.md`: Marked audit item 16 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.05 s; Component-preload.js generated cleanly**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
-  - `npx jest`: **68 passed, 68 total test suites; 872 passed, 872 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Sales Inquiry Authentic Data Lineage (Audit Rows 15 & 16)**:
+  - Sales Office and Sales Group show strictly what SAP holds; no borrowing from other customer inquiries or value help defaults.
+  - Ship-to party remains blank (`'-'`) when SAP partner read returns no 'WE' partner, eliminating Sold-to party substitution.
+- **Goods Issue Packaging Units (Audit Row 42)**:
+  - Synthetic `<material>-<unit>` barcode eliminated from clients, service definitions, and fixtures.
 - **Storage Unit (SU) Assumed Data Elimination**:
   - Eliminated assumed "Storage Unit" labeling across Goods Receipt and Goods Issue.
   - Scanned objects accurately presented as authentic Inbound Deliveries, Purchase Orders, and Batches.
-  - Zero false claims of Storage Unit / Handling Unit persistence where standard MM-IM documents apply.
 - **Goods Issue Batch Status / SLED Defaults (Audit Row 41)**:
   - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
-  - Failed batch lookups show `'unknown'`, never masquerading as `'NO SLED'`.
-- **Goods Issue Batch Submit Fallback (Audit Row 44)**:
-  - Queued lines return `Success: false`, `Queued: true`, `DifferenceCleared: false`, and `QueueReference`.
-- **Goods Issue Authentic Material Document Requirement (Audit Row 43)**:
-  - Non-queued responses must contain an authentic SAP `MaterialDocument` to be marked `POSTED_IN_SAP`.
 
 ## Next Steps
 1. Stage and commit changes to `feature/CL01`.

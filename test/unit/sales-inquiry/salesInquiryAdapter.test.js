@@ -64,45 +64,23 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(result.header.SalesGroupName).toBe('Surat');
     });
 
-    test('should dynamically derive SalesOffice and SalesGroup from SAP when inquiry header has empty fields', async () => {
-        let callCount = 0;
+    test('should return blank SalesOffice and SalesGroup when SAP inquiry header has empty fields (never borrow)', async () => {
         const mockWL = {
-            run: jest.fn().mockImplementation((_query) => {
-                callCount++;
-                if (callCount === 1) {
-                    // First call: inquiry header with empty SalesOffice
-                    return Promise.resolve({
-                        SalesInquiry: '100000',
-                        SalesOrganization: '1000',
-                        DistributionChannel: '10',
-                        OrganizationDivision: '52',
-                        SalesOffice: '',
-                        SalesGroup: '',
-                        SoldToParty: '10135'
-                    });
-                }
-                if (callCount === 2) {
-                    // Second call: customer historical inquiry lookup
-                    return Promise.resolve([
-                        { SalesOffice: 'SO10', SalesGroup: '100' }
-                    ]);
-                }
-                if (callCount === 3) {
-                    // Third call: SalesOffice VH lookup
-                    return Promise.resolve({ SalesOfficeName: 'Surat' });
-                }
-                if (callCount === 4) {
-                    // Fourth call: SalesGroup VH lookup
-                    return Promise.resolve({ SalesGroupName: 'Surat' });
-                }
-                return Promise.resolve(null);
+            run: jest.fn().mockResolvedValue({
+                SalesInquiry: '100000',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SalesOffice: '',
+                SalesGroup: '',
+                SoldToParty: '10135'
             })
         };
         const mockFS = {
-            run: jest.fn().mockImplementation(() => Promise.resolve({
+            run: jest.fn().mockResolvedValue({
                 SalesInquiry: '100000',
                 to_SDDocumentPartnerCard: []
-            }))
+            })
         };
 
         const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
@@ -112,10 +90,12 @@ describe('Unit: Sales Inquiry Adapter', () => {
         const result = await adapter.getInquiry('100000');
         expect(result).toBeDefined();
         expect(result.header.SalesInquiry).toBe('100000');
-        expect(result.header.SalesOffice).toBe('SO10');
-        expect(result.header.SalesOfficeName).toBe('Surat');
-        expect(result.header.SalesGroup).toBe('100');
-        expect(result.header.SalesGroupName).toBe('Surat');
+        expect(result.header.SalesOffice).toBe('');
+        expect(result.header.SalesOfficeName).toBe('');
+        expect(result.header.SalesGroup).toBe('');
+        expect(result.header.SalesGroupName).toBe('');
+        expect(result.header.ShipToParty).toBe('');
+        expect(result.header.ShipToPartyName).toBe('');
     });
 
     test('should create sales inquiry directly via S/4HANA OData service and return SAP-assigned number', async () => {

@@ -176,7 +176,7 @@
                                 <Label text="{i18n>salesInquiryLabelSoldToParty}" />
                                 <Text text="{= (${detail>/header/SoldToParty} || '') + (${detail>/header/OrganizationBPName1} ? ' - ' + ${detail>/header/OrganizationBPName1} : '') }" />
                                 <Label text="{i18n>salesInquiryLabelShipToParty}" />
-                                <Text text="{= (${detail>/header/ShipToParty} || '') + (${detail>/header/ShipToPartyName} ? ' - ' + ${detail>/header/ShipToPartyName} : '') }" />
+                                <Text text="{= (${detail>/header/ShipToParty} ? (${detail>/header/ShipToParty} + (${detail>/header/ShipToPartyName} ? ' - ' + ${detail>/header/ShipToPartyName} : '')) : (${detail>/header/ShipToPartyName} || '-')) }" />
                                 <Label text="{i18n>salesInquiryLabelContactPerson}" visible="{= !!${detail>/header/ContactPersonName} }" />
                                 <Text text="{detail>/header/ContactPersonName}" visible="{= !!${detail>/header/ContactPersonName} }" />
                                 <Label text="{i18n>salesInquiryLabelSalesEmployee}" visible="{= !!${detail>/header/SalesEmployeeName} }" />
