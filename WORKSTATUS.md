@@ -2517,14 +2517,31 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 15:40 IST — Hardened Error Propagation & Comprehensive Tests for Sales Order Metrics (Audit Item 22 Parity)
+- **Change**: Verified and hardened error propagation for `getSalesOrderMetrics` in both Sales Order and Sales Inquiry CAP handlers, ensuring full parity with S/4HANA error handling discipline.
+  1. **CAP Handlers**:
+     - `srv/sd/sales-order/handlers/salesOrder.handler.js`: Verified error propagation via `req.error(error.status || 502, error.message)` and error re-throwing when called without `req`, strictly eliminating the previous silent zero `{ openOrdersCount: 0, totalOrdersCount: 0 }` fallback.
+     - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Added error logging `LOG.error('Error fetching sales inquiry metrics:', error.message)` before returning `req.error(error.status || 502, error.message)` for consistency with `salesOrder.handler.js`.
+  2. **Unit Tests**:
+     - `test/unit/sales-order/salesOrderService.test.js`: Added tests verifying that `getSalesOrderMetrics` defaults to HTTP 502 when `error.status` is absent, and throws when `req` is absent.
+     - `test/unit/sales-inquiry/createSalesInquiryHandler.test.js`: Added comprehensive `getSalesOrderMetrics` test suite covering adapter delegation with `{ entity: 'inquiry' }`, error propagation via `req.error`, HTTP 502 fallback, and re-throwing when `req` is absent.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/sales-order/salesOrderService.test.js test/unit/sales-inquiry/createSalesInquiryHandler.test.js`: **2 passed, 2 total test suites; 22 passed, 22 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/ test/unit/sales-inquiry/`: **15 passed, 15 total test suites; 195 passed, 195 total tests (100% green)**.
+  - `npx jest test/unit/`: **58 passed, 58 total test suites; 856 passed, 856 total tests (100% green)**.
+  - `npx eslint srv/ test/`: **0 errors, 0 warnings (100% clean)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across all tested components:
+- **Build Status**: **100% Green** across entire repository test suite:
+  - `npx jest test/unit/`: **58 passed, 58 total test suites; 856 passed, 856 total tests (100% green)**.
   - `npx jest test/unit/fi/`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
   - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
-  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 57 passed, 57 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 59 passed, 59 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 136 passed, 136 total tests (100% green)**.
   - `npx jest test/unit/dashboard/`: **1 passed, 1 total test suite; 30 passed, 30 total tests (100% green)**.
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.

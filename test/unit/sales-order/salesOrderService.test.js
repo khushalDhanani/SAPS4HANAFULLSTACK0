@@ -249,5 +249,23 @@ describe('Unit: SalesOrderService Handler', () => {
 
             expect(mockReq.error).toHaveBeenCalledWith(502, 'SD_F1873_SO_WL_SRV unavailable');
         });
+
+        test('getSalesOrderMetrics defaults to HTTP 502 when error status is not provided', async () => {
+            const mockError = new Error('Network timeout connecting to S/4HANA');
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            await handlers.getSalesOrderMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'Network timeout connecting to S/4HANA');
+        });
+
+        test('getSalesOrderMetrics throws error when req is not provided on failure', async () => {
+            const mockError = new Error('SD_F1873_SO_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            await expect(handlers.getSalesOrderMetrics()).rejects.toThrow('SD_F1873_SO_WL_SRV unavailable');
+        });
     });
 });

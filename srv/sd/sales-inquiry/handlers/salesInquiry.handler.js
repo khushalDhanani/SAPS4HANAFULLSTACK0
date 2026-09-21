@@ -98,6 +98,7 @@ function registerSalesInquiryHandlers(srv) {
         try {
             return await salesInquiryAdapter.getSalesMetrics({ entity: 'inquiry' });
         } catch (error) {
+            LOG.error('Error fetching sales inquiry metrics:', error.message);
             if (req && typeof req.error === 'function') {
                 return req.error(error.status || 502, error.message);
             }

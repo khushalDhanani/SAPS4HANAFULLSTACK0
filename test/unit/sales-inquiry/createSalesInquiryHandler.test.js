@@ -1,14 +1,19 @@
 jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter', () => ({
-    createSalesInquiry: jest.fn()
+    createSalesInquiry: jest.fn(),
+    getSalesMetrics: jest.fn()
 }));
 
 const salesInquiryAdapter = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const registerSalesInquiryHandlers = require('../../../srv/sd/sales-inquiry/handlers/salesInquiry.handler');
 
-function handler() {
+function getAllHandlers() {
     const handlers = {};
     registerSalesInquiryHandlers({ on: (event, ...args) => { handlers[event] = args[args.length - 1]; } });
-    return handlers.createSalesInquiry;
+    return handlers;
+}
+
+function handler() {
+    return getAllHandlers().createSalesInquiry;
 }
 
 describe('Unit: createSalesInquiry handler', () => {
@@ -104,5 +109,50 @@ describe('Unit: createSalesInquiry handler', () => {
         expect(req.error).toHaveBeenCalledWith(502, message);
         expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('1000529'));
         expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('Do not retry'));
+    });
+
+    describe('getSalesOrderMetrics', () => {
+        test('delegates to adapter with entity inquiry', async () => {
+            const mockMetrics = { openOrdersCount: 15, totalOrdersCount: 60 };
+            salesInquiryAdapter.getSalesMetrics.mockResolvedValue(mockMetrics);
+
+            const allHandlers = getAllHandlers();
+            const result = await allHandlers.getSalesOrderMetrics();
+
+            expect(result).toEqual(mockMetrics);
+            expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalledWith({ entity: 'inquiry' });
+        });
+
+        test('propagates error via req.error on failure', async () => {
+            const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            const allHandlers = getAllHandlers();
+            await allHandlers.getSalesOrderMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'SD_F2370_INQY_WL_SRV unavailable');
+        });
+
+        test('defaults to HTTP 502 when error status is not provided', async () => {
+            const mockError = new Error('Gateway connection refused');
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            const allHandlers = getAllHandlers();
+            await allHandlers.getSalesOrderMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'Gateway connection refused');
+        });
+
+        test('throws error when req is not provided on failure', async () => {
+            const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const allHandlers = getAllHandlers();
+            await expect(allHandlers.getSalesOrderMetrics()).rejects.toThrow('SD_F2370_INQY_WL_SRV unavailable');
+        });
     });
 });
