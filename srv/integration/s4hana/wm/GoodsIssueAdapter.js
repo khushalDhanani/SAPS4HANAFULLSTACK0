@@ -358,12 +358,12 @@ class GoodsIssueAdapter {
     // Retrieve batches for active item's material and plant
     const allBatches = await this.getMaterialBatches(activeItem.Material, activeItem.Plant, activeItem.StorageLocation);
 
-    // Only unexpired batches with positive available stock are issuable
-    const issuableBatches = allBatches.filter(b => Number(b.AvailableStock) > 0 && b.StatusState !== 'Error');
+    // Only unexpired batches with positive available stock or unknown stock are issuable
+    const issuableBatches = allBatches.filter(b => (b.AvailableStock === null || Number(b.AvailableStock) > 0) && b.StatusState !== 'Error');
 
-    // If active item has no batch assigned, pick top FEFO unexpired batch if available with stock > 0
+    // If active item has no batch assigned, pick top FEFO unexpired batch if available with stock > 0 (or unknown)
     if (!activeItem.Batch && issuableBatches.length > 0) {
-      const topBatch = issuableBatches[0];
+      const topBatch = issuableBatches.find(b => b.AvailableStock !== null && Number(b.AvailableStock) > 0) || issuableBatches[0];
       activeItem.Batch = topBatch.Batch;
       activeItem.ExpiryDate = topBatch.ExpiryDate;
       activeItem.BatchStatusState = topBatch.StatusState;
@@ -375,15 +375,20 @@ class GoodsIssueAdapter {
       activeItem.BatchStatusText = 'NO BATCH';
     }
 
-    // Determine confirmed stock from batches or storage location
-    let availableStock = 0;
+    // Determine confirmed stock from batches or storage location (unknown stock remains null, never silent 0)
+    let availableStock = null;
     if (activeItem.Batch) {
       const selBatchObj = allBatches.find(b => b.Batch === activeItem.Batch);
       availableStock = selBatchObj && selBatchObj.AvailableStock !== null && selBatchObj.AvailableStock !== undefined
         ? Number(selBatchObj.AvailableStock)
-        : 0;
+        : null;
     } else if (issuableBatches.length > 0) {
-      availableStock = issuableBatches.reduce((acc, b) => acc + (Number(b.AvailableStock) || 0), 0);
+      const knownStockBatches = issuableBatches.filter(b => b.AvailableStock !== null && b.AvailableStock !== undefined);
+      if (knownStockBatches.length > 0) {
+        availableStock = knownStockBatches.reduce((acc, b) => acc + Number(b.AvailableStock), 0);
+      } else {
+        availableStock = null;
+      }
     } else if (allBatches.length > 0) {
       // All existing batches have zero stock
       availableStock = 0;

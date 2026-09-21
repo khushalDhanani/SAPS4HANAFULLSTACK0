@@ -610,7 +610,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     // ──────────────────────────────────────────────────────────
     // STEP 2: Read actual current stock and authentic batches from SAP
     // ──────────────────────────────────────────────────────────
-    let currentStock = 0;
+    let currentStock = null;
     let baseUnit = resvUnit;
 
     if (resvPlant && resvSLoc) {
@@ -620,23 +620,23 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
           '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
           `$filter=${slocFilter}&$format=json`
         );
-        if (Array.isArray(slocRes) && slocRes.length > 0) {
-          currentStock = Number(slocRes[0].CurrentStock || 0);
+        if (Array.isArray(slocRes) && slocRes.length > 0 && slocRes[0].CurrentStock !== undefined && slocRes[0].CurrentStock !== null) {
+          currentStock = Number(slocRes[0].CurrentStock);
           if (slocRes[0].BaseUnit) baseUnit = slocRes[0].BaseUnit;
         }
       } catch (err) {
         LOG.warn(`MaterialStorLocHelps query failed for ${resvMaterial}/${resvPlant}/${resvSLoc}: ${err.message}`);
       }
 
-      if (currentStock === 0) {
+      if (currentStock === null) {
         try {
           const stockFilter = `Material eq '${encodeURIComponent(resvMaterial)}' and Plant eq '${encodeURIComponent(resvPlant)}' and StorageLocation eq '${encodeURIComponent(resvSLoc)}'`;
           const stockRes = await this._get(
             '/sap/opu/odata/sap/C_STOCKQUANTITYVALUEBYTYPE_CDS/C_STOCKQUANTITYVALUEBYTYPE',
             `$filter=${stockFilter}&$format=json`
           );
-          if (Array.isArray(stockRes) && stockRes.length > 0) {
-            currentStock = Number(stockRes[0].MatlWrhsStkQtyInMatlBaseUnit || 0);
+          if (Array.isArray(stockRes) && stockRes.length > 0 && stockRes[0].MatlWrhsStkQtyInMatlBaseUnit !== undefined && stockRes[0].MatlWrhsStkQtyInMatlBaseUnit !== null) {
+            currentStock = Number(stockRes[0].MatlWrhsStkQtyInMatlBaseUnit);
             if (stockRes[0].MaterialBaseUnit) baseUnit = stockRes[0].MaterialBaseUnit;
           }
         } catch (err) {
@@ -676,7 +676,10 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
 
     const batchDirectMatch = directBatch || gs1Batch;
     if (batchDirectMatch) {
-      const maxIssueQty = Math.min(currentStock, openQty);
+      const resolvedStock = batchDirectMatch.AvailableStock !== null && batchDirectMatch.AvailableStock !== undefined
+        ? batchDirectMatch.AvailableStock
+        : currentStock;
+      const maxIssueQty = resolvedStock !== null ? Math.min(resolvedStock, openQty) : openQty;
       this._suDiag('SU barcode matched SAP Batch directly', {
         inputBarcode: sSu,
         identifierType: directBatch ? 'Direct SAP Batch identifier' : 'GS1 Barcode AI (10) Batch identifier',
@@ -684,7 +687,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         material: resvMaterial,
         plant: resvPlant,
         storageLocation: resvSLoc,
-        stock: currentStock
+        stock: resolvedStock
       });
 
       return {
@@ -701,8 +704,8 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         MaterialDesc: resvItem.ProductName || '',
         Plant: resvPlant,
         StorageLocation: resvSLoc,
-        CurrentStock: batchDirectMatch.AvailableStock != null ? batchDirectMatch.AvailableStock : currentStock,
-        SuStockQty: currentStock,
+        CurrentStock: resolvedStock,
+        SuStockQty: resolvedStock,
         BaseUnit: baseUnit,
         Batches: usableBatches,
         DeterminedBatch: batchDirectMatch.Batch,

@@ -426,11 +426,14 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(units[1].IsBaseUnit).toBe(true);
     });
 
-    it('should exclude expired batches and sort remaining by FEFO in getMaterialBatches', async () => {
+    it('should exclude expired batches and sort remaining by FEFO with batch-grain stock in getMaterialBatches', async () => {
       const mockAdapter = {
         _get: jest.fn().mockImplementation((path) => {
-          if (path.includes('MaterialStorLocHelps')) {
-            return Promise.resolve([{ CurrentStock: '500', BaseUnit: 'KG', WarehouseStorageBin: 'BIN-01' }]);
+          if (path.includes('MaterialMultiStockByDates')) {
+            return Promise.resolve([
+              { Batch: 'B_SOONER', CurrentStock: '500', BaseUnit: 'KG', StorageLocation: 'CS01' },
+              { Batch: 'B_LATER', CurrentStock: '200', BaseUnit: 'KG', StorageLocation: 'CS01' }
+            ]);
           }
           if (path.includes('I_Batch')) {
             return Promise.resolve([
@@ -446,20 +449,51 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       };
 
       const batchesClient = new GoodsIssueBatchesClient({ adapter: mockAdapter });
-      const batches = await batchesClient.getMaterialBatches('MAT01', '1120', '1120');
+      const batches = await batchesClient.getMaterialBatches('MAT01', '1120', 'CS01');
 
       expect(batches).toHaveLength(2);
       expect(batches[0].Batch).toBe('B_SOONER');
+      expect(batches[0].AvailableStock).toBe(500);
       expect(batches[0].IsSelectable).toBe(true);
       expect(batches[1].Batch).toBe('B_LATER');
+      expect(batches[1].AvailableStock).toBe(200);
       expect(batches[1].IsSelectable).toBe(true);
     });
 
-    it('should mark zero-stock batches as IsSelectable: false in getMaterialBatches', async () => {
+    it('should set AvailableStock: null and keep IsSelectable: true when batch stock is unknown (never silent zero)', async () => {
       const mockAdapter = {
         _get: jest.fn().mockImplementation((path) => {
-          if (path.includes('MaterialStorLocHelps')) {
-            return Promise.resolve([{ CurrentStock: '0', BaseUnit: 'KG', WarehouseStorageBin: '' }]);
+          if (path.includes('MaterialMultiStockByDates')) {
+            // Stock lookup fails or returns empty array
+            return Promise.resolve([]);
+          }
+          if (path.includes('I_Batch')) {
+            return Promise.resolve([
+              { Batch: 'B_UNKNOWN_STOCK', ShelfLifeExpirationDate: '/Date(1893456000000)/', Plant: '1120' }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        _enrichBatchStatus: (d) => GoodsIssueAdapter._enrichBatchStatus(d),
+        _formatDate: (d) => GoodsIssueAdapter._formatDate(d)
+      };
+
+      const batchesClient = new GoodsIssueBatchesClient({ adapter: mockAdapter });
+      const batches = await batchesClient.getMaterialBatches('MAT03', '1120', 'CS01');
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].Batch).toBe('B_UNKNOWN_STOCK');
+      // Unknown stock must NEVER become silent zero
+      expect(batches[0].AvailableStock).toBeNull();
+      // An unexpired batch with unknown stock must remain selectable, not blocked
+      expect(batches[0].IsSelectable).toBe(true);
+    });
+
+    it('should mark confirmed zero-stock batches as IsSelectable: false in getMaterialBatches', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('MaterialMultiStockByDates')) {
+            return Promise.resolve([{ Batch: 'B_ZERO_STOCK', CurrentStock: '0', BaseUnit: 'KG' }]);
           }
           if (path.includes('I_Batch')) {
             return Promise.resolve([
@@ -826,7 +860,57 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.SuExists).toBe(true);
       expect(res.ResolvedType).toBe('BATCH');
       expect(res.DeterminedBatch).toBe('BATCH_DIRECT');
+      expect(res.CurrentStock).toBe(50);
+      expect(res.SuStockQty).toBe(50);
       expect(res.MaxIssueQty).toBe(50);
+      expect(res.ReservationRemainingQty).toBe(80);
+    });
+
+    it('should preserve null for unknown stock in resolveStockUnitForGoodsIssue and not clamp MaxIssueQty to 0', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '10001',
+                ReservationItem: '0001',
+                OrderID: '40001',
+                Product: 'MAT01',
+                ProductName: 'Material 1',
+                Plant: '1120',
+                StorageLocation: '1120',
+                BaseUnit: 'KG',
+                ResvnItmRequiredQtyInBaseUnit: '100',
+                ResvnItmWithdrawnQtyInBaseUnit: '20'
+              }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([
+          {
+            Batch: 'BATCH_UNKNOWN',
+            ExpiryDate: '2030-01-01',
+            StatusState: 'Success',
+            StatusText: 'VALID',
+            DaysToExpiry: 1500,
+            AvailableStock: null,
+            StorageBin: 'BIN-10'
+          }
+        ])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      const res = await stockUnitClient.resolveStockUnitForGoodsIssue('BATCH_UNKNOWN', '10001', '0001');
+
+      expect(res.SuExists).toBe(true);
+      expect(res.ResolvedType).toBe('BATCH');
+      expect(res.DeterminedBatch).toBe('BATCH_UNKNOWN');
+      // Unknown stock must remain null, never silent zero
+      expect(res.CurrentStock).toBeNull();
+      expect(res.SuStockQty).toBeNull();
+      // MaxIssueQty must not be clamped to 0 when stock is unknown; defaults to open quantity (80)
+      expect(res.MaxIssueQty).toBe(80);
       expect(res.ReservationRemainingQty).toBe(80);
     });
 
@@ -927,6 +1011,41 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.AvailableBatches).toHaveLength(0);
       expect(res.ActiveItem.Batch).toBe('');
       expect(res.AvailableStock).toBe(0);
+
+      spyOpen.mockRestore();
+      spyBatches.mockRestore();
+    });
+
+    it('should preserve unknown stock as null in AvailableBatches and AvailableStock, never defaulting to 0', async () => {
+      const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
+        {
+          ReservationNo: '375048',
+          ReservationItem: '0001',
+          OrderNo: '1001953',
+          Material: '3000000298',
+          Plant: '1120',
+          StorageLocation: 'CS01',
+          OpenQty: 50,
+          Batch: ''
+        }
+      ]);
+      const spyBatches = jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue([
+        {
+          Batch: 'BATCH_NULL_STOCK',
+          AvailableStock: null,
+          IsSelectable: true,
+          StatusState: 'Success',
+          StatusText: 'VALID',
+          ExpiryDate: '2028-12-19'
+        }
+      ]);
+
+      const res = await GoodsIssueAdapter.resolveIdentifier('375048');
+      expect(res.AvailableBatches).toHaveLength(1);
+      expect(res.AvailableBatches[0].AvailableStock).toBeNull();
+      expect(res.ActiveItem.Batch).toBe('BATCH_NULL_STOCK');
+      // Unknown stock must remain null, never silent 0
+      expect(res.AvailableStock).toBeNull();
 
       spyOpen.mockRestore();
       spyBatches.mockRestore();

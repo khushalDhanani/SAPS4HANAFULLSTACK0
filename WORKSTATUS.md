@@ -2228,15 +2228,60 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit `test/unit/sales-order/salesOrdersController.test.js` and `WORKSTATUS.md` to `feature/CL01`.
 
+### 2026-09-21 — Goods Issue Batch Stock Retrieval Grain Correction & Silent Zero Elimination (Item 2.1 / Audit Row 40)
+- **Problem**:
+  - In `GoodsIssueBatchesClient.js:62-100,150-160` and `GoodsIssueStockUnitClient.js:612-645,704-705`, stock was retrieved at the wrong grain and suffered from silent zero default.
+  - Storage-location level stock from `MaterialStorLocHelps` (0 rows in SAP) or the first row of an unfiltered `C_STOCKQUANTITYVALUEBYTYPE` read was stamped onto *every* batch returned for a material.
+  - When both queries failed or returned no data, `AvailableStock` silently became `0`. Because `isSelectable = nStock > 0`, valid unexpired batches were marked unselectable (`IsSelectable: false`) and shown as "No Stock".
+  - In `GoodsIssueStockUnitClient.js`, scanned batch barcodes assigned storage-location stock (or fallback `0`) to `CurrentStock` and `SuStockQty`.
+- **Changes Applied**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`:
+    - Removed storage-location level stock stamping onto all batches.
+    - Implemented authentic batch-grain stock lookup via live-verified S/4HANA OData service `/sap/opu/odata/sap/MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates` with `$filter=Material eq '${sMat}'` (and optional `Plant`/`StorageLocation`).
+    - Mapped stock to each batch individually from `MaterialMultiStockByDates`.
+    - If a batch has no stock record or lookup fails, `AvailableStock` is set to `null` (unknown stock). **Unknown stock never defaults to 0**.
+    - Updated `isSelectable`: `(nStock === null || nStock > 0) && status.StatusState !== 'Error' && status.StatusText !== 'EXPIRED'`. Unexpired batches with unknown stock remain selectable; only confirmed zero-stock batches (`nStock === 0`) are disabled.
+    - In `revalidateStockBeforePosting`: Re-reads batch-grain stock via `MaterialMultiStockByDates` with `Batch eq '${sBatch}'` when a batch is specified.
+    - Removed unused `s4Config` import.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+    - Initialized `currentStock = null` (not `0`).
+    - When a scanned barcode directly matches an SAP batch (`directBatch` or `gs1Batch`), resolves `resolvedStock` using batch-level `AvailableStock`. Sets `CurrentStock: resolvedStock` and `SuStockQty: resolvedStock`, preserving `null` for unknown stock.
+    - `MaxIssueQty`: Computed as `Math.min(resolvedStock, openQty)` when stock is known, or `openQty` when unknown (never clamped to 0).
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+    - In `resolveIdentifier`: Included batches with unknown stock (`AvailableStock === null`) in `issuableBatches`.
+    - Preserved `AvailableStock: null` in active item and resolution result when stock is unknown, preventing silent zero conversion.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/BatchSelectionDialog.fragment.xml`:
+    - Updated Select button bindings so batches with unknown stock (`null`/`undefined`) display "Select" (not "No Stock") and remain enabled.
+  - `test/unit/wm/goodsIssueClients.test.js`:
+    - Updated tests to verify batch-grain stock mapping from `MaterialMultiStockByDates`.
+    - Added test asserting `AvailableStock: null` and `IsSelectable: true` when batch stock is unknown (never silent zero).
+    - Added test for `GoodsIssueStockUnitClient` asserting `CurrentStock` and `SuStockQty` match batch stock, and unknown stock is preserved as `null`.
+    - Added test for `GoodsIssueAdapter.resolveIdentifier` verifying unknown stock preservation.
+- **Validation Commands Executed & Results**:
+  - `npx eslint srv/integration/s4hana/wm/ test/unit/wm/`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 817 ms; Component-preload.js generated cleanly**.
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: **40 passed, 40 total tests (100% green)**.
+  - `npx jest test/unit/wm/goodsIssueService.test.js`: **45 passed, 45 total tests (100% green)**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 201 passed, 201 total tests (100% green)**.
+  - `npm test`: **68 passed, 68 total test suites; 866 passed, 866 total tests (100% green)** in 81.8 s.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project:
-  - `npm test`: 68 passed, 68 total test suites; 863 passed, 863 total tests.
+  - `npm test`: **68 passed, 68 total test suites; 866 passed, 866 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
-  - `cd app/fiori-app && npm run build`: Succeeded in 872 ms; `Component-preload.js` generated.
-  - `npx eslint .`: 0 errors, 0 warnings.
+  - `cd app/fiori-app && npm run build`: Succeeded in 817 ms; `Component-preload.js` generated.
+  - `npx eslint srv/integration/s4hana/wm/ test/unit/wm/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Goods Issue Batch Stock Retrieval & Silent Zero Elimination (Audit Row 40)**:
+  - Batch stock is read at authentic batch grain via `MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates`.
+  - Unknown stock is preserved as `null` and **never defaults to 0**.
+  - Batches with unknown stock remain selectable (`IsSelectable: true`) and enabled in UI dialogs; only confirmed zero-stock batches are disabled.
+  - Scanned batch barcodes assign batch stock to `CurrentStock` and `SuStockQty`, never falling back to silent zero.
 - **Elimination of Assumed/Invented Data (Sales Inquiry, Outbound Delivery, Purchase Order)**:
   - **Sales Inquiry**: No initial `OrderQuantity: 1` or `OrderQuantityUnit: "PC"`; zero hardcoded `ZIN`, `1000`, `10`, `52`, or `INR` in models, payloads, or failure fallbacks.
   - **Outbound Delivery**: No invented `ShippingPoint: "1120"` or synthetic shipping point lists on backend error or empty responses.
@@ -2248,6 +2293,6 @@
   - Authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`).
 
 ## Next Steps
-1. Stage and commit remaining test update (`test/unit/sales-order/salesOrdersController.test.js`) and `WORKSTATUS.md` to `feature/CL01`.
+1. Stage and commit Goods Issue batch stock grain correction and silent zero elimination to `feature/CL01`.
 2. Push to `origin/feature/CL01`.
-3. Proceed to next user priorities or remaining items in `docs/no-assumed-data-changes.md`.
+3. Proceed to next items in `docs/data-lineage-audit.md` (e.g. Item 41: Goods Issue batch status/SLED optimistic defaults).
