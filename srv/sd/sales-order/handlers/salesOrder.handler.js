@@ -86,15 +86,15 @@ function registerSalesOrderHandlers(srv) {
     });
 
     // 6. Function getSalesOrderMetrics
-    srv.on('getSalesOrderMetrics', async () => {
+    srv.on('getSalesOrderMetrics', async (req) => {
         try {
             return await salesInquiryAdapter.getSalesMetrics();
         } catch (error) {
             LOG.error('Error fetching sales order metrics:', error.message);
-            return {
-                openOrdersCount: 0,
-                totalOrdersCount: 0
-            };
+            if (req && typeof req.error === 'function') {
+                return req.error(error.status || 502, error.message);
+            }
+            throw error;
         }
     });
 

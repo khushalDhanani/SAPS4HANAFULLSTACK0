@@ -238,5 +238,16 @@ describe('Unit: SalesOrderService Handler', () => {
             expect(result).toEqual(mockMetrics);
             expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalled();
         });
+
+        test('getSalesOrderMetrics propagates error instead of returning silent zero counts', async () => {
+            const mockError = new Error('SD_F1873_SO_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            await handlers.getSalesOrderMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'SD_F1873_SO_WL_SRV unavailable');
+        });
     });
 });

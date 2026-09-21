@@ -55,11 +55,23 @@ const MockFilterType = {
 
 const MockBaseController = {
     prototype: {
-        onNavBack: jest.fn()
+        onNavBack: jest.fn(),
+        calculateKpiMetrics: function (oTable, oEvent) {
+            var iTotal = null;
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var vTotal = oEvent.getParameter("total");
+                if (typeof vTotal === "number" && !isNaN(vTotal)) {
+                    iTotal = vTotal;
+                }
+            }
+            return {
+                totalCount: iTotal !== null ? iTotal : "-"
+            };
+        }
     },
     extend: function (name, proto) {
         function Controller() {
-            Object.assign(this, proto);
+            Object.assign(this, MockBaseController.prototype, proto);
         }
         return Controller;
     }
@@ -74,6 +86,18 @@ const MockMessageBox = {
 const MockAuthService = {
     syncModelHeaders: jest.fn(),
     canCreateDelivery: jest.fn().mockReturnValue(true)
+};
+
+const MockODataClient = {
+    get: jest.fn().mockImplementation((url) => {
+        if (url.indexOf("getSalesOrderMetrics") !== -1) {
+            return Promise.resolve({ openOrdersCount: 42, totalOrdersCount: 150 });
+        }
+        if (url.indexOf("getDashboardMetrics") !== -1) {
+            return Promise.resolve({ customerCount: 88 });
+        }
+        return Promise.resolve({});
+    })
 };
 
 const MockOutboundDeliveryService = {
@@ -97,6 +121,7 @@ beforeAll(() => {
                     {}, // Fragment
                     MockMessageBox,
                     MockAuthService,
+                    MockODataClient,
                     MockOutboundDeliveryService
                 );
             }
@@ -152,11 +177,19 @@ describe("SalesOrders Controller", () => {
         });
     });
 
-    test("onInit sets up salesOrdersView model and attaches pattern matched", () => {
+    test("onInit sets up salesOrdersView model with '-' initial KPIs and attaches pattern matched", async () => {
         controller.onInit();
-        expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), "salesOrdersView");
+        const viewModel = mockView.getModel("salesOrdersView");
+        expect(viewModel.getProperty("/totalCount")).toBe("-");
+        expect(viewModel.getProperty("/openCount")).toBe("-");
+        expect(viewModel.getProperty("/customerCount")).toBe("-");
         expect(mockRouter.getRoute).toHaveBeenCalledWith("salesOrders");
         expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(controller._onRouteMatched, controller);
+
+        // Wait for async metrics load
+        await new Promise(process.nextTick);
+        expect(viewModel.getProperty("/openCount")).toBe(42);
+        expect(viewModel.getProperty("/customerCount")).toBe(88);
     });
 
     test("formatter translates OverallSDProcessStatus to human labels and semantic states", () => {
@@ -169,43 +202,11 @@ describe("SalesOrders Controller", () => {
         expect(controller.formatter.statusState("C")).toBe("Success");
     });
 
-    test("onUpdateFinished updates KPI counts for total, open, and unique customers", () => {
+    test("onUpdateFinished updates totalCount from binding $count parameter without scraping loaded rows", () => {
         controller.onInit();
 
-        const mockItems = [
-            {
-                getBindingContext: () => ({
-                    getProperty: (p) => {
-                        if (p === "SoldToParty") return "10135";
-                        if (p === "OverallSDProcessStatus") return "A";
-                        return null;
-                    }
-                })
-            },
-            {
-                getBindingContext: () => ({
-                    getProperty: (p) => {
-                        if (p === "SoldToParty") return "10135";
-                        if (p === "OverallSDProcessStatus") return "B";
-                        return null;
-                    }
-                })
-            },
-            {
-                getBindingContext: () => ({
-                    getProperty: (p) => {
-                        if (p === "SoldToParty") return "10136";
-                        if (p === "OverallSDProcessStatus") return "C";
-                        return null;
-                    }
-                })
-            }
-        ];
-
         const mockEvent = {
-            getSource: () => ({
-                getItems: () => mockItems
-            }),
+            getSource: () => ({}),
             getParameter: (param) => {
                 if (param === "total") return 3;
                 return null;
@@ -216,8 +217,32 @@ describe("SalesOrders Controller", () => {
 
         const viewModel = mockView.getModel("salesOrdersView");
         expect(viewModel.getProperty("/totalCount")).toBe(3);
-        expect(viewModel.getProperty("/openCount")).toBe(2);
-        expect(viewModel.getProperty("/customerCount")).toBe(2);
+    });
+
+    test("onUpdateFinished sets totalCount to '-' when $count parameter is absent", () => {
+        controller.onInit();
+
+        const mockEvent = {
+            getSource: () => ({}),
+            getParameter: () => null
+        };
+
+        controller.onUpdateFinished(mockEvent);
+
+        const viewModel = mockView.getModel("salesOrdersView");
+        expect(viewModel.getProperty("/totalCount")).toBe("-");
+    });
+
+    test("_loadServerMetrics handles server errors by setting '-'", async () => {
+        controller.onInit();
+        MockODataClient.get.mockRejectedValueOnce(new Error("502 Gateway Error"));
+        MockODataClient.get.mockRejectedValueOnce(new Error("502 Gateway Error"));
+
+        await controller._loadServerMetrics();
+
+        const viewModel = mockView.getModel("salesOrdersView");
+        expect(viewModel.getProperty("/openCount")).toBe("-");
+        expect(viewModel.getProperty("/customerCount")).toBe("-");
     });
 
     test("onNavigateToCreateSalesOrder navigates to createSalesOrder route", () => {

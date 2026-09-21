@@ -2468,18 +2468,50 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 15:25 IST — Eliminate Page-Only KPI Scraping & Silent Zero Fallbacks in Sales Orders & Inquiries (Audit Items 20, 21, 22)
+- **Change**: Eliminated page-only KPI calculations in `SalesOrders.controller.js` and `SalesInquiries.controller.js`, unified the definition of "Open" sales documents across the application to S/4HANA standard `OverallSDProcessStatus ne 'C'`, and fixed the silent zero error-masking bug in `salesOrder.handler.js`.
+  1. **S/4HANA Gateway Integration & CAP Handlers**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: Extended `getSalesMetrics(options)` to support `options.entity === 'inquiry'`, directing the count query to `SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370` with `$filter=OverallSDProcessStatus ne 'C'` and `$inlinecount=allpages&$top=1`. Preserved default querying of `SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873` with `$filter=OverallSDProcessStatus ne 'C'` for sales orders.
+     - `srv/sd/sales-order/handlers/salesOrder.handler.js`: Fixed Audit Item 22 silent zero bug. Removed catch block returning `{ openOrdersCount: 0, totalOrdersCount: 0 }`; now propagates backend errors via `req.error(error.status || 502, error.message)`.
+     - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Updated `getSalesOrderMetrics` handler to pass `{ entity: 'inquiry' }` to `salesInquiryAdapter.getSalesMetrics()`.
+  2. **Fiori UI Presentation Layer**:
+     - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`: Injected `ODataClient`. Initialized `salesOrdersView` model with `totalCount: "-"`, `openCount: "-"`, `customerCount: "-"`. In `onUpdateFinished`, eliminated loaded-row loop (`aItems.forEach`) and loaded-length fallback (`iTotal || aItems.length`); strictly sets `totalCount` via `calculateKpiMetrics(oTable, oEvent)` (displaying `"-"` when `$count` is absent). Added `_loadServerMetrics` to fetch authentic open order count from `/odata/v4/sales-order/getSalesOrderMetrics()` and active customer count from `/odata/v4/purchase-order/getDashboardMetrics()` (backed by `I_Customer_VH`). Wired `_loadServerMetrics` into `onInit`, `_onRouteMatched`, and `onRefresh`.
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js`: Injected `ODataClient`. Initialized `salesInquiriesView` model with `totalCount: "-"`, `openCount: "-"`, `customerCount: "-"`. In `onUpdateFinished`, eliminated loaded-row loop (`aItems.forEach`) and loaded-length fallback; strictly sets `totalCount` via `calculateKpiMetrics(oTable, oEvent)`. Added `_loadServerMetrics` to fetch authentic open inquiry count from `/odata/v4/sales-inquiry/getSalesOrderMetrics()` and active customer count from `/odata/v4/purchase-order/getDashboardMetrics()`. Wired `_loadServerMetrics` into `onInit`, `_onRouteMatched`, and `onRefresh`.
+  3. **Unit Tests & Documentation**:
+     - `test/unit/sales-order/salesOrderService.test.js`: Added test verifying error propagation in `getSalesOrderMetrics` handler (proving silent zero elimination).
+     - `test/unit/dashboard/dashboardMetrics.test.js`: Added test verifying `getSalesMetrics({ entity: 'inquiry' })` queries `SD_F2370_INQY_WL_SRV` with `OverallSDProcessStatus ne 'C'`.
+     - `test/unit/sales-order/salesOrdersController.test.js`: Updated with `calculateKpiMetrics` and `MockODataClient`. Tested initial `"-"` state, asynchronous metrics population (`openCount: 42`, `customerCount: 88`), and `totalCount` strictly reflecting binding `$count`.
+     - `test/unit/sales-inquiry/salesInquiriesController.test.js`: Updated with `calculateKpiMetrics` and `MockODataClient`. Tested initial `"-"` state, asynchronous metrics population (`openCount: 15`, `customerCount: 88`), and `totalCount` strictly reflecting binding `$count`.
+     - `docs/data-lineage-audit.md`: Marked items 20, 21, and 22 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/sales-order/ test/unit/sales-inquiry/`: **15 passed, 15 total test suites; 189 passed, 189 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/ test/unit/controller/ test/unit/dashboard/ test/unit/wm/`: **24 passed, 24 total test suites; 426 passed, 426 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 883 ms; Component-preload.js generated**.
+  - `npx eslint srv/ test/`: **Clean (0 errors, 0 warnings)**.
+  - `npx cds compile srv`: **Clean (0 errors)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
   - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 183 passed, 183 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 57 passed, 57 total tests (100% green)**.
   - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
+  - `npx jest test/unit/dashboard/`: **1 passed, 1 total test suite; 30 passed, 30 total tests (100% green)**.
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Sales Order & Inquiry KPI Authentic Data Lineage (Audit Rows 20, 21 & 22)**:
+  - Total Orders / Inquiries strictly reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
+  - Open Orders / Inquiries unified to authentic S/4HANA definition (`OverallSDProcessStatus ne 'C'`) via `getSalesMetrics`; loaded-row scraping eliminated.
+  - Active Customers reflects authentic S/4HANA server customer master count (`getDashboardMetrics()`); page-scoped counting eliminated.
+  - Silent zero error fallback in `salesOrder.handler.js` eliminated; errors properly propagated via `req.error(error.status || 502, error.message)`.
 - **Purchase Order Authentic KPI Lineage (Audit Rows 5, 6 & 7)**:
   - Total Orders reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
   - Suppliers reflects authentic S/4HANA server supplier count (`getDashboardMetrics()`); page-scoped counting and PO-count fallback eliminated.
@@ -2501,6 +2533,6 @@
   - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
 
 ## Next Steps
-1. Stage and commit changes to `feature/CL01`.
-2. Push to `origin/feature/CL01`.
-3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.
+1. Stage, commit, and push changes to `origin/feature/CL01`.
+2. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.
+

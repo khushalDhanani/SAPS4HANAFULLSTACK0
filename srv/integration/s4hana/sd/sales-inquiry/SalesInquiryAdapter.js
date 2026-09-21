@@ -1401,20 +1401,25 @@ class SalesInquiryAdapter {
    * @throws {Error} status 503 without a destination, 502 when SAP could not be read
    */
   async getSalesMetrics(options = {}) {
+    const isOrder = options.entity !== 'inquiry';
+    const docLabel = isOrder ? 'Sales order' : 'Sales inquiry';
+    const serviceName = isOrder ? 'SD_F1873_SO_WL_SRV' : 'SD_F2370_INQY_WL_SRV';
+    const servicePath = isOrder ? '/sap/opu/odata/sap/SD_F1873_SO_WL_SRV' : '/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV';
+    const entitySet = isOrder ? 'C_SalesOrderWl_F1873' : 'C_InquiryWL_F2370';
+
     let dest;
     try {
       dest = options.destination || await this._getDestination(options);
     } catch (e) {
-      const err = new Error(`Sales order metrics are not available: ${e.message}`);
+      const err = new Error(`${docLabel} metrics are not available: ${e.message}`);
       err.status = 503;
       throw err;
     }
 
-    const servicePath = '/sap/opu/odata/sap/SD_F1873_SO_WL_SRV';
     const executeFn = options.executeHttpRequest || this.client._execute;
     const request = (query) => executeFn(dest, {
       method: 'get',
-      url: `${servicePath}/C_SalesOrderWl_F1873?${query}`,
+      url: `${servicePath}/${entitySet}?${query}`,
       headers: { 'Accept': 'application/json', ...(options.headers || {}) }
     });
     const countOf = (res) => {
@@ -1431,7 +1436,7 @@ class SalesInquiryAdapter {
         request('$inlinecount=allpages&$top=1')
       ]);
     } catch (e) {
-      const err = new Error(`Sales order metrics could not be read from SD_F1873_SO_WL_SRV: ${e.message}`);
+      const err = new Error(`${docLabel} metrics could not be read from ${serviceName}: ${e.message}`);
       err.status = 502;
       throw err;
     }
@@ -1439,7 +1444,7 @@ class SalesInquiryAdapter {
     const openOrdersCount = countOf(resOpen);
     const totalOrdersCount = countOf(resTotal);
     if (openOrdersCount === null || totalOrdersCount === null) {
-      const err = new Error('Sales order metrics are not available: SD_F1873_SO_WL_SRV returned no count.');
+      const err = new Error(`${docLabel} metrics are not available: ${serviceName} returned no count.`);
       err.status = 502;
       throw err;
     }

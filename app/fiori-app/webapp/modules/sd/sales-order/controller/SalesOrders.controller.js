@@ -7,8 +7,9 @@ sap.ui.define([
     "sap/ui/core/Fragment",
     "sap/m/MessageBox",
     "saps4hana/fiori/service/AuthService",
+    "saps4hana/fiori/service/ODataClient",
     "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService"
-], function (BaseController, JSONModel, Filter, FilterOperator, FilterType, Fragment, MessageBox, AuthService, OutboundDeliveryService) {
+], function (BaseController, JSONModel, Filter, FilterOperator, FilterType, Fragment, MessageBox, AuthService, ODataClient, OutboundDeliveryService) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.modules.sd.sales-order.controller.SalesOrders", {
@@ -46,9 +47,9 @@ sap.ui.define([
             }
             var bCanCreateDelivery = (AuthService && typeof AuthService.canCreateDelivery === "function") ? AuthService.canCreateDelivery() : true;
             var oViewModel = new JSONModel({
-                totalCount: 0,
-                openCount: 0,
-                customerCount: 0,
+                totalCount: "-",
+                openCount: "-",
+                customerCount: "-",
                 canCreateDelivery: bCanCreateDelivery
             });
             this.getView().setModel(oViewModel, "salesOrdersView");
@@ -61,6 +62,7 @@ sap.ui.define([
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
             this._loadShippingPoints();
+            this._loadServerMetrics();
 
             var oRouter = this.getOwnerComponent().getRouter();
             if (oRouter && oRouter.getRoute("salesOrders")) {
@@ -87,35 +89,65 @@ sap.ui.define([
                     // Safe guard against refreshing in-flight initial request
                 }
             }
+            this._loadServerMetrics();
         },
 
         onUpdateFinished: function (oEvent) {
             var oTable = oEvent.getSource();
-            var iTotal = oEvent.getParameter("total") || 0;
-            var aItems = oTable.getItems() || [];
+            var oKpis = this.calculateKpiMetrics(oTable, oEvent);
             var oViewModel = this.getView().getModel("salesOrdersView");
+            if (oViewModel) {
+                oViewModel.setProperty("/totalCount", oKpis.totalCount);
+            }
+        },
 
-            var mCustomers = {};
-            var iOpen = 0;
+        _loadServerMetrics: function () {
+            var oViewModel = this.getView().getModel("salesOrdersView");
+            if (!oViewModel) {
+                return Promise.resolve();
+            }
 
-            aItems.forEach(function (oItem) {
-                var oCtx = oItem.getBindingContext("salesOrder");
-                if (oCtx) {
-                    var sCust = oCtx.getProperty("SoldToParty");
-                    if (sCust) {
-                        mCustomers[sCust] = true;
+            var pOrderMetrics = ODataClient.get("/odata/v4/sales-order/getSalesOrderMetrics()")
+                .then(function (res) {
+                    var data = res && res.value ? res.value : res;
+                    if (data && data.openOrdersCount != null) {
+                        oViewModel.setProperty("/openCount", data.openOrdersCount);
+                    } else {
+                        oViewModel.setProperty("/openCount", "-");
                     }
-                    var sStatus = oCtx.getProperty("OverallSDProcessStatus");
-                    if (!sStatus || sStatus === "A" || sStatus === "Open" || sStatus === "B") {
-                        iOpen++;
-                    }
-                }
-            });
+                })
+                .catch(function () {
+                    oViewModel.setProperty("/openCount", "-");
+                });
 
-            var iDistinctCustomers = Object.keys(mCustomers).length;
-            oViewModel.setProperty("/totalCount", iTotal || aItems.length);
-            oViewModel.setProperty("/openCount", iOpen);
-            oViewModel.setProperty("/customerCount", iDistinctCustomers);
+            var pCustomerMetrics = ODataClient.get("/odata/v4/purchase-order/getDashboardMetrics()")
+                .then(function (res) {
+                    var oMetrics = res;
+                    if (typeof oMetrics === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics);
+                        } catch (e) {
+                            oMetrics = null;
+                        }
+                    }
+                    if (oMetrics && typeof oMetrics.value === "string") {
+                        try {
+                            oMetrics = JSON.parse(oMetrics.value);
+                        } catch (e) {
+                            oMetrics = null;
+                        }
+                    }
+                    if (oMetrics && oMetrics.customerCount != null) {
+                        oViewModel.setProperty("/customerCount", oMetrics.customerCount);
+                    } else {
+                        oViewModel.setProperty("/customerCount", "-");
+                    }
+                })
+                .catch(function () {
+                    oViewModel.setProperty("/customerCount", "-");
+                });
+
+            return Promise.all([pOrderMetrics, pCustomerMetrics]);
         },
 
         onNavigateToCreateSalesOrder: function () {
@@ -158,6 +190,7 @@ sap.ui.define([
                     }
                 }
             }
+            this._loadServerMetrics();
         },
 
         _getTodayDateString: function () {

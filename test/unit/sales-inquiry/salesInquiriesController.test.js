@@ -56,7 +56,19 @@ const MockFilterType = {
 
 const MockBaseController = {
     prototype: {
-        onNavBack: jest.fn()
+        onNavBack: jest.fn(),
+        calculateKpiMetrics: function (oTable, oEvent) {
+            var iTotal = null;
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var vTotal = oEvent.getParameter("total");
+                if (typeof vTotal === "number" && !isNaN(vTotal)) {
+                    iTotal = vTotal;
+                }
+            }
+            return {
+                totalCount: iTotal !== null ? iTotal : "-"
+            };
+        }
     },
     extend: (name, proto) => {
         function Controller() {
@@ -86,6 +98,18 @@ const MockBaseController = {
     }
 };
 
+const MockODataClient = {
+    get: jest.fn().mockImplementation((url) => {
+        if (url.indexOf("getSalesOrderMetrics") !== -1) {
+            return Promise.resolve({ openOrdersCount: 15, totalOrdersCount: 50 });
+        }
+        if (url.indexOf("getDashboardMetrics") !== -1) {
+            return Promise.resolve({ customerCount: 88 });
+        }
+        return Promise.resolve({});
+    })
+};
+
 global.sap = {
     ui: {
         define: (deps, factory) => {
@@ -94,7 +118,8 @@ global.sap = {
                 MockJSONModel,
                 MockFilter,
                 MockFilterOperator,
-                MockFilterType
+                MockFilterType,
+                MockODataClient
             );
         },
         model: {
@@ -140,14 +165,18 @@ describe("SalesInquiries.controller", () => {
     });
 
     describe("Initialization & Lifecycle", () => {
-        it("onInit sets up salesInquiriesView model and route listener", () => {
+        it("onInit sets up salesInquiriesView model with '-' initial KPIs and attaches route listener", async () => {
             controller.onInit();
             const viewModel = controller.getView().getModel("salesInquiriesView");
             expect(viewModel).toBeDefined();
-            expect(viewModel.getProperty("/totalCount")).toBe(0);
-            expect(viewModel.getProperty("/openCount")).toBe(0);
-            expect(viewModel.getProperty("/customerCount")).toBe(0);
+            expect(viewModel.getProperty("/totalCount")).toBe("-");
+            expect(viewModel.getProperty("/openCount")).toBe("-");
+            expect(viewModel.getProperty("/customerCount")).toBe("-");
             expect(mockRouter.getRoute).toHaveBeenCalledWith("salesInquiries");
+
+            await new Promise(process.nextTick);
+            expect(viewModel.getProperty("/openCount")).toBe(15);
+            expect(viewModel.getProperty("/customerCount")).toBe(88);
         });
 
         it("_onRouteMatched refreshes table binding safely", () => {
@@ -178,38 +207,42 @@ describe("SalesInquiries.controller", () => {
     });
 
     describe("Table Updates & Metrics", () => {
-        it("onUpdateFinished computes totalCount, openCount, and unique customers", () => {
+        it("onUpdateFinished updates totalCount from binding $count parameter without scraping loaded rows", () => {
             controller.onInit();
-            const mockItems = [
-                {
-                    getBindingContext: () => ({
-                        getProperty: (prop) => prop === "SoldToParty" ? "10083" : "A"
-                    })
-                },
-                {
-                    getBindingContext: () => ({
-                        getProperty: (prop) => prop === "SoldToParty" ? "10135" : "B"
-                    })
-                },
-                {
-                    getBindingContext: () => ({
-                        getProperty: (prop) => prop === "SoldToParty" ? "10083" : "A"
-                    })
-                }
-            ];
 
             const oEvent = {
-                getSource: () => ({
-                    getItems: () => mockItems
-                }),
+                getSource: () => ({}),
                 getParameter: (param) => param === "total" ? 3 : null
             };
 
             controller.onUpdateFinished(oEvent);
             const viewModel = controller.getView().getModel("salesInquiriesView");
             expect(viewModel.getProperty("/totalCount")).toBe(3);
-            expect(viewModel.getProperty("/openCount")).toBe(2);
-            expect(viewModel.getProperty("/customerCount")).toBe(2);
+        });
+
+        it("onUpdateFinished sets totalCount to '-' when $count parameter is absent", () => {
+            controller.onInit();
+
+            const oEvent = {
+                getSource: () => ({}),
+                getParameter: () => null
+            };
+
+            controller.onUpdateFinished(oEvent);
+            const viewModel = controller.getView().getModel("salesInquiriesView");
+            expect(viewModel.getProperty("/totalCount")).toBe("-");
+        });
+
+        it("_loadServerMetrics handles server errors by setting '-'", async () => {
+            controller.onInit();
+            MockODataClient.get.mockRejectedValueOnce(new Error("502 Gateway Error"));
+            MockODataClient.get.mockRejectedValueOnce(new Error("502 Gateway Error"));
+
+            await controller._loadServerMetrics();
+
+            const viewModel = controller.getView().getModel("salesInquiriesView");
+            expect(viewModel.getProperty("/openCount")).toBe("-");
+            expect(viewModel.getProperty("/customerCount")).toBe("-");
         });
     });
 

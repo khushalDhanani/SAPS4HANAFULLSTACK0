@@ -96,9 +96,12 @@ function registerSalesInquiryHandlers(srv) {
     // 6. Function getSalesOrderMetrics
     srv.on('getSalesOrderMetrics', async (req) => {
         try {
-            return await salesInquiryAdapter.getSalesMetrics();
+            return await salesInquiryAdapter.getSalesMetrics({ entity: 'inquiry' });
         } catch (error) {
-            return req.error(error.status || 502, error.message);
+            if (req && typeof req.error === 'function') {
+                return req.error(error.status || 502, error.message);
+            }
+            throw error;
         }
     });
 }
