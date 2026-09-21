@@ -105,7 +105,19 @@ sap.ui.define([
          */
         createPurchaseOrder: function (oPayload) {
             var sUrl = SERVICE_BASE + "/createPurchaseOrder";
-            return ODataClient.post(sUrl, oPayload).then(function (result) {
+            var oCleanPayload = oPayload;
+            if (oPayload && Array.isArray(oPayload.items)) {
+                oCleanPayload = {
+                    header: oPayload.header,
+                    items: oPayload.items.map(function (item) {
+                        var oClean = Object.assign({}, item);
+                        delete oClean.errors;
+                        delete oClean.NetAmountIsEstimate;
+                        return oClean;
+                    })
+                };
+            }
+            return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
                 if (!result) return "";
                 return result.value || result.PurchaseOrder || result;
             });

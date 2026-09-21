@@ -112,6 +112,7 @@ service PurchaseOrderService {
         NetPriceAmount: Decimal;
         TaxCode: String;
         NetAmount: Decimal;
+        NetAmountIsEstimate: Boolean;
         RequisitionerName: String;
     }
 

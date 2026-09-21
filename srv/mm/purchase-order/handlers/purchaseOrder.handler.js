@@ -128,11 +128,34 @@ function registerPurchaseOrderHandlers(srv) {
                 po = await findPoWithDefaults({ Supplier: sSupplier });
             }
 
-            if (po && (po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification)) {
+            let sValidPaymentTerms = '';
+            if (po && po.PaymentTerms) {
+                const termUpper = String(po.PaymentTerms).trim().toUpperCase();
+                let validTermsSet = null;
+                if (typeof purchaseOrderAdapter.getValidPaymentTerms === 'function') {
+                    try {
+                        validTermsSet = await purchaseOrderAdapter.getValidPaymentTerms();
+                    } catch (_e) {
+                        validTermsSet = null;
+                    }
+                }
+                if (validTermsSet && validTermsSet.size > 0) {
+                    if (validTermsSet.has(termUpper)) {
+                        sValidPaymentTerms = termUpper;
+                    } else {
+                        LOG.warn(`Historical PO ${po.PurchaseOrder} has invalid/obsolete PaymentTerms '${po.PaymentTerms}' not present in S/4HANA customizing; omitted.`);
+                    }
+                } else if (termUpper !== 'AT01' && termUpper !== 'AT05' && termUpper !== 'AT06') {
+                    // Fallback when S/4 payment terms value help is unreachable or in mock mode
+                    sValidPaymentTerms = termUpper;
+                }
+            }
+
+            if (po && (po.DocumentCurrency || sValidPaymentTerms || po.IncotermsClassification)) {
                 return {
                     Supplier: sSupplier,
                     Currency: po.DocumentCurrency || '',
-                    PaymentTerms: po.PaymentTerms || '',
+                    PaymentTerms: sValidPaymentTerms,
                     IncotermsClassification: po.IncotermsClassification || '',
                     IncotermsLocation1: po.IncotermsTransferLocation || '',
                     derived: true,

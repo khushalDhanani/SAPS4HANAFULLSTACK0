@@ -6,9 +6,19 @@
 
 function _filterErrorDetails(details) {
     if (!Array.isArray(details) || details.length === 0) return [];
-    const messages = details
-        .map(d => d.message)
-        .filter(m => m && typeof m === 'string' && m.trim().length > 0 && !m.startsWith('System error in backend'));
+
+    const validDetails = details.filter(d =>
+        d && d.message && typeof d.message === 'string' &&
+        d.message.trim().length > 0 &&
+        !d.message.startsWith('System error in backend')
+    );
+
+    // If explicit 'error' severity entries exist, focus on errors so benign warnings
+    // (e.g. delivery date, price comparison, customer enhancements) do not obscure the blocking error.
+    const errorDetails = validDetails.filter(d => d.severity === 'error');
+    const targetDetails = errorDetails.length > 0 ? errorDetails : validDetails;
+
+    const messages = targetDetails.map(d => d.message.trim());
     return [...new Set(messages)];
 }
 

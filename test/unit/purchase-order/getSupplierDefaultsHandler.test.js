@@ -91,6 +91,62 @@ describe('Unit: getSupplierDefaults CAP handler', () => {
         });
     });
 
+    it('should filter out obsolete PaymentTerms AT01 from historical PO while keeping valid defaults', async () => {
+        purchaseOrderAdapter.readFsData.mockResolvedValue([{
+            PurchaseOrder: '300000001',
+            DocumentCurrency: 'INR',
+            PaymentTerms: 'AT01',
+            IncotermsClassification: 'EXW',
+            IncotermsTransferLocation: 'MUMBAI',
+            CompanyCode: '1000'
+        }]);
+
+        const req = {
+            data: {
+                Supplier: '100102',
+                CompanyCode: '1000',
+                PurchasingOrganization: 'AE01'
+            }
+        };
+
+        const result = await getSupplierDefaultsHandler()(req);
+
+        expect(result).toEqual({
+            Supplier: '100102',
+            Currency: 'INR',
+            PaymentTerms: '', // AT01 cleanly omitted!
+            IncotermsClassification: 'EXW',
+            IncotermsLocation1: 'MUMBAI',
+            derived: true,
+            source: 'from last PO',
+            lastPurchaseOrder: '300000001'
+        });
+    });
+
+    it('should validate against getValidPaymentTerms when available', async () => {
+        purchaseOrderAdapter.getValidPaymentTerms = jest.fn().mockResolvedValue(new Set(['0002', '0003', 'PT00']));
+        purchaseOrderAdapter.readFsData.mockResolvedValue([{
+            PurchaseOrder: '300000005',
+            DocumentCurrency: 'INR',
+            PaymentTerms: '0002',
+            IncotermsClassification: '',
+            IncotermsTransferLocation: '',
+            CompanyCode: '1000'
+        }]);
+
+        const req = {
+            data: {
+                Supplier: '100102',
+                CompanyCode: '1000',
+                PurchasingOrganization: 'AE01'
+            }
+        };
+
+        const result = await getSupplierDefaultsHandler()(req);
+
+        expect(result.PaymentTerms).toBe('0002');
+    });
+
     it('should return derived: false when no historical PO exists for supplier', async () => {
         purchaseOrderAdapter.readFsData.mockResolvedValue([]);
 

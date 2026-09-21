@@ -85,6 +85,7 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newPO");
                 oModel.setProperty("/header/PurchaseOrderType", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PurchaseOrderType", true);
                 this.onDocTypeChange();
             }
         },
@@ -115,6 +116,7 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newPO");
                 oModel.setProperty("/header/CompanyCode", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "CompanyCode", true);
                 this.onCompanyCodeChange();
             }
         },
@@ -138,6 +140,7 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newPO");
                 oModel.setProperty("/header/PurchasingOrganization", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PurchasingOrganization", true);
                 this.onPurchOrgChange();
             }
         },
@@ -158,6 +161,7 @@ sap.ui.define([
                 var sKey = oItem.getKey() || oItem.getText();
                 var oModel = this.getView().getModel("newPO");
                 oModel.setProperty("/header/PurchasingGroup", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PurchasingGroup", true);
                 this.onPurchGrpChange();
             }
         },
@@ -573,23 +577,39 @@ sap.ui.define([
 
             // Header fields
             if (sId.indexOf("inDocType") !== -1) {
+                oModel.setProperty("/header/PurchaseOrderType", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PurchaseOrderType", true);
                 this.onDocTypeChange();
             } else if (sId.indexOf("inCompanyCode") !== -1) {
+                oModel.setProperty("/header/CompanyCode", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "CompanyCode", true);
                 this.onCompanyCodeChange();
             } else if (sId.indexOf("inPurchOrg") !== -1) {
+                oModel.setProperty("/header/PurchasingOrganization", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PurchasingOrganization", true);
                 this.onPurchOrgChange();
             } else if (sId.indexOf("inPurchGrp") !== -1) {
+                oModel.setProperty("/header/PurchasingGroup", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PurchasingGroup", true);
                 this.onPurchGrpChange();
             } else if (sId.indexOf("inSupplier") !== -1) {
+                oModel.setProperty("/header/Supplier", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "Supplier", true);
                 if (oData && oData.CompanyCode && !oModel.getProperty("/header/CompanyCode")) {
                     oModel.setProperty("/header/CompanyCode", oData.CompanyCode);
                 }
                 this.onSupplierChange(sKey);
             } else if (sId.indexOf("inCurrency") !== -1) {
+                oModel.setProperty("/header/Currency", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "Currency", true);
                 this.onCurrencyChange();
             } else if (sId.indexOf("inPaymentTerms") !== -1) {
+                oModel.setProperty("/header/PaymentTerms", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "PaymentTerms", true);
                 this.onPaymentTermsChange();
             } else if (sId.indexOf("inIncoterms") !== -1) {
+                oModel.setProperty("/header/IncotermsClassification", sKey);
+                PurchaseOrderModel.markUserModified(oModel, "IncotermsClassification", true);
                 this.onIncotermsChange();
             }
         },
@@ -740,6 +760,7 @@ sap.ui.define([
             var aCleanItems = (oData.items || []).map(function(item) {
                 var oCleanItem = Object.assign({}, item);
                 delete oCleanItem.errors;
+                delete oCleanItem.NetAmountIsEstimate;
                 return oCleanItem;
             });
 

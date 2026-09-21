@@ -21,14 +21,53 @@ class PurchaseOrderAdapter {
     this.s4hanaMaint = null; // For PO maintenance service
     this.metricsCache = new TtlCache({ defaultTtlMs: 30000 }); // 30s TTL for aggregated dashboard
     this.masterDataCountCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL for master data counts
+    this._validPaymentTermsCache = null;
   }
 
   /**
-   * Resets internal metrics caches.
+   * Resets internal metrics and lookup caches.
    */
   clearMetricsCache() {
     this.metricsCache.clear();
     this.masterDataCountCache.clear();
+    this._validPaymentTermsCache = null;
+  }
+
+  /**
+   * Retrieves the set of valid PaymentTerms defined in S/4HANA customizing (C_MM_PaymentTermValueHelp).
+   * Cached to avoid repeated roundtrips.
+   *
+   * @param {Object} [options]
+   * @returns {Promise<Set<string>|null>}
+   */
+  async getValidPaymentTerms(options = {}) {
+    if (this._validPaymentTermsCache && this._validPaymentTermsCache.size > 0 && !options.forceRefresh) {
+      return this._validPaymentTermsCache;
+    }
+    try {
+      const dest = options.destination || await this._getDestination(options);
+      const executeFn = options.executeHttpRequest || this.client._execute;
+      const rootUrl = (dest.url || '').replace(/\/sap\/opu\/odata\/.*$/, '');
+      const res = await executeFn(dest, {
+        method: 'get',
+        url: `${rootUrl}/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_PaymentTermValueHelp?$select=PaymentTerms&$format=json`,
+        headers: {
+          'Accept': 'application/json',
+          ...(dest.headers || {}),
+          ...(options.headers || {})
+        }
+      });
+      const results = res.data?.d?.results || [];
+      const termsSet = new Set(results.map(r => String(r.PaymentTerms || '').trim().toUpperCase()).filter(Boolean));
+      if (termsSet.size > 0) {
+        this._validPaymentTermsCache = termsSet;
+        return termsSet;
+      }
+      return null;
+    } catch (e) {
+      LOG.warn('Could not fetch valid payment terms from S/4HANA:', e.message);
+      return null;
+    }
   }
 
   /** Initialize the generic read service */

@@ -2745,13 +2745,67 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 17:20 IST — Fix PO Creation HTTP 400 "Property NetAmountIsEstimate does not exist in items[0]"
+- **Change**: Resolved HTTP 400 error during Purchase Order creation (`Property "NetAmountIsEstimate" does not exist in items[0]`). The client-side UI flag `NetAmountIsEstimate: true` (introduced for Audit Item 11 to indicate estimated browser calculation) was leaking into the OData action payload. Because `POItem` in `service.cds` did not define this property, SAP CAP's OData V4 protocol handler rejected the action invocation before reaching domain logic.
+  1. **Frontend Controller Layer**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`: In `onCreatePress`, added `delete oCleanItem.NetAmountIsEstimate;` alongside `delete oCleanItem.errors;` to ensure UI-only calculation flags are stripped prior to submitting payload.
+  2. **Frontend Service Layer**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`: In `createPurchaseOrder`, defensively sanitized payload items by stripping `errors` and `NetAmountIsEstimate` before calling `ODataClient.post`.
+  3. **Backend Service Layer (Defense-in-Depth)**:
+     - `srv/mm/purchase-order/service.cds`: Added `NetAmountIsEstimate: Boolean;` to `POItem` action parameter type so CAP schema deserialization accepts the flag without throwing HTTP 400 if transmitted by direct API callers or cached client bundles. Normalized in `purchaseOrder.mapper.js` and stripped prior to S/4HANA draft payload mapping in `PurchaseOrderMapper.js`.
+  4. **Component Preload & Automated Tests**:
+     - `cd app/fiori-app && npm run build`: Rebuilt UI5 `dist/Component-preload.js` with sanitized controller and service code.
+     - `test/unit/purchase-order/purchaseOrderPayloadSanitization.test.js`: Added unit tests verifying `PurchaseOrderService.createPurchaseOrder` cleans `NetAmountIsEstimate` and `errors`.
+     - `test/integration/purchase-order/createPurchaseOrder.test.js`: Added integration test asserting that `POST /odata/v4/purchase-order/createPurchaseOrder` accepts items with `NetAmountIsEstimate: true` without schema errors (HTTP 200).
+     - `test/e2e/purchase-order/createPurchaseOrderFlow.test.js`: Updated e2e test journey asserting that `NetAmountIsEstimate` is set during calculation, cleanly stripped during submission, and PO creation succeeds (HTTP 200).
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/purchase-order/purchaseOrderPayloadSanitization.test.js test/integration/purchase-order/createPurchaseOrder.test.js test/e2e/purchase-order/createPurchaseOrderFlow.test.js`: **3 passed, 3 total test suites; 18 passed, 18 total tests (100% green)**.
+  - `npx cds compile srv`: Succeeded with 0 errors.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.38 s; Component-preload.js generated**.
+  - `npm test`: **72 passed, 72 total test suites; 937 passed, 937 total tests (100% green)** in 77.5 s.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
+### 2026-09-21 17:40 IST — Fix PO Creation HTTP 422 "Payment term AT01 not defined; PO header data still faulty"
+- **Change**: Resolved SAP S/4HANA HTTP 422 error during Purchase Order creation (`PO header data still faulty; Payment term AT01 not defined; Can delivery date be met?; Effective price is 160.00 INR, material price is 1,500.00 INR; Enter Requester, customer; Enter Reason for ordering, customer`).
+  1. **Root Cause Analysis**:
+     - **Obsolete Historical Payment Terms in S/4 Client 220**: In `srv/mm/purchase-order/handlers/purchaseOrder.handler.js` (`getSupplierDefaults`), querying historical POs for supplier `100102` derived `PaymentTerms: 'AT01'` from legacy POs `300000001`–`300000010`. In S/4HANA Client 220 customizing (`T052` / `C_MM_PaymentTermValueHelp`), `AT01` does not exist (valid terms start from `0002`, `0003`, `PT00`, etc.).
+     - **Frontend Value Help Selection Did Not Update Model**: In `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js` (`_handleValueHelpSelected`), selecting from Value Help dialogs called change handlers without calling `oModel.setProperty("/header/<field>", sKey)` for `inPaymentTerms`, `inDocType`, `inCompanyCode`, `inPurchOrg`, `inPurchGrp`, `inCurrency`, and `inIncoterms`. When users selected a valid payment term via Value Help dialog, the invalid derived `AT01` remained in the model.
+     - **Error Details Included Non-Blocking Warnings**: In `srv/integration/s4hana/S4ErrorMapper.js` (`_filterErrorDetails`), all messages in `errordetails` were concatenated indiscriminately. The actual blocking error was `Payment term AT01 not defined` (`severity: 'error'`), while `Can delivery date be met?`, `Effective price is ...`, `Enter Requester, customer`, and `Enter Reason for ordering, customer` were standard SAP warnings (`severity: 'warning'`), confusing the user on what prevented document creation.
+  2. **Frontend Controller Layer**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`: In `_handleValueHelpSelected`, added explicit `oModel.setProperty("/header/<field>", sKey)` and `PurchaseOrderModel.markUserModified(oModel, "<field>", true)` for `inDocType`, `inCompanyCode`, `inPurchOrg`, `inPurchGrp`, `inSupplier`, `inCurrency`, `inPaymentTerms`, and `inIncoterms`. Also added `markUserModified` to `onDocTypeSelect`, `onCompanyCodeSelect`, `onPurchOrgSelect`, and `onPurchGrpSelect`.
+  3. **Integration Adapter Layer**:
+     - `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`: Implemented `getValidPaymentTerms(options)` querying `MM_PUR_PO_MAINT_V2_SRV/C_MM_PaymentTermValueHelp?$select=PaymentTerms` with internal set caching. Reset in `clearMetricsCache()`.
+  4. **Backend CAP Handler Layer**:
+     - `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`: In `getSupplierDefaults`, validated `po.PaymentTerms` against `purchaseOrderAdapter.getValidPaymentTerms()`. Filtered obsolete payment terms (`AT01`, `AT05`, `AT06`) so invalid terms are never defaulted to the frontend or payload.
+  5. **S/4 Error Mapper Layer**:
+     - `srv/integration/s4hana/S4ErrorMapper.js`: In `_filterErrorDetails`, prioritized `severity === 'error'` items when present, filtering out non-blocking warnings so root blocking validation failures are clearly presented.
+  6. **Automated Unit & Integration Tests**:
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`: Added 8 unit tests verifying that selecting values in Value Help dialogs properly writes to `/header/<field>` and flags `userModified`.
+     - `test/unit/purchase-order/getSupplierDefaultsHandler.test.js`: Added unit tests verifying obsolete `AT01` is omitted and valid terms are verified against `getValidPaymentTerms()`.
+     - `test/unit/errorMapping.test.js`: Added unit test verifying that warnings are isolated and omitted when error severities exist.
+  7. **Live S/4HANA Backend Verification (Non-Negotiable Protocol)**:
+     - Executed live PO draft creation and activation against SAP S/4HANA Client 220 with valid payment terms `0002` and verified persistence:
+     - **Created Purchase Order**: `400000334` in S/4HANA Client 220.
+     - **Direct Read-Back**: Verified document persistence via `C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs('400000334')` returning Supplier `100102`, PaymentTerms `0002`.
+- **Validation Commands Executed & Results**:
+  - `cd app/fiori-app && npm run lint`: **Success! 0 findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 2.26 s; Component-preload.js generated**.
+  - `npx cds compile srv --to json > /dev/null`: **Succeeded with 0 errors**.
+  - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js test/unit/purchase-order/getSupplierDefaultsHandler.test.js test/unit/errorMapping.test.js`: **3 passed, 3 total test suites; 31 passed, 31 total tests (100% green)**.
+  - `npm test`: **73 passed, 73 total test suites; 948 passed, 948 total tests (100% green)** in 81.2 s.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **71 passed, 71 total test suites; 934 passed, 934 total tests (100% green)**.
-  - `npx jest test/unit/auth/`: **1 passed, 1 total test suites; 12 passed, 12 total tests (100% green)**.
-  - `npx jest test/unit/authAdapter.test.js`: **1 passed, 1 total test suites; 14 passed, 14 total tests (100% green)**.
-  - `npx jest test/unit/common/s4Config.test.js`: **1 passed, 1 total test suites; 27 passed, 27 total tests (100% green)**.
+  - `npm test`: **73 passed, 73 total test suites; 948 passed, 948 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js`: **1 passed, 1 total test suites; 8 passed, 8 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/getSupplierDefaultsHandler.test.js`: **1 passed, 1 total test suites; 5 passed, 5 total tests (100% green)**.
+  - `npx jest test/unit/errorMapping.test.js`: **1 passed, 1 total test suites; 18 passed, 18 total tests (100% green)**.
+  - `npx cds compile srv --to json > /dev/null`: Succeeded with 0 errors.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
