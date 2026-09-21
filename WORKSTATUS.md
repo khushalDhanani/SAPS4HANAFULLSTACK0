@@ -2187,25 +2187,67 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 12:30 IST — Eliminate Assumed/Invented Defaults in Sales Inquiry, Outbound Delivery, and Purchase Order Modules
+- **Agent**: Antigravity
+- **Change**: Eliminated synthetic and hardcoded fallbacks identified across Sales Inquiry, Outbound Delivery, and Purchase Order modules adhering to no-assumed-data and zero default policy:
+  - **Sales Inquiry Screen**:
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/model/SalesInquiryModel.js`:
+      - Removed hardcoded `SalesInquiryType: "ZIN"`, `SalesOrganization: "1000"`, `DistributionChannel: "10"`, `OrganizationDivision: "52"`, and `TransactionCurrency: "INR"` from `createInitialModel` header defaults; initialized to `""`.
+      - Removed hardcoded `OrderQuantity: 1` and `OrderQuantityUnit: "PC"` from initial line item (`createInitialModel`) and dynamically added items (`addItem`); initialized to empty `""`.
+      - Removed `"PC"` fallback in `cleanForCreation` and `buildPayload`; preserving user/master data unit without injecting `"PC"`.
+      - Removed hardcoded `"ZIN"`, `"1000"`, `"10"`, `"52"`, and `"INR"` fallbacks in `buildPayload`; leaving empty fields untouched when unpopulated.
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js`:
+      - Removed hardcoded fallback `Currency: "INR"` and `ShipToParty: sCustomer` in `getCustomerDefaults`; returns empty strings on missing input or network/OData failure.
+      - Removed hardcoded fallback returning `"ZIN"`, `"1000"`, `"10"`, `"52"`, and `"INR"` on failure in `getSalesInquiryDefaults`; returns empty strings and `derived: false`.
+  - **Outbound Delivery Screen**:
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js`:
+      - Removed invented `{ ShippingPoint: "1120", ShippingPoints: ["1120", "1112", "1108", "1109"] }` in `getDefaultShippingPoint`; returns `{ ShippingPoint: "", ShippingPoints: [] }` on missing backend response or network failure.
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`:
+      - Initialized `deliveryDialog` with `shippingPoint: ""` and `shippingPoints: []`; populates options and default shipping point exclusively from backend response. Removed hardcoded `"1120"` context fallback in `onCreateDeliveryPress`.
+    - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`:
+      - Initialized `deliveryDialog` with `shippingPoint: ""` and `shippingPoints: []`; sets shipping point from backend default or selected order context, eliminating hardcoded `"1120"`.
+  - **Purchase Order Screen**:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`:
+      - Line 140: Removed `UnitOfMeasure: "PC"` from initial line item in `createInitialModel`; initialized to `""`.
+      - Lines 180–182: Removed `OrderQuantity: "1"`, `UnitOfMeasure: "PC"`, and `NetPriceAmount: "0.00"` from `addItem`; new items initialize with empty `OrderQuantity: ""`, `UnitOfMeasure: ""`, and `NetPriceAmount: ""`.
+      - Line 63: Preserved Excel template example column configuration as-is (`UnitOfMeasure: { ..., example: "PC" }`).
+  - **Unit Tests**:
+    - `test/unit/sales-inquiry/salesInquiryModel.test.js`: Updated assertions for zero default header and item values; added tests verifying empty string preservation in `buildPayload`.
+    - `test/unit/sales-inquiry/createSalesInquiryController.test.js`: Configured explicit valid header setup helper in save flow tests.
+    - `test/unit/sales-inquiry/salesInquiryCreationPayload.test.js`: Added unit tests verifying `getCustomerDefaults` and `getSalesInquiryDefaults` return empty strings on failure.
+    - `test/unit/purchase-order/materialSelection.test.js`: Added test suite asserting empty unit and quantity initialization for initial and added items.
+    - `test/unit/purchase-order/createPurchaseOrderStatus.test.js`: Updated complete item test case to set unit of measure explicitly.
+    - `test/unit/le/outboundDeliveryService.test.js`: Added unit test asserting empty shipping point fallback when backend returns null or rejects.
+    - `test/unit/sales-order/salesOrdersController.test.js`: Updated mock binding context for sales order to provide `ShippingPoint: "1120"`.
+- **Validation Commands Executed & Results**:
+  - `npx eslint .`: 0 errors, 0 warnings.
+  - `cd app/fiori-app && npx ui5lint`: Success! No findings detected (0 errors).
+  - `cd app/fiori-app && npm run build`: Build succeeded in 872 ms; `Component-preload.js` generated cleanly.
+  - `npx cds compile srv`: Clean compilation (0 errors).
+  - `npm test`: **68 passed, 68 total test suites; 863 passed, 863 total tests (100% green)** in 71.7 s.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit `test/unit/sales-order/salesOrdersController.test.js` and `WORKSTATUS.md` to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
+- **Build Status**: **100% Green** across the entire full-stack project:
+  - `npm test`: 68 passed, 68 total test suites; 863 passed, 863 total tests.
+  - `cd app/fiori-app && npx ui5lint`: 0 findings.
+  - `cd app/fiori-app && npm run build`: Succeeded in 872 ms; `Component-preload.js` generated.
+  - `npx eslint .`: 0 errors, 0 warnings.
+  - `npx cds compile srv`: Clean (0 errors).
+  - `git diff --check`: Clean (0 errors).
+- **Elimination of Assumed/Invented Data (Sales Inquiry, Outbound Delivery, Purchase Order)**:
+  - **Sales Inquiry**: No initial `OrderQuantity: 1` or `OrderQuantityUnit: "PC"`; zero hardcoded `ZIN`, `1000`, `10`, `52`, or `INR` in models, payloads, or failure fallbacks.
+  - **Outbound Delivery**: No invented `ShippingPoint: "1120"` or synthetic shipping point lists on backend error or empty responses.
+  - **Purchase Order**: No default `UnitOfMeasure: "PC"` in initial items or added items; zero default item quantities on add. Excel template example preserved on line 63.
 - **Goods Receipt Authentic Quantities & No Assumed Data (Items 1.1-1.6)**:
-  - Hardcoded `Quantity: 10` eliminated from `GoodsReceiptAdapter.js`.
-  - `resolveStorageUnit()` dynamically queries `MMIM_GR4PO_DL_SRV/GR4PO_DL_Items` (key lookup) and `GR4PO_DL_Headers/Header2Items` (navigation) to resolve authentic SAP `OpenQuantity`, `OrderedQuantity`, `QuantityInEntryUnit`, and `UnitOfMeasure`.
-  - Proposes authentic SAP open quantities on scan (e.g. 1000 for delivery `180000008`, 100 for PO `400000028`) with zero hardcoded defaults.
-  - Removed all synthetic `'Material ' + id` and `'Plant ' + id` text fallbacks and `CS01` storage location fallback.
+  - Proposes authentic SAP open quantities on scan from `MMIM_GR4PO_DL_SRV/GR4PO_DL_Items` and `GR4PO_DL_Headers/Header2Items`.
+  - Zero hardcoded `Quantity: 10`, zero `'Material ' + id`, zero `'Plant ' + id`, zero `CS01` fallback.
 - **Sales Orders Worklist Resolution**:
-  - `SD_F1873_SO_WL_SRV` credentials configured in `server.js` for seamless local CDS remote connectivity.
-  - `SalesInquiryAdapter.getSalesOrders` maps incoming queries exclusively to remote entity `SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873`, correctly forwarding sorting, paging, column selection, and `$count`.
-  - Both live CDS remote service and fallback HTTP client return authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`).
-- **Security & Data Integrity Hardening (Audit Finding A)**:
-  - Zero Default Units, Zero Default Quantities, Zero Default Item Numbers, Zero Default Reason Codes, Zero Default Dates, Zero Default Customer References.
-  - Dev Token Guarding, Constant-Time Password Comparison.
-- **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
-- **XML Defect Audit**: **7 of 9 defects fixed** across 6 files.
+  - Authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`).
 
 ## Next Steps
-1. Stage and commit Goods Receipt authentic quantity changes to `feature/CL01`.
-2. Continue with remaining sections of `docs/no-assumed-data-changes.md` (Goods Issue, Sales Order, Outbound Delivery) as requested.
-3. Push changes to `origin/feature/CL01` when approved by user.
+1. Stage and commit remaining test update (`test/unit/sales-order/salesOrdersController.test.js`) and `WORKSTATUS.md` to `feature/CL01`.
+2. Push to `origin/feature/CL01`.
+3. Proceed to next user priorities or remaining items in `docs/no-assumed-data-changes.md`.

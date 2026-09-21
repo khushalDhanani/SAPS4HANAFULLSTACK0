@@ -253,7 +253,11 @@ describe("SalesOrders Controller", () => {
                 getBindingContext: (modelName) => {
                     if (modelName === "salesOrder") {
                         return {
-                            getProperty: (prop) => (prop === "SalesOrder" ? "5000104" : null)
+                            getProperty: (prop) => {
+                                if (prop === "SalesOrder") return "5000104";
+                                if (prop === "ShippingPoint") return "1120";
+                                return null;
+                            }
                         };
                     }
                     return null;
