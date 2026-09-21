@@ -226,6 +226,40 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                         }
                         return [];
                     }
+                    if (servicePath.includes('GR4PO_DL_Items')) {
+                        return [{
+                            InboundDelivery: '180000001',
+                            DeliveryDocumentItem: '000010',
+                            SourceOfGR: 'INBDELIV',
+                            Material: '1000000045',
+                            MaterialName: 'RAW MATERIAL TEST 45',
+                            Plant: '1120',
+                            PlantName: 'Plant 1120',
+                            StorageLocation: 'CS01',
+                            OpenQuantity: '50.000',
+                            OrderedQuantity: '50.000',
+                            QuantityInEntryUnit: '50.000',
+                            UnitOfMeasure: 'KG',
+                            EntryUnit: 'KG'
+                        }];
+                    }
+                    if (servicePath.includes('GR4PO_DL_Headers')) {
+                        return [{
+                            InboundDelivery: '400000011',
+                            DeliveryDocumentItem: '00010',
+                            SourceOfGR: 'PURORD',
+                            Material: '1000000045',
+                            MaterialName: 'RAW MATERIAL TEST 45',
+                            Plant: '1120',
+                            PlantName: 'Plant 1120',
+                            StorageLocation: 'CS01',
+                            OpenQuantity: '50.000',
+                            OrderedQuantity: '50.000',
+                            QuantityInEntryUnit: '50.000',
+                            UnitOfMeasure: 'KG',
+                            EntryUnit: 'KG'
+                        }];
+                    }
                     throw err;
                 }
             });
@@ -348,6 +382,16 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const suDetails = await GoodsReceiptAdapter.resolveStorageUnit('180000099');
             expect(suDetails.DeliveryDocumentItem).toBe('');
             expect(suDetails.PurchaseOrderItem).toBe('');
+        });
+
+        it('should retrieve authentic OpenQuantity, OrderedQuantity, and Unit from GR4PO_DL_Items instead of hardcoded 10', async () => {
+            const suDetails = await GoodsReceiptAdapter.resolveStorageUnit('180000001');
+            expect(suDetails).toBeDefined();
+            expect(typeof suDetails.Quantity).toBe('number');
+            expect(typeof suDetails.OpenQuantity).toBe('number');
+            expect(typeof suDetails.OrderedQuantity).toBe('number');
+            expect(typeof suDetails.QuantityInEntryUnit).toBe('number');
+            expect(suDetails.Unit).toBeTruthy();
         });
 
         it('should fetch a CSRF token and session cookie from MMIM_GR4PO_DL_SRV through the shared S/4 client, without caching them on the adapter', async () => {

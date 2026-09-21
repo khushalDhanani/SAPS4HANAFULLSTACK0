@@ -203,7 +203,11 @@
                                         value="{grView>/activeSU/Quantity}"
                                         width="140px"
                                         class="sapUiTinyMarginEnd" />
-                                    <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold" />
+                                    <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold sapUiSmallMarginEnd" />
+                                    <Text
+                                        id="txtOpenQty"
+                                        text="{= ${grView>/activeSU/OpenQuantity} ? ' / Open: ' + ${grView>/activeSU/OpenQuantity} + ' ' + ${grView>/activeSU/Unit} : '' }"
+                                        class="textMuted" />
                                 </HBox>
 
                             </form:content>

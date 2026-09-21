@@ -270,7 +270,28 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/activeSU/StorageLocation')).toBe('CS01');
             expect(oModel.getProperty('/activeSU/Batch')).toBe('IN25000133');
             expect(oModel.getProperty('/activeSU/BatchStatusState')).toBe('Success');
+            expect(oModel.getProperty('/activeSU/Quantity')).toBe(10);
+            expect(oModel.getProperty('/activeSU/Unit')).toBe('KG');
             expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('resolved from SAP'));
+        });
+
+        it('should bind authentic open quantity and unit from SAP on scan', async () => {
+            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce({
+                ...mockSUData,
+                Quantity: 1000,
+                OpenQuantity: 1000,
+                OrderedQuantity: 1000,
+                Unit: 'KG'
+            });
+
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/storageUnitBarcode', '180000008');
+
+            await controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/activeSU/Quantity')).toBe(1000);
+            expect(oModel.getProperty('/activeSU/OpenQuantity')).toBe(1000);
+            expect(oModel.getProperty('/activeSU/Unit')).toBe('KG');
         });
 
         it('should handle hardware laser scanner event and resolve Storage Unit', async () => {

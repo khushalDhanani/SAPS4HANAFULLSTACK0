@@ -252,6 +252,141 @@ class GoodsReceiptAdapter {
   }
 
   /**
+   * Retrieves authentic Goods Receipt item data (OpenQuantity, OrderedQuantity, UnitOfMeasure, EntryUnit, etc.)
+   * from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items and GR4PO_DL_Headers.
+   * Eliminates hardcoded quantities in strict compliance with AGENTS.md.
+   */
+  async getGoodsReceiptItem(deliveryDocument = '', deliveryItem = '', purchaseOrder = '', purchaseOrderItem = '') {
+    // 1. Try Inbound Delivery via GR4PO_DL_Items key lookup (SourceOfGR='INBDELIV')
+    if (deliveryDocument) {
+      const delivDoc = String(deliveryDocument).trim();
+      const sItem = deliveryItem ? String(deliveryItem).padStart(6, '0') : '000010';
+      try {
+        const itemKey = `InboundDelivery='${delivDoc}',DeliveryDocumentItem='${sItem}',SourceOfGR='INBDELIV',AccountAssignmentNumber='',ReferenceLineID=''`;
+        const res = await this._get(
+          `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Items(${itemKey})`,
+          '$format=json'
+        );
+        const it = Array.isArray(res) ? res[0] : res;
+        if (it) {
+          const openQty = Number(it.OpenQuantity);
+          const ordQty = Number(it.OrderedQuantity);
+          const entryQty = Number(it.QuantityInEntryUnit);
+          const unit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
+          if (openQty > 0 || ordQty > 0 || (unit && unit.trim())) {
+            return {
+              SourceOfGR: 'INBDELIV',
+              InboundDelivery: it.InboundDelivery || delivDoc,
+              DeliveryDocumentItem: it.DeliveryDocumentItem || sItem,
+              OpenQuantity: isNaN(openQty) ? 0 : openQty,
+              OrderedQuantity: isNaN(ordQty) ? 0 : ordQty,
+              QuantityInEntryUnit: isNaN(entryQty) ? 0 : entryQty,
+              Unit: unit.trim().toUpperCase(),
+              StorageLocation: it.StorageLocation || '',
+              StorageLocationName: it.StorageLocationName || '',
+              WarehouseStorageBin: it.WarehouseStorageBin || '',
+              Batch: it.Batch || '',
+              Material: it.Material || '',
+              MaterialName: it.MaterialName || it.PurchaseOrderItemText || '',
+              Plant: it.Plant || '',
+              PlantName: it.PlantName || ''
+            };
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Try Purchase Order via Header2Items navigation and GR4PO_DL_Items key lookup (SourceOfGR='PURORD')
+    if (purchaseOrder) {
+      const poDoc = String(purchaseOrder).trim();
+      const sPoItem = purchaseOrderItem ? String(purchaseOrderItem).trim() : '';
+
+      // 2a. Query GR4PO_DL_Headers(...)/Header2Items which returns all open PO items
+      try {
+        const headerNav = `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers(InboundDelivery='${poDoc}',SourceOfGR='PURORD')/Header2Items`;
+        const resNav = await this._get(headerNav, '$format=json');
+        const items = Array.isArray(resNav) ? resNav : (resNav?.results ? resNav.results : (resNav ? [resNav] : []));
+        if (items.length > 0) {
+          let matched = null;
+          if (sPoItem) {
+            matched = items.find(i =>
+              i.DeliveryDocumentItem === sPoItem ||
+              i.DeliveryDocumentItem === sPoItem.padStart(5, '0') ||
+              i.DeliveryDocumentItem === sPoItem.padStart(6, '0')
+            );
+          }
+          if (!matched) {
+            matched = items.find(i => Number(i.OpenQuantity) > 0) || items[0];
+          }
+          if (matched) {
+            const openQty = Number(matched.OpenQuantity);
+            const ordQty = Number(matched.OrderedQuantity);
+            const entryQty = Number(matched.QuantityInEntryUnit);
+            const unit = matched.UnitOfMeasure || matched.EntryUnit || matched.OrderedQuantityUnit || '';
+            return {
+              SourceOfGR: 'PURORD',
+              InboundDelivery: matched.InboundDelivery || poDoc,
+              DeliveryDocumentItem: matched.DeliveryDocumentItem || sPoItem,
+              OpenQuantity: isNaN(openQty) ? 0 : openQty,
+              OrderedQuantity: isNaN(ordQty) ? 0 : ordQty,
+              QuantityInEntryUnit: isNaN(entryQty) ? 0 : entryQty,
+              Unit: unit.trim().toUpperCase(),
+              StorageLocation: matched.StorageLocation || '',
+              StorageLocationName: matched.StorageLocationName || '',
+              WarehouseStorageBin: matched.WarehouseStorageBin || '',
+              Batch: matched.Batch || '',
+              Material: matched.Material || '',
+              MaterialName: matched.MaterialName || matched.PurchaseOrderItemText || '',
+              Plant: matched.Plant || '',
+              PlantName: matched.PlantName || ''
+            };
+          }
+        }
+      } catch (_) {}
+
+      // 2b. Query GR4PO_DL_Items by key for PO
+      const candItems = sPoItem ? [sPoItem.padStart(5, '0'), sPoItem.padStart(6, '0')] : ['00010', '000010'];
+      for (const cand of candItems) {
+        try {
+          const itemKey = `InboundDelivery='${poDoc}',DeliveryDocumentItem='${cand}',SourceOfGR='PURORD',AccountAssignmentNumber='',ReferenceLineID=''`;
+          const res = await this._get(
+            `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Items(${itemKey})`,
+            '$format=json'
+          );
+          const it = Array.isArray(res) ? res[0] : res;
+          if (it) {
+            const openQty = Number(it.OpenQuantity);
+            const ordQty = Number(it.OrderedQuantity);
+            const entryQty = Number(it.QuantityInEntryUnit);
+            const unit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
+            if (openQty > 0 || ordQty > 0 || (unit && unit.trim())) {
+              return {
+                SourceOfGR: 'PURORD',
+                InboundDelivery: it.InboundDelivery || poDoc,
+                DeliveryDocumentItem: it.DeliveryDocumentItem || cand,
+                OpenQuantity: isNaN(openQty) ? 0 : openQty,
+                OrderedQuantity: isNaN(ordQty) ? 0 : ordQty,
+                QuantityInEntryUnit: isNaN(entryQty) ? 0 : entryQty,
+                Unit: unit.trim().toUpperCase(),
+                StorageLocation: it.StorageLocation || '',
+                StorageLocationName: it.StorageLocationName || '',
+                WarehouseStorageBin: it.WarehouseStorageBin || '',
+                Batch: it.Batch || '',
+                Material: it.Material || '',
+                MaterialName: it.MaterialName || it.PurchaseOrderItemText || '',
+                Plant: it.Plant || '',
+                PlantName: it.PlantName || ''
+              };
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Primary method: Multi-tier resolution of scanned barcode to authentic SAP S/4HANA objects:
    * Scan -> Identify scanned value type -> Resolve SAP object -> Retrieve related Material/Batch/Quantity/SLED -> Populate Goods Receipt
    * Supported types:
@@ -309,9 +444,9 @@ class GoodsReceiptAdapter {
         resolvedPO = d.PurchaseOrder || '';
         resolvedPOItem = d.PurchaseOrderItem || '';
         resolvedMaterial = d.Material;
-        resolvedMaterialName = d.DeliveryDocumentItemText || ('Material ' + d.Material);
+        resolvedMaterialName = d.DeliveryDocumentItemText || '';
         resolvedPlant = d.Plant;
-        resolvedPlantName = d.PlantName || ('Plant ' + d.Plant);
+        resolvedPlantName = d.PlantName || '';
         resolvedSupplier = d.Supplier || '';
         resolvedSupplierName = d.SupplierName || '';
         resolvedSupplierCity = d.SupplierCityName || '';
@@ -337,9 +472,9 @@ class GoodsReceiptAdapter {
           resolvedPO = po.PurchaseOrder;
           resolvedPOItem = po.PurchaseOrderItem || '';
           resolvedMaterial = po.Material;
-          resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
+          resolvedMaterialName = po.PurchaseOrderItemText || '';
           resolvedPlant = po.Plant;
-          resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
+          resolvedPlantName = po.PlantName || '';
           resolvedSupplier = po.Supplier || '';
           resolvedSupplierName = po.SupplierName || '';
           resolvedSupplierCity = po.SupplierCityName || '';
@@ -399,9 +534,9 @@ class GoodsReceiptAdapter {
               resolvedDeliveryItem = md.DeliveryDocumentItem || '';
               resolvedPO = md.PurchaseOrder || '';
               resolvedPOItem = md.PurchaseOrderItem || '';
-              resolvedMaterialName = md.DeliveryDocumentItemText || ('Material ' + md.Material);
+              resolvedMaterialName = md.DeliveryDocumentItemText || '';
               resolvedPlant = md.Plant;
-              resolvedPlantName = md.PlantName || ('Plant ' + md.Plant);
+              resolvedPlantName = md.PlantName || '';
               resolvedSupplier = md.Supplier || '';
               resolvedSupplierName = md.SupplierName || '';
               resolvedSupplierCity = md.SupplierCityName || '';
@@ -417,9 +552,9 @@ class GoodsReceiptAdapter {
                 const po = poList[0];
                 resolvedPO = po.PurchaseOrder;
                 resolvedPOItem = po.PurchaseOrderItem || '';
-                resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
+                resolvedMaterialName = po.PurchaseOrderItemText || '';
                 resolvedPlant = po.Plant;
-                resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
+                resolvedPlantName = po.PlantName || '';
                 resolvedSupplier = po.Supplier || '';
                 resolvedSupplierName = po.SupplierName || '';
                 resolvedSupplierCity = po.SupplierCityName || '';
@@ -444,13 +579,13 @@ class GoodsReceiptAdapter {
           scannedType = 'MATERIAL';
           scannedTypeLabel = 'Material / Product';
           resolvedMaterial = md.Material;
-          resolvedMaterialName = md.DeliveryDocumentItemText || ('Material ' + md.Material);
+          resolvedMaterialName = md.DeliveryDocumentItemText || '';
           resolvedDelivery = md.DeliveryDocument;
           resolvedDeliveryItem = md.DeliveryDocumentItem || '';
           resolvedPO = md.PurchaseOrder || '';
           resolvedPOItem = md.PurchaseOrderItem || '';
           resolvedPlant = md.Plant;
-          resolvedPlantName = md.PlantName || ('Plant ' + md.Plant);
+          resolvedPlantName = md.PlantName || '';
           resolvedSupplier = md.Supplier || '';
           resolvedSupplierName = md.SupplierName || '';
           resolvedSupplierCity = md.SupplierCityName || '';
@@ -467,11 +602,11 @@ class GoodsReceiptAdapter {
             scannedType = 'MATERIAL';
             scannedTypeLabel = 'Material / Product';
             resolvedMaterial = po.Material;
-            resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
+            resolvedMaterialName = po.PurchaseOrderItemText || '';
             resolvedPO = po.PurchaseOrder;
             resolvedPOItem = po.PurchaseOrderItem || '';
             resolvedPlant = po.Plant;
-            resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
+            resolvedPlantName = po.PlantName || '';
             resolvedSupplier = po.Supplier || '';
             resolvedSupplierName = po.SupplierName || '';
             resolvedSupplierCity = po.SupplierCityName || '';
@@ -517,9 +652,9 @@ class GoodsReceiptAdapter {
           resolvedPO = matched.PurchaseOrder || '';
           resolvedPOItem = matched.PurchaseOrderItem || '';
           resolvedMaterial = matched.Material;
-          resolvedMaterialName = matched.DeliveryDocumentItemText || ('Material ' + matched.Material);
+          resolvedMaterialName = matched.DeliveryDocumentItemText || '';
           resolvedPlant = matched.Plant;
-          resolvedPlantName = matched.PlantName || ('Plant ' + matched.Plant);
+          resolvedPlantName = matched.PlantName || '';
           resolvedSupplier = matched.Supplier || '';
           resolvedSupplierName = matched.SupplierName || '';
           resolvedSupplierCity = matched.SupplierCityName || '';
@@ -538,9 +673,9 @@ class GoodsReceiptAdapter {
 
     // Retrieve authentic Storage Locations & Bins
     const storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
-    const defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : s4Config.getStorageLocation();
-    const defaultSLocName = storageLocations.length > 0 ? storageLocations[0].StorageLocationName : '';
-    const defaultBin = storageLocations.length > 0 ? storageLocations[0].WarehouseStorageBin : '';
+    let defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : '';
+    let defaultSLocName = storageLocations.length > 0 ? storageLocations[0].StorageLocationName : '';
+    let defaultBin = storageLocations.length > 0 ? storageLocations[0].WarehouseStorageBin : '';
 
     // Retrieve authentic Batches & SLED
     const batches = await this.getMaterialBatches(resolvedMaterial, resolvedPlant, defaultSLoc);
@@ -557,7 +692,28 @@ class GoodsReceiptAdapter {
       batchStatusText = topBatch.StatusText;
     }
 
-    const effectiveUnit = resolvedUnit || (storageLocations.length > 0 && storageLocations[0].BaseUnit) || (batches.length > 0 && batches[0].Unit) || '';
+    // Retrieve authentic Goods Receipt item details (OpenQuantity, OrderedQuantity, Unit) from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items
+    const grItem = await this.getGoodsReceiptItem(resolvedDelivery, resolvedDeliveryItem, resolvedPO, resolvedPOItem);
+    let proposedQuantity = 0;
+    let authenticOpenQuantity = 0;
+    let authenticOrderedQuantity = 0;
+    let authenticQuantityInEntryUnit = 0;
+
+    if (grItem) {
+      authenticOpenQuantity = grItem.OpenQuantity || 0;
+      authenticOrderedQuantity = grItem.OrderedQuantity || 0;
+      authenticQuantityInEntryUnit = grItem.QuantityInEntryUnit || 0;
+      proposedQuantity = authenticOpenQuantity > 0 ? authenticOpenQuantity : (authenticQuantityInEntryUnit > 0 ? authenticQuantityInEntryUnit : (authenticOrderedQuantity > 0 ? authenticOrderedQuantity : 0));
+      if (grItem.Unit) resolvedUnit = grItem.Unit;
+      if (grItem.StorageLocation && !defaultSLoc) defaultSLoc = grItem.StorageLocation;
+      if (grItem.WarehouseStorageBin && !defaultBin) defaultBin = grItem.WarehouseStorageBin;
+      if (grItem.Batch && !selectedBatch) selectedBatch = grItem.Batch;
+      if (grItem.DeliveryDocumentItem && !resolvedPOItem && grItem.SourceOfGR === 'PURORD') {
+        resolvedPOItem = grItem.DeliveryDocumentItem;
+      }
+    }
+
+    const effectiveUnit = resolvedUnit || (grItem && grItem.Unit) || (storageLocations.length > 0 && storageLocations[0].BaseUnit) || (batches.length > 0 && batches[0].Unit) || '';
 
     return {
       StorageUnit: resolvedDelivery || sCleanScan,
@@ -569,9 +725,9 @@ class GoodsReceiptAdapter {
       PurchaseOrder: resolvedPO,
       PurchaseOrderItem: resolvedPOItem,
       Material: resolvedMaterial,
-      MaterialName: resolvedMaterialName || ('Material ' + resolvedMaterial),
+      MaterialName: resolvedMaterialName || '',
       Plant: resolvedPlant,
-      PlantName: resolvedPlantName || ('Plant ' + resolvedPlant),
+      PlantName: resolvedPlantName || '',
       StorageLocation: defaultSLoc,
       StorageLocationName: defaultSLocName,
       WarehouseStorageBin: defaultBin,
@@ -579,7 +735,10 @@ class GoodsReceiptAdapter {
       ExpiryDate: expiryDate,
       BatchStatusState: batchStatusState,
       BatchStatusText: batchStatusText,
-      Quantity: 10,
+      Quantity: proposedQuantity,
+      OpenQuantity: authenticOpenQuantity,
+      OrderedQuantity: authenticOrderedQuantity,
+      QuantityInEntryUnit: authenticQuantityInEntryUnit,
       Unit: effectiveUnit,
       Supplier: resolvedSupplier,
       SupplierName: resolvedSupplierName,

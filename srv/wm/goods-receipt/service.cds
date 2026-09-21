@@ -71,6 +71,9 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         BatchStatusState     : String(10);
         BatchStatusText      : String(20);
         Quantity             : Decimal(13, 3);
+        OpenQuantity         : Decimal(13, 3);
+        OrderedQuantity      : Decimal(13, 3);
+        QuantityInEntryUnit  : Decimal(13, 3);
         Unit                 : String(3);
         Supplier             : String(10);
         SupplierName         : String(40);
