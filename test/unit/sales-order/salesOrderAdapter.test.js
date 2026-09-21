@@ -244,6 +244,61 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(mockRun).toHaveBeenCalled();
         });
 
+        test('getSalesOrders maps query to remote entity C_SalesOrderWl_F1873 and preserves $count', async () => {
+            const mockList = [{ SalesOrder: '2500085' }];
+            mockList.$count = 894;
+            const mockRun = jest.fn().mockResolvedValue(mockList);
+            adapter.s4hanaSO = { run: mockRun };
+
+            const incomingQuery = {
+                SELECT: {
+                    from: { ref: ['SalesOrders'] },
+                    columns: [{ ref: ['SalesOrder'] }],
+                    orderBy: [{ ref: ['CreationDate'], sort: 'desc' }],
+                    limit: { rows: { val: 25 }, offset: { val: 0 } },
+                    count: true
+                }
+            };
+
+            const result = await adapter.getSalesOrders(incomingQuery);
+            expect(result).toHaveLength(1);
+            expect(result.$count).toBe(894);
+            expect(mockRun).toHaveBeenCalled();
+            const calledQuery = mockRun.mock.calls[0][0];
+            const targetFrom = calledQuery.SELECT.from?.ref?.[0] || calledQuery.SELECT.from;
+            expect(targetFrom).toBe('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873');
+            expect(calledQuery.SELECT.count).toBe(true);
+        });
+
+        test('getSalesOrders HTTP fallback normalizes OData V2 date strings and preserves $count', async () => {
+            adapter.s4hanaSO = null;
+            const rawV2 = [
+                {
+                    SalesOrder: '2500085',
+                    CreationDate: '/Date(1789948800000)/',
+                    SalesOrderDate: '/Date(1789948800000)/',
+                    RequestedDeliveryDate: '/Date(1789948800000)/',
+                    LastChangeDateTime: '/Date(1789970480693+0000)/'
+                }
+            ];
+            const mockExecute = jest.fn().mockResolvedValue({
+                data: {
+                    d: {
+                        __count: '894',
+                        results: rawV2
+                    }
+                }
+            });
+
+            const result = await adapter.getSalesOrders({ SELECT: { count: true } }, { executeHttpRequest: mockExecute });
+            expect(result).toHaveLength(1);
+            expect(result.$count).toBe(894);
+            expect(result[0].CreationDate).toBe('2026-09-21');
+            expect(result[0].SalesOrderDate).toBe('2026-09-21');
+            expect(result[0].RequestedDeliveryDate).toBe('2026-09-21');
+            expect(result[0].LastChangeDateTime).toContain('2026-09-21');
+        });
+
         test('getSalesOrders throws 502 when backend read fails', async () => {
             adapter.s4hanaSO = null;
             const mockExecute = jest.fn().mockRejectedValue(new Error('Network error'));

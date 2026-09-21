@@ -221,7 +221,7 @@
                 </layout:Grid>
 
                 <!-- Section 3: Inquiry Line Items -->
-                <Panel id="panelInquiryItems" headerText="{i18n>salesInquiryPanelItems}">
+                <Panel id="panelInquiryItems">
                     <headerToolbar>
                         <Toolbar>
                             <Title text="{i18n>salesInquiryItemsCountTitle} ({= ${newInquiry>/items} ? ${newInquiry>/items}.length : 0 })" level="H2" />

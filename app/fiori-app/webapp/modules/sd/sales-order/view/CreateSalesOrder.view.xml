@@ -191,7 +191,7 @@
                 </layout:Grid>
 
                 <!-- Section 3: Order Line Items -->
-                <Panel id="panelOrderItems" headerText="{i18n>salesOrderPanelItems}">
+                <Panel id="panelOrderItems">
                     <headerToolbar>
                         <Toolbar>
                             <Title text="{i18n>salesOrderItemsCountTitle} ({= ${newOrder>/items} ? ${newOrder>/items}.length : 0 })" level="H2" />

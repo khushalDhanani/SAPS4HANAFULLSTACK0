@@ -2113,46 +2113,70 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit customer reference default elimination to `feature/CL01`.
 
-### 2026-09-21: Bug Fix — UI5 Binding Expression FormatException on Button Enabled & CDS SalesOrders Projection Alignment
-- **Problem**:
-  1. Runtime UI5 error: `FormatException in property 'enabled' of 'Element sap.m.Button#__button2-__clone0': A is not a valid boolean value`. In OData V4 expression bindings on boolean properties (e.g. `enabled`), UI5 evaluates referenced properties by automatically casting them to boolean unless `targetType: 'any'` is set. When `SalesDocApprovalStatus` is `'A'` ("In Approval"), `Boolean.parseValue("A")` throws a `FormatException`.
-  2. Runtime UI5 warning: `Failed to enhance query options for auto-$expand/$select as the path '/SalesOrders/-9007199254740991/SalesOrderType' does not point to a property`. `SalesOrders.view.xml` renders `<Text text="{salesOrder>SalesOrderType}" />`, but `SalesOrderType` was omitted from the `SalesOrders` entity projection in `srv/sd/sales-order/service.cds`, preventing UI5's automatic `$select` optimization from discovering the field in `$metadata`.
+### 2026-09-21: XML View Defect Audit — 7 Fixes Across 6 Files
+- **Problem**: User requested a sweep of all XML view/fragment files to find and fix defects. Exhaustive review of all 21 source XML files in `app/fiori-app/webapp/` identified 9 defects (7 fixed, 2 left as by-design).
 - **Changes Applied**:
-  1. `app/fiori-app/webapp/modules/sd/sales-order/view/SalesOrders.view.xml`:
-     - Updated button `enabled` expression binding from `${...}` to `%{...}` (`%{salesOrder>SalesDocApprovalStatus}` and `%{salesOrder>DeliveryBlockReason}`), explicitly declaring `targetType: 'any'` per official SAPUI5 OData V4 specification and avoiding automatic boolean casting on string status values.
-  2. `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`:
-     - Updated button `enabled` and `state` expression bindings from `${...}` to `%{...}` for `outboundDelivery>SalesDocApprovalStatus` and `outboundDelivery>DelivBlockReasonForSchedLine`, preventing `FormatException` when rendering delivery buttons and status indicators.
-  3. `srv/sd/sales-order/service.cds`:
-     - Added `SalesOrderType` and `SalesOrderDate` to `SalesOrders` entity projection on `externalSO.C_SalesOrderWl_F1873`, exposing both properties in the OData V4 metadata so UI5's auto-$select query generation completes cleanly.
+  1. `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`:
+     - Removed dead `headerText="{i18n>poHeaderItems}"` from Panel that already has a `<headerToolbar>` child (headerText is silently ignored when headerToolbar is present).
+  2. `app/fiori-app/webapp/modules/sd/sales-inquiry/view/CreateSalesInquiry.view.xml`:
+     - Removed dead `headerText="{i18n>salesInquiryPanelItems}"` from Panel with `<headerToolbar>`.
+  3. `app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml`:
+     - Removed dead `headerText="{i18n>salesOrderPanelItems}"` from Panel with `<headerToolbar>`.
+  4. `app/fiori-app/webapp/modules/fi/journal-entry/view/JournalEntries.view.xml`:
+     - Removed unused `xmlns:f="sap.f"` namespace declaration (never referenced in the file).
+     - Standardized expression binding on `icon` property from `${fiService>DebitCreditCode}` to `%{fiService>DebitCreditCode}` for consistency with the project `targetType: 'any'` convention.
+  5. `app/fiori-app/webapp/modules/sd/sales-inquiry/view/SalesInquiries.view.xml`:
+     - Removed unused `xmlns:f="sap.f"` namespace declaration (never referenced in the file).
+  6. `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`:
+     - Changed table `mode` from `SingleSelectMaster` to `None`. The `Navigation` type on `ColumnListItem` + `itemPress` handler already provides row-click navigation; `SingleSelectMaster` adds an unnecessary selection highlight that can cause double-fire scenarios.
+- **Not Fixed (By Design)**:
+  - SalesOrders table missing navigation: Intentional — each row has a "Create Delivery" action button and ColumnListItem type is `Inactive`.
+  - Dashboard MessageStrip `${...}` vs `%{...}`: `visible` is a boolean property and `!!${}` coercion works correctly; `%{}` convention applies specifically to `enabled`/`state` properties.
 - **Executed Commands and Results**:
-  - `npx cds compile srv`: **Compiled successfully with 0 errors**.
-  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 50 passed, 50 total tests (100% green)**.
-  - `cd app/fiori-app && npm run build`: **Build succeeded in 915 ms; Component-preload.js generated cleanly**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `git diff --check`: **### 2026-09-21: Sales Orders Worklist & KPI Count Fix (894 Orders Resolving Cleanly)
+- **Problem**: User reported: "in KPI Cards Sales order showing 894 byt list is not showing." Investigation identified two root causes:
+  1. `server.js` lacked development credentials configuration for remote service `SD_F1873_SO_WL_SRV` (while `SD_F2370_INQY_WL_SRV` and `SD_F2369_INQY_FS_SRV` were configured). As a result, `cds.connect.to('SD_F1873_SO_WL_SRV')` failed with `No credentials configured for "SD_F1873_SO_WL_SRV"`.
+  2. In `SalesInquiryAdapter.js`, `getSalesOrders(query)` erroneously ran `execQuery = SELECT.from(query.SELECT.from || 'SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873')`. When the CAP request arrived from UI5, `query.SELECT.from` was `SalesOrders`, which caused the remote S/4HANA OData V2 service to reject the request with HTTP 404 (`Resource not found for the segment 'SalesOrders'`).
+  3. When CDS failed, the fallback HTTP client returned raw OData V2 JSON containing `/Date(...)` timestamp strings (e.g. `"/Date(1789948800000)/"`), which violated OData V4 `Edm.Date` format and prevented UI5 OData V4 table from rendering data rows. Furthermore, `@odata.count` was not set on the returned array.
+- **Changes Applied**:
+  1. `server.js`:
+     - Added `credsSDSO` for `SD_F1873_SO_WL_SRV` pointing to `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F1873_SO_WL_SRV` with basic authentication and SAP client header.
+     - Registered `cds.env.requires.SD_F1873_SO_WL_SRV` and `cds.requires.SD_F1873_SO_WL_SRV` credentials in local development.
+  2. `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`:
+     - In `getSalesOrders(query)`: Strictly constructed `execQuery = SELECT.from('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873')` transferring `columns`, `where`, `orderBy`, `limit`, and `count` from incoming query. Never passes frontend entity name `SalesOrders` to remote service.
+     - Preserves `$count` property on returned list from `this.s4hanaSO.run(execQuery)`.
+     - In HTTP client fallback: Added `$inlinecount=allpages` support and normalized OData V2 `/Date(...)` dates (`CreationDate`, `SalesOrderDate`, `RequestedDeliveryDate`, `LastChangeDate`, `LastChangeDateTime`) to standard ISO `YYYY-MM-DD` strings, ensuring valid OData V4 schema compliance.
+     - In `getInquiries(query)`: Fixed query builder to strictly target `'SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370'` and preserve `$count`.
+  3. `test/unit/sales-order/salesOrderAdapter.test.js`:
+     - Added test verifying `getSalesOrders` maps query properly to `SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873` (never querying `SalesOrders`) and preserves `$count`.
+     - Added test verifying HTTP fallback normalizes `/Date(...)` strings and sets `$count`.
+- **Executed Commands and Results**:
+  - Live query verification via S/4HANA Client 220: HTTP 200 in 346 ms, `@odata.count: 894`, 50 rows returned, dates properly formatted as ISO `YYYY-MM-DD`.
+  - `npx jest test/unit/`: **57 passed, 57 total test suites; 806 passed, 806 total tests (100% green)**.
   - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
   - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
-  - `git diff --check`: **Clean (0 errors)**.
-- **Next recommended action**: Stage and commit the UI5 binding and CDS projection fixes to `feature/CL01`.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.56 s; Component-preload.js generated cleanly**.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 550 tests 100% green)**.
+- **Test Suite**: **All 57 test suites pass (806 tests 100% green)**.
+- **Sales Orders Worklist Resolution**:
+  - `SD_F1873_SO_WL_SRV` credentials configured in `server.js` for seamless local CDS remote connectivity.
+  - `SalesInquiryAdapter.getSalesOrders` maps incoming queries exclusively to remote entity `SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873`, correctly forwarding sorting, paging, column selection, and `$count`.
+  - Both live CDS remote service and fallback HTTP client return authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`), allowing the UI5 table to render all order rows and populate KPI tiles accurately.
 - **Security & Data Integrity Hardening (Audit Finding A)**:
-  - **Zero Default Units**: Removed all hardcoded `'PC'` and `'KG'` fallbacks across Sales Inquiry, Sales Order, Purchase Order, Goods Receipt, and Goods Issue. All interfaces strictly require authentic units from SAP master data or reject invalid requests with descriptive errors.
-  - **Zero Default Quantities**: Removed all `|| 1` fallbacks in `SalesInquiryAdapter.js` and `purchaseOrder.mapper.js`. Blank, non-numeric, zero, or negative quantities throw explicit validation errors upfront before SAP document creation.
-  - **Zero Default Item Numbers**: Removed all 13 `'000010'` and `'00010'` defaults in `GoodsReceiptAdapter.js`. Replaced synthetic item numbering with strict validation requiring authentic SAP item numbers.
-  - **Zero Default Reason Codes**: Removed `'0000'` fallback for `GoodsMovementReasonCode` in `GoodsReceiptAdapter.js`. Standard movements post with authentic reason or empty string.
-  - **Zero Default Dates**: Removed manufactured `today`, `today + 7 days`, and `today + 30 days` fallbacks across `salesInquiry.mapper.js` and `SalesInquiryMapper.js`. Customer PO date, document date, validity periods, and requested delivery dates preserve authentic user inputs or remain empty string when omitted.
-  - **Zero Default Customer References**: Removed fallback to first item text and `'SALES ORDER'` / `'SALES INQUIRY'` across `SalesInquiryAdapter.js` and `salesInquiry.mapper.js`. Customer PO reference remains empty string when omitted.
-  - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
-  - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
-  - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
-- **Frontend & CDS Schema Alignments**:
-  - Exposed `SalesOrderType` and `SalesOrderDate` in `SalesOrders` OData V4 projection.
-  - Migrated composite expression bindings on boolean controls to `%` (`targetType: 'any'`) syntax.
+  - Zero Default Units, Zero Default Quantities, Zero Default Item Numbers, Zero Default Reason Codes, Zero Default Dates, Zero Default Customer References.
+  - Dev Token Guarding, Constant-Time Password Comparison.
+- **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
+- **XML Defect Audit**: **7 of 9 defects fixed** across 6 files (3 dead headerText, 2 unused namespaces, 1 inconsistent binding syntax, 1 table mode mismatch). 2 items left as by-design.
 
 ## Next Steps
-1. Review eliminated invented value defaults with user.
-2. Commit and push changes to `origin/feature/CL01` when requested by user.
-Review eliminated invented value defaults with user.
-2. Commit and push changes to `origin/feature/CL01` when requested by user.
+1. Stage and commit the XML defect fixes and Sales Order worklist fixes to `feature/CL01`.
+2. Review eliminated invented value defaults with user.
+3. Commit and push changes to `origin/feature/CL01` when requested by user.

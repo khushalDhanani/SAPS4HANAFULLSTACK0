@@ -433,19 +433,30 @@ class SalesInquiryAdapter {
       throw err;
     }
     try {
-      const defaultQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
-        .orderBy('CreationDate desc', 'SalesInquiry desc')
-        .limit(50);
-      let execQuery = query || defaultQuery;
-      if (query && query.SELECT && (!query.SELECT.orderBy || query.SELECT.orderBy.length === 0)) {
-        execQuery = SELECT.from(query.SELECT.from || 'SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
-          .orderBy('CreationDate desc', 'SalesInquiry desc');
-        if (query.SELECT.where) execQuery.where(query.SELECT.where);
-        if (query.SELECT.columns) execQuery.columns(query.SELECT.columns);
-        if (query.SELECT.limit) execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
+      const execQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370');
+      if (query?.SELECT?.columns) execQuery.columns(query.SELECT.columns);
+      if (query?.SELECT?.where) execQuery.where(query.SELECT.where);
+      if (query?.SELECT?.orderBy && query.SELECT.orderBy.length > 0) {
+        execQuery.orderBy(query.SELECT.orderBy);
+      } else {
+        execQuery.orderBy('CreationDate desc', 'SalesInquiry desc');
+      }
+      if (query?.SELECT?.limit) {
+        const rows = query.SELECT.limit.rows?.val ?? query.SELECT.limit.rows ?? 50;
+        const offset = query.SELECT.limit.offset?.val ?? query.SELECT.limit.offset ?? 0;
+        execQuery.limit(rows, offset);
+      } else {
+        execQuery.limit(50);
+      }
+      if (query?.SELECT?.count) {
+        execQuery.SELECT.count = true;
       }
       const res = await this.s4hanaWL.run(execQuery);
-      return Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+      const list = Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+      if (res?.$count !== undefined) {
+        list.$count = res.$count;
+      }
+      return list;
     } catch (err) {
       LOG.error('Error fetching inquiries from SD_F2370_INQY_WL_SRV:', err.message);
       if (!err.status) err.status = 502;
@@ -716,19 +727,30 @@ class SalesInquiryAdapter {
     await this.init();
     if (this.s4hanaSO) {
       try {
-        const defaultQuery = SELECT.from('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873')
-          .orderBy('CreationDate desc', 'SalesOrder desc')
-          .limit(50);
-        let execQuery = query || defaultQuery;
-        if (query && query.SELECT && (!query.SELECT.orderBy || query.SELECT.orderBy.length === 0)) {
-          execQuery = SELECT.from(query.SELECT.from || 'SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873')
-            .orderBy('CreationDate desc', 'SalesOrder desc');
-          if (query.SELECT.where) execQuery.where(query.SELECT.where);
-          if (query.SELECT.columns) execQuery.columns(query.SELECT.columns);
-          if (query.SELECT.limit) execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
+        const execQuery = SELECT.from('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873');
+        if (query?.SELECT?.columns) execQuery.columns(query.SELECT.columns);
+        if (query?.SELECT?.where) execQuery.where(query.SELECT.where);
+        if (query?.SELECT?.orderBy && query.SELECT.orderBy.length > 0) {
+          execQuery.orderBy(query.SELECT.orderBy);
+        } else {
+          execQuery.orderBy('CreationDate desc', 'SalesOrder desc');
+        }
+        if (query?.SELECT?.limit) {
+          const rows = query.SELECT.limit.rows?.val ?? query.SELECT.limit.rows ?? 50;
+          const offset = query.SELECT.limit.offset?.val ?? query.SELECT.limit.offset ?? 0;
+          execQuery.limit(rows, offset);
+        } else {
+          execQuery.limit(50);
+        }
+        if (query?.SELECT?.count) {
+          execQuery.SELECT.count = true;
         }
         const res = await this.s4hanaSO.run(execQuery);
-        return Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+        const list = Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+        if (res?.$count !== undefined) {
+          list.$count = res.$count;
+        }
+        return list;
       } catch (err) {
         LOG.warn('Fetching sales orders from SD_F1873_SO_WL_SRV via CDS failed, falling back to HTTP client:', err.message);
       }
@@ -737,12 +759,37 @@ class SalesInquiryAdapter {
     try {
       const dest = options.destination || await this._getDestination(options);
       const executeFn = options.executeHttpRequest || this.client._execute;
+      const bCount = !!(query?.SELECT?.count);
+      const sInlineCount = bCount ? '&$inlinecount=allpages' : '';
       const res = await executeFn(dest, {
         method: 'get',
-        url: '/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$top=50&$orderby=CreationDate desc,SalesOrder desc',
+        url: `/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$top=50&$orderby=CreationDate desc,SalesOrder desc${sInlineCount}`,
         headers: { 'Accept': 'application/json', ...(options.headers || {}) }
       });
-      return res.data?.d?.results || res.data?.value || [];
+      const rawResults = res.data?.d?.results || res.data?.value || [];
+      const normalized = rawResults.map(item => {
+        const copy = { ...item };
+        ['CreationDate', 'SalesOrderDate', 'RequestedDeliveryDate', 'LastChangeDate'].forEach(dateField => {
+          if (copy[dateField] && typeof copy[dateField] === 'string') {
+            const match = copy[dateField].match(/\/Date\((\d+)\)\//);
+            if (match) {
+              copy[dateField] = new Date(Number(match[1])).toISOString().split('T')[0];
+            }
+          }
+        });
+        if (copy.LastChangeDateTime && typeof copy.LastChangeDateTime === 'string') {
+          const match = copy.LastChangeDateTime.match(/\/Date\((\d+)([+-]\d+)?\)\//);
+          if (match) {
+            copy.LastChangeDateTime = new Date(Number(match[1])).toISOString();
+          }
+        }
+        return copy;
+      });
+      const rawCount = res.data?.d?.__count ?? res.data?.['@odata.count'];
+      if (rawCount !== undefined) {
+        normalized.$count = Number(rawCount);
+      }
+      return normalized;
     } catch (httpErr) {
       LOG.error('Error reading sales orders from SD_F1873_SO_WL_SRV:', httpErr.message);
       const err = new Error(`Sales orders cannot be read: ${httpErr.message}`);

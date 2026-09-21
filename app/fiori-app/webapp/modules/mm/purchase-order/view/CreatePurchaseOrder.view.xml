@@ -197,7 +197,7 @@
 
                 </layout:Grid>
 
-                <Panel headerText="{i18n>poHeaderItems}">
+                <Panel id="panelPOItems">
                     <headerToolbar>
                         <Toolbar>
                             <Title text="{i18n>poItemsTitle} ({= ${newPO>/items}.length })" level="H2"/>

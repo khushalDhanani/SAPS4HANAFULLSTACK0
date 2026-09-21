@@ -209,7 +209,7 @@
                     }"
                     growing="true"
                     growingThreshold="20"
-                    mode="SingleSelectMaster"
+                    mode="None"
                     itemPress=".onItemPress"
                     sticky="ColumnHeaders,HeaderToolbar"
                     class="sapUiResponsiveContentPadding">

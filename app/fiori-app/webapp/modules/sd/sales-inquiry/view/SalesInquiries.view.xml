@@ -2,7 +2,6 @@
     controllerName="saps4hana.fiori.modules.sd.sales-inquiry.controller.SalesInquiries"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
-    xmlns:f="sap.f"
     xmlns:core="sap.ui.core">
 
     <Page
