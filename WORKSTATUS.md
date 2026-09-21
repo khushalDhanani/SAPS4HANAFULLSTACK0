@@ -2367,7 +2367,25 @@
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `npm test` (full project test suite): **68 passed, 68 total test suites; 872 passed, 872 total tests (100% green)**.
   - `git diff --check`: **Clean (0 errors)**.
-- **Next recommended action**: Stage and commit to `feature/CL01`.
+### 2026-09-21 — Eliminate Synthetic Packaging Unit Barcode `<material>-<unit>` (Audit Item 42)
+- **Change**: Eliminated synthetic `Barcode: <material>-<unit>` across Goods Issue domain clients, service definitions, and fixtures. S/4HANA `MMIM_MATERIAL_DATA_SRV/Material2Auoms` (MARM) provides authentic alternative units of measure, numerators, and denominators, but does not provide barcode strings. Previously, synthetic barcodes were invented on alternative units and fallback base unit objects.
+  1. **Backend Integration**:
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`: Removed `Barcode: `${sMat}-${u.AlternativeUnit}`` from `getMaterialPackagingUnits`.
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: Removed `Barcode: `${r.Product}-${baseUnit}`` from fallback base unit packaging object in `getOpenItems`.
+     - `srv/wm/goods-issue/service.cds`: Removed `Barcode : String(40);` from `type PackagingUnit`.
+  2. **Test & Fixture Synchronization**:
+     - `test/unit/wm/fixtures/goodsIssueFixtures.js`: Removed synthetic `Barcode` fields from mock packaging units.
+     - `test/unit/wm/goodsIssueClients.test.js`: Verified `units[0].Barcode` is `undefined` on mapped packaging units and fallback base units.
+     - `docs/data-lineage-audit.md`: Marked audit item 42 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx cds compile srv`: **Clean (0 errors)**.
+  - `npx eslint srv/integration/s4hana/wm/ test/unit/wm/`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 720 ms; Component-preload.js generated**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
+  - `npm test` (full project test suite): **68 passed, 68 total test suites; 872 passed, 872 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Implement Sales Inquiry Sales Office / Sales Group audit resolution (Item 15).
 
 ## Current Status
 - **Branch**: `feature/CL01`
