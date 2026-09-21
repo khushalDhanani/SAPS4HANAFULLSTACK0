@@ -18,8 +18,6 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
         throw new Error('Header data is required for S/4HANA Sales Inquiry payload mapping');
     }
 
-    const today = new Date().toISOString().split('T')[0];
-
     const s4Header = {
         SalesInquiryType: String(header.SalesInquiryType || s4Config.getInquiryType()).trim(),
         SalesOrganization: String(header.SalesOrganization || s4Config.getSalesOrganization()).trim(),
@@ -30,10 +28,10 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
         SoldToParty: String(header.SoldToParty || '').trim(),
         CustomerName: header.CustomerName ? String(header.CustomerName).trim() : '',
         PurchaseOrderByCustomer: header.PurchaseOrderByCustomer ? String(header.PurchaseOrderByCustomer).trim() : '',
-        CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate || today,
-        SalesInquiryDate: header.SalesInquiryDate || today,
-        BindingPeriodValidityStartDate: header.BindingPeriodValidityStartDate || today,
-        BindingPeriodValidityEndDate: header.BindingPeriodValidityEndDate || today,
+        CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate ? String(header.CustomerPurchaseOrderDate).trim() : '',
+        SalesInquiryDate: header.SalesInquiryDate ? String(header.SalesInquiryDate).trim() : '',
+        BindingPeriodValidityStartDate: header.BindingPeriodValidityStartDate ? String(header.BindingPeriodValidityStartDate).trim() : '',
+        BindingPeriodValidityEndDate: header.BindingPeriodValidityEndDate ? String(header.BindingPeriodValidityEndDate).trim() : '',
         TransactionCurrency: String(header.TransactionCurrency || s4Config.getCurrency()).trim().toUpperCase(),
         TotalNetAmount: header.TotalNetAmount !== undefined ? String(header.TotalNetAmount) : '0.00'
     };
@@ -97,9 +95,6 @@ function mapToS4OrderPayload(header, items, _options = {}) {
         throw new Error('Header data is required for S/4HANA Sales Order payload mapping');
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const defaultDelivery = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
     const s4Header = {
         SalesOrderType: String(header.SalesOrderType || s4Config.getOrderType()).trim(),
         SalesOrganization: String(header.SalesOrganization || s4Config.getSalesOrganization()).trim(),
@@ -111,9 +106,9 @@ function mapToS4OrderPayload(header, items, _options = {}) {
         CustomerName: header.CustomerName ? String(header.CustomerName).trim() : '',
         PurchaseOrderNumber: header.PurchaseOrderNumber || header.PurchaseOrderByCustomer || '',
         PurchaseOrderByCustomer: header.PurchaseOrderByCustomer || header.PurchaseOrderNumber || '',
-        CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate || today,
-        SalesOrderDate: header.SalesOrderDate || today,
-        RequestedDeliveryDate: header.RequestedDeliveryDate || defaultDelivery,
+        CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate ? String(header.CustomerPurchaseOrderDate).trim() : '',
+        SalesOrderDate: header.SalesOrderDate ? String(header.SalesOrderDate).trim() : '',
+        RequestedDeliveryDate: header.RequestedDeliveryDate ? String(header.RequestedDeliveryDate).trim() : '',
         TransactionCurrency: String(header.TransactionCurrency || s4Config.getCurrency()).trim().toUpperCase(),
         TotalNetAmount: header.TotalNetAmount !== undefined ? String(header.TotalNetAmount) : '0.00'
     };
@@ -152,7 +147,7 @@ function mapToS4OrderPayload(header, items, _options = {}) {
             NetPriceAmount: item.NetPriceAmount !== undefined ? String(parseFloat(item.NetPriceAmount || 0).toFixed(2)) : '0.00',
             NetAmount: item.NetAmount !== undefined ? String(parseFloat(item.NetAmount || 0).toFixed(2)) : '0.00',
             TransactionCurrency: s4Header.TransactionCurrency,
-            RequestedDeliveryDate: item.RequestedDeliveryDate || s4Header.RequestedDeliveryDate
+            RequestedDeliveryDate: item.RequestedDeliveryDate ? String(item.RequestedDeliveryDate).trim() : (s4Header.RequestedDeliveryDate || '')
         };
         if (item.Plant && String(item.Plant).trim() !== '') {
             s4Item.Plant = String(item.Plant).trim().toUpperCase();

@@ -2068,15 +2068,37 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Review with user and commit fixes for Audit Finding A reason codes.
 
+### 2026-09-21: Audit Finding A — Elimination of Invented Date Defaults (Today, Delivery Date +7 Days, Validity End +30 Days) in Sales Mappers
+- **Problem**: Audit flagged that dates defaulted to today and delivery date defaulted to today + 7 days in both sales mappers (`salesInquiry.mapper.js`, `SalesInquiryMapper.js`), resulting in fabricated Customer PO date, document date, validity period dates, and requested delivery dates being sent to SAP S/4HANA when left blank.
+- **Changes Applied**:
+  1. `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`:
+     - Removed `today` (`new Date().toISOString().split('T')[0]`), `defaultEnd` (+30 days), and `defaultDelivery` (+7 days) synthesizers.
+     - Header mapping now preserves authentic trimmed dates if provided (`CustomerPurchaseOrderDate`, `SalesInquiryDate`, `CreationDate`, `RequestedDeliveryDate`, `BindingPeriodValidityStartDate`, `BindingPeriodValidityEndDate`) or maps to `''` when blank/omitted.
+     - Item mapping now maps `RequestedDeliveryDate` to authentic item delivery date, falling back to authentic header `RequestedDeliveryDate`, or `''` if omitted.
+  2. `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`:
+     - In `mapToS4InquiryPayload`: Removed `today`. Mapped `CustomerPurchaseOrderDate`, `SalesInquiryDate`, `BindingPeriodValidityStartDate`, and `BindingPeriodValidityEndDate` to trimmed strings or `''`.
+     - In `mapToS4OrderPayload`: Removed `today` and `defaultDelivery`. Mapped `CustomerPurchaseOrderDate`, `SalesOrderDate`, and `RequestedDeliveryDate` to trimmed strings or `''`. Item `RequestedDeliveryDate` maps to item date, header date, or `''`.
+  3. `test/unit/sales-inquiry/salesInquiryMapping.test.js`:
+     - Added unit tests for `normalizeSalesInquiryData` asserting dates remain empty strings when omitted, and are correctly preserved when authentic values are provided.
+     - Added unit tests for `mapToS4InquiryPayload` asserting dates remain empty strings when omitted.
+     - Added unit tests for `mapToS4OrderPayload` asserting dates and item delivery dates remain empty strings when omitted, and preserve authentic values/item overrides when supplied.
+- **Executed Commands and Results**:
+  - `npx jest test/unit/sales-inquiry/salesInquiryMapping.test.js`: **1 passed, 1 total test suite; 13 passed, 13 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/ test/unit/sales-order/ test/unit/purchase-order/ test/unit/wm/`: **37 passed, 37 total test suites; 549 passed, 549 total tests (100% green)**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit the date default elimination to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 544 tests 100% green)**.
+- **Test Suite**: **All targeted suites in WM, PO, SD, LE, and FI pass (37 test suites, 549 tests 100% green)**.
 - **Security & Data Integrity Hardening (Audit Finding A)**:
   - **Zero Default Units**: Removed all hardcoded `'PC'` and `'KG'` fallbacks across Sales Inquiry, Sales Order, Purchase Order, Goods Receipt, and Goods Issue. All interfaces strictly require authentic units from SAP master data or reject invalid requests with descriptive errors.
   - **Zero Default Quantities**: Removed all `|| 1` fallbacks in `SalesInquiryAdapter.js` and `purchaseOrder.mapper.js`. Blank, non-numeric, zero, or negative quantities throw explicit validation errors upfront before SAP document creation.
   - **Zero Default Item Numbers**: Removed all 13 `'000010'` and `'00010'` defaults in `GoodsReceiptAdapter.js`. Replaced synthetic item numbering with strict validation requiring authentic SAP item numbers.
   - **Zero Default Reason Codes**: Removed `'0000'` fallback for `GoodsMovementReasonCode` in `GoodsReceiptAdapter.js`. Standard movements post with authentic reason or empty string.
+  - **Zero Default Dates**: Removed manufactured `today`, `today + 7 days`, and `today + 30 days` fallbacks across `salesInquiry.mapper.js` and `SalesInquiryMapper.js`. Customer PO date, document date, validity periods, and requested delivery dates preserve authentic user inputs or remain empty string when omitted.
   - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
   - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
 - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
@@ -2084,3 +2106,4 @@
 ## Next Steps
 1. Review eliminated invented value defaults with user.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.
+

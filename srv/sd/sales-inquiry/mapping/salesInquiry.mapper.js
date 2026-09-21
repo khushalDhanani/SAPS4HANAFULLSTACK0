@@ -17,9 +17,6 @@ function normalizeSalesDocumentData(data, options = {}) {
 
     const rawHeader = data.header || {};
     const rawItems = Array.isArray(data.items) ? data.items : [];
-    const today = new Date().toISOString().split('T')[0];
-    const defaultEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const defaultDelivery = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const currency = rawHeader.TransactionCurrency
         ? String(rawHeader.TransactionCurrency).trim().toUpperCase()
@@ -55,7 +52,7 @@ function normalizeSalesDocumentData(data, options = {}) {
             NetAmount: net,
             TransactionCurrency: currency,
             Plant: item.Plant ? String(item.Plant).trim().toUpperCase() : '',
-            RequestedDeliveryDate: item.RequestedDeliveryDate ? String(item.RequestedDeliveryDate).trim() : (rawHeader.RequestedDeliveryDate ? String(rawHeader.RequestedDeliveryDate).trim() : defaultDelivery)
+            RequestedDeliveryDate: item.RequestedDeliveryDate ? String(item.RequestedDeliveryDate).trim() : (rawHeader.RequestedDeliveryDate ? String(rawHeader.RequestedDeliveryDate).trim() : '')
         };
     });
 
@@ -86,12 +83,12 @@ function normalizeSalesDocumentData(data, options = {}) {
         ShipToPartyName: rawHeader.ShipToPartyName ? String(rawHeader.ShipToPartyName).trim() : '',
         PurchaseOrderByCustomer: description,
         PurchaseOrderNumber: description,
-        CustomerPurchaseOrderDate: rawHeader.CustomerPurchaseOrderDate || today,
-        SalesInquiryDate: rawHeader.SalesInquiryDate || today,
-        CreationDate: rawHeader.CreationDate || today,
-        RequestedDeliveryDate: rawHeader.RequestedDeliveryDate || defaultDelivery,
-        BindingPeriodValidityStartDate: rawHeader.BindingPeriodValidityStartDate || today,
-        BindingPeriodValidityEndDate: rawHeader.BindingPeriodValidityEndDate || defaultEnd,
+        CustomerPurchaseOrderDate: rawHeader.CustomerPurchaseOrderDate ? String(rawHeader.CustomerPurchaseOrderDate).trim() : '',
+        SalesInquiryDate: rawHeader.SalesInquiryDate ? String(rawHeader.SalesInquiryDate).trim() : '',
+        CreationDate: rawHeader.CreationDate ? String(rawHeader.CreationDate).trim() : '',
+        RequestedDeliveryDate: rawHeader.RequestedDeliveryDate ? String(rawHeader.RequestedDeliveryDate).trim() : '',
+        BindingPeriodValidityStartDate: rawHeader.BindingPeriodValidityStartDate ? String(rawHeader.BindingPeriodValidityStartDate).trim() : '',
+        BindingPeriodValidityEndDate: rawHeader.BindingPeriodValidityEndDate ? String(rawHeader.BindingPeriodValidityEndDate).trim() : '',
         TransactionCurrency: currency,
         TotalNetAmount: rawHeader.TotalNetAmount !== undefined && rawHeader.TotalNetAmount !== null
             ? parseFloat(rawHeader.TotalNetAmount)
