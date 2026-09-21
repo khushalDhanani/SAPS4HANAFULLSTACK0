@@ -2430,9 +2430,28 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 — Show Authentic SAP PO Status Name, Map Deletion Code L to Deleted, and Eliminate Fallthrough to "Approved" (Audit Item 4)
+- **Change**: Eliminated assumed PO status text heuristic in `app/fiori-app/webapp/model/formatter.js`. Previously, deletion flag `'L'` was presented as `"Rejected"`, SAP status names like `"Sent"` or `"Follow-On Documents"` were overridden with `"Approved"`, and any unrecognized status code fell through to `return "Approved"`.
+  1. **Frontend Formatter**:
+     - `app/fiori-app/webapp/model/formatter.js`:
+       - `_resolveDisplayStatus`: Prioritizes deletion flag `'L'` as `"Deleted"`. Returns authentic SAP status name (`sStatusName`) if present. Falls back to standard S/4HANA status code mappings (`01` -> Draft, `02` -> In Approval, `04` -> Sent, `05` -> Follow-On Documents, `38` -> Rejected). Unknown status codes display their raw code (`sStatusCode`), eliminating default fallthrough to `"Approved"`.
+       - `displayStatusState`: Added case for `"Deleted"` (`Error`), `"Sent"` / `"Follow-On Documents"` (`Success`), and defaults unknown raw codes to `None`.
+       - `displayStatusIcon`: Added case for `"Deleted"` (`sap-icon://decline`), `"Sent"` / `"Follow-On Documents"` (`sap-icon://accept`), and defaults unknown raw codes to `""`.
+  2. **Unit Tests & Documentation**:
+     - `test/unit/purchase-order/formatter.test.js`: Updated assertions to verify authentic status names (`Sent`, `Follow-On Documents`), deletion code `'L'` mapping to `"Deleted"`, and unknown codes (`"99"`, `"Z1"`) returning raw code with `None` state.
+     - `docs/data-lineage-audit.md`: Marked audit item 4 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 177 passed, 177 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 904 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across all tested components:
+  - `npx jest test/unit/purchase-order/`: **15 passed, 15 total test suites; 177 passed, 177 total tests (100% green)**.
   - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 132 passed, 132 total tests (100% green)**.
   - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 207 passed, 207 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
@@ -2440,6 +2459,10 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **Purchase Order Status Authentic Data Lineage (Audit Row 4)**:
+  - Shows SAP's authentic status name (`sStatusName`); no overriding of `"Sent"` or `"Follow-On Documents"` with `"Approved"`.
+  - Deletion code `'L'` accurately mapped to `"Deleted"` instead of `"Rejected"`.
+  - Unknown status codes display their raw code instead of defaulting to `"Approved"`.
 - **Sales Inquiry Authentic Data Lineage (Audit Rows 15, 16 & 17)**:
   - Item net price left blank (`''`) when SAP sends none; synthetic `NetAmount / Qty` division and `'0.00'` fallback eliminated.
   - Sales Office and Sales Group show strictly what SAP holds; no borrowing from other customer inquiries or value help defaults.
