@@ -145,6 +145,7 @@ sap.ui.define([
                         NetPriceAmount: "",
                         TaxCode: "",
                         NetAmount: "0.00",
+                        NetAmountIsEstimate: true,
                         RequisitionerName: sUser || "",
                         errors: {
                             Plant: { state: "None", text: "" },
@@ -186,6 +187,7 @@ sap.ui.define([
                 NetPriceAmount: "",
                 TaxCode: "",
                 NetAmount: "0.00",
+                NetAmountIsEstimate: true,
                 RequisitionerName: sUser || "",
                 errors: {
                     Plant: { state: "None", text: "" },
@@ -222,7 +224,8 @@ sap.ui.define([
         },
 
         /**
-         * Calculates line item NetAmount from OrderQuantity and NetPriceAmount.
+         * Calculates estimated line item NetAmount from OrderQuantity and NetPriceAmount
+         * in the browser before SAP S/4HANA prices the document.
          *
          * @param {sap.ui.model.json.JSONModel} oModel
          * @param {string} sPath
@@ -237,6 +240,7 @@ sap.ui.define([
             var fNetAmount = fQuantity * fNetPrice;
 
             oModel.setProperty(sPath + "/NetAmount", fNetAmount.toFixed(2));
+            oModel.setProperty(sPath + "/NetAmountIsEstimate", true);
         },
 
         /**

@@ -2580,12 +2580,37 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Implement Audit Item 11: PO line "Net Amount" on create screen (label as estimate).
 
+### 2026-09-21 16:00 IST — Explicitly Label PO Line Net Amount as Estimate on Create Screen (Audit Item 11)
+- **Change**: Resolved assumed data lineage on Create PO where the client-side calculated `OrderQuantity x NetPriceAmount` formula in the browser was presented as "Net Amount" before S/4HANA prices the document:
+  1. **Frontend i18n & View**:
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+       - Relabeled `poColNetAmount` from `Net Amount` to `Net Amount (Estimate)`.
+       - Added `poTooltipNetAmountEst=Estimated value (Quantity x Net Price). Final net amount is calculated by SAP S/4HANA upon creation.`.
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`:
+       - Updated column header with width `10rem`, label `poColNetAmount`, and tooltip `poTooltipNetAmountEst`.
+       - Updated disabled input with tooltip `poTooltipNetAmountEst` so hover informs user that it is a pre-creation estimate.
+       - Confirmed authentic S/4HANA persisted `NetAmount` remains displayed on Detail page (`PurchaseOrderDetail.view.xml`) after save.
+  2. **Model & Architecture**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`:
+       - Added `NetAmountIsEstimate: true` to line items in `createInitialModel` and `addItem`.
+       - Updated `calculateItemNetAmount` to document that it is a client-side pre-creation estimate and set `NetAmountIsEstimate: true`.
+  3. **Unit Tests & Documentation**:
+     - `test/unit/purchase-order/poItemNetAmountEstimate.test.js`: Added 5 unit tests verifying item initialization, decimal formatting, estimate flags, and calculation logic.
+     - `docs/data-lineage-audit.md`: Marked audit item 11 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/purchase-order/poItemNetAmountEstimate.test.js`: **1 passed, 1 total test suite; 5 passed, 5 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 194 passed, 194 total tests (100% green)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.11 s; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
   - `npx jest test/unit/fi/`: **1 passed, 1 total test suite; 11 passed, 11 total tests (100% green)**.
   - `npx jest test/unit/controller/`: **1 passed, 1 total test suite; 6 passed, 6 total tests (100% green)**.
-  - `npx jest test/unit/purchase-order/`: **16 passed, 16 total test suites; 189 passed, 189 total tests (100% green)**.
+  - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 194 passed, 194 total tests (100% green)**.
   - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
   - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 137 passed, 137 total tests (100% green)**.
   - `npx jest test/unit/dashboard/`: **1 passed, 1 total test suite; 30 passed, 30 total tests (100% green)**.
@@ -2595,6 +2620,10 @@
   - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
+- **PO Line Net Amount Lineage (Audit Row 11)**:
+  - Column header clearly relabeled to `Net Amount (Estimate)` (`poColNetAmount`).
+  - Informative tooltips on header and cell inputs clarify that browser calculation is an estimate before S/4HANA prices the document.
+  - Authentic S/4HANA persisted `NetAmount` displayed on detail view after creation.
 - **PO Supplier Defaults Lineage (Audit Row 10)**:
   - Backend query ordered by `PurchaseOrder desc`, ensuring commercial defaults reflect the latest historical PO.
   - Returns explicit `source: 'from last PO'` and document number `lastPurchaseOrder`.
@@ -2634,7 +2663,6 @@
   - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
 
 ## Next Steps
-1. Implement Audit Item 11: PO line "Net Amount" on create screen (label as estimate).
-2. Validate with unit tests and UI5 lint/build.
-3. Update `docs/data-lineage-audit.md` and `WORKSTATUS.md`.
+1. Stage, commit, and push changes to `origin/feature/CL01`.
+2. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.
 

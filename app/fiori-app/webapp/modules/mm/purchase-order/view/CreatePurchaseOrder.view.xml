@@ -235,7 +235,7 @@
                             <Column width="6rem"><Text text="{i18n>poColUnit}" /></Column>
                             <Column width="7.5rem" hAlign="End"><Text text="{i18n>poColNetPrice}" /></Column>
                             <Column width="6.5rem"><Text text="{i18n>poColTaxCode}" /></Column>
-                            <Column width="8rem" hAlign="End"><Text text="{i18n>poColNetAmount}" /></Column>
+                            <Column width="10rem" hAlign="End"><Text text="{i18n>poColNetAmount}" tooltip="{i18n>poTooltipNetAmountEst}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -295,7 +295,7 @@
                                             <core:ListItem key="{TaxCode}" text="{TaxCode}" additionalText="{TaxCode_Text}" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>NetAmount}" type="Number" placeholder="0.00" textAlign="End" editable="false" />
+                                    <Input value="{newPO>NetAmount}" type="Number" placeholder="0.00" textAlign="End" editable="false" tooltip="{i18n>poTooltipNetAmountEst}" />
                                  </cells>
                             </ColumnListItem>
                         </items>
