@@ -169,7 +169,7 @@ class GoodsIssueHandler {
             MaterialDocument: '',
             MaterialDocYear: '',
             TransferOrder: '',
-            DifferenceCleared: Number(DifferenceQty) > 0,
+            DifferenceCleared: false,
             DifferenceQty: Number(DifferenceQty) || 0,
             Success: true,
             Queued: true,
@@ -231,10 +231,12 @@ class GoodsIssueHandler {
                 MaterialDocument: '',
                 MaterialDocYear: '',
                 TransferOrder: '',
-                DifferenceCleared: Number(it.DifferenceQty) > 0,
+                DifferenceCleared: false,
                 DifferenceQty: Number(it.DifferenceQty) || 0,
                 Message: `Queued in dispatch queue (${qRecord.QueueReference})`,
-                Success: true
+                Success: false,
+                Queued: true,
+                QueueReference: qRecord.QueueReference
               });
             } catch (qErr) {
               lineResults.push({
@@ -245,7 +247,9 @@ class GoodsIssueHandler {
                 DifferenceCleared: false,
                 DifferenceQty: 0,
                 Message: `Queue error: ${qErr.message}`,
-                Success: false
+                Success: false,
+                Queued: false,
+                QueueReference: ''
               });
             }
           }

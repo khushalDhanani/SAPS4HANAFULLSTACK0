@@ -95,6 +95,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DifferenceQty     : Decimal(13, 3);
         Message           : String(255);
         Success           : Boolean;
+        Queued            : Boolean;
+        QueueReference    : String(40);
     };
 
     type GISubmitBatchResult {

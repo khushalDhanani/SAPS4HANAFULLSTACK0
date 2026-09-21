@@ -480,7 +480,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           ReservationNo: '18025',
           OrderNo: '1000040',
           Items: [
-            { ReservationItem: '0001', Material: '1000000204', IssueQty: 10, Unit: 'KG', Batch: 'BATCH-01' },
+            { ReservationItem: '0001', Material: '1000000204', IssueQty: 10, Unit: 'KG', Batch: 'BATCH-01', DifferenceQty: 5 },
             { ReservationItem: '0002', Material: '1000000373', IssueQty: 20, Unit: 'KG', Batch: 'BATCH-02' }
           ]
         },
@@ -492,7 +492,15 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result.AllPosted).toBe(false);
       expect(result.Results.length).toBe(2);
       expect(result.Results[0].Message).toContain('Queued in dispatch queue');
+      expect(result.Results[0].Success).toBe(false);
+      expect(result.Results[0].Queued).toBe(true);
+      expect(result.Results[0].DifferenceCleared).toBe(false);
+      expect(result.Results[0].DifferenceQty).toBe(5);
+      expect(result.Results[0].QueueReference).toBeDefined();
       expect(result.Results[1].Message).toContain('Queued in dispatch queue');
+      expect(result.Results[1].Success).toBe(false);
+      expect(result.Results[1].Queued).toBe(true);
+      expect(result.Results[1].DifferenceCleared).toBe(false);
     });
 
     it('should handle drainQueue action reporting synced vs failed counts', async () => {

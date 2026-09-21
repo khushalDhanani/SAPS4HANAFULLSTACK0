@@ -2268,31 +2268,61 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit to `feature/CL01`.
 
+### 2026-09-21 — Fix Goods Issue Result POSTED_IN_SAP Authentic Document Requirement (Item 43)
+- **Change**: Required an authentic SAP Material Document number before marking Goods Issue as `POSTED_IN_SAP` / `Success: true`. Any non-queued response missing a non-empty `MaterialDocument` is treated as unconfirmed/failed: sets `Success: false`, `Queued: false`, `SyncStatus: "FAILED"`, `MaterialDocument: ""`, plays error audio cue, and reports that posting response did not include an authentic SAP Material Document number. Aligned `onRetrySync` and `onRetryQueueItem` to only declare success when a trimmed `MaterialDocument` is present.
+- **Affected files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+    - In `_executePost`: Checks `sMatDoc` (trimmed `oResult.MaterialDocument`). If absent and not queued, sets `Success: false`, `SyncStatus: "FAILED"`, `MaterialDocument: ""`, plays failure beep, and displays descriptive unconfirmed message instead of assuming `POSTED_IN_SAP`.
+    - In `onRetrySync`: Requires non-empty `sMatDoc` along with `oResult.Success` before transitioning to `POSTED_IN_SAP` and playing success sound.
+    - In `onRetryQueueItem`: Requires non-empty `sMatDoc` along with `oResult.Success` before showing success MessageBox.
+  - `test/unit/wm/goodsIssueController.test.js`:
+    - Added unit test asserting that non-queued responses without `MaterialDocument` are marked `Success: false`, `SyncStatus: "FAILED"`, and report authentic SAP Material Document requirement.
+    - Added unit test asserting that retry without `MaterialDocument` keeps item queued and warns user.
+- **Validation Commands Executed & Results**:
+  - `npx eslint srv/ test/`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 1.07 s; Component-preload.js generated cleanly**.
+  - `npx jest test/unit/wm/goodsIssueController.test.js`: **49 passed, 49 total tests (100% green)**.
+
+### 2026-09-21 — Fix Goods Issue Batch Submit Queued Response Status & Difference Clearing (Item 44)
+- **Change**: Fixed mislabelled batch submit response when SAP posting capability is unavailable (501 / 403 / 404). Queued lines previously returned `Success: true` and `DifferenceCleared: true` (if difference quantity was entered) despite nothing being posted or cleared in SAP. Now returns `Success: false`, `Queued: true`, `DifferenceCleared: false`, and authentic `QueueReference: qRecord.QueueReference`. Single-item queued response also sets `DifferenceCleared: false`. Added `Queued` and `QueueReference` fields to `GISubmitLineResult` in `service.cds`.
+- **Affected files**:
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+    - In `submitGoodsIssueRequest` Dispatch Queue fallback: sets `Success: false`, `Queued: true`, `DifferenceCleared: false`, and `QueueReference: qRecord.QueueReference` on each queued item.
+    - In single-item `postGoodsIssue` Dispatch Queue fallback: sets `DifferenceCleared: false` when queued.
+  - `srv/wm/goods-issue/service.cds`:
+    - Added `Queued: Boolean;` and `QueueReference: String(40);` to `GISubmitLineResult` type definition.
+  - `test/unit/wm/goodsIssueService.test.js`:
+    - Updated `fallback to Dispatch Queue on batch submitGoodsIssueRequest when posting is unavailable` test to assert `Success: false`, `Queued: true`, `DifferenceCleared: false`, and `QueueReference` defined.
+- **Validation Commands Executed & Results**:
+  - `npx cds compile srv/wm/goods-issue/service.cds`: **Clean (0 errors)**.
+  - `npx eslint srv/ test/`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npx ui5lint`: **Success! No findings detected (0 errors)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 808 ms; Component-preload.js generated cleanly**.
+  - `npx jest test/unit/wm/goodsIssueService.test.js`: **45 passed, 45 total tests (100% green)**.
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: **40 passed, 40 total tests (100% green)**.
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 203 passed, 203 total tests (100% green)**.
+  - `npx jest test/integration/wm/`: **1 passed, 1 total test suite; 5 passed, 5 total tests (100% green)**.
+  - `git diff --check`: **Clean (0 errors)**.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project:
-  - `npm test`: **68 passed, 68 total test suites; 866 passed, 866 total tests (100% green)**.
+- **Build Status**: **100% Green** across all tested components:
+  - `npx jest test/unit/wm/`: **7 passed, 7 total test suites; 203 passed, 203 total tests (100% green)**.
+  - `npx jest test/integration/wm/`: **1 passed, 1 total test suite; 5 passed, 5 total tests (100% green)**.
   - `cd app/fiori-app && npx ui5lint`: 0 findings.
-  - `cd app/fiori-app && npm run build`: Succeeded in 817 ms; `Component-preload.js` generated.
-  - `npx eslint srv/integration/s4hana/wm/ test/unit/wm/`: 0 errors, 0 warnings.
+  - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
+  - `npx eslint srv/ test/`: 0 errors, 0 warnings.
   - `npx cds compile srv`: Clean (0 errors).
   - `git diff --check`: Clean (0 errors).
-- **Goods Issue Batch Stock Retrieval & Silent Zero Elimination (Audit Row 40)**:
-  - Batch stock is read at authentic batch grain via `MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates`.
-  - Unknown stock is preserved as `null` and **never defaults to 0**.
-  - Batches with unknown stock remain selectable (`IsSelectable: true`) and enabled in UI dialogs; only confirmed zero-stock batches are disabled.
-  - Scanned batch barcodes assign batch stock to `CurrentStock` and `SuStockQty`, never falling back to silent zero.
-- **Elimination of Assumed/Invented Data (Sales Inquiry, Outbound Delivery, Purchase Order)**:
-  - **Sales Inquiry**: No initial `OrderQuantity: 1` or `OrderQuantityUnit: "PC"`; zero hardcoded `ZIN`, `1000`, `10`, `52`, or `INR` in models, payloads, or failure fallbacks.
-  - **Outbound Delivery**: No invented `ShippingPoint: "1120"` or synthetic shipping point lists on backend error or empty responses.
-  - **Purchase Order**: No default `UnitOfMeasure: "PC"` in initial items or added items; zero default item quantities on add. Excel template example preserved on line 63.
-- **Goods Receipt Authentic Quantities & No Assumed Data (Items 1.1-1.6)**:
-  - Proposes authentic SAP open quantities on scan from `MMIM_GR4PO_DL_SRV/GR4PO_DL_Items` and `GR4PO_DL_Headers/Header2Items`.
-  - Zero hardcoded `Quantity: 10`, zero `'Material ' + id`, zero `'Plant ' + id`, zero `CS01` fallback.
-- **Sales Orders Worklist Resolution**:
-  - Authentic SAP counts (`@odata.count: 894`) and clean ISO dates (`YYYY-MM-DD`).
+- **Goods Issue Batch Submit Fallback (Audit Row 44)**:
+  - Queued lines return `Success: false`, `Queued: true`, `DifferenceCleared: false`, and `QueueReference`.
+  - Zero false claims of SAP success or SAP difference clearing before authentic posting.
+- **Goods Issue Authentic Material Document Requirement (Audit Row 43)**:
+  - Non-queued responses must contain an authentic SAP `MaterialDocument` to be marked `POSTED_IN_SAP`.
+  - Missing material document sets `Success: false`, `SyncStatus: "FAILED"`, and informs user.
 
 ## Next Steps
-1. Stage and commit Goods Issue batch stock grain correction and silent zero elimination to `feature/CL01`.
+1. Stage and commit Item 44 changes (`goodsIssue.handler.js`, `service.cds`, `goodsIssueService.test.js`, `WORKSTATUS.md`).
 2. Push to `origin/feature/CL01`.
-3. Proceed to next items in `docs/data-lineage-audit.md` (e.g. Item 41: Goods Issue batch status/SLED optimistic defaults).
+3. Continue through remaining items in `docs/data-lineage-audit.md` (e.g. Item 41: Goods Issue batch status/SLED optimistic defaults).
