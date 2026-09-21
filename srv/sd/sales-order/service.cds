@@ -10,6 +10,8 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     entity SalesOrders as projection on externalSO.C_SalesOrderWl_F1873 {
         key SalesOrder,
+        SalesOrderType,
+        SalesOrderDate,
         SoldToParty,
         SoldToPartyName,
         ShipToParty,

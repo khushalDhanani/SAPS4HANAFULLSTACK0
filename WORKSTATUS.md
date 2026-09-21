@@ -2108,11 +2108,30 @@
      - Added test asserting `PurchaseOrderNumber` in sales order deep insert payload remains empty string `''` when reference is omitted, never defaulting to item text or `'SALES ORDER'`.
 - **Executed Commands and Results**:
   - `npx jest test/unit/sales-inquiry/salesInquiryAdapter.test.js test/unit/sales-inquiry/salesInquiryMapping.test.js test/unit/sales-order/salesOrderAdapter.test.js`: **3 passed, 3 total test suites; 50 passed, 50 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/ test/unit/sales-order/ test/unit/purchase-order/ test/unit/wm/`: **37 passed, 37 total test suites; 550 passed, 550 total tests (100% green)**.
   - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
   - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage and commit customer reference default elimination to `feature/CL01`.
+
+### 2026-09-21: Bug Fix — UI5 Binding Expression FormatException on Button Enabled & CDS SalesOrders Projection Alignment
+- **Problem**:
+  1. Runtime UI5 error: `FormatException in property 'enabled' of 'Element sap.m.Button#__button2-__clone0': A is not a valid boolean value`. In OData V4 expression bindings on boolean properties (e.g. `enabled`), UI5 evaluates referenced properties by automatically casting them to boolean unless `targetType: 'any'` is set. When `SalesDocApprovalStatus` is `'A'` ("In Approval"), `Boolean.parseValue("A")` throws a `FormatException`.
+  2. Runtime UI5 warning: `Failed to enhance query options for auto-$expand/$select as the path '/SalesOrders/-9007199254740991/SalesOrderType' does not point to a property`. `SalesOrders.view.xml` renders `<Text text="{salesOrder>SalesOrderType}" />`, but `SalesOrderType` was omitted from the `SalesOrders` entity projection in `srv/sd/sales-order/service.cds`, preventing UI5's automatic `$select` optimization from discovering the field in `$metadata`.
+- **Changes Applied**:
+  1. `app/fiori-app/webapp/modules/sd/sales-order/view/SalesOrders.view.xml`:
+     - Updated button `enabled` expression binding from `${...}` to `%{...}` (`%{salesOrder>SalesDocApprovalStatus}` and `%{salesOrder>DeliveryBlockReason}`), explicitly declaring `targetType: 'any'` per official SAPUI5 OData V4 specification and avoiding automatic boolean casting on string status values.
+  2. `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`:
+     - Updated button `enabled` and `state` expression bindings from `${...}` to `%{...}` for `outboundDelivery>SalesDocApprovalStatus` and `outboundDelivery>DelivBlockReasonForSchedLine`, preventing `FormatException` when rendering delivery buttons and status indicators.
+  3. `srv/sd/sales-order/service.cds`:
+     - Added `SalesOrderType` and `SalesOrderDate` to `SalesOrders` entity projection on `externalSO.C_SalesOrderWl_F1873`, exposing both properties in the OData V4 metadata so UI5's auto-$select query generation completes cleanly.
+- **Executed Commands and Results**:
+  - `npx cds compile srv`: **Compiled successfully with 0 errors**.
+  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 50 passed, 50 total tests (100% green)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 915 ms; Component-preload.js generated cleanly**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit the UI5 binding and CDS projection fixes to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
@@ -2128,7 +2147,12 @@
   - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
   - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
   - **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
+- **Frontend & CDS Schema Alignments**:
+  - Exposed `SalesOrderType` and `SalesOrderDate` in `SalesOrders` OData V4 projection.
+  - Migrated composite expression bindings on boolean controls to `%` (`targetType: 'any'`) syntax.
 
 ## Next Steps
 1. Review eliminated invented value defaults with user.
+2. Commit and push changes to `origin/feature/CL01` when requested by user.
+Review eliminated invented value defaults with user.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.
