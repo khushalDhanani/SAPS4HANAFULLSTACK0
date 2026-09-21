@@ -1972,29 +1972,75 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Review with user and commit security hardening to `feature/CL01`.
 
+### 2026-09-21: Audit Finding A — Elimination of Invented Units of Measure ('PC' & 'KG') Sent to SAP
+- **Problem**: Audit flagged that missing Units of Measure silently fell back to `'PC'` or `'KG'` across multiple adapters, mappers, clients, and handlers (`SalesInquiryAdapter.js`, `SalesInquiryMapper.js`, `salesInquiry.mapper.js`, `purchaseOrder.mapper.js`, `GoodsReceiptAdapter.js`, `GoodsIssuePostingClient.js`, `GoodsIssueBatchesClient.js`, `GoodsIssueReservationsClient.js`, `GoodsIssueStockUnitClient.js`, `goodsIssue.handler.js`). Silently defaulting units risked posting real ERP documents and goods movements in incorrect units of measure.
+- **Changes Applied**:
+  1. `SalesInquiryAdapter.js`:
+     - In `createSalesDocument`, added upfront line item unit validation before posting header to SAP.
+     - In both Order deep insert and Inquiry sequential `ItemSet`/`PriceCondSet` steps, resolved unit from `OrderQuantityUnit || SalesUnit || UnitOfMeasure || BaseUnit`; throws descriptive error if omitted. Removed `'PC'` defaults.
+  2. `SalesInquiryMapper.js`:
+     - In `mapToS4InquiryPayload` and `mapToS4OrderPayload`, required authentic `OrderQuantityUnit` and removed `'PC'` fallback.
+  3. `salesInquiry.mapper.js`:
+     - Preserves authentic unit or empty string; removed `'PC'` default.
+  4. `purchaseOrder.mapper.js`:
+     - Resolves `UnitOfMeasure || OrderQuantityUnit || BaseUnit || Unit`; throws descriptive error if omitted. Removed `'PC'` fallback.
+  5. `GoodsReceiptAdapter.js`:
+     - In `getMaterialStorageLocations`, returns `r.BaseUnit || ''` instead of `'KG'`.
+     - In `resolveStorageUnit`, derives authentic unit from inbound delivery, purchase order, or material storage locations instead of hardcoded `'KG'`.
+     - In `postGoodsReceipt`, validates that `Unit`/`EntryUnit`/`UnitOfMeasure` is present for each item; throws descriptive error if missing. Removed `'KG'` fallback.
+  6. `GoodsIssuePostingClient.js`:
+     - In `postGoodsIssue` and `submitGoodsIssueRequest`, validates that `Unit`/`EntryUnit` is present; throws 400 error if missing. Removed `'KG'` fallback.
+  7. `GoodsIssueBatchesClient.js`:
+     - In `getMaterialPackagingUnits`, returns `u.AlternativeUnit || ''`; removed `'PC'` default.
+     - In `getMaterialBatches`, returns `(slocInfo && slocInfo.BaseUnit) || b.Unit || b.BaseUnit || ''`; removed `'KG'` default.
+     - In `revalidateStockAndBatch`, initializes `baseUnit = ''` and maps from `slocRes[0].BaseUnit || ''`; removed `'KG'` default.
+  8. `GoodsIssueReservationsClient.js`:
+     - In `getOpenItems`, derives `baseUnit = r.BaseUnit || r.ResvnItemComponentUnit || r.EntryUnit || r.UnitOfMeasure || ''`. Only generates base packaging unit if authentic unit exists. Removed `'PC'` default.
+  9. `GoodsIssueStockUnitClient.js`:
+     - In `resolveReservationComponent`, derives `resvUnit = resvItem.BaseUnit || resvItem.ResvnItemComponentUnit || resvItem.EntryUnit || resvItem.UnitOfMeasure || ''`; removed `'KG'` default.
+  10. `goodsIssue.handler.js`:
+     - In fallback queue enrollment, uses `it.Unit || it.EntryUnit || it.BaseUnit || ''`; removed `'PC'` default.
+- **Automated Tests**:
+  - `test/unit/purchase-order/domainMapping.test.js`: Added assertions verifying rejection of items missing `UnitOfMeasure`.
+  - `test/unit/sales-inquiry/salesInquiryMapping.test.js`: Added assertions verifying rejection of items missing `OrderQuantityUnit`.
+  - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Added assertions verifying rejection of items missing `OrderQuantityUnit`.
+  - `test/unit/wm/goodsReceiptService.test.js`: Added assertions verifying rejection of items missing `Unit`/`EntryUnit`.
+  - `test/unit/wm/goodsIssueClients.test.js`: Added assertions verifying rejection of items missing `Unit`/`EntryUnit`.
+- **Validation**: 32/32 test suites passed (488/488 tests green).
+
+### 2026-09-21: Audit Finding A — Elimination of Invented Quantity Defaults (Default to 1) Sent to SAP
+- **Problem**: Audit flagged that empty, zero, or invalid item quantities silently defaulted to `1` in `SalesInquiryAdapter.js` (lines 1079 and 1233) and `purchaseOrder.mapper.js` (line 41), causing blank or invalid quantities to silently post as orders for 1.
+- **Changes Applied**:
+  1. `purchaseOrder.mapper.js`:
+     - Validates that `item.OrderQuantity` is non-empty and a positive number (`> 0`). Throws explicit error `OrderQuantity is required for item ${itemNo}` or `OrderQuantity must be greater than 0 for item ${itemNo}`.
+     - Maps `OrderQuantity: String(qty)`. Removed `const qty = Number(item.OrderQuantity) || 1`.
+  2. `SalesInquiryAdapter.js`:
+     - Added upfront validation in `createSalesDocument` to verify that every item has a non-empty, positive `OrderQuantity (> 0)` before initiating any SAP network requests.
+     - In Order branch deep insert, removed `|| 1` and enforces `qty > 0`.
+     - In Inquiry branch sequential creation, removed `|| 1` and enforces `qty > 0`.
+- **Automated Tests**:
+  - `test/unit/purchase-order/domainMapping.test.js`: Added tests asserting `normalizePurchaseOrderData` rejects missing `OrderQuantity` and non-positive `OrderQuantity <= 0`.
+  - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Added tests asserting `createSalesDocument` rejects missing `OrderQuantity` and non-positive `OrderQuantity <= 0`.
+- **Executed Commands and Results**:
+  - `npx jest test/unit/purchase-order/ test/unit/sales-inquiry/`: 25 passed, 25 total test suites; 299 passed, 299 total tests (100% green).
+  - `npx jest test/unit/wm/`: 7 passed, 7 total test suites; 193 passed, 193 total tests (100% green).
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review with user and commit fixes for Audit Finding A.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
-- **Test Suite**: **835/835 passed across 68 test suites (100% green)**.
-- **Security Hardening**:
-  - Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`) across `localTokenUtil.js` and `server.js` middlewares.
-  - `AuthService._handleLogin` requires non-empty passwords, validates mock/dev credentials in constant time (`timingSafeEqual`), validates external credentials against S/4 Gateway, and enforces least-privilege `["Viewer"]` default role assignment.
-- **Outbound Delivery Phase 0**: **COMPLETED & PROVEN** (`13000526` created live).
-- **Outbound Delivery Phase 1 (Backend)**: **100% COMPLETE, TESTED & LIVE VERIFIED**.
-- **Outbound Delivery Phase 2 (Screen & Integration)**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
-  - Worklist: "Orders Due for Delivery" view and controller in `modules/le/outbound-delivery/`.
-  - Delivery Block & Approval Transparency: Delivery blocked orders visible with block reason; in-approval ('A'), rejected ('C'), rework ('D'), and released ('B') orders identified with clear status badges; Create Delivery button enabled only for released or non-approval orders without delivery blocks.
-  - Sales Order integration: Create Delivery button on `SalesOrders.view.xml` calling the same action, disabled when order has delivery block or is not released.
-  - Success/Warning message accuracy: Returns clean delivery numbers on success; displays explicit warning to check VL03N if SAP creates delivery without returning a document number.
-  - Performance & Caching: 60-second in-memory TTL caching for approval map prevents extra SAP calls on successive list reads and paging.
-  - Operational & Architectural Characteristics:
-    - **Approval Lookup Cap ($top=1000)**: In `OutboundDeliveryAdapter._fetchApprovalStatusMap`, the query filters for `(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')&$top=1000`. With 883 total sales orders currently in the system, the unapproved subset is <10, making the 1,000 cap completely harmless. Defense-in-depth guarantee: if an unapproved order were ever beyond 1,000 items, SAP Gateway authoritatively rejects delivery creation with message `V2/478` ("Subsequent documents not possible due to approval status of the document").
-    - **Cache Delay (60s TTL)**: An order released in SAP may still display as "In Approval" in the UI for up to 60 seconds if cached immediately before approval. Re-querying after the 60-second TTL expires automatically fetches the updated status from SAP Gateway.
-    - **Multi-Instance App Processes**: In Cloud Foundry / SAP BTP environments with multiple scaled runtime instances, the 60-second in-memory cache is held per server process. Each instance refreshes independently based on its own traffic. Correctness is fully preserved because transactional execution is always validated directly by live SAP Gateway.
-  - Role checks: `SalesRepresentative` role authorized for action; UI visibility conditioned on `AuthService.canCreateDelivery()`.
-  - Shell: Dashboard tile under Overview, SD, and Warehouse; route `le/orders-due`; full i18n parity.
-  - Preload: `Component-preload.js` rebuilt and verified.
+- **Test Suite**: **All targeted suites in PO, SD, and WM pass (32 test suites, 492 tests 100% green)**.
+- **Security & Data Integrity Hardening (Audit Finding A)**:
+  - **Zero Default Units**: Removed all hardcoded `'PC'` and `'KG'` fallbacks across Sales Inquiry, Sales Order, Purchase Order, Goods Receipt, and Goods Issue. All interfaces strictly require authentic units from SAP master data or reject invalid requests with descriptive errors.
+  - **Zero Default Quantities**: Removed all `|| 1` fallbacks in `SalesInquiryAdapter.js` and `purchaseOrder.mapper.js`. Blank, non-numeric, zero, or negative quantities throw explicit validation errors upfront before SAP document creation.
+  - **Dev Token Guarding**: Dev token issuer strictly disabled in production (`NODE_ENV === 'production'`).
+  - **Constant-Time Password Comparison**: `timingSafeEqual` enforced across auth service handlers with least-privilege default role assignment (`["Viewer"]`).
+- **Outbound Delivery Phase 0 & Phase 1 & Phase 2**: **100% COMPLETE, TESTED & PRELOAD BUILT**.
 
 ## Next Steps
-1. User review of security hardening and Outbound Delivery capabilities.
+1. Review eliminated invented value defaults with user.
 2. Commit and push changes to `origin/feature/CL01` when requested by user.
+

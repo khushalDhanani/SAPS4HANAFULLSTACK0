@@ -406,6 +406,22 @@ describe('Unit: Sales Inquiry Adapter', () => {
         })).rejects.toThrow(/Order quantity unit \(SalesUnit\) is required for item 000010/);
     });
 
+    test('should throw error when item is missing OrderQuantity in createSalesDocument', async () => {
+        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantityUnit: 'PC' }];
+        await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' }
+        })).rejects.toThrow(/OrderQuantity is required for item 000010/);
+    });
+
+    test('should throw error when item has zero or negative OrderQuantity in createSalesDocument', async () => {
+        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 0, OrderQuantityUnit: 'PC' }];
+        await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' }
+        })).rejects.toThrow(/OrderQuantity must be greater than 0 for item 000010/);
+    });
+
     test('should query Finished Goods materials with ZFRT/FERT condition and map MaterialName', async () => {
         const mockRun = jest.fn().mockResolvedValue([
             { Material: '4000000001', Material_Text: 'X-265', MaterialType: 'ZFRT', MaterialGroup: '164', MaterialBaseUnit: 'KG' },

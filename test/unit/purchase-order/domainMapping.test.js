@@ -98,6 +98,37 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
         expect(() => normalizePurchaseOrderData(rawData)).toThrow(/UnitOfMeasure is required for item 10/);
     });
 
+    it('should throw an error if an item is missing OrderQuantity', () => {
+        const rawData = {
+            header: validPayload.header,
+            items: [
+                {
+                    Material: 'TG11',
+                    Plant: '1010',
+                    UnitOfMeasure: 'PC',
+                    NetPriceAmount: '20'
+                }
+            ]
+        };
+        expect(() => normalizePurchaseOrderData(rawData)).toThrow(/OrderQuantity is required for item 10/);
+    });
+
+    it('should throw an error if an item has invalid OrderQuantity', () => {
+        const rawData = {
+            header: validPayload.header,
+            items: [
+                {
+                    Material: 'TG11',
+                    Plant: '1010',
+                    OrderQuantity: '0',
+                    UnitOfMeasure: 'PC',
+                    NetPriceAmount: '20'
+                }
+            ]
+        };
+        expect(() => normalizePurchaseOrderData(rawData)).toThrow(/OrderQuantity must be greater than 0 for item 10/);
+    });
+
     it('should return input as-is when input is falsy or invalid', () => {
         expect(normalizePurchaseOrderData(null)).toBeNull();
         expect(normalizePurchaseOrderData(undefined)).toBeUndefined();

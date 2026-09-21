@@ -38,7 +38,13 @@ function normalizePurchaseOrderData(data, context = {}) {
 
     const items = data.items.map((item, index) => {
         const itemNo = item.PurchaseOrderItem ? String(item.PurchaseOrderItem).trim() : String((index + 1) * 10);
-        const qty = Number(item.OrderQuantity) || 1;
+        if (item.OrderQuantity === undefined || item.OrderQuantity === null || String(item.OrderQuantity).trim() === '') {
+            throw new Error(`OrderQuantity is required for item ${itemNo}`);
+        }
+        const qty = Number(item.OrderQuantity);
+        if (isNaN(qty) || qty <= 0) {
+            throw new Error(`OrderQuantity must be greater than 0 for item ${itemNo}`);
+        }
         const price = Number(item.NetPriceAmount) || 0;
         const calculatedNetAmount = (qty * price).toFixed(2);
         const itemRequisitioner = (item.RequisitionerName && String(item.RequisitionerName).trim() !== '')

@@ -1054,7 +1054,7 @@ class SalesInquiryAdapter {
     const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || s4Config.getInquiryType()).trim();
     const isOrder = effectiveDocType !== 'ZIN';
 
-    // Upfront item unit validation for all document types
+    // Upfront item unit and quantity validation for all document types
     if (Array.isArray(items) && items.length > 0) {
       for (let idx = 0; idx < items.length; idx++) {
         const itm = items[idx];
@@ -1062,6 +1062,13 @@ class SalesInquiryAdapter {
         const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
         if (!itemUnit || !String(itemUnit).trim()) {
           throw new Error(`Order quantity unit (SalesUnit) is required for item ${lineNum}`);
+        }
+        if (itm.OrderQuantity === undefined || itm.OrderQuantity === null || String(itm.OrderQuantity).trim() === '') {
+          throw new Error(`OrderQuantity is required for item ${lineNum}`);
+        }
+        const qty = parseFloat(itm.OrderQuantity);
+        if (isNaN(qty) || qty <= 0) {
+          throw new Error(`OrderQuantity must be greater than 0 for item ${lineNum}`);
         }
       }
     }
@@ -1076,7 +1083,7 @@ class SalesInquiryAdapter {
       if (Array.isArray(items) && items.length > 0) {
         for (let idx = 0; idx < items.length; idx++) {
           const itm = items[idx];
-          const qty = parseFloat(itm.OrderQuantity) || 1;
+          const qty = parseFloat(itm.OrderQuantity);
           const price = parseFloat(itm.NetPriceAmount) || 0;
           const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
           totalNet += net;
@@ -1230,7 +1237,7 @@ class SalesInquiryAdapter {
     if (Array.isArray(items) && items.length > 0) {
       for (let idx = 0; idx < items.length; idx++) {
         const itm = items[idx];
-        const qty = parseFloat(itm.OrderQuantity) || 1;
+        const qty = parseFloat(itm.OrderQuantity);
         const price = parseFloat(itm.NetPriceAmount) || 0;
         const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
         totalNet += net;
