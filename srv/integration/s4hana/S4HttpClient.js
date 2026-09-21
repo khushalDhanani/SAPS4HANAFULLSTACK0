@@ -239,7 +239,7 @@ class S4HttpClient {
      * @returns {Promise<{ status: number, data: any, headers: Object }>}
      */
     async get(path, options = {}) {
-        const { query = '', headers = {}, accept = 'application/json', responseType, userJwt } = options;
+        const { query = '', headers = {}, accept = 'application/json', responseType } = options;
         const destination = await this._requireDestination(options);
         const requestConfig = {
             method: 'get',
@@ -313,7 +313,7 @@ class S4HttpClient {
      * @returns {Promise<{ status: number, data: any, headers: Object }>}
      */
     async post(path, options = {}) {
-        const { data = {}, headers = {}, csrfPath, userJwt } = options;
+        const { data = {}, headers = {}, csrfPath } = options;
         const destination = await this._requireDestination(options);
         const session = await this.fetchCsrfSession(csrfPath || serviceRootOf(path), destination, options);
         const requestConfig = {

@@ -1915,12 +1915,41 @@
     - `npx cds compile srv > /dev/null`: Succeeded with code 0.
     - `npx jest test/unit/le/ test/unit/sales-order/`: 9 passed, 9 total suites; 94 passed, 94 total tests (100% green).
     - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+## 2026-09-21 10:20 IST
+- **Agent**: Antigravity
+- **Change**: Zero-Lint Hygiene: Fixed All 16 Root ESLint `no-unused-vars` Warnings Across Codebase:
+  - **Audit & Resolution**: Eliminated all 16 pre-existing ESLint warnings in backend services, mappers, and test suites:
+    - `srv/integration/s4hana/S4ErrorMapper.js` (lines 52, 91): Renamed unused caught error parameters `(e)` to `(_e)`.
+    - `srv/integration/s4hana/S4HttpClient.js` (lines 242, 316): Removed unused `userJwt` destructuring in `get` and `post` methods (managed directly via `options`).
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js` (line 16): Renamed unused argument `options` to `_options`.
+    - `srv/mm/purchase-order/validation/purchaseOrder.validation.js` (line 7): Removed unused `ALPHANUMERIC_REGEX` constant.
+    - `test/integration/purchase-order/activation.test.js` (line 1): Removed unused `httpClient` import.
+    - `test/integration/purchase-order/draftCreation.test.js` (line 1): Removed unused `httpClient` import.
+    - `test/unit/auth/authService.test.js` (line 2): Removed unused `localTokenUtil` import.
+    - `test/unit/purchase-order/formatter.test.js` (lines 9, 21, 180): Renamed `options` to `_options` and wired `originalSap` restoration in `afterAll`.
+    - `test/unit/sales-inquiry/salesInquiryAdapter.test.js` (lines 27, 43, 70): Renamed unused mock argument `(query)` to `(_query)`.
+    - `test/unit/wm/goodsIssueController.test.js` (lines 764, 785): Renamed unused parameter `(m)` to `(_m)`.
+  - **Files Modified**:
+    - `srv/integration/s4hana/S4ErrorMapper.js`
+    - `srv/integration/s4hana/S4HttpClient.js`
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`
+    - `srv/mm/purchase-order/validation/purchaseOrder.validation.js`
+    - `test/integration/purchase-order/activation.test.js`
+    - `test/integration/purchase-order/draftCreation.test.js`
+    - `test/unit/auth/authService.test.js`
+    - `test/unit/purchase-order/formatter.test.js`
+    - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`
+    - `test/unit/wm/goodsIssueController.test.js`
+  - **Executed Commands and Results**:
+    - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+    - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npx jest test/unit/auth/ test/unit/purchase-order/ test/unit/sales-inquiry/ test/unit/wm/goodsIssueController.test.js test/integration/purchase-order/`: 36 passed, 36 total suites; 405 passed, 405 total tests (100% green).
     - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Review with user and commit to `feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root lint 0 errors, git diff --check clean).
+- **Build Status**: **100% Green** across the entire full-stack project (CDS compilation clean, UI5 build clean, ui5lint 0 findings, root ESLint 0 errors and 0 warnings, git diff --check clean).
 - **Test Suite**: **LE & SD Unit Tests**: 94/94 passed across 9 test suites (100% green); full suite 831/831 passed (100% green).
 - **Outbound Delivery Phase 0**: **COMPLETED & PROVEN** (`13000526` created live).
 - **Outbound Delivery Phase 1 (Backend)**: **100% COMPLETE, TESTED & LIVE VERIFIED**.

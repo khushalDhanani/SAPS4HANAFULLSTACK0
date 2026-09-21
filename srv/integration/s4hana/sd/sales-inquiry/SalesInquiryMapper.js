@@ -13,7 +13,7 @@ const s4Config = require('../../s4Config');
  * @param {Object} options - User and execution options
  * @returns {Object} S/4HANA compliant OData payload
  */
-function mapToS4InquiryPayload(header, items, options = {}) {
+function mapToS4InquiryPayload(header, items, _options = {}) {
     if (!header || typeof header !== 'object') {
         throw new Error('Header data is required for S/4HANA Sales Inquiry payload mapping');
     }

@@ -24,7 +24,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
     test('should return inquiry details with SalesOffice and SalesGroup populated and described', async () => {
         const mockWL = {
-            run: jest.fn().mockImplementation((query) => {
+            run: jest.fn().mockImplementation((_query) => {
                 // Return inquiry with expanded to_SalesOffice and to_SalesGroup
                 return Promise.resolve({
                     SalesInquiry: '100003',
@@ -40,7 +40,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
             })
         };
         const mockFS = {
-            run: jest.fn().mockImplementation((query) => {
+            run: jest.fn().mockImplementation((_query) => {
                 return Promise.resolve({
                     SalesInquiry: '100003',
                     CustomerPurchaseOrderDate: '2025-12-26',
@@ -67,7 +67,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
     test('should dynamically derive SalesOffice and SalesGroup from SAP when inquiry header has empty fields', async () => {
         let callCount = 0;
         const mockWL = {
-            run: jest.fn().mockImplementation((query) => {
+            run: jest.fn().mockImplementation((_query) => {
                 callCount++;
                 if (callCount === 1) {
                     // First call: inquiry header with empty SalesOffice

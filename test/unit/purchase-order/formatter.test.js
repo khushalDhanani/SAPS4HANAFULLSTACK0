@@ -6,7 +6,7 @@ let mmFormatter;
 let fiFormatter;
 
 const mockDateFormat = {
-    getDateInstance: jest.fn(options => ({
+    getDateInstance: jest.fn(_options => ({
         format: jest.fn(oDate => {
             if (!oDate || !(oDate instanceof Date) || isNaN(oDate.getTime())) return "";
             const sDay = String(oDate.getDate()).padStart(2, "0");
@@ -175,5 +175,9 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             const oDate = new Date(2026, 8, 5);
             expect(fiFormatter.formatDate(oDate)).toBe("05-09-2026");
         });
+    });
+
+    afterAll(() => {
+        global.sap = originalSap;
     });
 });

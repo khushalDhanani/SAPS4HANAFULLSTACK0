@@ -761,7 +761,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             const oModel = controller.getView().getModel('giView');
             const mockEvent = {
                 getSource: () => ({
-                    getBindingContext: (m) => ({
+                    getBindingContext: (_m) => ({
                         getObject: () => ({
                             Batch: 'IN25000970',
                             ExpiryDate: '2027-12-31',
@@ -782,7 +782,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
         it('should block selection of expired batch', () => {
             const mockEvent = {
                 getSource: () => ({
-                    getBindingContext: (m) => ({
+                    getBindingContext: (_m) => ({
                         getObject: () => ({
                             Batch: 'EXPIRED123',
                             ExpiryDate: '2024-01-01',

@@ -49,7 +49,7 @@ function extractS4ErrorMessage(error) {
                 if (parsed.error?.message?.value) {
                     return parsed.error.message.value;
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Ignore parse errors, proceed to fallback
             }
         }
@@ -88,7 +88,7 @@ function _extractErrorCode(error) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
                 if (parsed.error?.code) return parsed.error.code;
-            } catch (e) {
+            } catch (_e) {
                 // Ignore
             }
         }

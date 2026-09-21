@@ -4,7 +4,6 @@
  */
 
 const CURRENCY_REGEX = /^[A-Za-z]{3}$/;
-const ALPHANUMERIC_REGEX = /^[A-Za-z0-9_-]+$/;
 
 const REQUIRED_HEADER_FIELDS = [
     { field: 'PurchaseOrderType', label: 'Document Type', maxLen: 4 },

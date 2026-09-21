@@ -1,5 +1,4 @@
 const AuthServiceHandler = require('../../../srv/auth-service');
-const localTokenUtil = require('../../../srv/auth/localTokenUtil');
 const authAdapter = require('../../../srv/integration/s4hana/AuthAdapter');
 
 describe('Unit: AuthService (CAP Authentication Handler)', () => {

@@ -1,4 +1,3 @@
-const httpClient = require('@sap-cloud-sdk/http-client');
 const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const { mapToS4Payload } = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
 const validPayload = require('../../fixtures/purchase-order/validPOPayload.json');
