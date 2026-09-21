@@ -26,7 +26,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           const den = Number(u.Denominator || 1);
           const factor = den > 0 ? (num / den) : num;
           return {
-            Unit: u.AlternativeUnit || 'PC',
+            Unit: u.AlternativeUnit || '',
             Description: u.AlternativeUnitName || u.AlternativeUnit || '',
             Numerator: num,
             Denominator: den,
@@ -172,7 +172,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           ManufactDate: formattedMfg,
           AvailableStock: nStock,
           IsSelectable: isSelectable,
-          Unit: (slocInfo && slocInfo.BaseUnit) || b.Unit || 'KG',
+          Unit: (slocInfo && slocInfo.BaseUnit) || b.Unit || b.BaseUnit || '',
           StorageLocation: (slocInfo && slocInfo.StorageLocation) || sSLoc || b.StorageLocation || '',
           StorageLocationName: (slocInfo && slocInfo.StorageLocationName) || '',
           StatusState: status.StatusState,
@@ -297,7 +297,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
 
     // Re-read current stock from SAP
     let currentStock = 0;
-    let baseUnit = 'KG';
+    let baseUnit = '';
     let stockReadSuccess = false;
 
     if (sPlant && sSLoc) {
@@ -309,7 +309,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
         );
         if (Array.isArray(slocRes) && slocRes.length > 0) {
           currentStock = Number(slocRes[0].CurrentStock || 0);
-          baseUnit = slocRes[0].BaseUnit || 'KG';
+          baseUnit = (slocRes[0] && slocRes[0].BaseUnit) || '';
           stockReadSuccess = true;
         }
       } catch (err) {

@@ -158,7 +158,7 @@ class GoodsReceiptAdapter {
         StorageLocationName: r.StorageLocationName || '',
         WarehouseStorageBin: r.WarehouseStorageBin || '',
         CurrentStock: Number(r.CurrentStock) || 0,
-        BaseUnit: r.BaseUnit || 'KG'
+        BaseUnit: r.BaseUnit || ''
       }));
     } catch (_) {
       return [];
@@ -290,6 +290,7 @@ class GoodsReceiptAdapter {
     let targetExpiryDate = '';
     let targetBatchStatusState = 'None';
     let targetBatchStatusText = 'NO BATCH';
+    let resolvedUnit = '';
 
     // --- TIER 1: Inbound Delivery check (HMmimGr4inbdelSet) ---
     try {
@@ -314,6 +315,9 @@ class GoodsReceiptAdapter {
         resolvedSupplier = d.Supplier || '';
         resolvedSupplierName = d.SupplierName || '';
         resolvedSupplierCity = d.SupplierCityName || '';
+        if (d.DeliveryQuantityUnit || d.UnitOfMeasure || d.BaseUnit) {
+          resolvedUnit = d.DeliveryQuantityUnit || d.UnitOfMeasure || d.BaseUnit;
+        }
       }
     } catch (_) {}
 
@@ -339,6 +343,9 @@ class GoodsReceiptAdapter {
           resolvedSupplier = po.Supplier || '';
           resolvedSupplierName = po.SupplierName || '';
           resolvedSupplierCity = po.SupplierCityName || '';
+          if (po.OrderQuantityUnit || po.PurchaseOrderQuantityUnit || po.BaseUnit || po.UnitOfMeasure) {
+            resolvedUnit = po.OrderQuantityUnit || po.PurchaseOrderQuantityUnit || po.BaseUnit || po.UnitOfMeasure;
+          }
 
           // Look for an open Inbound Delivery for this PO
           try {
@@ -550,6 +557,8 @@ class GoodsReceiptAdapter {
       batchStatusText = topBatch.StatusText;
     }
 
+    const effectiveUnit = resolvedUnit || (storageLocations.length > 0 && storageLocations[0].BaseUnit) || (batches.length > 0 && batches[0].Unit) || '';
+
     return {
       StorageUnit: resolvedDelivery || sCleanScan,
       ScannedBarcode: sCleanScan,
@@ -571,7 +580,7 @@ class GoodsReceiptAdapter {
       BatchStatusState: batchStatusState,
       BatchStatusText: batchStatusText,
       Quantity: 10,
-      Unit: 'KG',
+      Unit: effectiveUnit,
       Supplier: resolvedSupplier,
       SupplierName: resolvedSupplierName,
       SupplierCityName: resolvedSupplierCity,
@@ -645,25 +654,37 @@ class GoodsReceiptAdapter {
 
     let items = [];
     if (Array.isArray(payload.Items) && payload.Items.length > 0) {
-      items = payload.Items.map((it, idx) => ({
-        InboundDelivery: sDoc,
-        DeliveryDocumentItem: it.DeliveryDocumentItem
-          ? String(it.DeliveryDocumentItem).padStart(6, '0')
-          : String((idx + 1) * 10).padStart(6, '0'),
-        SourceOfGR: sourceOfGR,
-        Material: it.Material || Material,
-        Plant: it.Plant || Plant,
-        StorageLocation: it.StorageLocation || StorageLocation,
-        Batch: it.Batch || Batch || '',
-        QuantityInEntryUnit: String(it.Quantity || nQty),
-        EntryUnit: it.Unit || payload.Unit || 'KG',
-        OpenQuantity: String(it.Quantity || nQty),
-        UnitOfMeasure: it.Unit || payload.Unit || 'KG',
-        GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || '101',
-        GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '0000',
-        DocumentItemText: it.DocumentItemText || ''
-      }));
+      items = payload.Items.map((it, idx) => {
+        const itemUnit = it.Unit || it.EntryUnit || it.UnitOfMeasure || payload.Unit || payload.EntryUnit || payload.UnitOfMeasure;
+        if (!itemUnit || !String(itemUnit).trim()) {
+          throw new Error(`Unit of Measure (EntryUnit) is required for Goods Receipt item ${it.DeliveryDocumentItem || idx + 1}`);
+        }
+        const cleanUnit = String(itemUnit).trim().toUpperCase();
+        return {
+          InboundDelivery: sDoc,
+          DeliveryDocumentItem: it.DeliveryDocumentItem
+            ? String(it.DeliveryDocumentItem).padStart(6, '0')
+            : String((idx + 1) * 10).padStart(6, '0'),
+          SourceOfGR: sourceOfGR,
+          Material: it.Material || Material,
+          Plant: it.Plant || Plant,
+          StorageLocation: it.StorageLocation || StorageLocation,
+          Batch: it.Batch || Batch || '',
+          QuantityInEntryUnit: String(it.Quantity || nQty),
+          EntryUnit: cleanUnit,
+          OpenQuantity: String(it.Quantity || nQty),
+          UnitOfMeasure: cleanUnit,
+          GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || '101',
+          GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '0000',
+          DocumentItemText: it.DocumentItemText || ''
+        };
+      });
     } else {
+      const itemUnit = payload.Unit || payload.EntryUnit || payload.UnitOfMeasure;
+      if (!itemUnit || !String(itemUnit).trim()) {
+        throw new Error('Unit of Measure (EntryUnit) is required for Goods Receipt');
+      }
+      const cleanUnit = String(itemUnit).trim().toUpperCase();
       items = [
         {
           InboundDelivery: sDoc,
@@ -674,9 +695,9 @@ class GoodsReceiptAdapter {
           StorageLocation: StorageLocation,
           Batch: Batch || '',
           QuantityInEntryUnit: String(nQty),
-          EntryUnit: payload.Unit || 'KG',
+          EntryUnit: cleanUnit,
           OpenQuantity: String(nQty),
-          UnitOfMeasure: payload.Unit || 'KG',
+          UnitOfMeasure: cleanUnit,
           GoodsMovementType: payload.GoodsMovementType || '101',
           GoodsMovementReasonCode: payload.GoodsMovementReasonCode || '0000',
           DocumentItemText: payload.DocumentItemText || ''

@@ -56,12 +56,18 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
             ? String(item.SalesInquiryItem).padStart(6, '0')
             : String((index + 1) * 10).padStart(6, '0');
 
+        const itemUnit = item.OrderQuantityUnit || item.SalesUnit || item.UnitOfMeasure || item.BaseUnit;
+        if (!itemUnit || !String(itemUnit).trim()) {
+            throw new Error(`OrderQuantityUnit is required for item ${itemNumber}`);
+        }
+        const cleanUnit = String(itemUnit).trim().toUpperCase();
+
         const s4Item = {
             SalesInquiryItem: itemNumber,
             Material: String(item.Material || '').trim(),
             SalesInquiryItemText: item.SalesInquiryItemText ? String(item.SalesInquiryItemText).trim() : '',
             OrderQuantity: String(parseFloat(item.OrderQuantity || 0).toFixed(3)),
-            OrderQuantityUnit: String(item.OrderQuantityUnit || 'PC').trim().toUpperCase(),
+            OrderQuantityUnit: cleanUnit,
             NetPriceAmount: item.NetPriceAmount !== undefined ? String(parseFloat(item.NetPriceAmount || 0).toFixed(2)) : '0.00',
             NetAmount: item.NetAmount !== undefined ? String(parseFloat(item.NetAmount || 0).toFixed(2)) : '0.00',
             TransactionCurrency: s4Header.TransactionCurrency
@@ -130,13 +136,19 @@ function mapToS4OrderPayload(header, items, _options = {}) {
             ? String(item.SalesOrderItem || item.SalesInquiryItem).padStart(6, '0')
             : String((index + 1) * 10).padStart(6, '0');
 
+        const itemUnit = item.OrderQuantityUnit || item.SalesUnit || item.UnitOfMeasure || item.BaseUnit;
+        if (!itemUnit || !String(itemUnit).trim()) {
+            throw new Error(`OrderQuantityUnit is required for item ${itemNumber}`);
+        }
+        const cleanUnit = String(itemUnit).trim().toUpperCase();
+
         const s4Item = {
             SalesOrderItem: itemNumber,
             SalesInquiryItem: itemNumber,
             Material: String(item.Material || '').trim(),
             SalesOrderItemText: item.SalesOrderItemText || item.SalesInquiryItemText ? String(item.SalesOrderItemText || item.SalesInquiryItemText).trim() : '',
             OrderQuantity: String(parseFloat(item.OrderQuantity || 0).toFixed(3)),
-            OrderQuantityUnit: String(item.OrderQuantityUnit || 'PC').trim().toUpperCase(),
+            OrderQuantityUnit: cleanUnit,
             NetPriceAmount: item.NetPriceAmount !== undefined ? String(parseFloat(item.NetPriceAmount || 0).toFixed(2)) : '0.00',
             NetAmount: item.NetAmount !== undefined ? String(parseFloat(item.NetAmount || 0).toFixed(2)) : '0.00',
             TransactionCurrency: s4Header.TransactionCurrency,

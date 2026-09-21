@@ -157,8 +157,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
 
         // Fetch live packaging units (MARM)
         let packagingUnits = await getPackagingUnitsFn(r.Product);
-        if (!packagingUnits || packagingUnits.length === 0) {
-          const baseUnit = r.BaseUnit || 'PC';
+        const baseUnit = r.BaseUnit || r.ResvnItemComponentUnit || r.EntryUnit || r.UnitOfMeasure || '';
+        if ((!packagingUnits || packagingUnits.length === 0) && baseUnit) {
           packagingUnits = [
             {
               Unit: baseUnit,
@@ -170,6 +170,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               Barcode: `${r.Product}-${baseUnit}`
             }
           ];
+        } else if (!packagingUnits) {
+          packagingUnits = [];
         }
 
         // Batch status evaluation if item has a pre-assigned batch
@@ -200,7 +202,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           ExpiryDate: expiryDate,
           BatchStatusState: batchStatus.StatusState,
           BatchStatusText: batchStatus.StatusText,
-          Unit: r.BaseUnit || 'PC',
+          Unit: baseUnit,
           RequiredQty: reqQty,
           WithdrawnQty: wdnQty,
           OpenQty: openQty,

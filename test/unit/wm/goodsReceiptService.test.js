@@ -332,8 +332,20 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Plant: '1120',
                 StorageLocation: 'CS01',
                 Batch: 'IN25000133',
-                Quantity: 10
+                Quantity: 10,
+                Unit: 'KG'
             })).rejects.toThrow(/Posting Goods Receipt for Inbound Delivery '180000001' via MMIM_GR4PO_DL_SRV failed/);
+        });
+
+        it('should throw validation error when Unit is missing on postGoodsReceipt', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceipt({
+                StorageUnit: '180000001',
+                DeliveryDocument: '180000001',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 10
+            })).rejects.toThrow(/Unit of Measure \(EntryUnit\) is required for Goods Receipt/);
         });
 
         it('should construct MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers deep insert payload and return posted MaterialDocument', async () => {
@@ -403,7 +415,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 5
+                Quantity: 5,
+                Unit: 'KG'
             });
 
             expect(result.Success).toBe(true);
@@ -426,7 +439,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 20
+                Quantity: 20,
+                Unit: 'KG'
             });
 
             expect(postSpy).toHaveBeenCalledWith(
@@ -469,7 +483,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 5
+                Quantity: 5,
+                Unit: 'KG'
             })).rejects.toThrow('Purchase order 0001800000 was already changed');
 
             postSpy.mockRestore();
@@ -488,7 +503,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000045',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 5
+                Quantity: 5,
+                Unit: 'KG'
             })).rejects.toThrow('SAP did not generate or return a material document number.');
 
             postSpy.mockRestore();
@@ -514,7 +530,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Material: '1000000562',
                 Plant: '1120',
                 StorageLocation: 'CS01',
-                Quantity: 1
+                Quantity: 1,
+                Unit: 'KG'
             });
 
             expect(result.Success).toBe(true);

@@ -218,7 +218,7 @@ class GoodsIssueHandler {
                 OrderNo,
                 Material: it.Material,
                 IssueQty: Number(it.IssueQty) || 0,
-                Unit: it.Unit || 'PC',
+                Unit: it.Unit || it.EntryUnit || it.BaseUnit || '',
                 Batch: it.Batch,
                 DifferenceQty: Number(it.DifferenceQty) || 0,
                 DifferenceReason: it.DifferenceReason,

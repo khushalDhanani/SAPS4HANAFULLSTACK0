@@ -1054,6 +1054,18 @@ class SalesInquiryAdapter {
     const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || s4Config.getInquiryType()).trim();
     const isOrder = effectiveDocType !== 'ZIN';
 
+    // Upfront item unit validation for all document types
+    if (Array.isArray(items) && items.length > 0) {
+      for (let idx = 0; idx < items.length; idx++) {
+        const itm = items[idx];
+        const lineNum = itm.SalesOrderItem || itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
+        const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
+        if (!itemUnit || !String(itemUnit).trim()) {
+          throw new Error(`Order quantity unit (SalesUnit) is required for item ${lineNum}`);
+        }
+      }
+    }
+
     // -------------------------------------------------------------------------
     // Order Branch: OData Deep Insert
     // -------------------------------------------------------------------------
@@ -1072,10 +1084,16 @@ class SalesInquiryAdapter {
           const _lineNum = itm.SalesOrderItem || itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
           const resolvedMaterial = await this.resolveMaterial(itm.Material);
 
+          const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
+          if (!itemUnit || !String(itemUnit).trim()) {
+            throw new Error(`Order quantity unit (SalesUnit) is required for item ${_lineNum}`);
+          }
+          const cleanItemUnit = String(itemUnit).trim().toUpperCase();
+
           const itemObj = {
             MaterialID: resolvedMaterial || itm.Material || '',
             OrderQty: String(qty.toFixed(3)),
-            SalesUnit: itm.OrderQuantityUnit || 'PC'
+            SalesUnit: cleanItemUnit
           };
           if (itm.Plant && String(itm.Plant).trim() !== '') {
             itemObj.Plant = String(itm.Plant).trim().toUpperCase();
@@ -1093,7 +1111,7 @@ class SalesInquiryAdapter {
                 AmountInternal: String(effectivePrice.toFixed(2)),
                 RateUnitExternal: header.TransactionCurrency || s4Config.getCurrency(),
                 PriceUnit: '1.000',
-                UnitOfMeasure: itm.OrderQuantityUnit || 'PC'
+                UnitOfMeasure: cleanItemUnit
               }
             ];
           }
@@ -1219,12 +1237,19 @@ class SalesInquiryAdapter {
 
         const lineNum = itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
         const resolvedMaterial = await this.resolveMaterial(itm.Material);
+
+        const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
+        if (!itemUnit || !String(itemUnit).trim()) {
+          throw new Error(`Order quantity unit (SalesUnit) is required for item ${lineNum}`);
+        }
+        const cleanItemUnit = String(itemUnit).trim().toUpperCase();
+
         const itemPayload = {
           SalesOrderID: sNewInquiryId,
           ItemID: lineNum,
           MaterialID: resolvedMaterial || itm.Material || '',
           OrderQty: String(qty.toFixed(3)),
-          SalesUnit: itm.OrderQuantityUnit || 'PC'
+          SalesUnit: cleanItemUnit
         };
         // Plant is on the ZIN item incompletion procedure; the Item entity carries it.
         if (itm.Plant && String(itm.Plant).trim() !== '') {
@@ -1270,7 +1295,7 @@ class SalesInquiryAdapter {
             AmountInternal: String(effectivePrice.toFixed(2)),
             RateUnitExternal: header.TransactionCurrency || s4Config.getCurrency(),
             PriceUnit: '1.000',
-            UnitOfMeasure: itm.OrderQuantityUnit || 'PC'
+            UnitOfMeasure: cleanItemUnit
           };
           try {
             await executeFn(destination, {

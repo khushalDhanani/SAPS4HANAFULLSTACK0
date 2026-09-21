@@ -161,5 +161,16 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
             expect(s4.header.TotalNetAmount).toBe('1500');
         });
+        test('should throw error if an item is missing OrderQuantityUnit in mapToS4InquiryPayload', () => {
+            const header = {
+                SalesInquiryType: 'ZIN',
+                SoldToParty: '10135'
+            };
+            const items = [{
+                Material: '4000000123',
+                OrderQuantity: 10
+            }];
+            expect(() => mapToS4InquiryPayload(header, items)).toThrow(/OrderQuantityUnit is required for item 000010/);
+        });
     });
 });

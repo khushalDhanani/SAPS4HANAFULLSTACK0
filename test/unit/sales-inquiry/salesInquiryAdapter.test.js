@@ -226,7 +226,8 @@ describe('Unit: Sales Inquiry Adapter', () => {
                 SalesInquiryItem: '000010',
                 Material: '4000000091',
                 SalesInquiryItemText: 'High Grade Chemical Reagent',
-                OrderQuantity: 5
+                OrderQuantity: 5,
+                OrderQuantityUnit: 'PC'
             }
         ];
 
@@ -275,7 +276,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
     test('should throw PartialSalesInquiryError with created document number when item creation fails midway', async () => {
         const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
-        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5 }];
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, OrderQuantityUnit: 'PC' }];
 
         const mockExecuteHttpRequest = jest.fn()
             .mockResolvedValueOnce({
@@ -318,7 +319,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
     test('should throw PartialSalesInquiryError with created document number when price condition creation fails midway', async () => {
         const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135', TransactionCurrency: 'INR' };
-        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, NetPriceAmount: 250.00 }];
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, OrderQuantityUnit: 'PC', NetPriceAmount: 250.00 }];
 
         const mockExecuteHttpRequest = jest.fn()
             .mockResolvedValueOnce({
@@ -365,7 +366,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
     test('should not set Plant on item payload when item has no Plant', async () => {
         const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
-        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1 }];
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, OrderQuantityUnit: 'PC' }];
 
         const mockExecuteHttpRequest = jest.fn()
             .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000560' } } })
@@ -382,7 +383,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
     test('should preserve user-supplied Plant on item payload', async () => {
         const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
-        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, Plant: '1108' }];
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, OrderQuantityUnit: 'PC', Plant: '1108' }];
 
         const mockExecuteHttpRequest = jest.fn()
             .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000561' } } })
@@ -395,6 +396,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
         const itemCall = mockExecuteHttpRequest.mock.calls[1];
         expect(itemCall[1].data.Plant).toBe('1108');
+    });
+
+    test('should throw error when item is missing OrderQuantityUnit in createSalesDocument', async () => {
+        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1 }];
+        await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' }
+        })).rejects.toThrow(/Order quantity unit \(SalesUnit\) is required for item 000010/);
     });
 
     test('should query Finished Goods materials with ZFRT/FERT condition and map MaterialName', async () => {

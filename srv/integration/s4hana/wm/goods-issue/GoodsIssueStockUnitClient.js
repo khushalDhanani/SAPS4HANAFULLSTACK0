@@ -605,13 +605,13 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit || 0);
     const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0);
     const openQty = Math.max(0, reqQty - wdnQty);
-    const resvUnit = resvItem.BaseUnit || 'KG';
+    const resvUnit = resvItem.BaseUnit || resvItem.ResvnItemComponentUnit || resvItem.EntryUnit || resvItem.UnitOfMeasure || '';
 
     // ──────────────────────────────────────────────────────────
     // STEP 2: Read actual current stock and authentic batches from SAP
     // ──────────────────────────────────────────────────────────
     let currentStock = 0;
-    let baseUnit = resvUnit || 'KG';
+    let baseUnit = resvUnit;
 
     if (resvPlant && resvSLoc) {
       try {

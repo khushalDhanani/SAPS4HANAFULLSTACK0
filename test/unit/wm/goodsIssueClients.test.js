@@ -670,7 +670,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         _post: mockPost
       };
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
-      const items = [{ ReservationItem: '1', Material: 'MAT01', IssueQty: 10 }];
+      const items = [{ ReservationItem: '1', Material: 'MAT01', IssueQty: 10, Unit: 'KG' }];
 
       try {
         await postingClient.submitGoodsIssueRequest('18025', '1000040', items);
@@ -682,6 +682,12 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         expect(err.message).toContain('it IS registered and this is an authorization failure');
         expect(err.message).toContain('Security must grant S_SERVICE');
       }
+    });
+
+    it('should throw validation error when an item is missing Unit in postGoodsIssue', async () => {
+      const postingClient = new GoodsIssuePostingClient();
+      await expect(postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, ''))
+        .rejects.toThrow(/Unit of measure \(EntryUnit\) is required for Goods Issue/);
     });
 
     it('should distinguish 403 from 404 in postGoodsIssue and specify required SAP teams', async () => {

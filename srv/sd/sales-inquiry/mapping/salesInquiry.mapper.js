@@ -50,7 +50,7 @@ function normalizeSalesDocumentData(data, options = {}) {
             SalesInquiryItemText: itemText ? String(itemText).trim() : '',
             SalesOrderItemText: itemText ? String(itemText).trim() : '',
             OrderQuantity: qty,
-            OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : 'PC',
+            OrderQuantityUnit: (item.OrderQuantityUnit || item.SalesUnit || item.UnitOfMeasure || item.BaseUnit) ? String(item.OrderQuantityUnit || item.SalesUnit || item.UnitOfMeasure || item.BaseUnit).trim().toUpperCase() : '',
             NetPriceAmount: price,
             NetAmount: net,
             TransactionCurrency: currency,

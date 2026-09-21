@@ -45,13 +45,19 @@ function normalizePurchaseOrderData(data, context = {}) {
             ? String(item.RequisitionerName).trim()
             : defaultRequisitioner;
 
+        const rawUnit = item.UnitOfMeasure || item.OrderQuantityUnit || item.BaseUnit || item.Unit;
+        if (!rawUnit || String(rawUnit).trim() === '') {
+            throw new Error(`UnitOfMeasure is required for item ${itemNo}`);
+        }
+        const unitOfMeasure = String(rawUnit).trim().toUpperCase();
+
         return {
             PurchaseOrderItem: itemNo,
             Material: String(item.Material || '').trim(),
             Plant: String(item.Plant || '').trim(),
             StorageLocation: item.StorageLocation ? String(item.StorageLocation).trim() : undefined,
             OrderQuantity: String(item.OrderQuantity).trim(),
-            UnitOfMeasure: String(item.UnitOfMeasure || 'PC').trim().toUpperCase(),
+            UnitOfMeasure: unitOfMeasure,
             NetPriceAmount: price.toFixed(2),
             NetAmount: item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount,
             RequisitionerName: itemRequisitioner,

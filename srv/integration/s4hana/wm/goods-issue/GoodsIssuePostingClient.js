@@ -34,6 +34,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       throw err;
     }
 
+    const effectiveUnit = unit ? String(unit).trim().toUpperCase() : '';
+    if (!effectiveUnit) {
+      const err = new Error('Unit of measure (EntryUnit) is required for Goods Issue');
+      err.status = 400;
+      throw err;
+    }
+
     // SLED Hard-Stop Validation: Block expired, deleted, or restricted batch
     const effectiveBatch = batch ? String(batch).trim() : '';
     if (effectiveBatch) {
@@ -105,7 +112,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
               {
                 Material: material || '',
                 GoodsMovementType: '261',
-                EntryUnit: unit || 'KG',
+                EntryUnit: effectiveUnit,
                 QuantityInEntryUnit: String(nQty),
                 Reservation: sReserv,
                 ReservationItem: sItem,
@@ -214,14 +221,20 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV with multi-line deep insert
       try {
         const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
-        const v2Items = items.map(item => {
+        const v2Items = items.map((item, idx) => {
           const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
           const sItem = rawItem ? rawItem.padStart(4, '0') : '';
           const nQty = Number(item.IssueQty);
+          const itemUnit = String(item.Unit || item.EntryUnit || item.BaseUnit || '').trim().toUpperCase();
+          if (!itemUnit) {
+            const err = new Error(`Unit of measure (EntryUnit) is required for Goods Issue item ${sItem || idx + 1}`);
+            err.status = 400;
+            throw err;
+          }
           return {
             Material: item.Material || '',
             GoodsMovementType: '261',
-            EntryUnit: item.Unit || item.EntryUnit || 'KG',
+            EntryUnit: itemUnit,
             QuantityInEntryUnit: String(nQty),
             Reservation: String(reservationNo || item.ReservationNo || '').trim(),
             ReservationItem: sItem,

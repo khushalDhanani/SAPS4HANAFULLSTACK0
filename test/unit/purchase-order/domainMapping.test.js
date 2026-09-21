@@ -18,6 +18,7 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
                     Material: ' TG11 ',
                     Plant: ' 1010 ',
                     OrderQuantity: '5',
+                    UnitOfMeasure: 'pc',
                     NetPriceAmount: '20'
                 }
             ]
@@ -49,6 +50,7 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
                     Material: 'TG11',
                     Plant: '1010',
                     OrderQuantity: '5',
+                    UnitOfMeasure: 'PC',
                     NetPriceAmount: '20'
                 }
             ]
@@ -67,6 +69,7 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
                     Material: 'TG11',
                     Plant: '1010',
                     OrderQuantity: '2',
+                    UnitOfMeasure: 'PC',
                     NetPriceAmount: '15.50',
                     RequisitionerName: 'Buyer 2',
                     NetAmount: '31.00'
@@ -78,6 +81,21 @@ describe('Unit: Domain Mapping (purchaseOrder.mapper)', () => {
         expect(result.items[0].PurchaseOrderItem).toBe('00020');
         expect(result.items[0].RequisitionerName).toBe('Buyer 2');
         expect(result.items[0].NetAmount).toBe('31.00');
+    });
+
+    it('should throw an error if an item is missing UnitOfMeasure', () => {
+        const rawData = {
+            header: validPayload.header,
+            items: [
+                {
+                    Material: 'TG11',
+                    Plant: '1010',
+                    OrderQuantity: '5',
+                    NetPriceAmount: '20'
+                }
+            ]
+        };
+        expect(() => normalizePurchaseOrderData(rawData)).toThrow(/UnitOfMeasure is required for item 10/);
     });
 
     it('should return input as-is when input is falsy or invalid', () => {
