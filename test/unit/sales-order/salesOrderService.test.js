@@ -85,6 +85,23 @@ describe('Unit: SalesOrderService Handler', () => {
             expect(salesInquiryAdapter.createSalesOrder).toHaveBeenCalledTimes(1);
         });
 
+        test('rejects with HTTP 502 when SAP returns no SalesOrder document number', async () => {
+            salesInquiryAdapter.createSalesOrder.mockResolvedValue({
+                SalesOrder: '',
+                SalesDocument: '',
+                TotalNetAmount: '1250.00'
+            });
+
+            const req = {
+                data: validOrderPayload,
+                user: { id: 'salesrep1' },
+                error: jest.fn()
+            };
+
+            await handlers.createSalesOrder(req);
+            expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('no Sales Order document number was returned by SAP'));
+        });
+
         test('rejects invalid payload missing SoldToParty with HTTP 400', async () => {
             const invalidPayload = {
                 header: {

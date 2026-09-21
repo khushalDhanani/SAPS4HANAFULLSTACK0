@@ -63,6 +63,23 @@ describe('Unit: createSalesInquiry handler', () => {
         expect(salesInquiryAdapter.createSalesInquiry).toHaveBeenCalledTimes(1);
     });
 
+    test('rejects with HTTP 502 when SAP returns no SalesInquiry document number', async () => {
+        salesInquiryAdapter.createSalesInquiry.mockResolvedValue({
+            SalesInquiry: '',
+            SalesDocument: '',
+            TotalNetAmount: '2500.00'
+        });
+
+        const req = {
+            data: validPayload,
+            user: { id: 'alice' },
+            error: jest.fn()
+        };
+
+        await handler()(req);
+        expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('no Sales Inquiry document number was returned by SAP'));
+    });
+
     test('rejects invalid payload with HTTP 400', async () => {
         const req = {
             data: { header: null, items: [] },

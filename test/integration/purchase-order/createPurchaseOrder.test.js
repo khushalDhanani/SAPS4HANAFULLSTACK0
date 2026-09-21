@@ -28,6 +28,21 @@ describe('Integration: Create Purchase Order Action', () => {
         expect(createPOSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('should reject with 502 Bad Gateway when SAP returns no PurchaseOrder document number', async () => {
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockResolvedValueOnce({
+            PurchaseOrder: '',
+            IsActiveEntity: true
+        });
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+            expect(true).toBe(false); // Should not reach here
+        } catch (err) {
+            expect(err.response.status).toBe(502);
+            expect(err.response.data.error.message).toContain('no Purchase Order document number was returned');
+        }
+    });
+
     it('should reject with 400 Bad Request when payload is missing required header fields', async () => {
         const invalidPayload = {
             header: {

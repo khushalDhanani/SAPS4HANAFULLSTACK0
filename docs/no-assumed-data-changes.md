@@ -37,7 +37,7 @@ Rule: missing value -> show empty / block Save with a field error. Never substit
 | 3.6 | Customer currency = config / last inquiry; `Country \|\| 'IN'`; UI returns `Currency: "INR"` on failure | `SalesInquiryAdapter.js` getCustomerDefaults (lines ~23, 43, 62), `SalesOrderService.js:307-337` | `I_Customer_VH.Country`, `.CityName`, `.CustomerName` (verified, 891 rows). Customer sales-area currency: NOT in `I_Customer_VH` (verified absent); source not verified in this repo. | Remove `'IN'` and both `"INR"` returns. Leave currency empty before save; after create show `Header.DocumentCurrency` (SAP determines it). |
 | 3.7 | Ship-to = sold-to customer | `SalesOrderService.js:326-337` | Not verified before create. After create: `LORD_ODATA_ORDER_SRV/HeaderPartnerSet` (entity exists, verified). | Leave empty; SAP determines partners at create. Show real partners from `HeaderPartnerSet` afterwards. |
 | 3.8 | Requested delivery date = today + 7 | `SalesOrderModel.js:54,120`, `SalesOrderService.js:352`, `SalesInquiryAdapter.js:804` | none — it is a user decision | Remove; leave empty, required field. |
-| 3.9 | `'Order Created'`, `'PO Created but no ID returned'` | `salesOrder.handler.js:66`, `purchaseOrder.handler.js:59` | SAP's returned document number only | No number = `req.error(502, ...)`, same as outbound delivery. |
+| 3.9 | `'Order Created'`, `'PO Created but no ID returned'`, `'Inquiry Created'` | `salesOrder.handler.js:66`, `purchaseOrder.handler.js:59`, `salesInquiry.handler.js:69` | SAP's returned document number only | RESOLVED: No number = `req.error(502, ...)`. Fake success text completely eliminated. |
 
 ## 4. Outbound Delivery
 

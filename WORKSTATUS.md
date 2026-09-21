@@ -2704,17 +2704,42 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 — Eliminate Fake Success Strings on Document Creation & Return 502 Errors (Audit Item 13)
+- **Change**: Eliminated synthetic fake success strings (`'PO Created but no ID returned'`, `'Order Created'`, and `'Inquiry Created'`) returned as document numbers when SAP S/4HANA returns no document ID. Previously, if S/4HANA responded without a document number, the backend returned string literals which the UI treated as valid document numbers, causing misleading success dialogs ("Purchase Order Created: PO Created but no ID returned", "Sales Order Order Created has been successfully created").
+  1. **Backend Handlers**:
+     - `srv/mm/purchase-order/handlers/purchaseOrder.handler.js`: Replaced `return result.PurchaseOrder || 'PO Created but no ID returned';` with strict validation. If `poNumber` is falsy or blank, logs error and returns `req.error(502, 'S/4HANA Purchase Order creation succeeded but no Purchase Order document number was returned by SAP.')`.
+     - `srv/sd/sales-order/handlers/salesOrder.handler.js`: Replaced `return result.SalesOrder || result.SalesDocument || 'Order Created';` with strict validation. If `orderId` is falsy or blank, logs error and returns `req.error(502, 'S/4HANA Sales Order creation succeeded but no Sales Order document number was returned by SAP.')`.
+     - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Replaced `return result.SalesInquiry || 'Inquiry Created';` with strict validation. If `inquiryId` is falsy or blank, logs error and returns `req.error(502, 'S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.')`.
+  2. **Automated Tests**:
+     - `test/integration/purchase-order/createPurchaseOrder.test.js`: Added integration test asserting `502 Bad Gateway` when SAP returns no `PurchaseOrder` document number.
+     - `test/unit/sales-order/salesOrderService.test.js`: Added unit test asserting `502 Bad Gateway` when SAP returns no `SalesOrder` document number.
+     - `test/unit/sales-inquiry/createSalesInquiryHandler.test.js`: Added unit test asserting `502 Bad Gateway` when SAP returns no `SalesInquiry` document number.
+  3. **Documentation**:
+     - `docs/data-lineage-audit.md`: Marked audit item 13 as RESOLVED.
+     - `docs/no-assumed-data-changes.md`: Marked item 3.9 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/integration/purchase-order/createPurchaseOrder.test.js test/unit/sales-order/salesOrderService.test.js test/unit/sales-inquiry/createSalesInquiryHandler.test.js`: **3 passed, 3 total test suites; 32 passed, 32 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 931 passed, 931 total tests (100% green)** in 80.7 s.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 979 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **71 passed, 71 total test suites; 928 passed, 928 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 931 passed, 931 total tests (100% green)**.
+  - `npx jest test/integration/purchase-order/`: **4 passed, 4 total test suites; 28 passed, 28 total tests (100% green)**.
   - `npx jest test/unit/le/`: **4 passed, 4 total test suites; 48 passed, 48 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 144 passed, 144 total tests (100% green)**.
-  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 145 passed, 145 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 61 passed, 61 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Eliminate Fake Success Strings on Creation (Audit Row 13)**:
+  - Fake success strings (`'PO Created but no ID returned'`, `'Order Created'`, `'Inquiry Created'`) eliminated across PO, SO, and Inquiry handlers.
+  - When SAP S/4HANA returns no document number upon document creation, backend strictly rejects with HTTP 502 and diagnostic details.
 - **Shipping Point List and Names Bound to ShippingPointVH (Audit Row 32)**:
   - Literal table `DEFAULT_SHIPPING_POINTS` with invented names eliminated from `OrdersDueForDelivery.controller.js`.
   - Create delivery dialog ComboBox bound directly to `outboundDelivery>/ShippingPointVH`, displaying authentic S/4HANA `ShippingPoint` and `ShippingPointName` from `C_ShippingPointVH`.

@@ -66,7 +66,13 @@ function registerSalesInquiryHandlers(srv) {
 
         try {
             const result = await salesInquiryAdapter.createSalesInquiry(s4Payload.header, s4Payload.items, { user: authenticatedUser });
-            return result.SalesInquiry || 'Inquiry Created';
+            const inquiryId = result && (result.SalesInquiry || result.SalesDocument || result.SalesOrderID);
+            if (!inquiryId || String(inquiryId).trim() === '') {
+                LOG.error('S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.');
+                req.error(502, 'S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.');
+                return;
+            }
+            return String(inquiryId).trim();
         } catch (error) {
             LOG.error('Error creating Sales Inquiry:', error.message);
             if (error.SalesInquiry || error.documentNumber || error.name === 'PartialSalesInquiryError') {

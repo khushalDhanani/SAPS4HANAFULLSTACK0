@@ -56,7 +56,13 @@ function registerPurchaseOrderHandlers(srv) {
         // Step D: Orchestrate draft & activation via integration adapter
         try {
             const result = await purchaseOrderAdapter.createPurchaseOrder(s4Payload);
-            return result.PurchaseOrder || 'PO Created but no ID returned';
+            const poNumber = result && (result.PurchaseOrder || result.PurchaseOrderNumber);
+            if (!poNumber || String(poNumber).trim() === '') {
+                LOG.error('S/4HANA PO activation succeeded but no PurchaseOrder document number was returned by SAP.');
+                req.error(502, 'S/4HANA Purchase Order creation succeeded but no Purchase Order document number was returned by SAP.');
+                return;
+            }
+            return String(poNumber).trim();
         } catch (error) {
             const sapError = mapS4Error(error);
             LOG.error(`Error creating PO (${sapError.status}):`, sapError.message);

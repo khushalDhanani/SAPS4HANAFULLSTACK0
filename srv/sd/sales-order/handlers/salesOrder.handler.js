@@ -63,7 +63,13 @@ function registerSalesOrderHandlers(srv) {
 
         try {
             const result = await salesInquiryAdapter.createSalesOrder(s4Payload.header, s4Payload.items, { user: authenticatedUser });
-            return result.SalesOrder || result.SalesDocument || 'Order Created';
+            const orderId = result && (result.SalesOrder || result.SalesDocument || result.SalesOrderID);
+            if (!orderId || String(orderId).trim() === '') {
+                LOG.error('S/4HANA Sales Order creation succeeded but no Sales Order document number was returned by SAP.');
+                req.error(502, 'S/4HANA Sales Order creation succeeded but no Sales Order document number was returned by SAP.');
+                return;
+            }
+            return String(orderId).trim();
         } catch (error) {
             LOG.error('Error creating Sales Order:', error.message);
             if (error.SalesOrder || error.SalesDocument || error.documentNumber) {
