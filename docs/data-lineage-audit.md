@@ -1,0 +1,152 @@
+# Data lineage audit - actual vs assumed data
+
+Snapshot: branch `feature/CL01`, commit `0bb173d` (21-Sep-2026), one uncommitted test file. Scope: `srv/`, `server.js`, `db/`, `config/`, `app/fiori-app/webapp/`, `test/`, `tools/`, `package.json`, env files (keys only), docs. About 30,000 lines read or pattern-scanned; `srv/external/*` (SAP metadata copies) excluded from code findings.
+
+OData source: SAP S/4HANA DS4 client 220 through SAP Gateway (OData V2, one V4 service). The auditor could not call SAP (network policy), so 'live' below means *the code reads it from SAP at request time*, not that a value was observed.
+
+There is no Power Query / ETL layer in this project, and **no budget, forecast, plan or estimate entity is consumed anywhere** (class f = none).
+
+## 1. Data sources
+
+| Source | Where | Notes |
+|---|---|---|
+| SAP OData V2 via `S4HttpClient` (raw paths) | srv/integration/s4hana/** | 21 services, see section 2 |
+| SAP OData V2 via CAP remote services (`cds.connect.to`) | package.json `cds.requires`; adapters | C_PURCHASEORDER_FS_SRV, MM_PUR_PO_MAINT_V2_SRV, SD_F2370_INQY_WL_SRV, SD_F2369_INQY_FS_SRV, SD_F1873_SO_WL_SRV, FAC_GL_JOURNALENTRY_VER_SRV |
+| SAP OData V4 | GoodsIssuePostingClient.js | `zui_gi_order_rsv_o4` - not published in SAP (404) |
+| CAP database | db/wm/goods-issue-queue.cds | Goods Issue dispatch queue only. In-memory SQLite in dev/test, HDI container in production |
+| Configuration constants | package.json `cds.s4` | client 220, plant 1120, sloc CS01, sales org 1000, channel 10, division 52, INR, ZIN, ZDOM, ZPR1, shipping points 1120/1112/1108/1109 |
+| Environment | `.env.local`, `.env.qas` | S4 URL, client, user, password, dev-token flags. `FAC_GL_JOURNALENTRY_VER_SRV` has a non-production default URL `http://localhost:5000` that applies if `S4_DESTINATION_URL` is unset |
+| In-memory caches | TtlCache: 30 s dashboard, 5 min master-data counts, 5 min customer/office/group/inquiry-type/material, 60 s approval map; LORD field list cached for process life | section 3 |
+| Browser storage | AuthService.js / ODataClient.js | session token only, no business data |
+| Test fixtures | test/fixtures/purchase-order/*.json, test/unit/wm/fixtures | referenced from tests only - no runtime reference found |
+| Static analysis files | catalog-*.csv, creatable-services.xlsx, docs/service-map.md | point-in-time scan results (18-21 Sep); not read by the app |
+
+No mock server, no seed CSV, no local JSON model in the UI5 app.
+
+## 2. OData entity sets consumed and their scoping filters
+
+| Service | Entity sets | Scoping `$filter` / `$select` |
+|---|---|---|
+| C_PURCHASEORDER_FS_SRV | C_PurchaseOrderFs, C_PurOrdItemEnh, I_PurchasingDocumentType, I_CurrencyStdVH, I_UnitOfMeasure, I_TaxCode, I_GLAccountStdVH, I_CostCenterVH, I_ProfitCenterStdVH, I_MasterFixedAssetStdVH, I_WBSElementBasicDataStdVH, I_InternalOrderStdVH, C_PurchaseContractValHelp | dashboard: `$inlinecount&$top=1&$select=PurchaseOrder`; doc types filtered by category in service.cds:63 |
+| MM_PUR_PO_MAINT_V2_SRV | C_MM_* value helps, C_PurchasingOrg/GroupValueHelp; PO create | none |
+| SD_F2370_INQY_WL_SRV | C_InquiryWL_F2370, I_Customer_VH, C_SalesOffice/GroupValueHelp, C_SalesInquiryTypeValueHelp, I_SalesOrganization, C_Dischannelvaluehelp, C_OrgDivisionValueHelp, C_SoldToValueHelp, I_CurrencyStdVH | default order CreationDate desc, limit 50 |
+| SD_F2369_INQY_FS_SRV | C_Inquiryfs, C_Inquiryitemfs, I_SalesDocumentType, I_Material | I_Material filtered to types ZFRT, FERT |
+| SD_F1873_SO_WL_SRV | C_SalesOrderWl_F1873, C_SalesDocumentItemWl, C_SalesOrderTypeVH_F1873 | open = `OverallSDProcessStatus ne 'C'`; approval map = `SalesDocApprovalStatus ne '' and ne 'B'`, `$top=1000` |
+| LORD_ODATA_ORDER_SRV | HeaderSet (+ItemSet, PriceCondSet deep insert), $metadata, CheckATP | write + metadata only |
+| LE_SHP_QC_DLVREF_SRV | C_SalesOrderDueForDeliveryVH, C_ShippingPointVH, C_DelivWthRefQuickCreate | shipping point in configured list unless one is given |
+| FAC_GL_JOURNALENTRY_VER_SRV | C_GLJrnlEntryItemToBeVerified | none - entity is itself 'to be verified' items only |
+| MMIM_GR4PO_DL_SRV | HMmimGr4inbdelSet, PoHelpSet, MMIMProductionOrderVH, GR4PO_DL_Headers, GR4PO_DL_Items, Header2Items | by scanned key |
+| UI_RESERVATION_ITM_MNG_V2 | ReservationDocumentItem | `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`; 2,000-row cap |
+| LO_BM_BATCH_SRV | I_Batch | by material (+plant or blank plant) |
+| MMIM_MATERIAL_DATA_SRV | MaterialStorLocHelps, MaterialHeaders/Material2Auoms | 0 rows in SAP per docs/service-map.md |
+| C_STOCKQUANTITYVALUEBYTYPE_CDS | C_STOCKQUANTITYVALUEBYTYPE | material+plant(+sloc), `$top=1` in one caller, first row used in both; no stock-type or batch filter |
+| API_MATERIAL_DOCUMENT_SRV | A_MaterialDocumentHeader | write; service not registered in SAP (403) |
+| ZAPI_GETBUPA_SRV, API_WAREHOUSE, IWFND CATALOGSERVICE | counts / login check | `/$count` |
+
+## 3-4. Data elements
+
+Verdict: **LIVE** = read from SAP at request time and failures are visible; **LIVE-CAVEAT** = from SAP but scoped, truncated, mislabelled or silently emptied; **ASSUMED** = computed, defaulted, hardcoded or borrowed, yet presented as the record's own data.
+
+| # | Data element | File(s):line(s) | Source type | Evidence | Confidence | Recommendation | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | Dashboard: 26 count tiles (POs, suppliers, open/all sales orders, inquiries, customers, reservations, inbound deliveries, master-data counts) | srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js:219-362; webapp/controller/Dashboard.controller.js:113-206 | b - cached OData | Each is `$inlinecount`/`$count` on a real entity set. Cache 30 s (transactional) / 5 min (master data). Failure -> `null` + `unavailable[]`, tile shows Failed, never 0. | High | Keep. Model for the rest of the app. | LIVE |
+| 2 | Dashboard FI tile: value labelled 'FI Documents' under 'Journal Entries' | Dashboard.view.xml:94-100; PurchaseOrderAdapter.js:282 | a - live, label wrong | Count is of `C_GLJrnlEntryItemToBeVerified` = line ITEMS awaiting verification (174,153 on 19-Sep), not FI documents. | High | Relabel 'Items to be verified'. | LIVE-CAVEAT |
+| 3 | Purchase Order worklist + detail rows | srv/mm/purchase-order/service.cds:8-60; handlers/purchaseOrder.handler.js (READ) | a - live | CAP projection on `C_PurchaseOrderFs` / `C_PurOrdItemEnh`, read through remote service. | Med (READ handler not traced line by line) | None. | LIVE |
+| 4 | PO status text (Approved / Draft / In Approval / Rejected) | webapp/model/formatter.js:6-28 | c - derived, defaulted | Heuristic over 5 fields; deletion flag 'L' shown as 'Rejected'; ANY unrecognised status falls through to `return "Approved"`. | High | Show SAP's own status name; unknown -> show the raw code, never 'Approved'. | ASSUMED |
+| 5 | PO KPI 'Total Orders' | BaseController.js:87-89 | a - live | `total` parameter of the list binding ($count). Falls back to loaded-row count if absent. | High | Show '-' when $count is absent. | LIVE |
+| 6 | PO KPI 'Suppliers - Unique vendor partners' | BaseController.js:91-113 | c - page-only, wrong fallback | Distinct suppliers among LOADED rows only; when 0 it returns `iTotal` (the PO count) as the supplier count. | High | Use dashboard `supplierCount` or drop the tile. | ASSUMED |
+| 7 | PO KPI 'Completeness Rate - Fully processed orders' | BaseController.js:100-108 | c - page-only, default 100 | % of LOADED rows with truthy `PurchasingCompletenessStatus`; `100` when no rows are loaded. | High | Compute server-side with a filtered $count, or remove. | ASSUMED |
+| 8 | PO / SD / WM value helps (suppliers, materials, plants, G/L, cost centers, customers, currencies, units ...) | srv/mm/purchase-order/service.cds:63-99; srv/sd/*/service.cds:51-100 | a - live | Read-only projections on SAP value-help entity sets. | High | None. | LIVE |
+| 9 | Sales material value help | SalesInquiryAdapter.js:211-300 (lines 224-228) | a - live, silently scoped | Hard filter to material types `ZFRT`,`FERT`; other materials are invisible with no notice. | High | Move the type list to `cds.s4`; state the scope on screen. | LIVE-CAVEAT |
+| 10 | Supplier defaults on Create PO (currency, payment terms, incoterms) | purchaseOrder.handler.js:68-143; webapp PurchaseOrderService.js:245-280 | c - derived from history | Copied from the first PO SAP returns for that supplier (`limit(1)`, no order) - not supplier master data. `derived:true` is returned but never shown in the UI. | High | Label as 'from last PO' or read supplier purchasing data. | ASSUMED |
+| 11 | PO line 'Net Amount' on create screen | PurchaseOrderModel.js:221-235 | c - local formula | `OrderQuantity x NetPriceAmount` in the browser, before SAP prices the document. | High | Label 'estimate'; show SAP value after save. | ASSUMED |
+| 12 | PO document type default | PurchaseOrderModel.js:114; purchaseOrder.mapper.js:27 | d - hardcoded | `"NB"` in UI and again as server fallback. | High | Require the field. | ASSUMED |
+| 13 | 'PO Created but no ID returned' / 'Order Created' | purchaseOrder.handler.js:59; salesOrder.handler.js:66 | d - fake success text | Returned as the document number when SAP sends none. | High | Return an error (as outbound delivery already does). | ASSUMED |
+| 14 | Sales Inquiry worklist rows | SalesInquiryAdapter.js:428-465 | a - live | `C_InquiryWL_F2370`; errors rethrown as 502/503; default 50 rows sorted by CreationDate desc. | High | None. | LIVE |
+| 15 | Sales Inquiry detail: Sales Office / Sales Group | SalesInquiryAdapter.js:613-700 | c/d - borrowed from other records | If blank on the inquiry: taken from ANOTHER inquiry of the same customer, else the FIRST sales office of the sales area, else the FIRST sales group of that office. Displayed as the document's own values; no marker. | High | Show what SAP holds for the document (blank). Keep suggestions for the create screen only. | ASSUMED |
+| 16 | Sales Inquiry detail: Ship-to party | SalesInquiryAdapter.js:605-608 | d - substituted | `ShipToParty = SoldToParty` when the partner read returned none. | High | Leave blank. | ASSUMED |
+| 17 | Sales Inquiry items: Net Price | SalesInquiryAdapter.js:596-602 | c - derived / default | `NetAmount / OrderQuantity`, else `'0.00'`, when SAP sends no `NetPriceAmount`. | High | Show blank when SAP sends none. | ASSUMED |
+| 18 | Sales Inquiry types list + Active/Inactive status | SalesInquiryAdapter.js:313-420 | b - cached 5 min; status derived | Live `I_SalesDocumentType` / `C_SalesInquiryTypeValueHelp`; status = `IsLocked` mapping; `SDDocumentCategory \|\| 'A'`. | High | Fine; drop the 'A' default. | LIVE |
+| 19 | Sales Order worklist rows | SalesInquiryAdapter.js:726-800 | a - live, unsafe fallback | CDS path honours filter/paging. If it fails, the HTTP fallback requests a fixed `$top=50` with NO filter - the user's search silently returns the unfiltered latest 50. | High | Apply the same filter in the fallback or fail. | LIVE-CAVEAT |
+| 20 | Sales Order / Inquiry KPI 'Total' | SalesOrders.controller.js:116; SalesInquiries.controller.js:87 | a - live | Binding `total` ($count); falls back to loaded rows. | High | Show '-' without $count. | LIVE |
+| 21 | Sales Order / Inquiry KPI 'Open ...' and 'Active Customers' | SalesOrders.controller.js:100-118; SalesInquiries.controller.js:72-89 | c - page-only | Counted over LOADED rows only. Blank status counts as open. 'Open' = A,B,blank for orders; A,blank for inquiries; dashboard uses `ne 'C'` - three definitions. | High | Use the server counts (`getSalesMetrics`) and one definition. | ASSUMED |
+| 22 | Sales order metrics function (open / total) | srv/sd/sales-order/handlers/salesOrder.handler.js:88-96 | d - silent zero | Adapter throws on failure (good); the sales-order handler catches and returns `{0,0}`. The sales-inquiry handler for the same call returns the error. | High | Return the error. | ASSUMED |
+| 23 | Customer defaults on create screens (name, city, country, currency, sales office/group) | SalesInquiryAdapter.js:871-1030 | b + d mix | Name/city live from `I_Customer_VH` (5-min cache). `Country \|\| 'IN'` (lines 913, 932). Currency starts from config. Office/group use the same 'first match' heuristic. `derived` flag never displayed. | High | Remove 'IN'; show suggestions as suggestions. | ASSUMED |
+| 24 | Sales order / inquiry header defaults (type, sales org, channel, division, plant, currency, dates) | SalesInquiryAdapter.js:849-870,1032-1050; SalesOrderModel.js:54-127,475-524; SalesOrderService.js:300-365 | d - config + hardcoded | Server: `cds.s4` config + delivery date today+7. UI: literal `ZDOM`,`1000`,`INR`,`KG`,`1120`, plant `"1000"` in CreateSalesOrder.controller.js:277, `Currency:"INR"` on lookup failure. | High | Already listed in docs/no-assumed-data-changes.md sections 3.2-3.8. | ASSUMED |
+| 25 | Org values written to SAP when the screen sends blank | salesInquiry.mapper.js:64-72; SalesInquiryMapper.js:22-35,99-112; SalesInquiryAdapter.js:1179-1181 | d - config default on write | Sales org / channel / division / currency / doc type filled from `cds.s4` at three layers before POST. | High | Validate and reject blanks. | ASSUMED |
+| 26 | Order total returned after create | SalesInquiryAdapter.js:1223,1392 | c - local formula | `qty x price`; fallback reads `d.NetValue` which does not exist in LORD metadata (real field `NetAmount`). | High | Read `NetAmount`/`TotalAmount`/`DocumentCurrency`. | ASSUMED |
+| 27 | Journal Entry item rows | srv/fi/journal-entry/service.js:10-17 | a - live | Straight pass-through of the query to `FAC_GL_JOURNALENTRY_VER_SRV`. | High | None. | LIVE |
+| 28 | Journal Entries KPI 'Total Documents' and 'G/L Accounts' | JournalEntries.controller.js:22-46 | c - page-only / forced 0 | Total = $count but set to `0` until the list length is final; G/L count = distinct accounts in LOADED rows. Label says documents, rows are line items. | High | Show '-' while unknown; relabel. | ASSUMED |
+| 29 | Orders Due for Delivery rows | OutboundDeliveryAdapter.js:57-135 | a - live | `C_SalesOrderDueForDeliveryVH`; errors mapped and rethrown. | High | None. | LIVE |
+| 30 | Orders Due KPI 'Due Orders' | OrdersDueForDelivery.controller.js:120-134 | a - live, label wrong | Counts rows of a SCHEDULE-LINE level entity (key SalesOrder+Item+ScheduleLine), not orders. | High | Relabel 'Due schedule lines' or count distinct orders server-side. | LIVE-CAVEAT |
+| 31 | Approval status shown on due orders / sales orders | OutboundDeliveryAdapter.js:250-290 | b - cached 60 s | `SD_F1873_SO_WL_SRV` lookup, `$top=1000`. On failure returns the last cache or an EMPTY map -> every order looks approved and the button is enabled (SAP still rejects with V2/478). | High | On failure mark status 'unknown' and disable create. | LIVE-CAVEAT |
+| 32 | Shipping point list and names in create-delivery dialogs | OrdersDueForDelivery.controller.js:24-29,92-105; outboundDelivery.handler.js:60-66 | d - config + hardcoded names | List = `cds.s4.shippingPoints`; names from a literal table ('1112 - Shipping Point 1112'). Real names exist in `C_ShippingPointVH`. | High | Bind the dialog to `ShippingPointVH`. | ASSUMED |
+| 33 | Goods Receipt scan resolution (delivery, PO, items, material, supplier, plant) | GoodsReceiptAdapter.js:400-690 | a - live | Tiered reads of `HMmimGr4inbdelSet`, `PoHelpSet`, `I_Batch`. 13 empty `catch {}` between lookup tiers: a SAP outage ends as 404 'barcode does not exist'. | Med | Distinguish outage from not-found (as GoodsIssueBatchesClient._isOutage does). | LIVE-CAVEAT |
+| 34 | Goods Receipt proposed quantity / open / ordered / unit | GoodsReceiptAdapter.js:255-380,695-740 | a - live (since 208c945) | `GR4PO_DL_Items.OpenQuantity` etc. If the read fails the values are `0`, not unknown. WORKSTATUS records live proof (180000008 -> 1000 KG); not re-run by me. | Med | Return `null` on failed read. | LIVE-CAVEAT |
+| 35 | Goods Receipt storage locations / batches pick lists | GoodsReceiptAdapter.js:140-250 | a - live, silent empty | `return []` on any error. `MaterialStorLocHelps` has 0 rows in SAP (docs/service-map.md) so the location list is always empty. | High | Surface the error; drop the dead source. | LIVE-CAVEAT |
+| 36 | Goods Receipt posting result (material document) | GoodsReceiptAdapter.js:896-930 | a - live | Material document only from SAP response; none -> error. No synthetic number. | High | None. | LIVE |
+| 37 | Goods Issue reservation list | GoodsIssueReservationsClient.js:30-80 | a - live, truncated | Paged read stops at 2,000 items; SAP holds 14,730 open items. `ItemCount` and the list are silently partial. | High | Filter server-side by plant/order before paging, or show 'first 2,000'. | LIVE-CAVEAT |
+| 38 | Goods Issue Required / Withdrawn / Open quantity | GoodsIssueReservationsClient.js:50-55,156-160; GoodsIssueStockUnitClient.js:605-607 | c - derived from live | Open = Required - Withdrawn (live inputs, missing -> 0). Does NOT subtract quantities sitting in the local dispatch queue, and posting to SAP is currently blocked, so issued-but-queued items still show as fully open. | High | Subtract queued quantity or flag lines with queued issues. | LIVE-CAVEAT |
+| 39 | Goods Issue movement type / name | GoodsIssueReservationsClient.js:62-63,209-210; GoodsIssueAdapter.js:402-403; goodsIssue.handler.js:25 | d - default | `\|\| '261'`, `\|\| 'GI for order'`. | High | Show what SAP returns. | ASSUMED |
+| 40 | Goods Issue batch 'Available Stock' and 'Current Stock' / 'SU Stock Qty' | GoodsIssueBatchesClient.js:62-100,150-160; GoodsIssueStockUnitClient.js:612-645,700-702 | c/d - wrong grain + silent zero | One storage-location figure (`MaterialStorLocHelps.CurrentStock` - 0 rows in SAP - else FIRST row of `C_STOCKQUANTITYVALUEBYTYPE`, no batch or stock-type filter) is stamped on EVERY batch as its available stock. Both reads failing -> `0` -> batch shown as empty and unselectable. | High (code) / Low (what row SAP returns first) | Read batch-level stock; unknown must not become 0. | ASSUMED |
+| 41 | Goods Issue batch status / SLED | GoodsIssueBatchesClient.js:140-170; GoodsIssueStockUnitClient.js:706-709; GoodsIssue.controller.js:602 | c - derived, optimistic default | Status from live `ShelfLifeExpirationDate`; missing status defaults to `'VALID'`/`'Success'`; failed lookup shows 'NO SLED'. | High | Missing status -> 'unknown', not VALID. | ASSUMED |
+| 42 | Goods Issue packaging units + their 'Barcode' | GoodsIssueBatchesClient.js:16-45; GoodsIssueReservationsClient.js:160-175 | d - synthesised | Source `MMIM_MATERIAL_DATA_SRV` has 0 rows, so the code builds a 'Base Unit' entry and a barcode string `<material>-<unit>` that exists nowhere in SAP. | High | Remove the synthetic barcode. | ASSUMED |
+| 43 | Goods Issue result 'POSTED_IN_SAP' | GoodsIssue.controller.js:1218-1230 | d - assumed success | Any response without `Queued` is shown as posted with `MaterialDocument \|\| ""` and a default 'posted successfully' message. | High | Require a material document number to show posted. | ASSUMED |
+| 44 | Goods Issue batch submit when SAP posting is unavailable | goodsIssue.handler.js:211-256 | d - mislabelled | Each line returns `Success:true` and `DifferenceCleared:true` (if a difference was entered) although nothing was posted or cleared in SAP; only `AllPosted:false` and a message tell the truth. | High | `Success:false, Queued:true`; never `DifferenceCleared` without SAP. | ASSUMED |
+| 45 | Dispatch queue contents and count | srv/wm/goods-issue/GoodsIssueQueueManager.js; GoodsIssue.controller.js:1251-1262 | local DB, not SAP | CAP database (in-memory SQLite in dev/test, HDI in production). Count falls to `0` on any error. | High | Show '-' on error; label as local. | LIVE-CAVEAT |
+| 46 | System label in user profile | srv/auth-service.js:56,109,123; AuthAdapter.js:139 | d - hardcoded | 'DEV - Client 220' literal; S/4 login path returns 'PRD - Client <n>' for the same DS4 system. | High | Build from `S4_SYSTEM_NAME` / `S4_CLIENT`. | ASSUMED |
+| 47 | 'Actual Picked Quantity' (only field labelled Actual) | i18n.properties:316; ShortPickDialog.fragment.xml:43 | user input | Typed by the clerk; not read from SAP. Correctly a recorded measurement, but not OData. | High | None. | LIVE |
+
+## 5. Keyword sweep (runtime code only)
+
+| Term | srv hits | webapp hits | What they are |
+|---|---|---|---|
+| mock / dummy | 15 | 0 | comments stating the no-mock rule; test hooks in AuthAdapter (`fetchFn`); `GoodsIssueBatchesClient.js:217` comment about unit tests; `GoodsIssueStockUnitClient.js:43` `NODE_ENV === 'test'` guard |
+| sample | 5 | 4 | `SampleMaterial` = first item's material shown as the reservation's material in the value help |
+| placeholder | 0 | 80 | input placeholders only |
+| TODO / FIXME / seed / fixture / estimate / assumption / budget / forecast | 0 | 0 | none |
+| hardcode | 1 | 0 | comment |
+| fallback | 16 | 13 | real fallbacks: sales-order HTTP fallback, supplier defaults, barcode manual entry, shipping points |
+| default | 75 | 63 | config getters and the defaults listed in section 3-4 |
+| plan (excluding 'plant') | 0 | 0 | none |
+| projection | 54 | 0 | CDS `as projection on` - not forecasts |
+| static | 16 | 2 | JS `static` members |
+| actual | 3 | 8 | one UI label: 'Actual Picked Quantity' (user input) |
+
+## 6. Error handling around SAP calls
+
+146 `catch` blocks in `srv/` + `server.js`; 60 do not rethrow. Grouped by what they do:
+
+| Group | Count | Locations | Effect |
+|---|---|---|---|
+| Substitute a value that looks like data | 9 | salesOrder.handler.js:92 (0/0); OutboundDeliveryAdapter.js:283 (stale or empty approval map); GoodsIssueBatchesClient.js:39,75,96,143 and GoodsIssueStockUnitClient.js:627,642 (stock becomes 0, units become synthetic); GoodsIssueReservationsClient.js:188 ('NO SLED') | rows 22, 31, 40, 41, 42 |
+| Return an empty list | 3 | GoodsReceiptAdapter.js:163,249; SalesInquiryAdapter.js:1440 | row 35; 'no data' indistinguishable from 'SAP failed' |
+| Fall through to the next lookup tier | 13 | GoodsReceiptAdapter.js:191,296,345,382,457,497,499,563,565,615,634,662,894 | row 33; an outage ends as 404 'barcode not found' |
+| Switch to another read path | 3 | SalesInquiryAdapter.js:754,816,822 | row 19; fallback drops the user's filter |
+| Leave an enrichment field blank | 6 | SalesInquiryAdapter.js:633,658,706,1004,1008,1072 | honest blank |
+| Report unavailable correctly | 5 | PurchaseOrderAdapter.js:202,255,271 (null + unavailable list); purchaseOrder.handler.js:131 (`derived:false`); goodsIssue.handler.js:239 (`Success:false`) | good pattern |
+| Connection / infrastructure / retry bookkeeping | 21 | S4HttpClient, S4ErrorMapper, AuthAdapter, auth, s4Config, queue manager, SalesInquiryAdapter.js:119,126,133,358,383, GoodsIssueStockUnitClient.js:44,147,364,375,497 | no business value substituted |
+
+UI layer: `_refreshQueueCount` -> 0 on error (GoodsIssue.controller.js:1259); `_loadShippingPoints` swallows the error (OrdersDueForDelivery.controller.js:109); customer / order defaults return literals on error (SalesOrderService.js:300-365).
+
+## Summary
+
+- Only one field in the whole UI is labelled "Actual" ('Actual Picked Quantity'), and it is user input. The meaningful test here is therefore: *is a value presented as SAP's data really SAP's data?*
+- Of 47 data-element groups: **11 are cleanly live (23%)**, **11 are live with a caveat (23%)**, **25 are assumed (53%)**. Grouping is the auditor's; the dashboard row alone covers 26 tiles, so by raw field count the live share is higher. Transaction rows (worklists, item lists, postings) are live; most KPIs, defaults and Goods Issue stock figures are not.
+- No budget / forecast / plan entity, no mock server, no seed data, no fixture in a runtime path.
+
+Top 3 riskiest:
+1. **Goods Issue stock figures (row 40)** - one storage-location number (or the first row of an unfiltered stock query) is shown as each batch's available stock, and a failed read becomes 0. Clerks pick batches and quantities from it.
+2. **Goods Issue success states (rows 43, 44, with 38)** - queued lines return `Success:true` / `DifferenceCleared:true`, any non-queued response is shown as POSTED_IN_SAP without a material document, and open quantities ignore the queue while SAP posting is blocked.
+3. **Sales Inquiry detail borrowing Sales Office / Sales Group / Ship-to from other records (rows 15, 16)** - a display screen shows values the SAP document does not contain.
+
+Close behind: PO status defaulting to 'Approved' (row 4) and page-only KPIs with a 100% default (rows 6, 7, 21, 28).
+
+## Not verified
+
+- No live SAP call was made; every 'live' verdict is a code-path verdict.
+- Which row `C_STOCKQUANTITYVALUEBYTYPE` returns first, and whether it carries batch or stock-type fields: no metadata for it is saved in the repo.
+- The Purchase Order READ handler and `PurchaseOrderDetail.controller.js` were pattern-scanned, not traced line by line.
+- `GoodsIssueStockUnitClient.js` handling-unit branch (lines 100-560, /scwm/ services) was not traced; EWM holds no data per docs/service-map.md.
+- WORKSTATUS.md claims of live results (GR quantities, approval status codes, delivery 13000526) were read, not reproduced.
+- Production behaviour (XSUAA, destinations, HDI) is inferred from `mta.yaml` and `package.json`; nothing is deployed that I could inspect.
