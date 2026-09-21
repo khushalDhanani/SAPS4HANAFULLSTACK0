@@ -2725,18 +2725,39 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 — Build System Label Dynamically from Environment Settings in User Profile & Auth Adapter (Audit Item 46)
+- **Change**: Eliminated contradictory hardcoded system labels (`"DEV - Client 220"` in `auth-service.js` vs `"PRD - Client <n>"` in `AuthAdapter.js`) for the same S/4HANA system. Replaced hardcoded string literals with centralized, dynamic label resolution in `s4Config.js` (`getSystemLabel`) driven by environment settings (`S4_SYSTEM_NAME` and `S4_CLIENT`).
+  1. **Central Configuration Module**:
+     - `srv/common/s4Config.js`: Added `getSystemName()` (checks `CDS_S4_SYSTEM_NAME`, `S4_SYSTEM_NAME`, `cds.s4.systemName`, falling back to `PRD` in production and `DEV` in development) and `getSystemLabel(clientOverride, systemNameOverride)` (formats `${systemName} - Client ${client}`). Added convenience getters `systemName` and `systemLabel`.
+  2. **Auth Service & Auth Adapter**:
+     - `srv/auth-service.js`: Replaced `"DEV - Client 220"` in `_resolveUserProfile` (line 56) and `_handleLogin` (lines 109, 123, 168) with `s4Config.getSystemLabel()`.
+     - `srv/integration/s4hana/AuthAdapter.js`: Replaced hardcoded `PRD - Client ${sClient}` with `s4Config.getSystemLabel(sClient, options.systemName)`. Prioritizes `process.env.S4_CLIENT` before `s4Config.getClient()` if `options.client` is omitted.
+  3. **Automated Tests**:
+     - `test/unit/authAdapter.test.js`: Updated assertions from hardcoded `'PRD'` to dynamic label. Added unit tests for `S4_SYSTEM_NAME` and `S4_CLIENT` environment overrides and `options.systemName` override.
+     - `test/unit/auth/authService.test.js`: Added unit test asserting dynamic system label resolution in user profile and login flow from `S4_SYSTEM_NAME` and `S4_CLIENT`.
+  4. **Documentation**:
+     - `docs/data-lineage-audit.md`: Marked audit item 46 as RESOLVED.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/authAdapter.test.js test/unit/auth/authService.test.js test/unit/common/s4Config.test.js`: **3 passed, 3 total test suites; 53 passed, 53 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 934 passed, 934 total tests (100% green)** in 71.3 s.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 709 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **71 passed, 71 total test suites; 931 passed, 931 total tests (100% green)**.
-  - `npx jest test/integration/purchase-order/`: **4 passed, 4 total test suites; 28 passed, 28 total tests (100% green)**.
-  - `npx jest test/unit/le/`: **4 passed, 4 total test suites; 48 passed, 48 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 145 passed, 145 total tests (100% green)**.
-  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 61 passed, 61 total tests (100% green)**.
-  - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 934 passed, 934 total tests (100% green)**.
+  - `npx jest test/unit/auth/`: **1 passed, 1 total test suites; 12 passed, 12 total tests (100% green)**.
+  - `npx jest test/unit/authAdapter.test.js`: **1 passed, 1 total test suites; 14 passed, 14 total tests (100% green)**.
+  - `npx jest test/unit/common/s4Config.test.js`: **1 passed, 1 total test suites; 27 passed, 27 total tests (100% green)**.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **System Label in User Profile & Auth Adapter (Audit Row 46)**:
+  - Hardcoded `"DEV - Client 220"` and `"PRD - Client <n>"` literals eliminated.
+  - System label built dynamically from environment settings (`S4_SYSTEM_NAME` and `S4_CLIENT`) via `s4Config.getSystemLabel()`.
 - **Eliminate Fake Success Strings on Creation (Audit Row 13)**:
   - Fake success strings (`'PO Created but no ID returned'`, `'Order Created'`, `'Inquiry Created'`) eliminated across PO, SO, and Inquiry handlers.
   - When SAP S/4HANA returns no document number upon document creation, backend strictly rejects with HTTP 502 and diagnostic details.

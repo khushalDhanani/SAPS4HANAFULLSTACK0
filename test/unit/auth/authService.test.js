@@ -9,6 +9,8 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         service = new AuthServiceHandler();
         delete process.env.ENABLE_DEV_TOKEN_ISSUER;
         delete process.env.LOCAL_AUTH_SECRET;
+        delete process.env.S4_SYSTEM_NAME;
+        delete process.env.S4_CLIENT;
         process.env.NODE_ENV = 'development';
     });
 
@@ -197,6 +199,25 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res.authenticated).toBe(true);
             expect(res.username).toBe('bob');
             expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
+        });
+
+        it('should build system label dynamically from S4_SYSTEM_NAME and S4_CLIENT in user profile and login', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.S4_SYSTEM_NAME = 'S4HANA_DEV';
+            process.env.S4_CLIENT = '300';
+
+            const req = {
+                data: { username: 'alice', password: 'alice' }
+            };
+
+            const res = await service._handleLogin(req);
+            expect(res.system).toBe('S4HANA_DEV - Client 300');
+
+            const infoRes = await service._handleGetUserInfo({
+                user: { id: 'alice', _is_anonymous: false, roles: ['Viewer'] }
+            });
+            expect(infoRes.system).toBe('S4HANA_DEV - Client 300');
         });
     });
 });

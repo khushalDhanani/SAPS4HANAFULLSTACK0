@@ -96,7 +96,7 @@ class AuthAdapter {
 
     const sUser = username.trim();
     const sPass = password.trim();
-    const sClient = options.client || s4Config.getClient();
+    const sClient = options.client || (process.env.S4_CLIENT && process.env.S4_CLIENT.trim()) || s4Config.getClient();
 
     const baseDest = options.destination || (await this._getDestination(options));
     const baseUrl = options.baseUrl || (baseDest && baseDest.url);
@@ -136,7 +136,7 @@ class AuthAdapter {
           authenticated: true,
           statusCode: status,
           message: 'Authentication successful.',
-          system: `PRD - Client ${sClient}`,
+          system: s4Config.getSystemLabel(sClient, options.systemName),
           client: sClient
         };
       }

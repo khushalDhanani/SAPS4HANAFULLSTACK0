@@ -84,6 +84,34 @@ class S4Config {
     return arr;
   }
 
+  /** S/4 System Name (e.g. 'DEV', 'PRD', or configured value from S4_SYSTEM_NAME / cds.s4.systemName) */
+  getSystemName() {
+    const val = this._getRaw('systemName', ['CDS_S4_SYSTEM_NAME', 'S4_SYSTEM_NAME']);
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
+      return String(val).trim();
+    }
+    return process.env.NODE_ENV === 'production' ? 'PRD' : 'DEV';
+  }
+
+  /**
+   * Builds the formatted system label from environment settings.
+   * e.g. `${systemName} - Client ${client}` (e.g. 'DEV - Client 220', 'S4HANA_DEV - Client 220')
+   * @param {string} [clientOverride] - Optional SAP client override
+   * @param {string} [systemNameOverride] - Optional system name override
+   * @returns {string}
+   */
+  getSystemLabel(clientOverride, systemNameOverride) {
+    const systemName = (systemNameOverride && String(systemNameOverride).trim()) || this.getSystemName();
+    let client = clientOverride;
+    if (!client) {
+      client = (process.env.S4_CLIENT && process.env.S4_CLIENT.trim()) || this.getClient();
+    }
+    if (client && String(client).trim() !== '') {
+      return `${systemName} - Client ${String(client).trim()}`;
+    }
+    return systemName;
+  }
+
   /** SAP Client (e.g. '220') */
   getClient() {
     return this._requireString('client', ['CDS_S4_CLIENT', 'S4_CLIENT']);
@@ -140,6 +168,8 @@ class S4Config {
   }
 
   // Getters for convenient property access
+  get systemName() { return this.getSystemName(); }
+  get systemLabel() { return this.getSystemLabel(); }
   get client() { return this.getClient(); }
   get plant() { return this.getPlant(); }
   get storageLocation() { return this.getStorageLocation(); }

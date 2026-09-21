@@ -4,6 +4,12 @@ const connectivity = require('@sap-cloud-sdk/connectivity');
 describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
     const originalEnvUrl = process.env.S4_DESTINATION_URL;
     const originalEnvClient = process.env.S4_CLIENT;
+    const originalEnvSystem = process.env.S4_SYSTEM_NAME;
+
+    beforeEach(() => {
+        delete process.env.S4_SYSTEM_NAME;
+        delete process.env.S4_CLIENT;
+    });
 
     afterEach(() => {
         if (originalEnvUrl !== undefined) {
@@ -15,6 +21,11 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             process.env.S4_CLIENT = originalEnvClient;
         } else {
             delete process.env.S4_CLIENT;
+        }
+        if (originalEnvSystem !== undefined) {
+            process.env.S4_SYSTEM_NAME = originalEnvSystem;
+        } else {
+            delete process.env.S4_SYSTEM_NAME;
         }
         jest.restoreAllMocks();
     });
@@ -66,7 +77,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
             expect(res.authenticated).toBe(true);
             expect(res.statusCode).toBe(200);
-            expect(res.system).toBe('PRD - Client 220');
+            expect(res.system).toBe('DEV - Client 220');
             expect(res.client).toBe('220');
             expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -151,7 +162,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
             expect(res.authenticated).toBe(true);
             expect(res.statusCode).toBe(200);
-            expect(res.system).toBe('PRD - Client 100');
+            expect(res.system).toBe('DEV - Client 100');
             expect(mockExecuteHttp).toHaveBeenCalledTimes(1);
 
             const [calledDest, calledConfig] = mockExecuteHttp.mock.calls[0];
@@ -161,6 +172,41 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(calledDest.authentication).toBe('BasicAuthentication');
             expect(calledConfig.method).toBe('get');
             expect(calledConfig.url).toContain('sap-client=100');
+        });
+
+        it('should build system label dynamically from S4_SYSTEM_NAME and S4_CLIENT environment variables', async () => {
+            process.env.S4_SYSTEM_NAME = 'S4HANA_DEV';
+            process.env.S4_CLIENT = '300';
+            const mockFetch = jest.fn().mockResolvedValueOnce({
+                ok: true,
+                status: 200
+            });
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
+                baseUrl: 'http://s4hana.example.corp:8000',
+                fetchFn: mockFetch
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.system).toBe('S4HANA_DEV - Client 300');
+            expect(res.client).toBe('300');
+        });
+
+        it('should support options.systemName override', async () => {
+            const mockFetch = jest.fn().mockResolvedValueOnce({
+                ok: true,
+                status: 200
+            });
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
+                baseUrl: 'http://s4hana.example.corp:8000',
+                client: '100',
+                systemName: 'PRD',
+                fetchFn: mockFetch
+            });
+
+            expect(res.authenticated).toBe(true);
+            expect(res.system).toBe('PRD - Client 100');
         });
     });
 
