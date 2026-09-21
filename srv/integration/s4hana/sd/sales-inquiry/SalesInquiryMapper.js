@@ -3,8 +3,6 @@
  * Maps between CAP Sales Inquiry domain representations and SAP S/4HANA OData technical payloads.
  */
 
-const s4Config = require('../../s4Config');
-
 /**
  * Maps CAP domain payload to S/4HANA Inquiry structure.
  *
@@ -18,11 +16,27 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
         throw new Error('Header data is required for S/4HANA Sales Inquiry payload mapping');
     }
 
+    if (!header.SalesInquiryType || String(header.SalesInquiryType).trim() === '') {
+        throw new Error('SalesInquiryType is required for S/4HANA Sales Inquiry payload mapping');
+    }
+    if (!header.SalesOrganization || String(header.SalesOrganization).trim() === '') {
+        throw new Error('SalesOrganization is required for S/4HANA Sales Inquiry payload mapping');
+    }
+    if (!header.DistributionChannel || String(header.DistributionChannel).trim() === '') {
+        throw new Error('DistributionChannel is required for S/4HANA Sales Inquiry payload mapping');
+    }
+    if (!header.OrganizationDivision || String(header.OrganizationDivision).trim() === '') {
+        throw new Error('OrganizationDivision is required for S/4HANA Sales Inquiry payload mapping');
+    }
+    if (!header.TransactionCurrency || String(header.TransactionCurrency).trim() === '') {
+        throw new Error('TransactionCurrency is required for S/4HANA Sales Inquiry payload mapping');
+    }
+
     const s4Header = {
-        SalesInquiryType: String(header.SalesInquiryType || s4Config.getInquiryType()).trim(),
-        SalesOrganization: String(header.SalesOrganization || s4Config.getSalesOrganization()).trim(),
-        DistributionChannel: String(header.DistributionChannel || s4Config.getDistributionChannel()).trim(),
-        OrganizationDivision: String(header.OrganizationDivision || s4Config.getDivision()).trim(),
+        SalesInquiryType: String(header.SalesInquiryType).trim(),
+        SalesOrganization: String(header.SalesOrganization).trim(),
+        DistributionChannel: String(header.DistributionChannel).trim(),
+        OrganizationDivision: String(header.OrganizationDivision).trim(),
         SalesOffice: String(header.SalesOffice || '').trim(),
         SalesGroup: String(header.SalesGroup || '').trim(),
         SoldToParty: String(header.SoldToParty || '').trim(),
@@ -32,7 +46,7 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
         SalesInquiryDate: header.SalesInquiryDate ? String(header.SalesInquiryDate).trim() : '',
         BindingPeriodValidityStartDate: header.BindingPeriodValidityStartDate ? String(header.BindingPeriodValidityStartDate).trim() : '',
         BindingPeriodValidityEndDate: header.BindingPeriodValidityEndDate ? String(header.BindingPeriodValidityEndDate).trim() : '',
-        TransactionCurrency: String(header.TransactionCurrency || s4Config.getCurrency()).trim().toUpperCase(),
+        TransactionCurrency: String(header.TransactionCurrency).trim().toUpperCase(),
         TotalNetAmount: header.TotalNetAmount !== undefined ? String(header.TotalNetAmount) : '0.00'
     };
 
@@ -95,11 +109,27 @@ function mapToS4OrderPayload(header, items, _options = {}) {
         throw new Error('Header data is required for S/4HANA Sales Order payload mapping');
     }
 
+    if (!header.SalesOrderType || String(header.SalesOrderType).trim() === '') {
+        throw new Error('SalesOrderType is required for S/4HANA Sales Order payload mapping');
+    }
+    if (!header.SalesOrganization || String(header.SalesOrganization).trim() === '') {
+        throw new Error('SalesOrganization is required for S/4HANA Sales Order payload mapping');
+    }
+    if (!header.DistributionChannel || String(header.DistributionChannel).trim() === '') {
+        throw new Error('DistributionChannel is required for S/4HANA Sales Order payload mapping');
+    }
+    if (!header.OrganizationDivision || String(header.OrganizationDivision).trim() === '') {
+        throw new Error('OrganizationDivision is required for S/4HANA Sales Order payload mapping');
+    }
+    if (!header.TransactionCurrency || String(header.TransactionCurrency).trim() === '') {
+        throw new Error('TransactionCurrency is required for S/4HANA Sales Order payload mapping');
+    }
+
     const s4Header = {
-        SalesOrderType: String(header.SalesOrderType || s4Config.getOrderType()).trim(),
-        SalesOrganization: String(header.SalesOrganization || s4Config.getSalesOrganization()).trim(),
-        DistributionChannel: String(header.DistributionChannel || s4Config.getDistributionChannel()).trim(),
-        OrganizationDivision: String(header.OrganizationDivision || s4Config.getDivision()).trim(),
+        SalesOrderType: String(header.SalesOrderType).trim(),
+        SalesOrganization: String(header.SalesOrganization).trim(),
+        DistributionChannel: String(header.DistributionChannel).trim(),
+        OrganizationDivision: String(header.OrganizationDivision).trim(),
         SalesOffice: String(header.SalesOffice || '').trim(),
         SalesGroup: String(header.SalesGroup || '').trim(),
         SoldToParty: String(header.SoldToParty || '').trim(),
@@ -109,7 +139,7 @@ function mapToS4OrderPayload(header, items, _options = {}) {
         CustomerPurchaseOrderDate: header.CustomerPurchaseOrderDate ? String(header.CustomerPurchaseOrderDate).trim() : '',
         SalesOrderDate: header.SalesOrderDate ? String(header.SalesOrderDate).trim() : '',
         RequestedDeliveryDate: header.RequestedDeliveryDate ? String(header.RequestedDeliveryDate).trim() : '',
-        TransactionCurrency: String(header.TransactionCurrency || s4Config.getCurrency()).trim().toUpperCase(),
+        TransactionCurrency: String(header.TransactionCurrency).trim().toUpperCase(),
         TotalNetAmount: header.TotalNetAmount !== undefined ? String(header.TotalNetAmount) : '0.00'
     };
 

@@ -204,6 +204,10 @@ describe('Unit: Sales Inquiry Mapping', () => {
         test('should preserve CustomerName, ShipToPartyName, and TotalNetAmount in mapToS4InquiryPayload', () => {
             const header = {
                 SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135',
                 CustomerName: "Divi's Laboratories Limited",
                 ShipToParty: '10135',
@@ -216,9 +220,34 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
             expect(s4.header.TotalNetAmount).toBe('1500');
         });
+
+        test('should throw error if required org fields, docType, or currency are missing or blank in mapToS4InquiryPayload', () => {
+            const baseHeader = {
+                SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const requiredFields = ['SalesInquiryType', 'SalesOrganization', 'DistributionChannel', 'OrganizationDivision', 'TransactionCurrency'];
+            requiredFields.forEach(field => {
+                const missing = { ...baseHeader };
+                delete missing[field];
+                expect(() => mapToS4InquiryPayload(missing, [])).toThrow(new RegExp(`${field} is required`));
+
+                const blank = { ...baseHeader, [field]: '   ' };
+                expect(() => mapToS4InquiryPayload(blank, [])).toThrow(new RegExp(`${field} is required`));
+            });
+        });
+
         test('should throw error if an item is missing OrderQuantityUnit in mapToS4InquiryPayload', () => {
             const header = {
                 SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135'
             };
             const items = [{
@@ -231,6 +260,10 @@ describe('Unit: Sales Inquiry Mapping', () => {
         test('should leave dates empty when not provided instead of inventing today in inquiry payload', () => {
             const header = {
                 SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135'
             };
             const items = [
@@ -252,6 +285,10 @@ describe('Unit: Sales Inquiry Mapping', () => {
         test('should leave dates empty when not provided instead of inventing today or today + 7 days in order payload', () => {
             const header = {
                 SalesOrderType: 'OR',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135'
             };
             const items = [
@@ -268,9 +305,33 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.items[0].RequestedDeliveryDate).toBe('');
         });
 
+        test('should throw error if required org fields, docType, or currency are missing or blank in mapToS4OrderPayload', () => {
+            const baseHeader = {
+                SalesOrderType: 'OR',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const requiredFields = ['SalesOrderType', 'SalesOrganization', 'DistributionChannel', 'OrganizationDivision', 'TransactionCurrency'];
+            requiredFields.forEach(field => {
+                const missing = { ...baseHeader };
+                delete missing[field];
+                expect(() => mapToS4OrderPayload(missing, [])).toThrow(new RegExp(`${field} is required`));
+
+                const blank = { ...baseHeader, [field]: '   ' };
+                expect(() => mapToS4OrderPayload(blank, [])).toThrow(new RegExp(`${field} is required`));
+            });
+        });
+
         test('should preserve authentic dates and item delivery date override in order payload', () => {
             const header = {
                 SalesOrderType: 'OR',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135',
                 CustomerPurchaseOrderDate: '2026-10-01',
                 SalesOrderDate: '2026-10-02',

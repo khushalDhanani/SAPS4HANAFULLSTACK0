@@ -54,12 +54,34 @@ describe('Unit: Sales Inquiry Validation', () => {
             'SalesOrganization',
             'DistributionChannel',
             'OrganizationDivision',
-            'SoldToParty'
+            'SoldToParty',
+            'TransactionCurrency'
         ];
 
         missingFields.forEach(field => {
             const badHeader = { ...validHeader };
             delete badHeader[field];
+            const result = validateCreateSalesInquiryPayload({
+                header: badHeader,
+                items: validItems
+            });
+            expect(result.isValid).toBe(false);
+            expect(result.errors.some(e => e.field === field)).toBe(true);
+        });
+    });
+
+    test('should reject blank or whitespace-only required header fields', () => {
+        const requiredFields = [
+            'SalesInquiryType',
+            'SalesOrganization',
+            'DistributionChannel',
+            'OrganizationDivision',
+            'SoldToParty',
+            'TransactionCurrency'
+        ];
+
+        requiredFields.forEach(field => {
+            const badHeader = { ...validHeader, [field]: '   ' };
             const result = validateCreateSalesInquiryPayload({
                 header: badHeader,
                 items: validItems

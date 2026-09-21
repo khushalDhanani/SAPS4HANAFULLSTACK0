@@ -104,6 +104,9 @@ describe('Unit: Sales Order Adapter Integration', () => {
 
             const header = {
                 SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
                 SoldToParty: '10135',
                 TransactionCurrency: 'EUR'
             };
@@ -145,6 +148,10 @@ describe('Unit: Sales Order Adapter Integration', () => {
 
             const header = {
                 SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135',
                 PurchaseOrderNumber: '',
                 PurchaseOrderByCustomer: ''
@@ -169,6 +176,37 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(result.SalesOrder).toBe('5000461');
             const callConfig = mockExecute.mock.calls[0][1];
             expect(callConfig.data.PurchaseOrderNumber).toBe('');
+        });
+
+        test('rejects createSalesOrder when SalesOrganization, DistributionChannel, or Division is missing or blank', async () => {
+            const baseHeader = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+
+            const orgFields = ['SalesOrganization', 'DistributionChannel', 'OrganizationDivision'];
+            for (const field of orgFields) {
+                const missing = { ...baseHeader };
+                delete missing[field];
+                await expect(
+                    adapter.createSalesOrder(missing, [], {
+                        destination: { url: 'http://sap.mock' },
+                        executeHttpRequest: jest.fn()
+                    })
+                ).rejects.toThrow();
+
+                const blank = { ...baseHeader, [field]: '   ' };
+                await expect(
+                    adapter.createSalesOrder(blank, [], {
+                        destination: { url: 'http://sap.mock' },
+                        executeHttpRequest: jest.fn()
+                    })
+                ).rejects.toThrow();
+            }
         });
 
         test('propagates SAP error message when Deep Insert fails', async () => {

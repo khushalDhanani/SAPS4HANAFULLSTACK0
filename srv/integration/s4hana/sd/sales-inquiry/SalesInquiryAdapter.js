@@ -1031,7 +1031,10 @@ class SalesInquiryAdapter {
     const custRef = (header.PurchaseOrderNumber || header.PurchaseOrderByCustomer)
       ? String(header.PurchaseOrderNumber || header.PurchaseOrderByCustomer).trim()
       : '';
-    const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || s4Config.getInquiryType()).trim();
+    const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || '').trim();
+    if (!effectiveDocType) {
+      throw new Error('Document Type is required for Sales Document creation');
+    }
     const isOrder = effectiveDocType !== 'ZIN';
 
     // Upfront item unit and quantity validation for all document types
@@ -1096,7 +1099,7 @@ class SalesInquiryAdapter {
               {
                 CondTypeCode: s4Config.getConditionType(),
                 AmountInternal: String(effectivePrice.toFixed(2)),
-                RateUnitExternal: header.TransactionCurrency || s4Config.getCurrency(),
+                RateUnitExternal: header.TransactionCurrency ? String(header.TransactionCurrency).trim().toUpperCase() : '',
                 PriceUnit: '1.000',
                 UnitOfMeasure: cleanItemUnit
               }
@@ -1106,11 +1109,22 @@ class SalesInquiryAdapter {
         }
       }
 
+      if (!header.SalesOrganization || String(header.SalesOrganization).trim() === '') {
+        throw new Error('SalesOrganization is required for Sales Order creation');
+      }
+      if (!header.DistributionChannel || String(header.DistributionChannel).trim() === '') {
+        throw new Error('DistributionChannel is required for Sales Order creation');
+      }
+      const orderDivision = header.OrganizationDivision || header.Division;
+      if (!orderDivision || String(orderDivision).trim() === '') {
+        throw new Error('Division is required for Sales Order creation');
+      }
+
       const headerPayload = {
         SalesOrderTypeCode: effectiveDocType,
-        SalesOrganization: header.SalesOrganization || s4Config.getSalesOrganization(),
-        DistributionChannel: header.DistributionChannel || s4Config.getDistributionChannel(),
-        Division: header.OrganizationDivision || s4Config.getDivision(),
+        SalesOrganization: String(header.SalesOrganization).trim(),
+        DistributionChannel: String(header.DistributionChannel).trim(),
+        Division: String(orderDivision).trim(),
         SoldToPartyID: header.SoldToParty || '',
         PurchaseOrderNumber: custRef,
         ItemSet: deepItems
@@ -1175,11 +1189,22 @@ class SalesInquiryAdapter {
     // Inquiry Branch: Sequential 3-Step POSTs
     // -------------------------------------------------------------------------
     // 1. Post Header to LORD_ODATA_ORDER_SRV/HeaderSet
+    if (!header.SalesOrganization || String(header.SalesOrganization).trim() === '') {
+      throw new Error('SalesOrganization is required for Sales Inquiry creation');
+    }
+    if (!header.DistributionChannel || String(header.DistributionChannel).trim() === '') {
+      throw new Error('DistributionChannel is required for Sales Inquiry creation');
+    }
+    const inquiryDivision = header.OrganizationDivision || header.Division;
+    if (!inquiryDivision || String(inquiryDivision).trim() === '') {
+      throw new Error('Division is required for Sales Inquiry creation');
+    }
+
     const headerPayload = {
       SalesOrderTypeCode: effectiveDocType,
-      SalesOrganization: header.SalesOrganization || s4Config.getSalesOrganization(),
-      DistributionChannel: header.DistributionChannel || s4Config.getDistributionChannel(),
-      Division: header.OrganizationDivision || s4Config.getDivision(),
+      SalesOrganization: String(header.SalesOrganization).trim(),
+      DistributionChannel: String(header.DistributionChannel).trim(),
+      Division: String(inquiryDivision).trim(),
       SoldToPartyID: header.SoldToParty || '',
       PurchaseOrderNumber: custRef
     };
@@ -1377,7 +1402,10 @@ class SalesInquiryAdapter {
    * Creates a Sales Inquiry directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV.
    */
   async createSalesInquiry(header, items, options = {}) {
-    const docType = header.SalesInquiryType || s4Config.getInquiryType();
+    const docType = header.SalesInquiryType;
+    if (!docType || String(docType).trim() === '') {
+      throw new Error('SalesInquiryType is required for Sales Inquiry creation');
+    }
     return this.createSalesDocument(docType, header, items, options);
   }
 
@@ -1385,7 +1413,10 @@ class SalesInquiryAdapter {
    * Creates a Sales Order directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV (Deep Insert).
    */
   async createSalesOrder(header, items, options = {}) {
-    const docType = header.SalesOrderType || s4Config.getOrderType();
+    const docType = header.SalesOrderType;
+    if (!docType || String(docType).trim() === '') {
+      throw new Error('SalesOrderType is required for Sales Order creation');
+    }
     return this.createSalesDocument(docType, header, items, options);
   }
 

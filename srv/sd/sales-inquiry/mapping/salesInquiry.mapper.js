@@ -3,8 +3,6 @@
  * Normalizes incoming CAP domain data into consistent business structures.
  */
 
-const s4Config = require('../../../common/s4Config');
-
 /**
  * Normalizes sales document domain data (Inquiry or Order).
  *
@@ -20,7 +18,7 @@ function normalizeSalesDocumentData(data, options = {}) {
 
     const currency = rawHeader.TransactionCurrency
         ? String(rawHeader.TransactionCurrency).trim().toUpperCase()
-        : s4Config.getCurrency();
+        : '';
 
     let calculatedTotal = 0;
 
@@ -61,15 +59,15 @@ function normalizeSalesDocumentData(data, options = {}) {
 
     const isOrder = Boolean(rawHeader.SalesOrderType || options.isOrder);
     const docType = isOrder
-        ? (rawHeader.SalesOrderType ? String(rawHeader.SalesOrderType).trim() : s4Config.getOrderType())
-        : (rawHeader.SalesInquiryType ? String(rawHeader.SalesInquiryType).trim() : s4Config.getInquiryType());
+        ? (rawHeader.SalesOrderType ? String(rawHeader.SalesOrderType).trim() : (rawHeader.SalesInquiryType ? String(rawHeader.SalesInquiryType).trim() : ''))
+        : (rawHeader.SalesInquiryType ? String(rawHeader.SalesInquiryType).trim() : (rawHeader.SalesOrderType ? String(rawHeader.SalesOrderType).trim() : ''));
 
     const normalizedHeader = {
-        SalesInquiryType: docType,
-        SalesOrderType: docType,
-        SalesOrganization: rawHeader.SalesOrganization ? String(rawHeader.SalesOrganization).trim() : s4Config.getSalesOrganization(),
-        DistributionChannel: rawHeader.DistributionChannel ? String(rawHeader.DistributionChannel).trim() : s4Config.getDistributionChannel(),
-        OrganizationDivision: rawHeader.OrganizationDivision ? String(rawHeader.OrganizationDivision).trim() : s4Config.getDivision(),
+        SalesInquiryType: isOrder ? '' : docType,
+        SalesOrderType: isOrder ? docType : '',
+        SalesOrganization: rawHeader.SalesOrganization ? String(rawHeader.SalesOrganization).trim() : '',
+        DistributionChannel: rawHeader.DistributionChannel ? String(rawHeader.DistributionChannel).trim() : '',
+        OrganizationDivision: rawHeader.OrganizationDivision ? String(rawHeader.OrganizationDivision).trim() : '',
         SalesOffice: rawHeader.SalesOffice ? String(rawHeader.SalesOffice).trim() : '',
         SalesOfficeName: rawHeader.SalesOfficeName ? String(rawHeader.SalesOfficeName).trim() : '',
         SalesGroup: rawHeader.SalesGroup ? String(rawHeader.SalesGroup).trim() : '',

@@ -253,6 +253,10 @@ describe('Unit: Sales Inquiry Adapter', () => {
     test('should leave PurchaseOrderNumber empty if reference is empty instead of inventing customer reference', async () => {
         const header = {
             SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
             SoldToParty: '10135',
             PurchaseOrderByCustomer: ''
         };
@@ -287,7 +291,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should propagate SAP S/4HANA backend error message when creation fails', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '99999' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '99999'
+        };
         const mockExecuteHttpRequest = jest.fn().mockRejectedValue({
             message: 'Request failed with status code 400',
             response: {
@@ -310,7 +321,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should throw PartialSalesInquiryError with created document number when item creation fails midway', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, OrderQuantityUnit: 'PC' }];
 
         const mockExecuteHttpRequest = jest.fn()
@@ -353,7 +371,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should throw PartialSalesInquiryError with created document number when price condition creation fails midway', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135', TransactionCurrency: 'INR' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
+            TransactionCurrency: 'INR'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, OrderQuantityUnit: 'PC', NetPriceAmount: 250.00 }];
 
         const mockExecuteHttpRequest = jest.fn()
@@ -400,7 +425,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should not set Plant on item payload when item has no Plant', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, OrderQuantityUnit: 'PC' }];
 
         const mockExecuteHttpRequest = jest.fn()
@@ -417,7 +449,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should preserve user-supplied Plant on item payload', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, OrderQuantityUnit: 'PC', Plant: '1108' }];
 
         const mockExecuteHttpRequest = jest.fn()
@@ -434,7 +473,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should throw error when item is missing OrderQuantityUnit in createSalesDocument', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1 }];
         await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
             destination: { url: 'http://mock-s4hana' }
@@ -442,7 +488,14 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should throw error when item is missing OrderQuantity in createSalesDocument', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantityUnit: 'PC' }];
         await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
             destination: { url: 'http://mock-s4hana' }
@@ -450,11 +503,73 @@ describe('Unit: Sales Inquiry Adapter', () => {
     });
 
     test('should throw error when item has zero or negative OrderQuantity in createSalesDocument', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '10135' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
         const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 0, OrderQuantityUnit: 'PC' }];
         await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
             destination: { url: 'http://mock-s4hana' }
         })).rejects.toThrow(/OrderQuantity must be greater than 0 for item 000010/);
+    });
+
+    test('rejects createSalesInquiry when SalesOrganization, DistributionChannel, or Division is missing or blank', async () => {
+        const baseHeader = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+
+        const orgFields = ['SalesOrganization', 'DistributionChannel', 'OrganizationDivision'];
+        for (const field of orgFields) {
+            const missing = { ...baseHeader };
+            delete missing[field];
+            await expect(
+                salesInquiryAdapter.createSalesInquiry(missing, [], {
+                    destination: { url: 'http://mock-s4hana' },
+                    executeHttpRequest: jest.fn()
+                })
+            ).rejects.toThrow();
+
+            const blank = { ...baseHeader, [field]: '   ' };
+            await expect(
+                salesInquiryAdapter.createSalesInquiry(blank, [], {
+                    destination: { url: 'http://mock-s4hana' },
+                    executeHttpRequest: jest.fn()
+                })
+            ).rejects.toThrow();
+        }
+    });
+
+    test('rejects createSalesInquiry when SalesInquiryType is missing or blank', async () => {
+        const baseHeader = {
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+
+        await expect(
+            salesInquiryAdapter.createSalesInquiry(baseHeader, [], {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: jest.fn()
+            })
+        ).rejects.toThrow(/SalesInquiryType/);
+
+        await expect(
+            salesInquiryAdapter.createSalesInquiry({ ...baseHeader, SalesInquiryType: '   ' }, [], {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: jest.fn()
+            })
+        ).rejects.toThrow(/SalesInquiryType/);
     });
 
     test('should query Finished Goods materials with ZFRT/FERT condition and map MaterialName', async () => {

@@ -68,7 +68,9 @@ function validateCreateSalesDocumentPayload(payload) {
         errors.push({ field: 'SoldToParty', message: 'Sold-to Party cannot exceed 10 characters' });
     }
 
-    if (header.TransactionCurrency && !CURRENCY_REGEX.test(String(header.TransactionCurrency).trim().toUpperCase())) {
+    if (!header.TransactionCurrency || String(header.TransactionCurrency).trim() === '') {
+        errors.push({ field: 'TransactionCurrency', message: 'Transaction Currency is required' });
+    } else if (!CURRENCY_REGEX.test(String(header.TransactionCurrency).trim().toUpperCase())) {
         errors.push({ field: 'TransactionCurrency', message: 'Currency must be a valid 3-character ISO currency code (e.g. INR, USD)' });
     }
 

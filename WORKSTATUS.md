@@ -2652,15 +2652,46 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-21 — Validate and Reject Blank Org Values and Eliminate cds.s4 Fallbacks (Audit Item 25)
+- **Change**: Eliminated silent `cds.s4` fallbacks on write across all three layers (`salesInquiry.mapper.js`, `SalesInquiryMapper.js`, and `SalesInquiryAdapter.js`). Previously, if a screen or client sent blank org values (`SalesOrganization`, `DistributionChannel`, `OrganizationDivision`), docType, or currency, each layer silently filled them from `cds.s4` config before POSTing to S/4HANA. Now, all three layers validate and strictly reject missing or blank values.
+  1. **Mapper & Normalization**:
+     - `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`: Removed `s4Config` import and all silent fallbacks (`s4Config.getCurrency()`, `s4Config.getSalesOrganization()`, `s4Config.getDistributionChannel()`, `s4Config.getDivision()`, `s4Config.getInquiryType()`, `s4Config.getOrderType()`). Missing fields normalize to `""` instead of injecting config values.
+  2. **Backend Payload Mapper**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`: Removed `s4Config` import. Added strict validation in `mapToS4InquiryPayload` throwing Error if `SalesInquiryType`, `SalesOrganization`, `DistributionChannel`, `OrganizationDivision`, or `TransactionCurrency` is missing or blank. Added identical validation in `mapToS4OrderPayload` for `SalesOrderType` and org fields.
+  3. **S/4HANA Integration Adapter**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: In `createSalesDocument`, removed all `|| s4Config.get...` fallbacks for `SalesOrganization`, `DistributionChannel`, `Division`, docType, and currency. Added validation throwing an Error if docType or org fields are missing or blank. Added validation in `createSalesInquiry` and `createSalesOrder` to require non-empty docTypes before delegation.
+  4. **Validation Layer**:
+     - `srv/sd/sales-inquiry/validation/salesInquiry.validation.js`: Marked `TransactionCurrency` as strictly required in `validateCreateSalesDocumentPayload` (rejects missing, blank, or invalid 3-letter ISO code).
+  5. **Unit Tests & Documentation**:
+     - `test/unit/sales-inquiry/salesInquiryValidation.test.js`: Added `TransactionCurrency` to missing fields tests; added test verifying blank/whitespace-only required header fields are rejected.
+     - `test/unit/sales-inquiry/salesInquiryMapping.test.js`: Updated tests with explicit org headers and currency; added tests asserting rejection of missing/blank org values, docType, and currency.
+     - `test/unit/sales-order/salesOrderAdapter.test.js`: Updated tests with explicit org headers; added test verifying rejection of missing/blank org values in `createSalesOrder`.
+     - `test/unit/sales-inquiry/salesInquiryAdapter.test.js`: Updated tests with explicit org headers; added tests verifying rejection of missing/blank org values and docType in `createSalesInquiry`.
+     - `docs/data-lineage-audit.md`: Updated Audit Item 25 to `RESOLVED`.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/sales-inquiry/salesInquiryValidation.test.js test/unit/sales-inquiry/salesInquiryMapping.test.js`: **2 passed, 2 total test suites; 29 passed, 29 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/salesOrderAdapter.test.js`: **1 passed, 1 total test suite; 13 passed, 13 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/salesInquiryAdapter.test.js`: **1 passed, 1 total test suite; 32 passed, 32 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/ test/unit/sales-order/`: **15 passed, 15 total test suites; 204 passed, 204 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 926 passed, 926 total tests (100% green)** in 75.7 s.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 984 ms; Component-preload.js generated**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **71 passed, 71 total test suites; 920 passed, 920 total tests (100% green)**.
-  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 140 passed, 140 total tests (100% green)**.
+  - `npm test`: **71 passed, 71 total test suites; 926 passed, 926 total tests (100% green)**.
+  - `npx jest test/unit/sales-inquiry/`: **10 passed, 10 total test suites; 144 passed, 144 total tests (100% green)**.
+  - `npx jest test/unit/sales-order/`: **5 passed, 5 total test suites; 60 passed, 60 total tests (100% green)**.
   - `npx jest test/unit/purchase-order/`: **17 passed, 17 total test suites; 195 passed, 195 total tests (100% green)**.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Validate and Reject Blank Org Values (Audit Row 25)**:
+  - Silent `cds.s4` fallbacks eliminated across all three layers (`salesInquiry.mapper.js`, `SalesInquiryMapper.js`, `SalesInquiryAdapter.js`).
+  - Blank or missing `SalesOrganization`, `DistributionChannel`, `OrganizationDivision`/`Division`, `SalesInquiryType`/`SalesOrderType`, and `TransactionCurrency` strictly validated and rejected.
 - **Customer Defaults Authentic Country (Audit Row 23)**:
   - Hardcoded `'IN'` fallback eliminated from `SalesInquiryAdapter.js` (`getCustomerDefaults`).
   - Returns authentic `Country` from `I_Customer_VH`, or empty string when absent in SAP master data.
