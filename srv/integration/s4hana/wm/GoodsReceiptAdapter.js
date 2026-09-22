@@ -173,32 +173,35 @@ class GoodsReceiptAdapter {
   }
 
   /**
-   * Retrieves storage locations and warehouse storage bins from MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps
+   * Retrieves authentic plant storage locations from MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp.
+   * Replaces dead MMIM_MATERIAL_DATA_SRV (0 rows in SAP) with authentic SAP Storage Location Value Help (696 rows).
    */
   async getMaterialStorageLocations(material, plant) {
-    if (!material) return [];
-    let filter = `Material eq ${odataString(material)}`;
+    let filter = '';
     if (plant) {
-      filter += ` and Plant eq ${odataString(plant)}`;
+      filter = `Plant eq ${odataString(plant)}`;
     }
 
     try {
-      const results = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${encodeURIComponent(filter)}&$format=json`);
-      const list = Array.isArray(results) ? results : (results ? [results] : []);
+      const queryParam = filter ? `$filter=${encodeURIComponent(filter)}&$format=json` : '$top=50&$format=json';
+      const results = await this._get('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp', queryParam);
+      const list = Array.isArray(results) ? results : (results?.results ? results.results : (results ? [results] : []));
 
       return list.map(r => ({
+        Plant: r.Plant || plant || '',
+        PlantName: r.PlantName || '',
         StorageLocation: r.StorageLocation,
         StorageLocationName: r.StorageLocationName || '',
         WarehouseStorageBin: r.WarehouseStorageBin || '',
-        CurrentStock: Number(r.CurrentStock) || 0,
+        CurrentStock: (r.CurrentStock !== undefined && r.CurrentStock !== null) ? Number(r.CurrentStock) : null,
         BaseUnit: r.BaseUnit || ''
       }));
     } catch (err) {
       if (this._isOutage(err)) {
-        LOG.error(`Failed to retrieve storage locations due to S/4HANA outage for material ${material}: ${err.message}`);
+        LOG.error(`Failed to retrieve storage locations due to S/4HANA outage: ${err.message}`);
         throw err;
       }
-      LOG.warn(`Storage location read failed for material ${material}: ${err.message}`);
+      LOG.warn(`Storage location read failed: ${err.message}`);
       throw err;
     }
   }
@@ -214,23 +217,14 @@ class GoodsReceiptAdapter {
       const rawBatches = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=${encodeURIComponent(filter)}&$format=json`);
       const list = Array.isArray(rawBatches) ? rawBatches : (rawBatches ? [rawBatches] : []);
 
-      // Query SLoc stock & bins
+      // Retain requested storageLocation context without dead MMIM_MATERIAL_DATA_SRV calls
       let slocMap = new Map();
-      try {
-        let slocFilter = `Material eq ${odataString(material)}`;
-        if (plant) slocFilter += ` and Plant eq ${odataString(plant)}`;
-        if (storageLocation) slocFilter += ` and StorageLocation eq ${odataString(storageLocation)}`;
-        const slocRes = await this._get(
-          '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
-          `$filter=${encodeURIComponent(slocFilter)}&$format=json`
-        );
-        const slocs = Array.isArray(slocRes) ? slocRes : (slocRes ? [slocRes] : []);
-        slocs.forEach(s => slocMap.set(s.StorageLocation, s));
-      } catch (err) {
-        if (this._isOutage(err)) {
-          throw err;
-        }
-        LOG.warn(`SLoc bin lookup failed during batch enrichment: ${err.message}`);
+      if (storageLocation) {
+        slocMap.set(storageLocation, {
+          StorageLocation: storageLocation,
+          WarehouseStorageBin: '',
+          CurrentStock: null
+        });
       }
 
       // Deduplicate client-level (Plant: "") and plant-level records
@@ -820,11 +814,33 @@ class GoodsReceiptAdapter {
         proposedQuantity = null;
       }
       if (grItem.Unit) resolvedUnit = grItem.Unit;
-      if (grItem.StorageLocation && !defaultSLoc) defaultSLoc = grItem.StorageLocation;
+      if (grItem.StorageLocation) {
+        defaultSLoc = grItem.StorageLocation;
+        if (grItem.StorageLocationName) defaultSLocName = grItem.StorageLocationName;
+      }
       if (grItem.WarehouseStorageBin && !defaultBin) defaultBin = grItem.WarehouseStorageBin;
       if (grItem.Batch && !selectedBatch) selectedBatch = grItem.Batch;
       if (grItem.DeliveryDocumentItem && !resolvedPOItem && grItem.SourceOfGR === 'PURORD') {
         resolvedPOItem = grItem.DeliveryDocumentItem;
+      }
+    }
+
+    // Ensure defaultSLoc has a matching name and is guaranteed in the availableStorageLocations picker list
+    if (defaultSLoc) {
+      const match = storageLocations.find(s => s.StorageLocation === defaultSLoc);
+      if (match && !defaultSLocName) {
+        defaultSLocName = match.StorageLocationName;
+      }
+      if (!match) {
+        storageLocations.unshift({
+          Plant: resolvedPlant || '',
+          PlantName: resolvedPlantName || '',
+          StorageLocation: defaultSLoc,
+          StorageLocationName: defaultSLocName || defaultSLoc,
+          WarehouseStorageBin: defaultBin || '',
+          CurrentStock: null,
+          BaseUnit: ''
+        });
       }
     }
 

@@ -21,13 +21,13 @@ const init = (srv) => {
 
     /**
      * READ MaterialStorageLocations
-     * Queries authentic storage locations and bins from MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps
+     * Queries authentic storage locations from MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp
      */
     srv.on('READ', 'MaterialStorageLocations', async (req) => {
         const { Material: sMaterial, Plant: sPlant } = extractFilterParams(req, ['Material', 'Plant']);
 
-        if (!sMaterial) {
-            return req.reject(400, 'Material parameter is required to query storage locations.');
+        if (!sMaterial && !sPlant) {
+            return req.reject(400, 'Plant or Material parameter is required to query storage locations.');
         }
 
         try {

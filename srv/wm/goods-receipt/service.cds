@@ -24,9 +24,10 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
     @readonly
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity MaterialStorageLocations {
-        key Material            : String(40);
         key Plant               : String(4);
         key StorageLocation     : String(4);
+            PlantName           : String(40);
+            Material            : String(40);
             StorageLocationName : String(40);
             WarehouseStorageBin : String(18);
             CurrentStock        : Decimal(13, 3);

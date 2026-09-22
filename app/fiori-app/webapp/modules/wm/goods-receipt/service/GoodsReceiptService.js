@@ -130,14 +130,18 @@ sap.ui.define([
             var sMaterial = _isModel(oModelOrMat) ? sMatOrPlant : oModelOrMat;
             var sPlantVal = _isModel(oModelOrMat) ? sPlant : sMatOrPlant;
 
-            if (!sMaterial || typeof sMaterial !== "string" || !sMaterial.trim()) {
-                return Promise.resolve([]);
+            var aFilters = [];
+            if (sMaterial && typeof sMaterial === "string" && sMaterial.trim()) {
+                aFilters.push(new _Filter("Material", _FilterOperator.EQ, sMaterial.trim()));
             }
-
-            var aFilters = [new _Filter("Material", _FilterOperator.EQ, sMaterial.trim())];
             if (sPlantVal && typeof sPlantVal === "string" && sPlantVal.trim()) {
                 aFilters.push(new _Filter("Plant", _FilterOperator.EQ, sPlantVal.trim()));
             }
+
+            if (aFilters.length === 0) {
+                return Promise.resolve([]);
+            }
+
             return _readEntitySet(oModel, "/MaterialStorageLocations", aFilters);
         },
 

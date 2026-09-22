@@ -3166,15 +3166,57 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
+## 2026-09-22 11:45 IST
+- **Agent**: Antigravity
+- **Change**: Goods Receipt Storage-Location Picker Dead Source Elimination & Authentic SAP Plant Value Help Integration (Audit Row 35 / Option 2C):
+  - **Root Cause Analysis**:
+    - `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` returns 0 rows in SAP S/4HANA (DS4 Client 220) across all materials and plants (SAP master data not maintained at material-to-storage-location grain).
+    - As a result, `GoodsReceiptAdapter.getMaterialStorageLocations` returned `[]`, setting `grView>/availableStorageLocations = []` in `GoodsReceipt.controller.js`.
+    - In `GoodsReceipt.view.xml`, `<Select id="selectStorageLocation" items="{grView>/availableStorageLocations}">` had 0 items. In SAPUI5, `Select` cannot display `selectedKey` without a matching `<core:Item>`, rendering the picker permanently empty and unselectable, even though `GR4PO_DL_Items` already held authentic transactional storage location data (`StorageLocation: "CS01"`).
+  - **Backend Integration & Adapter Layer**:
+    - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Dropped dead source `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps`. Replaced with live SAP Storage Location Value Help `MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp` (696 records in SAP Client 220) filtered by `Plant`.
+    - Removed dead `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` call in `getMaterialBatches`.
+    - In `getStorageUnitDetails`: Extracted and prioritized authentic `StorageLocation` and `StorageLocationName` from `GR4PO_DL_Items`. Guaranteed that the document's authentic storage location is always present in `AvailableStorageLocations`, preventing an empty dropdown.
+  - **CAP Service & Handler Layer**:
+    - `srv/wm/goods-receipt/service.cds`: Updated `MaterialStorageLocations` entity schema with `key Plant`, `key StorageLocation`, and `PlantName`.
+    - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: Updated `READ MaterialStorageLocations` handler to validate `!sMaterial && !sPlant` and delegate plant-level queries to the adapter.
+  - **Frontend Service Layer**:
+    - `app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService.js`: Updated `fetchMaterialStorageLocations` to dynamically construct filters for `Plant`, `Material`, or both.
+    - Rebuilt `dist/Component-preload.js`.
+  - **Automated Tests & Audit Documentation**:
+    - `test/unit/wm/goodsReceiptService.test.js`: Updated mock service path for `C_MM_StorLocValueHelp`, updated test descriptions, and added assertions verifying `StorageLocation` is populated and present in `AvailableStorageLocations`.
+    - `docs/data-lineage-audit.md`: Updated Row 35 and re-scan table to document the transition to `C_MM_StorLocValueHelp` and elimination of the empty picker bug.
+- **Files modified**:
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`
+  - `srv/wm/goods-receipt/service.cds`
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService.js`
+  - `test/unit/wm/goodsReceiptService.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npx cds compile srv --to json > /dev/null`: Succeeded with 0 errors.
+  - `npm test -- test/unit/wm/goodsReceiptService.test.js`: 41 passed, 41 total tests (100% green).
+  - `npm test -- test/unit/wm/goodsReceiptController.test.js`: 20 passed, 20 total tests (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 989 ms; `Component-preload.js` generated.
+  - `npm run test:unit`: 64 passed, 64 total test suites; 952 passed, 952 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm run test:unit`: **64 passed, 64 total test suites; 952 passed, 952 total tests (100% green)** in 38.9 s.
+  - `npm run test:unit`: **64 passed, 64 total test suites; 952 passed, 952 total tests (100% green)** in 38.3 s.
   - `npm test -- test/unit/wm/goodsReceiptService.test.js`: **41 passed, 41 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptController.test.js`: **20 passed, 20 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
   - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Goods Receipt Storage-Location Picker Dead Source Elimination (Audit Row 35 / Option 2C)**:
+  - Dead service `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` (0 rows in SAP) dropped.
+  - Replaced with live SAP Storage Location Value Help `MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp` (696 records in SAP Client 220) filtered by `Plant`.
+  - In `GoodsReceiptAdapter.getStorageUnitDetails`: Authentically extracts and prioritizes `StorageLocation` and `StorageLocationName` from `GR4PO_DL_Items`. Document storage location is guaranteed in `AvailableStorageLocations`.
+  - UI `<Select id="selectStorageLocation">` in `GoodsReceipt.view.xml` renders with the document's authentic storage location pre-selected (`CS01 - Chemical Store`) and valid plant storage locations available for selection.
 - **Goods Receipt Outage Propagation, Null Quantities, and Pick List Error Handling (Audit Rows 33, 34, 35)**:
   - In `GoodsReceiptAdapter.js`: `_isOutage` added; empty catch blocks across Tiers 1-6 replaced to rethrow backend outages immediately.
   - CAP handler `getStorageUnitDetails` rejects with 502/503/504 on backend outage instead of masking as 404 "barcode not found".

@@ -176,8 +176,9 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                         }
                         return [];
                     }
-                    if (servicePath.includes('MaterialStorLocHelps')) {
+                    if (servicePath.includes('MaterialStorLocHelps') || servicePath.includes('C_MM_StorLocValueHelp')) {
                         return [{
+                            Plant: '1120',
                             StorageLocation: 'CS01',
                             StorageLocationName: 'Raw Material Store',
                             WarehouseStorageBin: 'BIN-01',
@@ -280,7 +281,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(delivery18.Plant).toBe('1120');
         });
 
-        it('should query live storage locations for Material 1000000045 via MMIM_MATERIAL_DATA_SRV', async () => {
+        it('should query live storage locations for Plant 1120 via C_MM_StorLocValueHelp', async () => {
             const slocs = await GoodsReceiptAdapter.getMaterialStorageLocations('1000000045', '1120');
             expect(Array.isArray(slocs)).toBe(true);
             expect(slocs.length).toBeGreaterThan(0);
@@ -311,10 +312,12 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(suDetails.DeliveryDocument).toBe('180000001');
             expect(suDetails.Material).toBe('1000000045');
             expect(suDetails.Plant).toBe('1120');
+            expect(suDetails.StorageLocation).toBeTruthy();
             expect(suDetails.PurchaseOrder).toBe('400000011');
             expect(suDetails.Supplier).toBe('200001');
             expect(Array.isArray(suDetails.AvailableStorageLocations)).toBe(true);
             expect(suDetails.AvailableStorageLocations.length).toBeGreaterThan(0);
+            expect(suDetails.AvailableStorageLocations.some(s => s.StorageLocation === suDetails.StorageLocation)).toBe(true);
         });
 
         it('should resolve Purchase Order barcode 400000011 and link to open delivery', async () => {
