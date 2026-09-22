@@ -1,5 +1,7 @@
 # SAP change request: extend `LORD_ODATA_ORDER_SRV` for quotation-ready inquiries
 
+> **Status (2026-09-22):** the application-side quotation feature (`SalesInquiryToCreateSalesInquiry`) has been removed from this repository. This document stays as the SAP-side change request only; nothing in the app depends on it.
+
 **System:** DS4, client 220 (DEV) · **Owner:** SD development · **Requested by:** SAPS4HANAFULLSTACK application team
 
 ## Problem

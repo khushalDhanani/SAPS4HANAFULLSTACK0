@@ -232,7 +232,7 @@ class GoodsIssueHandler {
                 Batch: it.Batch,
                 DifferenceQty: Number(it.DifferenceQty) || 0,
                 DifferenceReason: it.DifferenceReason,
-                DifferenceStorageType: it.DifferenceStorageType || '999',
+                DifferenceStorageType: it.DifferenceStorageType || '',
                 FinalIssue: it.FinalIssue,
                 LastSyncError: err.message
               });

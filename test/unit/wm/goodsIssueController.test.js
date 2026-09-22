@@ -788,7 +788,6 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
                 expect.objectContaining({
                     DifferenceQty: 50,
                     DifferenceReason: '02',
-                    DifferenceStorageType: '999',
                     FinalIssue: true
                 })
             );

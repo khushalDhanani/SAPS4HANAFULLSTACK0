@@ -1,5 +1,7 @@
 # SAP Ticket / Incident Specification
 
+> **Status (2026-09-22):** the application-side quotation feature has been removed from this repository. This ticket stays open on the SAP side (ABAP copy routine); nothing in the app depends on it.
+
 **Subject:** VTAA copy control ZIN -> ZQT does not copy custom port fields (client 220)
 
 ---

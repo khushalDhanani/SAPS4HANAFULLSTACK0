@@ -21,7 +21,17 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const sItem = rawItem ? rawItem.padStart(4, '0') : '';
     const nQty = Number(issueQty);
     const nDiffQty = Number(differenceQty) || 0;
-    const sDiffStorageType = differenceStorageType || '999';
+    // Interim storage type for differences is WM customizing: caller-supplied, else configured (s4.differenceStorageType).
+    // Only needed when a difference is actually posted; never assumed.
+    let sDiffStorageType = String(differenceStorageType || '').trim();
+    if (!sDiffStorageType && nDiffQty > 0) {
+      try {
+        sDiffStorageType = s4Config.getDifferenceStorageType();
+      } catch (cfgErr) {
+        cfgErr.status = 400;
+        throw cfgErr;
+      }
+    }
 
     if (!sReserv || !sItem) {
       const err = new Error('ReservationNo and ReservationItem are required for Goods Issue');

@@ -57,11 +57,9 @@ sap.ui.define([
             var oDialogModel = new JSONModel({
                 salesOrder: "",
                 shippingPoint: "",
-                deliveryDate: this._getTodayDateString(),
-                shippingPoints: []
+                deliveryDate: this._getTodayDateString()
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
-            this._loadShippingPoints();
             this._loadServerMetrics();
 
             var oRouter = this.getOwnerComponent().getRouter();
@@ -198,32 +196,6 @@ sap.ui.define([
             var sMonth = String(d.getMonth() + 1).padStart(2, "0");
             var sDay = String(d.getDate()).padStart(2, "0");
             return d.getFullYear() + "-" + sMonth + "-" + sDay;
-        },
-
-        _loadShippingPoints: function () {
-            var that = this;
-            if (!OutboundDeliveryService || typeof OutboundDeliveryService.getShippingPoints !== "function") {
-                return;
-            }
-            OutboundDeliveryService.getShippingPoints()
-                .then(function (aPoints) {
-                    if (Array.isArray(aPoints)) {
-                        var aFormatted = aPoints.map(function (oSp) {
-                            var sKey = oSp.ShippingPoint || "";
-                            var sName = oSp.ShippingPointName || oSp.ShippingPoint_Text || "";
-                            return {
-                                key: sKey,
-                                text: sName ? (sKey + " - " + sName) : sKey,
-                                name: sName
-                            };
-                        });
-                        var oDialogModel = that.getView().getModel("deliveryDialog");
-                        if (oDialogModel) {
-                            oDialogModel.setProperty("/shippingPoints", aFormatted);
-                        }
-                    }
-                })
-                .catch(function () {});
         },
 
         onCreateDeliveryPress: function (oEvent) {
@@ -369,7 +341,9 @@ sap.ui.define([
                 if (oBundle && oBundle.hasText && oBundle.hasText(sKey)) {
                     return oBundle.getText(sKey);
                 }
-            } catch (e) {}
+            } catch (e) {
+                // i18n bundle not available (e.g. unit tests): fall through to the English default.
+            }
             return sDefault;
         }
     });

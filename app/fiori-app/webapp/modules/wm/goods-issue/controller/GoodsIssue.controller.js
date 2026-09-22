@@ -1146,7 +1146,6 @@ sap.ui.define([
                 Batch: oActive.Batch || "",
                 DifferenceQty: Number(oModel.getProperty("/differenceQty")) || 0,
                 DifferenceReason: oModel.getProperty("/differenceReason") || "",
-                DifferenceStorageType: "999",
                 FinalIssue: Boolean(oModel.getProperty("/finalIssue")),
                 OrderNo: oResolved.OrderNo || "",
                 MaterialDesc: oActive.MaterialDesc || "",

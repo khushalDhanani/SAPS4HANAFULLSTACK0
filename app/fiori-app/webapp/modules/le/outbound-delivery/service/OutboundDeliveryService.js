@@ -117,6 +117,22 @@ sap.ui.define([
         },
 
         /**
+         * KPI figures computed by the server over the full due-for-delivery set (not the loaded page).
+         * Rejects on failure so the caller can show "-" instead of a number.
+         *
+         * @returns {Promise<{scheduleLineCount: number, shippingPointCount: number}>}
+         */
+        getOrdersDueMetrics: function () {
+            return ODataClient.get(SERVICE_BASE + "/getOrdersDueMetrics()").then(function (result) {
+                var oData = (result && result.value) || result;
+                if (!oData || typeof oData.scheduleLineCount !== "number" || typeof oData.shippingPointCount !== "number") {
+                    throw new Error("getOrdersDueMetrics returned no figures");
+                }
+                return { scheduleLineCount: oData.scheduleLineCount, shippingPointCount: oData.shippingPointCount };
+            });
+        },
+
+        /**
          * Fetch default configured shipping point information.
          *
          * @returns {Promise<{ShippingPoint: string, ShippingPoints: string[]}>}

@@ -162,6 +162,14 @@ class S4Config {
     return this._requireString('conditionType', ['CDS_S4_CONDITION_TYPE', 'S4_CONDITION_TYPE']);
   }
 
+  /**
+   * WM interim storage type that Goods Issue differences are cleared to (e.g. '999').
+   * Warehouse customizing, not transactional data: must be configured explicitly, never defaulted.
+   */
+  getDifferenceStorageType() {
+    return this._requireString('differenceStorageType', ['CDS_S4_DIFFERENCE_STORAGE_TYPE', 'S4_DIFFERENCE_STORAGE_TYPE']);
+  }
+
   /** Specific Shipping Points (e.g. ['1120', '1112', '1108', '1109']) */
   getShippingPoints() {
     return this._requireArray('shippingPoints', ['CDS_S4_SHIPPING_POINTS', 'S4_SHIPPING_POINTS']);
@@ -181,6 +189,7 @@ class S4Config {
   get orderType() { return this.getOrderType(); }
   get conditionType() { return this.getConditionType(); }
   get shippingPoints() { return this.getShippingPoints(); }
+  get differenceStorageType() { return this.getDifferenceStorageType(); }
 
   /**
    * Returns a snapshot of all configured values.

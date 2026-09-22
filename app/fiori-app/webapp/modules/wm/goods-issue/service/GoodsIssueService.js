@@ -187,7 +187,7 @@ sap.ui.define([
                 Batch: oPayload.Batch || "",
                 DifferenceQty: Number(oPayload.DifferenceQty) || 0,
                 DifferenceReason: oPayload.DifferenceReason || "",
-                DifferenceStorageType: oPayload.DifferenceStorageType || "999",
+                DifferenceStorageType: oPayload.DifferenceStorageType || "",
                 FinalIssue: Boolean(oPayload.FinalIssue),
                 OrderNo: oPayload.OrderNo ? String(oPayload.OrderNo).trim() : "",
                 MaterialDesc: oPayload.MaterialDesc ? String(oPayload.MaterialDesc).trim() : "",
@@ -250,7 +250,7 @@ sap.ui.define([
                         Batch: it.Batch || "",
                         DifferenceQty: Number(it.DifferenceQty) || 0,
                         DifferenceReason: it.DifferenceReason || "",
-                        DifferenceStorageType: it.DifferenceStorageType || "999",
+                        DifferenceStorageType: it.DifferenceStorageType || "",
                         FinalIssue: Boolean(it.FinalIssue)
                     };
                 })

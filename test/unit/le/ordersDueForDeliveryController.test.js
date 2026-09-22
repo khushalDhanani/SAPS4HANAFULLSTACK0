@@ -82,7 +82,8 @@ const MockOutboundDeliveryService = {
         ShippingPoint: "1120",
         ShippingPoints: ["1120", "1112", "1108", "1109"]
     }),
-    createOutboundDelivery: jest.fn().mockResolvedValue("13000526")
+    createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
+    getOrdersDueMetrics: jest.fn().mockResolvedValue({ scheduleLineCount: 0, shippingPointCount: 0 })
 };
 
 beforeAll(() => {
@@ -162,39 +163,27 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(mockRoute.attachPatternMatched).toHaveBeenCalled();
     });
 
-    test("onUpdateFinished updates KPI counts for total and unique shipping points", () => {
+    test("_loadServerMetrics takes KPI counts from getOrdersDueMetrics (full set, not the loaded page)", async () => {
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({ scheduleLineCount: 57, shippingPointCount: 3 });
         controller.onInit();
-
-        const mockItems = [
-            {
-                getBindingContext: () => ({
-                    getProperty: (p) => (p === "ShippingPoint" ? "1120" : null)
-                })
-            },
-            {
-                getBindingContext: () => ({
-                    getProperty: (p) => (p === "ShippingPoint" ? "1112" : null)
-                })
-            },
-            {
-                getBindingContext: () => ({
-                    getProperty: (p) => (p === "ShippingPoint" ? "1120" : null)
-                })
-            }
-        ];
-
-        const mockEvent = {
-            getSource: () => ({
-                getItems: () => mockItems
-            }),
-            getParameter: (p) => (p === "total" ? 3 : null)
-        };
-
-        controller.onUpdateFinished(mockEvent);
+        await Promise.resolve();
+        await Promise.resolve();
 
         const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/totalCount")).toBe(3);
-        expect(viewModel.getProperty("/shippingPointCount")).toBe(2);
+        expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalled();
+        expect(viewModel.getProperty("/totalCount")).toBe(57);
+        expect(viewModel.getProperty("/shippingPointCount")).toBe(3);
+    });
+
+    test("_loadServerMetrics shows '-' (never 0) when the server metrics call fails", async () => {
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockRejectedValueOnce(new Error("502"));
+        controller.onInit();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const viewModel = mockView.getModel("ordersDueView");
+        expect(viewModel.getProperty("/totalCount")).toBe("-");
+        expect(viewModel.getProperty("/shippingPointCount")).toBe("-");
     });
 
     test("onSearch applies filter on table items", () => {
@@ -238,24 +227,6 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(dialogModel.getProperty("/shippingPoint")).toBe("1120");
         expect(dialogModel.getProperty("/deliveryDate")).toBe("2026-09-20");
         expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
-    });
-
-    test("_loadShippingPoints loads authentic shipping points from getShippingPoints without hardcoded table", async () => {
-        MockOutboundDeliveryService.getShippingPoints.mockResolvedValueOnce([
-            { ShippingPoint: "1120", ShippingPointName: "1130-FG Loading Area" },
-            { ShippingPoint: "1112", ShippingPointName: "Packaging Area 1112" }
-        ]);
-
-        controller.onInit();
-        await Promise.resolve(); // wait for getShippingPoints promise
-
-        const dialogModel = mockView.getModel("deliveryDialog");
-        const aPoints = dialogModel.getProperty("/shippingPoints");
-        expect(MockOutboundDeliveryService.getShippingPoints).toHaveBeenCalled();
-        expect(aPoints).toEqual([
-            { key: "1120", text: "1120 - 1130-FG Loading Area", name: "1130-FG Loading Area" },
-            { key: "1112", text: "1112 - Packaging Area 1112", name: "Packaging Area 1112" }
-        ]);
     });
 
     test("onCreateDeliveryPress leaves shippingPoint empty when row has no ShippingPoint", () => {

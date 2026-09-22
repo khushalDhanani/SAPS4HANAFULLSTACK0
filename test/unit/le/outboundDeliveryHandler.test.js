@@ -195,4 +195,29 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       });
     });
   });
+
+  describe('getOrdersDueMetrics function', () => {
+    test('counts schedule lines and distinct shipping points over the full unpaged set', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue([
+        { SalesOrder: '5000104', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1120' },
+        { SalesOrder: '5000104', SalesOrderItem: '20', ScheduleLine: '1', ShippingPoint: '1120' },
+        { SalesOrder: '5000105', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1112' },
+        { SalesOrder: '5000106', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '' }
+      ]);
+      const req = { error: jest.fn() };
+      const res = await handlers['getOrdersDueMetrics'](req);
+      expect(res).toEqual({ scheduleLineCount: 4, shippingPointCount: 2 });
+      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith({});
+      expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('reports an error instead of zero counts when SAP read fails', async () => {
+      const err = new Error('S/4HANA GET failed');
+      err.status = 502;
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockRejectedValue(err);
+      const req = { error: jest.fn() };
+      await handlers['getOrdersDueMetrics'](req);
+      expect(req.error).toHaveBeenCalledWith(502, 'S/4HANA GET failed');
+    });
+  });
 });

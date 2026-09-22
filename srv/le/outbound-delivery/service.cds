@@ -41,4 +41,10 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
         ShippingPoint : String;
         ShippingPoints: array of String;
     };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getOrdersDueMetrics() returns {
+        scheduleLineCount : Integer;
+        shippingPointCount: Integer;
+    };
 }

@@ -150,4 +150,20 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(() => s4Config.validate()).toThrow(/Missing required S\/4HANA configuration: s4\.division/);
     });
   });
+
+  describe('Difference Storage Type (WM customizing, never defaulted)', () => {
+    test('throws ConfigurationError when neither cds.s4 nor env define it', () => {
+      delete process.env.S4_DIFFERENCE_STORAGE_TYPE;
+      delete process.env.CDS_S4_DIFFERENCE_STORAGE_TYPE;
+      if (cds.env.s4) delete cds.env.s4.differenceStorageType;
+      expect(() => s4Config.getDifferenceStorageType()).toThrow(ConfigurationError);
+      expect(() => s4Config.differenceStorageType).toThrow(/differenceStorageType/);
+    });
+
+    test('reads S4_DIFFERENCE_STORAGE_TYPE from the environment', () => {
+      if (cds.env.s4) delete cds.env.s4.differenceStorageType;
+      process.env.S4_DIFFERENCE_STORAGE_TYPE = ' 999 ';
+      expect(s4Config.getDifferenceStorageType()).toBe('999');
+    });
+  });
 });

@@ -405,7 +405,7 @@ class GoodsIssueAdapter {
       ReservationNo: resolvedResv,
       OrderNo: resolvedOrder || activeItem.OrderNo || '',
       Plant: activeItem.Plant,
-      PlantName: `Plant ${activeItem.Plant}`,
+      PlantName: '',
       MovementType: activeItem.MovementType || '',
       MovementTypeName: activeItem.MovementTypeName || '',
       ActiveItem: activeItem,

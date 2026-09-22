@@ -30,7 +30,9 @@ sap.ui.define([
                         if (sUser) return sUser;
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                // AuthService not loaded (e.g. unit tests): no user name available.
+            }
 
             if (!oComponent) return "alice";
             var oAuthModel = oComponent.getModel("auth");

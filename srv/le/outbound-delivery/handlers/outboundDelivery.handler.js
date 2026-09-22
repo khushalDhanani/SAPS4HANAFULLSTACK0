@@ -65,6 +65,21 @@ function registerOutboundDeliveryHandlers(srv) {
       ShippingPoints: configuredSPs
     };
   });
+
+  // 5. Function getOrdersDueMetrics: counts over the full due set (same SAP read as the worklist, unpaged)
+  srv.on('getOrdersDueMetrics', async (req) => {
+    try {
+      const rows = await outboundDeliveryAdapter.getOrdersDueForDelivery({});
+      if (!Array.isArray(rows)) {
+        throw new Error('Orders due for delivery could not be read from S/4HANA');
+      }
+      const shippingPoints = new Set(rows.map(r => r && r.ShippingPoint).filter(Boolean));
+      return { scheduleLineCount: rows.length, shippingPointCount: shippingPoints.size };
+    } catch (err) {
+      LOG.error(`Failed to compute orders-due metrics: ${err.message}`);
+      return req.error(err.status || 502, err.message);
+    }
+  });
 }
 
 module.exports = registerOutboundDeliveryHandlers;

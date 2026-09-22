@@ -29,8 +29,8 @@ sap.ui.define([
 
             var bCanCreateDelivery = (AuthService && typeof AuthService.canCreateDelivery === "function") ? AuthService.canCreateDelivery() : true;
             var oViewModel = new JSONModel({
-                totalCount: 0,
-                shippingPointCount: 0,
+                totalCount: "-",
+                shippingPointCount: "-",
                 canCreateDelivery: bCanCreateDelivery
             });
             this.getView().setModel(oViewModel, "ordersDueView");
@@ -38,8 +38,7 @@ sap.ui.define([
             var oDialogModel = new JSONModel({
                 salesOrder: "",
                 shippingPoint: "",
-                deliveryDate: this._getTodayDateString(),
-                shippingPoints: []
+                deliveryDate: this._getTodayDateString()
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
 
@@ -48,7 +47,7 @@ sap.ui.define([
                 oRouter.getRoute("ordersDueForDelivery").attachPatternMatched(this._onRouteMatched, this);
             }
 
-            this._loadShippingPoints();
+            this._loadServerMetrics();
         },
 
         _onRouteMatched: function () {
@@ -70,7 +69,7 @@ sap.ui.define([
                     // Ignore refresh error if request is in flight
                 }
             }
-            this._loadShippingPoints();
+            this._loadServerMetrics();
         },
 
         _getTodayDateString: function () {
@@ -80,52 +79,21 @@ sap.ui.define([
             return d.getFullYear() + "-" + sMonth + "-" + sDay;
         },
 
-        _loadShippingPoints: function () {
-            var that = this;
-            if (!OutboundDeliveryService || typeof OutboundDeliveryService.getShippingPoints !== "function") {
-                return;
-            }
-            OutboundDeliveryService.getShippingPoints()
-                .then(function (aPoints) {
-                    if (Array.isArray(aPoints)) {
-                        var aFormatted = aPoints.map(function (oSp) {
-                            var sKey = oSp.ShippingPoint || "";
-                            var sName = oSp.ShippingPointName || oSp.ShippingPoint_Text || "";
-                            return {
-                                key: sKey,
-                                text: sName ? (sKey + " - " + sName) : sKey,
-                                name: sName
-                            };
-                        });
-                        var oDialogModel = that.getView().getModel("deliveryDialog");
-                        if (oDialogModel) {
-                            oDialogModel.setProperty("/shippingPoints", aFormatted);
-                        }
-                    }
-                })
-                .catch(function () {});
-        },
-
-        onUpdateFinished: function (oEvent) {
-            var oTable = oEvent.getSource();
-            var iTotal = oEvent.getParameter("total") || 0;
-            var aItems = oTable.getItems() || [];
+        _loadServerMetrics: function () {
             var oViewModel = this.getView().getModel("ordersDueView");
-
-            var mShippingPoints = {};
-            aItems.forEach(function (oItem) {
-                var oCtx = oItem.getBindingContext("outboundDelivery");
-                if (oCtx) {
-                    var sSp = oCtx.getProperty("ShippingPoint");
-                    if (sSp) {
-                        mShippingPoints[sSp] = true;
-                    }
-                }
-            });
-
-            var iDistinctSp = Object.keys(mShippingPoints).length;
-            oViewModel.setProperty("/totalCount", iTotal || aItems.length);
-            oViewModel.setProperty("/shippingPointCount", iDistinctSp);
+            if (!oViewModel) {
+                return Promise.resolve();
+            }
+            return OutboundDeliveryService.getOrdersDueMetrics()
+                .then(function (oMetrics) {
+                    var bOk = oMetrics && typeof oMetrics.scheduleLineCount === "number" && typeof oMetrics.shippingPointCount === "number";
+                    oViewModel.setProperty("/totalCount", bOk ? oMetrics.scheduleLineCount : "-");
+                    oViewModel.setProperty("/shippingPointCount", bOk ? oMetrics.shippingPointCount : "-");
+                })
+                .catch(function () {
+                    oViewModel.setProperty("/totalCount", "-");
+                    oViewModel.setProperty("/shippingPointCount", "-");
+                });
         },
 
         onSearch: function (oEvent) {
@@ -310,7 +278,9 @@ sap.ui.define([
                 if (oBundle && oBundle.hasText && oBundle.hasText(sKey)) {
                     return oBundle.getText(sKey);
                 }
-            } catch (e) {}
+            } catch (e) {
+                // i18n bundle not available (e.g. unit tests): fall through to the English default.
+            }
             return sDefault;
         }
     });

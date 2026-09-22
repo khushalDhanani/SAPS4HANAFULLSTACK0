@@ -1698,7 +1698,57 @@
 - **Not done / left as-is**: `DifferenceStorageType '999'` (5 places) untouched pending WM owner confirmation of the real interim storage type; `PlantName: \`Plant ${activeItem.Plant}\`` in `GoodsIssueAdapter.js` is still a synthesized label (not in this batch).
 - **Commit state**: intentionally **not committed** (user request). Code edits are unstaged; the untracking (`git rm --cached`) and moves (`git mv`) are staged in the index. `git status` shows 12 modified files, 5 renames, 217 staged deletions, 1 new file (`logs/2026-09-16-to-19-archive.md`).
 
+## 2026-09-22 13:05 IST
+- **Agent**: Claude (Cowork)
+- **Change**: `DifferenceStorageType '999'` removed from all 5 places. New `s4Config.getDifferenceStorageType()` (`srv/common/s4Config.js`) reads `cds.s4.differenceStorageType` / `S4_DIFFERENCE_STORAGE_TYPE` and throws `ConfigurationError` when unset — no default. `GoodsIssuePostingClient.postGoodsIssue` uses the caller value, else the configured value, and only when `DifferenceQty > 0` (HTTP 400 with the configuration message if a difference is posted and nothing is configured); when no difference is posted the field is sent empty. `goodsIssue.handler.js` queue fallback, `GoodsIssue.controller.js` payload and `GoodsIssueService.js` (2 places) no longer inject `999`. `.env.example` documents `S4_DIFFERENCE_STORAGE_TYPE` (value to be confirmed by the WM owner; SAP standard is 999).
+  - **Tests**: `test/unit/common/s4Config.test.js` +2 (throws when unset, reads env); `test/unit/wm/goodsIssueController.test.js` expectation no longer asserts `'999'`.
+  - **Validation**: see gate run at 13:16 IST below.
+
+## 2026-09-22 13:06 IST
+- **Agent**: Claude (Cowork)
+- **Change**: `PlantName: \`Plant ${activeItem.Plant}\`` in `srv/integration/s4hana/wm/GoodsIssueAdapter.js` (resolved-reservation mapper) → `''`. It was a synthesized label, not SAP's plant name; no view displays it.
+  - **Validation**: see gate run at 13:16 IST below.
+
+## 2026-09-22 13:07 IST
+- **Agent**: Claude (Cowork)
+- **Change**: `srv/auth-service.js` — (a) local mock users (`alice`, `bob`, and the `khushal` mock branch) authenticate only against `LOCAL_DEV_PASSWORD`; the username is never accepted as the password, and mock login returns "Local mock users are disabled: set LOCAL_DEV_PASSWORD…" when it is unset. `khushal` / `S4_USERNAME` with `S4_PASSWORD` or S/4 Gateway credentials is unchanged. (b) The hardcoded 8-role Admin fallback is gone: roles come only from `cds.requires.auth.users` (package.json `[development]`/`[test]` already list alice/bob/khushal), anyone unlisted gets `Viewer`. Production gate (`NODE_ENV=production` / dev-token issuer off → 403) unchanged.
+  - **Tests**: `test/unit/auth/authService.test.js` — 4 tests now set `LOCAL_DEV_PASSWORD`; +1 test (mock user rejected when unset); custom `S4_USERNAME` asserted to receive `Viewer` only.
+  - **Operational note**: local mock logins now need `LOCAL_DEV_PASSWORD` in the environment.
+  - **Validation**: see gate run at 13:16 IST below.
+
+## 2026-09-22 13:08 IST
+- **Agent**: Claude (Cowork)
+- **Change**: `srv/integration/s4hana/S4HttpClient.js` — every request config (GET, POST, CSRF probe) carries `timeout: S4HttpClient.requestTimeoutMs()` (`S4_HTTP_TIMEOUT_MS`, default 30000 ms) so a hung S/4 call fails with an `S4HttpError` instead of blocking the CAP request. No automatic retry, by design: POSTs (goods movements, deliveries, orders) are not idempotent.
+  - **Tests**: `test/unit/s4HttpClient.test.js` — 3 exact-config expectations include `timeout: 30000`; +1 test for the env override / bad value.
+  - **Validation**: see gate run at 13:16 IST below.
+
+## 2026-09-22 13:10 IST
+- **Agent**: Claude (Cowork)
+- **Change**: UI silent `catch` blocks (12 found): `service/ODataClient.js` (now imports `sap/base/Log`) and `service/AuthService.js` log a warning when the stored auth session is unreadable instead of swallowing it; 7 guards that are intentional (storage unavailable in private mode, autoplay rejection in `BarcodeScanService`, i18n bundle missing in `SalesOrders`/`OrdersDueForDelivery` `_text`, AuthService not loaded in the three model `getCurrentUserName` helpers) now carry a comment saying so. The remaining 2 (`SalesOrders.controller.js` and `OrdersDueForDelivery.controller.js` `_loadShippingPoints().catch(() => {})`) were dead code — the list it built (`deliveryDialog>/shippingPoints`) was never bound; the dialog ComboBox reads `outboundDelivery>/ShippingPointVH` directly — so the function, its calls and the model property were removed from both controllers.
+  - **Tests**: `test/unit/le/ordersDueForDeliveryController.test.js` — dead `_loadShippingPoints` test removed.
+  - **Validation**: see gate run at 13:16 IST below.
+
+## 2026-09-22 13:12 IST
+- **Agent**: Claude (Cowork)
+- **Change**: Orders Due for Delivery KPI tiles now come from the server over the full due set instead of the loaded page. New `function getOrdersDueMetrics() returns { scheduleLineCount, shippingPointCount }` in `srv/le/outbound-delivery/service.cds`; handler reads `outboundDeliveryAdapter.getOrdersDueForDelivery({})` (unpaged, same SAP read as the worklist) and counts rows and distinct `ShippingPoint`; errors go to `req.error` (never zero counts). `OutboundDeliveryService.getOrdersDueMetrics()` added in the UI service (rejects when figures are missing). Controller: `_loadServerMetrics` (called on init and route match) sets `/totalCount` and `/shippingPointCount`, `"-"` on failure; the page-level `onUpdateFinished` computation and the view's `updateFinished` binding were removed; initial model values are `"-"`. i18n `ordersDueKpiShippingPointsSub` → "Distinct across all due lines".
+  - **Tests**: `test/unit/le/outboundDeliveryHandler.test.js` +2 (counts, error path); `test/unit/le/ordersDueForDeliveryController.test.js` — page-level KPI test replaced by 2 server-metrics tests (values, `"-"` on failure).
+  - **Validation**: see gate run at 13:16 IST below.
+
+## 2026-09-22 13:13 IST
+- **Agent**: Claude (Cowork)
+- **Change**: Status banner added to the two quotation-era SAP change requests, `docs/sap-inquiry-service-extension-spec.md` and `docs/ticket-vtaa-copy-control-zin-zqt.md`: the application-side quotation feature is removed; the documents remain as SAP-side (ABAP/Basis) requests only. `docs/ticket-gateway-remediation-ds4.md` left untouched — it is the live Basis ticket (system aliases, `API_MATERIAL_DOCUMENT_SRV`, `ZUI_GI_ORDER_RSV_O4`).
+- **Gate run (Mac, Node v22.23.1, 13:14–13:16 IST, after all changes above)**:
+  - `npx cds compile srv` → OK
+  - `npm run lint` (eslint .) → exit 0, no findings
+  - `npx jest test/unit` → first run 3 failures (tests encoding the old `'999'` / username-as-password behaviour, updated as listed above); rerun 65 suites / 965 tests passed (36.6 s; includes live DS4 client 220 tests)
+  - `cd app/fiori-app && npx ui5lint` → "Success! No findings detected."
+  - `cd app/fiori-app && npm run build` → "Build succeeded in 657 ms" (`dist/Component-preload.js` regenerated; no UI source changed after the build)
+  - `git diff --check` → clean
+- **Commit state**: intentionally **not committed** (user request); all changes unstaged.
+- **Still open (needs a person, not code)**: the real value for `S4_DIFFERENCE_STORAGE_TYPE` from the WM owner; Basis ticket `docs/ticket-gateway-remediation-ds4.md`; ABAP ticket `docs/ticket-vtaa-copy-control-zin-zqt.md`.
+
 ## Current Status
+- **2026-09-22 13:16 IST (uncommitted)**: remaining audit items closed — `999` default removed (config required), synthesized PlantName, dev-auth username-as-password and implicit Admin, S/4 HTTP timeout, UI silent catches, Orders Due KPIs server-side, doc banners. Gates green (cds compile, eslint, jest 965/965, ui5lint, ui5 build, diff --check).
 - **2026-09-22 12:56 IST (uncommitted)**: audit items 13, 22, 23, 24, 26, 27, 40, 41, 42 applied; all gates green (cds compile, eslint, jest 959/959, ui5lint, ui5 build, diff --check). `999` DifferenceStorageType still open.
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
@@ -1770,6 +1820,6 @@
   - Added module-level and runtime defensive normalization in `Component.js`.
 
 ## Next Steps
-1. Review the uncommitted 2026-09-22 12:50–12:56 IST changes (`git status`, `git diff`, `git diff --cached`), then stage, commit, and push to `origin/feature/CL01`.
-2. Decide the real `DifferenceStorageType` with the WM owner and replace the `999` default (5 places).
+1. Review the uncommitted 2026-09-22 13:05–13:13 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+2. Set `LOCAL_DEV_PASSWORD` in the local environment (mock logins) and, once the WM owner confirms the interim storage type, `S4_DIFFERENCE_STORAGE_TYPE` (needed only for Goods Issue differences).
 3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.

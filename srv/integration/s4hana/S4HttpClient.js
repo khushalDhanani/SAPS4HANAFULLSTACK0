@@ -136,6 +136,15 @@ class S4HttpClient {
     }
 
     /**
+     * Per-request timeout in ms (S4_HTTP_TIMEOUT_MS, default 30000) so a hung S/4 call fails instead of
+     * blocking the CAP request forever. No automatic retry: POSTs are not idempotent (double postings).
+     */
+    static requestTimeoutMs() {
+        const n = Number(process.env.S4_HTTP_TIMEOUT_MS);
+        return Number.isFinite(n) && n > 0 ? n : 30000;
+    }
+
+    /**
      * Extracts caller's JWT from options or current CAP request context.
      * Enables Principal Propagation to S/4HANA via SAP Cloud Connector.
      *
@@ -244,6 +253,7 @@ class S4HttpClient {
         const requestConfig = {
             method: 'get',
             url: joinQuery(path, query),
+            timeout: S4HttpClient.requestTimeoutMs(),
             headers: { Accept: accept, ...S4HttpClient.sapClientHeader(destination), ...headers },
             ...(responseType ? { responseType } : {})
         };
@@ -281,6 +291,7 @@ class S4HttpClient {
         const requestConfig = {
             method: 'get',
             url: csrfPath,
+            timeout: S4HttpClient.requestTimeoutMs(),
             headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json', ...S4HttpClient.sapClientHeader(dest) }
         };
         try {
@@ -320,6 +331,7 @@ class S4HttpClient {
             method: 'post',
             url: path,
             data,
+            timeout: S4HttpClient.requestTimeoutMs(),
             headers: {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',

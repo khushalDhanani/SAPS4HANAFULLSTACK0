@@ -126,6 +126,7 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(config).toEqual({
                 method: 'get',
                 url: "/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch?$filter=Batch eq 'B1'&$top=1",
+                timeout: 30000,
                 headers: { Accept: 'application/json', 'sap-client': '220' }
             });
             expect(options).toEqual({ fetchCsrfToken: false });
@@ -201,6 +202,7 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(probe).toEqual({
                 method: 'get',
                 url: '/sap/opu/odata/sap/API_WHSE_INBOUND_DELIVERY/',
+                timeout: 30000,
                 headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json', 'sap-client': '220' }
             });
             expect(probeOptions).toEqual({ fetchCsrfToken: false });
@@ -210,6 +212,7 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
                 method: 'post',
                 url: "/sap/opu/odata/sap/API_WHSE_INBOUND_DELIVERY/PostGoodsReceipt?InboundDelivery='180000001'",
                 data: {},
+                timeout: 30000,
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
@@ -292,6 +295,19 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
                 fetchCsrfToken: false,
                 userJwt: 'caller.jwt.token'
             });
+        });
+    });
+
+    describe('request timeout', () => {
+        afterEach(() => { delete process.env.S4_HTTP_TIMEOUT_MS; });
+
+        test('defaults to 30000 ms and honours S4_HTTP_TIMEOUT_MS', () => {
+            delete process.env.S4_HTTP_TIMEOUT_MS;
+            expect(S4HttpClient.requestTimeoutMs()).toBe(30000);
+            process.env.S4_HTTP_TIMEOUT_MS = '5000';
+            expect(S4HttpClient.requestTimeoutMs()).toBe(5000);
+            process.env.S4_HTTP_TIMEOUT_MS = 'abc';
+            expect(S4HttpClient.requestTimeoutMs()).toBe(30000);
         });
     });
 });

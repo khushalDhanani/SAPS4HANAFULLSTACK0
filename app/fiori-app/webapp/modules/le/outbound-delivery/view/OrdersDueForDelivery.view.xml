@@ -75,7 +75,6 @@
                     growingThreshold="25"
                     growingScrollToLoad="true"
                     noDataText="{i18n>ordersDueNoDataText}"
-                    updateFinished=".onUpdateFinished"
                     sticky="ColumnHeaders,HeaderToolbar">
                     <headerToolbar>
                         <OverflowToolbar id="tableToolbar">

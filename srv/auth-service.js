@@ -96,14 +96,21 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     }
 
     const sEnvDevUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
+    // Local mock passwords exist only when LOCAL_DEV_PASSWORD is set; a username is never a password.
+    const sLocalDevPass = (process.env.LOCAL_DEV_PASSWORD || "").trim();
 
     let authResult;
     const isMockOnlyUser = sUserLower === "alice" || sUserLower === "bob";
     const isKhushalUser = sUserLower === "khushal";
 
     if (isMockOnlyUser) {
-      const expectedPass = process.env.LOCAL_DEV_PASSWORD || sUserLower;
-      const isMatch = localTokenUtil.timingSafeEqual(sPass.toLowerCase(), expectedPass.toLowerCase());
+      if (!sLocalDevPass) {
+        return {
+          authenticated: false,
+          message: "Local mock users are disabled: set LOCAL_DEV_PASSWORD to enable them."
+        };
+      }
+      const isMatch = localTokenUtil.timingSafeEqual(sPass.toLowerCase(), sLocalDevPass.toLowerCase());
       if (isMatch) {
         authResult = {
           authenticated: true,
@@ -117,11 +124,10 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
         };
       }
     } else if (isKhushalUser) {
-      // Allow 'khushal' with local mock password ('khushal' or LOCAL_DEV_PASSWORD),
+      // Allow 'khushal' with the local mock password (LOCAL_DEV_PASSWORD, if set),
       // or with real S/4 credentials (S4_PASSWORD or S/4 Gateway)
-      const expectedMockPass = process.env.LOCAL_DEV_PASSWORD || "khushal";
       const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
-      if (localTokenUtil.timingSafeEqual(sPass.toLowerCase(), expectedMockPass.toLowerCase())) {
+      if (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass.toLowerCase(), sLocalDevPass.toLowerCase())) {
         authResult = {
           authenticated: true,
           message: "Authentication successful (Local Development User).",
@@ -176,13 +182,8 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     };
     let devRoles = extractRoles(configuredUsers[sUserLower]) || extractRoles(configuredUsers[sUser]);
     if (!devRoles || devRoles.length === 0) {
-      if (sUserLower === "bob") {
-        devRoles = ["Viewer"];
-      } else if (sUserLower === "alice" || sUserLower === "khushal" || (sEnvDevUser && sUserLower === sEnvDevUser)) {
-        devRoles = ["Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
-      } else {
-        devRoles = ["Viewer"];
-      }
+      // Roles come only from cds.requires.auth.users; nothing is granted implicitly.
+      devRoles = ["Viewer"];
     }
     const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
 

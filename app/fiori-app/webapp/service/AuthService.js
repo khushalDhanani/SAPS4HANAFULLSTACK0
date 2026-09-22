@@ -327,7 +327,12 @@ sap.ui.define([
                     var parsed = JSON.parse(sRaw);
                     return (parsed && parsed.user && parsed.user.token) || (parsed && parsed.token) || null;
                 }
-            } catch (e) {}
+            } catch (e) {
+                // Corrupt or unreadable session storage: treated as "no token" and logged.
+                if (Log && typeof Log.warning === "function") {
+                    Log.warning("AuthService: stored auth session unreadable (" + (e && e.message) + ")");
+                }
+            }
             return null;
         },
 

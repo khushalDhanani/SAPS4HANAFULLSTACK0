@@ -106,9 +106,20 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining('SAP BTP XSUAA Single Sign-On'));
         });
 
+        it('should reject local mock users when LOCAL_DEV_PASSWORD is not set (no username-as-password)', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            delete process.env.LOCAL_DEV_PASSWORD;
+
+            const res = await service._handleLogin({ data: { username: 'alice', password: 'alice' } });
+            expect(res.authenticated).toBe(false);
+            expect(res.message).toContain('LOCAL_DEV_PASSWORD');
+        });
+
         it('should allow dev login for alice when valid password provided and dev issuer enabled', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_DEV_PASSWORD = 'alice';
 
             const req = {
                 data: { username: 'alice', password: 'alice' }
@@ -125,6 +136,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         it('should reject login for alice when password is missing or wrong', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_DEV_PASSWORD = 'alice';
 
             const req1 = {
                 data: { username: 'alice', password: '' }
@@ -146,6 +158,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
             process.env.S4_USERNAME = 'custom_dev_user';
             process.env.S4_PASSWORD = 'devPassword123';
+            process.env.LOCAL_DEV_PASSWORD = 'khushal';
 
             const req1 = {
                 data: { username: 'KHUSHAL', password: 'khushal' }
@@ -162,6 +175,8 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res2.authenticated).toBe(true);
             expect(res2.username).toBe('CUSTOM_DEV_USER');
             expect(res2.system).toBe('DEV - Client 220');
+            // not listed in cds.requires.auth.users -> Viewer only, never implicit Admin
+            expect(res2.scopes).toEqual(['$XSAPPNAME.Viewer']);
 
             // Verify khushal can also authenticate with real S/4 password (S4_PASSWORD)
             process.env.S4_USERNAME = 'khushal';
@@ -201,6 +216,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
         it('should grant only Viewer role to bob', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_DEV_PASSWORD = 'bob';
 
             const req = {
                 data: { username: 'bob', password: 'bob' }
@@ -217,6 +233,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
             process.env.S4_SYSTEM_NAME = 'S4HANA_DEV';
             process.env.S4_CLIENT = '300';
+            process.env.LOCAL_DEV_PASSWORD = 'alice';
 
             const req = {
                 data: { username: 'alice', password: 'alice' }

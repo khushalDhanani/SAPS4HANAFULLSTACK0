@@ -1,4 +1,4 @@
-sap.ui.define([], function () {
+sap.ui.define(["sap/base/Log"], function (Log) {
     "use strict";
 
     var sCsrfToken = null;
@@ -142,7 +142,12 @@ sap.ui.define([], function () {
                                     mHeaders["Authorization"] = "Bearer " + sAuthToken;
                                 }
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            // Corrupt or unreadable session: the request goes out unauthenticated and will 401.
+                            if (Log && typeof Log.warning === "function") {
+                                Log.warning("ODataClient: stored auth session unreadable (" + (e && e.message) + ")");
+                            }
+                        }
                     }
 
                     var bodyData = options.body;
@@ -181,7 +186,9 @@ sap.ui.define([], function () {
                                 try {
                                     sessionStorage.removeItem("saps4hana_fiori_auth_session");
                                     localStorage.removeItem("saps4hana_fiori_auth_session");
-                                } catch (e) {}
+                                } catch (e) {
+                                    // Storage unavailable (private mode): nothing to clear.
+                                }
                             }
                             return that.parseError(response).then(function (err) {
                                 throw err;
