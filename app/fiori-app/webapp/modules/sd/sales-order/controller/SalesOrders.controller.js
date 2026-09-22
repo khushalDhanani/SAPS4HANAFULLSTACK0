@@ -234,6 +234,10 @@ sap.ui.define([
             var sApprovalStatus = oCtx.getProperty("SalesDocApprovalStatus");
             var sDeliveryBlock = oCtx.getProperty("DeliveryBlockReason");
 
+            if (sApprovalStatus === "unknown") {
+                MessageBox.warning(this._text("msgOrderApprovalUnknown", "Approval status for Sales Order {0} could not be verified from S/4HANA. Delivery creation is blocked until status is confirmed.", [sSalesOrder]));
+                return;
+            }
             if (sApprovalStatus === "A") {
                 MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval and cannot be delivered.", [sSalesOrder]));
                 return;

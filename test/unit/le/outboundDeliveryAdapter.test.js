@@ -7,7 +7,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
   beforeEach(() => {
     mockClient = {
-      get: jest.fn(),
+      get: jest.fn().mockResolvedValue({ status: 200, data: { d: { results: [] } } }),
       post: jest.fn()
     };
     adapter = new OutboundDeliveryAdapter({ client: mockClient });
@@ -234,6 +234,40 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
       await expect(adapter.getOrdersDueForDelivery({ shippingPoint: '1120' })).rejects.toThrow('Database query timeout');
     });
+
+    test('marks SalesDocApprovalStatus as unknown and invalidates cache when approval lookup fails', async () => {
+      mockClient.get.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              {
+                SalesOrder: '5000104',
+                SalesOrderItem: '000010',
+                ScheduleLine: '0001',
+                ShippingPoint: '1120',
+                DeliveryCreationDate: '/Date(1755129600000)/',
+                DeliveryPriority: '00',
+                Route: 'Z00001',
+                ForwardingAgent: '',
+                GoodsIssueDate: '/Date(1755129600000)/',
+                ShipToParty: '10082',
+                DelivBlockReasonForSchedLine: ''
+              }
+            ]
+          }
+        }
+      }).mockRejectedValueOnce(new Error('Gateway timeout on approval status'));
+
+      const orders = await adapter.getOrdersDueForDelivery({ shippingPoint: '1120' });
+      expect(orders).toHaveLength(1);
+      expect(orders[0].SalesOrder).toBe('5000104');
+      expect(orders[0].SalesDocApprovalStatus).toBe('unknown');
+
+      // Verify that cache was cleared and does not store stale data
+      expect(adapter._approvalCache.timestamp).toBe(0);
+      expect(adapter._approvalCache.map.size).toBe(0);
+    });
   });
 
   describe('getShippingPoints', () => {
@@ -362,6 +396,58 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           shippingPoint: 'WAVG'
         })
       ).rejects.toThrow('Subsequent documents not possible due to approval status of the document.');
+    });
+
+    test('blocks with 502 when approval status check fails from Gateway', async () => {
+      mockClient.get.mockRejectedValueOnce(new Error('SD_F1873_SO_WL_SRV timeout'));
+
+      await expect(
+        adapter.createDeliveryFromOrder({
+          salesOrder: '5000104',
+          shippingPoint: '1120'
+        })
+      ).rejects.toThrow('Could not verify approval status for Sales Order 5000104. Outbound delivery creation blocked.');
+    });
+
+    test('blocks with 400 when order is unapproved (status A, C, or D)', async () => {
+      mockClient.get.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              { SalesOrder: '5000461', SalesDocApprovalStatus: 'A' }
+            ]
+          }
+        }
+      });
+
+      await expect(
+        adapter.createDeliveryFromOrder({
+          salesOrder: '5000461',
+          shippingPoint: '1120'
+        })
+      ).rejects.toThrow('Sales Order 5000461 is in approval and cannot be delivered.');
+    });
+
+    test('bypasses approval check when skipApprovalCheck is true', async () => {
+      mockClient.post.mockResolvedValue({
+        status: 201,
+        data: {
+          d: {
+            OutboundDelivery: '13000528',
+            ReferenceSDDocument: '5000461',
+            ShippingPoint: '1120'
+          }
+        }
+      });
+
+      const result = await adapter.createDeliveryFromOrder(
+        { salesOrder: '5000461', shippingPoint: '1120' },
+        { skipApprovalCheck: true }
+      );
+
+      expect(mockClient.get).not.toHaveBeenCalled();
+      expect(result.OutboundDelivery).toBe('13000528');
     });
   });
 });

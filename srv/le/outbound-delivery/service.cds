@@ -17,7 +17,7 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
             GoodsIssueDate              : Date;
             ShipToParty                 : String(10);
             DelivBlockReasonForSchedLine: String(2);
-            SalesDocApprovalStatus      : String(1);
+            SalesDocApprovalStatus      : String(10);
     };
 
     @readonly

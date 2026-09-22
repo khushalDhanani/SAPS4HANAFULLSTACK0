@@ -303,6 +303,32 @@ describe("SalesOrders Controller", () => {
         expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
     });
 
+    test("onCreateDeliveryPress warns and blocks when order approval status is unknown", () => {
+        controller.onInit();
+        controller._openCreateDeliveryDialog = jest.fn();
+
+        const mockEvent = {
+            getSource: () => ({
+                getBindingContext: (modelName) => {
+                    if (modelName === "salesOrder") {
+                        return {
+                            getProperty: (prop) => {
+                                if (prop === "SalesOrder") return "5000104";
+                                if (prop === "SalesDocApprovalStatus") return "unknown";
+                                return null;
+                            }
+                        };
+                    }
+                    return null;
+                }
+            })
+        };
+
+        controller.onCreateDeliveryPress(mockEvent);
+        expect(MockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining("could not be verified"));
+        expect(controller._openCreateDeliveryDialog).not.toHaveBeenCalled();
+    });
+
     test("onCreateDeliveryPress warns and blocks when order is in approval (A)", () => {
         controller.onInit();
         controller._openCreateDeliveryDialog = jest.fn();

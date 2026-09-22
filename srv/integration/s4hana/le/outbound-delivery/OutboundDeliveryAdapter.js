@@ -192,6 +192,30 @@ class OutboundDeliveryAdapter {
     const cleanOrder = String(salesOrder).trim();
     const cleanSP = String(shippingPoint || s4Config.getShippingPoints()[0]).trim();
 
+    // Verify approval status unless explicitly skipped
+    if (!options.skipApprovalCheck) {
+      const approvalMap = await this._fetchApprovalStatusMap(cleanOrder, options);
+      if (approvalMap === null) {
+        const err = new Error(`Could not verify approval status for Sales Order ${cleanOrder}. Outbound delivery creation blocked.`);
+        err.status = 502;
+        err.statusCode = 502;
+        throw err;
+      }
+      const approvalStatus = approvalMap.get(cleanOrder);
+      if (approvalStatus && approvalStatus !== 'B') {
+        const statusDescriptions = {
+          'A': 'in approval',
+          'C': 'rejected',
+          'D': 'being reworked'
+        };
+        const desc = statusDescriptions[approvalStatus] || `status '${approvalStatus}'`;
+        const err = new Error(`Sales Order ${cleanOrder} is ${desc} and cannot be delivered.`);
+        err.status = 400;
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
     const payload = {
       ReferenceSDDocument: cleanOrder,
       ShippingPoint: cleanSP
@@ -280,13 +304,16 @@ class OutboundDeliveryAdapter {
           map
         };
       }
+      return map;
     } catch (err) {
       LOG.warn(`Could not fetch sales order approval status map: ${err.message}`);
-      if (!so && this._approvalCache.map.size > 0) {
-        return this._approvalCache.map;
-      }
+      // Invalidate cache and return null so callers know approval lookup failed
+      this._approvalCache = {
+        timestamp: 0,
+        map: new Map()
+      };
+      return null;
     }
-    return map;
   }
 
   /**
@@ -295,6 +322,7 @@ class OutboundDeliveryAdapter {
    * @private
    */
   _formatOrderResults(rawResults, approvalStatusMap = new Map()) {
+    const isUnknown = approvalStatusMap === null;
     return rawResults.map(r => ({
       SalesOrder: r.SalesOrder,
       SalesOrderItem: r.SalesOrderItem,
@@ -307,7 +335,9 @@ class OutboundDeliveryAdapter {
       GoodsIssueDate: _parseODataV2Date(r.GoodsIssueDate),
       ShipToParty: r.ShipToParty || '',
       DelivBlockReasonForSchedLine: r.DelivBlockReasonForSchedLine || '',
-      SalesDocApprovalStatus: (approvalStatusMap && typeof approvalStatusMap.get === 'function' ? approvalStatusMap.get(r.SalesOrder) : '') || ''
+      SalesDocApprovalStatus: isUnknown
+        ? 'unknown'
+        : ((approvalStatusMap && typeof approvalStatusMap.get === 'function' ? approvalStatusMap.get(r.SalesOrder) : '') || '')
     }));
   }
 }

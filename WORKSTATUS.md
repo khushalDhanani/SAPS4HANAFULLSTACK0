@@ -2975,18 +2975,79 @@
   - `cd app/fiori-app && npm run lint`: Success! No findings detected.
   - `cd app/fiori-app && npm run build`: Build succeeded in 1.76 s; `dist/Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
-- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+## 2026-09-22 10:50 IST
+- **Agent**: Antigravity
+- **Change**: Fix Approval Lookup Failure Masking Unapproved Orders as Approved (Audit Row 31):
+  - **Root Cause Analysis**:
+    - In `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js` (line 283), `_fetchApprovalStatusMap` caught Gateway read errors from `SD_F1873_SO_WL_SRV` and returned either `this._approvalCache.map` (stale cache) or `new Map()` (empty map).
+    - Unapproved orders missing from the returned map received `SalesDocApprovalStatus: ''` ("Not Relevant" / Approved).
+    - In `OrdersDueForDelivery.view.xml` and `SalesOrders.view.xml`, button enablement expression `(%{...SalesDocApprovalStatus} === 'B' || !%{...SalesDocApprovalStatus})` evaluated to `true`, enabling the Create Delivery button for unverified/unapproved orders, which subsequently failed in S/4HANA with `V2/478`.
+  - **Backend Adapter Layer**:
+    - `OutboundDeliveryAdapter.js`:
+      - In `_fetchApprovalStatusMap`: On catch, cleared cached map (`this._approvalCache = { timestamp: 0, map: new Map() }`) and returned `null`.
+      - In `_formatOrderResults`: When `approvalStatusMap === null`, mapped `SalesDocApprovalStatus = 'unknown'`.
+      - In `createDeliveryFromOrder`: Unless `options.skipApprovalCheck` is explicitly set, verified approval status before calling S/4HANA `C_DelivWthRefQuickCreate`. Throws HTTP 502 if approval lookup failed (`null`) and HTTP 400 if order is unapproved (`'A'`, `'C'`, or `'D'`).
+  - **CAP Service Definition Layer**:
+    - `srv/le/outbound-delivery/service.cds`: Widened `OrdersDueForDelivery.SalesDocApprovalStatus` from `String(1)` to `String(10)` to accommodate `'unknown'`.
+  - **UI5 Views and Controllers**:
+    - `OrdersDueForDelivery.view.xml`: Rendered `'unknown'` with `Warning` status in `ObjectStatus`; added `%{outboundDelivery>SalesDocApprovalStatus} !== 'unknown'` to `Button enabled` condition; updated tooltip expression.
+    - `OrdersDueForDelivery.controller.js`: In `onCreateDeliveryPress`, guarded against `sApprovalStatus === "unknown"` with warning `MessageBox` and blocked dialog.
+    - `SalesOrders.view.xml`: Added `%{salesOrder>SalesDocApprovalStatus} !== 'unknown'` to `Button enabled` condition and updated tooltip expression.
+    - `SalesOrders.controller.js`: In `onCreateDeliveryPress`, guarded against `sApprovalStatus === "unknown"` with warning `MessageBox` and blocked dialog.
+  - **i18n Localization**:
+    - Added `statusApprovalUnknown`, `tooltipOrderApprovalUnknown`, and `msgOrderApprovalUnknown` to both `i18n.properties` and `i18n_en.properties` maintaining 100% exact key-for-key parity (831 lines each).
+  - **Rebuilt Bundle**:
+    - Rebuilt `dist/Component-preload.js` via `npm --prefix app/fiori-app run build`.
+  - **Automated Tests**:
+    - `test/unit/le/outboundDeliveryAdapter.test.js`:
+      - Verified `getOrdersDueForDelivery` sets `SalesDocApprovalStatus: 'unknown'` and invalidates cache when approval lookup fails.
+      - Verified `createDeliveryFromOrder` blocks with 502 when approval status check fails from Gateway.
+      - Verified `createDeliveryFromOrder` blocks with 400 when order is unapproved (`A`, `C`, `D`).
+      - Verified `createDeliveryFromOrder` bypasses approval check when `skipApprovalCheck: true`.
+    - `test/unit/le/ordersDueForDeliveryController.test.js`:
+      - Verified `onCreateDeliveryPress` warns and blocks when `SalesDocApprovalStatus === "unknown"`.
+    - `test/unit/sales-order/salesOrdersController.test.js`:
+      - Verified `onCreateDeliveryPress` warns and blocks when `SalesDocApprovalStatus === "unknown"`.
+  - **Audit Documentation**:
+    - Updated `docs/data-lineage-audit.md` Row 31 status to **RESOLVED** and removed OutboundDeliveryAdapter from the Section 6 "Substitute a value that looks like data" table.
+- **Files modified**:
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+  - `srv/le/outbound-delivery/service.cds`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/view/SalesOrders.view.xml`
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/SalesOrders.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/le/outboundDeliveryAdapter.test.js`
+  - `test/unit/le/ordersDueForDeliveryController.test.js`
+  - `test/unit/sales-order/salesOrdersController.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npx cds compile srv/le/outbound-delivery/service.cds`: Succeeded with 0 errors.
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Succeeded; `dist/Component-preload.js` generated.
+  - `npm test -- test/unit/le/`: 4 passed, 4 total test suites; 53 passed, 53 total tests (100% green).
+  - `npm test -- test/unit/sales-order/salesOrdersController.test.js`: 17 passed, 17 total tests (100% green).
+  - `npm run test:unit`: 64 passed, 64 total test suites; 937 passed, 937 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npx jest test/unit/wm/goodsIssueClients.test.js`: **49 passed, 49 total tests (100% green)**.
-  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: **11 passed, 11 total tests (100% green)**.
-  - `npx jest test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssueController.test.js test/integration/wm/goodsIssueQueue.test.js`: **101 passed, 101 total tests (100% green)**.
-  - `npx cds compile srv`: Succeeded with 0 errors.
-  - `cd app/fiori-app && npm run lint`: 0 findings.
-  - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
+  - `npm run test:unit`: **64 passed, 64 total test suites; 937 passed, 937 total tests (100% green)** in 40 s.
+  - `npm test -- test/unit/le/`: **4 passed, 4 total test suites; 53 passed, 53 total tests (100% green)**.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Fix Approval Lookup Failure Masking Unapproved Orders (Audit Row 31)**:
+  - In `OutboundDeliveryAdapter.js`: `_fetchApprovalStatusMap` clears cache and returns `null` on lookup error (never stale cache or empty map).
+  - `_formatOrderResults`: Maps `SalesDocApprovalStatus = 'unknown'` when `approvalStatusMap === null`.
+  - `createDeliveryFromOrder`: Blocks delivery creation with HTTP 502 if approval lookup failed (`null`) and HTTP 400 if order is unapproved (`A`, `C`, `D`).
+  - `service.cds`: `OrdersDueForDelivery.SalesDocApprovalStatus` widened to `String(10)`.
+  - UI5 Views & Controllers: `OrdersDueForDelivery` and `SalesOrders` show `Warning` ("Unknown") badge, disable Create Delivery button, and warn in `onCreateDeliveryPress`.
+  - Added localization keys to `i18n.properties` and `i18n_en.properties` with 100% key parity.
 - **Goods Issue Open Quantity Queue Deduction & Double-Issue Prevention (Audit Row 38)**:
   - Deducts pending quantities in local CAP dispatch queue (`openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty)`).
   - Exposes `QueuedQty` on OData `GIItems` and `GIComponentItem`.
@@ -3003,68 +3064,6 @@
   - Fixed `"center bottom" is not of type "sap.ui.core.Popup.Dock"` console validation errors on `MessageToast.show`.
   - Pinned UI5 CDN updated to LTS maintenance patch `1.136.22`.
   - Added module-level and runtime defensive normalization in `Component.js`.
-- **System Label in User Profile & Auth Adapter (Audit Row 46)**:
-  - Hardcoded `"DEV - Client 220"` and `"PRD - Client <n>"` literals eliminated.
-  - System label built dynamically from environment settings (`S4_SYSTEM_NAME` and `S4_CLIENT`) via `s4Config.getSystemLabel()`.
-- **Eliminate Fake Success Strings on Creation (Audit Row 13)**:
-  - Fake success strings (`'PO Created but no ID returned'`, `'Order Created'`, `'Inquiry Created'`) eliminated across PO, SO, and Inquiry handlers.
-  - When SAP S/4HANA returns no document number upon document creation, backend strictly rejects with HTTP 502 and diagnostic details.
-- **Shipping Point List and Names Bound to ShippingPointVH (Audit Row 32)**:
-  - Literal table `DEFAULT_SHIPPING_POINTS` with invented names eliminated from `OrdersDueForDelivery.controller.js`.
-  - Create delivery dialog ComboBox bound directly to `outboundDelivery>/ShippingPointVH`, displaying authentic S/4HANA `ShippingPoint` and `ShippingPointName` from `C_ShippingPointVH`.
-  - Fallback to pre-set config shipping point eliminated when due order row lacks shipping point.
-- **Validate and Reject Blank Org Values (Audit Row 25)**:
-  - Silent `cds.s4` fallbacks eliminated across all three layers (`salesInquiry.mapper.js`, `SalesInquiryMapper.js`, `SalesInquiryAdapter.js`).
-  - Blank or missing `SalesOrganization`, `DistributionChannel`, `OrganizationDivision`/`Division`, `SalesInquiryType`/`SalesOrderType`, and `TransactionCurrency` strictly validated and rejected.
-- **Customer Defaults Authentic Country (Audit Row 23)**:
-  - Hardcoded `'IN'` fallback eliminated from `SalesInquiryAdapter.js` (`getCustomerDefaults`).
-  - Returns authentic `Country` from `I_Customer_VH`, or empty string when absent in SAP master data.
-- **PO Document Type Required (Audit Row 12)**:
-  - Hardcoded `"NB"` eliminated from initial UI model and backend normalization mapper.
-  - `PurchaseOrderType` strictly required in UI input (`required="true"`), UI model validation (`validateForm`), and backend mapper (`normalizePurchaseOrderData`).
-  - Draft PO with empty document type shows Warning state in header until document type is entered.
-- **PO Line Net Amount Lineage (Audit Row 11)**:
-  - Column header clearly relabeled to `Net Amount (Estimate)` (`poColNetAmount`).
-  - Informative tooltips on header and cell inputs clarify that browser calculation is an estimate before S/4HANA prices the document.
-  - Authentic S/4HANA persisted `NetAmount` displayed on detail view after creation.
-- **PO Supplier Defaults Lineage (Audit Row 10)**:
-  - Backend query ordered by `PurchaseOrder desc`, ensuring commercial defaults reflect the latest historical PO.
-  - Returns explicit `source: 'from last PO'` and document number `lastPurchaseOrder`.
-  - Frontend prominently labels derived terms with header status badge, informative message strip, and `(from last PO)` label suffixes until user-modified.
-- **Sales Order & Inquiry Order Total Lineage (Audit Row 26)**:
-  - Local `qty x price` arithmetic formula eliminated as primary amount.
-  - Reads authentic `NetAmount`, `TotalAmount`, `TaxAmount`, and `DocumentCurrency` directly from S/4HANA `LORD_ODATA_ORDER_SRV` response and read-back.
-  - Non-existent `NetValue` and `Currency` field references eliminated.
-- **Journal Entries KPI Authentic Data Lineage (Audit Row 28)**:
-  - Tile relabeled to "Total Line Items" (`fiKpiTotalItems`), matching `C_GLJrnlEntryItemToBeVerified` line item records.
-  - Forced `0` state eliminated; tiles display `"-"` while loading or on error.
-  - Total count strictly extracted from binding `$count` via `calculateKpiMetrics`.
-  - G/L Account count queries authentic server count (`getDashboardMetrics()`), eliminating loaded-page row scraping.
-- **Sales Order & Inquiry KPI Authentic Data Lineage (Audit Rows 20, 21 & 22)**:
-  - Total Orders / Inquiries strictly reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
-  - Open Inquiries queries authentic inquiry count (`openInquiriesCount`) directly from `SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370` (`OverallSDProcessStatus ne 'C'`) via `getSalesInquiryMetrics()`; calling `getSalesOrderMetrics()` eliminated from Sales Inquiries view.
-  - Open Orders queries authentic sales order count (`openOrdersCount`) directly from `SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873` (`OverallSDProcessStatus ne 'C'`) via `getSalesOrderMetrics()`.
-  - Active Customers reflects authentic S/4HANA server customer master count (`getDashboardMetrics()`); page-scoped counting eliminated.
-  - Silent zero error fallback eliminated in handlers; errors properly propagated via `req.error(error.status || 502, error.message)`.
-- **Purchase Order Authentic KPI Lineage (Audit Rows 5, 6 & 7)**:
-  - Total Orders reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
-  - Suppliers reflects authentic S/4HANA server supplier count (`getDashboardMetrics()`); page-scoped counting and PO-count fallback eliminated.
-  - Completeness Rate synthetic calculation and assumed default 100 eliminated; misleading tile removed from view.
-- **Purchase Order Status Authentic Data Lineage (Audit Row 4)**:
-  - Shows SAP's authentic status name (`sStatusName`); no overriding of `"Sent"` or `"Follow-On Documents"` with `"Approved"`.
-  - Deletion code `'L'` accurately mapped to `"Deleted"` instead of `"Rejected"`.
-  - Unknown status codes display their raw code instead of defaulting to `"Approved"`.
-- **Sales Inquiry Authentic Data Lineage (Audit Rows 15, 16 & 17)**:
-  - Item net price left blank (`''`) when SAP sends none; synthetic `NetAmount / Qty` division and `'0.00'` fallback eliminated.
-  - Sales Office and Sales Group show strictly what SAP holds; no borrowing from other customer inquiries or value help defaults.
-  - Ship-to party remains blank (`'-'`) when SAP partner read returns no 'WE' partner, eliminating Sold-to party substitution.
-- **Goods Issue Packaging Units (Audit Row 42)**:
-  - Synthetic `<material>-<unit>` barcode eliminated from clients, service definitions, and fixtures.
-- **Storage Unit (SU) Assumed Data Elimination**:
-  - Eliminated assumed "Storage Unit" labeling across Goods Receipt and Goods Issue.
-  - Scanned objects accurately presented as authentic Inbound Deliveries, Purchase Orders, and Batches.
-- **Goods Issue Batch Status / SLED Defaults (Audit Row 41)**:
-  - Missing batch status defaults to `'unknown'` and `'None'`, eliminating optimistic `'VALID'` / `'Success'` assumptions.
 
 ## Next Steps
 1. Stage, commit, and push changes to `origin/feature/CL01`.
