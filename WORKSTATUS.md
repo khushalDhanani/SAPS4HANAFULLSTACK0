@@ -3069,13 +3069,78 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
+## 2026-09-22 11:15 IST
+- **Agent**: Antigravity
+- **Change**: Fix Goods Issue reservation list 2,000 cap silent truncation (Audit Row 37) — pushed reservation and order filters server-side into SAP OData `$filter` before paging, eliminated silent truncation with diagnostic logging and metadata flags (`IsTruncated`, `ItemCountPartial`, `TruncationNote`), and surfaced visual warnings and toasts in UI5.
+  - **Server-Side Filter Pushdown & Configurable Limits**:
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`:
+      - Updated `getOpenReservations(movementType = '261', plant = '', options = {})`:
+        - Pushes `options.reservationNo` and `options.orderNo` server-side into SAP Gateway `$filter`: `(Reservation eq '...' or Reservation eq '...')` and `(OrderID eq '...' or OrderID eq '...')`, allowing specific reservation/order lookups to return in page 1 without scanning arbitrary items.
+        - Supports configurable `maxItems` (defaults to 2000 for unconstrained queries, 10000 for targeted lookups) and `pageSize`.
+        - Detects truncation non-silently when `allResults.length >= maxItems`: logs explicit diagnostic warning (`LOG.warn`) detailing scanned count, plant, movement type, and advising specific plant/reservation/order filters.
+        - Attaches `IsTruncated: true`, `TruncationNote`, and `ItemCountPartial` indicator for the reservation at the cutoff boundary whose items may span across unread pages. Formats `DisplayText` with `${v.ItemCount}+ items (partial)` for the boundary reservation.
+        - Exposes non-enumerable metadata properties `isTruncated` and `totalScannedItems` on returned array.
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+      - Updated `getOpenReservations(movementType = '261', plant = '', options)` to forward `options` to `this.reservations.getOpenReservations`.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+      - Extracted `ReservationNo` and `OrderNo` and passed them into `GoodsIssueAdapter.getOpenReservations(mvtType, plant, { reservationNo, orderNo })` so SAP filters server-side before paging.
+    - `srv/wm/goods-issue/service.cds`:
+      - Added `IsTruncated: Boolean;`, `ItemCountPartial: Boolean;`, `TruncationNote: String(120);` to `OpenReservations` entity.
+  - **Frontend Truncation Awareness & Value Help Resilience**:
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+      - Set `reservationsTruncated` and `reservationsTruncatedMsg` on `giView` model based on `aResvs[0].IsTruncated`.
+      - Updated `onRefreshReservations` toast to inform user: `"{0} open reservations loaded (first 2,000 items scanned from SAP)"` when truncated.
+      - Allowed manual numeric entry of reservation numbers in combobox not present in the initial 2,000 items to load directly from SAP via `_loadReservationDetails`.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`:
+      - Added `MessageStrip` (`msgStripResvTruncated`) displaying `reservationsTruncatedMsg` above reservation combobox when truncated.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/ReservationValueHelpDialog.fragment.xml`:
+      - Updated item description to show `${giView>ItemCount}+ items (partial)` when `ItemCountPartial` is true.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+      - Added `giReservationsTruncatedMsg` and `giReservationsTruncatedToast` with 100% key parity.
+  - **Automated Tests**:
+    - `test/unit/wm/goodsIssueClients.test.js`:
+      - Verified server-side filter generation when `reservationNo` and `orderNo` are provided.
+      - Verified non-silent truncation detection, `LOG.warn` call, boundary reservation `ItemCountPartial: true` and `1+ items (partial)` in `DisplayText`, and `TruncationNote`.
+    - `test/unit/wm/goodsIssueService.test.js`:
+      - Verified `READ:OpenReservations` passes `ReservationNo` and `OrderNo` server-side to adapter.
+  - **Audit Documentation**:
+    - Updated `docs/data-lineage-audit.md` Row 37 to **RESOLVED** and added to Re-scan table.
+- **Files modified**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/ReservationValueHelpDialog.fragment.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssueClients.test.js`
+  - `test/unit/wm/goodsIssueService.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npm test -- test/unit/wm/goodsIssueClients.test.js`: 51 passed, 51 total tests (100% green).
+  - `npm test -- test/unit/wm/goodsIssueService.test.js`: 46 passed, 46 total tests (100% green).
+  - `npm run test:unit`: 64 passed, 64 total test suites; 945 passed, 945 total tests (100% green).
+  - `npx cds compile srv`: Succeeded with 0 errors.
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 842 ms; `Component-preload.js` generated.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm run test:unit`: **64 passed, 64 total test suites; 942 passed, 942 total tests (100% green)** in 41.5 s.
-  - `npm test -- test/unit/sales-order/salesOrderAdapter.test.js`: **18 passed, 18 total tests (100% green)**.
+  - `npm run test:unit`: **64 passed, 64 total test suites; 945 passed, 945 total tests (100% green)** in 38.2 s.
+  - `npm test -- test/unit/wm/goodsIssueClients.test.js`: **51 passed, 51 total tests (100% green)**.
+  - `npm test -- test/unit/wm/goodsIssueService.test.js`: **46 passed, 46 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Goods Issue Reservation List 2,000 Cap Truncation Fix (Audit Row 37)**:
+  - In `GoodsIssueReservationsClient.js`: `getOpenReservations` pushes `reservationNo` and `orderNo` server-side into SAP OData filter before paging, ensuring specific reservation/order lookups bypass arbitrary item limits.
+  - Non-silent truncation: When 2,000 items are reached, backend logs diagnostic warning, sets `IsTruncated: true`, sets `TruncationNote`, and marks cutoff reservation with `ItemCountPartial: true` and `${ItemCount}+ items (partial)`.
+  - Frontend displays `MessageStrip` notification, updates toast to inform user of the 2,000 item scan, and allows manual numeric reservation selection.
 - **Sales Order HTTP Fallback Filter Preservation (Audit Row 19)**:
   - In `SalesInquiryAdapter.js`: `getSalesOrders` HTTP fallback dynamically constructs `$top`, `$skip`, `$orderby`, `$inlinecount`, and `$filter`.
   - CQN WHERE clauses, operators, parentheses, string functions, and plain objects translated to valid OData v2 filter syntax via `_cqnWhereToODataFilter`.

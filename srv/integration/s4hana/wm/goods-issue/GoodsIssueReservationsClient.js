@@ -47,10 +47,23 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
    * Fetch distinct open reservations for Goods Issue directly from UI_RESERVATION_ITM_MNG_V2
    * @param {string} [movementType='261']
    * @param {string} [plant]
+   * @param {object|string} [options] - Options object or reservationNo string
+   * @param {string} [options.reservationNo] - Server-side filter by Reservation
+   * @param {string} [options.orderNo] - Server-side filter by OrderID
+   * @param {number} [options.maxItems=2000] - Maximum raw items to scan (0 = unconstrained)
+   * @param {number} [options.pageSize=100] - OData page size
    * @returns {Promise<Array>}
    */
-  async getOpenReservations(movementType = '261', plant = '') {
+  async getOpenReservations(movementType = '261', plant = '', options = {}) {
     const sPlant = plant ? String(plant).trim() : '';
+    const opts = typeof options === 'string' ? { reservationNo: options } : (options || {});
+    const sResv = opts.reservationNo ? String(opts.reservationNo).trim() : '';
+    const sOrder = opts.orderNo ? String(opts.orderNo).trim() : '';
+    const pageSize = typeof opts.pageSize === 'number' && opts.pageSize > 0 ? opts.pageSize : 100;
+    // If targeted reservation or order is specified, default to high/unconstrained ceiling
+    const defaultMax = (sResv || sOrder) ? 10000 : 2000;
+    const maxItems = typeof opts.maxItems === 'number' ? opts.maxItems : defaultMax;
+
     let filter = `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
     if (movementType) {
       filter += ` and (GoodsMovementType eq '${encodeURIComponent(movementType)}' or GoodsMovementType eq '261' or GoodsMovementType eq '201' or GoodsMovementType eq '531')`;
@@ -58,12 +71,23 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     if (sPlant) {
       filter += ` and Plant eq '${encodeURIComponent(sPlant)}'`;
     }
+    if (sResv) {
+      const sResClean = sResv.replace(/^0+/, '');
+      const sResPadded = sResv.padStart(10, '0');
+      filter += ` and (Reservation eq '${encodeURIComponent(sResClean)}' or Reservation eq '${encodeURIComponent(sResPadded)}')`;
+    }
+    if (sOrder) {
+      const sOrderClean = sOrder.replace(/^0+/, '');
+      const sOrderPadded = sOrder.padStart(12, '0');
+      filter += ` and (OrderID eq '${encodeURIComponent(sOrderClean)}' or OrderID eq '${encodeURIComponent(sOrderPadded)}')`;
+    }
 
     try {
-      const pendingQueueMap = await this._getPendingQueueMap();
-      const pageSize = 100;
+      const pendingQueueMap = await this._getPendingQueueMap(sResv);
       let skip = 0;
       const allResults = [];
+      let isTruncated = false;
+
       while (true) {
         const page = await this._get(
           '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
@@ -71,17 +95,32 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
         );
         const items = Array.isArray(page) ? page : [];
         allResults.push(...items);
-        if (items.length < pageSize || allResults.length >= 2000) break;
+
+        if (items.length < pageSize) {
+          break;
+        }
+
+        if (maxItems > 0 && allResults.length >= maxItems) {
+          isTruncated = true;
+          LOG.warn(
+            `Open reservations item scan reached limit of ${maxItems} items from SAP S/4HANA (plant: '${sPlant || 'all'}', movementType: '${movementType || 'all'}'). ` +
+            `List is partial (scanned ${allResults.length} items). Filter by plant, reservation, or order for complete results.`
+          );
+          break;
+        }
+
         skip += pageSize;
       }
 
       if (allResults.length > 0) {
         const resvMap = new Map();
-        for (const r of allResults) {
-          const sResv = r.Reservation || '';
-          if (!sResv) continue;
+        const boundaryResvNo = (isTruncated && allResults.length > 0) ? allResults[allResults.length - 1].Reservation : null;
 
-          const sResClean = sResv.replace(/^0+/, '');
+        for (const r of allResults) {
+          const sRes = r.Reservation || '';
+          if (!sRes) continue;
+
+          const sResClean = sRes.replace(/^0+/, '');
           const sItemClean = String(r.ReservationItem || '').trim().replace(/^0+/, '');
           const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
           const queuedQty = qEntry ? qEntry.queuedQty : 0;
@@ -93,25 +132,31 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
           if (openQty <= 0) continue;
 
-          if (!resvMap.has(sResv)) {
-            resvMap.set(sResv, {
-              ReservationNo: sResv,
+          if (!resvMap.has(sRes)) {
+            resvMap.set(sRes, {
+              ReservationNo: sRes,
               OrderNo: r.OrderID || '',
               Plant: r.Plant || '',
               MovementType: r.GoodsMovementType || '261',
               MovementTypeName: r.GoodsMovementTypeName || 'GI for order',
               ItemCount: 1,
+              ItemCountPartial: false,
               SampleMaterial: r.Product || '',
               SampleMaterialDesc: r.ProductName || ''
             });
           } else {
-            const entry = resvMap.get(sResv);
+            const entry = resvMap.get(sRes);
             entry.ItemCount++;
             if (!entry.OrderNo && r.OrderID) entry.OrderNo = r.OrderID;
           }
         }
 
-        return Array.from(resvMap.values()).map(v => {
+        // If truncated, flag the reservation sitting at the cutoff boundary as having potentially partial ItemCount
+        if (isTruncated && boundaryResvNo && resvMap.has(boundaryResvNo)) {
+          resvMap.get(boundaryResvNo).ItemCountPartial = true;
+        }
+
+        const resultArray = Array.from(resvMap.values()).map(v => {
           let desc = `Reservation ${v.ReservationNo}`;
           if (v.OrderNo) {
             desc += ` (Order ${v.OrderNo}`;
@@ -121,13 +166,26 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           if (v.Plant) {
             desc += ` • Plant ${v.Plant}`;
           }
-          desc += ` • ${v.ItemCount} ${v.ItemCount === 1 ? 'item' : 'items'})`;
+          if (v.ItemCountPartial) {
+            desc += ` • ${v.ItemCount}+ items (partial))`;
+          } else {
+            desc += ` • ${v.ItemCount} ${v.ItemCount === 1 ? 'item' : 'items'})`;
+          }
 
           return {
             ...v,
+            IsTruncated: isTruncated,
+            TruncationNote: isTruncated
+              ? `Showing reservations from first ${allResults.length} SAP items. Filter by plant or order for complete list.`
+              : '',
             DisplayText: desc
           };
         }).sort((a, b) => Number(b.ReservationNo) - Number(a.ReservationNo));
+
+        Object.defineProperty(resultArray, 'isTruncated', { value: isTruncated, enumerable: false, writable: true });
+        Object.defineProperty(resultArray, 'totalScannedItems', { value: allResults.length, enumerable: false, writable: true });
+
+        return resultArray;
       }
     } catch (err) {
       LOG.warn(`Failed to query open reservations from S/4HANA: ${err.message}`);

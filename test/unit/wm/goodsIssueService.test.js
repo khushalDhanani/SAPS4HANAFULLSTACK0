@@ -400,6 +400,46 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(req.error).not.toHaveBeenCalled();
     });
 
+    it('should serve READ:OpenReservations filtering by ReservationNo and OrderNo', async () => {
+      const spy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockResolvedValueOnce([
+        {
+          ReservationNo: '18025',
+          OrderNo: '1000040',
+          Plant: '1120',
+          ItemCount: 2,
+          DisplayText: 'Reservation 18025 (Order 1000040 • Plant 1120 • 2 items)',
+          IsTruncated: false,
+          ItemCountPartial: false,
+          TruncationNote: ''
+        }
+      ]);
+
+      const req = {
+        data: {},
+        query: {
+          SELECT: {
+            where: [
+              { ref: ['ReservationNo'] }, '=', { val: '18025' },
+              'and',
+              { ref: ['OrderNo'] }, '=', { val: '1000040' }
+            ]
+          }
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers['READ:OpenReservations'](req);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result[0].ReservationNo).toBe('18025');
+      expect(spy).toHaveBeenCalledWith(
+        '261',
+        '',
+        expect.objectContaining({ reservationNo: '18025', orderNo: '1000040' })
+      );
+      spy.mockRestore();
+    });
+
     it('should enqueue transaction to Dispatch Queue when SAP posting service is unavailable (Outbox Queue pattern)', async () => {
       const req = {
         data: {

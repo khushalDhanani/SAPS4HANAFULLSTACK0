@@ -24,12 +24,20 @@ class GoodsIssueHandler {
       const plant = _extractFilterParam(req, 'Plant') || '';
       const mvtType = _extractFilterParam(req, 'MovementType') || '261';
       const reservNo = _extractFilterParam(req, 'ReservationNo');
+      const orderNo = _extractFilterParam(req, 'OrderNo');
 
       try {
-        let reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant);
+        let reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant, {
+          reservationNo: reservNo,
+          orderNo: orderNo
+        });
         if (reservNo && Array.isArray(reservations)) {
           const sResClean = reservNo.replace(/^0+/, '');
           reservations = reservations.filter(r => r.ReservationNo === reservNo || r.ReservationNo === sResClean);
+        }
+        if (orderNo && Array.isArray(reservations)) {
+          const sOrderClean = orderNo.replace(/^0+/, '');
+          reservations = reservations.filter(r => r.OrderNo === orderNo || r.OrderNo === sOrderClean);
         }
         return applyPaging(reservations, req);
       } catch (err) {

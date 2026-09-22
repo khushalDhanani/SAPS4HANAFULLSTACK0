@@ -452,7 +452,10 @@ class GoodsIssueAdapter {
   /**
    * Fetch distinct open reservations for Goods Issue directly from UI_RESERVATION_ITM_MNG_V2
    */
-  async getOpenReservations(movementType = '261', plant = '') {
+  async getOpenReservations(movementType = '261', plant = '', options) {
+    if (options !== undefined) {
+      return this.reservations.getOpenReservations(movementType, plant, options);
+    }
     return this.reservations.getOpenReservations(movementType, plant);
   }
 

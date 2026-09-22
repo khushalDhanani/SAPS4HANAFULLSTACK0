@@ -90,6 +90,14 @@
                             <form:content>
                                 <core:Title text="{i18n>giStep1ResvFormTitle}" />
 
+                                <MessageStrip
+                                    id="msgStripResvTruncated"
+                                    visible="{= !!${giView>/reservationsTruncated} }"
+                                    text="{giView>/reservationsTruncatedMsg}"
+                                    type="Information"
+                                    showIcon="true"
+                                    class="sapUiTinyMarginBottom" />
+
                                 <Label text="{i18n>giSelectReservationLabel}" labelFor="comboReservation" required="true" />
                                 <HBox width="100%" alignItems="Center">
                                     <ComboBox

@@ -73,6 +73,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             SampleMaterial     : String(40);
             SampleMaterialDesc : String(80);
             DisplayText        : String(120);
+            IsTruncated        : Boolean;
+            ItemCountPartial   : Boolean;
+            TruncationNote     : String(120);
     };
 
     type GISubmitItem {

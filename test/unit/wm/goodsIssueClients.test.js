@@ -185,6 +185,96 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(otherResv.ItemCount).toBe(99);
     });
 
+    it('should push reservationNo and orderNo server-side into SAP OData $filter', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '18025',
+            OrderID: '1000040',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            Product: 'MAT01',
+            ResvnItmRequiredQtyInBaseUnit: '10',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
+          }
+        ])
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120', {
+        reservationNo: '18025',
+        orderNo: '1000040'
+      });
+
+      expect(mockAdapter._get).toHaveBeenCalledTimes(1);
+      const urlFilter = mockAdapter._get.mock.calls[0][1];
+      expect(urlFilter).toContain(encodeURIComponent("Reservation eq '18025' or Reservation eq '0000018025'"));
+      expect(urlFilter).toContain(encodeURIComponent("OrderID eq '1000040' or OrderID eq '000001000040'"));
+      expect(result).toHaveLength(1);
+      expect(result[0].ReservationNo).toBe('18025');
+      expect(result[0].IsTruncated).toBe(false);
+    });
+
+    it('should detect truncation non-silently, log diagnostic warning, and flag partial boundary reservation', async () => {
+      // 2 pages of 10 items; maxItems set to 20
+      const page1 = Array.from({ length: 10 }, (_, i) => ({
+        Reservation: `RES_${i}`,
+        OrderID: `ORD_${i}`,
+        Plant: '1120',
+        GoodsMovementType: '261',
+        Product: 'MAT',
+        ResvnItmRequiredQtyInBaseUnit: '10',
+        ResvnItmWithdrawnQtyInBaseUnit: '0'
+      }));
+      const page2 = Array.from({ length: 9 }, (_, i) => ({
+        Reservation: `RES_${i + 10}`,
+        OrderID: `ORD_${i + 10}`,
+        Plant: '1120',
+        GoodsMovementType: '261',
+        Product: 'MAT',
+        ResvnItmRequiredQtyInBaseUnit: '10',
+        ResvnItmWithdrawnQtyInBaseUnit: '0'
+      }));
+      // Boundary item at index 19 (item 20 total)
+      page2.push({
+        Reservation: 'RES_BOUNDARY',
+        OrderID: 'ORD_BOUNDARY',
+        Plant: '1120',
+        GoodsMovementType: '261',
+        Product: 'MAT_BOUNDARY',
+        ResvnItmRequiredQtyInBaseUnit: '10',
+        ResvnItmWithdrawnQtyInBaseUnit: '0'
+      });
+
+      const mockAdapter = {
+        _get: jest.fn()
+          .mockResolvedValueOnce(page1)
+          .mockResolvedValueOnce(page2)
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120', {
+        maxItems: 20,
+        pageSize: 10
+      });
+
+      expect(mockAdapter._get).toHaveBeenCalledTimes(2);
+      expect(result.isTruncated).toBe(true);
+      expect(result.totalScannedItems).toBe(20);
+
+      const boundary = result.find(r => r.ReservationNo === 'RES_BOUNDARY');
+      expect(boundary).toBeDefined();
+      expect(boundary.IsTruncated).toBe(true);
+      expect(boundary.ItemCountPartial).toBe(true);
+      expect(boundary.DisplayText).toContain('1+ items (partial)');
+      expect(boundary.TruncationNote).toContain('first 20 SAP items');
+
+      const nonBoundary = result.find(r => r.ReservationNo === 'RES_0');
+      expect(nonBoundary.IsTruncated).toBe(true);
+      expect(nonBoundary.ItemCountPartial).toBe(false);
+      expect(nonBoundary.DisplayText).toContain('1 item');
+    });
+
     it('should exclude items with OpenQty <= 0 from ItemCount (single source of truth)', async () => {
       // Simulate SAP reality: items not-finally-issued but with Req=0 / Wdn=0
       const mockAdapter = {

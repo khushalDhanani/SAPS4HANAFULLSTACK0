@@ -12,7 +12,7 @@
         class="sapUiSizeCompact">
         <StandardListItem
             title="{giView>DisplayText}"
-            description="{= 'Order: ' + ${giView>OrderNo} + ' | Plant: ' + ${giView>Plant} + ' | ' + ${giView>ItemCount} + ' items' }"
+            description="{= 'Order: ' + ${giView>OrderNo} + ' | Plant: ' + ${giView>Plant} + ' | ' + ${giView>ItemCount} + (${giView>ItemCountPartial} ? '+ items (partial)' : ' items') }"
             info="{= ${giView>SampleMaterial} ? 'Material: ' + ${giView>SampleMaterial} : '' }"
             icon="sap-icon://document"
             type="Active" />

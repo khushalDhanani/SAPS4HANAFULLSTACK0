@@ -212,6 +212,15 @@ sap.ui.define([
                     var aResvs = aReservations || [];
                     oModel.setProperty("/openReservations", aResvs);
                     oModel.setProperty("/reservationsUnavailable", false);
+                    var bTruncated = aResvs.some(function (r) { return r.IsTruncated; });
+                    oModel.setProperty("/reservationsTruncated", bTruncated);
+                    if (bTruncated) {
+                        var sTruncNote = (aResvs[0] && aResvs[0].TruncationNote) ||
+                            "Showing reservations from the first 2,000 SAP items. Filter by plant or order for full list.";
+                        oModel.setProperty("/reservationsTruncatedMsg", sTruncNote);
+                    } else {
+                        oModel.setProperty("/reservationsTruncatedMsg", "");
+                    }
                     return aResvs;
                 })
                 .catch(function (err) {
@@ -219,6 +228,8 @@ sap.ui.define([
                     oModel.setProperty("/openReservations", []);
                     oModel.setProperty("/reservationsUnavailable", true);
                     oModel.setProperty("/reservationsUnavailableMsg", sMsg || "Failed to load open reservations from SAP S/4HANA.");
+                    oModel.setProperty("/reservationsTruncated", false);
+                    oModel.setProperty("/reservationsTruncatedMsg", "");
                     MessageBox.error("Failed to load open reservations from SAP: " + sMsg);
                     return [];
                 })
@@ -230,7 +241,12 @@ sap.ui.define([
         onRefreshReservations: function () {
             var that = this;
             return this.loadOpenReservations().then(function (aReservations) {
-                MessageToast.show(aReservations.length + " open reservations loaded from SAP");
+                var bTruncated = aReservations && aReservations.some(function (r) { return r.IsTruncated; });
+                if (bTruncated) {
+                    MessageToast.show((aReservations ? aReservations.length : 0) + " open reservations loaded (first 2,000 items scanned from SAP)");
+                } else {
+                    MessageToast.show((aReservations ? aReservations.length : 0) + " open reservations loaded from SAP");
+                }
             });
         },
 
@@ -248,6 +264,8 @@ sap.ui.define([
                 });
                 if (oFound) {
                     sReservationNo = oFound.ReservationNo;
+                } else if (/^\d+$/.test(sVal)) {
+                    sReservationNo = sVal;
                 }
             }
             if (!sReservationNo) {
