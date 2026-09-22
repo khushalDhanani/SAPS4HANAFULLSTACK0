@@ -37,11 +37,31 @@ describe('Unit: SalesInquiryAdapter getSalesMetrics', () => {
             executeHttpRequest: mockExecute
         });
 
-        expect(metrics).toEqual({ openOrdersCount: 12, totalOrdersCount: 45 });
+        expect(metrics).toEqual({
+            openInquiriesCount: 12,
+            totalInquiriesCount: 45,
+            openOrdersCount: 12,
+            totalOrdersCount: 45
+        });
         expect(mockExecute).toHaveBeenCalledTimes(2);
         expect(mockExecute.mock.calls[0][1].url).toContain('SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370');
         expect(mockExecute.mock.calls[0][1].url).toContain("$filter=OverallSDProcessStatus ne 'C'");
         expect(mockExecute.mock.calls[1][1].url).toContain('SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370');
+    });
+
+    test('getInquiryMetrics queries SD_F2370_INQY_WL_SRV via getSalesMetrics', async () => {
+        const mockExecute = jest.fn()
+            .mockResolvedValueOnce({ data: { d: { __count: '12', results: [{ SalesInquiry: '10000001' }] } } })
+            .mockResolvedValueOnce({ data: { d: { __count: '45', results: [{ SalesInquiry: '10000001' }] } } });
+
+        const metrics = await salesInquiryAdapter.getInquiryMetrics({
+            destination: { url: 'https://mock.s4hana' },
+            executeHttpRequest: mockExecute
+        });
+
+        expect(metrics.openInquiriesCount).toBe(12);
+        expect(metrics.totalInquiriesCount).toBe(45);
+        expect(mockExecute).toHaveBeenCalledTimes(2);
     });
 
     test('fails with 502 instead of returning zero counts when the SAP call fails', async () => {

@@ -1525,7 +1525,25 @@ class SalesInquiryAdapter {
       err.status = 502;
       throw err;
     }
-    return { openOrdersCount, totalOrdersCount };
+    if (isOrder) {
+      return { openOrdersCount, totalOrdersCount };
+    }
+    return {
+      openInquiriesCount: openOrdersCount,
+      totalInquiriesCount: totalOrdersCount,
+      openOrdersCount,
+      totalOrdersCount
+    };
+  }
+
+  /**
+   * Retrieves Sales Inquiry metrics from SD_F2370_INQY_WL_SRV / C_InquiryWL_F2370.
+   *
+   * @param {Object} [options] - destination / executeHttpRequest / headers overrides
+   * @returns {Promise<{ openInquiriesCount: number, totalInquiriesCount: number, openOrdersCount: number, totalOrdersCount: number }>}
+   */
+  async getInquiryMetrics(options = {}) {
+    return this.getSalesMetrics({ ...options, entity: 'inquiry' });
   }
 
   /**

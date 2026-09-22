@@ -1,7 +1,11 @@
-jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter', () => ({
-    createSalesInquiry: jest.fn(),
-    getSalesMetrics: jest.fn()
-}));
+jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter', () => {
+    const mockAdapter = {
+        createSalesInquiry: jest.fn(),
+        getSalesMetrics: jest.fn(),
+        getInquiryMetrics: jest.fn((opts) => mockAdapter.getSalesMetrics({ ...opts, entity: 'inquiry' }))
+    };
+    return mockAdapter;
+});
 
 const salesInquiryAdapter = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const registerSalesInquiryHandlers = require('../../../srv/sd/sales-inquiry/handlers/salesInquiry.handler');
@@ -126,6 +130,31 @@ describe('Unit: createSalesInquiry handler', () => {
         expect(req.error).toHaveBeenCalledWith(502, message);
         expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('1000529'));
         expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('Do not retry'));
+    });
+
+    describe('getSalesInquiryMetrics', () => {
+        test('delegates to adapter getInquiryMetrics', async () => {
+            const mockMetrics = { openInquiriesCount: 15, totalInquiriesCount: 60, openOrdersCount: 15, totalOrdersCount: 60 };
+            salesInquiryAdapter.getSalesMetrics.mockResolvedValue(mockMetrics);
+
+            const allHandlers = getAllHandlers();
+            const result = await allHandlers.getSalesInquiryMetrics();
+
+            expect(result).toEqual(mockMetrics);
+            expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalledWith({ entity: 'inquiry' });
+        });
+
+        test('propagates error via req.error on failure', async () => {
+            const mockError = new Error('SD_F2370_INQY_WL_SRV unavailable');
+            mockError.status = 502;
+            salesInquiryAdapter.getSalesMetrics.mockRejectedValue(mockError);
+
+            const mockReq = { error: jest.fn() };
+            const allHandlers = getAllHandlers();
+            await allHandlers.getSalesInquiryMetrics(mockReq);
+
+            expect(mockReq.error).toHaveBeenCalledWith(502, 'SD_F2370_INQY_WL_SRV unavailable');
+        });
     });
 
     describe('getSalesOrderMetrics', () => {

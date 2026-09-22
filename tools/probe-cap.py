@@ -7,7 +7,7 @@ SERVICES = ["/odata/v4/purchase-order","/odata/v4/journal-entry","/odata/v4/sale
             "/odata/v4/warehouse-management","/odata/v4/goods-issue","/odata/v4/goods-receipt"]
 FUNCS = {
  "/odata/v4/purchase-order": ["getDashboardMetrics()"],
- "/odata/v4/sales-inquiry": ["getSalesInquiryDefaults()","getInquiryCreationCapabilities()","getSalesOrderMetrics()"],
+ "/odata/v4/sales-inquiry": ["getSalesInquiryDefaults()","getInquiryCreationCapabilities()","getSalesInquiryMetrics()","getSalesOrderMetrics()"],
  "/odata/v4/goods-issue": ["getQueueSummary()"],
 }
 

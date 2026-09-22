@@ -100,6 +100,9 @@ const MockBaseController = {
 
 const MockODataClient = {
     get: jest.fn().mockImplementation((url) => {
+        if (url.indexOf("getSalesInquiryMetrics") !== -1) {
+            return Promise.resolve({ openInquiriesCount: 15, totalInquiriesCount: 50, openOrdersCount: 15, totalOrdersCount: 50 });
+        }
         if (url.indexOf("getSalesOrderMetrics") !== -1) {
             return Promise.resolve({ openOrdersCount: 15, totalOrdersCount: 50 });
         }

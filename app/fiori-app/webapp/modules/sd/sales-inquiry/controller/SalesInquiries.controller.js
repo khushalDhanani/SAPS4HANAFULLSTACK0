@@ -78,10 +78,12 @@ sap.ui.define([
                 return Promise.resolve();
             }
 
-            var pInquiryMetrics = ODataClient.get("/odata/v4/sales-inquiry/getSalesOrderMetrics()")
+            var pInquiryMetrics = ODataClient.get("/odata/v4/sales-inquiry/getSalesInquiryMetrics()")
                 .then(function (res) {
                     var data = res && res.value ? res.value : res;
-                    if (data && data.openOrdersCount != null) {
+                    if (data && data.openInquiriesCount != null) {
+                        oViewModel.setProperty("/openCount", data.openInquiriesCount);
+                    } else if (data && data.openOrdersCount != null) {
                         oViewModel.setProperty("/openCount", data.openOrdersCount);
                     } else {
                         oViewModel.setProperty("/openCount", "-");

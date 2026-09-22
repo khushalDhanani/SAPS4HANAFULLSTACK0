@@ -155,7 +155,7 @@ Checks: `cds compile` OK; `jest test/unit` 62 suites / 897 tests passed; `eslint
 | 11, 12, 13 | Fixed | Net amount flagged as estimate; document type required; no document number -> 502. |
 | 15, 16, 17 Inquiry detail | Fixed | No borrowing; blank stays blank. |
 | 20, 22 Totals / metrics handler | Fixed | "-" placeholders; handler returns the error. |
-| 21 "Open" and "Active Customers" KPIs | **Changed, now mislabelled** | Sales INQUIRIES screen shows `getSalesOrderMetrics().openOrdersCount` - the open SALES ORDER count - under "Open Inquiries" (SalesInquiries.controller.js:81-86). Both screens show the customer MASTER count (`I_Customer_VH`, dashboard metric) under "Active Customers / Distinct Sold-to Parties". |
+| 21 "Open" and "Active Customers" KPIs | Fixed | Sales INQUIRIES screen shows authentic inquiry count (`openInquiriesCount`) from `C_InquiryWL_F2370` via `getSalesInquiryMetrics()`. Sales ORDERS screen queries `C_SalesOrderWl_F1873` via `getSalesOrderMetrics()`. Both screens fetch authentic server customer count (`I_Customer_VH`). |
 | 23 Customer defaults | Partly | `'IN'` removed; office/group heuristics and config currency remain (flagged `derived`). |
 | 24 Sales header defaults in the UI | **Open** | `SalesOrderModel.js`, `SalesOrderService.js`, `CreateSalesOrder.controller.js:277` unchanged (ZDOM, 1000, INR, KG, 1120, "1000", today+7). |
 | 25 Org values on write | Fixed | Mappers reject blanks. |

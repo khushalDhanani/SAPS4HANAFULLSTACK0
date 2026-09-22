@@ -182,8 +182,16 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
     };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
+    function getSalesInquiryMetrics() returns {
+        openInquiriesCount: Integer;
+        totalInquiriesCount: Integer;
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getSalesOrderMetrics() returns {
         openOrdersCount: Integer;
         totalOrdersCount: Integer;
+        openInquiriesCount: Integer;
+        totalInquiriesCount: Integer;
     };
 }

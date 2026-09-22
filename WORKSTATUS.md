@@ -2880,12 +2880,40 @@
   - `npx jest test/unit/auth/`: **3 passed, 3 total test suites; 38 passed, 38 total tests (100% green)** in 3.4 s.
   - `npm test`: **75 passed, 75 total test suites; 971 passed, 971 total tests (100% green)** in 75.3 s.
   - `git diff --check`: **Clean (0 errors)**.
-- **Next recommended action**: Stage and commit to `origin/feature/CL01`.
+### 2026-09-22 10:18 IST — Fix Sales Inquiry KPI Authentic Data Lineage: Open Inquiries from C_InquiryWL_F2370 (Audit Row 21)
+- **Change**: Resolved misleading data where the "Open Inquiries" tile on the Sales Inquiries screen called `getSalesOrderMetrics()` and displayed `openOrdersCount`. Replaced with authentic Sales Inquiry metrics queried directly from `SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370`.
+  1. **Root Cause Analysis**:
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js` (`_loadServerMetrics`) called `/odata/v4/sales-inquiry/getSalesOrderMetrics()` and extracted `openOrdersCount` instead of inquiry metrics.
+     - `srv/sd/sales-inquiry/service.cds` exposed `getSalesOrderMetrics()` returning `openOrdersCount: Integer` rather than a dedicated inquiry metrics function.
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js` returned `{ openOrdersCount, totalOrdersCount }` even when querying `C_InquiryWL_F2370` with `entity: 'inquiry'`.
+  2. **CAP Service Definition Layer**:
+     - `srv/sd/sales-inquiry/service.cds`: Declared authentic function `getSalesInquiryMetrics() returns { openInquiriesCount: Integer; totalInquiriesCount: Integer; };`. Extended `getSalesOrderMetrics()` to return both inquiry and order count properties for backwards compatibility.
+  3. **Integration Adapter Layer**:
+     - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: In `getSalesMetrics`, when `entity === 'inquiry'`, returns `{ openInquiriesCount, totalInquiriesCount, openOrdersCount, totalOrdersCount }` from `SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370` where `$filter=OverallSDProcessStatus ne 'C'`. Added dedicated helper `getInquiryMetrics(options)`.
+  4. **Backend CAP Handler Layer**:
+     - `srv/sd/sales-inquiry/handlers/salesInquiry.handler.js`: Registered `getSalesInquiryMetrics` and `getSalesOrderMetrics` handlers delegating to `salesInquiryAdapter.getInquiryMetrics()`, properly propagating errors via `req.error(error.status || 502, error.message)`.
+  5. **Frontend Controller & Service Layer**:
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/SalesInquiries.controller.js`: In `_loadServerMetrics`, updated inquiry metrics call to `/odata/v4/sales-inquiry/getSalesInquiryMetrics()`, binding `data.openInquiriesCount` to `salesInquiriesView>/openCount`, setting `"-"` on error.
+     - `cd app/fiori-app && npm run build`: Rebuilt `dist/Component-preload.js`.
+  6. **Automated Tests & Audit Documentation**:
+     - `test/unit/sales-inquiry/salesInquiriesController.test.js`: Updated `MockODataClient` to recognize `getSalesInquiryMetrics` returning `{ openInquiriesCount: 15, totalInquiriesCount: 50 }`.
+     - `test/unit/sales-inquiry/createSalesInquiryHandler.test.js`: Added test suite for `getSalesInquiryMetrics` verifying delegation to adapter and error propagation.
+     - `test/unit/dashboard/dashboardMetrics.test.js`: Updated inquiry metrics assertions to verify `openInquiriesCount` and added `getInquiryMetrics` test suite.
+     - `tools/probe-cap.py`: Added `getSalesInquiryMetrics()` to probe functions list.
+     - `docs/data-lineage-audit.md`: Updated Row 21 status to **Fixed** with verification notes.
+- **Validation Commands Executed & Results**:
+  - `npx cds compile srv`: **Succeeded with 0 errors**.
+  - `cd app/fiori-app && npm run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 807 ms; Component-preload.js generated**.
+  - `npx jest test/unit/sales-inquiry test/unit/dashboard`: **11 passed, 11 total test suites; 179 passed, 179 total tests (100% green)**.
+  - `npm test`: **75 passed, 75 total test suites; 974 passed, 974 total tests (100% green)** in 73.5 s.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **75 passed, 75 total test suites; 971 passed, 971 total tests (100% green)**.
+  - `npm test`: **75 passed, 75 total test suites; 974 passed, 974 total tests (100% green)**.
   - `npx jest test/unit/auth/`: **3 passed, 3 total test suites; 38 passed, 38 total tests (100% green)**.
   - `npx jest test/unit/controller/messageToastDockNormalization.test.js`: **1 passed, 1 total test suites; 4 passed, 4 total tests (100% green)**.
   - `npx jest test/unit/controller/loginController.test.js`: **1 passed, 1 total test suites; 6 passed, 6 total tests (100% green)**.
@@ -2938,9 +2966,10 @@
   - G/L Account count queries authentic server count (`getDashboardMetrics()`), eliminating loaded-page row scraping.
 - **Sales Order & Inquiry KPI Authentic Data Lineage (Audit Rows 20, 21 & 22)**:
   - Total Orders / Inquiries strictly reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
-  - Open Orders / Inquiries unified to authentic S/4HANA definition (`OverallSDProcessStatus ne 'C'`) via `getSalesMetrics`; loaded-row scraping eliminated.
+  - Open Inquiries queries authentic inquiry count (`openInquiriesCount`) directly from `SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370` (`OverallSDProcessStatus ne 'C'`) via `getSalesInquiryMetrics()`; calling `getSalesOrderMetrics()` eliminated from Sales Inquiries view.
+  - Open Orders queries authentic sales order count (`openOrdersCount`) directly from `SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873` (`OverallSDProcessStatus ne 'C'`) via `getSalesOrderMetrics()`.
   - Active Customers reflects authentic S/4HANA server customer master count (`getDashboardMetrics()`); page-scoped counting eliminated.
-  - Silent zero error fallback in `salesOrder.handler.js` eliminated; errors properly propagated via `req.error(error.status || 502, error.message)`.
+  - Silent zero error fallback eliminated in handlers; errors properly propagated via `req.error(error.status || 502, error.message)`.
 - **Purchase Order Authentic KPI Lineage (Audit Rows 5, 6 & 7)**:
   - Total Orders reflects binding total ($count); displays `"-"` if absent, eliminating loaded-row fallback.
   - Suppliers reflects authentic S/4HANA server supplier count (`getDashboardMetrics()`); page-scoped counting and PO-count fallback eliminated.

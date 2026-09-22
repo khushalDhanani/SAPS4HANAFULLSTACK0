@@ -99,9 +99,12 @@ function registerSalesInquiryHandlers(srv) {
         return await salesInquiryAdapter.getSalesInquiryDefaults();
     });
 
-    // 6. Function getSalesOrderMetrics
-    srv.on('getSalesOrderMetrics', async (req) => {
+    // 6. Functions getSalesInquiryMetrics and getSalesOrderMetrics
+    const fetchInquiryMetrics = async (req) => {
         try {
+            if (typeof salesInquiryAdapter.getInquiryMetrics === 'function') {
+                return await salesInquiryAdapter.getInquiryMetrics();
+            }
             return await salesInquiryAdapter.getSalesMetrics({ entity: 'inquiry' });
         } catch (error) {
             LOG.error('Error fetching sales inquiry metrics:', error.message);
@@ -110,7 +113,9 @@ function registerSalesInquiryHandlers(srv) {
             }
             throw error;
         }
-    });
+    };
+    srv.on('getSalesInquiryMetrics', fetchInquiryMetrics);
+    srv.on('getSalesOrderMetrics', fetchInquiryMetrics);
 }
 
 registerSalesInquiryHandlers.registerSalesInquiryHandlers = registerSalesInquiryHandlers;
