@@ -2,6 +2,7 @@
     controllerName="saps4hana.fiori.modules.fi.journal-entry.controller.JournalEntries"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
+    xmlns:fb="sap.ui.comp.filterbar"
     xmlns:core="sap.ui.core"
     displayBlock="true">
     
@@ -12,70 +13,228 @@
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiResponsiveMargin">
-                <!-- KPI Header -->
-                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
-                    <GenericTile class="sapUiTinyMarginEnd" header="{i18n>fiKpiTotalItems}" subheader="{i18n>fiPageSubtitle}">
-                        <TileContent>
-                            <NumericContent value="{fiView>/totalCount}" icon="sap-icon://document-text" />
-                        </TileContent>
-                    </GenericTile>
-                    <GenericTile class="sapUiTinyMarginEnd" header="{i18n>fiKpiGLAccounts}">
-                        <TileContent>
-                            <NumericContent value="{fiView>/glAccountCount}" icon="sap-icon://loan" valueColor="Good" />
-                        </TileContent>
-                    </GenericTile>
-                </HBox>
+                <!-- KPI Tiles Section -->
+                <Panel headerText="{i18n>kpiSectionTitle}" class="sapUiSmallMarginBottom">
+                    <HBox id="kpiContainer" wrap="Wrap">
+                        <GenericTile
+                            id="kpiTotalItems"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>fiKpiTotalItems}"
+                            subheader="{i18n>fiKpiTotalItemsDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiTotalItemsVal"
+                                    value="{fiView>/totalCount}"
+                                    truncateValueTo="10"
+                                    icon="sap-icon://document-text"
+                                    valueColor="Neutral" />
+                            </TileContent>
+                        </GenericTile>
+
+                        <GenericTile
+                            id="kpiGLAccounts"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>fiKpiGLAccounts}"
+                            subheader="{i18n>fiKpiGLAccountsDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiGLAccountsVal"
+                                    value="{fiView>/glAccountCount}"
+                                    truncateValueTo="10"
+                                    icon="sap-icon://loan"
+                                    valueColor="Good" />
+                            </TileContent>
+                        </GenericTile>
+
+                        <GenericTile
+                            id="kpiCostCenters"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>fiKpiCostCenters}"
+                            subheader="{i18n>fiKpiCostCentersDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiCostCentersVal"
+                                    value="{fiView>/costCenterCount}"
+                                    truncateValueTo="10"
+                                    icon="sap-icon://dimension"
+                                    valueColor="Neutral" />
+                            </TileContent>
+                        </GenericTile>
+
+                        <GenericTile
+                            id="kpiCompanyCodes"
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                            header="{i18n>fiKpiCompanyCodes}"
+                            subheader="{i18n>fiKpiCompanyCodesDesc}">
+                            <TileContent>
+                                <NumericContent
+                                    id="kpiCompanyCodesVal"
+                                    value="{fiView>/companyCodeCount}"
+                                    truncateValueTo="10"
+                                    icon="sap-icon://building"
+                                    valueColor="Neutral" />
+                            </TileContent>
+                        </GenericTile>
+                    </HBox>
+                </Panel>
+
+                <!-- Advanced Filter Bar -->
+                <Panel class="sapUiSmallMarginBottom" width="auto">
+                    <fb:FilterBar
+                        id="fiFilterBar"
+                        search=".onFilterBarSearch"
+                        showGoOnFB="true"
+                        showClearOnFB="true"
+                        clear=".onFilterBarClear"
+                        useToolbar="false">
+                        <fb:filterGroupItems>
+                            <fb:FilterGroupItem groupName="G1" name="AccountingDocument" label="{i18n>fiColDocument}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbDocNumber"
+                                        value="{fiView>/filterDocument}"
+                                        placeholder="{i18n>fiFilterDocPlaceholder}"
+                                        submit=".onFilterBarSearch" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="CompanyCode" label="{i18n>fiColCompanyCode}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbCompanyCode"
+                                        value="{fiView>/filterCompanyCode}"
+                                        placeholder="{i18n>fiFilterCompanyPlaceholder}"
+                                        submit=".onFilterBarSearch" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="FiscalYear" label="{i18n>fiColFiscalYear}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbFiscalYear"
+                                        value="{fiView>/filterFiscalYear}"
+                                        placeholder="{i18n>fiFilterFiscalYearPlaceholder}"
+                                        submit=".onFilterBarSearch" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="GLAccount" label="{i18n>fiColGLAccount}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbGLAccount"
+                                        value="{fiView>/filterGLAccount}"
+                                        placeholder="{i18n>fiFilterGLAccountPlaceholder}"
+                                        submit=".onFilterBarSearch" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="CostCenter" label="{i18n>fiColCostCenter}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Input
+                                        id="fbCostCenter"
+                                        value="{fiView>/filterCostCenter}"
+                                        placeholder="{i18n>fiFilterCostCenterPlaceholder}"
+                                        submit=".onFilterBarSearch" />
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                            <fb:FilterGroupItem groupName="G1" name="DebitCreditCode" label="{i18n>fiColDebitCredit}" visibleInFilterBar="true">
+                                <fb:control>
+                                    <Select
+                                        id="fbDebitCredit"
+                                        selectedKey="{fiView>/selectedTab}"
+                                        change=".onFilterBarSearch"
+                                        width="100%">
+                                        <items>
+                                            <core:Item key="all" text="{i18n>fiFilterAll}" />
+                                            <core:Item key="S" text="{i18n>fiStatusDebit}" />
+                                            <core:Item key="H" text="{i18n>fiStatusCredit}" />
+                                        </items>
+                                    </Select>
+                                </fb:control>
+                            </fb:FilterGroupItem>
+                        </fb:filterGroupItems>
+                    </fb:FilterBar>
+                </Panel>
 
                 <!-- Journal Entries Table -->
                 <Table
                     id="tableJournalEntries"
                     items="{
                         path: 'fiService>/JournalEntryItems',
-                        sorter: { path: 'AccountingDocument', descending: true },
+                        sorter: [
+                            { path: 'AccountingDocument', descending: true },
+                            { path: 'AccountingDocumentItem', descending: false }
+                        ],
                         parameters: { $count: true }
                     }"
-                    updateFinished=".onUpdateFinished"
                     growing="true"
+                    growingThreshold="25"
                     growingScrollToLoad="true"
-                    mode="SingleSelectMaster"
-                    selectionChange=".onItemPress"
-                    class="sapUiResponsiveMargin">
-                    
+                    noDataText="{i18n>fiNoDataText}"
+                    updateFinished=".onUpdateFinished"
+                    mode="None"
+                    itemPress=".onItemPress"
+                    sticky="ColumnHeaders,HeaderToolbar"
+                    class="sapUiResponsiveContentPadding">
+
                     <headerToolbar>
-                        <OverflowToolbar>
-                            <Title text="{i18n>fiPageTitle} ({fiView>/totalCount})" level="H2"/>
+                        <OverflowToolbar id="tableToolbar">
+                            <Title
+                                id="tableTitle"
+                                text="{i18n>fiPageTitle} ({fiView>/totalCount})"
+                                level="H2" />
                             <ToolbarSpacer />
                             <SearchField
                                 id="searchField"
-                                width="30%"
+                                width="300px"
                                 placeholder="{i18n>fiSearchPlaceholder}"
-                                search=".onSearch" />
+                                search=".onSearch"
+                                liveChange=".onSearch">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="12rem" />
+                                </layoutData>
+                            </SearchField>
                             <Button
+                                id="btnExportTable"
+                                icon="sap-icon://excel-attachment"
+                                tooltip="{i18n>fiBtnExportCsv}"
+                                text="{i18n>fiBtnExportCsv}"
+                                press=".onExport">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="Medium" />
+                                </layoutData>
+                            </Button>
+                            <Button
+                                id="btnRefreshTable"
                                 icon="sap-icon://refresh"
                                 tooltip="{i18n>btnRefresh}"
-                                press=".onRefresh" />
+                                press=".onRefresh">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="Low" />
+                                </layoutData>
+                            </Button>
                         </OverflowToolbar>
                     </headerToolbar>
 
                     <columns>
-                        <Column><Text text="{i18n>fiColDocument}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColGLAccount}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColFiscalYear}" /></Column>
-                        <Column hAlign="Center"><Text text="{i18n>fiColDebitCredit}" /></Column>
-                        <Column hAlign="End"><Text text="{i18n>fiColAmount}" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>fiColCostCenter}" /></Column>
+                        <Column width="11rem"><Text text="{i18n>fiColDocument}" /></Column>
+                        <Column width="8rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColCompanyCode}" /></Column>
+                        <Column width="14rem"><Text text="{i18n>fiColGLAccount}" /></Column>
+                        <Column width="12rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>fiColItemText}" /></Column>
+                        <Column width="7rem" hAlign="Center"><Text text="{i18n>fiColDebitCredit}" /></Column>
+                        <Column width="11rem" hAlign="End"><Text text="{i18n>fiColAmount}" /></Column>
+                        <Column width="10rem" minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>fiColCostCenter}" /></Column>
                     </columns>
 
                     <items>
-                        <ColumnListItem type="Active">
+                        <ColumnListItem type="Navigation" press=".onItemPress">
                             <cells>
                                 <ObjectIdentifier
                                     title="{fiService>AccountingDocument}"
-                                    text="{i18n>fiCompanyCodeLabel} {fiService>SourceCompanyCode}" />
+                                    text="{= ${i18n>fiColItem} + ': ' + ${fiService>AccountingDocumentItem} }" />
                                 <ObjectIdentifier
-                                    title="{fiService>GLAccountName}"
-                                    text="{fiService>GLAccount}" />
-                                <Text text="{fiService>FiscalYear}" />
+                                    title="{fiService>CompanyCode}"
+                                    text="{= ${i18n>fiColFiscalYear} + ': ' + ${fiService>FiscalYear} }" />
+                                <ObjectIdentifier
+                                    title="{= ${fiService>GLAccountName} ? ${fiService>GLAccountName} : ${fiService>GLAccount} }"
+                                    text="{= ${fiService>GLAccountName} ? ${fiService>GLAccount} : '' }" />
+                                <Text text="{= ${fiService>DocumentItemText} ? ${fiService>DocumentItemText} : '-' }" maxLines="2" wrapping="true" />
                                 <ObjectStatus
                                     text="{
                                         path: 'fiService>DebitCreditCode',
@@ -96,7 +255,9 @@
                                         path: 'fiService>DebitCreditCode',
                                         formatter: '.formatter.debitCreditState'
                                     }" />
-                                <Text text="{fiService>CostCenter}" />
+                                <ObjectIdentifier
+                                    title="{= ${fiService>CostCenter} ? ${fiService>CostCenter} : '-' }"
+                                    text="{= ${fiService>ProfitCenter} ? ${fiService>ProfitCenter} : '' }" />
                             </cells>
                         </ColumnListItem>
                     </items>

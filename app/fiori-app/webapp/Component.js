@@ -13,6 +13,35 @@ sap.ui.define([
 ], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService) {
     "use strict";
 
+    // Defensive normalization for UI5 MessageToast dock validation issue (SAP DINC0487249)
+    // Ensures default 'my' and 'at' properties align with sap.ui.core.Popup.Dock enum ("CenterBottom" instead of legacy "center bottom")
+    function normalizeMessageToastDock() {
+        if (MessageToast && typeof MessageToast.show === "function" && !MessageToast._dockPatched) {
+            MessageToast._dockPatched = true;
+            if (MessageToast._mSettings) {
+                if (MessageToast._mSettings.my === "center bottom") {
+                    MessageToast._mSettings.my = "CenterBottom";
+                }
+                if (MessageToast._mSettings.at === "center bottom") {
+                    MessageToast._mSettings.at = "CenterBottom";
+                }
+            }
+            var fnOrigShow = MessageToast.show;
+            MessageToast.show = function (sMessage, mOptions) {
+                if (mOptions) {
+                    if (mOptions.my === "center bottom") {
+                        mOptions.my = "CenterBottom";
+                    }
+                    if (mOptions.at === "center bottom") {
+                        mOptions.at = "CenterBottom";
+                    }
+                }
+                return fnOrigShow.apply(this, arguments);
+            };
+        }
+    }
+    normalizeMessageToastDock();
+
     return UIComponent.extend("saps4hana.fiori.Component", {
         metadata: {
             manifest: "json",
@@ -20,6 +49,8 @@ sap.ui.define([
         },
 
         init: function () {
+            normalizeMessageToastDock();
+
             // call the base component's init function
             UIComponent.prototype.init.apply(this, arguments);
 

@@ -1,0 +1,109 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog
+        id="journalEntryDetailDialog"
+        title="{i18n>fiDialogTitle} — {fiService>AccountingDocument}"
+        type="Message"
+        contentWidth="520px"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <form:SimpleForm
+                    id="formJournalEntryDetail"
+                    editable="false"
+                    layout="ResponsiveGridLayout"
+                    labelSpanXL="4"
+                    labelSpanL="4"
+                    labelSpanM="4"
+                    labelSpanS="12"
+                    adjustLabelSpan="false"
+                    emptySpanXL="0"
+                    emptySpanL="0"
+                    emptySpanM="0"
+                    emptySpanS="0"
+                    columnsXL="1"
+                    columnsL="1"
+                    columnsM="1"
+                    singleContainerFullSize="false">
+                    <form:content>
+                        <core:Title text="{i18n>fiDialogHeaderSection}" />
+
+                        <Label text="{i18n>fiColDocument}" />
+                        <Text text="{fiService>AccountingDocument}" />
+
+                        <Label text="{i18n>fiColItem}" />
+                        <Text text="{fiService>AccountingDocumentItem}" />
+
+                        <Label text="{i18n>fiColCompanyCode}" />
+                        <Text text="{fiService>CompanyCode}" />
+
+                        <Label text="{i18n>fiDialogSourceCompany}" />
+                        <Text text="{fiService>SourceCompanyCode}" />
+
+                        <Label text="{i18n>fiColFiscalYear}" />
+                        <Text text="{fiService>FiscalYear}" />
+
+                        <core:Title text="{i18n>fiDialogFinancialSection}" />
+
+                        <Label text="{i18n>fiColGLAccount}" />
+                        <ObjectIdentifier
+                            title="{= ${fiService>GLAccountName} ? ${fiService>GLAccountName} : ${fiService>GLAccount} }"
+                            text="{= ${fiService>GLAccountName} ? ${fiService>GLAccount} : '' }" />
+
+                        <Label text="{i18n>fiColDebitCredit}" />
+                        <ObjectStatus
+                            text="{
+                                path: 'fiService>DebitCreditCode',
+                                formatter: '.formatter.formatDebitCredit'
+                            }"
+                            state="{
+                                path: 'fiService>DebitCreditCode',
+                                formatter: '.formatter.debitCreditState'
+                            }"
+                            icon="{= %{fiService>DebitCreditCode} === 'S' ? 'sap-icon://arrow-bottom' : 'sap-icon://arrow-top' }" />
+
+                        <Label text="{i18n>fiDialogAmountCompany}" />
+                        <ObjectNumber
+                            number="{
+                                path: 'fiService>AmountInCompanyCodeCurrency',
+                                formatter: '.formatter.formatAmount'
+                            }"
+                            unit="{fiService>CompanyCodeCurrency}"
+                            state="{
+                                path: 'fiService>DebitCreditCode',
+                                formatter: '.formatter.debitCreditState'
+                            }" />
+
+                        <Label text="{i18n>fiDialogAmountTransaction}" />
+                        <ObjectNumber
+                            number="{
+                                path: 'fiService>AmountInTransactionCurrency',
+                                formatter: '.formatter.formatAmount'
+                            }"
+                            unit="{fiService>TransactionCurrency}" />
+
+                        <core:Title text="{i18n>fiDialogAssignmentSection}" />
+
+                        <Label text="{i18n>fiColCostCenter}" />
+                        <Text text="{= ${fiService>CostCenter} ? ${fiService>CostCenter} : '-' }" />
+
+                        <Label text="{i18n>fiColProfitCenter}" />
+                        <Text text="{= ${fiService>ProfitCenter} ? ${fiService>ProfitCenter} : '-' }" />
+
+                        <Label text="{i18n>fiColItemText}" />
+                        <Text text="{= ${fiService>DocumentItemText} ? ${fiService>DocumentItemText} : '-' }" />
+                    </form:content>
+                </form:SimpleForm>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnCloseJournalEntryDetail"
+                text="{i18n>fiDialogClose}"
+                press=".onCloseJournalEntryDetailDialog"
+                type="Emphasized" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>

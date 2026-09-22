@@ -162,6 +162,17 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res2.authenticated).toBe(true);
             expect(res2.username).toBe('CUSTOM_DEV_USER');
             expect(res2.system).toBe('DEV - Client 220');
+
+            // Verify khushal can also authenticate with real S/4 password (S4_PASSWORD)
+            process.env.S4_USERNAME = 'khushal';
+            process.env.S4_PASSWORD = 'RealS4Password!@#';
+            const req3 = {
+                data: { username: 'KHUSHAL', password: 'RealS4Password!@#' }
+            };
+            const res3 = await service._handleLogin(req3);
+            expect(res3.authenticated).toBe(true);
+            expect(res3.username).toBe('KHUSHAL');
+            expect(res3.message).toContain('S/4 Development User');
         });
 
         it('should validate credentials against authAdapter when username is not a dev user', async () => {

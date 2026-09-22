@@ -2798,17 +2798,107 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+### 2026-09-22 09:30 IST — Fix Journal Entries View Layout, KPI Digit Truncation & Amount Formatting
+- **Change**: Resolved UI defects in `app/fiori-app/webapp/modules/fi/journal-entry/view/JournalEntries.view.xml`, amount formatting in `formatter.js`, and detail dialog.
+  1. **Root Cause Analysis**:
+     - **NumericContent 4-Character Truncation**: Default `truncateValueTo` in UI5 `NumericContent` is 4 characters. Large counts like `174,187` and `33,784` were clipped to `1741` and `3378`. Added `truncateValueTo="10"` on all 4 KPI tiles.
+     - **OData V4 Decimal Formatter String Parsing**: UI5 OData V4 formatters output pre-formatted numeric strings with grouping commas (e.g. `"2,958.600"`). Calling `parseFloat` directly on strings with commas failed inside currency formatting, rendering blank cells with only `"INR"`. Updated `formatAmount` to strip commas prior to parsing and formatting with `NumberFormat`.
+     - **IconTabBar Wrapper Removal**: Removed redundant outer `<IconTabBar>` wrapping `<Table>` to match SAP Fiori floorplan standards and `PurchaseOrders.view.xml`.
+     - **Line Item Text Column Width**: Fixed column header wrap in `Line Item Text` by specifying `width="12rem"` and rebuilding `Component-preload.js`.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/fi/journal-entry/view/JournalEntries.view.xml`
+     - `app/fiori-app/webapp/modules/fi/journal-entry/view/JournalEntryDetailDialog.fragment.xml`
+     - `app/fiori-app/webapp/modules/fi/journal-entry/model/formatter.js`
+     - `app/fiori-app/webapp/modules/fi/journal-entry/controller/JournalEntries.controller.js`
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`
+     - `test/unit/fi/journalEntryFormatter.test.js`
+  3. **Validation**:
+     - `npx jest test/unit/fi/`: **2 passed, 2 total test suites; 30 passed, 30 total tests (100% green)**.
+     - `cd app/fiori-app && npm run lint`: **0 errors, 0 warnings**.
+     - `cd app/fiori-app && npm run build`: Succeeded.
+     - Chrome DevTools MCP live verification: verified 174,187 count rendered in full without ellipsis; amounts formatted as `2,958.60 INR` and `5,514,142.00 INR`; screenshots saved to artifacts.
+
+### 2026-09-22 09:50 IST — Fix Login Form Enter-Submit, Input Control Synchronization & Misleading Placeholders
+- **Change**: Resolved login failures where pressing Enter in password input or using browser autofill displayed `"Username and password are required."`, and aligned login placeholders with actual personas.
+  1. **Root Cause Analysis**:
+     - **Enter Key Submit vs Blur Desynchronization**: Two-way data binding on SAPUI5 `<Input>` only writes to the model on `change` (blur). When users hit Enter to submit the form, `onsapenter` fired `submit` while the field still held focus. `onLogin` read from `oViewModel.getProperty("/password")`, which remained empty `""`, triggering validation failure `"Username and password are required."`.
+     - **Browser Autofill Desynchronization**: Browser credential autofill populates native DOM element values without firing UI5 synthetic change events, leaving view model properties blank.
+     - **Misleading Placeholders**: Placeholder `e.g. s4admin or purchaser` prompted users to input non-existent personas, which failed with S/4 Gateway HTTP 401.
+  2. **Code Changes**:
+     - `app/fiori-app/webapp/view/Login.view.xml`: Added `valueLiveUpdate="true"` to both `inputUsername` and `inputPassword`.
+     - `app/fiori-app/webapp/controller/Login.controller.js`: In `onLogin`, prioritized live control values (`this.byId("inputUsername").getValue()`, `this.byId("inputPassword").getValue()`) and synchronized back to the view model before validation. Also synchronized control values in `onInputChange` and cleared the password control on success.
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Updated `loginUsernamePlaceholder` to `e.g. alice, khushal, or S/4 username`, and updated demo account strings with 100% key-for-key parity.
+     - `test/unit/controller/loginController.test.js`: Added 6 unit tests covering initialization, live control synchronization, Enter key submission, validation errors, and authentication rejection.
+  3. **Validation Commands Executed & Results**:
+     - `npx jest test/unit/controller/loginController.test.js`: **1 passed, 1 total test suites; 6 passed, 6 total tests (100% green)**.
+     - `cd app/fiori-app && npm run lint`: **Success! 0 findings detected (0 errors, 0 warnings)**.
+     - `cd app/fiori-app && npm run build`: **Build succeeded in 781 ms; Component-preload.js generated**.
+     - `npx cds compile srv`: **Succeeded with 0 errors**.
+     - `npm test`: **74 passed, 74 total test suites; 967 passed, 967 total tests (100% green)** in 79.5 s.
+     - `git diff --check`: **Clean (0 errors)**.
+     - Chrome DevTools MCP live verification: verified `alice` / `alice` and `khushal` / `khushal` log in via Enter key and redirect to `#/dashboard` with tokens and roles; screenshots saved to artifacts.
+- **Next recommended action**: Stage and commit to `origin/feature/CL01`.
+
+### 2026-09-22 09:55 IST — Fix SAPUI5 MessageToast Dock Position Validation Error (SAP DINC0487249)
+- **Change**: Resolved browser console validation error `"center bottom" is not of type "sap.ui.core.Popup.Dock" on sap.m.MessageToast._validateDockPosition` triggered twice upon calling `sap.m.MessageToast.show(...)` throughout the application.
+  1. **Root Cause Analysis**:
+     - **UI5 Framework Type Normalization**: In SAPUI5 1.136.0, `core.Popup` updated the `sap.ui.core.Popup.Dock` enum to use PascalCase strings (`CenterBottom: "CenterBottom"`) with identical keys and values, registered via `DataType.registerEnum("sap.ui.core.Popup.Dock", Popup.Dock)`.
+     - **MessageToast Default Settings Discrepancy**: `sap.m.MessageToast._mSettings` in UI5 1.136.0 still defaulted `my` and `at` to legacy lowercase `"center bottom"`. When `MessageToast.show()` was called without explicit dock options, `MessageToast._validateDockPosition` called `DataType.getType("sap.ui.core.Popup.Dock").isValid(sDock)`. Because `"center bottom"` did not match `"CenterBottom"`, UI5 logged assertion errors for both `my` and `at`.
+     - **Upstream Fix Alignment**: SAP officially addressed this regression under incident `DINC0487249` (OpenUI5 commit `0fb0b865`) in patch release `1.136.10` and subsequent releases (`1.136.22` LTS).
+  2. **Frontend UI5 CDN Update**:
+     - `app/fiori-app/webapp/index.html`: Updated pinned CDN bootstrap from initial zero-patch `https://ui5.sap.com/1.136.0/resources/sap-ui-core.js` to current stable maintenance patch `https://ui5.sap.com/1.136.22/resources/sap-ui-core.js`.
+  3. **Frontend Component Layer (Defensive Normalization)**:
+     - `app/fiori-app/webapp/Component.js`: Added `normalizeMessageToastDock()` executed at module load and in `init()`. Checks `MessageToast._mSettings` and updates `my` and `at` from `"center bottom"` to `"CenterBottom"`. Defensively wraps `MessageToast.show` so any explicit caller options with lowercase `"center bottom"` are sanitized to `"CenterBottom"` before passing to UI5 core.
+  4. **Documentation & Bundling**:
+     - `README.md`: Updated SAPUI5 version badges and tech stack table from `1.136.0` to `1.136.22 (Pinned LTS)`.
+     - `cd app/fiori-app && npm run build`: Rebuilt `dist/Component-preload.js` with normalized component logic.
+  5. **Automated Tests**:
+     - `test/unit/controller/messageToastDockNormalization.test.js`: Added 4 unit tests verifying that `_mSettings` defaults are converted from `"center bottom"` to `"CenterBottom"`, explicit options in `MessageToast.show` are normalized, non-default dock positions are preserved, and normalization is idempotent.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/controller/messageToastDockNormalization.test.js`: **1 passed, 1 total test suites; 4 passed, 4 total tests (100% green)** in 0.88 s.
+  - `npx jest test/unit/controller/`: **3 passed, 3 total test suites; 16 passed, 16 total tests (100% green)**.
+  - `cd app/fiori-app && npm run lint`: **Success! 0 findings detected (0 errors, 0 warnings)**.
+  - `cd app/fiori-app && npm run build`: **Build succeeded in 759 ms; Component-preload.js generated**.
+  - `npx cds compile srv`: **Succeeded with 0 errors**.
+  - `npm test`: **75 passed, 75 total test suites; 971 passed, 971 total tests (100% green)** in 87.7 s.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `origin/feature/CL01`.
+
+### 2026-09-22 10:05 IST — Fix S/4 Password Authentication for Development User (srv/auth-service.js)
+- **Change**: Resolved authentication failure (`Invalid username or password.`) when logging in as `KHUSHAL` with authentic SAP S/4HANA credentials.
+  1. **Root Cause Analysis**:
+     - In `srv/auth-service.js` (`_handleLogin`), `sUserLower === "khushal"` was grouped into `isMockUser` alongside `alice` and `bob`.
+     - When `isMockUser` was true, the handler tested strictly against `process.env.LOCAL_DEV_PASSWORD || sUserLower` (`"khushal"`). When the password did not match `"khushal"`, it immediately returned `{ authenticated: false, message: "Invalid username or password." }` without checking `process.env.S4_PASSWORD` or falling back to the live S/4 Gateway via `authAdapter.validateCredentials(username, password)`.
+     - Consequently, entering the real S/4 password was always intercepted and rejected by the mock user check before reaching the S/4 credential validation.
+  2. **Authentication Flow Separation**:
+     - `srv/auth-service.js`: Separated pure mock users (`alice`, `bob`) from development users. For `khushal` (and `sEnvDevUser`), checks the local development password first, and if not matched, evaluates `process.env.S4_PASSWORD` and delegates to `authAdapter.validateCredentials(username, password)`.
+  3. **Automated Tests**:
+     - `test/unit/auth/authService.test.js`: Added test case asserting that `KHUSHAL` can authenticate with either local mock password or real `process.env.S4_PASSWORD`.
+  4. **Live Verification**:
+     - Tested live HTTP POST to `http://localhost:4004/odata/v4/auth/login` with `KHUSHAL` and `S4_PASSWORD`: Verified HTTP 200, `authenticated: true`, `system: "S4HANA_DEV - Client 220"`, valid JWT token, and 8 enterprise roles.
+- **Validation Commands Executed & Results**:
+  - `npx jest test/unit/auth/`: **3 passed, 3 total test suites; 38 passed, 38 total tests (100% green)** in 3.4 s.
+  - `npm test`: **75 passed, 75 total test suites; 971 passed, 971 total tests (100% green)** in 75.3 s.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Stage and commit to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **73 passed, 73 total test suites; 948 passed, 948 total tests (100% green)**.
-  - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js`: **1 passed, 1 total test suites; 8 passed, 8 total tests (100% green)**.
-  - `npx jest test/unit/purchase-order/getSupplierDefaultsHandler.test.js`: **1 passed, 1 total test suites; 5 passed, 5 total tests (100% green)**.
-  - `npx jest test/unit/errorMapping.test.js`: **1 passed, 1 total test suites; 18 passed, 18 total tests (100% green)**.
-  - `npx cds compile srv --to json > /dev/null`: Succeeded with 0 errors.
+  - `npm test`: **75 passed, 75 total test suites; 971 passed, 971 total tests (100% green)**.
+  - `npx jest test/unit/auth/`: **3 passed, 3 total test suites; 38 passed, 38 total tests (100% green)**.
+  - `npx jest test/unit/controller/messageToastDockNormalization.test.js`: **1 passed, 1 total test suites; 4 passed, 4 total tests (100% green)**.
+  - `npx jest test/unit/controller/loginController.test.js`: **1 passed, 1 total test suites; 6 passed, 6 total tests (100% green)**.
+  - `npx cds compile srv`: Succeeded with 0 errors.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Development User Authentication Support**:
+  - Fixed credential validation so `KHUSHAL` can authenticate with both local mock credentials and authentic S/4HANA credentials (`S4_PASSWORD` / S/4 Gateway).
+- **MessageToast Dock Position Normalization (SAP DINC0487249)**:
+  - Fixed `"center bottom" is not of type "sap.ui.core.Popup.Dock"` console validation errors on `MessageToast.show`.
+  - Pinned UI5 CDN updated to LTS maintenance patch `1.136.22`.
+  - Added module-level and runtime defensive normalization in `Component.js`.
 - **System Label in User Profile & Auth Adapter (Audit Row 46)**:
   - Hardcoded `"DEV - Client 220"` and `"PRD - Client <n>"` literals eliminated.
   - System label built dynamically from environment settings (`S4_SYSTEM_NAME` and `S4_CLIENT`) via `s4Config.getSystemLabel()`.

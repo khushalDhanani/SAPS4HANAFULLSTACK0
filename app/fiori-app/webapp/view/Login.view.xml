@@ -47,6 +47,7 @@
                                 <Input
                                     id="inputUsername"
                                     value="{loginView>/username}"
+                                    valueLiveUpdate="true"
                                     placeholder="{i18n>loginUsernamePlaceholder}"
                                     valueState="{loginView>/usernameState}"
                                     valueStateText="{loginView>/usernameStateText}"
@@ -58,6 +59,7 @@
                                     id="inputPassword"
                                     type="Password"
                                     value="{loginView>/password}"
+                                    valueLiveUpdate="true"
                                     placeholder="{i18n>loginPasswordPlaceholder}"
                                     valueState="{loginView>/passwordState}"
                                     valueStateText="{loginView>/passwordStateText}"

@@ -142,6 +142,35 @@ Top 3 riskiest:
 
 Close behind: PO status defaulting to 'Approved' (row 4) and page-only KPIs with a 100% default (rows 6, 7, 21, 28).
 
+
+## Re-scan at commit `d56964c` (21-Sep-2026, evening)
+
+Checks: `cds compile` OK; `jest test/unit` 62 suites / 897 tests passed; `eslint .` 0 problems; `ui5lint` no findings. No live SAP call made.
+
+| Row | Status | Note |
+|---|---|---|
+| 4 PO status | Fixed | SAP status name first, then a code table (01/02/04/05/38), unknown code shown raw. Last resort still maps completeness=true to "Approved". Code table not verified against SAP. |
+| 5, 6, 7 PO KPIs | Fixed | Supplier count from server metric, "-" when unavailable; completeness rate no longer computed. |
+| 10 Supplier defaults | Fixed | Ordered by PurchaseOrder desc; `source: 'from last PO'` shown to the user. |
+| 11, 12, 13 | Fixed | Net amount flagged as estimate; document type required; no document number -> 502. |
+| 15, 16, 17 Inquiry detail | Fixed | No borrowing; blank stays blank. |
+| 20, 22 Totals / metrics handler | Fixed | "-" placeholders; handler returns the error. |
+| 21 "Open" and "Active Customers" KPIs | **Changed, now mislabelled** | Sales INQUIRIES screen shows `getSalesOrderMetrics().openOrdersCount` - the open SALES ORDER count - under "Open Inquiries" (SalesInquiries.controller.js:81-86). Both screens show the customer MASTER count (`I_Customer_VH`, dashboard metric) under "Active Customers / Distinct Sold-to Parties". |
+| 23 Customer defaults | Partly | `'IN'` removed; office/group heuristics and config currency remain (flagged `derived`). |
+| 24 Sales header defaults in the UI | **Open** | `SalesOrderModel.js`, `SalesOrderService.js`, `CreateSalesOrder.controller.js:277` unchanged (ZDOM, 1000, INR, KG, 1120, "1000", today+7). |
+| 25 Org values on write | Fixed | Mappers reject blanks. |
+| 26 Order total | Mostly fixed | Reads `NetAmount`; falls back to `TotalAmount` (includes tax) and then to qty x price without a flag. |
+| 28 Journal Entry KPIs | Fixed | Total from $count, "-" when unknown, label "Total Line Items". "G/L Accounts" is now the chart-of-accounts master count, not accounts in the list. |
+| 32 Shipping points | Fixed | Bound to `ShippingPointVH`. |
+| 39 Movement type default | **Open** | `|| '261'`, `|| 'GI for order'` still in 3 files. |
+| 40 GI batch stock | Mostly fixed | Batch-grain stock from `MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates` (fields verified in saved metadata: Batch, CurrentStock, StorageLocation, BaseUnit); unknown = null. Residuals: (a) `batchStockMap.set` keeps the LAST row per batch, so a batch in two storage locations or special stock is not summed when no storage location is given; (b) handling-unit branch `GoodsIssueStockUnitClient.js:966` `if (currentStock <= 0)` is true for `null` in JavaScript -> unknown stock raises "SAP reports no stock"; line 1018 `Math.min(null, openQty)` = 0; (c) a "secondary fallback for unit test mocks" read sits in the runtime path (GoodsIssueBatchesClient.js:124-146). |
+| 41, 42, 43, 44 | Fixed | 'unknown' status; synthetic barcode removed; POSTED_IN_SAP needs a material document; queued lines `Success:false, Queued:true, DifferenceCleared:false`. |
+| 46 System label | Fixed | `s4Config.getSystemLabel()`. |
+| 2, 9, 19, 30, 31, 33, 34, 35, 37, 38, 45 | **Open** | Unchanged: FI tile label, ZFRT/FERT scope, sales-order fallback drops the filter, "Due Orders" counts schedule lines, approval lookup failure = looks approved, GR outage = 404, GR quantity 0 on failed read, GR lists `[]` on error, reservation cap 2,000, open quantity ignores the queue, queue count 0 on error. |
+| Not in table | Open | `'999'` difference storage type (5 places); GI unit `|| "PC"` (GoodsIssueService.js:183); GR movement type `|| '101'`. |
+
+Scorecard by the same 47 groups: cleanly live 11 -> 30; live with caveat 11 -> 12; assumed 25 -> 5 (rows 21, 23, 24, 26 partly, 39).
+
 ## Not verified
 
 - No live SAP call was made; every 'live' verdict is a code-path verdict.

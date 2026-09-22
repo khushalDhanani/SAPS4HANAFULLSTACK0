@@ -85,7 +85,17 @@ function issueToken(username, roles = ['PurchasingManager', 'Viewer'], options =
     }
 
     const sUser = username.trim();
-    const aScopes = roles.map(r => `$XSAPPNAME.${r}`);
+    let aRoles = [];
+    if (Array.isArray(roles)) {
+        aRoles = roles;
+    } else if (roles && typeof roles === 'object') {
+        aRoles = Object.keys(roles).filter(k => roles[k]);
+    } else if (typeof roles === 'string') {
+        aRoles = [roles];
+    } else {
+        aRoles = ['PurchasingManager', 'Viewer'];
+    }
+    const aScopes = aRoles.map(r => `$XSAPPNAME.${r}`);
     const now = Math.floor(Date.now() / 1000);
     const exp = now + (options.expiresInSeconds || LOCAL_DEV_EXPIRY_SECONDS);
 

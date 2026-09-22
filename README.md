@@ -2,7 +2,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-v22%20LTS-339933.svg)](https://nodejs.org)
 [![SAP CAP](https://img.shields.io/badge/SAP%20CAP-v10-0070F2.svg)](https://cap.cloud.sap)
-[![SAPUI5](https://img.shields.io/badge/SAPUI5-v1.136.0-E35205.svg)](https://ui5.sap.com)
+[![SAPUI5](https://img.shields.io/badge/SAPUI5-v1.136.22-E35205.svg)](https://ui5.sap.com)
 [![Cloud SDK](https://img.shields.io/badge/SAP%20Cloud%20SDK-v4-0A6ED1.svg)](https://sap.github.io/cloud-sdk/)
 [![MTA](https://img.shields.io/badge/MTA-Cloud%20Foundry-303030.svg)](https://help.sap.com/docs/BTP)
 [![CI Pipeline](https://img.shields.io/badge/CI%20Pipeline-Passing-success.svg)](.github/workflows/ci.yml)
@@ -170,7 +170,7 @@ flowchart TD
 | Layer | Technology / Library | Version | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Runtime Environment** | Node.js | `>=22.0.0` (v22 LTS) | High-performance JavaScript runtime |
-| **Frontend Framework** | SAPUI5 | `1.136.0` (Pinned) | Enterprise Fiori UX and control library |
+| **Frontend Framework** | SAPUI5 | `1.136.22` (Pinned LTS) | Enterprise Fiori UX and control library |
 | **Frontend Tooling** | `@ui5/cli`, `@ui5/linter` | `4.x` / `1.x` | UI5 local server, build packaging, and static analysis |
 | **Backend Framework** | SAP CAP | `@sap/cds` v10 | OData V4 service model, routing, and domain logic |
 | **SAP Integration** | SAP Cloud SDK | `v4.x` | BTP Destination lookup and HTTP execution |
@@ -435,7 +435,7 @@ SAPS4HANAFULLSTACK/
 │   │   ├── xs-app.json                   # UI5 route descriptor (XSUAA & CSRF)
 │   │   └── webapp/
 │   │       ├── Component.js              # SAPUI5 component lifecycle, V4 model wiring & guards
-│   │       ├── index.html                # Pinned UI5 1.136.0 CDN bootstrap & shell
+│   │       ├── index.html                # Pinned UI5 1.136.22 (LTS) CDN bootstrap & shell
 │   │       ├── manifest.json             # Fiori descriptor, dataSources, V4 models & routing
 │   │       ├── controller/               # Shared Shell Controllers (App, Base, Dashboard, Login)
 │   │       ├── view/                     # Shared Shell Views (App, Dashboard, Login)

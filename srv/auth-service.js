@@ -98,9 +98,10 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     const sEnvDevUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
 
     let authResult;
-    const isMockUser = sUserLower === "alice" || sUserLower === "bob" || sUserLower === "khushal";
+    const isMockOnlyUser = sUserLower === "alice" || sUserLower === "bob";
+    const isKhushalUser = sUserLower === "khushal";
 
-    if (isMockUser) {
+    if (isMockOnlyUser) {
       const expectedPass = process.env.LOCAL_DEV_PASSWORD || sUserLower;
       const isMatch = localTokenUtil.timingSafeEqual(sPass.toLowerCase(), expectedPass.toLowerCase());
       if (isMatch) {
@@ -114,6 +115,26 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
           authenticated: false,
           message: "Invalid username or password."
         };
+      }
+    } else if (isKhushalUser) {
+      // Allow 'khushal' with local mock password ('khushal' or LOCAL_DEV_PASSWORD),
+      // or with real S/4 credentials (S4_PASSWORD or S/4 Gateway)
+      const expectedMockPass = process.env.LOCAL_DEV_PASSWORD || "khushal";
+      const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
+      if (localTokenUtil.timingSafeEqual(sPass.toLowerCase(), expectedMockPass.toLowerCase())) {
+        authResult = {
+          authenticated: true,
+          message: "Authentication successful (Local Development User).",
+          system: s4Config.getSystemLabel()
+        };
+      } else if (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)) {
+        authResult = {
+          authenticated: true,
+          message: "Authentication successful (S/4 Development User).",
+          system: s4Config.getSystemLabel()
+        };
+      } else {
+        authResult = await authAdapter.validateCredentials(username, password);
       }
     } else if (sEnvDevUser && sUserLower === sEnvDevUser) {
       const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
@@ -146,18 +167,22 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     });
 
     const configuredUsers = cds.env?.requires?.auth?.users || {};
-    let devRoles;
-    if (configuredUsers[sUserLower]?.roles) {
-      devRoles = configuredUsers[sUserLower].roles;
-    } else if (configuredUsers[sUser]?.roles) {
-      devRoles = configuredUsers[sUser].roles;
-    } else if (sUserLower === "bob") {
-      devRoles = ["Viewer"];
-    } else if (sUserLower === "alice" || sUserLower === "khushal" || (sEnvDevUser && sUserLower === sEnvDevUser)) {
-      devRoles = ["Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
-    } else {
-      // Unconfigured or external S/4 users receive least-privilege Viewer role by default
-      devRoles = ["Viewer"];
+    const extractRoles = (userConfig) => {
+      if (!userConfig || !userConfig.roles) return null;
+      if (Array.isArray(userConfig.roles)) return userConfig.roles;
+      if (typeof userConfig.roles === 'object') return Object.keys(userConfig.roles).filter(k => userConfig.roles[k]);
+      if (typeof userConfig.roles === 'string') return [userConfig.roles];
+      return null;
+    };
+    let devRoles = extractRoles(configuredUsers[sUserLower]) || extractRoles(configuredUsers[sUser]);
+    if (!devRoles || devRoles.length === 0) {
+      if (sUserLower === "bob") {
+        devRoles = ["Viewer"];
+      } else if (sUserLower === "alice" || sUserLower === "khushal" || (sEnvDevUser && sUserLower === sEnvDevUser)) {
+        devRoles = ["Admin", "Viewer", "PurchasingManager", "FinanceViewer", "SalesRepresentative", "SalesManager", "WarehouseClerk", "WarehouseManager"];
+      } else {
+        devRoles = ["Viewer"];
+      }
     }
     const tokenObj = localTokenUtil.issueToken(sUser, devRoles);
 
