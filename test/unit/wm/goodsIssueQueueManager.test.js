@@ -117,6 +117,36 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       await manager.clear();
       expect((await manager.getSummary()).TotalCount).toBe(0);
     });
+
+    it('getPendingItems, getPendingQueueMap, and getPendingQueuedQty aggregate non-posted items correctly', async () => {
+      await manager.enqueue({ ReservationNo: '0000010001', ReservationItem: '0001', IssueQty: 10, FinalIssue: false });
+      await manager.enqueue({ ReservationNo: '10001', ReservationItem: '1', IssueQty: 5, FinalIssue: true });
+      const rec3 = await manager.enqueue({ ReservationNo: '10001', ReservationItem: '2', IssueQty: 20, FinalIssue: false });
+      await manager.enqueue({ ReservationNo: '20002', ReservationItem: '1', IssueQty: 15, FinalIssue: false });
+
+      // Mark rec3 as posted to SAP
+      await manager.update(rec3.QueueReference, { SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '5000000001' });
+
+      // getPendingItems without filter
+      const allPending = await manager.getPendingItems();
+      expect(allPending).toHaveLength(3);
+
+      // getPendingItems with reservation filter (matches with/without leading zeros)
+      const res10001Pending = await manager.getPendingItems('0000010001');
+      expect(res10001Pending).toHaveLength(2);
+
+      // getPendingQueueMap aggregates queuedQty and finalIssue flag
+      const queueMap = await manager.getPendingQueueMap('10001');
+      expect(queueMap.get('10001:1')).toEqual({ queuedQty: 15, finalIssue: true });
+      expect(queueMap.has('10001:2')).toBe(false); // Posted to SAP, so not pending
+
+      // getPendingQueuedQty retrieves single item details
+      const singleItem = await manager.getPendingQueuedQty('0000010001', '0001');
+      expect(singleItem).toEqual({ queuedQty: 15, finalIssue: true });
+
+      const unqueued = await manager.getPendingQueuedQty('99999', '0001');
+      expect(unqueued).toEqual({ queuedQty: 0, finalIssue: false });
+    });
   });
 
   describe('Goods Issue handlers with the database-backed queue', () => {

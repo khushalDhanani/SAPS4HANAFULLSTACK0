@@ -33,7 +33,39 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
+    this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
     this._huModelCache = null;
+  }
+
+  /**
+   * Resolve the queue manager instance if available.
+   * @returns {Object|null}
+   */
+  _getQueueManager() {
+    if (this.queueManager) return this.queueManager;
+    if (this.adapter && this.adapter.queueManager) return this.adapter.queueManager;
+    try {
+      return require('../../../../wm/goods-issue/GoodsIssueQueueManager');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Helper to retrieve map of pending queued items.
+   * @param {string} [reservationNo]
+   * @returns {Promise<Map<string, { queuedQty: number, finalIssue: boolean }>>}
+   */
+  async _getPendingQueueMap(reservationNo) {
+    try {
+      const qm = this._getQueueManager();
+      if (qm && typeof qm.getPendingQueueMap === 'function') {
+        return await qm.getPendingQueueMap(reservationNo);
+      }
+    } catch (err) {
+      LOG.warn(`Could not read pending queue map in stock unit client: ${err.message}`);
+    }
+    return new Map();
   }
 
   /**
@@ -599,13 +631,28 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       throw err;
     }
 
+    const sResClean = sResv.replace(/^0+/, '');
+    const sItemClean = sItem.replace(/^0+/, '');
+    const pendingQueueMap = await this._getPendingQueueMap(sResClean);
+    const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
+    const queuedQty = qEntry ? qEntry.queuedQty : 0;
+    const isFinalQueued = qEntry ? qEntry.finalIssue : false;
+
     const resvMaterial = resvItem.Product || '';
     const resvPlant = resvItem.Plant || '';
     const resvSLoc = resvItem.StorageLocation || '';
     const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit || 0);
     const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0);
-    const openQty = Math.max(0, reqQty - wdnQty);
+    const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
     const resvUnit = resvItem.BaseUnit || resvItem.ResvnItemComponentUnit || resvItem.EntryUnit || resvItem.UnitOfMeasure || '';
+
+    if (openQty <= 0) {
+      const err = new Error(
+        `Reservation ${reservationNo} item ${reservationItem} has no open quantity remaining (already fully issued or queued in dispatch).`
+      );
+      err.status = 400;
+      throw err;
+    }
 
     // ──────────────────────────────────────────────────────────
     // STEP 2: Read actual current stock and authentic batches from SAP
@@ -959,11 +1006,11 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const effectivePlant = resvPlant || suPlant;
     const effectiveSLoc = resvSLoc || suSLoc;
 
-    if (suQty > 0) {
-      currentStock = currentStock > 0 ? Math.min(currentStock, suQty) : suQty;
+    if (currentStock !== null && currentStock !== undefined && currentStock > 0 && suQty > 0) {
+      currentStock = Math.min(currentStock, suQty);
     }
 
-    if (currentStock <= 0) {
+    if (currentStock !== null && currentStock !== undefined && currentStock <= 0) {
       const err = new Error(
         `Stock Unit ${sSu} resolved to material ${resvMaterial} in plant ${effectivePlant} / ` +
         `storage location ${effectiveSLoc}, but SAP reports no stock there ` +
@@ -1015,7 +1062,12 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       };
     }
 
-    const maxIssueQty = Math.min(currentStock, openQty);
+    const availableStock = currentStock !== null && currentStock !== undefined
+      ? currentStock
+      : (suQty > 0 ? suQty : null);
+    const maxIssueQty = availableStock !== null
+      ? Math.min(availableStock, openQty)
+      : openQty;
 
     this._suDiag('SU resolution complete', {
       inputBarcode: sSu,
@@ -1046,7 +1098,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       Plant: effectivePlant,
       StorageLocation: effectiveSLoc,
       CurrentStock: currentStock,
-      SuStockQty: suQty,
+      SuStockQty: suQty > 0 ? suQty : (currentStock !== null && currentStock !== undefined ? currentStock : null),
       BaseUnit: baseUnit,
       Batches: usableBatches,
       DeterminedBatch: determinedBatch,

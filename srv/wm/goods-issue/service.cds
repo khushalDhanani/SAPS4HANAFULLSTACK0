@@ -37,6 +37,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             Unit            : String(3);
             RequiredQty     : Decimal(13, 3);
             WithdrawnQty    : Decimal(13, 3);
+            QueuedQty       : Decimal(13, 3);
             OpenQty         : Decimal(13, 3);
             MovementType    : String(3);
             MovementTypeName: String(20);
@@ -134,6 +135,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Unit            : String(3);
         RequiredQty     : Decimal(13, 3);
         WithdrawnQty    : Decimal(13, 3);
+        QueuedQty       : Decimal(13, 3);
         OpenQty         : Decimal(13, 3);
         MovementType    : String(3);
         MovementTypeName: String(20);

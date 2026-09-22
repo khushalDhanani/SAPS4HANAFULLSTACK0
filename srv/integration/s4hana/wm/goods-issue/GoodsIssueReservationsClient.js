@@ -9,6 +9,38 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
+    this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
+  }
+
+  /**
+   * Resolve the queue manager instance if available.
+   * @returns {Object|null}
+   */
+  _getQueueManager() {
+    if (this.queueManager) return this.queueManager;
+    if (this.adapter && this.adapter.queueManager) return this.adapter.queueManager;
+    try {
+      return require('../../../../wm/goods-issue/GoodsIssueQueueManager');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Helper to retrieve map of pending queued items.
+   * @param {string} [reservationNo]
+   * @returns {Promise<Map<string, { queuedQty: number, finalIssue: boolean }>>}
+   */
+  async _getPendingQueueMap(reservationNo) {
+    try {
+      const qm = this._getQueueManager();
+      if (qm && typeof qm.getPendingQueueMap === 'function') {
+        return await qm.getPendingQueueMap(reservationNo);
+      }
+    } catch (err) {
+      LOG.warn(`Could not read pending queue map in reservations client: ${err.message}`);
+    }
+    return new Map();
   }
 
   /**
@@ -28,6 +60,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     }
 
     try {
+      const pendingQueueMap = await this._getPendingQueueMap();
       const pageSize = 100;
       let skip = 0;
       const allResults = [];
@@ -48,10 +81,16 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           const sResv = r.Reservation || '';
           if (!sResv) continue;
 
-          // Derive OpenQty — only count items the clerk will actually see
+          const sResClean = sResv.replace(/^0+/, '');
+          const sItemClean = String(r.ReservationItem || '').trim().replace(/^0+/, '');
+          const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
+          const queuedQty = qEntry ? qEntry.queuedQty : 0;
+          const isFinalQueued = qEntry ? qEntry.finalIssue : false;
+
+          // Derive OpenQty — deduct SAP withdrawn qty AND local queued qty
           const reqQty = Number(r.ResvnItmRequiredQtyInBaseUnit) || 0;
           const wdnQty = Number(r.ResvnItmWithdrawnQtyInBaseUnit) || 0;
-          const openQty = Math.max(0, reqQty - wdnQty);
+          const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
           if (openQty <= 0) continue;
 
           if (!resvMap.has(sResv)) {
@@ -130,6 +169,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     const results = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(fullFilter)}&$format=json`);
 
     if (Array.isArray(results) && results.length > 0) {
+      const pendingQueueMap = await this._getPendingQueueMap(rawReserv);
+
       const getPackagingUnitsFn = (mat) => {
         if (this.adapter && typeof this.adapter.getMaterialPackagingUnits === 'function') {
           return this.adapter.getMaterialPackagingUnits(mat);
@@ -151,9 +192,15 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
       };
 
       const mappedItems = await Promise.all(results.map(async (r) => {
+        const sResClean = String(r.Reservation || '').trim().replace(/^0+/, '');
+        const sItemClean = String(r.ReservationItem || '').trim().replace(/^0+/, '');
+        const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
+        const queuedQty = qEntry ? qEntry.queuedQty : 0;
+        const isFinalQueued = qEntry ? qEntry.finalIssue : false;
+
         const reqQty = Number(r.ResvnItmRequiredQtyInBaseUnit || 0);
         const wdnQty = Number(r.ResvnItmWithdrawnQtyInBaseUnit || 0);
-        const openQty = Math.max(0, reqQty - wdnQty);
+        const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
 
         // Fetch live packaging units (MARM)
         let packagingUnits = await getPackagingUnitsFn(r.Product);
@@ -217,6 +264,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           Unit: baseUnit,
           RequiredQty: reqQty,
           WithdrawnQty: wdnQty,
+          QueuedQty: queuedQty,
           OpenQty: openQty,
           MovementType: r.GoodsMovementType || '261',
           MovementTypeName: r.GoodsMovementTypeName || 'GI for order',

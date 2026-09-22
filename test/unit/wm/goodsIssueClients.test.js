@@ -441,6 +441,136 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       // Both items have OpenQty = 0 — should return empty, not fall back to all items
       expect(items).toHaveLength(0);
     });
+
+    it('should deduct queued quantity from OpenQty and exclude items fully queued in dispatch queue', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            Plant: '1120',
+            StorageLocation: '1120',
+            BaseUnit: 'KG',
+            ResvnItmRequiredQtyInBaseUnit: '50.000',
+            ResvnItmWithdrawnQtyInBaseUnit: '10.000',
+            GoodsMovementType: '261'
+          },
+          {
+            Reservation: '10001',
+            ReservationItem: '2',
+            OrderID: '40001',
+            Product: 'MAT02',
+            ProductName: 'Material 2',
+            Plant: '1120',
+            StorageLocation: '1120',
+            BaseUnit: 'KG',
+            ResvnItmRequiredQtyInBaseUnit: '30.000',
+            ResvnItmWithdrawnQtyInBaseUnit: '0.000',
+            GoodsMovementType: '261'
+          }
+        ]),
+        getMaterialPackagingUnits: jest.fn().mockResolvedValue([]),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const mockQueueManager = {
+        getPendingQueueMap: jest.fn().mockResolvedValue(new Map([
+          ['10001:1', { queuedQty: 15, finalIssue: false }], // 40 open - 15 queued = 25 open
+          ['10001:2', { queuedQty: 30, finalIssue: false }]  // 30 open - 30 queued = 0 open -> excluded!
+        ]))
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({
+        adapter: mockAdapter,
+        queueManager: mockQueueManager
+      });
+
+      const items = await reservationsClient.getOpenItems('40001', '10001');
+
+      // Item 2 is fully queued, so only Item 1 is returned
+      expect(items).toHaveLength(1);
+      expect(items[0].ReservationItem).toBe('0001');
+      expect(items[0].RequiredQty).toBe(50);
+      expect(items[0].WithdrawnQty).toBe(10);
+      expect(items[0].QueuedQty).toBe(15);
+      expect(items[0].OpenQty).toBe(25); // 50 - 10 - 15
+    });
+
+    it('should deduct queued quantity in getOpenReservations and skip reservation if all items are queued', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Product: 'MAT01',
+            ResvnItmRequiredQtyInBaseUnit: '20',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
+          },
+          {
+            Reservation: '20002',
+            ReservationItem: '1',
+            OrderID: '40002',
+            Product: 'MAT02',
+            ResvnItmRequiredQtyInBaseUnit: '50',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
+          }
+        ])
+      };
+
+      const mockQueueManager = {
+        getPendingQueueMap: jest.fn().mockResolvedValue(new Map([
+          ['10001:1', { queuedQty: 20, finalIssue: false }], // fully queued
+          ['20002:1', { queuedQty: 10, finalIssue: false }]  // partially queued (40 remaining)
+        ]))
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({
+        adapter: mockAdapter,
+        queueManager: mockQueueManager
+      });
+
+      const reservations = await reservationsClient.getOpenReservations('261');
+
+      // Reservation 10001 is completely queued, so only 20002 is listed
+      expect(reservations).toHaveLength(1);
+      expect(reservations[0].ReservationNo).toBe('20002');
+      expect(reservations[0].ItemCount).toBe(1);
+    });
+
+    it('should exclude items with FinalIssue queued in dispatch queue even if queued qty is less than open qty', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Product: 'MAT01',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '0'
+          }
+        ]),
+        getMaterialPackagingUnits: jest.fn().mockResolvedValue([]),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const mockQueueManager = {
+        getPendingQueueMap: jest.fn().mockResolvedValue(new Map([
+          ['10001:1', { queuedQty: 20, finalIssue: true }] // Final issue marked
+        ]))
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({
+        adapter: mockAdapter,
+        queueManager: mockQueueManager
+      });
+
+      const items = await reservationsClient.getOpenItems('40001', '10001');
+      expect(items).toHaveLength(0);
+    });
   });
 
   describe('GoodsIssueBatchesClient', () => {
@@ -1004,6 +1134,181 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       // MaxIssueQty must not be clamped to 0 when stock is unknown; defaults to open quantity (80)
       expect(res.MaxIssueQty).toBe(80);
       expect(res.ReservationRemainingQty).toBe(80);
+    });
+
+    it('should not treat unknown stock (null) as zero in Handling Unit branch and not clamp MaxIssueQty to 0', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '10001',
+                ReservationItem: '0001',
+                OrderID: '40001',
+                Product: 'MAT01',
+                ProductName: 'Material 1',
+                Plant: '1120',
+                StorageLocation: '1120',
+                BaseUnit: 'KG',
+                ResvnItmRequiredQtyInBaseUnit: '100',
+                ResvnItmWithdrawnQtyInBaseUnit: '20'
+              }
+            ]);
+          }
+          // MaterialStorLocHelps and C_STOCKQUANTITYVALUEBYTYPE return empty => currentStock is null
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      stockUnitClient._discoverHuModel = jest.fn().mockResolvedValue({
+        base: '/scwm/test',
+        warehouse: 'W01',
+        huIdField: 'HUId'
+      });
+      stockUnitClient._findHuByBarcode = jest.fn().mockResolvedValue({ HUId: 'HU_TEST_01' });
+      stockUnitClient._readHuContents = jest.fn().mockResolvedValue({
+        primary: { material: 'MAT01', plant: '1120', sloc: '1120', qty: 0, unit: 'KG' },
+        items: []
+      });
+
+      const res = await stockUnitClient.resolveStockUnitForGoodsIssue('HU_TEST_01', '10001', '0001');
+
+      expect(res.SuExists).toBe(true);
+      expect(res.ResolvedType).toBe('HANDLING_UNIT');
+      // Unknown stock must remain null, never treated as <= 0 or zero
+      expect(res.CurrentStock).toBeNull();
+      expect(res.SuStockQty).toBeNull();
+      // MaxIssueQty must not be clamped to 0 by Math.min(null, openQty); defaults to open quantity (80)
+      expect(res.MaxIssueQty).toBe(80);
+      expect(res.ReservationRemainingQty).toBe(80);
+    });
+
+    it('should constrain MaxIssueQty by suQty when stock is unknown (null) in Handling Unit branch', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '10001',
+                ReservationItem: '0001',
+                OrderID: '40001',
+                Product: 'MAT01',
+                ProductName: 'Material 1',
+                Plant: '1120',
+                StorageLocation: '1120',
+                BaseUnit: 'KG',
+                ResvnItmRequiredQtyInBaseUnit: '100',
+                ResvnItmWithdrawnQtyInBaseUnit: '20'
+              }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      stockUnitClient._discoverHuModel = jest.fn().mockResolvedValue({
+        base: '/scwm/test',
+        warehouse: 'W01',
+        huIdField: 'HUId'
+      });
+      stockUnitClient._findHuByBarcode = jest.fn().mockResolvedValue({ HUId: 'HU_TEST_02' });
+      stockUnitClient._readHuContents = jest.fn().mockResolvedValue({
+        primary: { material: 'MAT01', plant: '1120', sloc: '1120', qty: 25, unit: 'KG' },
+        items: []
+      });
+
+      const res = await stockUnitClient.resolveStockUnitForGoodsIssue('HU_TEST_02', '10001', '0001');
+
+      expect(res.CurrentStock).toBeNull();
+      expect(res.SuStockQty).toBe(25);
+      // MaxIssueQty is constrained by HU physical quantity Math.min(25, 80) = 25
+      expect(res.MaxIssueQty).toBe(25);
+    });
+
+    it('should reject with 422 when SAP explicitly reports 0 stock in Handling Unit branch', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '10001',
+                ReservationItem: '0001',
+                OrderID: '40001',
+                Product: 'MAT01',
+                ProductName: 'Material 1',
+                Plant: '1120',
+                StorageLocation: '1120',
+                BaseUnit: 'KG',
+                ResvnItmRequiredQtyInBaseUnit: '100',
+                ResvnItmWithdrawnQtyInBaseUnit: '20'
+              }
+            ]);
+          }
+          if (path.includes('MaterialStorLocHelps')) {
+            return Promise.resolve([{ CurrentStock: '0', BaseUnit: 'KG' }]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      stockUnitClient._discoverHuModel = jest.fn().mockResolvedValue({
+        base: '/scwm/test',
+        warehouse: 'W01',
+        huIdField: 'HUId'
+      });
+      stockUnitClient._findHuByBarcode = jest.fn().mockResolvedValue({ HUId: 'HU_TEST_03' });
+      stockUnitClient._readHuContents = jest.fn().mockResolvedValue({
+        primary: { material: 'MAT01', plant: '1120', sloc: '1120', qty: 10, unit: 'KG' },
+        items: []
+      });
+
+      await expect(stockUnitClient.resolveStockUnitForGoodsIssue('HU_TEST_03', '10001', '0001'))
+        .rejects.toMatchObject({
+          status: 422,
+          message: expect.stringContaining('SAP reports no stock there')
+        });
+    });
+
+    it('should deduct queued quantity in resolveStockUnitForGoodsIssue and reject with 400 when no open quantity remains', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '10001',
+            ReservationItem: '0001',
+            OrderID: '40001',
+            Product: 'MAT01',
+            Plant: '1120',
+            StorageLocation: '1120',
+            BaseUnit: 'KG',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '20' // 80 open in SAP
+          }
+        ]),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const mockQueueManager = {
+        getPendingQueueMap: jest.fn().mockResolvedValue(new Map([
+          ['10001:1', { queuedQty: 80, finalIssue: false }] // All 80 are in dispatch queue
+        ]))
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({
+        adapter: mockAdapter,
+        queueManager: mockQueueManager
+      });
+
+      await expect(stockUnitClient.resolveStockUnitForGoodsIssue('BATCH01', '10001', '0001'))
+        .rejects.toMatchObject({
+          status: 400,
+          message: expect.stringContaining('has no open quantity remaining (already fully issued or queued in dispatch)')
+        });
     });
 
     it('should extract entity sets and type property details from $metadata XML', () => {

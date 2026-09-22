@@ -190,6 +190,71 @@ class GoodsIssueQueueManager {
   }
 
   /**
+   * Retrieves pending items whose Goods Issue has not yet been confirmed in SAP.
+   *
+   * @param {string} [reservationNo]
+   * @returns {Promise<Array<Object>>}
+   */
+  async getPendingItems(reservationNo) {
+    if (!this.isAvailable()) return [];
+    const all = await this.getAll();
+    const pending = all.filter(i => i.SyncStatus !== 'POSTED_IN_SAP');
+    if (!reservationNo) return pending;
+    const sClean = String(reservationNo).trim().replace(/^0+/, '');
+    return pending.filter(i => {
+      const itemRes = String(i.ReservationNo || '').trim().replace(/^0+/, '');
+      return itemRes === sClean;
+    });
+  }
+
+  /**
+   * Builds a Map of pending queued quantities keyed by `${cleanResv}:${cleanItem}`.
+   * Also tracks whether FinalIssue has been queued for that item.
+   *
+   * @param {string} [reservationNo]
+   * @returns {Promise<Map<string, { queuedQty: number, finalIssue: boolean }>>}
+   */
+  async getPendingQueueMap(reservationNo) {
+    const map = new Map();
+    if (!this.isAvailable()) return map;
+    const pending = await this.getPendingItems(reservationNo);
+    for (const item of pending) {
+      const sRes = String(item.ReservationNo || '').trim().replace(/^0+/, '');
+      const sItem = String(item.ReservationItem || '').trim().replace(/^0+/, '');
+      if (!sRes || !sItem) continue;
+      const key = `${sRes}:${sItem}`;
+      const issueQty = Number(item.IssueQty) || 0;
+      const finalIssue = Boolean(item.FinalIssue);
+
+      if (!map.has(key)) {
+        map.set(key, { queuedQty: issueQty, finalIssue });
+      } else {
+        const entry = map.get(key);
+        entry.queuedQty += issueQty;
+        if (finalIssue) entry.finalIssue = true;
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Retrieves pending queued quantity and final-issue flag for a specific reservation item.
+   *
+   * @param {string} reservationNo
+   * @param {string} reservationItem
+   * @returns {Promise<{ queuedQty: number, finalIssue: boolean }>}
+   */
+  async getPendingQueuedQty(reservationNo, reservationItem) {
+    if (!this.isAvailable() || !reservationNo || !reservationItem) {
+      return { queuedQty: 0, finalIssue: false };
+    }
+    const map = await this.getPendingQueueMap(reservationNo);
+    const sRes = String(reservationNo).trim().replace(/^0+/, '');
+    const sItem = String(reservationItem).trim().replace(/^0+/, '');
+    return map.get(`${sRes}:${sItem}`) || { queuedQty: 0, finalIssue: false };
+  }
+
+  /**
    * Drain the queue by attempting to post all pending (QUEUED / FAILED) items against SAP S/4HANA.
    *
    * @param {Object} adapter - GoodsIssueAdapter instance

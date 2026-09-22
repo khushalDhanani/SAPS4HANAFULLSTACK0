@@ -2910,17 +2910,93 @@
   - `git diff --check`: **Clean (0 errors)**.
 - **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
 
+## 2026-09-22 10:15 IST
+- **Agent**: Antigravity
+- **Change**: Sales KPI Customer Master Count Relabeling across Sales Inquiries and Sales Orders screens:
+  - Relabeled `salesInquiriesKpiActiveCustomers` and `salesOrdersKpiActiveCustomers` in both English property bundles from "Active Customers / Distinct Sold-to Parties" to "Customers", with subtitle "Customer records in SAP".
+  - Reflected the authentic data lineage that `getDashboardMetrics()` retrieves total customer master count (891 records) from `I_Customer_VH`, eliminating confusion with active sold-to parties on loaded orders/inquiries.
+  - Maintained 100% exact key-for-key parity between `i18n.properties` and `i18n_en.properties`.
+  - Rebuilt `dist/Component-preload.js`.
+- **Files modified**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+- **Validation**:
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected.
+  - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Proceed to Goods Issue handling unit unknown stock bug fix.
+
+## 2026-09-22 10:25 IST
+- **Agent**: Antigravity
+- **Change**: Goods Issue Handling Unit Unknown Stock Bug Fix (Audit Row 40 Residual (b)):
+  - Fixed JavaScript `null` coercion gotchas in `GoodsIssueStockUnitClient.js` where `currentStock <= 0` evaluated to `true` when `currentStock === null` (unknown stock from SAP), causing false "SAP reports no stock" HTTP 422 rejections.
+  - Fixed line 1018 `Math.min(currentStock, openQty)` evaluating to `0` when `currentStock === null`.
+  - Guarded step 6 checks with explicit `currentStock !== null && currentStock !== undefined`, and defined `availableStock` so `maxIssueQty` falls back cleanly to `openQty` without 0-clamping when stock is unknown.
+  - Added unit test suite in `test/unit/wm/goodsIssueClients.test.js` validating unknown stock preservation, `suQty` constraint when stock is unknown, and authentic HTTP 422 rejection when SAP explicitly returns 0 stock.
+  - Updated `docs/data-lineage-audit.md` marking Row 40 residual (b) as resolved.
+- **Files modified**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`
+  - `test/unit/wm/goodsIssueClients.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: 45 passed, 45 total tests.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Address Open quantity ignoring dispatch queue (Audit Row 38).
+
+## 2026-09-22 10:35 IST
+- **Agent**: Antigravity
+- **Change**: Goods Issue Open Quantity Dispatch Queue Deduction & Double-Issue Prevention (Audit Row 38):
+  - In `GoodsIssueQueueManager.js`: Added `getPendingItems(reservationNo)`, `getPendingQueueMap(reservationNo)`, and `getPendingQueuedQty(reservationNo, reservationItem)` to query and aggregate pending queued quantities and final issue flags for reservation items where `SyncStatus !== 'POSTED_IN_SAP'`.
+  - In `srv/wm/goods-issue/service.cds`: Added `QueuedQty : Decimal(13, 3);` to `entity GIItems` and `type GIComponentItem`.
+  - In `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Injected `this.queueManager` into `GoodsIssueReservationsClient` and `GoodsIssueStockUnitClient`.
+  - In `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`:
+    - `getOpenReservations`: Deducted pending queued quantity (`openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty)`); excluded reservations where all items are queued and aligned `ItemCount` to open items.
+    - `getOpenItems`: Deducted pending queued quantity, attached `QueuedQty: queuedQty`, and filtered out items with `OpenQty <= 0` (preventing double-issuance of queued items).
+  - In `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+    - Deducted pending queued quantity in `resolveStockUnitForGoodsIssue`.
+    - Threw HTTP 400 when no open quantity remains (`Reservation <resv> item <item> has no open quantity remaining (already fully issued or queued in dispatch)`).
+    - Constrained `maxIssueQty` and `ReservationRemainingQty` by unqueued remaining quantity.
+  - In `docs/data-lineage-audit.md`: Updated Row 38 status to **RESOLVED** and removed from Open residuals list.
+  - Added unit tests across `test/unit/wm/goodsIssueQueueManager.test.js` and `test/unit/wm/goodsIssueClients.test.js`.
+- **Files modified**:
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`
+  - `test/unit/wm/goodsIssueQueueManager.test.js`
+  - `test/unit/wm/goodsIssueClients.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npx cds compile srv`: Succeeded with 0 errors.
+  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: 11 passed, 11 total tests.
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: 49 passed, 49 total tests.
+  - `npx jest test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssueController.test.js test/integration/wm/goodsIssueQueue.test.js`: 101 passed, 101 total tests (3 test suites).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.76 s; `dist/Component-preload.js` generated.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage, commit, and push changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
-- **Build Status**: **100% Green** across entire repository test suite:
-  - `npm test`: **75 passed, 75 total test suites; 974 passed, 974 total tests (100% green)**.
-  - `npx jest test/unit/auth/`: **3 passed, 3 total test suites; 38 passed, 38 total tests (100% green)**.
-  - `npx jest test/unit/controller/messageToastDockNormalization.test.js`: **1 passed, 1 total test suites; 4 passed, 4 total tests (100% green)**.
-  - `npx jest test/unit/controller/loginController.test.js`: **1 passed, 1 total test suites; 6 passed, 6 total tests (100% green)**.
+- **Build Status**: **100% Green** across repository test suites:
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: **49 passed, 49 total tests (100% green)**.
+  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: **11 passed, 11 total tests (100% green)**.
+  - `npx jest test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssueController.test.js test/integration/wm/goodsIssueQueue.test.js`: **101 passed, 101 total tests (100% green)**.
   - `npx cds compile srv`: Succeeded with 0 errors.
   - `cd app/fiori-app && npm run lint`: 0 findings.
   - `cd app/fiori-app && npm run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Goods Issue Open Quantity Queue Deduction & Double-Issue Prevention (Audit Row 38)**:
+  - Deducts pending quantities in local CAP dispatch queue (`openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty)`).
+  - Exposes `QueuedQty` on OData `GIItems` and `GIComponentItem`.
+  - Excludes fully queued items from `getOpenItems` and `getOpenReservations`.
+  - Rejects SU resolution with HTTP 400 when an item is already fully issued or queued.
+- **Goods Issue Handling Unit Unknown Stock Bug Fix (Audit Row 40 Residual (b))**:
+  - `currentStock !== null` checks prevent treating unknown SAP stock as zero.
+  - Prevents false HTTP 422 "SAP reports no stock" and prevents `Math.min(null, openQty) = 0`.
+- **Customer Master Tile Relabeling across Sales Screens**:
+  - Relabeled "Active Customers" tile to "Customers" (subtitle "Customer records in SAP") across Sales Orders and Sales Inquiries, reflecting authentic S/4HANA server customer master count (891).
 - **Development User Authentication Support**:
   - Fixed credential validation so `KHUSHAL` can authenticate with both local mock credentials and authentic S/4HANA credentials (`S4_PASSWORD` / S/4 Gateway).
 - **MessageToast Dock Position Normalization (SAP DINC0487249)**:
@@ -2993,4 +3069,5 @@
 ## Next Steps
 1. Stage, commit, and push changes to `origin/feature/CL01`.
 2. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.
+
 
