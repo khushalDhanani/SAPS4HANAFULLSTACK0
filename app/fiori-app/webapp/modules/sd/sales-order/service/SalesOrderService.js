@@ -304,7 +304,7 @@ sap.ui.define([
                     CustomerName: "",
                     City: "",
                     Country: "",
-                    Currency: "INR",
+                    Currency: "",
                     ShipToParty: "",
                     ShipToPartyName: "",
                     derived: false
@@ -323,7 +323,7 @@ sap.ui.define([
                     CustomerName: "",
                     City: "",
                     Country: "",
-                    Currency: "INR",
+                    Currency: "",
                     ShipToParty: sCustomer,
                     ShipToPartyName: "",
                     derived: false
@@ -334,7 +334,7 @@ sap.ui.define([
                     CustomerName: "",
                     City: "",
                     Country: "",
-                    Currency: "INR",
+                    Currency: "",
                     ShipToParty: sCustomer,
                     ShipToPartyName: "",
                     derived: false
@@ -348,18 +348,17 @@ sap.ui.define([
         getSalesOrderDefaults: function () {
             var sUrl = SERVICE_BASE + "/getSalesOrderDefaults()";
             return ODataClient.get(sUrl).catch(function () {
-                var today = new Date().toISOString().split("T")[0];
-                var reqDlv = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
                 return {
-                    SalesOrderType: "ZDOM",
-                    SalesOrganization: "1000",
-                    DistributionChannel: "10",
-                    OrganizationDivision: "52",
-                    SalesOrderDate: today,
-                    CreationDate: today,
-                    RequestedDeliveryDate: reqDlv,
-                    TransactionCurrency: "INR",
-                    derived: true
+                    SalesOrderType: "",
+                    SalesOrganization: "",
+                    DistributionChannel: "",
+                    OrganizationDivision: "",
+                    SalesOrderDate: "",
+                    CreationDate: "",
+                    RequestedDeliveryDate: "",
+                    TransactionCurrency: "",
+                    Plant: "",
+                    derived: false
                 };
             });
         },

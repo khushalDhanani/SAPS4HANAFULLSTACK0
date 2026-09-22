@@ -51,14 +51,13 @@ sap.ui.define([
          */
         createInitialModel: function (sUser) {
             var today = new Date().toISOString().split("T")[0];
-            var reqDlv = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
             return new JSONModel({
                 header: {
-                    SalesOrderType: "ZDOM",
-                    SalesOrganization: "1000",
-                    DistributionChannel: "10",
-                    OrganizationDivision: "52",
+                    SalesOrderType: "",
+                    SalesOrganization: "",
+                    DistributionChannel: "",
+                    OrganizationDivision: "",
                     SalesOffice: "",
                     SalesGroup: "",
                     SoldToParty: "",
@@ -71,8 +70,8 @@ sap.ui.define([
                     PurchaseOrderByCustomer: "",
                     CustomerPurchaseOrderDate: today,
                     SalesOrderDate: today,
-                    RequestedDeliveryDate: reqDlv,
-                    TransactionCurrency: "INR",
+                    RequestedDeliveryDate: "",
+                    TransactionCurrency: "",
                     TotalNetAmount: "0.00",
                     CustomerGroup2: "",
                     PortOfLoading: "",
@@ -88,10 +87,10 @@ sap.ui.define([
                         SalesOrderItem: "10",
                         Material: "",
                         SalesOrderItemText: "",
-                        OrderQuantity: "1.000",
-                        OrderQuantityUnit: "KG",
-                        Plant: "1120",
-                        RequestedDeliveryDate: reqDlv,
+                        OrderQuantity: "",
+                        OrderQuantityUnit: "",
+                        Plant: "",
+                        RequestedDeliveryDate: "",
                         NetPriceAmount: "0.00",
                         NetAmount: "0.00",
                         errors: {}
@@ -111,21 +110,20 @@ sap.ui.define([
          * Creates a fresh blank line item.
          *
          * @param {number} iIndex
-         * @param {string} [sPlant="1120"]
+         * @param {string} [sPlant=""]
          * @param {string} [sReqDlvDate]
          * @returns {Object}
          */
         createEmptyItem: function (iIndex, sPlant, sReqDlvDate) {
             var sItemNum = String(((iIndex || 0) + 1) * 10);
-            var reqDate = sReqDlvDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
             return {
                 SalesOrderItem: sItemNum,
                 Material: "",
                 SalesOrderItemText: "",
-                OrderQuantity: "1.000",
-                OrderQuantityUnit: "KG",
-                Plant: sPlant || "1120",
-                RequestedDeliveryDate: reqDate,
+                OrderQuantity: "",
+                OrderQuantityUnit: "",
+                Plant: sPlant || "",
+                RequestedDeliveryDate: sReqDlvDate || "",
                 NetPriceAmount: "0.00",
                 NetAmount: "0.00",
                 errors: {}
@@ -202,7 +200,7 @@ sap.ui.define([
 
             var sMaterial = oMaterialData.Material || oMaterialData.Product || "";
             var sDesc = oMaterialData.MaterialName || oMaterialData.Material_Text || oMaterialData.ProductDescription || "";
-            var sUnit = oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit || oMaterialData.OrderQuantityUnit || "KG";
+            var sUnit = oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit || oMaterialData.OrderQuantityUnit || "";
 
             oModel.setProperty(sPath + "/Material", sMaterial);
             if (sDesc) {
@@ -459,6 +457,52 @@ sap.ui.define([
         },
 
         /**
+         * Applies server-sourced defaults from getSalesOrderDefaults() to empty model fields.
+         * Only sets a field if it is currently empty (not yet modified by the user).
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {Object} oDefaults - Response from getSalesOrderDefaults()
+         */
+        applyServerDefaults: function (oModel, oDefaults) {
+            if (!oModel || !oDefaults) return;
+
+            var oHeader = oModel.getProperty("/header") || {};
+
+            var aHeaderFields = [
+                "SalesOrderType",
+                "SalesOrganization",
+                "DistributionChannel",
+                "OrganizationDivision",
+                "TransactionCurrency",
+                "RequestedDeliveryDate"
+            ];
+
+            aHeaderFields.forEach(function (sField) {
+                if ((!oHeader[sField] || String(oHeader[sField]).trim() === "") && oDefaults[sField]) {
+                    oModel.setProperty("/header/" + sField, oDefaults[sField]);
+                }
+            });
+
+            // Apply plant and unit defaults to items that are still empty
+            var aItems = oModel.getProperty("/items") || [];
+            var sDefPlant = oDefaults.Plant || "";
+            var sDefUnit = oDefaults.OrderQuantityUnit || "";
+            var sDefReqDlvDate = oDefaults.RequestedDeliveryDate || "";
+            aItems.forEach(function (itm) {
+                if (!itm.Plant && sDefPlant) {
+                    itm.Plant = sDefPlant;
+                }
+                if (!itm.OrderQuantityUnit && sDefUnit) {
+                    itm.OrderQuantityUnit = sDefUnit;
+                }
+                if (!itm.RequestedDeliveryDate && sDefReqDlvDate) {
+                    itm.RequestedDeliveryDate = sDefReqDlvDate;
+                }
+            });
+            oModel.setProperty("/items", aItems);
+        },
+
+        /**
          * Builds a clean API-compliant payload conforming to the CAP OrderHeader and OrderItem contract.
          *
          * @param {sap.ui.model.json.JSONModel} oModel
@@ -472,17 +516,17 @@ sap.ui.define([
             var sPoNumber = oHeader.PurchaseOrderNumber || oHeader.PurchaseOrderByCustomer || "";
 
             var oCleanHeader = {
-                SalesOrderType: oHeader.SalesOrderType ? String(oHeader.SalesOrderType).trim() : "ZDOM",
-                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "1000",
-                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "10",
-                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "52",
+                SalesOrderType: oHeader.SalesOrderType ? String(oHeader.SalesOrderType).trim() : "",
+                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "",
+                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "",
+                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "",
                 SoldToParty: oHeader.SoldToParty ? String(oHeader.SoldToParty).trim() : "",
                 PurchaseOrderNumber: sPoNumber ? String(sPoNumber).trim() : "",
                 PurchaseOrderByCustomer: sPoNumber ? String(sPoNumber).trim() : "",
                 CustomerPurchaseOrderDate: oHeader.CustomerPurchaseOrderDate || null,
                 SalesOrderDate: oHeader.SalesOrderDate || null,
                 RequestedDeliveryDate: oHeader.RequestedDeliveryDate || null,
-                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "INR",
+                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "",
                 TotalNetAmount: oHeader.TotalNetAmount !== undefined && oHeader.TotalNetAmount !== null ? Number(oHeader.TotalNetAmount) : 0
             };
 
@@ -509,7 +553,7 @@ sap.ui.define([
                     ? String(item.SalesOrderItem).trim()
                     : String((idx + 1) * 10);
 
-                var nQty = Number(item.OrderQuantity) || 1;
+                var nQty = Number(item.OrderQuantity) || 0;
                 var nPrice = Number(item.NetPriceAmount) || 0;
                 var nNet = item.NetAmount !== undefined && item.NetAmount !== null
                     ? Number(item.NetAmount)
@@ -520,8 +564,8 @@ sap.ui.define([
                     Material: item.Material ? String(item.Material).trim() : "",
                     SalesOrderItemText: item.SalesOrderItemText ? String(item.SalesOrderItemText).trim() : "",
                     OrderQuantity: nQty,
-                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "KG",
-                    Plant: item.Plant ? String(item.Plant).trim().toUpperCase() : "1120",
+                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "",
+                    Plant: item.Plant ? String(item.Plant).trim().toUpperCase() : "",
                     NetPriceAmount: nPrice,
                     NetAmount: nNet,
                     TransactionCurrency: oCleanHeader.TransactionCurrency

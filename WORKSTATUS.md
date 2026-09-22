@@ -3279,9 +3279,55 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Commit changes to `feature/CL01`.
 
+## 2026-09-22 12:30 IST
+- **Agent**: Antigravity
+- **Change**: Elimination of Hardcoded Defaults from Create Sales Order (Audit Row 24):
+  - **Root Cause & Requirements**:
+    - `SalesOrderModel.js`, `SalesOrderService.js`, and `CreateSalesOrder.controller.js` previously hardcoded literal values `ZDOM`, `1000`, `10`, `52`, `INR`, `KG`, plant `1120`/`"1000"`, `quantity || 1`, and `delivery date today + 7`.
+    - Requirement: Defaults only from `getSalesOrderDefaults()`; empty on failure.
+  - **Implementation**:
+    - `SalesOrderModel.js`:
+      - `createInitialModel`: All organizational, currency, plant, unit, and item quantity fields start as empty strings (`""`). Creation dates (`SalesOrderDate`, `CustomerPurchaseOrderDate`) initialize to today's date.
+      - `createEmptyItem`: Removed hardcoded `1.000` quantity, `KG` unit, and `1120` plant fallbacks; now default to empty strings unless explicitly passed.
+      - `applyMaterialDefaults`: Removed `|| "KG"` fallback unit; unit is now set only from material master data.
+      - `applyServerDefaults(oModel, oDefaults)`: Added method to apply server-sourced defaults from `getSalesOrderDefaults()` to empty fields only without overwriting user inputs.
+      - `buildPayload`: Removed all hardcoded fallbacks (`ZDOM`, `1000`, `10`, `52`, `INR`, `KG`, `1120`). Empty fields remain empty strings, ensuring validation catches missing data before submission.
+    - `SalesOrderService.js`:
+      - `getSalesOrderDefaults`: On catch/failure, returns empty strings for all fields with `derived: false` instead of hardcoded fallbacks.
+      - `getCustomerDefaults`: Removed hardcoded `Currency: "INR"` on empty customer and on catch/failure; returns `Currency: ""` with `derived: false`.
+    - `CreateSalesOrder.controller.js`:
+      - `_loadConfigurationAndDefaults`: Asynchronously calls `SalesOrderService.getSalesOrderDefaults()` and applies defaults via `SalesOrderModel.applyServerDefaults(oModel, oDefaults)`.
+      - Replaced `itm.Plant === "1000"` check with `!itm.Plant`.
+      - `onAddItem`: Removed `|| "1000"` plant fallback; uses `(aItems[0] && aItems[0].Plant) || ""`.
+    - `test/unit/sales-order/salesOrderModel.test.js`:
+      - Updated assertions for empty initial model.
+      - Added unit test for `applyServerDefaults`.
+      - Updated `buildPayload` tests verifying clean payloads with and without defaults.
+    - `test/unit/sales-order/createSalesOrderController.test.js`:
+      - Updated `onSave` unit test to populate required header fields.
+      - Added unit test for `_loadConfigurationAndDefaults` verifying server defaults are loaded and applied.
+    - `docs/data-lineage-audit.md`: Updated Row 24 to `RESOLVED` in main table and `Fixed` in summary table.
+- **Files modified**:
+  - `app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`
+  - `test/unit/sales-order/salesOrderModel.test.js`
+  - `test/unit/sales-order/createSalesOrderController.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npm test -- test/unit/sales-order/`: **5 passed, 5 total test suites; 69 passed, 69 total tests (100% green)** in 2.05 s.
+  - `npm test`: **76 passed, 76 total test suites; 1010 passed, 1010 total tests (100% green)** in 113.3 s.
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.66 s; preload bundle rebuilt.
+  - `npx cds compile srv`: Succeeded with 0 errors.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Commit changes to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
+  - `npm test`: **76 passed, 76 total test suites; 1010 passed, 1010 total tests (100% green)**.
+  - `npm test -- test/unit/sales-order/`: **5 passed, 5 total test suites; 69 passed, 69 total tests (100% green)**.
   - `npm test -- test/unit/purchase-order/`: **19 suites passed, 207 passed, 207 total tests (100% green)**.
   - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
   - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
@@ -3292,6 +3338,9 @@
   - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `npx cds compile srv`: 0 errors.
   - `git diff --check`: Clean (0 errors).
+- **Elimination of Hardcoded Defaults from Create Sales Order (Audit Row 24)**:
+  - Eliminated hardcoded literals (`ZDOM`, `1000`, `10`, `52`, `INR`, `KG`, `1120`, plant `"1000"`, `quantity || 1`, `delivery date today + 7`) across `SalesOrderModel.js`, `SalesOrderService.js`, and `CreateSalesOrder.controller.js`.
+  - Initial model starts empty; defaults sourced exclusively from server `getSalesOrderDefaults()` via `applyServerDefaults()`. Empty on failure.
 - **PO Status Verification & Elimination of Completeness Fallback (Audit Row 4)**:
   - Integrated 33 verified status codes from SAP Gateway `C_PURCHASEORDER_FS_SRV/I_PurchasingDocumentStatusText`.
   - Eliminated synthetic guessing (`completeness = true -> Approved`, `completeness = false -> Draft`, `releaseNotCompleted -> In Approval`). Status strictly shows SAP status name or verified code lookup.

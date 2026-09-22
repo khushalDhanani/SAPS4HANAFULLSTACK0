@@ -268,6 +268,11 @@ describe("CreateSalesOrder Controller", () => {
     test("onSave submits valid order and displays success dialog", async () => {
         controller.onInit();
         const oModel = mockView.getModel("newOrder");
+        oModel.setProperty("/header/SalesOrderType", "ZDOM");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/TransactionCurrency", "INR");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-AUTO-01");
         oModel.setProperty("/items/0/Material", "4000000001");
@@ -286,5 +291,29 @@ describe("CreateSalesOrder Controller", () => {
             expect.stringContaining("5000465"),
             expect.objectContaining({ title: "Sales Order Created" })
         );
+    });
+
+    test("_loadConfigurationAndDefaults loads server defaults and applies to empty fields", async () => {
+        controller.onInit();
+        mockSalesOrderService.getSalesOrderDefaults.mockResolvedValueOnce({
+            SalesOrderType: "ZDOM",
+            SalesOrganization: "1000",
+            DistributionChannel: "10",
+            OrganizationDivision: "52",
+            TransactionCurrency: "INR",
+            Plant: "1120",
+            OrderQuantityUnit: "KG"
+        });
+        mockSalesOrderService.loadConfiguration.mockResolvedValueOnce({
+            defaults: { Plant: "1120" }
+        });
+
+        await controller._loadConfigurationAndDefaults();
+
+        const oModel = mockView.getModel("newOrder");
+        expect(mockSalesOrderService.getSalesOrderDefaults).toHaveBeenCalled();
+        expect(oModel.getProperty("/header/SalesOrderType")).toBe("ZDOM");
+        expect(oModel.getProperty("/header/SalesOrganization")).toBe("1000");
+        expect(oModel.getProperty("/items/0/Plant")).toBe("1120");
     });
 });

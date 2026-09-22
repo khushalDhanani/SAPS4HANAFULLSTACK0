@@ -46,9 +46,20 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("newOrder");
 
+            // Load server defaults (org, plant, currency, dates) and apply to empty fields
+            var pDefaults = SalesOrderService.getSalesOrderDefaults().then(function (oDefaults) {
+                var oCurrentModel = that.getView().getModel("newOrder");
+                if (oCurrentModel && oDefaults) {
+                    SalesOrderModel.applyServerDefaults(oCurrentModel, oDefaults);
+                    SalesOrderModel.updateStatus(oCurrentModel);
+                }
+            }).catch(function (err) {
+                console.warn("[CreateSalesOrder] Error loading server defaults:", err);
+            });
+
             if (this._oConfigData) {
                 this._updateOrganizationalFilters();
-                return Promise.resolve(this._oConfigData);
+                return Promise.all([pDefaults, Promise.resolve(this._oConfigData)]);
             }
 
             var oSalesOrderModel = (this.getModel && this.getModel("salesOrder")) || null;
@@ -56,7 +67,7 @@ sap.ui.define([
                 SalesOrderService.loadConfiguration(oSalesOrderModel) :
                 SalesOrderService.loadConfiguration();
 
-            return oConfigPromise.then(function (oConfigData) {
+            return Promise.all([pDefaults, oConfigPromise.then(function (oConfigData) {
                 that._oConfigData = oConfigData;
                 var oCurrentModel = that.getView().getModel("newOrder");
                 if (oCurrentModel) {
@@ -65,7 +76,7 @@ sap.ui.define([
                         var sDefPlant = oConfigData.defaults.Plant;
                         var aItems = oCurrentModel.getProperty("/items") || [];
                         aItems.forEach(function (itm) {
-                            if (!itm.Plant || itm.Plant === "1000") {
+                            if (!itm.Plant) {
                                 itm.Plant = sDefPlant;
                             }
                         });
@@ -75,7 +86,7 @@ sap.ui.define([
                 return oConfigData;
             }).catch(function (err) {
                 console.warn("[CreateSalesOrder] Error loading config data:", err);
-            });
+            })]);
         },
 
         _onRouteMatched: function () {
@@ -274,7 +285,7 @@ sap.ui.define([
         onAddItem: function () {
             var oModel = this.getView().getModel("newOrder");
             var aItems = oModel.getProperty("/items") || [];
-            var sPlant = (aItems[0] && aItems[0].Plant) || "1000";
+            var sPlant = (aItems[0] && aItems[0].Plant) || "";
             var sReqDate = oModel.getProperty("/header/RequestedDeliveryDate");
             var oNewItem = SalesOrderModel.createEmptyItem(aItems.length, sPlant, sReqDate);
             aItems.push(oNewItem);

@@ -72,18 +72,18 @@ describe("SalesOrderModel - Initial State and User Resolution", () => {
         const header = oModel.getProperty("/header");
         const items = oModel.getProperty("/items");
 
-        expect(header.SalesOrderType).toBe("ZDOM");
-        expect(header.SalesOrganization).toBe("1000");
-        expect(header.DistributionChannel).toBe("10");
-        expect(header.OrganizationDivision).toBe("52");
-        expect(header.TransactionCurrency).toBe("INR");
+        expect(header.SalesOrderType).toBe("");
+        expect(header.SalesOrganization).toBe("");
+        expect(header.DistributionChannel).toBe("");
+        expect(header.OrganizationDivision).toBe("");
+        expect(header.TransactionCurrency).toBe("");
         expect(header.CreatedByUser).toBe("john");
 
         expect(items).toHaveLength(1);
         expect(items[0].SalesOrderItem).toBe("10");
-        expect(items[0].Plant).toBe("1120");
-        expect(items[0].OrderQuantityUnit).toBe("KG");
-        expect(items[0].OrderQuantity).toBe("1.000");
+        expect(items[0].Plant).toBe("");
+        expect(items[0].OrderQuantityUnit).toBe("");
+        expect(items[0].OrderQuantity).toBe("");
     });
 });
 
@@ -93,7 +93,38 @@ describe("SalesOrderModel - Calculation and Item Operations", () => {
         expect(item.SalesOrderItem).toBe("30");
         expect(item.Plant).toBe("1120");
         expect(item.RequestedDeliveryDate).toBe("2026-10-01");
-        expect(item.OrderQuantity).toBe("1.000");
+        expect(item.OrderQuantity).toBe("");
+        expect(item.OrderQuantityUnit).toBe("");
+    });
+
+    test("applyServerDefaults applies server-sourced defaults to empty fields only", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        oModel.setProperty("/header/TransactionCurrency", "EUR");
+
+        SalesOrderModel.applyServerDefaults(oModel, {
+            SalesOrderType: "ZDOM",
+            SalesOrganization: "1000",
+            DistributionChannel: "10",
+            OrganizationDivision: "52",
+            TransactionCurrency: "INR",
+            RequestedDeliveryDate: "2026-10-15",
+            Plant: "1120",
+            OrderQuantityUnit: "KG"
+        });
+
+        const header = oModel.getProperty("/header");
+        const item = oModel.getProperty("/items/0");
+
+        expect(header.SalesOrderType).toBe("ZDOM");
+        expect(header.SalesOrganization).toBe("1000");
+        expect(header.DistributionChannel).toBe("10");
+        expect(header.OrganizationDivision).toBe("52");
+        expect(header.TransactionCurrency).toBe("EUR");
+        expect(header.RequestedDeliveryDate).toBe("2026-10-15");
+
+        expect(item.Plant).toBe("1120");
+        expect(item.OrderQuantityUnit).toBe("KG");
+        expect(item.RequestedDeliveryDate).toBe("2026-10-15");
     });
 
     test("calculateTotals computes item net amounts and header total net value", () => {
@@ -158,10 +189,20 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
 
     test("validateForm passes when all required fields and items are populated", () => {
         const oModel = SalesOrderModel.createInitialModel();
+        SalesOrderModel.applyServerDefaults(oModel, {
+            SalesOrderType: "ZDOM",
+            SalesOrganization: "1000",
+            DistributionChannel: "10",
+            OrganizationDivision: "52",
+            TransactionCurrency: "INR",
+            Plant: "1120",
+            OrderQuantityUnit: "KG"
+        });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/Plant", "1120");
         oModel.setProperty("/items/0/OrderQuantity", "5.000");
+        oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
 
         const bValid = SalesOrderModel.validateForm(oModel);
         expect(bValid).toBe(true);
@@ -171,11 +212,20 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
 
     test("buildPayload constructs clean API-compliant payload", () => {
         const oModel = SalesOrderModel.createInitialModel("sales_rep");
+        SalesOrderModel.applyServerDefaults(oModel, {
+            SalesOrderType: "ZDOM",
+            SalesOrganization: "1000",
+            DistributionChannel: "10",
+            OrganizationDivision: "52",
+            TransactionCurrency: "INR"
+        });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-99988");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/OrderQuantity", "10.000");
+        oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
         oModel.setProperty("/items/0/NetPriceAmount", "50.00");
+        oModel.setProperty("/items/0/Plant", "1120");
         SalesOrderModel.calculateTotals(oModel);
 
         const payload = SalesOrderModel.buildPayload(oModel);
@@ -188,8 +238,23 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.items).toHaveLength(1);
         expect(payload.items[0].Material).toBe("4000000001");
         expect(payload.items[0].OrderQuantity).toBe(10);
+        expect(payload.items[0].OrderQuantityUnit).toBe("KG");
         expect(payload.items[0].NetPriceAmount).toBe(50);
         expect(payload.items[0].NetAmount).toBe(500);
         expect(payload.items[0].Plant).toBe("1120");
+    });
+
+    test("buildPayload leaves empty fields without hardcoded fallbacks", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        const payload = SalesOrderModel.buildPayload(oModel);
+
+        expect(payload.header.SalesOrderType).toBe("");
+        expect(payload.header.SalesOrganization).toBe("");
+        expect(payload.header.DistributionChannel).toBe("");
+        expect(payload.header.OrganizationDivision).toBe("");
+        expect(payload.header.TransactionCurrency).toBe("");
+        expect(payload.items[0].OrderQuantity).toBe(0);
+        expect(payload.items[0].OrderQuantityUnit).toBe("");
+        expect(payload.items[0].Plant).toBe("");
     });
 });
