@@ -3224,16 +3224,43 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
+## 2026-09-22 11:55 IST
+- **Agent**: Antigravity
+- **Change**: Removal of Non-Production Default URL `http://localhost:5000` for `FAC_GL_JOURNALENTRY_VER_SRV`:
+  - **Root Cause & Rationale**:
+    - `package.json` had a hardcoded default `"credentials": { "url": "http://localhost:5000" }` on `FAC_GL_JOURNALENTRY_VER_SRV` that applied when `S4_DESTINATION_URL` was unset.
+    - This caused requests to silently target local port 5000 rather than failing loudly when S/4HANA destination/credentials were not configured.
+    - Removed `credentials: { url: "http://localhost:5000" }` from `package.json:144`.
+    - Enhanced `srv/fi/journal-entry/service.js` with structured logging via `getLogger('journal-entry')` and proper HTTP error status propagation (502 / error status) when remote calls fail.
+    - Added unit tests in `test/unit/fi/journalEntryService.test.js` validating package.json configuration, immediate fail-loud behavior (`No credentials configured for "FAC_GL_JOURNALENTRY_VER_SRV"`), and error forwarding.
+    - Updated `docs/data-lineage-audit.md` documenting elimination of non-production default URL.
+- **Files modified**:
+  - `package.json`
+  - `srv/fi/journal-entry/service.js`
+  - `docs/data-lineage-audit.md`
+  - `test/unit/fi/journalEntryService.test.js` (new)
+- **Validation**:
+  - `npm run test:unit`: **65 passed, 65 total test suites; 955 passed, 955 total tests (100% green)** in 35.5 s.
+  - `npm test -- test/unit/fi/journalEntriesController.test.js test/unit/fi/journalEntryFormatter.test.js test/integration/fi/journalEntry.test.js`: 33 passed, 33 total.
+  - `npx cds compile srv`: Succeeded with 0 errors.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Commit changes to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm run test:unit`: **64 passed, 64 total test suites; 952 passed, 952 total tests (100% green)** in 38.3 s.
+  - `npm run test:unit`: **65 passed, 65 total test suites; 955 passed, 955 total tests (100% green)** in 35.5 s.
+  - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
   - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptService.test.js`: **41 passed, 41 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptController.test.js`: **20 passed, 20 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
-  - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
+  - `npx cds compile srv`: 0 errors.
   - `git diff --check`: Clean (0 errors).
+- **External Service Configuration Hardening (FAC_GL_JOURNALENTRY_VER_SRV Default URL Removal)**:
+  - Removed non-production `http://localhost:5000` default from `package.json`.
+  - Service fails loudly with explicit missing credentials error when `S4_DESTINATION_URL` is unset, matching architecture standards.
 - **Dashboard FI Tile Relabeling (Audit Row 2)**:
   - Relabeled `dashboardKpiFIDocs` to "Items to be verified" across `i18n.properties` and `i18n_en.properties`.
   - Reflects authentic data lineage of `FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified` line items awaiting verification.
