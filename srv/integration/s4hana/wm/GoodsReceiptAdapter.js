@@ -54,6 +54,39 @@ class GoodsReceiptAdapter {
   }
 
   /**
+   * Determine if an error represents an S/4HANA backend outage, network timeout,
+   * unconfigured destination, or connection failure.
+   */
+  _isOutage(err) {
+    return GoodsReceiptAdapter._isOutage(err);
+  }
+
+  static _isOutage(err) {
+    if (!err) return false;
+    if (err.code === 'DESTINATION_NOT_CONFIGURED' || err.code === 'S4_DESTINATION_NOT_CONFIGURED') return true;
+    const status = err.status || err.statusCode || err.response?.status;
+    if (status && (status === 502 || status === 503 || status === 504 || status === 500 || status === 401 || status === 403)) {
+      return true;
+    }
+    const code = String(err.code || err.cause?.code || '').toUpperCase();
+    if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ENOTFOUND' || code === 'ECONNRESET') {
+      return true;
+    }
+    const msg = String(err.message || '').toLowerCase();
+    if (
+      msg.includes('destination') ||
+      msg.includes('network error') ||
+      msg.includes('connection refused') ||
+      msg.includes('etimedout') ||
+      msg.includes('econnrefused') ||
+      msg.includes('enotfound')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Resolve the S/4HANA destination through the shared client. Returns null when nothing is configured.
    */
   async _getDestination() {
@@ -160,8 +193,13 @@ class GoodsReceiptAdapter {
         CurrentStock: Number(r.CurrentStock) || 0,
         BaseUnit: r.BaseUnit || ''
       }));
-    } catch (_) {
-      return [];
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`Failed to retrieve storage locations due to S/4HANA outage for material ${material}: ${err.message}`);
+        throw err;
+      }
+      LOG.warn(`Storage location read failed for material ${material}: ${err.message}`);
+      throw err;
     }
   }
 
@@ -188,7 +226,12 @@ class GoodsReceiptAdapter {
         );
         const slocs = Array.isArray(slocRes) ? slocRes : (slocRes ? [slocRes] : []);
         slocs.forEach(s => slocMap.set(s.StorageLocation, s));
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          throw err;
+        }
+        LOG.warn(`SLoc bin lookup failed during batch enrichment: ${err.message}`);
+      }
 
       // Deduplicate client-level (Plant: "") and plant-level records
       const batchMap = new Map();
@@ -246,8 +289,13 @@ class GoodsReceiptAdapter {
       });
 
       return processed;
-    } catch (_) {
-      return [];
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`Failed to retrieve batches due to S/4HANA outage for material ${material}: ${err.message}`);
+        throw err;
+      }
+      LOG.warn(`Batch read failed for material ${material}: ${err.message}`);
+      throw err;
     }
   }
 
@@ -269,19 +317,19 @@ class GoodsReceiptAdapter {
         );
         const it = Array.isArray(res) ? res[0] : res;
         if (it) {
-          const openQty = Number(it.OpenQuantity);
-          const ordQty = Number(it.OrderedQuantity);
-          const entryQty = Number(it.QuantityInEntryUnit);
+          const openQty = (it.OpenQuantity !== undefined && it.OpenQuantity !== null && it.OpenQuantity !== '') ? Number(it.OpenQuantity) : null;
+          const ordQty = (it.OrderedQuantity !== undefined && it.OrderedQuantity !== null && it.OrderedQuantity !== '') ? Number(it.OrderedQuantity) : null;
+          const entryQty = (it.QuantityInEntryUnit !== undefined && it.QuantityInEntryUnit !== null && it.QuantityInEntryUnit !== '') ? Number(it.QuantityInEntryUnit) : null;
           const unit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
-          if (openQty > 0 || ordQty > 0 || (unit && unit.trim())) {
+          if ((openQty !== null && openQty > 0) || (ordQty !== null && ordQty > 0) || (unit && unit.trim())) {
             return {
               SourceOfGR: 'INBDELIV',
               InboundDelivery: it.InboundDelivery || delivDoc,
               DeliveryDocumentItem: it.DeliveryDocumentItem || sItem,
-              OpenQuantity: isNaN(openQty) ? 0 : openQty,
-              OrderedQuantity: isNaN(ordQty) ? 0 : ordQty,
-              QuantityInEntryUnit: isNaN(entryQty) ? 0 : entryQty,
-              Unit: unit.trim().toUpperCase(),
+              OpenQuantity: openQty !== null && !isNaN(openQty) ? openQty : null,
+              OrderedQuantity: ordQty !== null && !isNaN(ordQty) ? ordQty : null,
+              QuantityInEntryUnit: entryQty !== null && !isNaN(entryQty) ? entryQty : null,
+              Unit: unit ? unit.trim().toUpperCase() : '',
               StorageLocation: it.StorageLocation || '',
               StorageLocationName: it.StorageLocationName || '',
               WarehouseStorageBin: it.WarehouseStorageBin || '',
@@ -293,7 +341,12 @@ class GoodsReceiptAdapter {
             };
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          throw err;
+        }
+        LOG.warn(`Goods receipt item lookup failed for delivery ${delivDoc}: ${err.message}`);
+      }
     }
 
     // 2. Try Purchase Order via Header2Items navigation and GR4PO_DL_Items key lookup (SourceOfGR='PURORD')
@@ -319,18 +372,18 @@ class GoodsReceiptAdapter {
             matched = items.find(i => Number(i.OpenQuantity) > 0) || items[0];
           }
           if (matched) {
-            const openQty = Number(matched.OpenQuantity);
-            const ordQty = Number(matched.OrderedQuantity);
-            const entryQty = Number(matched.QuantityInEntryUnit);
+            const openQty = (matched.OpenQuantity !== undefined && matched.OpenQuantity !== null && matched.OpenQuantity !== '') ? Number(matched.OpenQuantity) : null;
+            const ordQty = (matched.OrderedQuantity !== undefined && matched.OrderedQuantity !== null && matched.OrderedQuantity !== '') ? Number(matched.OrderedQuantity) : null;
+            const entryQty = (matched.QuantityInEntryUnit !== undefined && matched.QuantityInEntryUnit !== null && matched.QuantityInEntryUnit !== '') ? Number(matched.QuantityInEntryUnit) : null;
             const unit = matched.UnitOfMeasure || matched.EntryUnit || matched.OrderedQuantityUnit || '';
             return {
               SourceOfGR: 'PURORD',
               InboundDelivery: matched.InboundDelivery || poDoc,
               DeliveryDocumentItem: matched.DeliveryDocumentItem || sPoItem,
-              OpenQuantity: isNaN(openQty) ? 0 : openQty,
-              OrderedQuantity: isNaN(ordQty) ? 0 : ordQty,
-              QuantityInEntryUnit: isNaN(entryQty) ? 0 : entryQty,
-              Unit: unit.trim().toUpperCase(),
+              OpenQuantity: openQty !== null && !isNaN(openQty) ? openQty : null,
+              OrderedQuantity: ordQty !== null && !isNaN(ordQty) ? ordQty : null,
+              QuantityInEntryUnit: entryQty !== null && !isNaN(entryQty) ? entryQty : null,
+              Unit: unit ? unit.trim().toUpperCase() : '',
               StorageLocation: matched.StorageLocation || '',
               StorageLocationName: matched.StorageLocationName || '',
               WarehouseStorageBin: matched.WarehouseStorageBin || '',
@@ -342,7 +395,12 @@ class GoodsReceiptAdapter {
             };
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) {
+          throw err;
+        }
+        LOG.warn(`Header2Items query failed for PO ${poDoc}: ${err.message}`);
+      }
 
       // 2b. Query GR4PO_DL_Items by key for PO
       const candItems = sPoItem ? [sPoItem.padStart(5, '0'), sPoItem.padStart(6, '0')] : ['00010', '000010'];
@@ -355,19 +413,19 @@ class GoodsReceiptAdapter {
           );
           const it = Array.isArray(res) ? res[0] : res;
           if (it) {
-            const openQty = Number(it.OpenQuantity);
-            const ordQty = Number(it.OrderedQuantity);
-            const entryQty = Number(it.QuantityInEntryUnit);
+            const openQty = (it.OpenQuantity !== undefined && it.OpenQuantity !== null && it.OpenQuantity !== '') ? Number(it.OpenQuantity) : null;
+            const ordQty = (it.OrderedQuantity !== undefined && it.OrderedQuantity !== null && it.OrderedQuantity !== '') ? Number(it.OrderedQuantity) : null;
+            const entryQty = (it.QuantityInEntryUnit !== undefined && it.QuantityInEntryUnit !== null && it.QuantityInEntryUnit !== '') ? Number(it.QuantityInEntryUnit) : null;
             const unit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
-            if (openQty > 0 || ordQty > 0 || (unit && unit.trim())) {
+            if ((openQty !== null && openQty > 0) || (ordQty !== null && ordQty > 0) || (unit && unit.trim())) {
               return {
                 SourceOfGR: 'PURORD',
                 InboundDelivery: it.InboundDelivery || poDoc,
                 DeliveryDocumentItem: it.DeliveryDocumentItem || cand,
-                OpenQuantity: isNaN(openQty) ? 0 : openQty,
-                OrderedQuantity: isNaN(ordQty) ? 0 : ordQty,
-                QuantityInEntryUnit: isNaN(entryQty) ? 0 : entryQty,
-                Unit: unit.trim().toUpperCase(),
+                OpenQuantity: openQty !== null && !isNaN(openQty) ? openQty : null,
+                OrderedQuantity: ordQty !== null && !isNaN(ordQty) ? ordQty : null,
+                QuantityInEntryUnit: entryQty !== null && !isNaN(entryQty) ? entryQty : null,
+                Unit: unit ? unit.trim().toUpperCase() : '',
                 StorageLocation: it.StorageLocation || '',
                 StorageLocationName: it.StorageLocationName || '',
                 WarehouseStorageBin: it.WarehouseStorageBin || '',
@@ -379,7 +437,12 @@ class GoodsReceiptAdapter {
               };
             }
           }
-        } catch (_) {}
+        } catch (err) {
+          if (this._isOutage(err)) {
+            throw err;
+          }
+          LOG.warn(`GR4PO_DL_Items query failed for PO ${poDoc} item ${cand}: ${err.message}`);
+        }
       }
     }
 
@@ -454,7 +517,10 @@ class GoodsReceiptAdapter {
           resolvedUnit = d.DeliveryQuantityUnit || d.UnitOfMeasure || d.BaseUnit;
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Tier 1 Inbound Delivery lookup failed for ${sCleanScan}: ${err.message}`);
+    }
 
     // --- TIER 2: Purchase Order check (PoHelpSet) ---
     if (!scannedType) {
@@ -494,9 +560,15 @@ class GoodsReceiptAdapter {
               resolvedDelivery = linkedDelList[0].DeliveryDocument;
               resolvedDeliveryItem = linkedDelList[0].DeliveryDocumentItem || '';
             }
-          } catch (_) {}
+          } catch (linkedErr) {
+            if (this._isOutage(linkedErr)) throw linkedErr;
+            LOG.warn(`Linked delivery check failed for PO ${sCleanScan}: ${linkedErr.message}`);
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 2 PO check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 3: Batch check (LO_BM_BATCH_SRV/I_Batch) ---
@@ -560,9 +632,15 @@ class GoodsReceiptAdapter {
                 resolvedSupplierCity = po.SupplierCityName || '';
               }
             }
-          } catch (_) {}
+          } catch (innerErr) {
+            if (this._isOutage(innerErr)) throw innerErr;
+            LOG.warn(`Batch material link lookup failed for ${resolvedMaterial}: ${innerErr.message}`);
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 3 Batch check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 4: Material check (HMmimGr4inbdelSet / PoHelpSet / MaterialHeaders) ---
@@ -612,7 +690,10 @@ class GoodsReceiptAdapter {
             resolvedSupplierCity = po.SupplierCityName || '';
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 4 Material check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 5: Production Order check (MMIMProductionOrderVH) ---
@@ -631,7 +712,10 @@ class GoodsReceiptAdapter {
           resolvedMaterial = pr.Material || '';
           resolvedPlant = pr.ProductionPlant || '';
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 5 Production Order check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 6: Storage Unit / General Delivery Fallback (query top 50 deliveries) ---
@@ -659,7 +743,10 @@ class GoodsReceiptAdapter {
           resolvedSupplierName = matched.SupplierName || '';
           resolvedSupplierCity = matched.SupplierCityName || '';
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 6 Fallback check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 7: Genuine Non-Existent Object / Validation Error ---
@@ -672,13 +759,25 @@ class GoodsReceiptAdapter {
     }
 
     // Retrieve authentic Storage Locations & Bins
-    const storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
+    let storageLocations = [];
+    try {
+      storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Material storage locations lookup failed for ${resolvedMaterial}: ${err.message}`);
+    }
     let defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : '';
     let defaultSLocName = storageLocations.length > 0 ? storageLocations[0].StorageLocationName : '';
     let defaultBin = storageLocations.length > 0 ? storageLocations[0].WarehouseStorageBin : '';
 
     // Retrieve authentic Batches & SLED
-    const batches = await this.getMaterialBatches(resolvedMaterial, resolvedPlant, defaultSLoc);
+    let batches = [];
+    try {
+      batches = await this.getMaterialBatches(resolvedMaterial, resolvedPlant, defaultSLoc);
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Material batches lookup failed for ${resolvedMaterial}: ${err.message}`);
+    }
     let selectedBatch = targetBatch;
     let expiryDate = targetExpiryDate;
     let batchStatusState = targetBatchStatusState;
@@ -693,17 +792,33 @@ class GoodsReceiptAdapter {
     }
 
     // Retrieve authentic Goods Receipt item details (OpenQuantity, OrderedQuantity, Unit) from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items
-    const grItem = await this.getGoodsReceiptItem(resolvedDelivery, resolvedDeliveryItem, resolvedPO, resolvedPOItem);
-    let proposedQuantity = 0;
-    let authenticOpenQuantity = 0;
-    let authenticOrderedQuantity = 0;
-    let authenticQuantityInEntryUnit = 0;
+    let grItem = null;
+    try {
+      grItem = await this.getGoodsReceiptItem(resolvedDelivery, resolvedDeliveryItem, resolvedPO, resolvedPOItem);
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Goods receipt item lookup failed: ${err.message}`);
+    }
+    let proposedQuantity = null;
+    let authenticOpenQuantity = null;
+    let authenticOrderedQuantity = null;
+    let authenticQuantityInEntryUnit = null;
 
     if (grItem) {
-      authenticOpenQuantity = grItem.OpenQuantity || 0;
-      authenticOrderedQuantity = grItem.OrderedQuantity || 0;
-      authenticQuantityInEntryUnit = grItem.QuantityInEntryUnit || 0;
-      proposedQuantity = authenticOpenQuantity > 0 ? authenticOpenQuantity : (authenticQuantityInEntryUnit > 0 ? authenticQuantityInEntryUnit : (authenticOrderedQuantity > 0 ? authenticOrderedQuantity : 0));
+      authenticOpenQuantity = (grItem.OpenQuantity !== undefined && grItem.OpenQuantity !== null && !isNaN(grItem.OpenQuantity)) ? grItem.OpenQuantity : null;
+      authenticOrderedQuantity = (grItem.OrderedQuantity !== undefined && grItem.OrderedQuantity !== null && !isNaN(grItem.OrderedQuantity)) ? grItem.OrderedQuantity : null;
+      authenticQuantityInEntryUnit = (grItem.QuantityInEntryUnit !== undefined && grItem.QuantityInEntryUnit !== null && !isNaN(grItem.QuantityInEntryUnit)) ? grItem.QuantityInEntryUnit : null;
+      if (authenticOpenQuantity !== null && authenticOpenQuantity > 0) {
+        proposedQuantity = authenticOpenQuantity;
+      } else if (authenticQuantityInEntryUnit !== null && authenticQuantityInEntryUnit > 0) {
+        proposedQuantity = authenticQuantityInEntryUnit;
+      } else if (authenticOrderedQuantity !== null && authenticOrderedQuantity > 0) {
+        proposedQuantity = authenticOrderedQuantity;
+      } else if (authenticOpenQuantity !== null) {
+        proposedQuantity = authenticOpenQuantity;
+      } else {
+        proposedQuantity = null;
+      }
       if (grItem.Unit) resolvedUnit = grItem.Unit;
       if (grItem.StorageLocation && !defaultSLoc) defaultSLoc = grItem.StorageLocation;
       if (grItem.WarehouseStorageBin && !defaultBin) defaultBin = grItem.WarehouseStorageBin;

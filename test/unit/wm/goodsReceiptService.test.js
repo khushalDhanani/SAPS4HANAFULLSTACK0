@@ -673,6 +673,82 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(registeredEvents).toContain('getStorageUnitDetails');
             expect(registeredEvents).toContain('postGoodsReceipt');
         });
+
+        it('should rethrow S/4HANA outage immediately during resolveStorageUnit and NOT return 404 barcode not found', async () => {
+            const outageErr = new Error('Gateway Timeout');
+            outageErr.statusCode = 504;
+            outageErr.status = 504;
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockRejectedValueOnce(outageErr);
+
+            await expect(GoodsReceiptAdapter.resolveStorageUnit('180000001')).rejects.toThrow('Gateway Timeout');
+
+            try {
+                getSpy.mockRejectedValueOnce(outageErr);
+                await GoodsReceiptAdapter.resolveStorageUnit('180000001');
+            } catch (err) {
+                expect(err.statusCode).toBe(504);
+                expect(err.message).not.toContain('does not exist in any active record');
+            }
+
+            getSpy.mockRestore();
+        });
+
+        it('should return null quantities when item read fails or returns no item', async () => {
+            const origGetItem = GoodsReceiptAdapter.getGoodsReceiptItem.bind(GoodsReceiptAdapter);
+            jest.spyOn(GoodsReceiptAdapter, 'getGoodsReceiptItem').mockResolvedValueOnce(null);
+
+            const suDetails = await GoodsReceiptAdapter.resolveStorageUnit('180000001');
+            expect(suDetails).toBeDefined();
+            expect(suDetails.Quantity).toBeNull();
+            expect(suDetails.OpenQuantity).toBeNull();
+            expect(suDetails.OrderedQuantity).toBeNull();
+            expect(suDetails.QuantityInEntryUnit).toBeNull();
+
+            GoodsReceiptAdapter.getGoodsReceiptItem = origGetItem;
+        });
+
+        it('should throw on S/4HANA outage in getMaterialStorageLocations instead of returning []', async () => {
+            const outageErr = new Error('Service Unavailable');
+            outageErr.statusCode = 503;
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockRejectedValueOnce(outageErr);
+
+            await expect(GoodsReceiptAdapter.getMaterialStorageLocations('1000000045', '1120')).rejects.toThrow('Service Unavailable');
+
+            getSpy.mockRestore();
+        });
+
+        it('should throw on S/4HANA outage in getMaterialBatches instead of returning []', async () => {
+            const outageErr = new Error('connect ECONNREFUSED 172.27.100.32:8000');
+            outageErr.code = 'ECONNREFUSED';
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockRejectedValueOnce(outageErr);
+
+            await expect(GoodsReceiptAdapter.getMaterialBatches('1000000045', '1120', 'CS01')).rejects.toThrow(/ECONNREFUSED/);
+
+            getSpy.mockRestore();
+        });
+
+        it('should reject getStorageUnitDetails with 502 when backend outage occurs', async () => {
+            const handler = require('../../../srv/wm/goods-receipt/handlers/goodsReceipt.handler');
+            const mockSrv = { on: jest.fn() };
+            handler(mockSrv);
+
+            const getSUHandler = mockSrv.on.mock.calls.find(c => c[0] === 'getStorageUnitDetails')?.[1];
+            expect(getSUHandler).toBeDefined();
+
+            const outageErr = new Error('Destination host unreachable');
+            outageErr.code = 'ETIMEDOUT';
+            const resolveSpy = jest.spyOn(GoodsReceiptAdapter, 'resolveStorageUnit').mockRejectedValueOnce(outageErr);
+
+            const mockReq = {
+                data: { StorageUnit: '180000001' },
+                reject: jest.fn()
+            };
+
+            await getSUHandler(mockReq);
+            expect(mockReq.reject).toHaveBeenCalledWith(502, expect.stringContaining('Destination host unreachable'));
+
+            resolveSpy.mockRestore();
+        });
     });
 
     describe('Frontend GoodsReceiptService V4 Model Operations', () => {

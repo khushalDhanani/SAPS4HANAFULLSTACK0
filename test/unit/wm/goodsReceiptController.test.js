@@ -360,7 +360,48 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             await controller.onScanStorageUnit();
 
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('not found in SAP S/4HANA'), expect.any(Object));
+            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('not found in SAP S/4HANA'), expect.objectContaining({
+                title: 'Validation Error: Document Not Found'
+            }));
+        });
+
+        it('should preserve null quantities without defaulting to 0 when SAP item read yields no quantities', async () => {
+            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce({
+                ...mockSUData,
+                Quantity: null,
+                OpenQuantity: null,
+                OrderedQuantity: null,
+                QuantityInEntryUnit: null
+            });
+
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/storageUnitBarcode', '180000001');
+
+            await controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/activeSU/Quantity')).toBe('');
+            expect(oModel.getProperty('/activeSU/OpenQuantity')).toBeNull();
+            expect(oModel.getProperty('/activeSU/OrderedQuantity')).toBeNull();
+            expect(oModel.getProperty('/activeSU/QuantityInEntryUnit')).toBeNull();
+        });
+
+        it('should display outage dialog when resolution fails due to S/4HANA backend outage (502/503)', async () => {
+            const outageErr = new Error('Failed to retrieve storage locations due to S/4HANA outage for material 1000000045: Gateway Timeout');
+            outageErr.statusCode = 502;
+            mockGoodsReceiptService.resolveStorageUnit.mockRejectedValueOnce(outageErr);
+
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/storageUnitBarcode', '180000001');
+
+            await controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/hasActiveSU')).toBe(false);
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('S/4HANA outage'),
+                expect.objectContaining({
+                    title: 'S/4HANA Backend Outage / Service Unavailable'
+                })
+            );
         });
     });
 

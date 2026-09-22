@@ -206,7 +206,7 @@
                                     <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold sapUiSmallMarginEnd" />
                                     <Text
                                         id="txtOpenQty"
-                                        text="{= ${grView>/activeSU/OpenQuantity} ? ' / Open: ' + ${grView>/activeSU/OpenQuantity} + ' ' + ${grView>/activeSU/Unit} : '' }"
+                                        text="{= ${grView>/activeSU/OpenQuantity} !== null &amp;&amp; ${grView>/activeSU/OpenQuantity} !== '' ? ' / Open: ' + ${grView>/activeSU/OpenQuantity} + ' ' + ${grView>/activeSU/Unit} : '' }"
                                         class="textMuted" />
                                 </HBox>
 

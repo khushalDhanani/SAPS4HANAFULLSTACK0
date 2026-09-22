@@ -71,7 +71,9 @@ const init = (srv) => {
             return await GoodsReceiptAdapter.resolveStorageUnit(StorageUnit);
         } catch (err) {
             LOG.error('getStorageUnitDetails failed:', err.message);
-            req.reject(err.statusCode || 404, err.message);
+            const isOutage = (GoodsReceiptAdapter._isOutage && GoodsReceiptAdapter._isOutage(err)) || (GoodsReceiptAdapter.constructor && GoodsReceiptAdapter.constructor._isOutage && GoodsReceiptAdapter.constructor._isOutage(err));
+            const statusCode = err.status || err.statusCode || (isOutage ? 502 : 404);
+            req.reject(statusCode, err.message);
         }
     });
 

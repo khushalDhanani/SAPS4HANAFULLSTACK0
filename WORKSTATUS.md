@@ -3128,15 +3128,59 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
+## 2026-09-22 11:35 IST
+- **Agent**: Antigravity
+- **Change**: Goods Receipt Scan S/4HANA Outage Propagation, Authentic Null Quantities on Missing Item Reads, and Pick List Error Surfacing (Audit Rows 33, 34, 35).
+  - **Audit Row 33 (Outage Masking in Scan Resolution)**:
+    - In `GoodsReceiptAdapter.js`: Added `_isOutage(err)` and `static _isOutage(err)` to identify S/4HANA backend outages (500, 502, 503, 504, 401, 403, ECONNREFUSED, ETIMEDOUT, ENOTFOUND, ECONNRESET, destination configuration failure, network drop).
+    - Removed empty `catch (_) {}` blocks across Tiers 1-6 (`HMmimGr4inbdelSet`, `PoHelpSet`, `I_Batch`, `MMIMProductionOrderVH`, and fallback scan). Outages are rethrown immediately instead of falling through to Tier 7 validation error.
+    - In `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: Updated `getStorageUnitDetails` catch block to check `_isOutage(err)` and reject with `502/503/504` instead of defaulting to `404`.
+    - In `GoodsReceipt.controller.js`: Distinguishes `502/503/504` backend outages from genuine 404 "Document Not Found", presenting an explicit "S/4HANA Backend Outage / Service Unavailable" MessageBox.
+  - **Audit Row 34 (Quantity 0 vs Blank / Null on Missing/Failed Item Reads)**:
+    - In `GoodsReceiptAdapter.js`: Updated `getGoodsReceiptItem` and `resolveStorageUnit` so missing or failed item reads return authentic `null` for `Quantity`, `OpenQuantity`, `OrderedQuantity`, and `QuantityInEntryUnit` instead of default `0`.
+    - In `GoodsReceipt.controller.js`: Updated initial state model, `onResetWorkflow`, and `resolveStorageUnit` mapping to keep `OpenQuantity`, `OrderedQuantity`, `QuantityInEntryUnit` as `null` and `Quantity` as `""` (not `0`).
+    - In `GoodsReceipt.view.xml`: Updated `txtOpenQty` text binding expression to check `!== null && !== ''`, ensuring unknown quantities remain blank.
+  - **Audit Row 35 (Pick Lists Returning Silent Empty Arrays on Error)**:
+    - In `GoodsReceiptAdapter.js`: `getMaterialStorageLocations` and `getMaterialBatches` now log and rethrow on S/4HANA outages and backend errors instead of catching `_` and returning `[]`.
+    - CAP handlers in `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js` for `MaterialStorageLocations` and `MaterialBatches` reject with `502` on backend failure, correctly surfacing errors to the Fiori UI.
+  - **Automated Tests**:
+    - `test/unit/wm/goodsReceiptService.test.js`: Added 5 unit tests verifying outage propagation in `resolveStorageUnit`, authentic `null` quantities on failed/missing item reads, throwing errors in `getMaterialStorageLocations` and `getMaterialBatches`, and CAP 502 rejection on backend outage.
+    - `test/unit/wm/goodsReceiptController.test.js`: Added unit tests verifying preservation of `null` quantities and display of the S/4HANA backend outage MessageBox.
+  - **Audit Documentation**:
+    - Updated `docs/data-lineage-audit.md` Rows 33, 34, and 35 to **RESOLVED**, updated Section 6 error classification table, and updated Re-scan table.
+- **Files modified**:
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/view/GoodsReceipt.view.xml`
+  - `test/unit/wm/goodsReceiptService.test.js`
+  - `test/unit/wm/goodsReceiptController.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npm test -- test/unit/wm/goodsReceiptService.test.js`: 41 passed, 41 total tests (100% green).
+  - `npm test -- test/unit/wm/goodsReceiptController.test.js`: 20 passed, 20 total tests (100% green).
+  - `npm run test:unit`: 64 passed, 64 total test suites; 952 passed, 952 total tests (100% green).
+  - `npx cds compile srv`: Succeeded with 0 errors.
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 910 ms; `Component-preload.js` generated.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm run test:unit`: **64 passed, 64 total test suites; 945 passed, 945 total tests (100% green)** in 38.2 s.
-  - `npm test -- test/unit/wm/goodsIssueClients.test.js`: **51 passed, 51 total tests (100% green)**.
-  - `npm test -- test/unit/wm/goodsIssueService.test.js`: **46 passed, 46 total tests (100% green)**.
+  - `npm run test:unit`: **64 passed, 64 total test suites; 952 passed, 952 total tests (100% green)** in 38.9 s.
+  - `npm test -- test/unit/wm/goodsReceiptService.test.js`: **41 passed, 41 total tests (100% green)**.
+  - `npm test -- test/unit/wm/goodsReceiptController.test.js`: **20 passed, 20 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
   - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Goods Receipt Outage Propagation, Null Quantities, and Pick List Error Handling (Audit Rows 33, 34, 35)**:
+  - In `GoodsReceiptAdapter.js`: `_isOutage` added; empty catch blocks across Tiers 1-6 replaced to rethrow backend outages immediately.
+  - CAP handler `getStorageUnitDetails` rejects with 502/503/504 on backend outage instead of masking as 404 "barcode not found".
+  - Fiori Goods Receipt UI distinguishes backend outages and displays an explicit S/4HANA backend outage dialog.
+  - Missing/failed item reads return `Quantity: null`, `OpenQuantity: null`, `OrderedQuantity: null`, `QuantityInEntryUnit: null` rather than coercing to 0.
+  - `getMaterialStorageLocations` and `getMaterialBatches` throw on S/4HANA outages/errors; CAP handlers reject with 502, surfacing SAP failures instead of silently returning `[]`.
 - **Goods Issue Reservation List 2,000 Cap Truncation Fix (Audit Row 37)**:
   - In `GoodsIssueReservationsClient.js`: `getOpenReservations` pushes `reservationNo` and `orderNo` server-side into SAP OData filter before paging, ensuring specific reservation/order lookups bypass arbitrary item limits.
   - Non-silent truncation: When 2,000 items are reached, backend logs diagnostic warning, sets `IsTruncated: true`, sets `TruncationNote`, and marks cutoff reservation with `ItemCountPartial: true` and `${ItemCount}+ items (partial)`.

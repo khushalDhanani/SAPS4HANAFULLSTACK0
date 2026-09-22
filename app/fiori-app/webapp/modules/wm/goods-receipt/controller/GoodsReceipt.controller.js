@@ -41,10 +41,10 @@ sap.ui.define([
                     ExpiryDate: "",
                     BatchStatusState: "None",
                     BatchStatusText: "NO BATCH",
-                    Quantity: 0,
-                    OpenQuantity: 0,
-                    OrderedQuantity: 0,
-                    QuantityInEntryUnit: 0,
+                    Quantity: "",
+                    OpenQuantity: null,
+                    OrderedQuantity: null,
+                    QuantityInEntryUnit: null,
                     Unit: "",
                     Supplier: "",
                     SupplierName: "",
@@ -274,9 +274,9 @@ sap.ui.define([
                         BatchStatusState: oSU.BatchStatusState || "None",
                         BatchStatusText: oSU.BatchStatusText || "NO BATCH",
                         Quantity: (oSU.Quantity !== undefined && oSU.Quantity !== null && !isNaN(Number(oSU.Quantity))) ? Number(oSU.Quantity) : "",
-                        OpenQuantity: Number(oSU.OpenQuantity) || 0,
-                        OrderedQuantity: Number(oSU.OrderedQuantity) || 0,
-                        QuantityInEntryUnit: Number(oSU.QuantityInEntryUnit) || 0,
+                        OpenQuantity: (oSU.OpenQuantity !== undefined && oSU.OpenQuantity !== null && !isNaN(Number(oSU.OpenQuantity))) ? Number(oSU.OpenQuantity) : null,
+                        OrderedQuantity: (oSU.OrderedQuantity !== undefined && oSU.OrderedQuantity !== null && !isNaN(Number(oSU.OrderedQuantity))) ? Number(oSU.OrderedQuantity) : null,
+                        QuantityInEntryUnit: (oSU.QuantityInEntryUnit !== undefined && oSU.QuantityInEntryUnit !== null && !isNaN(Number(oSU.QuantityInEntryUnit))) ? Number(oSU.QuantityInEntryUnit) : null,
                         Unit: oSU.Unit || "",
                         Supplier: oSU.Supplier || "",
                         SupplierName: oSU.SupplierName || "",
@@ -298,22 +298,31 @@ sap.ui.define([
                     that._playBeep(false);
                     oModel.setProperty("/hasActiveSU", false);
                     var sRawMsg = err.message || err || "";
-                    var sGuidance = that.getText("grNotFoundGuidance");
-                    if (sGuidance && sGuidance.includes("{0}")) {
-                        sGuidance = sGuidance.replace("{0}", sBarcode);
-                    }
-                    var sOpenVHTitle = that.getText("grBtnOpenValueHelp") || "Open Value Help";
-                    MessageBox.error(sRawMsg, {
-                        title: "Validation Error: Document Not Found",
-                        details: sGuidance || undefined,
-                        actions: [MessageBox.Action.CLOSE, sOpenVHTitle],
-                        emphasizedAction: sOpenVHTitle,
-                        onClose: function (sAction) {
-                            if (sAction === sOpenVHTitle) {
-                                that.onStorageUnitValueHelp();
-                            }
+                    var isOutage = err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.status === 502 || err.status === 503 || err.status === 504 ||
+                        (sRawMsg && (sRawMsg.toLowerCase().includes("s/4hana outage") || sRawMsg.toLowerCase().includes("destination") || sRawMsg.toLowerCase().includes("econnrefused")));
+                    if (isOutage) {
+                        MessageBox.error(sRawMsg, {
+                            title: "S/4HANA Backend Outage / Service Unavailable",
+                            actions: [MessageBox.Action.CLOSE]
+                        });
+                    } else {
+                        var sGuidance = that.getText("grNotFoundGuidance");
+                        if (sGuidance && sGuidance.includes("{0}")) {
+                            sGuidance = sGuidance.replace("{0}", sBarcode);
                         }
-                    });
+                        var sOpenVHTitle = that.getText("grBtnOpenValueHelp") || "Open Value Help";
+                        MessageBox.error(sRawMsg, {
+                            title: "Validation Error: Document Not Found",
+                            details: sGuidance || undefined,
+                            actions: [MessageBox.Action.CLOSE, sOpenVHTitle],
+                            emphasizedAction: sOpenVHTitle,
+                            onClose: function (sAction) {
+                                if (sAction === sOpenVHTitle) {
+                                    that.onStorageUnitValueHelp();
+                                }
+                            }
+                        });
+                    }
                 })
                 .finally(function () {
                     that.setBusy(false);
@@ -487,10 +496,10 @@ sap.ui.define([
                 ExpiryDate: "",
                 BatchStatusState: "None",
                 BatchStatusText: "NO BATCH",
-                Quantity: 0,
-                OpenQuantity: 0,
-                OrderedQuantity: 0,
-                QuantityInEntryUnit: 0,
+                Quantity: "",
+                OpenQuantity: null,
+                OrderedQuantity: null,
+                QuantityInEntryUnit: null,
                 Unit: "",
                 Supplier: "",
                 SupplierName: "",
