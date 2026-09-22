@@ -3247,17 +3247,54 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Commit changes to `feature/CL01`.
 
+## 2026-09-22 12:05 IST
+- **Agent**: Antigravity
+- **Change**: PO Status: Elimination of Synthetic Completeness Fallback to "Approved" & Live SAP Code Table Verification (Audit Row 4):
+  - **Root Cause & Rationale**:
+    - `webapp/model/formatter.js:40-42` contained a last-resort fallback: `if (bCompleteness === true) return "Approved"`.
+    - Live S/4HANA verification proved this heuristic was false: PO `300000001` has `PurchasingCompletenessStatus: true`, but its authentic SAP status is `PurchasingDocumentStatus: '01'`, `PurchasingDocumentStatusName: 'Draft'`. Displaying "Approved" was misleading.
+    - Previously only 5 codes were hardcoded (`01`, `02`, `04`, `05`, `38`) without backend verification.
+    - Queried live SAP Gateway entity set `/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_PurchasingDocumentStatusText?$filter=Language eq 'EN'` and retrieved all 33 verified status codes and English names (`01: Draft`, `02: In Approval`, `03: Not Yet Sent`, `04: Sent`, `05: Follow-On Documents`, `06: Release Orders Exist`, `07: Expiring Soon`, `08: Released`, `09: Expired`, `10: Deleted`, `11: Paid`, `12: Unpaid`, `13: Blocked`, `14: Canceled`, `15: Partially Paid`, `16: Release Refused`, `21: Invoice Completed`, `22: Completed`, `23: Ordered`, `24: Quantity Mismatch`, `25: Value Mismatch`, `26: Missing Confirmation`, `27: Created`, `31: Reversed`, `32: With Errors`, `33: Correct`, `34: Parked and Held`, `35: Entered and Held`, `36: Empty Item`, `37: Output Error`, `38: Rejected`, `39: Marked for Deletion`, `40: Not Yet Relevant`).
+    - Added `SAP_PURCHASING_DOCUMENT_STATUS` table to `formatter.js`.
+    - `_resolveDisplayStatus` strictly shows:
+      1) `"Deleted"` if `sDeletionCode === "L"`
+      2) SAP's authentic status name (`sStatusName`) if present
+      3) Verified SAP name for `sStatusCode` from `SAP_PURCHASING_DOCUMENT_STATUS`, or raw code if unrecognized
+      4) Empty string `""` if no status information is present (zero guessing from `bCompleteness` or `bReleaseNotCompleted`).
+    - Changed `completenessText` in `formatter.js` to return `"Complete"` / `"Incomplete"` instead of `"Approved"` / `"Draft"`.
+    - Rebuilt `dist/Component-preload.js` with `ui5 build --all`.
+    - Updated `test/unit/purchase-order/formatter.test.js` asserting verified SAP status codes and asserting `""` (no guessing) for completeness/release boolean flags.
+    - Updated `docs/data-lineage-audit.md` Row 4.
+- **Files modified**:
+  - `app/fiori-app/webapp/model/formatter.js`
+  - `app/fiori-app/webapp/dist/Component-preload.js`
+  - `test/unit/purchase-order/formatter.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
+  - `npm test -- test/unit/purchase-order/`: **19 suites passed, 207 passed, 207 total tests (100% green)**.
+  - `npm test -- test/unit/dashboard/dashboardMetrics.test.js test/unit/fi/`: **4 suites passed, 64 total tests (100% green)**.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.82 s; preload bundle rebuilt.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Commit changes to `feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm run test:unit`: **65 passed, 65 total test suites; 955 passed, 955 total tests (100% green)** in 35.5 s.
+  - `npm test -- test/unit/purchase-order/`: **19 suites passed, 207 passed, 207 total tests (100% green)**.
+  - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
   - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
   - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptService.test.js`: **41 passed, 41 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptController.test.js`: **20 passed, 20 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `npx cds compile srv`: 0 errors.
   - `git diff --check`: Clean (0 errors).
+- **PO Status Verification & Elimination of Completeness Fallback (Audit Row 4)**:
+  - Integrated 33 verified status codes from SAP Gateway `C_PURCHASEORDER_FS_SRV/I_PurchasingDocumentStatusText`.
+  - Eliminated synthetic guessing (`completeness = true -> Approved`, `completeness = false -> Draft`, `releaseNotCompleted -> In Approval`). Status strictly shows SAP status name or verified code lookup.
 - **External Service Configuration Hardening (FAC_GL_JOURNALENTRY_VER_SRV Default URL Removal)**:
   - Removed non-production `http://localhost:5000` default from `package.json`.
   - Service fails loudly with explicit missing credentials error when `S4_DESTINATION_URL` is unset, matching architecture standards.

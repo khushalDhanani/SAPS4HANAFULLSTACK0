@@ -3,10 +3,47 @@ sap.ui.define([
 ], function (DateFormat) {
     "use strict";
 
+    /**
+     * Verified SAP S/4HANA Purchasing Document Status codes and names
+     * from Gateway service C_PURCHASEORDER_FS_SRV (entity set I_PurchasingDocumentStatusText, Language 'EN').
+     */
+    var SAP_PURCHASING_DOCUMENT_STATUS = {
+        "01": "Draft",
+        "02": "In Approval",
+        "03": "Not Yet Sent",
+        "04": "Sent",
+        "05": "Follow-On Documents",
+        "06": "Release Orders Exist",
+        "07": "Expiring Soon",
+        "08": "Released",
+        "09": "Expired",
+        "10": "Deleted",
+        "11": "Paid",
+        "12": "Unpaid",
+        "13": "Blocked",
+        "14": "Canceled",
+        "15": "Partially Paid",
+        "16": "Release Refused",
+        "21": "Invoice Completed",
+        "22": "Completed",
+        "23": "Ordered",
+        "24": "Quantity Mismatch",
+        "25": "Value Mismatch",
+        "26": "Missing Confirmation",
+        "27": "Created",
+        "31": "Reversed",
+        "32": "With Errors",
+        "33": "Correct",
+        "34": "Parked and Held",
+        "35": "Entered and Held",
+        "36": "Empty Item",
+        "37": "Output Error",
+        "38": "Rejected",
+        "39": "Marked for Deletion",
+        "40": "Not Yet Relevant"
+    };
+
     function _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
-        if (sStatusCode == null && sStatusName == null && bReleaseNotCompleted == null && sDeletionCode == null && bCompleteness == null) {
-            return "";
-        }
         if (sDeletionCode === "L") {
             return "Deleted";
         }
@@ -15,31 +52,12 @@ sap.ui.define([
         }
         if (sStatusCode != null && String(sStatusCode).trim() !== "") {
             var sCode = String(sStatusCode).trim();
-            switch (sCode) {
-                case "01":
-                    return "Draft";
-                case "02":
-                    return "In Approval";
-                case "04":
-                    return "Sent";
-                case "05":
-                    return "Follow-On Documents";
-                case "38":
-                    return "Rejected";
-                default:
-                    return sCode;
+            if (SAP_PURCHASING_DOCUMENT_STATUS[sCode]) {
+                return SAP_PURCHASING_DOCUMENT_STATUS[sCode];
             }
+            return sCode;
         }
-        var bRelNotDone = bReleaseNotCompleted === true || bReleaseNotCompleted === "true";
-        if (bRelNotDone) {
-            return "In Approval";
-        }
-        if (bCompleteness === false || bCompleteness === "false") {
-            return "Draft";
-        }
-        if (bCompleteness === true || bCompleteness === "true") {
-            return "Approved";
-        }
+        // Show SAP's status name only; never synthesize status from completeness or release flags
         return "";
     }
 
@@ -71,17 +89,17 @@ sap.ui.define([
         /**
          * Computes the authentic Display Status from S/4HANA Purchasing Document status fields:
          * - 'Deleted' (Deletion code L)
-         * - Authentic SAP Status Name if present (e.g. 'Draft', 'In Approval', 'Sent', 'Follow-On Documents', 'Rejected', 'Approved')
-         * - Standard status code mapped name ('01' -> 'Draft', '02' -> 'In Approval', '04' -> 'Sent', '05' -> 'Follow-On Documents', '38' -> 'Rejected')
+         * - Authentic SAP Status Name if present (e.g. 'Draft', 'In Approval', 'Sent', 'Follow-On Documents', 'Rejected', etc.)
+         * - Verified status code lookup against SAP I_PurchasingDocumentStatusText table (33 codes)
          * - Raw status code if unrecognized (never defaults to 'Approved')
-         * - Fallback to release pending ('In Approval') or completeness flags ('Approved' / 'Draft')
+         * - Blank string if no status information is provided (never guesses from completeness or release flags)
          *
          * @param {string} [sStatusCode] - PurchasingDocumentStatus (e.g. '01', '02', '04', '05', '38')
          * @param {string} [sStatusName] - PurchasingDocumentStatusName (e.g. 'Draft', 'In Approval', 'Sent', 'Follow-On Documents', 'Rejected')
          * @param {boolean} [bReleaseNotCompleted] - ReleaseIsNotCompleted
          * @param {string} [sDeletionCode] - PurchasingDocumentDeletionCode ('L')
          * @param {boolean} [bCompleteness] - PurchasingCompletenessStatus
-         * @returns {string} Status name, 'Deleted', raw status code, or ''
+         * @returns {string} Authentic SAP status name, 'Deleted', raw status code, or ''
          */
         displayStatus: function (sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness) {
             return _resolveDisplayStatus(sStatusCode, sStatusName, bReleaseNotCompleted, sDeletionCode, bCompleteness);
@@ -93,16 +111,16 @@ sap.ui.define([
                 return "None";
             }
             var sLower = sStatus.toLowerCase();
-            if (sLower === "approved" || sLower === "sent" || sLower === "follow-on documents") {
+            if (sLower === "approved" || sLower === "sent" || sLower === "follow-on documents" || sLower === "released" || sLower === "completed" || sLower === "ordered" || sLower === "correct") {
                 return "Success";
             }
-            if (sLower === "draft") {
+            if (sLower === "draft" || sLower === "created" || sLower === "entered and held" || sLower === "parked and held") {
                 return "Information";
             }
-            if (sLower === "in approval" || sLower.indexOf("approval") !== -1) {
+            if (sLower === "in approval" || sLower.indexOf("approval") !== -1 || sLower === "not yet sent" || sLower === "expiring soon") {
                 return "Warning";
             }
-            if (sLower === "rejected" || sLower === "deleted") {
+            if (sLower === "rejected" || sLower === "deleted" || sLower === "canceled" || sLower === "blocked" || sLower === "with errors" || sLower === "release refused" || sLower === "output error" || sLower === "marked for deletion") {
                 return "Error";
             }
             return "None";
@@ -114,16 +132,16 @@ sap.ui.define([
                 return "";
             }
             var sLower = sStatus.toLowerCase();
-            if (sLower === "approved" || sLower === "sent" || sLower === "follow-on documents") {
+            if (sLower === "approved" || sLower === "sent" || sLower === "follow-on documents" || sLower === "released" || sLower === "completed" || sLower === "ordered" || sLower === "correct") {
                 return "sap-icon://accept";
             }
-            if (sLower === "draft") {
+            if (sLower === "draft" || sLower === "created" || sLower === "entered and held" || sLower === "parked and held") {
                 return "sap-icon://edit";
             }
-            if (sLower === "in approval" || sLower.indexOf("approval") !== -1) {
+            if (sLower === "in approval" || sLower.indexOf("approval") !== -1 || sLower === "not yet sent" || sLower === "expiring soon") {
                 return "sap-icon://pending";
             }
-            if (sLower === "rejected" || sLower === "deleted") {
+            if (sLower === "rejected" || sLower === "deleted" || sLower === "canceled" || sLower === "blocked" || sLower === "with errors" || sLower === "release refused" || sLower === "output error" || sLower === "marked for deletion") {
                 return "sap-icon://decline";
             }
             return "";
@@ -141,7 +159,7 @@ sap.ui.define([
 
         completenessText: function (bComplete) {
             var bIsComplete = bComplete === true || bComplete === "true";
-            return bIsComplete ? "Approved" : "Draft";
+            return bIsComplete ? "Complete" : "Incomplete";
         },
 
         docTypeDisplay: function (sDocType) {
