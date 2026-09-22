@@ -43,6 +43,41 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
     };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getDeliveryStatus(DeliveryDocument : String) returns {
+        DeliveryDocument             : String;
+        DeliveryDocumentType         : String;
+        ShippingPoint                : String;
+        SoldToParty                  : String;
+        SalesOrganization            : String;
+        OverallPickingStatus         : String;
+        OverallGoodsMovementStatus   : String;
+        OverallDelivReltdBillgStatus : String;
+        OverallSDProcessStatus       : String;
+        ActualGoodsMovementDate      : String;
+    };
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'SalesManager', 'Admin'])
+    action postGoodsIssue(DeliveryDocument : String) returns {
+        DeliveryDocument : String;
+        Done             : Boolean;
+        ErrorFlags       : array of String;
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getBillingDocumentTypes(DeliveryDocument : String) returns array of {
+        BillingDocumentType     : String;
+        BillingDocumentTypeName : String;
+    };
+
+    @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])
+    action createBillingDocument(DeliveryDocument : String, BillingDocumentType : String, BillingDocumentDate : Date) returns {
+        BillingDocument : String;
+        BillToParty     : String;
+        BillToPartyName : String;
+        Messages        : array of { MessageType : String; MessageId : String; Message : String; };
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getOrdersDueMetrics() returns {
         scheduleLineCount : Integer;
         shippingPointCount: Integer;

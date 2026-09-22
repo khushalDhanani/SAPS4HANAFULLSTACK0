@@ -228,6 +228,26 @@ Related question: **is OData V4 configured on this hub at all?** The V4 catalog 
 have been unable to enumerate any V4 service on DS4. If V4 is not active, that single fact explains
 both results.
 
+## Item 4 — Register `API_SALES_CONTRACT_SRV`
+
+**Transaction:** `/IWFND/MAINT_SERVICE` → Add Service → System Alias `LOCAL` →
+Technical Service Name `API_SALES_CONTRACT_SRV` → Get Services → Add Selected Services
+
+**Evidence (2026-09-22, GET only):** `GET /sap/opu/odata/sap/API_SALES_CONTRACT_SRV/$metadata` returns
+
+```
+HTTP 403
+/IWFND/MED/170 — "No service found for namespace '', name 'API_SALES_CONTRACT_SRV', version '0001'"
+```
+
+The service is absent from the service catalog (1,345 entries). A metadata scan of every live V2 service found no
+creatable sales-contract entity set anywhere (`SD_F1851_CONTR_WL_SRV`, `SD_F2026_CONTR_FS_SRV`,
+`SD_SALESCONTRACT_WORKFLOW`, `SD_MCC_CCO_MASS_UPDATE_SRV` are all read-only for contracts); the V4 groups
+`API_SALESCONTRACT` and `UI_SALESCONTRACTMANAGE` answer 404 `/IWBEP/CM_V4_COS/014` "not published".
+Full evidence: `docs/sales-contract-service-findings.md`, `docs/contract-metadata/REPORT.txt`.
+
+Client 220 has 52 sales contracts today, all of type `ZGCQ` (the only unlocked contract type), created in `VA41`.
+
 ---
 
 ## Business impact

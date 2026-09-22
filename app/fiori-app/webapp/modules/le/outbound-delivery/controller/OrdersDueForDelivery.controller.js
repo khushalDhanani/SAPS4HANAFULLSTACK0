@@ -42,6 +42,20 @@ sap.ui.define([
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
 
+            // Follow-up on an existing delivery: PGI and billing. Types come from SAP per delivery.
+            this.getView().setModel(new JSONModel({
+                delivery: "",
+                billingTypes: [],
+                billingType: "",
+                billingDate: "",
+                busy: false,
+                lastResult: "",
+                status: null,
+                statusText: "",
+                canPgi: false,
+                canBill: false
+            }), "deliveryFollowUp");
+
             var oRouter = this.getOwnerComponent().getRouter();
             if (oRouter && oRouter.getRoute("ordersDueForDelivery")) {
                 oRouter.getRoute("ordersDueForDelivery").attachPatternMatched(this._onRouteMatched, this);
@@ -234,6 +248,8 @@ sap.ui.define([
                     if (sDeliveryNo && String(sDeliveryNo).trim() !== "" && sDeliveryNo !== "Delivery created") {
                         var sSuccessTemplate = that._text("msgDeliveryCreatedSuccess", "Delivery {0} created");
                         var sSuccessMessage = sSuccessTemplate.replace("{0}", sDeliveryNo);
+                        var oFollowUp = that.getView().getModel("deliveryFollowUp");
+                        if (oFollowUp) { oFollowUp.setProperty("/delivery", String(sDeliveryNo)); oFollowUp.setProperty("/billingTypes", []); oFollowUp.setProperty("/billingType", ""); that.onLoadDeliveryStatus(); }
                         MessageBox.success(sSuccessMessage, {
                             onClose: function () {
                                 that.onRefresh();
@@ -260,6 +276,111 @@ sap.ui.define([
                 .finally(function () {
                     that._setDialogBusy(false);
                 });
+        },
+
+        // SAP status domain (STATV): A = not yet processed, B = partially processed, C = completely processed, blank = not relevant
+        _statusLabel: function (sCode) {
+            var m = { A: "not started", B: "partial", C: "complete", "": "not relevant" };
+            return (sCode || "") + " (" + (m[sCode || ""] || sCode) + ")";
+        },
+
+        onLoadDeliveryStatus: function () {
+            var that = this;
+            var oFU = this.getView().getModel("deliveryFollowUp");
+            // Read the live control value: on Enter the submit event can arrive before the two-way binding has written the model.
+            var oInput = this.byId && this.byId("inpFollowUpDelivery");
+            if (oInput && typeof oInput.getValue === "function") {
+                oFU.setProperty("/delivery", String(oInput.getValue() || "").trim());
+            }
+            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
+            oFU.setProperty("/status", null); oFU.setProperty("/statusText", ""); oFU.setProperty("/canPgi", false); oFU.setProperty("/canBill", false);
+            oFU.setProperty("/billingTypes", []); oFU.setProperty("/billingType", "");
+            if (!sDelivery) { return Promise.resolve(); }
+            oFU.setProperty("/busy", true);
+            return OutboundDeliveryService.getDeliveryStatus(sDelivery)
+                .then(function (o) {
+                    oFU.setProperty("/status", o);
+                    oFU.setProperty("/statusText", that._text("dlvFollowUpStatus", "Type {0} · Ship-to {1} · Picking {2} · Goods movement {3} · Billing {4}")
+                        .replace("{0}", o.DeliveryDocumentType).replace("{1}", o.SoldToParty).replace("{2}", that._statusLabel(o.OverallPickingStatus))
+                        .replace("{3}", that._statusLabel(o.OverallGoodsMovementStatus)).replace("{4}", that._statusLabel(o.OverallDelivReltdBillgStatus)));
+                    // Gate on SAP's own statuses: PGI needs picking complete and no goods movement yet; billing needs goods movement complete and billing not complete.
+                    oFU.setProperty("/canPgi", o.OverallPickingStatus === "C" && o.OverallGoodsMovementStatus !== "C");
+                    oFU.setProperty("/canBill", o.OverallGoodsMovementStatus === "C" && o.OverallDelivReltdBillgStatus !== "C");
+                })
+                .catch(function (err) {
+                    oFU.setProperty("/statusText", (err && (err.message || err.statusText)) || "Delivery status could not be read from SAP.");
+                })
+                .finally(function () { oFU.setProperty("/busy", false); });
+        },
+
+        onPostGoodsIssue: function () {
+            var that = this;
+            var oFU = this.getView().getModel("deliveryFollowUp");
+            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
+            if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
+            MessageBox.confirm(this._text("msgConfirmPgi", "Post goods issue in S/4HANA for delivery {0}? This cannot be undone here.").replace("{0}", sDelivery), {
+                onClose: function (sAction) {
+                    if (sAction !== MessageBox.Action.OK) { return; }
+                    oFU.setProperty("/busy", true);
+                    OutboundDeliveryService.postGoodsIssue(sDelivery)
+                        .then(function (oRes) {
+                            var sMsg = that._text("msgPgiPosted", "Goods issue posted in S/4HANA for delivery {0}.").replace("{0}", sDelivery);
+                            oFU.setProperty("/lastResult", sMsg);
+                            MessageBox.success(sMsg, { onClose: function () { that.onRefresh(); that.onLoadDeliveryStatus(); } });
+                            return oRes;
+                        })
+                        .catch(function (err) {
+                            // SAP's own message, verbatim
+                            MessageBox.error((err && (err.message || err.statusText)) || "Goods issue could not be posted.");
+                        })
+                        .finally(function () { oFU.setProperty("/busy", false); });
+                }
+            });
+        },
+
+        onLoadBillingTypes: function () {
+            var oFU = this.getView().getModel("deliveryFollowUp");
+            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
+            if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
+            oFU.setProperty("/busy", true);
+            return OutboundDeliveryService.getBillingDocumentTypes(sDelivery)
+                .then(function (aTypes) {
+                    oFU.setProperty("/billingTypes", aTypes);
+                    oFU.setProperty("/billingType", aTypes.length === 1 ? aTypes[0].BillingDocumentType : "");
+                    if (aTypes.length === 0) { MessageBox.warning("S/4HANA returned no billing document type for delivery " + sDelivery + "."); }
+                })
+                .catch(function (err) {
+                    oFU.setProperty("/billingTypes", []);
+                    MessageBox.error((err && (err.message || err.statusText)) || "Billing document types could not be read.");
+                })
+                .finally(function () { oFU.setProperty("/busy", false); });
+        },
+
+        onCreateBillingDocument: function () {
+            var that = this;
+            var oFU = this.getView().getModel("deliveryFollowUp");
+            var sDelivery = (oFU.getProperty("/delivery") || "").trim();
+            var sType = oFU.getProperty("/billingType") || "";
+            if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
+            MessageBox.confirm(this._text("msgConfirmBilling", "Create billing document (type {1}) in S/4HANA for delivery {0}?").replace("{0}", sDelivery).replace("{1}", sType || this._text("dlvFollowUpTypeBySap", "determined by SAP copy control")), {
+                onClose: function (sAction) {
+                    if (sAction !== MessageBox.Action.OK) { return; }
+                    oFU.setProperty("/busy", true);
+                    OutboundDeliveryService.createBillingDocument({ delivery: sDelivery, billingType: sType, billingDate: oFU.getProperty("/billingDate") })
+                        .then(function (oRes) {
+                            var sNo = oRes && oRes.BillingDocument;
+                            var aMsgs = (oRes && oRes.Messages) || [];
+                            var sDetail = aMsgs.map(function (m) { return m.Message; }).filter(Boolean).join("\n");
+                            var sMsg = that._text("msgBillingCreated", "Billing document {0} created in S/4HANA for delivery {1}.").replace("{0}", sNo).replace("{1}", sDelivery);
+                            oFU.setProperty("/lastResult", sMsg);
+                            MessageBox.success(sMsg + (sDetail ? "\n\n" + sDetail : ""), { onClose: function () { that.onLoadDeliveryStatus(); } });
+                        })
+                        .catch(function (err) {
+                            MessageBox.error((err && (err.message || err.statusText)) || "Billing document could not be created.");
+                        })
+                        .finally(function () { oFU.setProperty("/busy", false); });
+                }
+            });
         },
 
         _setDialogBusy: function (bBusy) {

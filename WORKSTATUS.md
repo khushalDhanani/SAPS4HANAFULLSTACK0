@@ -1807,6 +1807,48 @@
 - **Commit state**: intentionally **not committed** (user request); all changes unstaged.
 - **Still open (needs a person, not code)**: `S4_DIFFERENCE_STORAGE_TYPE` value from the WM owner; `LOCAL_DEV_PASSWORD` in the local environment for mock logins; Basis ticket `docs/ticket-gateway-remediation-ds4.md`; ABAP ticket `docs/ticket-vtaa-copy-control-zin-zqt.md`.
 
+## 2026-09-22 14:30 IST
+- **Agent**: Claude (Cowork)
+- **Change**: evidence-only search for a service that creates **Sales Contracts** (user request). `tools/verify-quotation-services.py` made reusable via env `PATTERN` / `OUT` / `DIRECT` (defaults unchanged, quotation behaviour identical) and run with a sales-contract pattern; results in `docs/sales-contract-service-findings.md` (new), machine report `docs/contract-metadata/REPORT.txt` (new), raw metadata `docs/contract-metadata/*.xml` (gitignored, `.gitignore` updated). `docs/ticket-gateway-remediation-ds4.md` gained **Item 4 — Register `API_SALES_CONTRACT_SRV`**.
+  - **Executed (Mac, GET only, 14:15–14:25 IST)**: `$metadata` of 1,242 services (1,237 live V2 from `catalog-audit.csv` + 5 direct probes); `I_SalesDocumentType` (category G); `C_SalesContractWl_F1851` count; `C_SalesContractTypeValueHelp`.
+  - **Result**: no registered service exposes a creatable sales-contract entity set or a create function import (9 services name sales contracts, all `sap:creatable="false"`). `API_SALES_CONTRACT_SRV` → HTTP 403 `/IWFND/MED/170` (not registered); V4 `API_SALESCONTRACT` / `UI_SALESCONTRACTMANAGE` → 404 `/IWBEP/CM_V4_COS/014` (not published). `LORD_ODATA_ORDER_SRV` metadata does not mention contracts; untested. Client 220: 12 contract types, only `ZGCQ` unlocked; 52 contracts exist (latest 3000051–3000053, type ZGCQ).
+  - **Validation**: `python3 -c "import ast; ast.parse(...)"` on the script → OK; the quotation default path is unchanged (`PATTERN` unset ⇒ same regex, same direct probes). No SAP POST was made.
+  - **Next**: Basis registers `API_SALES_CONTRACT_SRV` (ticket item 4), then re-run the scan with `DIRECT='API_SALES_CONTRACT_SRV=/sap/opu/odata/sap/API_SALES_CONTRACT_SRV'` to verify `A_SalesContract` is creatable before any application work.
+
+## 2026-09-22 14:50 IST
+- **Agent**: Claude (Cowork)
+- **Change**: SD module — verified creatable services (user picked SD). `$metadata` of 8 SD services fetched live (GET only) and saved to `docs/sd-metadata/*.xml` (gitignored); function imports with parameters and creatable entity sets recorded in `docs/sd-creatable-services.md` (new). Result: PGI (`SD_SOFM_CREDIT_BLOCK_SRV.PostGoodsIssue`), billing (`SD_CUSTOMER_INVOICES_CREATE.CreateBillingDocuments`, `SD_SOFM_INVOICE_SRV.createInvoice/postToAccount`), credit release and delivery-without-reference are creatable per metadata and untested; quotation/contract remain blocked SAP-side.
+  - **Validation**: HTTP 200 on all 8 metadata calls; no POST made. Next recommended build: PGI + billing from a delivery.
+
+## 2026-09-22 14:55 IST
+- **Agent**: Claude (Cowork)
+- **Change**: **Post Goods Issue → Create Billing Document from a delivery** (SD, user request). Services and parameters taken from the live metadata saved in `docs/sd-metadata/` (22 Sep), not assumed.
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: `postGoodsIssue(delivery)` → POST `SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue?DeliveryNumber='…'`, success only when SAP's `PostGoodsReturnInfo.Done=true` and `ErrorAny!=true`, otherwise 422 naming the true `Error*` flags (SAP returns no material document number, so none is shown); `getBillingDocumentTypes(delivery)` → POST `SD_CUSTOMER_INVOICES_CREATE/GetBillingDocumentTypes?ReferenceSDDocument='…'`; `createBillingDocument({deliveryDocument, billingDocumentType, billingDocumentDate})` → POST `CreateBillingDocuments?ReferenceSDDocument=…&ReferenceSDDocumentCategory='J'&BillingDocumentType=…[&BillingDocumentDate=YYYYMMDD]`, billing number only from SAP's `FunctionImportResult`, SAP messages returned verbatim, 422 when no number. `'J'` = SAP document category of an outbound delivery (fixed domain value, commented).
+  - `srv/le/outbound-delivery/service.cds` + handler: action `postGoodsIssue`, function `getBillingDocumentTypes`, action `createBillingDocument` (roles: PGI = warehouse/sales manager/admin; billing = sales rep/manager/admin).
+  - UI (`OutboundDeliveryService.js`, `OrdersDueForDelivery.controller.js/.view.xml`, i18n ×2): "Delivery follow-up" panel — delivery number (pre-filled after Create Delivery), Post Goods Issue (confirm dialog), Load Billing Types (Select filled only from SAP), optional billing date, Create Billing Document (confirm). Success/error texts carry SAP's message verbatim.
+  - **Tests**: `outboundDeliveryAdapter.test.js` +6 (URL shape, Done/ErrorAny handling, type filtering, category J + date, no-number → error); `outboundDeliveryHandler.test.js` +2.
+- **Gate run (Mac, Node v22.23.1, 14:54–14:55 IST)**: `cds compile` OK · eslint 0 · jest 65 suites / 974 tests passed · ui5lint no findings · ui5 build succeeded (`Component-preload.js` regenerated) · `git diff --check` clean.
+- **Not done**: no live POST was made. First live PGI and billing run needs an explicit delivery number from the user (13000526 is a candidate if it is picked and unposted in VL03N) — the app now shows exactly what SAP answers.
+- **Commit state**: uncommitted (user request).
+
+## 2026-09-22 15:05 IST
+- **Agent**: Claude (Cowork)
+- **Change**: PGI → billing made proper ("Fix All Make a proper"). (1) New `getDeliveryStatus(DeliveryDocument)` (adapter + cds function + handler + UI service): reads the delivery header from `SD_SOF/I_DeliveryDocument` by `$filter` (verified live; the single-key read fails with `LCX_INVALID_SECTION_TYPE`) — type, ship-to, `OverallPickingStatus`, `OverallGoodsMovementStatus`, `OverallDelivReltdBillgStatus`, goods-movement date; 404 when SAP has no such delivery. (2) The follow-up panel loads it on entering a delivery number and on each success; buttons are gated on SAP's statuses only — PGI needs picking `C` and goods movement ≠ `C`; billing needs goods movement `C` and billing ≠ `C`. Status line shows the SAP codes with the STATV meaning (A not started / B partial / C complete). (3) `BillingDocumentType` is optional: live `GetBillingDocumentTypes` returned an empty list for goods-issued delivery 13000522 and for 13000526, so the type Select is optional and when empty `CreateBillingDocuments` is called without a type and S/4HANA determines it from copy control (as VF01 does).
+  - **Live checks (GET / non-modifying, 15:00 IST)**: `I_DeliveryDocument` — 13000526 (created by this app) is `ZLF`, picking A, goods movement A → PGI not possible yet (needs picking); PGI-ready deliveries in client 220: 13000515, 13000498, 13000487, 13000449, 13000017 (picking C, goods movement A); billable (goods movement C, billing A): 13000522. `LE_SHP_OUTBOUND_DELIVERY_FS` and `LE_SHP_DELIVERY_PICK` answer 500 `/IWFND/CM_COS/064` (no system alias — Basis ticket item 1). `GetBillingDocumentTypes` → HTTP 200, `results: []` for both deliveries.
+  - **Tests**: adapter +1 (status read / null), handler +1 (status / 404), adapter billing test covers the no-type URL; controller mock gained `getDeliveryStatus`.
+- **Gate run (Mac, Node v22.23.1, 15:04–15:05 IST)**: `cds compile` OK · eslint 0 · jest 65 suites / 976 tests passed · ui5lint no findings · ui5 build succeeded · `git diff --check` clean.
+- **Not done**: no PGI or billing POST has been made — both change stock/accounting in client 220 and are waiting for the user's go on a specific delivery (PGI: 13000515; billing: 13000522).
+- **Commit state**: uncommitted (user request).
+
+## 2026-09-22 15:18 IST
+- **Agent**: Claude (Cowork)
+- **Change**: end-to-end check of the new screen in the running app (`cds serve` on the Mac, built-in browser, dev login `alice` with a throw-away `LOCAL_DEV_PASSWORD` set only for that server process; server stopped afterwards). Backend verified live: `getDeliveryStatus` 13000515 → picking C / goods movement A; 13000526 → A / A; 99999999 → 404; `getOrdersDueMetrics` → 234 lines / 2 shipping points; `getBillingDocumentTypes` 13000522 → `[]`.
+  - **Bug found & fixed (all modules)**: opening the app on a deep link before login (e.g. `#/le/orders-due`, or a browser refresh after the session expired) left every list on that OData V4 service empty after login — the V4 model had fetched `$metadata` with HTTP 401 and caches that failure for its lifetime, so `changeHttpHeaders` after login cannot repair it (KPIs, which use plain fetch, still worked — the screen showed "234" and "No orders found" at once). `Login.controller.js` now reloads the page to `#dashboard` after a successful login instead of `navTo`, re-creating all models with the stored session. Test added (`loginController.test.js`); the existing navTo path stays as fallback without `window`.
+  - **Also fixed**: `onLoadDeliveryStatus` reads the live Input value before the two-way binding writes the model (Enter can fire `submit` first).
+  - **Verified in the browser after rebuild**: deep link → login → list shows 234 due lines; follow-up panel for 13000515 shows "Type ZLF · Ship-to 10358 · Picking C (complete) · Goods movement A (not started) · Billing A (not started)", Post Goods Issue enabled, billing disabled; for 13000522 goods movement C → Create Billing Document enabled, SAP returns no billing types (type left to SAP). No PGI/billing POST made.
+- **Gate run (15:17 IST)**: eslint 0 · jest 65 suites / 977 tests · ui5lint no findings · `cds compile` OK · `git diff --check` clean · UI5 build 15:15 (preload regenerated).
+- **Commit state**: uncommitted (user request).
+
 ## Current Status
 - **2026-09-22 13:59 IST (uncommitted)**: module-by-module pass closed the remaining audit residuals — Master Data (material-type scope config, customer defaults history-only, cache age shown), SD (no proposed dates/ship-to, totals only from real HeaderSet fields, no silent blank defaults), WM (GR no first-row proposals + lookup warnings, GI batch stock summed, no synthetic 9999/0), MM (failed supplier lookup flagged). Gates green (cds compile, eslint, jest 966/966, ui5lint, ui5 build, diff --check).
 - **2026-09-22 13:16 IST (uncommitted)**: remaining audit items closed — `999` default removed (config required), synthesized PlantName, dev-auth username-as-password and implicit Admin, S/4 HTTP timeout, UI silent catches, Orders Due KPIs server-side, doc banners. Gates green (cds compile, eslint, jest 965/965, ui5lint, ui5 build, diff --check).
@@ -1881,6 +1923,7 @@
   - Added module-level and runtime defensive normalization in `Component.js`.
 
 ## Next Steps
-1. Review the uncommitted 2026-09-22 13:30–13:57 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+1. Review the uncommitted 2026-09-22 13:30–14:55 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+2. Supervised live test: PGI on one picked, unposted delivery, then Load Billing Types + Create Billing Document on it; record SAP's numbers/messages here.
 2. Set `LOCAL_DEV_PASSWORD` in the local environment (mock logins) and, once the WM owner confirms the interim storage type, `S4_DIFFERENCE_STORAGE_TYPE` (needed only for Goods Issue differences).
 3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.

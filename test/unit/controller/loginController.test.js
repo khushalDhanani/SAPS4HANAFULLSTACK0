@@ -233,6 +233,22 @@ describe("Login.controller Unit Tests", () => {
         expect(mockRouter.navTo).toHaveBeenCalledWith("dashboard", {}, true);
     });
 
+    test("onLogin reloads the page after login so OData V4 models drop a cached 401 $metadata (deep link before login)", async () => {
+        mockUserInput.getValue.mockReturnValue("alice");
+        mockPassInput.getValue.mockReturnValue("alice");
+        mockAuthService.login.mockResolvedValue({ username: "alice" });
+        global.window = { location: { hash: "le/orders-due", reload: jest.fn() } };
+        try {
+            controller.onLogin();
+            await new Promise(process.nextTick);
+            expect(global.window.location.reload).toHaveBeenCalled();
+            expect(global.window.location.hash).toBe("dashboard");
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
+        } finally {
+            delete global.window;
+        }
+    });
+
     test("onLogin should handle authentication failure cleanly", async () => {
         mockUserInput.getValue.mockReturnValue("alice");
         mockPassInput.getValue.mockReturnValue("wrongpass");

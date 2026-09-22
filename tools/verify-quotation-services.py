@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Evidence-only search: which service can CREATE a Sales Quotation? GET requests only.
+"""Evidence-only search: which service can CREATE a Sales Quotation (default) or any other SD object? GET requests only.
+Override with env: PATTERN (regex matched against metadata text/names), OUT (output dir), DIRECT (comma-separated name=path probes).
+  e.g. PATTERN='sales.?contract|slscontr' OUT=docs/contract-metadata DIRECT='API_SALES_CONTRACT_SRV=/sap/opu/odata/sap/API_SALES_CONTRACT_SRV' python3 tools/verify-quotation-services.py
 Fetches $metadata of every live V2 service + every V4 service in the V4 catalog, keeps any whose
 metadata names a quotation entity/action, saves that metadata to docs/quotation-metadata/ and
 writes docs/quotation-metadata/REPORT.txt. Nothing is inferred from service names."""
 import base64, csv, json, os, re, urllib.request, urllib.error, xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, 'docs', 'quotation-metadata'); os.makedirs(OUT, exist_ok=True)
+OUT = os.path.join(ROOT, os.environ.get('OUT', 'docs/quotation-metadata')); os.makedirs(OUT, exist_ok=True)
 SAP = '{http://www.sap.com/Protocols/SAPData}'; M = '{http://schemas.microsoft.com/ado/2007/08/dataservices/metadata}'
-Q = re.compile(r'quot|qtan|slsqtn', re.I)
+Q = re.compile(os.environ.get('PATTERN', r'quot|qtan|slsqtn'), re.I)
 env = {}
 for fn in ('.env.local', '.env'):
     p = os.path.join(ROOT, fn)
@@ -65,7 +67,12 @@ def probe(item):
     except Exception as e: return name, path, st, ['unparseable: %s' % e], b''
 
 items = [(r['service'], r['path']) for r in csv.DictReader(open(os.path.join(ROOT, 'catalog-audit.csv'))) if r['status'] == '200']
-items.append(('API_SALES_QUOTATION_SRV(direct)', '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV'))
+DIRECT = os.environ.get('DIRECT')
+if DIRECT:
+    for d in DIRECT.split(','):
+        n, _, u = d.partition('='); items.append((n.strip() + '(direct)', u.strip()))
+else:
+    items.append(('API_SALES_QUOTATION_SRV(direct)', '/sap/opu/odata/sap/API_SALES_QUOTATION_SRV'))
 v4note = ''
 for cat in ('config/default/iwfnd/catalog/0002', 'config/default/iwfnd/catalog/0001', 'catalog/default/iwfnd/catalog/0002'):
     st, body = get('/sap/opu/odata4/iwfnd/%s/ServiceGroups?$expand=DefaultSystem($expand=Services)&$top=5000' % cat, 'application/json', 90)
@@ -77,16 +84,17 @@ for cat in ('config/default/iwfnd/catalog/0002', 'config/default/iwfnd/catalog/0
                 if u: items.append(('V4:' + s.get('ServiceId', ''), u))
         v4note = 'V4 catalog %s: HTTP 200, %d V4 services listed' % (cat, len(items) - n0); break
     v4note += 'V4 catalog %s: HTTP %s  ' % (cat, st)
-items.append(('V4:ui_salesquotationmanage(direct)', '/sap/opu/odata4/sap/ui_salesquotationmanage/srvd/sap/ui_salesquotationmanage/0001'))
-items.append(('V4:api_salesquotation(direct)', '/sap/opu/odata4/sap/api_salesquotation/srvd_a2x/sap/salesquotation/0001'))
+if not DIRECT:
+    items.append(('V4:ui_salesquotationmanage(direct)', '/sap/opu/odata4/sap/ui_salesquotationmanage/srvd/sap/ui_salesquotationmanage/0001'))
+    items.append(('V4:api_salesquotation(direct)', '/sap/opu/odata4/sap/api_salesquotation/srvd_a2x/sap/salesquotation/0001'))
 items = list(dict.fromkeys(items))
 with ThreadPoolExecutor(int(os.environ.get('PAR', '5'))) as ex: res = list(ex.map(probe, items))
 hits = [r for r in res if r[3]]; fails = [r for r in res if r[2] != 200]
 with open(os.path.join(OUT, 'REPORT.txt'), 'w') as f:
-    f.write('%s\nmetadata fetched: %d  | HTTP!=200: %d | metadata naming a quotation object: %d\n\n' % (v4note, len(res), len(fails), len(hits)))
+    f.write('pattern: %s\n%s\nmetadata fetched: %d  | HTTP!=200: %d | metadata naming a matching object: %d\n\n' % (Q.pattern, v4note, len(res), len(fails), len(hits)))
     for n, p, st, facts, _ in sorted(hits):
         f.write('== %s\n   %s\n' % (n, p)); [f.write('   - %s\n' % x) for x in facts]; f.write('\n')
-    f.write('\n== NON-200 for quotation-named or direct-probed services\n')
+    f.write('\n== NON-200 for pattern-named or direct-probed services\n')
     for n, p, st, _, b in fails:
-        if Q.search(n + p): f.write('   HTTP %s %s %s\n      %s\n' % (st, n, p, b.decode('utf-8', 'replace').replace('\n', ' ')[:250]))
+        if Q.search(n + p) or '(direct)' in n: f.write('   HTTP %s %s %s\n      %s\n' % (st, n, p, b.decode('utf-8', 'replace').replace('\n', ' ')[:250]))
 print(open(os.path.join(OUT, 'REPORT.txt')).read()[:300]); print('DONE')

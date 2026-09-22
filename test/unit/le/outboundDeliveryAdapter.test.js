@@ -450,4 +450,60 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(result.OutboundDelivery).toBe('13000528');
     });
   });
+
+  describe('postGoodsIssue (SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue)', () => {
+    test('rejects without a delivery number', async () => {
+      await expect(adapter.postGoodsIssue('')).rejects.toThrow('DeliveryDocument is required');
+    });
+
+    test('posts the function import with the delivery in the URL and reports SAP Done flag', async () => {
+      mockClient.post.mockResolvedValue({ data: { d: { PostGoodsIssue: { Done: true, ErrorAny: false, ErrorInGoodsIssue: false } } } });
+      const res = await adapter.postGoodsIssue('13000526');
+      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue?DeliveryNumber='13000526'");
+      expect(res).toEqual({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
+    });
+
+    test('throws (never reports success) when SAP says Done=false and names the error flags', async () => {
+      mockClient.post.mockResolvedValue({ data: { d: { Done: false, ErrorAny: true, ErrorInGoodsIssue: true, ErrorInFinalCheck: false } } });
+      await expect(adapter.postGoodsIssue('13000526')).rejects.toThrow(/did not post goods issue.*ErrorInGoodsIssue/);
+    });
+  });
+
+  describe('getBillingDocumentTypes / createBillingDocument (SD_CUSTOMER_INVOICES_CREATE)', () => {
+    test('returns the types SAP lists for the delivery', async () => {
+      mockClient.post.mockResolvedValue({ data: { d: { results: [{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }, { BillingDocumentType: '', BillingDocumentTypeName: 'x' }] } } });
+      const rows = await adapter.getBillingDocumentTypes('13000526');
+      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE/GetBillingDocumentTypes?ReferenceSDDocument='13000526'");
+      expect(rows).toEqual([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
+    });
+
+    test('passes category J, the optional type and the optional date; without a type SAP determines it', async () => {
+      mockClient.post.mockResolvedValueOnce({ data: { d: { results: [{ BillingDocument: '90000122' }] } } });
+      await adapter.createBillingDocument({ deliveryDocument: '13000522' });
+      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments?ReferenceSDDocument='13000522'&ReferenceSDDocumentCategory='J'");
+      mockClient.post.mockClear();
+      mockClient.post.mockResolvedValue({ data: { d: { results: [{ BillingDocument: '90000123', MessageType: 'S', Message: 'Document 90000123 saved', BillToParty: '20021', BillToPartyName: 'ABC' }] } } });
+      const res = await adapter.createBillingDocument({ deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: '2026-09-22' });
+      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments?ReferenceSDDocument='13000526'&ReferenceSDDocumentCategory='J'&BillingDocumentType='F2'&BillingDocumentDate='20260922'");
+      expect(res.BillingDocument).toBe('90000123');
+      expect(res.BillToParty).toBe('20021');
+      expect(res.Messages).toEqual([{ MessageType: 'S', MessageId: '', Message: 'Document 90000123 saved' }]);
+    });
+
+    test('throws with SAP messages when no billing document number comes back', async () => {
+      mockClient.post.mockResolvedValue({ data: { d: { results: [{ BillingDocument: '', MessageType: 'E', Message: 'Delivery has no goods issue' }] } } });
+      await expect(adapter.createBillingDocument({ deliveryDocument: '13000526', billingDocumentType: 'F2' })).rejects.toThrow(/no billing document.*Delivery has no goods issue/);
+    });
+  });
+
+  describe('getDeliveryStatus (SD_SOF/I_DeliveryDocument)', () => {
+    test('reads the header statuses by $filter and returns null when SAP has no row', async () => {
+      mockClient.get.mockResolvedValueOnce({ data: { d: { results: [{ DeliveryDocument: '13000515', DeliveryDocumentType: 'ZLF', OverallPickingStatus: 'C', OverallGoodsMovementStatus: 'A', OverallDelivReltdBillgStatus: 'A', ActualGoodsMovementDate: null }] } } });
+      const s = await adapter.getDeliveryStatus('13000515');
+      expect(mockClient.get.mock.calls[0][0]).toContain("/sap/opu/odata/sap/SD_SOF/I_DeliveryDocument?$filter=DeliveryDocument%20eq%20'13000515'");
+      expect(s).toMatchObject({ DeliveryDocument: '13000515', OverallPickingStatus: 'C', OverallGoodsMovementStatus: 'A', ActualGoodsMovementDate: null });
+      mockClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+      expect(await adapter.getDeliveryStatus('99')).toBeNull();
+    });
+  });
 });

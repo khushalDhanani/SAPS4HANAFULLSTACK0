@@ -154,6 +154,15 @@ sap.ui.define([
                     }
                     MessageToast.show(oResourceBundle.getText("loginSuccessMsg", [oUser.username]));
 
+                    // Full reload instead of navTo: an OData V4 model that already requested $metadata while
+                    // unauthenticated (deep link before login) caches the 401 for its lifetime, so every list on
+                    // that service stays empty after login even though the auth header is now set. A reload
+                    // re-creates all models with the stored session.
+                    if (typeof window !== "undefined" && window.location && typeof window.location.reload === "function") {
+                        window.location.hash = "dashboard";
+                        window.location.reload();
+                        return;
+                    }
                     var oRouter = that.getOwnerComponent().getRouter();
                     oRouter.navTo("dashboard", {}, true);
                 })

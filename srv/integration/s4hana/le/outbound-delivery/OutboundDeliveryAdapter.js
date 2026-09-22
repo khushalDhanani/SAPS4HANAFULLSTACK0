@@ -5,6 +5,13 @@ const { odataString, extractFilterParam } = require('../../../../common/filterUt
 const { mapS4Error } = require('../../S4ErrorMapper');
 
 const SERVICE_PATH = '/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV';
+// Verified in docs/sd-metadata (22 Sep 2026): function imports, HttpMethod POST, parameters in the URL.
+const PGI_SERVICE_PATH = '/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV';
+const BILLING_SERVICE_PATH = '/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE';
+// Delivery header statuses: SD_SOF/I_DeliveryDocument (verified live 22 Sep 2026; single-key read fails with LCX_INVALID_SECTION_TYPE, $filter works)
+const DELIVERY_READ_PATH = '/sap/opu/odata/sap/SD_SOF';
+// SAP SD document category of an outbound delivery (VBTYP 'J'); a fixed SAP domain value, not data of this delivery.
+const SD_DOC_CATEGORY_DELIVERY = 'J';
 
 /**
  * Formats a Date instance or ISO string to OData v2 Edm.DateTime JSON representation (/Date(ms)/).
@@ -340,6 +347,148 @@ class OutboundDeliveryAdapter {
         : ((approvalStatusMap && typeof approvalStatusMap.get === 'function' ? approvalStatusMap.get(r.SalesOrder) : '') || '')
     }));
   }
+
+  /**
+   * Reads the delivery header statuses from S/4HANA (picking, goods movement, billing). Returns null when SAP has no such delivery.
+   */
+  async getDeliveryStatus(deliveryDocument, options = {}) {
+    const dlv = String(deliveryDocument || '').trim();
+    if (!dlv) {
+      const err = new Error('DeliveryDocument is required.');
+      err.status = 400;
+      throw err;
+    }
+    const select = 'DeliveryDocument,DeliveryDocumentType,ShippingPoint,SoldToParty,SalesOrganization,OverallPickingStatus,OverallGoodsMovementStatus,OverallDelivReltdBillgStatus,OverallSDProcessStatus,ActualGoodsMovementDate';
+    const url = `${DELIVERY_READ_PATH}/I_DeliveryDocument?$filter=${encodeURIComponent(`DeliveryDocument eq ${odataString(dlv)}`)}&$select=${select}&$top=1&$format=json`;
+    let res;
+    try {
+      res = await this.client.get(url, options);
+    } catch (err) {
+      throw mapS4Error(err, 'getDeliveryStatus');
+    }
+    const rows = res.data?.d?.results || res.data?.value || [];
+    const r = Array.isArray(rows) && rows.length ? rows[0] : null;
+    if (!r) return null;
+    return {
+      DeliveryDocument: r.DeliveryDocument || dlv,
+      DeliveryDocumentType: r.DeliveryDocumentType || '',
+      ShippingPoint: r.ShippingPoint || '',
+      SoldToParty: r.SoldToParty || '',
+      SalesOrganization: r.SalesOrganization || '',
+      OverallPickingStatus: r.OverallPickingStatus || '',
+      OverallGoodsMovementStatus: r.OverallGoodsMovementStatus || '',
+      OverallDelivReltdBillgStatus: r.OverallDelivReltdBillgStatus || '',
+      OverallSDProcessStatus: r.OverallSDProcessStatus || '',
+      ActualGoodsMovementDate: _parseODataV2Date(r.ActualGoodsMovementDate)
+    };
+  }
+
+  /**
+   * Posts goods issue for an outbound delivery via SD_SOFM_CREDIT_BLOCK_SRV/PostGoodsIssue.
+   * SAP answers with PostGoodsReturnInfo flags only (no material document number) — that is what is reported.
+   */
+  async postGoodsIssue(deliveryDocument, options = {}) {
+    const dlv = String(deliveryDocument || '').trim();
+    if (!dlv) {
+      const err = new Error('DeliveryDocument is required to post goods issue.');
+      err.status = 400;
+      throw err;
+    }
+    const url = `${PGI_SERVICE_PATH}/PostGoodsIssue?DeliveryNumber=${odataString(dlv)}`;
+    LOG.info(`Posting goods issue: POST ${url}`);
+    let res;
+    try {
+      res = await this.client.post(url, { data: {}, ...options });
+    } catch (err) {
+      throw mapS4Error(err, 'postGoodsIssue');
+    }
+    const d = (res.data && (res.data.d || res.data)) || {};
+    const info = d.PostGoodsIssue || d;
+    const errorFlags = Object.keys(info).filter(k => k.startsWith('Error') && k !== 'ErrorAny' && info[k] === true);
+    const done = info.Done === true && info.ErrorAny !== true;
+    if (!done) {
+      const err = new Error(`S/4HANA did not post goods issue for delivery ${dlv}${errorFlags.length ? ` (${errorFlags.join(', ')})` : ''}.`);
+      err.status = 422;
+      err.details = info;
+      throw err;
+    }
+    return { DeliveryDocument: dlv, Done: true, ErrorFlags: errorFlags };
+  }
+
+  /**
+   * Billing document types S/4HANA allows for this delivery (SD_CUSTOMER_INVOICES_CREATE/GetBillingDocumentTypes).
+   */
+  async getBillingDocumentTypes(deliveryDocument, options = {}) {
+    const dlv = String(deliveryDocument || '').trim();
+    if (!dlv) {
+      const err = new Error('DeliveryDocument is required.');
+      err.status = 400;
+      throw err;
+    }
+    const url = `${BILLING_SERVICE_PATH}/GetBillingDocumentTypes?ReferenceSDDocument=${odataString(dlv)}`;
+    let res;
+    try {
+      res = await this.client.post(url, { data: {}, ...options });
+    } catch (err) {
+      throw mapS4Error(err, 'getBillingDocumentTypes');
+    }
+    const rows = res.data?.d?.results || res.data?.d || res.data?.value || [];
+    return (Array.isArray(rows) ? rows : []).map(r => ({
+      BillingDocumentType: r.BillingDocumentType || '',
+      BillingDocumentTypeName: r.BillingDocumentTypeName || ''
+    })).filter(r => r.BillingDocumentType);
+  }
+
+  /**
+   * Creates a billing document for an outbound delivery via SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments.
+   * The billing document number comes only from SAP's FunctionImportResult; SAP's messages are returned verbatim.
+   */
+  async createBillingDocument({ deliveryDocument, billingDocumentType, billingDocumentDate }, options = {}) {
+    const dlv = String(deliveryDocument || '').trim();
+    const type = String(billingDocumentType || '').trim();
+    if (!dlv) {
+      const err = new Error('DeliveryDocument is required to create a billing document.');
+      err.status = 400;
+      throw err;
+    }
+    // BillingDocumentType is optional: when omitted S/4HANA determines it from copy control (VTFL), which is what VF01 does.
+    const params = [
+      `ReferenceSDDocument=${odataString(dlv)}`,
+      `ReferenceSDDocumentCategory=${odataString(SD_DOC_CATEGORY_DELIVERY)}`
+    ];
+    if (type) params.push(`BillingDocumentType=${odataString(type)}`);
+    if (billingDocumentDate) {
+      const ymd = String(billingDocumentDate).slice(0, 10).replace(/-/g, '');
+      if (/^\d{8}$/.test(ymd)) params.push(`BillingDocumentDate=${odataString(ymd)}`);
+    }
+    const url = `${BILLING_SERVICE_PATH}/CreateBillingDocuments?${params.join('&')}`;
+    LOG.info(`Creating billing document: POST ${url}`);
+    let res;
+    try {
+      res = await this.client.post(url, { data: {}, ...options });
+    } catch (err) {
+      throw mapS4Error(err, 'createBillingDocument');
+    }
+    const rows = res.data?.d?.results || res.data?.d || res.data?.value || [];
+    const results = Array.isArray(rows) ? rows : [rows];
+    const messages = results
+      .filter(r => r && (r.Message || r.MessageType))
+      .map(r => ({ MessageType: r.MessageType || '', MessageId: r.MessageId || '', Message: r.Message || '' }));
+    const created = results.find(r => r && r.BillingDocument && String(r.BillingDocument).trim() !== '');
+    if (!created) {
+      const err = new Error(`S/4HANA returned no billing document for delivery ${dlv}: ${messages.map(m => m.Message).filter(Boolean).join(' | ') || 'no message'}`);
+      err.status = 422;
+      err.details = messages;
+      throw err;
+    }
+    return {
+      BillingDocument: String(created.BillingDocument).trim(),
+      BillToParty: created.BillToParty || '',
+      BillToPartyName: created.BillToPartyName || '',
+      Messages: messages
+    };
+  }
+
 }
 
 module.exports = new OutboundDeliveryAdapter();

@@ -83,6 +83,7 @@ const MockOutboundDeliveryService = {
         ShippingPoints: ["1120", "1112", "1108", "1109"]
     }),
     createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
+    getDeliveryStatus: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526", DeliveryDocumentType: "ZLF", SoldToParty: "10082", OverallPickingStatus: "A", OverallGoodsMovementStatus: "A", OverallDelivReltdBillgStatus: "A" }),
     getOrdersDueMetrics: jest.fn().mockResolvedValue({ scheduleLineCount: 0, shippingPointCount: 0 })
 };
 

@@ -58,6 +58,31 @@
                     </GenericTile>
                 </HBox>
 
+                <!-- Follow-up on an existing delivery: PGI, then billing. Everything shown comes from S/4HANA. -->
+                <Panel id="deliveryFollowUpPanel" headerText="{i18n>dlvFollowUpTitle}" expandable="true" expanded="{= !!${deliveryFollowUp>/delivery} }" class="sapUiSmallMarginBottom" busy="{deliveryFollowUp>/busy}">
+                    <HBox wrap="Wrap" alignItems="End" class="sapUiTinyMargin">
+                        <VBox class="sapUiTinyMarginEnd">
+                            <Label text="{i18n>dlvFollowUpDelivery}" labelFor="inpFollowUpDelivery" />
+                            <Input id="inpFollowUpDelivery" value="{deliveryFollowUp>/delivery}" width="11rem" placeholder="{i18n>dlvFollowUpDeliveryPlaceholder}" change=".onLoadDeliveryStatus" submit=".onLoadDeliveryStatus" />
+                        </VBox>
+                        <Button id="btnPostGoodsIssue" text="{i18n>btnPostGoodsIssue}" icon="sap-icon://outbox" type="Emphasized" press=".onPostGoodsIssue" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canPgi}" />
+                        <Button id="btnLoadBillingTypes" text="{i18n>btnLoadBillingTypes}" icon="sap-icon://refresh" press=".onLoadBillingTypes" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canBill}" />
+                        <VBox class="sapUiTinyMarginEnd">
+                            <Label text="{i18n>dlvFollowUpBillingType}" labelFor="selBillingType" />
+                            <Select id="selBillingType" selectedKey="{deliveryFollowUp>/billingType}" forceSelection="false" width="16rem" items="{deliveryFollowUp>/billingTypes}" enabled="{= ${deliveryFollowUp>/billingTypes}.length > 0 }">
+                                <core:Item key="{deliveryFollowUp>BillingDocumentType}" text="{deliveryFollowUp>BillingDocumentType} - {deliveryFollowUp>BillingDocumentTypeName}" />
+                            </Select>
+                        </VBox>
+                        <VBox class="sapUiTinyMarginEnd">
+                            <Label text="{i18n>dlvFollowUpBillingDate}" labelFor="dpBillingDate" />
+                            <DatePicker id="dpBillingDate" value="{deliveryFollowUp>/billingDate}" valueFormat="yyyy-MM-dd" displayFormat="yyyy-MM-dd" width="10rem" placeholder="{i18n>dlvFollowUpBillingDatePlaceholder}" />
+                        </VBox>
+                        <Button id="btnCreateBillingDocument" text="{i18n>btnCreateBillingDocument}" icon="sap-icon://sales-document" type="Emphasized" press=".onCreateBillingDocument" enabled="{deliveryFollowUp>/canBill}" />
+                    </HBox>
+                    <Text text="{deliveryFollowUp>/statusText}" class="sapUiTinyMargin" visible="{= !!${deliveryFollowUp>/statusText} }" />
+                    <Text text="{deliveryFollowUp>/lastResult}" class="sapUiTinyMargin" visible="{= !!${deliveryFollowUp>/lastResult} }" />
+                </Panel>
+
                 <!-- Orders Due Table -->
                 <Table
                     id="ordersDueTable"

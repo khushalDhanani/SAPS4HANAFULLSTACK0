@@ -66,7 +66,47 @@ function registerOutboundDeliveryHandlers(srv) {
     };
   });
 
-  // 5. Function getOrdersDueMetrics: counts over the full due set (same SAP read as the worklist, unpaged)
+  // 5. PGI / billing on an existing delivery — SAP's result only, never a synthesized number
+  srv.on('getDeliveryStatus', async (req) => {
+    try {
+      const status = await outboundDeliveryAdapter.getDeliveryStatus(req.data?.DeliveryDocument);
+      if (!status) return req.error(404, `Delivery ${req.data?.DeliveryDocument} was not found in S/4HANA.`);
+      return status;
+    } catch (err) {
+      LOG.error(`getDeliveryStatus failed: ${err.message}`);
+      return req.error(err.status || 502, err.message);
+    }
+  });
+
+  srv.on('postGoodsIssue', async (req) => {
+    try {
+      return await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument);
+    } catch (err) {
+      LOG.error(`postGoodsIssue failed: ${err.message}`);
+      return req.error(err.status || 502, err.message);
+    }
+  });
+
+  srv.on('getBillingDocumentTypes', async (req) => {
+    try {
+      return await outboundDeliveryAdapter.getBillingDocumentTypes(req.data?.DeliveryDocument);
+    } catch (err) {
+      LOG.error(`getBillingDocumentTypes failed: ${err.message}`);
+      return req.error(err.status || 502, err.message);
+    }
+  });
+
+  srv.on('createBillingDocument', async (req) => {
+    const { DeliveryDocument, BillingDocumentType, BillingDocumentDate } = req.data || {};
+    try {
+      return await outboundDeliveryAdapter.createBillingDocument({ deliveryDocument: DeliveryDocument, billingDocumentType: BillingDocumentType, billingDocumentDate: BillingDocumentDate });
+    } catch (err) {
+      LOG.error(`createBillingDocument failed: ${err.message}`);
+      return req.error(err.status || 502, err.message);
+    }
+  });
+
+  // 6. Function getOrdersDueMetrics: counts over the full due set (same SAP read as the worklist, unpaged)
   srv.on('getOrdersDueMetrics', async (req) => {
     try {
       const rows = await outboundDeliveryAdapter.getOrdersDueForDelivery({});

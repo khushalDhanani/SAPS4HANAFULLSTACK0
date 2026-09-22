@@ -180,6 +180,41 @@ sap.ui.define([
                 var sDeliveryNo = (result && result.value !== undefined) ? result.value : result;
                 return String(sDeliveryNo || "");
             });
+        },
+
+        /** Delivery header statuses from SAP (picking / goods movement / billing). Rejects when SAP has no such delivery. */
+        getDeliveryStatus: function (sDelivery) {
+            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            return ODataClient.get(SERVICE_BASE + "/getDeliveryStatus(DeliveryDocument='" + encodeURIComponent(String(sDelivery).trim()) + "')").then(function (result) {
+                var o = (result && result.value !== undefined && typeof result.value === "object") ? result.value : result;
+                if (!o || !o.DeliveryDocument) { throw new Error("getDeliveryStatus returned no data"); }
+                return o;
+            });
+        },
+
+        /** Post goods issue for a delivery. Resolves with SAP's PostGoodsReturnInfo-based result; rejects with SAP's message. */
+        postGoodsIssue: function (sDelivery) {
+            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", { DeliveryDocument: String(sDelivery).trim() });
+        },
+
+        /** Billing document types SAP allows for this delivery (never a hardcoded list). */
+        getBillingDocumentTypes: function (sDelivery) {
+            if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            return ODataClient.get(SERVICE_BASE + "/getBillingDocumentTypes(DeliveryDocument='" + encodeURIComponent(String(sDelivery).trim()) + "')").then(function (result) {
+                var aRows = (result && Array.isArray(result.value)) ? result.value : (Array.isArray(result) ? result : []);
+                return aRows;
+            });
+        },
+
+        /** Create a billing document for a delivery; the number comes only from SAP. */
+        createBillingDocument: function (mParams) {
+            if (!mParams || !mParams.delivery) { return Promise.reject(new Error("Delivery number is required.")); }
+            return ODataClient.post(SERVICE_BASE + "/createBillingDocument", {
+                DeliveryDocument: String(mParams.delivery).trim(),
+                BillingDocumentType: mParams.billingType ? String(mParams.billingType).trim() : null,
+                BillingDocumentDate: mParams.billingDate ? String(mParams.billingDate).trim() : null
+            });
         }
     };
 });
