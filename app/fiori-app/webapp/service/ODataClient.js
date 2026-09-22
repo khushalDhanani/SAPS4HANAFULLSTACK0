@@ -17,6 +17,24 @@ sap.ui.define(["sap/base/Log"], function (Log) {
          * @param {boolean} [bForceRefresh=false]
          * @returns {Promise<string|null>}
          */
+        /** Authorization header from the stored login session ({} when none / unreadable). */
+        authHeaders: function () {
+            try {
+                var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
+                if (sSession) {
+                    var oParsed = JSON.parse(sSession);
+                    var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;
+                    if (sAuthToken) { return { "Authorization": "Bearer " + sAuthToken }; }
+                }
+            } catch (e) {
+                // Corrupt or unreadable session: the request goes out unauthenticated and will 401.
+                if (Log && typeof Log.warning === "function") {
+                    Log.warning("ODataClient: stored auth session unreadable (" + (e && e.message) + ")");
+                }
+            }
+            return {};
+        },
+
         fetchCsrfToken: function (bForceRefresh) {
             if (sCsrfToken && !bForceRefresh) {
                 return Promise.resolve(sCsrfToken);
@@ -133,21 +151,7 @@ sap.ui.define(["sap/base/Log"], function (Log) {
                     }
 
                     if (!mHeaders["Authorization"]) {
-                        try {
-                            var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
-                            if (sSession) {
-                                var oParsed = JSON.parse(sSession);
-                                var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;
-                                if (sAuthToken) {
-                                    mHeaders["Authorization"] = "Bearer " + sAuthToken;
-                                }
-                            }
-                        } catch (e) {
-                            // Corrupt or unreadable session: the request goes out unauthenticated and will 401.
-                            if (Log && typeof Log.warning === "function") {
-                                Log.warning("ODataClient: stored auth session unreadable (" + (e && e.message) + ")");
-                            }
-                        }
+                        Object.assign(mHeaders, that.authHeaders());
                     }
 
                     var bodyData = options.body;

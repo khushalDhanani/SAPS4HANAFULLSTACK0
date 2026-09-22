@@ -68,7 +68,7 @@ async function chatSap(messages, options) {
         name: model,
         params: {
           temperature: options.temperature ?? num('AI_TEMPERATURE', 0.2),
-          max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 1024)
+          max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 4096)
         }
       }
     }
@@ -120,7 +120,7 @@ async function chatNvidia(messages, options) {
     model,
     messages,
     temperature: options.temperature ?? num('AI_TEMPERATURE', 0.2),
-    max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 1024)
+    max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 4096)
   });
   return {
     content: res?.choices?.[0]?.message?.content ?? '',
@@ -144,6 +144,43 @@ async function chat(messages, options = {}) {
   return out;
 }
 
+/**
+ * Streams the answer as text deltas from the configured provider.
+ * @param {Array<{role:string, content:string}>} messages
+ * @param {{model?:string}} [options]
+ * @returns {AsyncGenerator<string|{thinking:true}>} yields text chunks (or a thinking heartbeat); returns {model, finishReason}
+ */
+async function* chatStream(messages, options = {}) {
+  const provider = getProvider();
+  const model = options.model || getDefaultModel();
+  if (provider === 'sap') {
+    if (!hasSapKey()) throw notConfigured('AICORE_SERVICE_KEY is missing or not a valid service key JSON');
+    const { OrchestrationClient } = require('@sap-ai-sdk/orchestration');
+    const client = new OrchestrationClient({ promptTemplating: { model: { name: model, params: {
+      temperature: options.temperature ?? num('AI_TEMPERATURE', 0.2), max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 4096) } } } },
+    (process.env.AI_SAP_RESOURCE_GROUP || '').trim() ? { resourceGroup: process.env.AI_SAP_RESOURCE_GROUP.trim() } : {});
+    const res = await client.stream({ messages: [messages[messages.length - 1]], messagesHistory: messages.slice(0, -1) });
+    for await (const chunk of res.stream.toContentStream()) yield chunk;
+    return { model };
+  }
+  const stream = await getNvidia().chat.completions.create({
+    model, messages, stream: true,
+    temperature: options.temperature ?? num('AI_TEMPERATURE', 0.2),
+    max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 4096)
+  });
+  let usedModel = model, finish = null;
+  for await (const part of stream) {
+    usedModel = part.model || usedModel;
+    const choice = part.choices?.[0];
+    if (choice?.finish_reason) finish = choice.finish_reason;
+    const delta = choice?.delta?.content;
+    if (delta) yield delta;
+    // Reasoning models think first; surface that as a heartbeat so the client can show progress without exposing it.
+    else if (choice?.delta?.reasoning_content) yield { thinking: true };
+  }
+  return { model: usedModel, finishReason: finish };
+}
+
 /** Convenience wrapper: single question in, answer out. */
 async function askAI(question, options = {}) {
   const messages = [];
@@ -157,4 +194,4 @@ function _reset() {
   _nvidia = null;
 }
 
-module.exports = { chat, askAI, getDefaultModel, getProvider, num, _reset };
+module.exports = { chat, chatStream, askAI, getDefaultModel, getProvider, num, _reset };

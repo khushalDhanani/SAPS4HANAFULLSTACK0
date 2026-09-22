@@ -98,6 +98,22 @@ describe('aiClient', () => {
     expect(deployment).toEqual({});
   });
 
+  test('nvidia chatStream yields content deltas, thinking heartbeats and the finish reason', async () => {
+    process.env.NVIDIA_API_KEY = 'k';
+    async function* fake() {
+      yield { model: 'm', choices: [{ delta: { reasoning_content: 'hmm' } }] };
+      yield { model: 'm', choices: [{ delta: { content: 'Hel' } }] };
+      yield { model: 'm', choices: [{ delta: { content: 'lo' }, finish_reason: 'length' }] };
+    }
+    mockCreate.mockResolvedValue(fake());
+    const gen = aiClient.chatStream([{ role: 'user', content: 'x' }]);
+    const out = []; let r;
+    while (!(r = await gen.next()).done) out.push(r.value);
+    expect(out).toEqual([{ thinking: true }, 'Hel', 'lo']);
+    expect(r.value).toEqual({ model: 'm', finishReason: 'length' });
+    expect(mockCreate.mock.calls[0][0]).toMatchObject({ stream: true });
+  });
+
   test('num() reads numeric env with fallback', () => {
     process.env.AI_MAX_TOKENS = '256';
     process.env.AI_TEMPERATURE = '';

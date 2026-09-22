@@ -62,6 +62,11 @@ sap.ui.define([
     }
 
     return {
+        /** SAP purchasing document status name for a status code (e.g. "04" → "Sent"); code itself when unknown. */
+        statusCodeName: function (sCode) {
+            return SAP_PURCHASING_DOCUMENT_STATUS[sCode] || sCode;
+        },
+
         formatDate: function (sDate) {
             if (!sDate) {
                 return "";
