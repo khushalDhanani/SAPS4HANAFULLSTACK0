@@ -3033,14 +3033,53 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
+## 2026-09-22 11:05 IST
+- **Agent**: Antigravity
+- **Change**: Fix Sales Order HTTP fallback dropping user's filter and ignoring pagination/sorting (Audit Row 19) — implemented AST-to-OData v2 query translator, preserved filters/pagination/ordering in HTTP fallback, and enforced refusal-to-drop policy.
+  - **OData V2 Query Translation**:
+    - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`:
+      - Implemented `_formatODataV2Literal(val)` formatting strings, numbers, booleans, dates, and GUIDs into OData v2 literal syntax.
+      - Implemented `_cqnOrderByToOData(orderBy)` translating CQN orderBy AST to OData v2 `$orderby` syntax.
+      - Implemented `_cqnWhereToODataFilter(where)` translating CQN WHERE AST (predicates, operators `=, !=, >, >=, <, <=, and, or, not`, string functions `contains`/`substringof`, `startswith`, `endswith`, entity prefix stripping `SalesOrders/`, `C_SalesOrderWl_F1873/`, and parentheses nesting) and plain filter dictionaries to valid OData v2 `$filter` expressions.
+      - Exported helper methods on `SalesInquiryAdapter.prototype`, `defaultAdapter`, and `module.exports`.
+  - **HTTP Fallback Filter & Pagination Preservation**:
+    - In `SalesInquiryAdapter.getSalesOrders(query, options)`:
+      - Preserves `$top` and `$skip` from `query.SELECT.limit` (`limit.rows`, `limit.offset`) or query options, defaulting to `$top=50` and `$skip=0`.
+      - Preserves `$orderby` from `query.SELECT.orderBy` or fallback options, defaulting to `CreationDate desc,SalesOrder desc`.
+      - Preserves `$inlinecount=allpages` when count requested (`query.SELECT.count` or `$count=true`).
+      - Preserves `$filter` from `options.filter`, `query._queryOptions.$filter`, or translated CQN WHERE.
+      - **Refusal-to-drop policy**: If a filter requirement is present on the query but cannot be safely translated to OData v2, throws HTTP 500 (`Cannot safely translate sales order query filter to OData HTTP fallback; refusing to return unfiltered results.`) rather than silently returning unfiltered results.
+  - **Automated Unit Tests**:
+    - `test/unit/sales-order/salesOrderAdapter.test.js`:
+      - Verified single condition `$filter` preservation (`SoldToParty eq '10082'`).
+      - Verified compound `$filter` preservation (`substringof('500', SalesOrder) and OverallSDProcessStatus ne 'C'`).
+      - Verified custom `$top=20`, `$skip=40`, and `$orderby=SalesOrder asc` preservation.
+      - Verified HTTP 500 error thrown and HTTP execution prevented when filter is unparseable.
+      - Verified `_cqnWhereToODataFilter` unit tests across AST tokens, operators, parentheses, entity prefix stripping, and plain objects.
+  - **Audit Documentation**:
+    - Updated `docs/data-lineage-audit.md`: Marked Row 19 as **RESOLVED**, updated Section 6 error handling note for row 19, and updated Re-scan table.
+- **Files modified**:
+  - `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`
+  - `test/unit/sales-order/salesOrderAdapter.test.js`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npm test -- test/unit/sales-order/salesOrderAdapter.test.js`: 18 passed, 18 total tests (100% green).
+  - `npm run test:unit`: 64 passed, 64 total test suites; 942 passed, 942 total tests (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm run test:unit`: **64 passed, 64 total test suites; 937 passed, 937 total tests (100% green)** in 40 s.
-  - `npm test -- test/unit/le/`: **4 passed, 4 total test suites; 53 passed, 53 total tests (100% green)**.
+  - `npm run test:unit`: **64 passed, 64 total test suites; 942 passed, 942 total tests (100% green)** in 41.5 s.
+  - `npm test -- test/unit/sales-order/salesOrderAdapter.test.js`: **18 passed, 18 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
-  - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Sales Order HTTP Fallback Filter Preservation (Audit Row 19)**:
+  - In `SalesInquiryAdapter.js`: `getSalesOrders` HTTP fallback dynamically constructs `$top`, `$skip`, `$orderby`, `$inlinecount`, and `$filter`.
+  - CQN WHERE clauses, operators, parentheses, string functions, and plain objects translated to valid OData v2 filter syntax via `_cqnWhereToODataFilter`.
+  - Refusal-to-drop policy: Throws HTTP 500 when filter cannot be safely translated, guaranteeing no unfiltered data is returned when the user requested filtered sales orders.
 - **Fix Approval Lookup Failure Masking Unapproved Orders (Audit Row 31)**:
   - In `OutboundDeliveryAdapter.js`: `_fetchApprovalStatusMap` clears cache and returns `null` on lookup error (never stale cache or empty map).
   - `_formatOrderResults`: Maps `SalesDocApprovalStatus = 'unknown'` when `approvalStatusMap === null`.

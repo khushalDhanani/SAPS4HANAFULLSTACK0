@@ -51,6 +51,176 @@ function _formatODataV2Date(dateVal) {
 }
 
 /**
+ * Formats a primitive or date value as an OData v2 literal in $filter.
+ *
+ * @param {any} val
+ * @returns {string}
+ */
+function _formatODataV2Literal(val) {
+  if (val === null || val === undefined) return 'null';
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'number') return String(val);
+  if (val instanceof Date) {
+    return `datetime'${val.toISOString().slice(0, 19)}'`;
+  }
+  const s = String(val);
+  if (/^\/Date\(\d+\)\/$/.test(s)) return s;
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Translates CAP CQN order-by clause to an OData v2 $orderby string.
+ *
+ * @param {any} orderBy
+ * @returns {string}
+ */
+function _cqnOrderByToOData(orderBy) {
+  if (!orderBy) return '';
+  if (typeof orderBy === 'string') return orderBy.trim();
+  if (Array.isArray(orderBy) && orderBy.length > 0) {
+    const parts = orderBy.map(item => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        const col = item.ref ? item.ref[item.ref.length - 1] : (item.val || '');
+        const dir = item.sort ? ` ${item.sort}` : '';
+        return `${col}${dir}`.trim();
+      }
+      return '';
+    }).filter(Boolean);
+    return parts.join(', ');
+  }
+  return '';
+}
+
+/**
+ * Translates CAP CQN where clause to an OData v2 $filter expression string.
+ *
+ * @param {any} where
+ * @returns {string}
+ */
+function _cqnWhereToODataFilter(where) {
+  if (!where) return '';
+  if (typeof where === 'string') return where.trim();
+
+  // Plain object dictionary: { Field1: 'val1', Field2: 'val2' }
+  if (where && typeof where === 'object' && !Array.isArray(where)) {
+    if (where.ref || 'val' in where || where.func) {
+      where = [where];
+    } else {
+      const parts = Object.entries(where)
+        .filter(([, v]) => v !== undefined && v !== null)
+        .map(([k, v]) => `${k} eq ${_formatODataV2Literal(v)}`);
+      return parts.join(' and ');
+    }
+  }
+
+  if (!Array.isArray(where) || where.length === 0) return '';
+
+  const opMap = {
+    '=': 'eq',
+    '==': 'eq',
+    '!=': 'ne',
+    '<>': 'ne',
+    '>': 'gt',
+    '>=': 'ge',
+    '<': 'lt',
+    '<=': 'le',
+    'and': 'and',
+    'AND': 'and',
+    'or': 'or',
+    'OR': 'or',
+    'not': 'not',
+    'NOT': 'not'
+  };
+
+  const tokens = [];
+
+  for (let i = 0; i < where.length; i++) {
+    const token = where[i];
+
+    if (token === null || token === undefined) continue;
+
+    if (token === '(' || token === ')') {
+      tokens.push(token);
+      continue;
+    }
+
+    if (typeof token === 'string') {
+      const lower = token.toLowerCase();
+      if (opMap[token] || opMap[lower]) {
+        tokens.push(opMap[token] || opMap[lower]);
+      } else {
+        tokens.push(token);
+      }
+      continue;
+    }
+
+    if (typeof token === 'object' && token.ref && Array.isArray(token.ref)) {
+      let refPath = token.ref;
+      if (refPath.length > 1 && (refPath[0] === 'SalesOrders' || refPath[0] === 'C_SalesOrderWl_F1873' || refPath[0] === 'externalSO.C_SalesOrderWl_F1873')) {
+        refPath = refPath.slice(1);
+      }
+      tokens.push(refPath.join('/'));
+      continue;
+    }
+
+    if (typeof token === 'object' && 'val' in token) {
+      tokens.push(_formatODataV2Literal(token.val));
+      continue;
+    }
+
+    if (typeof token === 'object' && token.func && Array.isArray(token.args)) {
+      const fnName = String(token.func).toLowerCase();
+      const argTokens = token.args.map(a => {
+        if (typeof a === 'object') {
+          if (a.ref) {
+            let p = a.ref;
+            if (p.length > 1 && (p[0] === 'SalesOrders' || p[0] === 'C_SalesOrderWl_F1873')) p = p.slice(1);
+            return p.join('/');
+          }
+          if ('val' in a) return _formatODataV2Literal(a.val);
+        }
+        if (typeof a === 'string') return _formatODataV2Literal(a);
+        return String(a);
+      });
+
+      if (fnName === 'contains') {
+        tokens.push(`substringof(${argTokens[1]}, ${argTokens[0]})`);
+      } else if (fnName === 'substringof') {
+        tokens.push(`substringof(${argTokens.join(', ')})`);
+      } else if (fnName === 'startswith') {
+        tokens.push(`startswith(${argTokens.join(', ')})`);
+      } else if (fnName === 'endswith') {
+        tokens.push(`endswith(${argTokens.join(', ')})`);
+      } else {
+        tokens.push(`${fnName}(${argTokens.join(', ')})`);
+      }
+      continue;
+    }
+
+    if (Array.isArray(token)) {
+      const sub = _cqnWhereToODataFilter(token);
+      if (sub) {
+        tokens.push(`(${sub})`);
+      }
+      continue;
+    }
+
+    if (typeof token === 'number' || typeof token === 'boolean') {
+      tokens.push(String(token));
+      continue;
+    }
+  }
+
+  let filterStr = tokens.join(' ');
+  filterStr = filterStr.replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+  filterStr = filterStr.replace(/\s+/g, ' ').trim();
+
+  return filterStr;
+}
+
+
+/**
  * Adapter class to encapsulate communication with SAP S/4HANA Sales Inquiry services:
  * - SD_F2370_INQY_WL_SRV (Manage Sales Inquiries Worklist & Configuration Value Helps)
  * - SD_F2369_INQY_FS_SRV (Sales Inquiry Factsheet & Line Items)
@@ -691,11 +861,71 @@ class SalesInquiryAdapter {
     try {
       const dest = options.destination || await this._getDestination(options);
       const executeFn = options.executeHttpRequest || this.client._execute;
-      const bCount = !!(query?.SELECT?.count);
-      const sInlineCount = bCount ? '&$inlinecount=allpages' : '';
+      const bCount = !!(query?.SELECT?.count || query?._queryOptions?.$count === 'true');
+
+      // 1. Pagination: honour limit.rows and limit.offset if specified
+      const limitObj = query?.SELECT?.limit;
+      let top = options.top;
+      let skip = options.skip;
+
+      if (limitObj) {
+        if (limitObj.rows !== undefined) {
+          top = limitObj.rows?.val !== undefined ? Number(limitObj.rows.val) : Number(limitObj.rows);
+        }
+        if (limitObj.offset !== undefined) {
+          skip = limitObj.offset?.val !== undefined ? Number(limitObj.offset.val) : Number(limitObj.offset);
+        }
+      }
+      if (top === undefined || top === null || isNaN(top)) {
+        top = query?._queryOptions?.$top ? parseInt(query._queryOptions.$top, 10) : 50;
+      }
+      if (skip === undefined || skip === null || isNaN(skip)) {
+        skip = query?._queryOptions?.$skip ? parseInt(query._queryOptions.$skip, 10) : 0;
+      }
+
+      // 2. Ordering: honour query.SELECT.orderBy if specified
+      let orderByStr = options.orderBy || _cqnOrderByToOData(query?.SELECT?.orderBy);
+      if (!orderByStr) {
+        orderByStr = 'CreationDate desc,SalesOrder desc';
+      }
+
+      // 3. Filtering: honour user's filter and refuse to drop it
+      const rawWhere = query?.SELECT?.where || query?.where;
+      const hasFilterRequirement = !!(options.filter || rawWhere || query?._queryOptions?.$filter);
+      let filterStr = options.filter || (query?._queryOptions?.$filter ? query._queryOptions.$filter.trim() : '');
+      if (!filterStr && rawWhere) {
+        filterStr = _cqnWhereToODataFilter(rawWhere);
+      }
+
+      if (hasFilterRequirement && !filterStr) {
+        const err = new Error('Cannot safely translate sales order query filter to OData HTTP fallback; refusing to return unfiltered results.');
+        err.status = 500;
+        throw err;
+      }
+
+      const queryParts = [];
+      if (top !== undefined && top !== null && !isNaN(top) && top > 0) {
+        queryParts.push(`$top=${top}`);
+      } else {
+        queryParts.push('$top=50');
+      }
+      if (skip !== undefined && skip !== null && !isNaN(skip) && skip > 0) {
+        queryParts.push(`$skip=${skip}`);
+      }
+      if (orderByStr) {
+        queryParts.push(`$orderby=${orderByStr}`);
+      }
+      if (bCount) {
+        queryParts.push('$inlinecount=allpages');
+      }
+      if (filterStr) {
+        queryParts.push(`$filter=${filterStr}`);
+      }
+
+      const queryString = queryParts.join('&');
       const res = await executeFn(dest, {
         method: 'get',
-        url: `/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$top=50&$orderby=CreationDate desc,SalesOrder desc${sInlineCount}`,
+        url: `/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873${queryString ? `?${queryString}` : ''}`,
         headers: { 'Accept': 'application/json', ...(options.headers || {}) }
       });
       const rawResults = res.data?.d?.results || res.data?.value || [];
@@ -1602,9 +1832,22 @@ class SalesInquiryAdapter {
   }
 }
 
+SalesInquiryAdapter.prototype._formatODataV2Date = _formatODataV2Date;
+SalesInquiryAdapter.prototype._formatODataV2Literal = _formatODataV2Literal;
+SalesInquiryAdapter.prototype._cqnOrderByToOData = _cqnOrderByToOData;
+SalesInquiryAdapter.prototype._cqnWhereToODataFilter = _cqnWhereToODataFilter;
+
 const defaultAdapter = new SalesInquiryAdapter();
 defaultAdapter.SalesInquiryAdapter = SalesInquiryAdapter;
 defaultAdapter.PartialSalesInquiryError = PartialSalesInquiryError;
+defaultAdapter._formatODataV2Date = _formatODataV2Date;
+defaultAdapter._formatODataV2Literal = _formatODataV2Literal;
+defaultAdapter._cqnOrderByToOData = _cqnOrderByToOData;
+defaultAdapter._cqnWhereToODataFilter = _cqnWhereToODataFilter;
 
 module.exports = defaultAdapter;
 module.exports.PartialSalesInquiryError = PartialSalesInquiryError;
+module.exports._formatODataV2Date = _formatODataV2Date;
+module.exports._formatODataV2Literal = _formatODataV2Literal;
+module.exports._cqnOrderByToOData = _cqnOrderByToOData;
+module.exports._cqnWhereToODataFilter = _cqnWhereToODataFilter;

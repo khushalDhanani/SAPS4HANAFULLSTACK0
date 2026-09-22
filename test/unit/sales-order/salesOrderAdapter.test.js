@@ -379,6 +379,106 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(result[0].LastChangeDateTime).toContain('2026-09-21');
         });
 
+        test('getSalesOrders HTTP fallback preserves $filter from query.SELECT.where', async () => {
+            adapter.s4hanaSO = null;
+            const mockExecute = jest.fn().mockResolvedValue({
+                data: { d: { results: [{ SalesOrder: '5000104', SoldToParty: '10082' }] } }
+            });
+
+            const query = {
+                SELECT: {
+                    where: [{ ref: ['SoldToParty'] }, '=', { val: '10082' }]
+                }
+            };
+
+            const result = await adapter.getSalesOrders(query, { executeHttpRequest: mockExecute });
+            expect(result).toHaveLength(1);
+            expect(mockExecute).toHaveBeenCalled();
+            const calledUrl = mockExecute.mock.calls[0][1].url;
+            expect(calledUrl).toContain("$filter=SoldToParty eq '10082'");
+        });
+
+        test('getSalesOrders HTTP fallback preserves compound $filter with contains/substringof and ne', async () => {
+            adapter.s4hanaSO = null;
+            const mockExecute = jest.fn().mockResolvedValue({
+                data: { d: { results: [] } }
+            });
+
+            const query = {
+                SELECT: {
+                    where: [
+                        { func: 'contains', args: [{ ref: ['SalesOrder'] }, { val: '500' }] },
+                        'and',
+                        { ref: ['OverallSDProcessStatus'] },
+                        '!=',
+                        { val: 'C' }
+                    ]
+                }
+            };
+
+            await adapter.getSalesOrders(query, { executeHttpRequest: mockExecute });
+            expect(mockExecute).toHaveBeenCalled();
+            const calledUrl = mockExecute.mock.calls[0][1].url;
+            expect(calledUrl).toContain("substringof('500', SalesOrder)");
+            expect(calledUrl).toContain("OverallSDProcessStatus ne 'C'");
+        });
+
+        test('getSalesOrders HTTP fallback preserves custom $top, $skip, and $orderby', async () => {
+            adapter.s4hanaSO = null;
+            const mockExecute = jest.fn().mockResolvedValue({
+                data: { d: { results: [] } }
+            });
+
+            const query = {
+                SELECT: {
+                    limit: { rows: { val: 20 }, offset: { val: 40 } },
+                    orderBy: [{ ref: ['SalesOrder'], sort: 'asc' }]
+                }
+            };
+
+            await adapter.getSalesOrders(query, { executeHttpRequest: mockExecute });
+            expect(mockExecute).toHaveBeenCalled();
+            const calledUrl = mockExecute.mock.calls[0][1].url;
+            expect(calledUrl).toContain('$top=20');
+            expect(calledUrl).toContain('$skip=40');
+            expect(calledUrl).toContain('$orderby=SalesOrder asc');
+        });
+
+        test('getSalesOrders HTTP fallback throws error when filter is present but cannot be safely translated', async () => {
+            adapter.s4hanaSO = null;
+            const mockExecute = jest.fn();
+
+            const query = {
+                SELECT: {
+                    where: [{ unparseableObject: true }]
+                }
+            };
+
+            await expect(adapter.getSalesOrders(query, { executeHttpRequest: mockExecute })).rejects.toMatchObject({
+                message: expect.stringContaining('Cannot safely translate sales order query filter')
+            });
+            expect(mockExecute).not.toHaveBeenCalled();
+        });
+
+        test('_cqnWhereToODataFilter translates AST tokens, operators, parentheses, and plain objects', () => {
+            expect(adapter._cqnWhereToODataFilter(null)).toBe('');
+            expect(adapter._cqnWhereToODataFilter('')).toBe('');
+            expect(adapter._cqnWhereToODataFilter("SalesOrder eq '5000104'")).toBe("SalesOrder eq '5000104'");
+
+            // Plain object
+            expect(adapter._cqnWhereToODataFilter({ SoldToParty: '10082', SalesOrderType: 'ZDOM' })).toBe(
+                "SoldToParty eq '10082' and SalesOrderType eq 'ZDOM'"
+            );
+
+            // AST with entity prefix stripped
+            const ast1 = [{ ref: ['SalesOrders', 'SoldToParty'] }, '=', { val: '10082' }];
+            expect(adapter._cqnWhereToODataFilter(ast1)).toBe("SoldToParty eq '10082'");
+
+            // Nested parentheses
+            const ast2 = ['(', { ref: ['SalesOrder'] }, '=', { val: '5000104' }, ')', 'or', '(', { ref: ['SalesOrder'] }, '=', { val: '5000105' }, ')'];
+            expect(adapter._cqnWhereToODataFilter(ast2)).toBe("(SalesOrder eq '5000104') or (SalesOrder eq '5000105')");
+        });
+
         test('getSalesOrders throws 502 when backend read fails', async () => {
             adapter.s4hanaSO = null;
             const mockExecute = jest.fn().mockRejectedValue(new Error('Network error'));
