@@ -247,6 +247,20 @@ describe("SalesInquiries.controller", () => {
             expect(viewModel.getProperty("/openCount")).toBe("-");
             expect(viewModel.getProperty("/customerCount")).toBe("-");
         });
+
+        it("_loadServerMetrics strictly binds openInquiriesCount and never falls back to openOrdersCount", async () => {
+            controller.onInit();
+            // Mock returning only openOrdersCount without openInquiriesCount
+            MockODataClient.get.mockResolvedValueOnce({ openOrdersCount: 99, totalOrdersCount: 150 });
+            MockODataClient.get.mockResolvedValueOnce({ customerCount: 42 });
+
+            await controller._loadServerMetrics();
+
+            const viewModel = controller.getView().getModel("salesInquiriesView");
+            // Must NOT show 99 (the open orders count)
+            expect(viewModel.getProperty("/openCount")).toBe("-");
+            expect(viewModel.getProperty("/customerCount")).toBe(42);
+        });
     });
 
     describe("Navigation", () => {

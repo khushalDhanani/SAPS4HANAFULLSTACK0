@@ -83,8 +83,6 @@ sap.ui.define([
                     var data = res && res.value ? res.value : res;
                     if (data && data.openInquiriesCount != null) {
                         oViewModel.setProperty("/openCount", data.openInquiriesCount);
-                    } else if (data && data.openOrdersCount != null) {
-                        oViewModel.setProperty("/openCount", data.openOrdersCount);
                     } else {
                         oViewModel.setProperty("/openCount", "-");
                     }
