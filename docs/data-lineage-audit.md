@@ -50,7 +50,7 @@ Verdict: **LIVE** = read from SAP at request time and failures are visible; **LI
 | # | Data element | File(s):line(s) | Source type | Evidence | Confidence | Recommendation | Verdict |
 |---|---|---|---|---|---|---|---|
 | 1 | Dashboard: 26 count tiles (POs, suppliers, open/all sales orders, inquiries, customers, reservations, inbound deliveries, master-data counts) | srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js:219-362; webapp/controller/Dashboard.controller.js:113-206 | b - cached OData | Each is `$inlinecount`/`$count` on a real entity set. Cache 30 s (transactional) / 5 min (master data). Failure -> `null` + `unavailable[]`, tile shows Failed, never 0. | High | Keep. Model for the rest of the app. | LIVE |
-| 2 | Dashboard FI tile: value labelled 'FI Documents' under 'Journal Entries' | Dashboard.view.xml:94-100; PurchaseOrderAdapter.js:282 | a - live, label wrong | Count is of `C_GLJrnlEntryItemToBeVerified` = line ITEMS awaiting verification (174,153 on 19-Sep), not FI documents. | High | Relabel 'Items to be verified'. | LIVE-CAVEAT |
+| 2 | Dashboard FI tile: value labelled 'FI Documents' under 'Journal Entries' | Dashboard.view.xml:94-100; PurchaseOrderAdapter.js:282 | a - live | Relabeled to 'Items to be verified' across i18n and i18n_en bundles (dashboardKpiFIDocs). Accurately reflects count of `C_GLJrnlEntryItemToBeVerified` line items awaiting verification. | High | Relabel 'Items to be verified'. | RESOLVED |
 | 3 | Purchase Order worklist + detail rows | srv/mm/purchase-order/service.cds:8-60; handlers/purchaseOrder.handler.js (READ) | a - live | CAP projection on `C_PurchaseOrderFs` / `C_PurOrdItemEnh`, read through remote service. | Med (READ handler not traced line by line) | None. | LIVE |
 | 4 | PO status text (Approved / Draft / In Approval / Rejected) | webapp/model/formatter.js:6-28 | c - derived, defaulted | Heuristic eliminated. Shows authentic SAP status name (`sStatusName`); deletion flag 'L' maps to 'Deleted'; unknown status codes display raw code, never defaulting or falling through to 'Approved'. | High | Show SAP's own status name; unknown -> show the raw code, never 'Approved'. | RESOLVED |
 | 5 | PO KPI 'Total Orders' | BaseController.js:87-89 | a - live | Loaded-row fallback eliminated. Strictly reflects binding total ($count); displays '-' when $count is absent. | High | Show '-' when $count is absent. | RESOLVED |
@@ -172,10 +172,11 @@ Checks: `cds compile` OK; `jest test/unit` 62 suites / 897 tests passed; `eslint
 | 33 GR scan outage propagation | Fixed | `GoodsReceiptAdapter.js` distinguishes S/4HANA backend outages across Tiers 1-6 via `_isOutage` and rethrows immediately; handler rejects with 502/503/504 and UI shows backend outage dialog instead of masking as 404 'barcode not found'. |
 | 34 GR quantity blank on failed read | Fixed | Missing or failed item reads return authentic `null` for `Quantity`, `OpenQuantity`, `OrderedQuantity`, and `QuantityInEntryUnit` instead of default 0. UI controller and view preserve blank/null. |
 | 35 GR pick list errors surfaced & dead source dropped | Fixed | Dead source `MMIM_MATERIAL_DATA_SRV` (0 rows) dropped and replaced with live SAP Value Help `C_MM_StorLocValueHelp` (696 rows); document's authentic `StorageLocation` from `GR4PO_DL_Items` guaranteed in `AvailableStorageLocations`. `getMaterialStorageLocations` and `getMaterialBatches` rethrow on outages and backend errors; CAP handlers reject with 502. |
-| 2, 9, 30, 45 | **Open** | Unchanged: FI tile label, ZFRT/FERT scope, "Due Orders" counts schedule lines, queue count 0 on error. |
+| 2 FI tile relabeling | Fixed | Relabeled to "Items to be verified" in `i18n.properties` and `i18n_en.properties` (`dashboardKpiFIDocs`), reflecting authentic `C_GLJrnlEntryItemToBeVerified` line item count. |
+| 9, 30, 45 | **Open** | Unchanged: ZFRT/FERT scope, "Due Orders" counts schedule lines, queue count 0 on error. |
 | Not in table | Open | `'999'` difference storage type (5 places); GI unit `|| "PC"` (GoodsIssueService.js:183); GR movement type `|| '101'`. |
 
-Scorecard by the same 47 groups: cleanly live 11 -> 30; live with caveat 11 -> 12; assumed 25 -> 5 (rows 21, 23, 24, 26 partly, 39).
+Scorecard by the same 47 groups: cleanly live 11 -> 31; live with caveat 11 -> 11; assumed 25 -> 5 (rows 21, 23, 24, 26 partly, 39).
 
 ## Not verified
 

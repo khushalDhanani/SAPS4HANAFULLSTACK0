@@ -3203,15 +3203,40 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
 
+## 2026-09-22 11:50 IST
+- **Agent**: Antigravity
+- **Change**: Dashboard FI Tile Relabeling to "Items to be verified" (Audit Row 2):
+  - **Root Cause & Rationale**:
+    - The Dashboard FI card unit text was labeled "FI Documents", but its backing query in `PurchaseOrderAdapter.js` reads `FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified`.
+    - In S/4HANA, this entity set contains General Ledger line items awaiting verification (174,153 items in SAP DS4 Client 220), not distinct accounting documents.
+    - Relabeled `dashboardKpiFIDocs` from "FI Documents" to "Items to be verified" across both English property bundles (`i18n.properties` and `i18n_en.properties`) to reflect the authentic data lineage.
+    - Preserved 100% key-for-key parity between property files.
+    - Rebuilt `dist/Component-preload.js`.
+    - Updated `docs/data-lineage-audit.md` marking Row 2 as **RESOLVED** and incrementing cleanly live scorecard.
+- **Files modified**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `docs/data-lineage-audit.md`
+- **Validation**:
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 1.31 s; `Component-preload.js` generated.
+  - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: 31 passed, 31 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit changes to `origin/feature/CL01`.
+
 ## Current Status
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
   - `npm run test:unit`: **64 passed, 64 total test suites; 952 passed, 952 total tests (100% green)** in 38.3 s.
+  - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptService.test.js`: **41 passed, 41 total tests (100% green)**.
   - `npm test -- test/unit/wm/goodsReceiptController.test.js`: **20 passed, 20 total tests (100% green)**.
   - `npm --prefix app/fiori-app run lint`: 0 findings.
   - `npm --prefix app/fiori-app run build`: Succeeded; `Component-preload.js` generated.
   - `git diff --check`: Clean (0 errors).
+- **Dashboard FI Tile Relabeling (Audit Row 2)**:
+  - Relabeled `dashboardKpiFIDocs` to "Items to be verified" across `i18n.properties` and `i18n_en.properties`.
+  - Reflects authentic data lineage of `FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified` line items awaiting verification.
 - **Goods Receipt Storage-Location Picker Dead Source Elimination (Audit Row 35 / Option 2C)**:
   - Dead service `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` (0 rows in SAP) dropped.
   - Replaced with live SAP Storage Location Value Help `MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp` (696 records in SAP Client 220) filtered by `Plant`.
