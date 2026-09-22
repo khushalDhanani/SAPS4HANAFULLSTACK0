@@ -153,7 +153,7 @@ sap.ui.define([
                     if (iAvailable === 0 && oMetrics.error) {
                         oViewModel.setProperty("/metricsError", oMetrics.error);
                     }
-                    that._setConnectionStatus(iAvailable, METRIC_KEYS.length);
+                    that._setConnectionStatus(iAvailable, METRIC_KEYS.length, oMetrics.asOf);
                 })
                 .catch(function (err) {
                     METRIC_KEYS.forEach(function (sKey) {
@@ -171,11 +171,16 @@ sap.ui.define([
         /**
          * @private
          */
-        _setConnectionStatus: function (iAvailable, iTotal) {
+        _setConnectionStatus: function (iAvailable, iTotal, sAsOf) {
             var oViewModel = this.getView().getModel("dashboardView");
+            // Figures may come from the server cache (30 s transactional / 5 min master data): show when SAP was actually read.
+            var dAsOf = sAsOf ? new Date(sAsOf) : null;
+            var sAsOfText = (dAsOf && !isNaN(dAsOf.getTime())) ? dAsOf.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
             if (iAvailable === iTotal) {
                 oViewModel.setProperty("/connectionState", "Success");
-                oViewModel.setProperty("/connectionText", this._text("dashboardConnectionOk", "S/4HANA connected"));
+                oViewModel.setProperty("/connectionText", sAsOfText
+                    ? this._text("dashboardConnectionOkAsOf", "S/4HANA connected \u00b7 figures as of {0}", [sAsOfText])
+                    : this._text("dashboardConnectionOk", "S/4HANA connected"));
             } else if (iAvailable === 0) {
                 oViewModel.setProperty("/connectionState", "Error");
                 oViewModel.setProperty("/connectionText", this._text("dashboardConnectionDown", "S/4HANA not reachable"));

@@ -3,18 +3,18 @@ const { enrichBatchStatus } = require('../../../srv/common/batchUtils');
 describe('Unit: batchUtils (enrichBatchStatus)', () => {
   it('should return None / NO SLED for null, undefined, or empty expiry date', () => {
     const resNull = enrichBatchStatus(null);
-    expect(resNull).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 });
+    expect(resNull).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null });
 
     const resUndef = enrichBatchStatus(undefined);
-    expect(resUndef).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 });
+    expect(resUndef).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null });
 
     const resEmpty = enrichBatchStatus('');
-    expect(resEmpty).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 });
+    expect(resEmpty).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null });
   });
 
   it('should return None / NO SLED for invalid date strings', () => {
     const res = enrichBatchStatus('not-a-valid-date');
-    expect(res).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 });
+    expect(res).toEqual({ StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null });
   });
 
   it('should classify past expiry date as Error / EXPIRED', () => {

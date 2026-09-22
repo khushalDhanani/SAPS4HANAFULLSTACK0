@@ -1027,13 +1027,13 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
 
     let determinedBatch = '';
     let determinedBatchExpiry = null;
-    let determinedBatchStatus = { StatusState: 'None', StatusText: 'SU BATCH NOT STATED', DaysToExpiry: 9999 };
+    let determinedBatchStatus = { StatusState: 'None', StatusText: 'SU BATCH NOT STATED', DaysToExpiry: null };
     let multipleBatches = false;
     let noBatchAvailable = false;
 
     if (suBatches.length === 0) {
       noBatchAvailable = true;
-      determinedBatchStatus = { StatusState: 'None', StatusText: 'SU BATCH NOT STATED', DaysToExpiry: 9999 };
+      determinedBatchStatus = { StatusState: 'None', StatusText: 'SU BATCH NOT STATED', DaysToExpiry: null };
     } else if (suBatches.length > 1) {
       multipleBatches = true;
       this._suDiag('SU resolution: multiple batches inside HU', {

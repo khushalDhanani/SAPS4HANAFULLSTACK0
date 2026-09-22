@@ -418,7 +418,7 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(defaults.lastPurchaseOrder).toBe('4500000999');
         });
 
-        it('getSupplierDefaults should gracefully fall back to empty when unconfigured', async () => {
+        it('getSupplierDefaults returns blanks flagged "lookup failed" (not "no history") when SAP cannot be read', async () => {
             mockODataClient.get.mockRejectedValue(new Error('Network error'));
 
             const defaults = await PurchaseOrderService.getSupplierDefaults('UNKNOWN', '1000', 'AE01');
@@ -427,7 +427,7 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(defaults.Currency).toBe('');
             expect(defaults.PaymentTerms).toBe('');
             expect(defaults.derived).toBe(false);
-            expect(defaults.source).toBe('');
+            expect(defaults.source).toBe('lookup failed');
             expect(defaults.lastPurchaseOrder).toBe('');
         });
     });

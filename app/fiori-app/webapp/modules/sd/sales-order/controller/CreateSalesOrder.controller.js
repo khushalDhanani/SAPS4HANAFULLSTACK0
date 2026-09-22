@@ -55,6 +55,7 @@ sap.ui.define([
                 }
             }).catch(function (err) {
                 console.warn("[CreateSalesOrder] Error loading server defaults:", err);
+                MessageToast.show((typeof that.getText === "function" && that.getText("msgOrderDefaultsUnavailable")) || "Order defaults could not be loaded from SAP. Enter the organisational data manually.");
             });
 
             if (this._oConfigData) {
@@ -179,12 +180,17 @@ sap.ui.define([
             var sDist = oModel.getProperty("/header/DistributionChannel");
             var sDiv = oModel.getProperty("/header/OrganizationDivision");
 
+            var that = this;
             SalesOrderService.getCustomerDefaults(sCustomer, sOrg, sDist, sDiv).then(function (oDefaults) {
                 if (oDefaults) {
                     SalesOrderModel.applyCustomerDefaults(oModel, oDefaults);
+                    if (oDefaults.derived) {
+                        MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsFromHistory")) || "Currency, sales office and sales group were taken from this customer's previous sales documents. Verify before submitting.");
+                    }
                 }
                 SalesOrderModel.updateStatus(oModel);
             }).catch(function () {
+                MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsUnavailable")) || "Customer data could not be loaded from SAP.");
                 SalesOrderModel.updateStatus(oModel);
             });
         },

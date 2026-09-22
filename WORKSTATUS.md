@@ -1747,7 +1747,68 @@
 - **Commit state**: intentionally **not committed** (user request); all changes unstaged.
 - **Still open (needs a person, not code)**: the real value for `S4_DIFFERENCE_STORAGE_TYPE` from the WM owner; Basis ticket `docs/ticket-gateway-remediation-ds4.md`; ABAP ticket `docs/ticket-vtaa-copy-control-zin-zqt.md`.
 
+## 2026-09-22 13:30 IST
+- **Agent**: Claude (Cowork)
+- **Change (Master Data, audit row 9)**: sales material value help no longer hardcodes `MaterialType = 'ZFRT' or 'FERT'`. `s4Config.getSalesMaterialTypes()` reads `cds.s4.salesMaterialTypes` / `S4_SALES_MATERIAL_TYPES` (package.json now lists `["ZFRT","FERT"]`, `.env.example` documents the override); `SalesInquiryAdapter.getMaterials` builds the OR filter from it. The scope is stated on screen: material placeholders on Create Sales Order / Create Sales Inquiry read "Finished goods only (configured material types)".
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:33 IST
+- **Agent**: Claude (Cowork)
+- **Change (Master Data / SD, audit row 23)**: `SalesInquiryAdapter.getCustomerDefaults` — currency no longer starts from the configured `INR`; office, group and currency come only from the customer's previous inquiries (`C_InquiryWL_F2370`) and set `derived: true`. The two "first row of the value help" heuristics (first sales office for the sales area, first sales group of that office) are removed; only the office name of a known office is still resolved (master lookup). Ship-to is no longer proposed as the sold-to (`ShipToParty: ''`) — S/4HANA partner determination sets it on create. Sales-area parameters are kept in the signature for API compatibility (`_sOrg`, `_sChannel`, `_sDivision`).
+  - **UI**: Create Sales Order / Create Sales Inquiry show a toast when `derived` is true ("Currency, sales office and sales group were taken from this customer's previous sales documents. Verify before submitting.") — same pattern as the PO "from last PO" note. New i18n keys `msgCustomerDefaultsFromHistory`, `msgCustomerDefaultsUnavailable`, `msgOrderDefaultsUnavailable`.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:36 IST
+- **Agent**: Claude (Cowork)
+- **Change (SD, audit row 24 residual)**: no proposed dates. `getSalesOrderDefaults` no longer returns `RequestedDeliveryDate = today + 7`; `getSalesInquiryDefaults` no longer returns `BindingPeriodValidityEndDate = today + 30`; `SalesInquiryModel.createInitialModel` no longer pre-fills the +30 validity end. S/4HANA derives the requested delivery date from customizing when the field is left blank; the validity end is entered by the user.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:40 IST
+- **Agent**: Claude (Cowork)
+- **Change (SD, audit row 26)**: document totals after create come only from the real `LORD_ODATA_ORDER_SRV` HeaderSet fields (`NetAmount`, `TotalAmount`, `TaxAmount`, `DocumentCurrency` — verified against `docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx`; `NetValue` and `Currency` do not exist there). Removed in both branches of `createSalesDocument`: the `NetAmount ?? TotalAmount ?? NetValue` cascade (tax-inclusive total was shown as net), the locally computed `totalNet` (qty × price) fallback, and the `header.TransactionCurrency || s4Config.getCurrency()` currency fallback. Inquiry branch: the header POST answers before items exist, so the header is now read back by default (`options.readBack !== false`) and totals are reported only from that read-back; otherwise blank.
+  - **Tests**: `salesOrderAdapter.test.js` mocks use the real field names; 3-step inquiry tests expect 3 POSTs + 1 read-back GET; `salesInquiryAdapter.test.js` header mock carries `DocumentCurrency` and a 4th read-back mock with `NetAmount`.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:43 IST
+- **Agent**: Claude (Cowork)
+- **Change (SD UI)**: `SalesOrderService.getCustomerDefaults` / `getSalesOrderDefaults` and `SalesInquiryService.getCustomerDefaults` / `getSalesInquiryDefaults` no longer swallow failures into blank objects (which were indistinguishable from "SAP has no data"); they reject, and the create controllers show "Customer data could not be loaded from SAP." / "Order defaults could not be loaded from SAP. Enter the organisational data manually.".
+  - **Tests**: `salesInquiryCreationPayload.test.js` — two tests now assert rejection instead of silent blanks.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:47 IST
+- **Agent**: Claude (Cowork)
+- **Change (WM – Goods Receipt, audit rows 33–35 residuals)**: `GoodsReceiptAdapter.resolveStorageUnit` no longer pre-selects anything from pick lists: storage location / bin were the FIRST row of the plant's 696-row value help, the batch was `batches[0]`, and the unit fell back to the first storage location's or batch's unit. Now: storage location, bin and batch come only from the scanned object or the document item (`GR4PO_DL_Items`), and the batch's SLED/status is taken from the matching batch row; unit only from the scan or the document item. `Quantity` (proposed) is SAP's `OpenQuantity` and nothing else — the old cascade proposed `QuantityInEntryUnit` / `OrderedQuantity` again when open was 0. `StorageLocationName` is no longer filled with the code. Non-outage lookup failures (storage locations, batches, open quantity) are returned in a new `LookupWarnings` array (`service.cds` `StorageUnitDetails`) and shown by the GR screen in a warning dialog ("Some SAP data could not be read"); outages still throw as before.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:50 IST
+- **Agent**: Claude (Cowork)
+- **Change (WM – Goods Issue, audit rows 40(a), 41 residual)**: `GoodsIssueBatchesClient` sums `MaterialMultiStockByDates` rows per batch (a batch in several storage locations was previously reported with the LAST row's stock only); when rows disagree on storage location the batch's location is left blank (or the requested one). `DaysToExpiry` for "NO SLED" / "SU BATCH NOT STATED" is `null` instead of the synthetic `9999` (`srv/common/batchUtils.js`, `GoodsIssueReservationsClient.js`, `GoodsIssueStockUnitClient.js` ×2). SU-not-found response in `goodsIssue.handler.js` returns `CurrentStock` / `SuStockQty` `null` instead of `0` and `DeterminedBatchDaysToExpiry` `null` instead of `0`.
+  - **Tests**: `test/unit/common/batchUtils.test.js` expects `null`.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:54 IST
+- **Agent**: Claude (Cowork)
+- **Change (Cross-module, audit row 1 caveat)**: dashboard figures say how old they are. `PurchaseOrderAdapter.getDashboardMetrics` adds `asOf` (ISO time SAP was read; a cached answer keeps its original `asOf`). Dashboard header shows "S/4HANA connected · figures as of HH:MM (server cache: 30 s transactional, 5 min master data)" (`dashboardConnectionOkAsOf`); without `asOf` the old text is kept.
+  - **Tests**: `dashboardMetrics.test.js` +1 (asOf rendered), adapter test asserts `asOf` is a valid time.
+  - **Validation**: see gate run at 13:59 IST below.
+
+## 2026-09-22 13:57 IST
+- **Agent**: Claude (Cowork)
+- **Change (MM – Purchase Order)**: a failed supplier-history lookup is no longer reported as "no history". `purchaseOrder.handler.js` `getSupplierDefaults` returns `source: 'lookup failed'` when the S/4 read throws; `PurchaseOrderService.getSupplierDefaults` (UI) does the same in its final catch; `CreatePurchaseOrder` shows "Supplier history could not be read from SAP. Enter currency, payment terms and Incoterms manually." and applies nothing.
+  - **Tests**: `poConfigDefaulting.test.js` expects `source: 'lookup failed'` on a rejected read.
+- **Gate run (Mac, Node v22.23.1, 13:58–13:59 IST, after all changes above)**:
+  - `npx cds compile srv` → OK
+  - `npm run lint` (eslint .) → exit 0, no findings
+  - `npx jest test/unit` → 65 suites / 966 tests passed (35.2 s; includes live DS4 client 220 tests). Earlier runs surfaced 7 tests that encoded the old behaviour (3-call counts, `9999`, `NetValue`/`Currency` mocks, silent-blank defaults, `source: ''`); each was updated as listed above.
+  - `cd app/fiori-app && npx ui5lint` → "Success! No findings detected."
+  - `cd app/fiori-app && npm run build` → "Build succeeded" (`dist/Component-preload.js` regenerated; no UI source changed after the build)
+  - `git diff --check` → clean
+- **Verified, nothing to change**: FI — journal-entry READ propagates errors (`req.error`), KPI labels "Total Line Items" / "G/L Accounts – Chart of Accounts" are accurate; MM — `formatter.js` never synthesises a PO status from completeness/release flags; SD row 18 — `SDDocumentCategory 'A'` is the query's own filter (both sources return inquiry types only), not an assumption.
+- **Commit state**: intentionally **not committed** (user request); all changes unstaged.
+- **Still open (needs a person, not code)**: `S4_DIFFERENCE_STORAGE_TYPE` value from the WM owner; `LOCAL_DEV_PASSWORD` in the local environment for mock logins; Basis ticket `docs/ticket-gateway-remediation-ds4.md`; ABAP ticket `docs/ticket-vtaa-copy-control-zin-zqt.md`.
+
 ## Current Status
+- **2026-09-22 13:59 IST (uncommitted)**: module-by-module pass closed the remaining audit residuals — Master Data (material-type scope config, customer defaults history-only, cache age shown), SD (no proposed dates/ship-to, totals only from real HeaderSet fields, no silent blank defaults), WM (GR no first-row proposals + lookup warnings, GI batch stock summed, no synthetic 9999/0), MM (failed supplier lookup flagged). Gates green (cds compile, eslint, jest 966/966, ui5lint, ui5 build, diff --check).
 - **2026-09-22 13:16 IST (uncommitted)**: remaining audit items closed — `999` default removed (config required), synthesized PlantName, dev-auth username-as-password and implicit Admin, S/4 HTTP timeout, UI silent catches, Orders Due KPIs server-side, doc banners. Gates green (cds compile, eslint, jest 965/965, ui5lint, ui5 build, diff --check).
 - **2026-09-22 12:56 IST (uncommitted)**: audit items 13, 22, 23, 24, 26, 27, 40, 41, 42 applied; all gates green (cds compile, eslint, jest 959/959, ui5lint, ui5 build, diff --check). `999` DifferenceStorageType still open.
 - **Branch**: `feature/CL01`
@@ -1820,6 +1881,6 @@
   - Added module-level and runtime defensive normalization in `Component.js`.
 
 ## Next Steps
-1. Review the uncommitted 2026-09-22 13:05–13:13 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+1. Review the uncommitted 2026-09-22 13:30–13:57 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
 2. Set `LOCAL_DEV_PASSWORD` in the local environment (mock logins) and, once the WM owner confirms the interim storage type, `S4_DIFFERENCE_STORAGE_TYPE` (needed only for Goods Issue differences).
 3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.

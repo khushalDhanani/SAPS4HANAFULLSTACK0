@@ -89,6 +89,7 @@ function registerPurchaseOrderHandlers(srv) {
         const sSupplier = String(Supplier).trim();
         const sPurchOrg = PurchasingOrganization ? String(PurchasingOrganization).trim() : '';
         const sCompCode = CompanyCode ? String(CompanyCode).trim() : '';
+        let sLookupFailed = false;
 
         try {
             const findPoWithDefaults = async (filterObj) => {
@@ -164,7 +165,9 @@ function registerPurchaseOrderHandlers(srv) {
                 };
             }
         } catch (error) {
-            LOG.warn('getSupplierDefaults readFsData failed, falling back:', error.message);
+            LOG.warn('getSupplierDefaults readFsData failed:', error.message);
+            // A failed lookup is not "no history": say so, so the screen can tell the user.
+            sLookupFailed = true;
         }
 
         return {
@@ -174,7 +177,7 @@ function registerPurchaseOrderHandlers(srv) {
             IncotermsClassification: '',
             IncotermsLocation1: '',
             derived: false,
-            source: '',
+            source: sLookupFailed ? 'lookup failed' : '',
             lastPurchaseOrder: ''
         };
     });

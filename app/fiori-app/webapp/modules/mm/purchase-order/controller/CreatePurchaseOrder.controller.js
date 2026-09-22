@@ -212,6 +212,10 @@ sap.ui.define([
             PurchaseOrderService.getSupplierDefaults(sSupplier, sCoCode, sPurchOrg)
                 .then(function (oDefaults) {
                     if (!oDefaults) return;
+                    if (oDefaults.source === "lookup failed") {
+                        MessageToast.show("Supplier history could not be read from SAP. Enter currency, payment terms and Incoterms manually.");
+                        return;
+                    }
                     var oReport = PurchaseOrderModel.deriveSupplierDefaults(oModel, sSupplier, oDefaults);
                     if (oReport && oReport.applied && Object.keys(oReport.applied).length > 0) {
                         var aAppliedFields = Object.keys(oReport.applied).map(function (k) {

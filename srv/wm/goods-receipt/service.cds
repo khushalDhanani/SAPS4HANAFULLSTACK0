@@ -79,6 +79,7 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         Supplier             : String(10);
         SupplierName         : String(40);
         SupplierCityName     : String(40);
+        LookupWarnings       : array of String(255);
     };
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])

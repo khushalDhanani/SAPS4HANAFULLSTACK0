@@ -293,6 +293,9 @@ sap.ui.define([
                         ? sToastTpl.replace("{0}", sLabel).replace("{1}", sBarcode).replace("{2}", oSU.Material || "")
                         : (sLabel + " " + sBarcode + " resolved from SAP.");
                     MessageToast.show(sToastMsg);
+                    if (Array.isArray(oSU.LookupWarnings) && oSU.LookupWarnings.length > 0) {
+                        MessageBox.warning(oSU.LookupWarnings.join("\n"), { title: that.getText("grLookupWarningsTitle") || "Some SAP data could not be read" });
+                    }
                 })
                 .catch(function (err) {
                     that._playBeep(false);

@@ -130,8 +130,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
                         SalesOrderID: '1000522',
                         SalesOrderTypeCode: 'ZIN',
                         SalesOrganization: '1000',
-                        NetValue: '250.00',
-                        Currency: 'INR'
+                        DocumentCurrency: 'INR'
                     }
                 }
             })
@@ -157,6 +156,18 @@ describe('Unit: Sales Inquiry Adapter', () => {
                         AmountInternal: '50.00'
                     }
                 }
+            })
+            // 4th call: HeaderSet read-back (default) — the only source of the document totals
+            .mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    d: {
+                        SalesOrderID: '1000522',
+                        NetAmount: '250.00',
+                        TotalAmount: '295.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
             });
 
         const created = await salesInquiryAdapter.createSalesInquiry(header, items, {
@@ -169,7 +180,8 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(created.TransactionCurrency).toBe('INR');
 
         // Check calls
-        expect(mockExecuteHttpRequest).toHaveBeenCalledTimes(3);
+        // 3 POSTs (HeaderSet, ItemSet, PriceCondSet) + 1 GET read-back for the document totals
+        expect(mockExecuteHttpRequest).toHaveBeenCalledTimes(4);
         const headerCall = mockExecuteHttpRequest.mock.calls[0];
         expect(headerCall[1].method).toBe('post');
         expect(headerCall[1].url).toContain('/HeaderSet');

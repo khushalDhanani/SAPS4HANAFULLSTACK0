@@ -388,6 +388,8 @@ class PurchaseOrderAdapter {
       if (values[i] === null) unavailable.push(key);
     });
     metrics.unavailable = unavailable;
+    // When these figures were read from SAP. A cached answer keeps its original asOf, so the screen can say how old it is.
+    metrics.asOf = new Date().toISOString();
     if (unavailable.length === keys.length && lastError) {
       metrics.error = lastError.includes('401')
         ? `SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client ${s4Config.getClient()}.`

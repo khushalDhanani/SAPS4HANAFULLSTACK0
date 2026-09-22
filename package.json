@@ -208,6 +208,10 @@
         "1112",
         "1108",
         "1109"
+      ],
+      "salesMaterialTypes": [
+        "ZFRT",
+        "FERT"
       ]
     }
   }

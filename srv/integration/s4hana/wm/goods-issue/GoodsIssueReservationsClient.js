@@ -296,7 +296,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               } else if (matchedBatch.ExpiryDate) {
                 batchStatus = this._enrichBatchStatus(matchedBatch.ExpiryDate);
               } else {
-                batchStatus = { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
+                batchStatus = { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null };
               }
             } else {
               batchStatus = { StatusState: 'None', StatusText: 'unknown', DaysToExpiry: null };

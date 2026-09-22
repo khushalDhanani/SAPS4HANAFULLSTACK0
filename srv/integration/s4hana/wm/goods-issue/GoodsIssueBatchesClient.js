@@ -108,12 +108,23 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
         for (const row of stockRes) {
           const bId = row.Batch ? String(row.Batch).trim() : '';
           if (bId) {
-            batchStockMap.set(bId, {
-              CurrentStock: row.CurrentStock !== undefined && row.CurrentStock !== null ? Number(row.CurrentStock) : null,
-              BaseUnit: row.BaseUnit || '',
-              StorageLocation: row.StorageLocation || sSLoc || '',
-              StorageLocationName: row.StorageLocationName || ''
-            });
+            const rowStock = row.CurrentStock !== undefined && row.CurrentStock !== null ? Number(row.CurrentStock) : null;
+            const prev = batchStockMap.get(bId);
+            if (!prev) {
+              batchStockMap.set(bId, {
+                CurrentStock: rowStock,
+                BaseUnit: row.BaseUnit || '',
+                StorageLocation: row.StorageLocation || sSLoc || '',
+                StorageLocationName: row.StorageLocationName || ''
+              });
+            } else {
+              // Same batch in several storage locations / stock rows: stock is the sum, location is no longer a single one.
+              prev.CurrentStock = (prev.CurrentStock === null || rowStock === null) ? null : prev.CurrentStock + rowStock;
+              if ((row.StorageLocation || '') !== prev.StorageLocation) {
+                prev.StorageLocation = sSLoc || '';
+                prev.StorageLocationName = '';
+              }
+            }
           }
         }
       }

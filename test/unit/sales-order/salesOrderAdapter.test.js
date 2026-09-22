@@ -19,8 +19,8 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 data: {
                     d: {
                         SalesOrderID: '5000460',
-                        NetValue: '1250.00',
-                        Currency: 'INR'
+                        NetAmount: '1250.00',
+                        DocumentCurrency: 'INR'
                     }
                 }
             });
@@ -140,8 +140,8 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 data: {
                     d: {
                         SalesOrderID: '5000461',
-                        NetValue: '500.00',
-                        Currency: 'INR'
+                        NetAmount: '500.00',
+                        DocumentCurrency: 'INR'
                     }
                 }
             });
@@ -274,13 +274,14 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(result.SalesDocument).toBe('1000530');
             expect(result.SalesInquiry).toBe('1000530');
             // 3 sequential calls
-            expect(mockExecute).toHaveBeenCalledTimes(3);
+            // 3 POSTs + 1 GET read-back for the document totals
+            expect(mockExecute).toHaveBeenCalledTimes(4);
         });
 
         test('routes ZDOM to single Deep Insert POST', async () => {
             const mockExecute = jest.fn().mockResolvedValueOnce({
                 status: 201,
-                data: { d: { SalesOrderID: '5000461', NetValue: '500.00', Currency: 'INR' } }
+                data: { d: { SalesOrderID: '5000461', NetAmount: '500.00', DocumentCurrency: 'INR' } }
             });
 
             const header = {

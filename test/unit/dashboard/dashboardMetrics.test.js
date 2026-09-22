@@ -175,6 +175,18 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((key) => expect(data).not.toHaveProperty(key));
     });
 
+    test('shows when the figures were read from SAP (asOf) so cached answers are not mistaken for live ones', async () => {
+        const oViewModel = new MockJSONModel({});
+        const controller = makeController(oViewModel);
+        const payload = fullPayload({ totalCount: 1 });
+        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [], asOf: '2026-09-22T08:22:00.000Z' }));
+
+        await controller._loadMetrics();
+
+        expect(oViewModel.getProperty('/connectionState')).toBe('Success');
+        expect(oViewModel.getProperty('/connectionText')).toMatch(/figures as of \d/);
+    });
+
     test('populates every figure SAP returned and reports S/4HANA connected', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
@@ -401,6 +413,9 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
         expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(typeof metrics.asOf).toBe('string');
+        expect(new Date(metrics.asOf).getTime()).not.toBeNaN();
+        delete metrics.asOf; // read time, asserted above
         expect(metrics).toEqual({
             totalCount: 2729,
             supplierCount: 4376,

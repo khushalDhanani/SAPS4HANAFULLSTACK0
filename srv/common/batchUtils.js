@@ -13,14 +13,14 @@
  */
 function enrichBatchStatus(expiryDate) {
   if (!expiryDate) {
-    return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
+    return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null };
   }
 
   let exp = null;
   if (typeof expiryDate === 'string') {
     const trimmed = expiryDate.trim();
     if (!trimmed) {
-      return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
+      return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null };
     }
     const match = /\/Date\((\d+)(?:[+-]\d+)?\)\//.exec(trimmed);
     if (match) {
@@ -35,7 +35,7 @@ function enrichBatchStatus(expiryDate) {
   }
 
   if (!exp || isNaN(exp.getTime())) {
-    return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
+    return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: null };
   }
 
   const now = new Date();

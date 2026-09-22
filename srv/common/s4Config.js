@@ -162,6 +162,11 @@ class S4Config {
     return this._requireString('conditionType', ['CDS_S4_CONDITION_TYPE', 'S4_CONDITION_TYPE']);
   }
 
+  /** Material types offered in the sales material value help (e.g. ['ZFRT', 'FERT']) — org scope, configured, never hardcoded */
+  getSalesMaterialTypes() {
+    return this._requireArray('salesMaterialTypes', ['CDS_S4_SALES_MATERIAL_TYPES', 'S4_SALES_MATERIAL_TYPES']);
+  }
+
   /**
    * WM interim storage type that Goods Issue differences are cleared to (e.g. '999').
    * Warehouse customizing, not transactional data: must be configured explicitly, never defaulted.
@@ -190,6 +195,7 @@ class S4Config {
   get conditionType() { return this.getConditionType(); }
   get shippingPoints() { return this.getShippingPoints(); }
   get differenceStorageType() { return this.getDifferenceStorageType(); }
+  get salesMaterialTypes() { return this.getSalesMaterialTypes(); }
 
   /**
    * Returns a snapshot of all configured values.

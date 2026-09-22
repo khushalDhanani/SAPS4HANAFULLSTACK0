@@ -302,6 +302,7 @@ sap.ui.define([
                         lastPurchaseOrder: ""
                     };
                 }).catch(function () {
+                    // Not "no history": the history could not be read. The controller tells the user.
                     return {
                         Supplier: sCleanSupplier,
                         Currency: "",
@@ -309,7 +310,7 @@ sap.ui.define([
                         IncotermsClassification: "",
                         IncotermsLocation1: "",
                         derived: false,
-                        source: "",
+                        source: "lookup failed",
                         lastPurchaseOrder: ""
                     };
                 });

@@ -312,27 +312,10 @@ sap.ui.define([
 
             var sUrl = SERVICE_BASE + "/getCustomerDefaults(" + sParams + ")";
             return ODataClient.get(sUrl).then(function (result) {
-                return result || {
-                    Customer: sCustomer,
-                    CustomerName: "",
-                    City: "",
-                    Country: "",
-                    Currency: "",
-                    ShipToParty: "",
-                    ShipToPartyName: "",
-                    derived: false
-                };
-            }).catch(function () {
-                return {
-                    Customer: sCustomer,
-                    CustomerName: "",
-                    City: "",
-                    Country: "",
-                    Currency: "",
-                    ShipToParty: "",
-                    ShipToPartyName: "",
-                    derived: false
-                };
+                if (!result || typeof result !== "object") {
+                    throw new Error("getCustomerDefaults returned no data");
+                }
+                return result;
             });
         },
 
@@ -357,21 +340,8 @@ sap.ui.define([
 
         getSalesInquiryDefaults: function () {
             var sUrl = SERVICE_BASE + "/getSalesInquiryDefaults()";
-            return ODataClient.get(sUrl).catch(function () {
-                var today = new Date().toISOString().split("T")[0];
-                var validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-                return {
-                    SalesInquiryType: "",
-                    SalesOrganization: "",
-                    DistributionChannel: "",
-                    OrganizationDivision: "",
-                    SalesInquiryDate: today,
-                    BindingPeriodValidityStartDate: today,
-                    BindingPeriodValidityEndDate: validityEnd,
-                    TransactionCurrency: "",
-                    derived: false
-                };
-            });
+            // Rejects on failure so the screen can say the defaults could not be loaded (never silent blanks or invented dates).
+            return ODataClient.get(sUrl);
         },
 
         /**

@@ -755,38 +755,35 @@ class GoodsReceiptAdapter {
       throw err;
     }
 
-    // Retrieve authentic Storage Locations & Bins
+    // Lookups that fail (non-outage) are reported to the caller, never silently emptied.
+    const lookupWarnings = [];
+
+    // Retrieve authentic Storage Locations & Bins (pick list only; nothing is pre-selected from it)
     let storageLocations = [];
     try {
       storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
     } catch (err) {
       if (this._isOutage(err)) throw err;
       LOG.warn(`Material storage locations lookup failed for ${resolvedMaterial}: ${err.message}`);
+      lookupWarnings.push(`Storage locations could not be read from SAP: ${err.message}`);
     }
-    let defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : '';
-    let defaultSLocName = storageLocations.length > 0 ? storageLocations[0].StorageLocationName : '';
-    let defaultBin = storageLocations.length > 0 ? storageLocations[0].WarehouseStorageBin : '';
+    let defaultSLoc = '';
+    let defaultSLocName = '';
+    let defaultBin = '';
 
-    // Retrieve authentic Batches & SLED
+    // Retrieve authentic Batches & SLED (pick list only; the batch comes from the scan or the document, never batches[0])
     let batches = [];
     try {
       batches = await this.getMaterialBatches(resolvedMaterial, resolvedPlant, defaultSLoc);
     } catch (err) {
       if (this._isOutage(err)) throw err;
       LOG.warn(`Material batches lookup failed for ${resolvedMaterial}: ${err.message}`);
+      lookupWarnings.push(`Batches could not be read from SAP: ${err.message}`);
     }
     let selectedBatch = targetBatch;
     let expiryDate = targetExpiryDate;
     let batchStatusState = targetBatchStatusState;
     let batchStatusText = targetBatchStatusText;
-
-    if (!selectedBatch && batches.length > 0) {
-      const topBatch = batches[0];
-      selectedBatch = topBatch.Batch;
-      expiryDate = topBatch.ExpiryDate;
-      batchStatusState = topBatch.StatusState;
-      batchStatusText = topBatch.StatusText;
-    }
 
     // Retrieve authentic Goods Receipt item details (OpenQuantity, OrderedQuantity, Unit) from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items
     let grItem = null;
@@ -795,6 +792,7 @@ class GoodsReceiptAdapter {
     } catch (err) {
       if (this._isOutage(err)) throw err;
       LOG.warn(`Goods receipt item lookup failed: ${err.message}`);
+      lookupWarnings.push(`Open quantity could not be read from SAP: ${err.message}`);
     }
     let proposedQuantity = null;
     let authenticOpenQuantity = null;
@@ -805,24 +803,23 @@ class GoodsReceiptAdapter {
       authenticOpenQuantity = (grItem.OpenQuantity !== undefined && grItem.OpenQuantity !== null && !isNaN(grItem.OpenQuantity)) ? grItem.OpenQuantity : null;
       authenticOrderedQuantity = (grItem.OrderedQuantity !== undefined && grItem.OrderedQuantity !== null && !isNaN(grItem.OrderedQuantity)) ? grItem.OrderedQuantity : null;
       authenticQuantityInEntryUnit = (grItem.QuantityInEntryUnit !== undefined && grItem.QuantityInEntryUnit !== null && !isNaN(grItem.QuantityInEntryUnit)) ? grItem.QuantityInEntryUnit : null;
-      if (authenticOpenQuantity !== null && authenticOpenQuantity > 0) {
-        proposedQuantity = authenticOpenQuantity;
-      } else if (authenticQuantityInEntryUnit !== null && authenticQuantityInEntryUnit > 0) {
-        proposedQuantity = authenticQuantityInEntryUnit;
-      } else if (authenticOrderedQuantity !== null && authenticOrderedQuantity > 0) {
-        proposedQuantity = authenticOrderedQuantity;
-      } else if (authenticOpenQuantity !== null) {
-        proposedQuantity = authenticOpenQuantity;
-      } else {
-        proposedQuantity = null;
-      }
+      // Proposed quantity is SAP's open quantity and nothing else: an item with 0 open must not propose the ordered quantity again.
+      proposedQuantity = authenticOpenQuantity;
       if (grItem.Unit) resolvedUnit = grItem.Unit;
       if (grItem.StorageLocation) {
         defaultSLoc = grItem.StorageLocation;
         if (grItem.StorageLocationName) defaultSLocName = grItem.StorageLocationName;
       }
       if (grItem.WarehouseStorageBin && !defaultBin) defaultBin = grItem.WarehouseStorageBin;
-      if (grItem.Batch && !selectedBatch) selectedBatch = grItem.Batch;
+      if (grItem.Batch && !selectedBatch) {
+        selectedBatch = grItem.Batch;
+        const docBatch = batches.find(b => b.Batch === grItem.Batch);
+        if (docBatch) {
+          expiryDate = docBatch.ExpiryDate;
+          batchStatusState = docBatch.StatusState;
+          batchStatusText = docBatch.StatusText;
+        }
+      }
       if (grItem.DeliveryDocumentItem && !resolvedPOItem && grItem.SourceOfGR === 'PURORD') {
         resolvedPOItem = grItem.DeliveryDocumentItem;
       }
@@ -839,7 +836,7 @@ class GoodsReceiptAdapter {
           Plant: resolvedPlant || '',
           PlantName: resolvedPlantName || '',
           StorageLocation: defaultSLoc,
-          StorageLocationName: defaultSLocName || defaultSLoc,
+          StorageLocationName: defaultSLocName || '',
           WarehouseStorageBin: defaultBin || '',
           CurrentStock: null,
           BaseUnit: ''
@@ -847,7 +844,8 @@ class GoodsReceiptAdapter {
       }
     }
 
-    const effectiveUnit = resolvedUnit || (grItem && grItem.Unit) || (storageLocations.length > 0 && storageLocations[0].BaseUnit) || (batches.length > 0 && batches[0].Unit) || '';
+    // Unit only from the scanned object or the document item; a first storage location's or batch's unit is not this item's unit.
+    const effectiveUnit = resolvedUnit || (grItem && grItem.Unit) || '';
 
     return {
       StorageUnit: resolvedDelivery || sCleanScan,
@@ -878,7 +876,8 @@ class GoodsReceiptAdapter {
       SupplierName: resolvedSupplierName,
       SupplierCityName: resolvedSupplierCity,
       AvailableStorageLocations: storageLocations,
-      AvailableBatches: batches
+      AvailableBatches: batches,
+      LookupWarnings: lookupWarnings
     };
   }
 

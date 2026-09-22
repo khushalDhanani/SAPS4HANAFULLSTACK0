@@ -62,7 +62,6 @@ sap.ui.define([
          */
         createInitialModel: function (sUser) {
             var today = new Date().toISOString().split("T")[0];
-            var validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
             return new JSONModel({
                 header: {
@@ -80,7 +79,7 @@ sap.ui.define([
                     CustomerPurchaseOrderDate: today,
                     SalesInquiryDate: today,
                     BindingPeriodValidityStartDate: today,
-                    BindingPeriodValidityEndDate: validityEnd,
+                    BindingPeriodValidityEndDate: "",
                     TransactionCurrency: "",
                     TotalNetAmount: "0.00",
                     CustomerGroup2: "",

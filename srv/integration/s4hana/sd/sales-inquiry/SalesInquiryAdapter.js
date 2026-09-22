@@ -374,8 +374,8 @@ class SalesInquiryAdapter {
   }
 
   /**
-   * Retrieves Finished Goods (FG) materials dynamically from S/4HANA SD_F2369_INQY_FS_SRV.I_Material.
-   * Restricts strictly to Finished Goods (MaterialType = 'ZFRT' or MaterialType = 'FERT').
+   * Retrieves sales materials dynamically from S/4HANA SD_F2369_INQY_FS_SRV.I_Material.
+   * Scoped to the material types configured in cds.s4.salesMaterialTypes (finished goods); the scope is stated on screen.
    * Merges incoming search filters, applies stable deterministic sorting, and supports pagination.
    */
   async getMaterials(query) {
@@ -386,18 +386,13 @@ class SalesInquiryAdapter {
       throw err;
     }
     try {
-      // Finished Goods constraint in S/4HANA Client 220
-      const fgCondition = [
-        '(',
-        { ref: ['MaterialType'] },
-        '=',
-        { val: 'ZFRT' },
-        'or',
-        { ref: ['MaterialType'] },
-        '=',
-        { val: 'FERT' },
-        ')'
-      ];
+      // Material-type scope comes from configuration (cds.s4.salesMaterialTypes), not a literal list
+      const fgCondition = ['('];
+      s4Config.getSalesMaterialTypes().forEach((t, i) => {
+        if (i > 0) fgCondition.push('or');
+        fgCondition.push({ ref: ['MaterialType'] }, '=', { val: t });
+      });
+      fgCondition.push(')');
 
       // Helper to map alias MaterialName -> physical field Material_Text in S/4HANA CDS
       const mapWhereNode = (node) => {
@@ -1010,14 +1005,14 @@ class SalesInquiryAdapter {
    */
   async getSalesOrderDefaults() {
     const today = new Date().toISOString().split('T')[0];
-    const defaultDelivery = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     return {
       SalesOrderType: s4Config.getOrderType(),
       SalesOrganization: s4Config.getSalesOrganization(),
       DistributionChannel: s4Config.getDistributionChannel(),
       OrganizationDivision: s4Config.getDivision(),
       Plant: s4Config.getPlant(),
-      RequestedDeliveryDate: defaultDelivery,
+      // No proposed delivery date: S/4HANA derives it from customizing when the user leaves it blank.
+      RequestedDeliveryDate: '',
       SalesOrderDate: today,
       CreationDate: today,
       TransactionCurrency: s4Config.getCurrency(),
@@ -1030,7 +1025,8 @@ class SalesInquiryAdapter {
    * Runs customer master lookup and historical inquiries in parallel, with
    * customer master details and value helps cached with a 5-minute TTL.
    */
-  async getCustomerDefaults(sCustomer, sOrg, sChannel, sDivision) {
+  // Sales area parameters are accepted for API compatibility; no office/group is guessed from them any more.
+  async getCustomerDefaults(sCustomer, _sOrg, _sChannel, _sDivision) {
     if (!sCustomer || String(sCustomer).trim() === '') {
       return {
         Customer: '',
@@ -1052,7 +1048,8 @@ class SalesInquiryAdapter {
     let sName = '';
     let sCity = '';
     let sCountry = '';
-    let sCurrency = s4Config.getCurrency();
+    let sCurrency = '';
+    let bDerived = false; // true when a value was taken from the customer's previous documents
     let sOffice = '';
     let sOfficeName = '';
     let sGroup = '';
@@ -1097,60 +1094,23 @@ class SalesInquiryAdapter {
         const rawInqs = inqResult.status === 'fulfilled' ? inqResult.value : [];
         const aInqs = Array.isArray(rawInqs) ? rawInqs : (rawInqs?.value || []);
         for (const inq of aInqs) {
-          if (inq?.TransactionCurrency && !sCurrency) sCurrency = inq.TransactionCurrency;
-          if (inq?.SalesOffice && !sOffice) sOffice = inq.SalesOffice;
-          if (inq?.SalesGroup && !sGroup) sGroup = inq.SalesGroup;
+          if (inq?.TransactionCurrency && !sCurrency) { sCurrency = inq.TransactionCurrency; bDerived = true; }
+          if (inq?.SalesOffice && !sOffice) { sOffice = inq.SalesOffice; bDerived = true; }
+          if (inq?.SalesGroup && !sGroup) { sGroup = inq.SalesGroup; bDerived = true; }
         }
 
-        // If no office found on customer history, query valid office for provided sales area from cache or SAP
-        if (!sOffice && sOrg) {
-          const areaKey = `${sOrg}:${sChannel || s4Config.getDistributionChannel()}:${sDivision || s4Config.getDivision()}`;
-          const oMatch = await this.salesOfficeVhCache.getOrSet(`area:${areaKey}`, async () => {
-            const areaOffices = await this.s4hanaWL.run(
-              SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp')
-                .where({
-                  SalesOrganization: sOrg,
-                  DistributionChannel: sChannel || s4Config.getDistributionChannel(),
-                  OrganizationDivision: sDivision || s4Config.getDivision()
-                })
-                .limit(1)
-            );
-            return Array.isArray(areaOffices) ? areaOffices[0] : (areaOffices?.value?.[0] || null);
-          });
-          if (oMatch?.SalesOffice) {
-            sOffice = oMatch.SalesOffice;
-            sOfficeName = oMatch.SalesOfficeName || '';
-          }
-        }
-
-        // Parallel resolution of SalesOfficeName and SalesGroup if both are missing
-        const needsOfficeName = sOffice && !sOfficeName;
-        const needsGroup = sOffice && !sGroup;
-
-        if (needsOfficeName || needsGroup) {
-          const [nameRes, groupRes] = await Promise.allSettled([
-            needsOfficeName ? this.salesOfficeVhCache.getOrSet(`office:${sOffice}`, async () => {
+        // Sales office name is master data for a known office; no office or group is ever picked from the
+        // first row of a value help (that was a guess, not the customer's data).
+        if (sOffice && !sOfficeName) {
+          try {
+            sOfficeName = await this.salesOfficeVhCache.getOrSet(`office:${sOffice}`, async () => {
               const oVH = await this.s4hanaWL.run(
                 SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp').where({ SalesOffice: sOffice })
               );
               return oVH?.SalesOfficeName || '';
-            }) : Promise.resolve(sOfficeName),
-
-            needsGroup ? this.salesGroupVhCache.getOrSet(`group_by_office:${sOffice}`, async () => {
-              const gRows = await this.s4hanaWL.run(
-                SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesGroupValueHelp').where({ SalesOffice: sOffice }).limit(1)
-              );
-              const gRow = Array.isArray(gRows) ? gRows[0] : (gRows?.value?.[0] || null);
-              return gRow ? { SalesGroup: gRow.SalesGroup, SalesGroupName: gRow.SalesGroupName || '' } : null;
-            }) : Promise.resolve(null)
-          ]);
-
-          if (needsOfficeName && nameRes.status === 'fulfilled' && nameRes.value) {
-            sOfficeName = nameRes.value;
-          }
-          if (needsGroup && groupRes.status === 'fulfilled' && groupRes.value) {
-            sGroup = groupRes.value.SalesGroup || '';
-            sGroupName = groupRes.value.SalesGroupName || '';
+            });
+          } catch (e) {
+            LOG.warn(`Could not resolve sales office name for ${sOffice}:`, e.message);
           }
         }
 
@@ -1178,13 +1138,14 @@ class SalesInquiryAdapter {
       City: sCity,
       Country: sCountry,
       Currency: sCurrency,
-      ShipToParty: sCust,
-      ShipToPartyName: sName,
+      // Ship-to is not proposed: S/4HANA partner determination sets it on create when left blank.
+      ShipToParty: '',
+      ShipToPartyName: '',
       SalesOffice: sOffice,
       SalesOfficeName: sOfficeName,
       SalesGroup: sGroup,
       SalesGroupName: sGroupName,
-      derived: Boolean(sName || sCity || sOffice)
+      derived: bDerived
     };
   }
 
@@ -1193,7 +1154,6 @@ class SalesInquiryAdapter {
    */
   async getSalesInquiryDefaults() {
     const today = new Date().toISOString().split('T')[0];
-    const validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     return {
       SalesInquiryType: s4Config.getInquiryType(),
@@ -1202,7 +1162,7 @@ class SalesInquiryAdapter {
       OrganizationDivision: s4Config.getDivision(),
       SalesInquiryDate: today,
       BindingPeriodValidityStartDate: today,
-      BindingPeriodValidityEndDate: validityEnd,
+      BindingPeriodValidityEndDate: '',
       TransactionCurrency: s4Config.getCurrency(),
       derived: true
     };
@@ -1290,7 +1250,6 @@ class SalesInquiryAdapter {
     // Order Branch: OData Deep Insert
     // -------------------------------------------------------------------------
     if (isOrder) {
-      let totalNet = 0;
       const deepItems = [];
 
       if (Array.isArray(items) && items.length > 0) {
@@ -1299,7 +1258,6 @@ class SalesInquiryAdapter {
           const qty = parseFloat(itm.OrderQuantity);
           const price = parseFloat(itm.NetPriceAmount) || 0;
           const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
-          totalNet += net;
 
           const _lineNum = itm.SalesOrderItem || itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
           const resolvedMaterial = await this.resolveMaterial(itm.Material);
@@ -1391,15 +1349,14 @@ class SalesInquiryAdapter {
         throw new Error('Sales Order number not returned from SAP S/4HANA');
       }
 
+      // HeaderSet (LORD_ODATA_ORDER_SRV) carries NetAmount, TotalAmount, TaxAmount, DocumentCurrency — nothing else, nothing computed.
       const s4Header = createResp.data?.d || createResp.data || {};
-      const sapNet = s4Header.NetAmount ?? s4Header.TotalAmount ?? s4Header.NetValue;
+      const sapNet = s4Header.NetAmount;
       const sapTotal = s4Header.TotalAmount;
       const sapTax = s4Header.TaxAmount;
-      const sapCurrency = s4Header.DocumentCurrency || s4Header.Currency || header.TransactionCurrency || s4Config.getCurrency();
+      const sapCurrency = s4Header.DocumentCurrency || '';
 
-      const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '')
-        ? String(sapNet)
-        : (totalNet > 0 ? String(totalNet.toFixed(2)) : '');
+      const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '') ? String(sapNet) : '';
 
       return {
         SalesDocument: sNewOrderId,
@@ -1407,7 +1364,7 @@ class SalesInquiryAdapter {
         SalesOrder: sNewOrderId,
         SalesInquiry: sNewOrderId,
         TotalNetAmount: finalNet,
-        NetAmount: s4Header.NetAmount !== undefined && s4Header.NetAmount !== null ? String(s4Header.NetAmount) : (finalNet || undefined),
+        NetAmount: finalNet || undefined,
         TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
         TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
         TransactionCurrency: sapCurrency,
@@ -1479,7 +1436,6 @@ class SalesInquiryAdapter {
       throw new Error('Sales Inquiry number not returned from SAP S/4HANA');
     }
 
-    let totalNet = 0;
 
     // 2. Post line items sequentially to LORD_ODATA_ORDER_SRV/HeaderSet('<SalesOrderID>')/ItemSet
     if (Array.isArray(items) && items.length > 0) {
@@ -1488,7 +1444,6 @@ class SalesInquiryAdapter {
         const qty = parseFloat(itm.OrderQuantity);
         const price = parseFloat(itm.NetPriceAmount) || 0;
         const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
-        totalNet += net;
 
         const lineNum = itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
         const resolvedMaterial = await this.resolveMaterial(itm.Material);
@@ -1585,8 +1540,11 @@ class SalesInquiryAdapter {
     }
 
     let s4Header = headerResp.data?.d || headerResp.data || {};
+    // The header POST answers before items and prices exist, so its amounts are not the document's totals.
+    // Totals are reported only after reading the header back (default), never computed locally.
+    let totalsFromReadBack = false;
 
-    if (options.readBack) {
+    if (options.readBack !== false) {
       try {
         const readResp = await executeFn(destination, {
           method: 'get',
@@ -1598,21 +1556,19 @@ class SalesInquiryAdapter {
         }, { fetchCsrfToken: false });
         if (readResp?.data?.d || readResp?.data) {
           s4Header = readResp.data?.d || readResp.data;
+          totalsFromReadBack = true;
         }
       } catch (readErr) {
         LOG.warn(`Could not read back header totals for inquiry ${sNewInquiryId}:`, readErr.message);
       }
     }
 
-    const sapNet = s4Header.NetAmount ?? s4Header.TotalAmount ?? s4Header.NetValue;
-    const sapTotal = s4Header.TotalAmount;
-    const sapTax = s4Header.TaxAmount;
-    const sapCurrency = s4Header.DocumentCurrency || s4Header.Currency || header.TransactionCurrency || s4Config.getCurrency();
+    const sapNet = totalsFromReadBack ? s4Header.NetAmount : undefined;
+    const sapTotal = totalsFromReadBack ? s4Header.TotalAmount : undefined;
+    const sapTax = totalsFromReadBack ? s4Header.TaxAmount : undefined;
+    const sapCurrency = s4Header.DocumentCurrency || '';
 
-    // Prefer SAP's authentic NetAmount/TotalAmount if returned; otherwise fall back to computed totalNet or blank
-    const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '' && Number(sapNet) > 0)
-      ? String(sapNet)
-      : (totalNet > 0 ? String(totalNet.toFixed(2)) : (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '' ? String(sapNet) : ''));
+    const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '') ? String(sapNet) : '';
 
     return {
       SalesDocument: sNewInquiryId,
@@ -1620,7 +1576,7 @@ class SalesInquiryAdapter {
       SalesInquiry: sNewInquiryId,
       SalesOrder: sNewInquiryId,
       TotalNetAmount: finalNet,
-      NetAmount: s4Header.NetAmount !== undefined && s4Header.NetAmount !== null ? String(s4Header.NetAmount) : (finalNet || undefined),
+      NetAmount: finalNet || undefined,
       TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
       TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
       TransactionCurrency: sapCurrency,

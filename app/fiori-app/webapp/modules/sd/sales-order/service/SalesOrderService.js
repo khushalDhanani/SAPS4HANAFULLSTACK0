@@ -318,27 +318,10 @@ sap.ui.define([
 
             var sUrl = SERVICE_BASE + "/getCustomerDefaults(" + sParams + ")";
             return ODataClient.get(sUrl).then(function (result) {
-                return result || {
-                    Customer: sCustomer,
-                    CustomerName: "",
-                    City: "",
-                    Country: "",
-                    Currency: "",
-                    ShipToParty: sCustomer,
-                    ShipToPartyName: "",
-                    derived: false
-                };
-            }).catch(function () {
-                return {
-                    Customer: sCustomer,
-                    CustomerName: "",
-                    City: "",
-                    Country: "",
-                    Currency: "",
-                    ShipToParty: sCustomer,
-                    ShipToPartyName: "",
-                    derived: false
-                };
+                if (!result || typeof result !== "object") {
+                    throw new Error("getCustomerDefaults returned no data");
+                }
+                return result;
             });
         },
 
@@ -347,20 +330,8 @@ sap.ui.define([
          */
         getSalesOrderDefaults: function () {
             var sUrl = SERVICE_BASE + "/getSalesOrderDefaults()";
-            return ODataClient.get(sUrl).catch(function () {
-                return {
-                    SalesOrderType: "",
-                    SalesOrganization: "",
-                    DistributionChannel: "",
-                    OrganizationDivision: "",
-                    SalesOrderDate: "",
-                    CreationDate: "",
-                    RequestedDeliveryDate: "",
-                    TransactionCurrency: "",
-                    Plant: "",
-                    derived: false
-                };
-            });
+            // Rejects on failure so the screen can say the defaults could not be loaded (never silent blanks).
+            return ODataClient.get(sUrl);
         },
 
         /**

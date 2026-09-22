@@ -259,9 +259,13 @@ sap.ui.define([
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel && oCurrentModel.getProperty("/header/SoldToParty") === sCustomer) {
                     SalesInquiryModel.deriveCustomerDefaults(oCurrentModel, sCustomer, oDefaults);
+                    if (oDefaults && oDefaults.derived) {
+                        MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsFromHistory")) || "Currency, sales office and sales group were taken from this customer's previous sales documents. Verify before submitting.");
+                    }
                 }
             }).catch(function (err) {
                 console.warn("[CreateSalesInquiry] Error fetching customer defaults:", err);
+                MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsUnavailable")) || "Customer data could not be loaded from SAP.");
             });
         },
 
