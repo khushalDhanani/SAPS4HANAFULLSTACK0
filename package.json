@@ -20,11 +20,13 @@
   "license": "ISC",
   "dependencies": {
     "@cap-js/hana": "^3",
+    "@sap-ai-sdk/orchestration": "^2.16.0",
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
     "@sap-cloud-sdk/resilience": "^4",
     "@sap/cds": "^10.0.6",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "openai": "^7.21.0"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",

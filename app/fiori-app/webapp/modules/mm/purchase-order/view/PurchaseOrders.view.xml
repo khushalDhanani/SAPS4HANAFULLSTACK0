@@ -217,6 +217,12 @@
                                 tooltip="{i18n>btnRefresh}"
                                 press=".onRefresh" />
                             <Button
+                                id="btnAskAI"
+                                text="{i18n>btnAskAI}"
+                                icon="sap-icon://ai"
+                                tooltip="{i18n>aiDialogTitle}"
+                                press=".onAskAI" />
+                            <Button
                                 id="btnCreatePO"
                                 text="{i18n>btnCreatePO}"
                                 type="Emphasized"

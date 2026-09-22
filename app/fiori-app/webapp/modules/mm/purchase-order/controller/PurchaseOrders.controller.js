@@ -7,7 +7,8 @@ sap.ui.define([
     "sap/ui/core/library",
     "sap/m/MessageBox",
     "saps4hana/fiori/service/ValueHelpService",
-    "saps4hana/fiori/service/ODataClient"
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/core/Fragment"
 ], function (
     BaseController,
     JSONModel,
@@ -17,13 +18,14 @@ sap.ui.define([
     coreLibrary,
     MessageBox,
     ValueHelpService,
-    ODataClient
+    ODataClient,
+    Fragment
 ) {
     "use strict";
 
     var SortOrder = coreLibrary.SortOrder;
 
-    return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrders", {
+    var PurchaseOrdersController = BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.PurchaseOrders", {
         onInit: function () {
             this._sCurrentSortProperty = "CreationDate";
             this._bCurrentSortDescending = true;
@@ -449,6 +451,134 @@ sap.ui.define([
             oRouter.navTo("createPurchaseOrder");
         },
 
+        // ---------------- Ask AI chat (NVIDIA NIM via /odata/v4/ai/chat) ----------------
+        onAskAI: function () {
+            var oView = this.getView(), that = this;
+            if (!oView.getModel("aiDialog")) {
+                oView.setModel(new JSONModel({ question: "", messages: [], busy: false }), "aiDialog");
+            }
+            if (!this._pAskAIDialog) {
+                this._pAskAIDialog = Fragment.load({
+                    id: oView.getId(),
+                    name: "saps4hana.fiori.modules.mm.purchase-order.view.AskAIDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    oView.addDependent(oDialog);
+                    if (oDialog.addStyleClass && that.getContentDensityClass) {
+                        oDialog.addStyleClass(that.getContentDensityClass());
+                    }
+                    return oDialog;
+                });
+            }
+            this._pAskAIDialog.then(function (oDialog) { oDialog.open(); });
+        },
+
+        onAIClose: function () {
+            this._pAskAIDialog.then(function (oDialog) { oDialog.close(); });
+        },
+
+        onAIClear: function () {
+            var oModel = this.getView().getModel("aiDialog");
+            oModel.setProperty("/messages", []);
+            oModel.setProperty("/question", "");
+        },
+
+        onAIPreset: function (oEvent) {
+            this.getView().getModel("aiDialog").setProperty("/question", oEvent.getSource().getText());
+            this.onAIAsk();
+        },
+
+        /** Compact rows currently loaded in the table (only what the user already sees). */
+        _getLoadedPurchaseOrders: function () {
+            var oTable = this.byId("purchaseOrdersTable");
+            var oBinding = oTable && oTable.getBinding("items");
+            var aCtx = oBinding ? oBinding.getCurrentContexts() : [];
+            return aCtx.filter(Boolean).map(function (oCtx) {
+                return PurchaseOrdersController._toAIRow(oCtx.getObject());
+            });
+        },
+
+        /**
+         * PO numbers typed in the question are loaded from SAP with their items (even if not in the table),
+         * so the assistant can answer about a specific document. Resolves {rows, notFound}.
+         */
+        _fetchMentionedPurchaseOrders: function (sQuestion, aRows) {
+            var aNumbers = PurchaseOrdersController._extractPONumbers(sQuestion);
+            var aNotFound = [];
+            var aOut = aRows.slice();
+            return Promise.all(aNumbers.map(function (sPo) {
+                return ODataClient.get("/odata/v4/purchase-order/PurchaseOrders('" + encodeURIComponent(sPo) + "')" +
+                    "?$expand=to_PurchaseOrderItem($select=PurchaseOrderItem,Material,PurchaseOrderItemText,Plant,OrderQuantity," +
+                    "PurchaseOrderQuantityUnit,NetPriceAmount,NetAmount,FirstDeliveryDate,PurchaseOrderItemStatus)")
+                    .then(function (oPo) {
+                        var oRow = PurchaseOrdersController._toAIRow(oPo);
+                        oRow.items = (oPo.to_PurchaseOrderItem || []).map(function (it) {
+                            return { item: it.PurchaseOrderItem, material: it.Material, text: it.PurchaseOrderItemText, plant: it.Plant,
+                                qty: it.OrderQuantity, unit: it.PurchaseOrderQuantityUnit, price: it.NetPriceAmount, net: it.NetAmount,
+                                delivery: it.FirstDeliveryDate ? String(it.FirstDeliveryDate).slice(0, 10) : null, status: it.PurchaseOrderItemStatus };
+                        });
+                        aOut = aOut.filter(function (r) { return r.po !== sPo; });
+                        aOut.push(oRow);
+                    })
+                    .catch(function () { aNotFound.push(sPo); });
+            })).then(function () { return { rows: aOut, notFound: aNotFound }; });
+        },
+
+        /** Real totals for the current filter (server $count / KPI), so the model does not count the loaded page. */
+        _getAIScope: function (iShown) {
+            var oTable = this.byId("purchaseOrdersTable");
+            var oBinding = oTable && oTable.getBinding("items");
+            var iTotal = null;
+            if (oBinding && typeof oBinding.getCount === "function") { iTotal = oBinding.getCount(); }
+            if (iTotal == null && oBinding && typeof oBinding.getLength === "function" && oBinding.isLengthFinal && oBinding.isLengthFinal()) { iTotal = oBinding.getLength(); }
+            var oVM = this.getView().getModel("viewModel");
+            var vKpi = oVM ? oVM.getProperty("/totalCount") : null;
+            if (iTotal == null && vKpi != null && vKpi !== "-" && !isNaN(Number(vKpi))) { iTotal = Number(vKpi); }
+            var vSuppliers = oVM ? oVM.getProperty("/supplierCount") : null;
+            return {
+                shown: iShown,
+                total: iTotal,
+                supplierTotal: (vSuppliers != null && vSuppliers !== "-" && !isNaN(Number(vSuppliers))) ? Number(vSuppliers) : null,
+                filtered: !!(oBinding && typeof oBinding.getFilters === "function" && (oBinding.getFilters("Application") || []).length)
+            };
+        },
+
+        _scrollAIChatToBottom: function () {
+            var oScroll = this.byId("aiChatScroll");
+            if (oScroll) { setTimeout(function () { oScroll.scrollTo(0, 1e6, 200); }, 50); }
+        },
+
+        onAIAsk: function () {
+            var that = this;
+            var oModel = this.getView().getModel("aiDialog");
+            var sQuestion = (oModel.getProperty("/question") || "").trim();
+            if (!sQuestion || oModel.getProperty("/busy")) { return; }
+            var aMessages = (oModel.getProperty("/messages") || []).slice();
+            aMessages.push({ role: "user", content: sQuestion, html: PurchaseOrdersController._toHtml(sQuestion) });
+            oModel.setProperty("/messages", aMessages);
+            oModel.setProperty("/question", "");
+            oModel.setProperty("/busy", true);
+            this._scrollAIChatToBottom();
+            var aRows = this._getLoadedPurchaseOrders();
+            return this._fetchMentionedPurchaseOrders(sQuestion, aRows).then(function (oCtx) {
+                return ODataClient.post("/odata/v4/ai/chat", {
+                    messages: aMessages.filter(function (m) { return !m.error; }).map(function (m) { return { role: m.role, content: m.content }; }),
+                    system: PurchaseOrdersController._buildAISystemPrompt(oCtx.rows, oCtx.notFound, that._getAIScope(aRows.length))
+                });
+            }).then(function (oResult) {
+                var sAnswer = (oResult && oResult.answer) || "";
+                aMessages.push({ role: "assistant", content: sAnswer, html: PurchaseOrdersController._toHtml(sAnswer) +
+                    "<p><em>" + that.getText("aiMeta", [aRows.length, (oResult && oResult.model) || "-"]) + "</em></p>" });
+            }).catch(function (oErr) {
+                var sMsg = (oErr && oErr.message) || String(oErr);
+                aMessages.push({ role: "assistant", error: true, content: sMsg, html: PurchaseOrdersController._toHtml(sMsg) });
+            }).finally(function () {
+                oModel.setProperty("/messages", aMessages.slice());
+                oModel.setProperty("/busy", false);
+                that._scrollAIChatToBottom();
+            });
+        },
+
         onItemPress: function (oEvent) {
             var oItem = oEvent.getParameter("listItem");
             var oContext = oItem ? oItem.getBindingContext() : null;
@@ -463,4 +593,60 @@ sap.ui.define([
             }
         }
     });
+
+    /** Static helpers (pure, unit-tested). */
+    PurchaseOrdersController._toAIRow = function (o) {
+        o = o || {};
+        return {
+            po: o.PurchaseOrder, type: o.PurchaseOrderType,
+            supplier: o.Supplier, supplierName: o.SupplierName,
+            company: o.CompanyCode, purchOrg: o.PurchasingOrganization, purchGroup: o.PurchasingGroup,
+            created: o.CreationDate ? String(o.CreationDate).slice(0, 10) : null, createdBy: o.CreatedByUser,
+            netAmount: o.PurchaseOrderNetAmount, currency: o.DocumentCurrency,
+            status: o.PurchasingDocumentStatusName || o.PurchasingDocumentStatus || null,
+            deleted: o.PurchasingDocumentDeletionCode === "L" || undefined
+        };
+    };
+
+    /** 10-digit SAP document numbers mentioned in free text (de-duplicated, max 5). */
+    PurchaseOrdersController._extractPONumbers = function (sText) {
+        var aFound = String(sText || "").match(/\b\d{10}\b/g) || [];
+        return aFound.filter(function (n, i) { return aFound.indexOf(n) === i; }).slice(0, 5);
+    };
+
+    PurchaseOrdersController._buildAISystemPrompt = function (aRows, aNotFound, oScope) {
+        oScope = oScope || {};
+        var sScope = oScope.total != null
+            ? "SCOPE: the list " + (oScope.filtered ? "with the user's current filters " : "") + "contains " + oScope.total + " purchase orders in total" +
+              (oScope.supplierTotal != null ? " from " + oScope.supplierTotal + " suppliers" : "") +
+              "; only the " + oScope.shown + " rows loaded on screen are included below. " +
+              "For any count or total across all purchase orders use the SCOPE figures, never count the rows below; " +
+              "when a question needs data beyond the loaded rows, say the answer is based on the " + oScope.shown + " loaded rows only. "
+            : "SCOPE: only the " + (oScope.shown != null ? oScope.shown : aRows.length) + " rows loaded on screen are included below; the full list may be larger. ";
+        return "You are an SAP MM procurement assistant for Aether Industries. " +
+            sScope +
+            "Answer only from the purchase order data below (JSON, one object per PO; POs the user asked about by number include their items). " +
+            "If the data does not contain the answer, say so. Be concise; use short bullet lists where useful. " +
+            "Amounts are in the row currency." +
+            (aNotFound && aNotFound.length ? " These PO numbers were looked up in SAP and do NOT exist or are not accessible: " + aNotFound.join(", ") + "." : "") +
+            "\n\nPURCHASE_ORDERS = " + JSON.stringify(aRows);
+    };
+
+    /** Minimal markdown → HTML for sap.m.FormattedText (escapes HTML first). */
+    PurchaseOrdersController._toHtml = function (sText) {
+        if (!sText) { return ""; }
+        var s = String(sText).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        var aLines = s.split(/\r?\n/), aOut = [], bList = false;
+        aLines.forEach(function (l) {
+            var m = /^\s*[-*]\s+(.*)$/.exec(l);
+            if (m) { if (!bList) { aOut.push("<ul>"); bList = true; } aOut.push("<li>" + m[1] + "</li>"); return; }
+            if (bList) { aOut.push("</ul>"); bList = false; }
+            if (l.trim()) { aOut.push("<p>" + l + "</p>"); }
+        });
+        if (bList) { aOut.push("</ul>"); }
+        return aOut.join("");
+    };
+
+    return PurchaseOrdersController;
 });

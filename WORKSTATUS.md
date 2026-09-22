@@ -1849,6 +1849,97 @@
 - **Gate run (15:17 IST)**: eslint 0 · jest 65 suites / 977 tests · ui5lint no findings · `cds compile` OK · `git diff --check` clean · UI5 build 15:15 (preload regenerated).
 - **Commit state**: uncommitted (user request).
 
+## 2026-09-22 15:31 IST
+- **Agent**: Claude (Cowork)
+- **Change**: LLM integration via NVIDIA NIM free API (OpenAI-compatible), chosen over `@sap-ai-sdk/orchestration` for now because that SDK only targets SAP AI Core (needs `AICORE_SERVICE_KEY` + orchestration deployment, not yet provisioned). The `@sap-ai-sdk/orchestration` dependency added earlier (uncommitted) was left untouched; it is unused.
+  - `package.json`: added `openai` ^7.21.0 (`npm install openai`).
+  - `srv/common/aiClient.js` (new): lazy singleton `OpenAI` client with `baseURL` = `NVIDIA_BASE_URL` (default `https://integrate.api.nvidia.com/v1`), `apiKey` = `NVIDIA_API_KEY`, default model `NVIDIA_MODEL` (default `meta/llama-3.1-70b-instruct`), timeout `AI_TIMEOUT_MS` (60 s), 1 retry. Exports `chat(messages, opts)`, `askAI(question, {system, model})`, `_reset()`. Throws `AI_NOT_CONFIGURED` when the key is missing; never logs prompt text or key.
+  - `srv/ai/service.cds` + `srv/ai/service.js` (new): `AIService` at `/odata/v4/ai`, `@requires: authenticated-user`, action `askAI(question, system?, model?) → {answer, model, promptTokens, completionTokens}`; 400 empty/oversized (>8000 chars) question, 503 when not configured, 429 passthrough on rate limit, 502 on other provider errors. Registered in `srv/service.cds`.
+  - `.env`: appended `NVIDIA_API_KEY=` (empty), `NVIDIA_BASE_URL`, `NVIDIA_MODEL` placeholders. Key must be obtained from build.nvidia.com and set locally; not committed. For BTP the same variables go into `mta/extensions/*` env (not a service binding).
+  - `test/unit/ai/aiClient.test.js` (new, 3 tests): missing key → `AI_NOT_CONFIGURED`; system+user messages and model passed through, content/model/usage returned; empty choices → empty content.
+- **Validation**: `cds compile srv/ai/service.cds` OK · `eslint` on new files 0 findings · `jest test/unit/ai` 3/3 pass · smoke `cds serve srv/ai/service.cds` (port 4099, mocked auth): `POST /odata/v4/ai/askAI` as `alice` → HTTP 503 "NVIDIA_API_KEY is missing" (expected, key unset); unauthenticated → 401. Server stopped. **Not yet done**: live call to NVIDIA with a real key; full `npm test` not re-run for this change.
+- **Note**: working tree also shows `.env.example` deleted and `.env` containing only `AICORE_SERVICE_KEY=` before this change (other local vars live in `.env.local`) — pre-existing, not from this session; review before commit.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 15:41 IST
+- **Agent**: Claude (Cowork)
+- **Change**: all AI settings now env-driven. `srv/common/aiClient.js`: `num()` helper; `AI_TIMEOUT_MS`, `AI_MAX_RETRIES`, `AI_TEMPERATURE`, `AI_MAX_TOKENS` read from env (defaults 60000 / 1 / 0.2 / 1024); default model changed to `nvidia/nemotron-3.5-lightning-30b-a3b`. `srv/ai/service.js`: question limit from `AI_MAX_QUESTION_LENGTH` (default 8000). `.env`: documented block with all variables and the free model options.
+- **Validation**: `jest test/unit/ai` 4/4 pass · eslint 0 findings on touched files.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 15:43 IST
+- **Agent**: Claude (Cowork)
+- **Change**: env file hygiene for the AI settings. `.env.example` restored from HEAD via `git show` (was deleted in the working tree; `git checkout` blocked by a stale `.git/index.lock` that this session cannot remove) and the AI/LLM block appended with placeholder key `nvapi-YOUR_KEY_HERE`. AI block moved from `.env` to `.env.local` (loaded first by `server.js` / `test/setupEnv.js`); `.env` returned to its pre-session content. No secret values written.
+- **Validation**: `git status` shows `.env.example` modified (not deleted); `.env.local` contains all `NVIDIA_*` / `AI_*` keys.
+- **Blocker**: stale `.git/index.lock` present — remove it manually (`rm .git/index.lock`) before the next git command.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 15:49 IST
+- **Agent**: Claude (Cowork)
+- **Change**: "Ask AI" option on the Purchase Orders list (`#/mm/purchase-orders`).
+  - `view/PurchaseOrders.view.xml`: toolbar button `btnAskAI` (icon `sap-icon://ai`) before Create PO.
+  - `view/AskAIDialog.fragment.xml` (new): dialog with 3 preset questions (summarize / needs attention / group by supplier), free-text question, answer rendered via `FormattedText`, error strip, "Based on N purchase orders · Model" footer.
+  - `controller/PurchaseOrders.controller.js`: `onAskAI` (lazy fragment + `aiDialog` JSONModel), `onAIPreset`, `onAIAsk` → `ODataClient.post('/odata/v4/ai/askAI', {question, system})`; context = only the rows currently loaded in the table (`getCurrentContexts`), reduced to 13 business fields by static `_toAIRow`; `_buildAISystemPrompt` instructs answer-only-from-data; `_toHtml` escapes HTML then renders bold/bullets. No new S/4 calls, no data beyond what the screen already shows.
+  - i18n: 9 keys added to `i18n.properties` and `i18n_en.properties` (parity verified). Preload rebuilt (`npm run build`).
+  - `test/unit/purchase-order/purchaseOrdersAskAI.test.js` (new, 5 tests).
+- **Validation**: jest `test/unit/purchase-order` 212/212 · ui5lint no findings · UI5 build OK · `app/**` is eslint-ignored by config. Backend smoke via `cds serve srv/ai/service.cds` with the real key → HTTP 502 "Connection error": the Cowork sandbox cannot reach `integrate.api.nvidia.com` (curl → 000; npm registry reachable), so the **live NVIDIA call is unverified from this session** — must be run from the Mac terminal.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 15:52 IST
+- **Agent**: Claude (Cowork)
+- **Change**: Ask AI dialog on Purchase Orders converted to a multi-turn chatbot UI.
+  - Backend `srv/ai/service.cds`: new type `ChatMessage {role: user|assistant, content}` and action `chat(messages, system?, model?) → AIAnswer`. `srv/ai/service.js`: shared `_run()` for `askAI` and `chat`; history filtered to valid user/assistant messages, trimmed to `AI_MAX_HISTORY` (default 20, added to `.env.local` / `.env.example`); last message must be from user (400 otherwise); system prompt prepended.
+  - `AskAIDialog.fragment.xml`: rewritten as chat — scrollable message area with user/assistant bubbles (`FormattedText`), welcome + 3 suggestion buttons when empty, busy bubble while waiting, footer with `Input` (Enter to send) + send button + Close; sub-header with context hint and "New chat".
+  - `css/style.css`: `.aiBubble*` styles using SAP theme CSS variables.
+  - `PurchaseOrders.controller.js`: `onAIAsk` now appends the user bubble, posts full non-error history to `/odata/v4/ai/chat` with the current-table system prompt, appends assistant or error bubble, auto-scrolls; `onAIClear` added. Static helpers unchanged.
+  - i18n: `aiAsk=Send`, `aiClear`, `aiWelcome` added; title/hint reworded (parity verified). Preload rebuilt.
+  - Tests: `purchaseOrdersAskAI.test.js` rewritten for chat flow (6 tests).
+- **Validation**: jest `test/unit/purchase-order` + `test/unit/ai` 217/217 · `cds compile` OK · eslint `srv/ai` 0 · ui5lint no findings · UI5 build OK · backend smoke on `cds serve` port 4099: `chat` with empty / assistant-last history → 400; valid history → 502 "Connection error" (sandbox has no route to NVIDIA — live model call still unverified; run from Mac).
+- **Commit state**: uncommitted.
+
+## 2026-09-22 15:57 IST
+- **Agent**: Claude (Cowork)
+- **Change**: AI chat could not answer about a PO typed by number (e.g. 6100000059) when that PO was not among the rows loaded in the table (context was table rows only). `PurchaseOrders.controller.js`: `_extractPONumbers` (10-digit numbers in the question, max 5) and `_fetchMentionedPurchaseOrders` — each mentioned PO is read live via `GET /odata/v4/purchase-order/PurchaseOrders('<n>')?$expand=to_PurchaseOrderItem(...)` and added to the context **with items** (item, material, text, plant, qty, unit, price, net, delivery date, status), replacing the header-only table row; numbers SAP does not return are listed in the system prompt as not existing/accessible so the model says so instead of guessing. `_buildAISystemPrompt(aRows, aNotFound)` updated. Uses the existing CAP PO service only (no new S/4 client). Preload rebuilt.
+- **Tests**: 3 added in `purchaseOrdersAskAI.test.js` (number extraction; fetched PO with items replaces row; unknown PO reported). Fixed test isolation (`mockPost.mockReset()` per test).
+- **Validation**: jest `test/unit/purchase-order` + `test/unit/ai` 220/220 · ui5lint no findings · UI5 build OK. Live behaviour with a real PO still to be confirmed on the Mac.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 16:02 IST
+- **Agent**: Claude (Cowork)
+- **Change**: SAP Cloud SDK for AI (`@sap-ai-sdk/orchestration` 2.16, already installed) wired in as the primary LLM provider; NVIDIA kept as fallback. `srv/common/aiClient.js` rewritten as a provider switch: `AI_PROVIDER=sap|nvidia`, default `sap` when `AICORE_SERVICE_KEY` is a *valid* service-key JSON (https URLs + clientid/secret), else `nvidia`. SAP path: `OrchestrationClient` with `promptTemplating.model {name: AI_SAP_MODEL (default gpt-4o), params: temperature/max_tokens}`, chat history passed as `messagesHistory` + last user message as `messages`, optional `resourceGroup` (`AI_SAP_RESOURCE_GROUP`), optional SAP Data Privacy Integration masking (`AI_SAP_MASK_PII=true` → pseudonymize person/email/phone/address), request timeout `AI_TIMEOUT_MS`; response normalised to `{content, model, usage{prompt/completion/total_tokens}, finishReason}` so `srv/ai/service.js` and the Fiori chat are unchanged. Service credentials are picked up by the SDK from `AICORE_SERVICE_KEY` locally and from the `aicore` service binding on BTP (no code change needed there).
+  - `.env.example` / `.env.local`: new block `AI_PROVIDER`, `AICORE_SERVICE_KEY` (example shape only), `AI_SAP_MODEL`, `AI_SAP_RESOURCE_GROUP`, `AI_SAP_MASK_PII`. In `.env.local` the `AICORE_SERVICE_KEY` line is a comment (an empty value there would shadow the real key in `.env`, which is loaded second).
+  - `test/unit/ai/aiClient.test.js` rewritten: 7 tests (provider selection incl. placeholder-key rejection, NVIDIA path, SAP path with history split/params/masking/resource group, SAP defaults, `num()`).
+- **Validation**: jest `test/unit/ai` 7/7, with purchase-order suites 223/223 · eslint 0. Live SAP AI Core call attempted: the `AICORE_SERVICE_KEY` currently in `.env` is the documentation placeholder (`"..."` values, no URLs) so the SDK fails with "Failed to fetch the list of deployments"; provider therefore resolves to `nvidia` until a real key is pasted. **Blocked**: real AI Core service key + an orchestration deployment (resource group `default`) are needed to verify the SAP path end to end.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 16:11 IST
+- **Agent**: Claude (Cowork)
+- **Issue**: `POST /odata/v4/ai/chat` never answered in the Fiori chat. Reproduced on the Mac (Desktop Commander, real network): NVIDIA key valid (`GET /v1/models` 200), but model `nvidia/nemotron-3.5-lightning-30b-a3b` never responds (curl HTTP 000 after 40 s; SDK "Request timed out" after 2 × 60 s), so the request hung in the busy state. Also found `z-ai/glm-5.3-flash` hangs, `meta/llama-3.1-*` are end-of-life (HTTP 410), `nvidia/llama-3.1-nemotron-70b-instruct` 404 on this account.
+- **Fix**: default NVIDIA model changed to `nvidia/nemotron-3-super-120b-a12b` (responds in ~2 s) in `srv/common/aiClient.js`, `.env.local`, `.env.example` (comment lists verified/avoid models), test updated.
+- **Validation (on the Mac, real NVIDIA)**: `cds serve srv/ai/service.cds` port 4097 → `POST /odata/v4/ai/chat` with 3-message history + PO context → HTTP 200 in 3.8 s, answer "Released", model `nvidia/nemotron-3-super-120b-a12b`, 472 tokens; server log `[ai-client] chat ok`. jest `test/unit/ai` 7/7. Note: Mac default `node` is 18.12 (nvm has 22.23.1) — `npm run watch` must run under Node 22.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 16:12 IST
+- **Agent**: Claude (Cowork)
+- **Change**: deleted `.env` (user request; it only held the placeholder `AICORE_SERVICE_KEY`, gitignored). `.env.local` is the single local env file; its `AICORE_SERVICE_KEY` line is now a commented placeholder for when SAP AI Core is provisioned. `server.js` / `test/setupEnv.js` tolerate a missing `.env` (dotenv returns an error object, does not throw).
+- **Validation**: `ls -a` shows `.env.local`, `.env.example`, `.env.qas` only.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 16:13 IST
+- **Agent**: Claude (Cowork)
+- **Bug**: Ask AI chat threw `e.getResourceBundle is not a function` after a successful answer (the assistant bubble never rendered). Cause: `PurchaseOrders.controller.js` called `this.getResourceBundle()`, which `BaseController` does not define (it exposes `getText(sKey, aArgs)`); the unit test had mocked the non-existent method, so it passed.
+- **Fix**: use `this.getText("aiMeta", [...])`; footer tag `<small>` → `<em>` (sap.m.FormattedText strips `<small>`). Test mock corrected to `getText`. Preload rebuilt.
+- **Validation**: jest `test/unit/purchase-order` 216/216 · ui5lint no findings · UI5 build OK.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 16:16 IST
+- **Agent**: Claude (Cowork)
+- **Bug**: AI chat reported "Total number of purchase orders: 40" — it counted the rows loaded in the growing table (page size 20), not the real total.
+- **Fix**: `PurchaseOrders.controller.js` `_getAIScope()` reads the real figures already on the screen — OData V4 list binding `getCount()` (server `$count`, falls back to final `getLength()` / KPI `viewModel>/totalCount`), KPI `supplierCount`, and whether application filters are active — and `_buildAISystemPrompt(aRows, aNotFound, oScope)` now opens with a SCOPE line ("the list contains N purchase orders in total from M suppliers; only the K loaded rows are included; use SCOPE figures for counts, never count the rows; say when an answer is limited to the loaded rows"). No new requests. Preload rebuilt.
+- **Tests**: `purchaseOrdersAskAI.test.js` +1 test, 1 extended (scope text; server count + filter flag reach the prompt).
+- **Validation**: jest `test/unit/purchase-order` 217/217 · ui5lint no findings · UI5 build OK.
+- **Commit state**: uncommitted.
+
 ## Current Status
 - **2026-09-22 13:59 IST (uncommitted)**: module-by-module pass closed the remaining audit residuals — Master Data (material-type scope config, customer defaults history-only, cache age shown), SD (no proposed dates/ship-to, totals only from real HeaderSet fields, no silent blank defaults), WM (GR no first-row proposals + lookup warnings, GI batch stock summed, no synthetic 9999/0), MM (failed supplier lookup flagged). Gates green (cds compile, eslint, jest 966/966, ui5lint, ui5 build, diff --check).
 - **2026-09-22 13:16 IST (uncommitted)**: remaining audit items closed — `999` default removed (config required), synthesized PlantName, dev-auth username-as-password and implicit Admin, S/4 HTTP timeout, UI silent catches, Orders Due KPIs server-side, doc banners. Gates green (cds compile, eslint, jest 965/965, ui5lint, ui5 build, diff --check).
@@ -1923,6 +2014,7 @@
   - Added module-level and runtime defensive normalization in `Component.js`.
 
 ## Next Steps
+0. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
 1. Review the uncommitted 2026-09-22 13:30–14:55 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
 2. Supervised live test: PGI on one picked, unposted delivery, then Load Billing Types + Create Billing Document on it; record SAP's numbers/messages here.
 2. Set `LOCAL_DEV_PASSWORD` in the local environment (mock logins) and, once the WM owner confirms the interim storage type, `S4_DIFFERENCE_STORAGE_TYPE` (needed only for Goods Issue differences).

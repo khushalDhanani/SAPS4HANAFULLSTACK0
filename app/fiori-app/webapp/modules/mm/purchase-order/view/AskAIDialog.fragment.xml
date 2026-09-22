@@ -1,0 +1,61 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="askAIDialog"
+        title="{i18n>aiDialogTitle}"
+        contentWidth="44rem"
+        contentHeight="36rem"
+        resizable="true"
+        draggable="true"
+        verticalScrolling="false"
+        class="aiChatDialog">
+        <subHeader>
+            <Toolbar>
+                <Text text="{i18n>aiDialogHint}" class="sapUiTinyMarginBegin" />
+                <ToolbarSpacer />
+                <Button icon="sap-icon://clear-all" tooltip="{i18n>aiClear}" press=".onAIClear" type="Transparent" />
+            </Toolbar>
+        </subHeader>
+        <content>
+            <ScrollContainer id="aiChatScroll" height="100%" width="100%" vertical="true" horizontal="false" class="aiChatScroll">
+                <VBox class="sapUiSmallMargin aiChatBody">
+                    <VBox visible="{= ${aiDialog>/messages}.length === 0 }" class="aiChatEmpty">
+                        <Text text="{i18n>aiWelcome}" class="sapUiSmallMarginBottom" />
+                        <Button text="{i18n>aiPresetSummary}" press=".onAIPreset" type="Transparent" icon="sap-icon://ai" class="aiSuggestion" />
+                        <Button text="{i18n>aiPresetRisks}" press=".onAIPreset" type="Transparent" icon="sap-icon://ai" class="aiSuggestion" />
+                        <Button text="{i18n>aiPresetSuppliers}" press=".onAIPreset" type="Transparent" icon="sap-icon://ai" class="aiSuggestion" />
+                    </VBox>
+                    <VBox items="{aiDialog>/messages}" width="100%">
+                        <HBox justifyContent="{= ${aiDialog>role} === 'user' ? 'End' : 'Start' }" width="100%" class="sapUiTinyMarginBottom">
+                            <VBox class="{= 'aiBubble ' + (${aiDialog>role} === 'user' ? 'aiBubbleUser' : (${aiDialog>error} ? 'aiBubbleError' : 'aiBubbleAssistant')) }">
+                                <FormattedText htmlText="{aiDialog>html}" />
+                            </VBox>
+                        </HBox>
+                    </VBox>
+                    <HBox visible="{aiDialog>/busy}" class="sapUiTinyMarginBottom">
+                        <VBox class="aiBubble aiBubbleAssistant"><BusyIndicator size="1rem" /></VBox>
+                    </HBox>
+                </VBox>
+            </ScrollContainer>
+        </content>
+        <footer>
+            <Toolbar class="aiChatFooter">
+                <Input
+                    id="aiInput"
+                    value="{aiDialog>/question}"
+                    placeholder="{i18n>aiQuestionPlaceholder}"
+                    width="100%"
+                    submit=".onAIAsk"
+                    enabled="{= !${aiDialog>/busy} }" />
+                <Button
+                    icon="sap-icon://paper-plane"
+                    tooltip="{i18n>aiAsk}"
+                    type="Emphasized"
+                    press=".onAIAsk"
+                    enabled="{= !!${aiDialog>/question} &amp;&amp; !${aiDialog>/busy} }" />
+                <Button text="{i18n>btnClose}" press=".onAIClose" />
+            </Toolbar>
+        </footer>
+    </Dialog>
+</core:FragmentDefinition>
