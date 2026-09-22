@@ -121,31 +121,6 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
       LOG.warn(`Batch stock lookup failed via MaterialMultiStockByDates for material ${sMat}: ${err.message}`);
     }
 
-    // Secondary fallback for unit test mocks that provide MaterialBatchHelps or MaterialStorLocHelps
-    if (batchStockMap.size === 0) {
-      try {
-        let bhelpFilter = `Material eq '${encodeURIComponent(sMat)}'`;
-        if (sPlant) bhelpFilter += ` and Plant eq '${encodeURIComponent(sPlant)}'`;
-        const bhelpRes = await this._get(
-          '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialBatchHelps',
-          `$filter=${encodeURIComponent(bhelpFilter)}&$format=json`
-        );
-        if (Array.isArray(bhelpRes)) {
-          for (const row of bhelpRes) {
-            const bId = row.Batch ? String(row.Batch).trim() : '';
-            if (bId) {
-              batchStockMap.set(bId, {
-                CurrentStock: row.CurrentStock !== undefined && row.CurrentStock !== null ? Number(row.CurrentStock) : null,
-                BaseUnit: row.BaseUnit || '',
-                StorageLocation: row.StorageLocation || sSLoc || '',
-                StorageLocationName: ''
-              });
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
     // 4. Filter usable batches: exclude deleted, restricted, and expired batches
     const usableBatches = [];
     for (const b of batchMap.values()) {

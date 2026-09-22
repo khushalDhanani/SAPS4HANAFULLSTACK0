@@ -174,13 +174,16 @@ sap.ui.define([
             if (isNaN(nQty) || nQty <= 0) {
                 return Promise.reject(new Error("Issue quantity must be greater than zero"));
             }
+            if (!oPayload.Unit || !String(oPayload.Unit).trim()) {
+                return Promise.reject(new Error("Unit of measure is missing on the SAP reservation item; cannot post Goods Issue"));
+            }
 
             var oBody = {
                 ReservationNo: String(oPayload.ReservationNo).trim(),
                 ReservationItem: String(oPayload.ReservationItem).trim(),
                 Material: oPayload.Material || "",
                 IssueQty: nQty,
-                Unit: oPayload.Unit || "PC",
+                Unit: String(oPayload.Unit).trim(),
                 Batch: oPayload.Batch || "",
                 DifferenceQty: Number(oPayload.DifferenceQty) || 0,
                 DifferenceReason: oPayload.DifferenceReason || "",

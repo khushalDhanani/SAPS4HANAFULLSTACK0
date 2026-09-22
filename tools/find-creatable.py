@@ -61,7 +61,7 @@ def main():
 def demo():  # python3 tools/find-creatable.py --selftest
     n, cre, fi = analyse(open(os.path.join(ROOT, 'srv/external/SD_F2370_INQY_WL_SRV.edmx'), 'rb').read())
     assert n == 35 and cre == [] and fi == [], (n, cre, fi)      # worklist: read-only
-    n, cre, fi = analyse(open(os.path.join(ROOT, 'srv/external/LORD_ODATA_ORDER_SRV.edmx'), 'rb').read())
+    n, cre, fi = analyse(open(os.path.join(ROOT, 'docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx'), 'rb').read())
     assert 'HeaderSet' in cre and len(fi) == 4, (cre, fi)        # inquiry creation: writable
     print('selftest ok')
 

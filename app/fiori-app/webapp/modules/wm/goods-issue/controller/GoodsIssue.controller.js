@@ -370,8 +370,8 @@ sap.ui.define([
                         ReservationNo: sReservationNo,
                         OrderNo: sOrderNo || (aItems && aItems[0] ? aItems[0].OrderNo : ""),
                         Plant: (oResv && oResv.Plant) ? oResv.Plant : (aItems && aItems[0] ? aItems[0].Plant : ""),
-                        MovementType: (oResv && oResv.MovementType) ? oResv.MovementType : "261",
-                        MovementTypeName: (oResv && oResv.MovementTypeName) ? oResv.MovementTypeName : "GI for order",
+                        MovementType: (oResv && oResv.MovementType) ? oResv.MovementType : "",
+                        MovementTypeName: (oResv && oResv.MovementTypeName) ? oResv.MovementTypeName : "",
                         Items: aItems || []
                     };
                     oModel.setProperty("/resolved", oResolved);
@@ -1293,12 +1293,12 @@ sap.ui.define([
             var oModel = this.getView().getModel("giView");
             return GoodsIssueService.getQueueSummary()
                 .then(function (oSummary) {
-                    var nCount = (oSummary && typeof oSummary.QueuedCount === "number") ? oSummary.QueuedCount : 0;
-                    oModel.setProperty("/queuedCount", nCount);
-                    return nCount;
+                    var bHasCount = oSummary && typeof oSummary.QueuedCount === "number";
+                    oModel.setProperty("/queuedCount", bHasCount ? oSummary.QueuedCount : "-");
+                    return bHasCount ? oSummary.QueuedCount : 0;
                 })
                 .catch(function () {
-                    oModel.setProperty("/queuedCount", 0);
+                    oModel.setProperty("/queuedCount", "-");
                     return 0;
                 });
         },

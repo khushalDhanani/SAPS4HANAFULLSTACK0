@@ -8,6 +8,9 @@ const { enrichBatchStatus } = require('../../../common/batchUtils');
 const { formatDateToYMD } = require('../../../common/dateUtils');
 const { odataString } = require('../../../common/filterUtils');
 
+// Movement type this app posts (GR for purchase order / inbound delivery). App parameter, not SAP-sourced data.
+const GR_MOVEMENT_TYPE = '101';
+
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA for Goods Receipt (Movement 101):
  * - Resolve Storage Unit Number to authentic Inbound Delivery, Material, Batch, SLED, Plant, SLoc via MMIM_GR4PO_DL_SRV & LO_BM_BATCH_SRV
@@ -969,7 +972,7 @@ class GoodsReceiptAdapter {
           EntryUnit: cleanUnit,
           OpenQuantity: String(it.Quantity || nQty),
           UnitOfMeasure: cleanUnit,
-          GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || '101',
+          GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || GR_MOVEMENT_TYPE,
           GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '',
           DocumentItemText: it.DocumentItemText || ''
         };
@@ -993,7 +996,7 @@ class GoodsReceiptAdapter {
           EntryUnit: cleanUnit,
           OpenQuantity: String(nQty),
           UnitOfMeasure: cleanUnit,
-          GoodsMovementType: payload.GoodsMovementType || '101',
+          GoodsMovementType: payload.GoodsMovementType || GR_MOVEMENT_TYPE,
           GoodsMovementReasonCode: payload.GoodsMovementReasonCode || '',
           DocumentItemText: payload.DocumentItemText || ''
         }

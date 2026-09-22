@@ -3,6 +3,8 @@ const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
 const { extractFilterParam, applyPaging } = require('../../../common/filterUtils');
 
 const _extractFilterParam = extractFilterParam;
+// Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
+const GI_MOVEMENT_TYPE = '261';
 
 class GoodsIssueHandler {
   static init(srv) {
@@ -22,7 +24,7 @@ class GoodsIssueHandler {
     // READ OpenReservations: query distinct open reservations for Goods Issue
     srv.on('READ', 'OpenReservations', async (req) => {
       const plant = _extractFilterParam(req, 'Plant') || '';
-      const mvtType = _extractFilterParam(req, 'MovementType') || '261';
+      const mvtType = _extractFilterParam(req, 'MovementType') || GI_MOVEMENT_TYPE;
       const reservNo = _extractFilterParam(req, 'ReservationNo');
       const orderNo = _extractFilterParam(req, 'OrderNo');
 

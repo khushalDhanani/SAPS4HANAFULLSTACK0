@@ -137,8 +137,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               ReservationNo: sRes,
               OrderNo: r.OrderID || '',
               Plant: r.Plant || '',
-              MovementType: r.GoodsMovementType || '261',
-              MovementTypeName: r.GoodsMovementTypeName || 'GI for order',
+              MovementType: r.GoodsMovementType || '',
+              MovementTypeName: r.GoodsMovementTypeName || '',
               ItemCount: 1,
               ItemCountPartial: false,
               SampleMaterial: r.Product || '',
@@ -324,8 +324,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           WithdrawnQty: wdnQty,
           QueuedQty: queuedQty,
           OpenQty: openQty,
-          MovementType: r.GoodsMovementType || '261',
-          MovementTypeName: r.GoodsMovementTypeName || 'GI for order',
+          MovementType: r.GoodsMovementType || '',
+          MovementTypeName: r.GoodsMovementTypeName || '',
           PackagingUnits: packagingUnits
         };
       }));
