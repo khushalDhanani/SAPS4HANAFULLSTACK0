@@ -2230,9 +2230,46 @@
 - **No source code changes made** — analysis and regeneration of reference data only.
 - **Next recommended action**: Review the creatable services report; decide which development-ready features (items 8–15) to build next; follow up on Basis ticket for blocked services.
 
+## 2026-09-23 12:25 IST
+- **Agent**: Antigravity
+- **Change**: Goods Issue 261 Gateway Blocker Investigation, Code Hardening & Remediation Documentation:
+  - **Live Investigation & Discoveries**:
+    - Investigated Gateway blockers for Goods Issue 261 (`API_MATERIAL_DOCUMENT_SRV` and `ZMMIM_MATDOC_SRV`).
+    - Proved via live probe on DS4 client 220 that `API_MATERIAL_DOCUMENT_SRV` remains unregistered (`/IWFND/MED/170`, HTTP 403).
+    - Discovered that `ZMMIM_MATDOC_SRV` has also been deregistered from Gateway client 220 (`/IWFND/MED/170`, HTTP 403); previously it returned HTTP 501 for `MATDOCHEADERS_CREATE_ENTITY`.
+    - Screened all 1,237 live catalogued services to determine if any alternative service could handle movement 261: only 5 services possess `PostGoodsIssue` or `GoodsIssue` function imports (`SD_SOFM_CREDIT_BLOCK_SRV`, `API_WHSE_OUTB_DLV_ORDER`, `SIMPLE_OUTB_DLV_SRV`, `SIMPLE_OUTB_TU_SRV`, `UI_SHIPMENTCONTAINERPACKG`), but all are delivery-based only. No alternative OData service exists for reservation-based movement type 261.
+    - Proved that registering `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 is the sole valid technical path to unblock Goods Issue 261 posting.
+  - **Code Hardening & Contract Updates**:
+    - `GoodsIssuePostingClient.js`:
+      - Updated diagnostic error message in `_buildPostingUnavailableError` with accurate live state: noted `ZMMIM_MATDOC_SRV` is now deregistered (`/IWFND/MED/170`) and cited the 1,237 service scan proving no alternative OData service supports reservation movement 261.
+      - Supported `Plant` and `StorageLocation` in Tier 2 `API_MATERIAL_DOCUMENT_SRV` payload mapping (required by standard S/4HANA material document creation for movement 261), conditionally attaching them only when provided to ensure backward compatibility and prevent empty string payloads.
+      - Updated `postGoodsIssue` signature to accept optional `plant` and `storageLocation`.
+    - `GoodsIssueAdapter.js`:
+      - Forwarded `plant` and `storageLocation` to `GoodsIssuePostingClient.postGoodsIssue`, preserving exact 10-argument delegation when omitted.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+      - Forwarded `Plant` and `StorageLocation` from `req.data` into `GoodsIssueAdapter.postGoodsIssue` for both initial posting and queue retry (`retryQueuedGoodsIssue`).
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+      - Passed `item.Plant` and `item.StorageLocation` into `adapter.postGoodsIssue` during queue drain (`drainQueue`).
+    - `docs/ticket-gateway-remediation-ds4.md`:
+      - Updated ticket evidence section: recorded deregistration of `ZMMIM_MATDOC_SRV` (`/IWFND/MED/170`) and added proof from the 1,237 service scan showing that `API_MATERIAL_DOCUMENT_SRV` is irreplaceable.
+  - **Files modified**:
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+    - `docs/ticket-gateway-remediation-ds4.md`
+  - **Executed Commands and Results**:
+    - `python3 tools/find-creatable.py`: 1,237 scanned, 0 errors, 635 writable services.
+    - `npx jest --runInBand test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueQueueManager.test.js test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssueController.test.js`: 4 test suites passed, 159 tests passed (100% green).
+    - `npx jest --runInBand test/integration/wm/goodsIssueQueue.test.js`: 1 test suite passed, 5 tests passed (100% green).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Share updated `docs/ticket-gateway-remediation-ds4.md` with Basis/Gateway administration team to execute Item 2 (`API_MATERIAL_DOCUMENT_SRV` activation via `/IWFND/MAINT_SERVICE` on client 220); once registered, test minimal live POST directly against SAP.
+
 ## Next Steps
-0. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
-1. Review the uncommitted 2026-09-22 13:30–14:55 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
-2. Supervised live test: PGI on one picked, unposted delivery, then Load Billing Types + Create Billing Document on it; record SAP's numbers/messages here.
-2. Set `LOCAL_DEV_PASSWORD` in the local environment (mock logins) and, once the WM owner confirms the interim storage type, `S4_DIFFERENCE_STORAGE_TYPE` (needed only for Goods Issue differences).
-3. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.
+0. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
+1. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
+2. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
+3. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+4. Supervised live test: PGI on one picked, unposted delivery, then Load Billing Types + Create Billing Document on it; record SAP's numbers/messages here.
+5. Set `LOCAL_DEV_PASSWORD` in the local environment (mock logins) and, once the WM owner confirms the interim storage type, `S4_DIFFERENCE_STORAGE_TYPE` (needed only for Goods Issue differences).
+6. Proceed to the next data lineage item from `docs/data-lineage-audit.md`.

@@ -260,9 +260,14 @@ All application-side prerequisites are verified and ready:
 - Reservation 18025 item 1, material 1000000204 (Para Chloro Phenol), plant 1120 / SLOC CS01
 - `GoodsMovementIsAllowed = true`, movement type 261 on the reservation item
 - 479,766 KG unrestricted stock (type 01) available
-- No alternative service can substitute: 15 candidate services were checked for a creatable
-  material-document entity set; none has one. `ZMMIM_MATDOC_SRV` is registered but returns
-  HTTP 501 for `MATDOCHEADERS_CREATE_ENTITY` and is restricted to MBND_CLOUD stock transfers.
+- No alternative service can substitute: a live `$metadata` scan of all 1,237 catalogued services
+  (23-Sep-2026, zero errors) found five services with a `PostGoodsIssue` or `GoodsIssue` function
+  import — `SD_SOFM_CREDIT_BLOCK_SRV`, `API_WHSE_OUTB_DLV_ORDER`, `SIMPLE_OUTB_DLV_SRV`,
+  `SIMPLE_OUTB_TU_SRV`, and `UI_SHIPMENTCONTAINERPACKG` — but all are delivery-based only and
+  cannot post reservation movement type 261.
+- `ZMMIM_MATDOC_SRV` was registered on 18-Sep-2026 (returned HTTP 501 for
+  `MATDOCHEADERS_CREATE_ENTITY`), but is **now also deregistered** — returns HTTP 403
+  `/IWFND/MED/170` as of 23-Sep-2026 12:16 IST.
 
 Item 1 additionally restores sales order, sales quotation, delivery creation, supplier invoice and
 sourcing-project functionality, plus the eight AIL custom services listed above.

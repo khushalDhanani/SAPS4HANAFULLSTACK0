@@ -15,7 +15,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /**
    * Post goods issue for a single reservation component line (Bound Action)
    */
-  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue) {
+  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation) {
     const sReserv = String(reservationNo || '').trim();
     const rawItem = reservationItem != null ? String(reservationItem).trim() : '';
     const sItem = rawItem ? rawItem.padStart(4, '0') : '';
@@ -112,23 +112,25 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV
       try {
         const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
+        const v2Item = {
+          Material: material || '',
+          GoodsMovementType: '261',
+          EntryUnit: effectiveUnit,
+          QuantityInEntryUnit: String(nQty),
+          Reservation: sReserv,
+          ReservationItem: sItem,
+          Batch: effectiveBatch || ''
+        };
+        if (plant) v2Item.Plant = plant;
+        if (storageLocation) v2Item.StorageLocation = storageLocation;
+
         const v2Payload = {
           GoodsMovementCode: '03',
           PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
           DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
           MaterialDocumentHeaderText: `GI Resv ${sReserv}`,
           to_MaterialDocumentItem: {
-            results: [
-              {
-                Material: material || '',
-                GoodsMovementType: '261',
-                EntryUnit: effectiveUnit,
-                QuantityInEntryUnit: String(nQty),
-                Reservation: sReserv,
-                ReservationItem: sItem,
-                Batch: effectiveBatch || ''
-              }
-            ]
+            results: [v2Item]
           }
         };
         const v2Res = await this._post(v2Path, v2Payload);
@@ -241,7 +243,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             err.status = 400;
             throw err;
           }
-          return {
+          const itemPayload = {
             Material: item.Material || '',
             GoodsMovementType: '261',
             EntryUnit: itemUnit,
@@ -250,6 +252,9 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             ReservationItem: sItem,
             Batch: item.Batch ? String(item.Batch).trim() : ''
           };
+          if (item.Plant) itemPayload.Plant = item.Plant;
+          if (item.StorageLocation) itemPayload.StorageLocation = item.StorageLocation;
+          return itemPayload;
         });
 
         const v2Payload = {
@@ -354,10 +359,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
 
     const message = `SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${client} for ${operationName}. ` +
-      `Two distinct causes, each needing a different SAP team (verified against $metadata 2026-09-18): ` +
+      `Two distinct causes, each needing a different SAP team (verified against live SAP 2026-09-23): ` +
       `${t1Diag}. ${t2Diag}. ` +
       `Fixing (2) alone unblocks posting and is the smaller request. ` +
-      `Catalog service 'ZMMIM_MATDOC_SRV' is registered but restricted to MBND_CLOUD Stock Transfers (HTTP 501 / Method 'MATDOCHEADERS_CREATE_ENTITY' not implemented) and lacks reservation movement 261 support. ` +
+      `'ZMMIM_MATDOC_SRV' is also deregistered (/IWFND/MED/170 as of 2026-09-23; previously returned HTTP 501 'MATDOCHEADERS_CREATE_ENTITY not implemented'). ` +
+      `No alternative OData service on this system supports reservation-based movement type 261 — 1,237 services scanned, five GI-capable services found, all delivery-based only. ` +
       `In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`;
 
     const postingError = new Error(message);

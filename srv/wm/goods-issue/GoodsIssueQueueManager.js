@@ -315,7 +315,9 @@ class GoodsIssueQueueManager {
           item.DifferenceQty,
           item.DifferenceReason,
           item.DifferenceStorageType,
-          item.FinalIssue
+          item.FinalIssue,
+          item.Plant,
+          item.StorageLocation
         );
 
         if (result && result.MaterialDocument) {

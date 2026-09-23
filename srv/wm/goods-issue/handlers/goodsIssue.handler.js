@@ -131,7 +131,9 @@ class GoodsIssueHandler {
           DifferenceQty,
           DifferenceReason,
           DifferenceStorageType,
-          FinalIssue
+          FinalIssue,
+          Plant,
+          StorageLocation
         );
         return Object.assign({
           Queued: false,
@@ -301,7 +303,9 @@ class GoodsIssueHandler {
           item.DifferenceQty,
           item.DifferenceReason,
           item.DifferenceStorageType,
-          item.FinalIssue
+          item.FinalIssue,
+          item.Plant,
+          item.StorageLocation
         );
 
         // Update queue item
