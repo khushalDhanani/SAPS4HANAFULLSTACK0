@@ -5,4 +5,5 @@ using from './sd/sales-order/service';
 using from './wm/goods-issue/service';
 using from './wm/goods-receipt/service';
 using from './le/outbound-delivery/service';
+using from './sd/customer-invoice/service';
 using from './ai/service';

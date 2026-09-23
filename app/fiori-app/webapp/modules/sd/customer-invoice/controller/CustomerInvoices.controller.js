@@ -20,7 +20,11 @@ sap.ui.define([
                 cancelledCount: 0,
                 displayCount: 0,
                 selectedTab: "all",
-                searchQuery: ""
+                searchQuery: "",
+                hasSelectedInvoice: false,
+                canReleaseSelected: false,
+                canCancelSelected: false,
+                selectedInvoice: null
             });
             this.getView().setModel(oViewModel, "customerInvoicesView");
 
@@ -38,6 +42,7 @@ sap.ui.define([
         },
 
         onRefresh: function () {
+            this._resetSelection();
             this._loadMetrics();
             var oTable = this.byId("tblCustomerInvoices");
             if (oTable) {
@@ -47,6 +52,20 @@ sap.ui.define([
                 }
             }
             MessageToast.show(this._getText("msgInvoicesRefreshed"));
+        },
+
+        _resetSelection: function () {
+            var oViewModel = this.getView().getModel("customerInvoicesView");
+            if (oViewModel) {
+                oViewModel.setProperty("/hasSelectedInvoice", false);
+                oViewModel.setProperty("/canReleaseSelected", false);
+                oViewModel.setProperty("/canCancelSelected", false);
+                oViewModel.setProperty("/selectedInvoice", null);
+            }
+            var oTable = this.byId("tblCustomerInvoices");
+            if (oTable && typeof oTable.removeSelections === "function") {
+                oTable.removeSelections(true);
+            }
         },
 
         _loadMetrics: function () {
@@ -130,6 +149,7 @@ sap.ui.define([
                 aFilters.push(oSearchFilter);
             }
 
+            this._resetSelection();
             var oFinalFilter = aFilters.length > 0 ? new Filter({ filters: aFilters, and: true }) : null;
             oBinding.filter(oFinalFilter);
 
@@ -141,13 +161,59 @@ sap.ui.define([
             });
         },
 
+        onInvoiceSelectionChange: function (oEvent) {
+            var oTable = oEvent.getSource();
+            var oSelectedItem = oTable.getSelectedItem();
+            var oViewModel = this.getView().getModel("customerInvoicesView");
+
+            if (!oSelectedItem) {
+                this._resetSelection();
+                return;
+            }
+
+            var oContext = oSelectedItem.getBindingContext("customerInvoice");
+            var oData = oContext ? oContext.getObject() : null;
+            if (oData) {
+                var bIsCancelled = oData.BillingDocumentIsCancelled === true || oData.BillingDocumentIsCancelled === "true";
+                var bCanRelease = !bIsCancelled && oData.AccountingTransferStatus !== "C";
+                var bCanCancel = !bIsCancelled;
+
+                oViewModel.setProperty("/hasSelectedInvoice", true);
+                oViewModel.setProperty("/canReleaseSelected", bCanRelease);
+                oViewModel.setProperty("/canCancelSelected", bCanCancel);
+                oViewModel.setProperty("/selectedInvoice", oData);
+            } else {
+                this._resetSelection();
+            }
+        },
+
+        onToolbarReleasePress: function () {
+            var oViewModel = this.getView().getModel("customerInvoicesView");
+            var oSelected = oViewModel.getProperty("/selectedInvoice");
+            if (!oSelected || !oSelected.BillingDocument) {
+                return;
+            }
+            this._confirmAndReleaseInvoice(oSelected.BillingDocument);
+        },
+
+        onToolbarCancelPress: function () {
+            var oViewModel = this.getView().getModel("customerInvoicesView");
+            var oSelected = oViewModel.getProperty("/selectedInvoice");
+            if (!oSelected || !oSelected.BillingDocument) {
+                return;
+            }
+            this._openCancelDialog(oSelected);
+        },
+
         onReleaseToAccountingPress: function (oEvent) {
             var oContext = oEvent.getSource().getBindingContext("customerInvoice");
             if (!oContext) return;
             var oData = oContext.getObject();
-            var sDoc = oData.BillingDocument;
-            var that = this;
+            this._confirmAndReleaseInvoice(oData.BillingDocument);
+        },
 
+        _confirmAndReleaseInvoice: function (sDoc) {
+            var that = this;
             var sConfirmMsg = this._getText("msgConfirmReleaseAccounting", [sDoc]);
             MessageBox.confirm(sConfirmMsg, {
                 title: this._getText("titleReleaseAccounting"),
@@ -187,8 +253,11 @@ sap.ui.define([
             var oContext = oEvent.getSource().getBindingContext("customerInvoice");
             if (!oContext) return;
             var oData = oContext.getObject();
-            var that = this;
+            this._openCancelDialog(oData);
+        },
 
+        _openCancelDialog: function (oData) {
+            var that = this;
             if (!this._pCancelDialog) {
                 var sViewId = (this.getView && typeof this.getView().getId === "function") ? this.getView().getId() : undefined;
                 this._pCancelDialog = Fragment.load({
@@ -247,6 +316,44 @@ sap.ui.define([
         _getText: function (sKey, aArgs) {
             var oResourceBundle = this.getView().getModel("i18n").getResourceBundle();
             return oResourceBundle.getText(sKey, aArgs);
+        },
+
+        formatInvoiceStatusText: function (bIsCancelled, sAccountingStatus) {
+            if (bIsCancelled === true || bIsCancelled === "true") {
+                return this._getText("statusCancelled");
+            }
+            if (sAccountingStatus === "C") {
+                return this._getText("statusTransferredToAccounting");
+            }
+            return this._getText("statusPendingAccounting");
+        },
+
+        formatInvoiceStatusState: function (bIsCancelled, sAccountingStatus) {
+            if (bIsCancelled === true || bIsCancelled === "true") {
+                return "Error";
+            }
+            if (sAccountingStatus === "C") {
+                return "Success";
+            }
+            return "Warning";
+        },
+
+        formatInvoiceStatusIcon: function (bIsCancelled, sAccountingStatus) {
+            if (bIsCancelled === true || bIsCancelled === "true") {
+                return "sap-icon://sys-cancel";
+            }
+            if (sAccountingStatus === "C") {
+                return "sap-icon://accept";
+            }
+            return "sap-icon://pending";
+        },
+
+        formatReleaseEnabled: function (bIsCancelled, sAccountingStatus) {
+            return bIsCancelled !== true && bIsCancelled !== "true" && sAccountingStatus !== "C";
+        },
+
+        formatCancelEnabled: function (bIsCancelled) {
+            return bIsCancelled !== true && bIsCancelled !== "true";
         }
     });
 });

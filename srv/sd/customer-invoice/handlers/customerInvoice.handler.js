@@ -17,7 +17,7 @@ function registerCustomerInvoiceHandlers(srv) {
       const billingDocParam = extractFilterParam(req, 'BillingDocument');
 
       // Fetch from S/4HANA via adapter
-      const { results } = await customerInvoiceAdapter.getBillingDocuments({}, req);
+      const { results } = await customerInvoiceAdapter.getBillingDocuments({});
 
       let filtered = results;
 
@@ -53,7 +53,7 @@ function registerCustomerInvoiceHandlers(srv) {
   // 2. Function getInvoiceMetrics
   srv.on('getInvoiceMetrics', async (req) => {
     try {
-      const { results } = await customerInvoiceAdapter.getBillingDocuments({}, req);
+      const { results } = await customerInvoiceAdapter.getBillingDocuments({});
       const totalInvoices = results.length;
       const cancelledCount = results.filter(i => Boolean(i.BillingDocumentIsCancelled)).length;
       const transferredCount = results.filter(i => !i.BillingDocumentIsCancelled && String(i.AccountingTransferStatus).toUpperCase() === 'C').length;
@@ -82,7 +82,7 @@ function registerCustomerInvoiceHandlers(srv) {
 
     try {
       // Check current invoice status to guard against redundant release
-      const current = await customerInvoiceAdapter.getBillingDocument(doc, req);
+      const current = await customerInvoiceAdapter.getBillingDocument(doc);
       if (current?.BillingDocumentIsCancelled) {
         return req.error(400, `Cannot release cancelled billing document ${doc} to accounting.`);
       }
@@ -114,7 +114,7 @@ function registerCustomerInvoiceHandlers(srv) {
     }
 
     try {
-      const current = await customerInvoiceAdapter.getBillingDocument(doc, req);
+      const current = await customerInvoiceAdapter.getBillingDocument(doc);
       if (current?.BillingDocumentIsCancelled) {
         return req.error(400, `Billing document ${doc} is already cancelled.`);
       }

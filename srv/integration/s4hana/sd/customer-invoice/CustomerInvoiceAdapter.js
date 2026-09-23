@@ -62,6 +62,24 @@ function _formatInvoiceRow(row) {
   };
 }
 
+/**
+ * Sanitizes transport options to ensure incoming client headers (e.g. Authorization)
+ * are not leaked to the S/4HANA destination, which requires its own configured credentials.
+ *
+ * @param {Object} options
+ * @returns {Object}
+ */
+function _cleanOptions(options = {}) {
+  const clean = { ...options };
+  if (clean.headers) {
+    const headers = { ...clean.headers };
+    delete headers.authorization;
+    delete headers.Authorization;
+    clean.headers = headers;
+  }
+  return clean;
+}
+
 class CustomerInvoiceAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
@@ -76,6 +94,7 @@ class CustomerInvoiceAdapter {
    * @returns {Promise<{ results: Array<Object>, count: number }>}
    */
   async getBillingDocuments(query = {}, options = {}) {
+    const transportOptions = _cleanOptions(options);
     const params = [];
     if (query.top !== undefined && query.top !== null) params.push(`$top=${Number(query.top)}`);
     if (query.skip !== undefined && query.skip !== null) params.push(`$skip=${Number(query.skip)}`);
@@ -89,7 +108,7 @@ class CustomerInvoiceAdapter {
 
     let res;
     try {
-      res = await this.client.get(url, options);
+      res = await this.client.get(url, transportOptions);
     } catch (err) {
       throw mapS4Error(err, 'getBillingDocuments');
     }
@@ -113,6 +132,7 @@ class CustomerInvoiceAdapter {
    * @returns {Promise<Object>}
    */
   async getBillingDocument(billingDocument, options = {}) {
+    const transportOptions = _cleanOptions(options);
     const doc = String(billingDocument || '').trim();
     if (!doc) {
       const err = new Error('BillingDocument is required.');
@@ -124,7 +144,7 @@ class CustomerInvoiceAdapter {
 
     let res;
     try {
-      res = await this.client.get(url, options);
+      res = await this.client.get(url, transportOptions);
     } catch (err) {
       throw mapS4Error(err, 'getBillingDocument');
     }
@@ -144,6 +164,7 @@ class CustomerInvoiceAdapter {
    * @returns {Promise<{ BillingDocument: string, AccountingDocument: string, FiscalYear: string, AccountingTransferStatus: string, Success: boolean, Message: string }>}
    */
   async postBillingDocumentToAccounting({ billingDocument, sdDocumentCategory = DEFAULT_SD_CATEGORY }, options = {}) {
+    const transportOptions = _cleanOptions(options);
     const doc = String(billingDocument || '').trim();
     const cat = String(sdDocumentCategory || DEFAULT_SD_CATEGORY).trim();
     if (!doc) {
@@ -157,7 +178,7 @@ class CustomerInvoiceAdapter {
 
     let res;
     try {
-      res = await this.client.post(url, { data: {}, ...options });
+      res = await this.client.post(url, { data: {}, ...transportOptions });
     } catch (err) {
       throw mapS4Error(err, 'postBillingDocumentToAccounting');
     }
@@ -167,7 +188,7 @@ class CustomerInvoiceAdapter {
     let fiscalYear = '';
     let transferStatus = 'C';
     try {
-      const updated = await this.getBillingDocument(doc, options);
+      const updated = await this.getBillingDocument(doc, transportOptions);
       if (updated) {
         acctDoc = updated.AccountingDocument || '';
         fiscalYear = updated.FiscalYear || '';
@@ -202,6 +223,7 @@ class CustomerInvoiceAdapter {
    * @returns {Promise<{ BillingDocument: string, CancellationDocument: string, Success: boolean, Message: string }>}
    */
   async cancelBillingDocument({ billingDocument, sdDocumentCategory = DEFAULT_SD_CATEGORY }, options = {}) {
+    const transportOptions = _cleanOptions(options);
     const doc = String(billingDocument || '').trim();
     const cat = String(sdDocumentCategory || DEFAULT_SD_CATEGORY).trim();
     if (!doc) {
@@ -215,7 +237,7 @@ class CustomerInvoiceAdapter {
 
     let res;
     try {
-      res = await this.client.post(url, { data: {}, ...options });
+      res = await this.client.post(url, { data: {}, ...transportOptions });
     } catch (err) {
       throw mapS4Error(err, 'cancelBillingDocument');
     }

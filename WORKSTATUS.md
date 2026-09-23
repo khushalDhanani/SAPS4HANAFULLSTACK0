@@ -3,6 +3,47 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-23 14:35 IST
+- **Agent**: Antigravity
+- **Change**: Customer Invoices Screen Standardization per SAP Fiori / SAPUI5 Design Guidelines:
+  1. **UI5 MCP Server Guidelines Adherence**:
+     - Queried and applied guidelines from `ui5-mcp-server` (`get_guidelines`, `run_ui5_linter`).
+     - Fixed Table action button design per standard SAP Fiori List Report patterns.
+  2. **Table & Action Button Standardizations (`CustomerInvoices.view.xml`)**:
+     - Replaced non-standard `type="Accept"` and `type="Reject"` table row buttons (which produced visual clutter, green/red bordered boxes, and truncated text `"Cancel Invoi..."`) with standard SAP Fiori `type="Transparent"` icon-only row buttons (`icon="sap-icon://money-bills"` and `icon="sap-icon://sys-cancel"`).
+     - Reduced Action column width from an excessive `14rem` to standard `6rem`, eliminating horizontal overflow and table horizontal scroll.
+     - Added `sticky="ColumnHeaders,HeaderToolbar"` to `<Table id="tblCustomerInvoices">` for standard Fiori desktop table sticky headers.
+     - Enabled single-row selection (`mode="SingleSelectMaster"`, `selectionChange=".onInvoiceSelectionChange"`).
+     - Added standard Fiori List Report header toolbar action buttons (`btnToolbarRelease` - `type="Emphasized"` and `btnToolbarCancel` - `type="Transparent"`) with `<OverflowToolbarLayoutData priority="NeverOverflow" />` that dynamically enable/disable based on the selected row's invoice status.
+     - Normalized `searchInvoices` `SearchField` from fixed `width="250px"` to standard `width="16rem"` with `OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem"`.
+     - Added `OverflowToolbarLayoutData priority="Low" shrinkable="true"` to `SegmentedButton`.
+  3. **Controller Enhancements (`CustomerInvoices.controller.js`)**:
+     - Added selection tracking (`hasSelectedInvoice`, `canReleaseSelected`, `canCancelSelected`, `selectedInvoice`) to `customerInvoicesView` model.
+     - Implemented `onInvoiceSelectionChange`, `onToolbarReleasePress`, `onToolbarCancelPress`, and helper `_resetSelection()`.
+     - Refactored `_openCancelDialog()` and `_confirmAndReleaseInvoice()` to be shared cleanly across toolbar and row actions.
+     - Automatically resets table selection when filters, tabs, or search queries change, and on table refresh.
+  4. **Internationalization (i18n)**:
+     - Added `tooltipSelectInvoiceToRelease` and `tooltipSelectInvoiceToCancel` to both `i18n.properties` and `i18n_en.properties` ensuring 100% key parity.
+  5. **Automated Unit Tests**:
+     - Added 4 unit test cases in `test/unit/sd/customerInvoicesController.test.js` covering selection change, deselection, toolbar release, and toolbar cancel.
+     - Total controller unit tests: 10/10 passing (100% green).
+- **Files Modified**:
+  - `app/fiori-app/webapp/modules/sd/customer-invoice/view/CustomerInvoices.view.xml`
+  - `app/fiori-app/webapp/modules/sd/customer-invoice/controller/CustomerInvoices.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/sd/customerInvoicesController.test.js`
+  - `docs/images/customer_invoices_standardized.png` [NEW]
+  - `docs/images/customer_invoices_row_selected.png` [NEW]
+- **Executed Commands and Results**:
+  - `npm test test/unit/sd/customerInvoicesController.test.js`: **10 passed, 10 total tests (100% green)**.
+  - `npm test`: **81 passed, 81 total test suites; 1101 passed, 1101 total tests (100% green)**.
+  - `ui5-mcp-server:run_ui5_linter`: **0 findings, 100% clean**.
+  - `npm --prefix app/fiori-app run build`: **Succeeded in 1.39 s; Component-preload.js generated**.
+  - `npm run lint`: **0 errors, 0 warnings (100% clean)**.
+  - `git diff --check`: **Clean (0 errors)**.
+- **Next recommended action**: Review standardized screen in browser with user, stage, and commit to `feature/CL01`.
+
 ## 2026-09-21 09:40 IST
 - **Agent**: Antigravity
 - **Change**: Phase 2 Outbound Delivery Screen & Integration:
@@ -2125,6 +2166,7 @@
   - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
 
 ## Current Status
+- **2026-09-23 14:35 IST (uncommitted)**: Customer Invoices view (`CustomerInvoices.view.xml`) standardized per SAP Fiori / SAPUI5 guidelines via `ui5-mcp-server`. Row buttons converted to clean transparent icon buttons with tooltips, removing red/green visual clutter and eliminating horizontal overflow. Standard Fiori List Report table selection and header toolbar actions (`Release to G/L` and `Cancel Invoice`) implemented. Unit tests updated (10/10 passing), 81/81 test suites (1101 tests) passing, 0 lint errors, 0 git diff errors.
 - **2026-09-23 13:15 IST (uncommitted)**: Customer Invoices Management (`SD_CUSTOMER_INVOICES_MANAGE`) implemented end-to-end. Real SAP backend actions verified live on DS4 220: `PostBillingDocumentToAccounting` (created FI Doc `9000000100`) and `CancelBillingDocument` (created Reversal Doc `90000053`). Full stack delivered: Gateway adapter, CAP service & handlers, UI5 worklist view with KPI tiles and cancel dialog, manifest/Component/App/Dashboard wiring, 100% i18n key parity, 28 new unit tests. All 81 repo test suites (1097 tests) 100% green, 0 lint errors, 0 git diff errors.
 - **2026-09-23 11:25 IST (uncommitted)**: Outbound delivery worklist segmentation implemented, status 'B' (Released) mapping fixed in `OutboundDeliveryAdapter.js`, `IsDeliverable` flag and KPI metrics enriched, and warning guidance for SAP Flexible Workflow added. All repository gates green (`cds compile`, `eslint`, `ui5lint`, `ui5 build`, Jest LE tests 71/71, full repo test suite 1068/1068, `git diff --check`).
 - **2026-09-23 11:00 IST (uncommitted)**: Journal entry role enforcement updated to strictly require `FinanceViewer` or `Admin`, closing the pending 403 test in `test/integration/fi/journalEntry.test.js` and establishing proper segregation of duties for financial accounting data. Gates green (`cds compile`, `eslint`, `ui5lint`, Jest FI tests 37/37, `git diff --check`).
@@ -2356,6 +2398,48 @@
     - `npm --prefix app/fiori-app run lint`: 0 findings.
     - `cd app/fiori-app && npm run build`: Preload built cleanly.
     - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Review with user and commit to `feature/CL01`.
+
+## 2026-09-23 14:10 IST
+- **Agent**: Antigravity
+- **Change**: Customer Invoices UI Troubleshooting, Backend Service Mounting & Live DevTools MCP Verification (`SD_CUSTOMER_INVOICES_MANAGE`):
+  - **Issue Reported**: User reported inability to see UI side of Customer Invoices ("I Can't see the UI Side Check with dev mcp tool.").
+  - **Root Cause Analysis & Resolving Actions**:
+    1. **Service Auto-Mount in CAP (`srv/service.cds`)**: Added `using from './sd/customer-invoice/service';` so that CAP automatically serves `CustomerInvoiceService` at `/odata/v4/customer-invoice`.
+    2. **Namespace Harmonization (`srv/sd/customer-invoice/service.cds`)**: Removed `namespace saps4hana.sd;` to align with sibling SD services (`SalesOrderService`, `SalesInquiryService`) that serve at clean root service names without nested namespace prefixes.
+    3. **Destination Credential Overwriting Bug (`CustomerInvoiceAdapter.js`)**:
+       - *Root Cause*: In `customerInvoice.handler.js`, `req` had been passed as transport options to `customerInvoiceAdapter.getBillingDocuments({}, req)`. Because `req` contained client HTTP headers (`authorization: Basic YWxpY2U6` / Bearer token), `S4HttpClient` spread those headers into `requestConfig.headers`, overriding the configured S/4HANA destination basic authentication credentials (`S4_USERNAME` / `S4_PASSWORD`). This triggered SAP Gateway rejection `401 - Anmeldung fehlgeschlagen` on read requests.
+       - *Fix*: Created helper `_cleanOptions(options)` in `CustomerInvoiceAdapter.js` to strip `authorization` / `Authorization` headers, ensuring caller credentials never leak into backend SAP Gateway calls. Updated `customerInvoice.handler.js` to pass `{}` for reads and forward `req` cleanly for transactional actions.
+    4. **Model Token Synchronization (`AuthService.js`)**: Added `"customerInvoice"` to `aModelNames` in `AuthService.syncModelHeaders` to maintain Bearer header parity across all OData V4 models.
+    5. **Dashboard Visibility (`Dashboard.view.xml`)**: Added `tileOverviewCustomerInvoices` to the Overview panel in addition to the SD tab (`tileSDCustomerInvoices`).
+    6. **ObjectStatus and Action Button Formatters (`CustomerInvoices.controller.js` & `CustomerInvoices.view.xml`)**: Implemented dedicated controller formatters (`formatInvoiceStatusText`, `formatInvoiceStatusState`, `formatInvoiceStatusIcon`, `formatReleaseEnabled`, `formatCancelEnabled`) replacing fragile multi-model ternary expression bindings. Correctly displays live statuses (Green checkmark for "Transferred", Orange clock for "Pending Release", Red cancel for "Cancelled").
+    7. **UI5 Preload Rebuilt**: Executed `npm --prefix app/fiori-app run build` cleanly (823 ms).
+  - **Live UI Verification in Chrome DevTools MCP**:
+    - Navigated Chrome MCP page to `http://localhost:4004/fiori-app/webapp/index.html#/sd/invoices`.
+    - Verified full live DOM render: all 4 KPI tiles populated with live SAP data (506 total, 138 pending, 314 transferred, 54 cancelled).
+    - Verified 30 live customer invoices displayed in responsive table with net/tax/gross amounts, formatted statuses, G/L accounting documents, and action buttons.
+    - Verified dashboard tile navigation from `#/dashboard` to `#/sd/invoices` on tile click.
+    - Full-page screenshots captured and saved to `docs/images/customer_invoices_live_ui.png`, `docs/images/dashboard_with_invoices_tile.png`, and `docs/images/dashboard_sd_tab.png`.
+  - **Files Modified**:
+    - `srv/service.cds`
+    - `srv/sd/customer-invoice/service.cds`
+    - `srv/sd/customer-invoice/handlers/customerInvoice.handler.js`
+    - `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js`
+    - `app/fiori-app/webapp/service/AuthService.js`
+    - `app/fiori-app/webapp/view/Dashboard.view.xml`
+    - `app/fiori-app/webapp/modules/sd/customer-invoice/controller/CustomerInvoices.controller.js`
+    - `app/fiori-app/webapp/modules/sd/customer-invoice/view/CustomerInvoices.view.xml`
+    - `docs/images/customer_invoices_live_ui.png` [NEW]
+    - `docs/images/dashboard_with_invoices_tile.png` [NEW]
+    - `docs/images/dashboard_sd_tab.png` [NEW]
+  - **Executed Commands and Results**:
+    - `npm test`: 81 passed, 81 total test suites; 1097 passed, 1097 total tests (100% green).
+    - `npm run test:unit`: 70 passed, 70 total test suites; 1045 passed, 1045 total tests (100% green).
+    - `npm run test:integration`: 10 passed, 10 total test suites; 45 passed, 45 total tests (100% green).
+    - `npm run lint`: 0 errors.
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 823 ms.
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Review with user and commit to `feature/CL01`.
 

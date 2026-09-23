@@ -278,4 +278,71 @@ describe("CustomerInvoices Controller", () => {
         );
         expect(MockMessageBox.success).toHaveBeenCalled();
     });
+
+    test("onInvoiceSelectionChange updates selection state and flags", () => {
+        controller.onInit();
+        const mockInvoice = {
+            BillingDocument: "31000111",
+            AccountingTransferStatus: "A",
+            BillingDocumentIsCancelled: false
+        };
+        const oEvent = {
+            getSource: () => ({
+                getSelectedItem: () => ({
+                    getBindingContext: () => ({
+                        getObject: () => mockInvoice
+                    })
+                })
+            })
+        };
+
+        controller.onInvoiceSelectionChange(oEvent);
+
+        const viewModel = models["customerInvoicesView"];
+        expect(viewModel.getProperty("/hasSelectedInvoice")).toBe(true);
+        expect(viewModel.getProperty("/canReleaseSelected")).toBe(true);
+        expect(viewModel.getProperty("/canCancelSelected")).toBe(true);
+        expect(viewModel.getProperty("/selectedInvoice")).toEqual(mockInvoice);
+    });
+
+    test("onInvoiceSelectionChange handles deselection", () => {
+        controller.onInit();
+        const oEvent = {
+            getSource: () => ({
+                getSelectedItem: () => null
+            })
+        };
+
+        controller.onInvoiceSelectionChange(oEvent);
+
+        const viewModel = models["customerInvoicesView"];
+        expect(viewModel.getProperty("/hasSelectedInvoice")).toBe(false);
+        expect(viewModel.getProperty("/canReleaseSelected")).toBe(false);
+        expect(viewModel.getProperty("/canCancelSelected")).toBe(false);
+        expect(viewModel.getProperty("/selectedInvoice")).toBeNull();
+    });
+
+    test("onToolbarReleasePress prompts confirmation and releases selected invoice", () => {
+        controller.onInit();
+        const viewModel = models["customerInvoicesView"];
+        viewModel.setProperty("/selectedInvoice", { BillingDocument: "31000111" });
+
+        controller.onToolbarReleasePress();
+
+        expect(MockMessageBox.confirm).toHaveBeenCalled();
+        expect(MockCustomerInvoiceService.releaseInvoiceToAccounting).toHaveBeenCalledWith(
+            "31000111",
+            undefined
+        );
+    });
+
+    test("onToolbarCancelPress opens cancel dialog for selected invoice", async () => {
+        controller.onInit();
+        const viewModel = models["customerInvoicesView"];
+        viewModel.setProperty("/selectedInvoice", { BillingDocument: "31000112" });
+
+        controller.onToolbarCancelPress();
+        await controller._pCancelDialog;
+        expect(controller._oCancelDialog.open).toHaveBeenCalled();
+    });
 });

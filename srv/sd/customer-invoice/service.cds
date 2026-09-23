@@ -1,5 +1,3 @@
-namespace saps4hana.sd;
-
 @(requires: 'authenticated-user')
 service CustomerInvoiceService @(path: '/odata/v4/customer-invoice') {
 

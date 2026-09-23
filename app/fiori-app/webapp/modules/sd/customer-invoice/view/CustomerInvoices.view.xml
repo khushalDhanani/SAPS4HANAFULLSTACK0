@@ -98,7 +98,10 @@
                     growing="true"
                     growingThreshold="20"
                     growingScrollToLoad="true"
-                    noDataText="{i18n>noInvoicesFound}">
+                    noDataText="{i18n>noInvoicesFound}"
+                    mode="SingleSelectMaster"
+                    selectionChange=".onInvoiceSelectionChange"
+                    sticky="ColumnHeaders,HeaderToolbar">
 
                     <headerToolbar>
                         <OverflowToolbar id="toolbarInvoices">
@@ -119,14 +122,48 @@
                                     <SegmentedButtonItem key="transferred" text="{i18n>tabTransferred}" />
                                     <SegmentedButtonItem key="cancelled" text="{i18n>tabCancelled}" />
                                 </items>
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="Low" shrinkable="true" />
+                                </layoutData>
                             </SegmentedButton>
+
+                            <!-- Table Toolbar Action Buttons -->
+                            <Button
+                                id="btnToolbarRelease"
+                                text="{i18n>btnReleaseToAccounting}"
+                                icon="sap-icon://money-bills"
+                                type="Emphasized"
+                                enabled="{customerInvoicesView>/canReleaseSelected}"
+                                tooltip="{= ${customerInvoicesView>/canReleaseSelected} ? ${i18n>tooltipReleaseToAccounting} : ${i18n>tooltipSelectInvoiceToRelease} }"
+                                press=".onToolbarReleasePress">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="NeverOverflow" />
+                                </layoutData>
+                            </Button>
+
+                            <Button
+                                id="btnToolbarCancel"
+                                text="{i18n>btnCancelInvoice}"
+                                icon="sap-icon://sys-cancel"
+                                type="Transparent"
+                                enabled="{customerInvoicesView>/canCancelSelected}"
+                                tooltip="{= ${customerInvoicesView>/canCancelSelected} ? ${i18n>tooltipCancelInvoice} : ${i18n>tooltipSelectInvoiceToCancel} }"
+                                press=".onToolbarCancelPress">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="NeverOverflow" />
+                                </layoutData>
+                            </Button>
 
                             <SearchField
                                 id="searchInvoices"
-                                width="250px"
+                                width="16rem"
                                 placeholder="{i18n>searchInvoicesPlaceholder}"
                                 search=".onSearch"
-                                liveChange=".onLiveSearch" />
+                                liveChange=".onLiveSearch">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                </layoutData>
+                            </SearchField>
 
                             <Button
                                 id="btnTableRefresh"
@@ -165,7 +202,7 @@
                         <Column id="colAccountingDocument" minScreenWidth="Desktop" demandPopin="true" width="9rem">
                             <Text text="{i18n>colAccountingDocument}" />
                         </Column>
-                        <Column id="colActions" width="14rem" hAlign="Center">
+                        <Column id="colActions" width="6rem" hAlign="Center">
                             <Text text="{i18n>colActions}" />
                         </Column>
                     </columns>
@@ -222,9 +259,27 @@
                                 <!-- Accounting Status -->
                                 <ObjectStatus
                                     id="statusAccounting"
-                                    text="{= ${customerInvoice>BillingDocumentIsCancelled} ? ${i18n>statusCancelled} : (${customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>statusTransferredToAccounting} : ${i18n>statusPendingAccounting}) }"
-                                    state="{= ${customerInvoice>BillingDocumentIsCancelled} ? 'Error' : (${customerInvoice>AccountingTransferStatus} === 'C' ? 'Success' : 'Warning') }"
-                                    icon="{= ${customerInvoice>BillingDocumentIsCancelled} ? 'sap-icon://sys-cancel' : (${customerInvoice>AccountingTransferStatus} === 'C' ? 'sap-icon://accept' : 'sap-icon://pending') }" />
+                                    text="{
+                                        parts: [
+                                            { path: 'customerInvoice>BillingDocumentIsCancelled' },
+                                            { path: 'customerInvoice>AccountingTransferStatus' }
+                                        ],
+                                        formatter: '.formatInvoiceStatusText'
+                                    }"
+                                    state="{
+                                        parts: [
+                                            { path: 'customerInvoice>BillingDocumentIsCancelled' },
+                                            { path: 'customerInvoice>AccountingTransferStatus' }
+                                        ],
+                                        formatter: '.formatInvoiceStatusState'
+                                    }"
+                                    icon="{
+                                        parts: [
+                                            { path: 'customerInvoice>BillingDocumentIsCancelled' },
+                                            { path: 'customerInvoice>AccountingTransferStatus' }
+                                        ],
+                                        formatter: '.formatInvoiceStatusIcon'
+                                    }" />
 
                                 <!-- Accounting Document -->
                                 <VBox>
@@ -241,21 +296,21 @@
                                 <HBox justifyContent="Center" alignItems="Center">
                                     <Button
                                         id="btnReleaseToAccounting"
-                                        text="{i18n>btnReleaseToAccounting}"
                                         icon="sap-icon://money-bills"
-                                        type="Accept"
+                                        type="Transparent"
                                         class="sapUiTinyMarginEnd"
-                                        enabled="{= ${customerInvoice>AccountingTransferStatus} !== 'C' &amp;&amp; !${customerInvoice>BillingDocumentIsCancelled} }"
-                                        tooltip="{= ${customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>tooltipAlreadyTransferred} : (${customerInvoice>BillingDocumentIsCancelled} ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipReleaseToAccounting}) }"
+                                        enabled="{= ${customerInvoice>AccountingTransferStatus} !== 'C' &amp;&amp; ${customerInvoice>BillingDocumentIsCancelled} !== true }"
+                                        tooltip="{= ${customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>tooltipAlreadyTransferred} : (${customerInvoice>BillingDocumentIsCancelled} === true ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipReleaseToAccounting}) }"
+                                        ariaLabelledBy="colActions"
                                         press=".onReleaseToAccountingPress" />
 
                                     <Button
                                         id="btnCancelInvoice"
-                                        text="{i18n>btnCancelInvoice}"
                                         icon="sap-icon://sys-cancel"
-                                        type="Reject"
-                                        enabled="{= !${customerInvoice>BillingDocumentIsCancelled} }"
-                                        tooltip="{= ${customerInvoice>BillingDocumentIsCancelled} ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipCancelInvoice} }"
+                                        type="Transparent"
+                                        enabled="{= ${customerInvoice>BillingDocumentIsCancelled} !== true }"
+                                        tooltip="{= ${customerInvoice>BillingDocumentIsCancelled} === true ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipCancelInvoice} }"
+                                        ariaLabelledBy="colActions"
                                         press=".onCancelInvoicePress" />
                                 </HBox>
                             </cells>
