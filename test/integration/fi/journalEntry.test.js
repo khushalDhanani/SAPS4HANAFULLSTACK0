@@ -12,25 +12,34 @@ describe('FI Journal Entry Service Integration', () => {
             }
         });
 
-        it('should return 200 for authenticated access (Viewer)', async () => {
+        it('should return 200 for authenticated access with FinanceViewer (Alice)', async () => {
             try {
                 const response = await GET('/odata/v4/journal-entry/JournalEntryItems?$top=1', {
                     headers: {
-                        Authorization: 'Basic YWxpY2U6YW55dGhpbmc=' // Alice is mocked in package.json
+                        Authorization: 'Basic YWxpY2U6YW55dGhpbmc=' // Alice has FinanceViewer and Admin in package.json
                     }
                 });
                 expect(response.status).to.be.oneOf([200, 502, 500]);
             } catch (error) {
-                // If the external mock fails, it might throw a 502 or 500
+                // If upstream S/4HANA destination is unreachable, CAP maps error to 502/500/504
                 expect(error.response?.status).to.be.oneOf([502, 500, 504]);
             }
         });
         
-        it('should return 403 for unauthorized role (Bob - no FinanceViewer)', async () => {
-            // Bob only has User and Viewer, not FinanceViewer (we added FinanceViewer to the service)
-            // Wait, the service requires ['Viewer', 'FinanceViewer', 'Admin'].
-            // Since Bob has Viewer, he can actually access it. 
-            // Let's test just basic authentication rejection vs success.
+        it('should return 403 for unauthorized role on JournalEntryItems (Bob - Viewer only, no FinanceViewer)', async () => {
+            try {
+                await GET('/odata/v4/journal-entry/JournalEntryItems', {
+                    headers: {
+                        Authorization: 'Basic Ym9iOmFueXRoaW5n' // Bob has Viewer only
+                    }
+                });
+                expect.fail('Should have thrown 403 Forbidden');
+            } catch (error) {
+                expect(error.response.status).to.equal(403);
+            }
+        });
+
+        it('should return 200 for metadata access by authenticated user (Bob)', async () => {
             const { status } = await GET('/odata/v4/journal-entry/$metadata', {
                 headers: {
                     Authorization: 'Basic Ym9iOmFueXRoaW5n'
