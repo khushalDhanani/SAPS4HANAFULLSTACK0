@@ -59,6 +59,8 @@ sap.ui.define([
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
                 this._updateShell("customerInvoices");
+            } else if (sHash.indexOf("sd/returns") === 0) {
+                this._updateShell("customerReturns");
             } else if (sHash.indexOf("dashboard") === 0) {
                 this._updateShell("dashboard");
             }
@@ -148,6 +150,10 @@ sap.ui.define([
                     break;
                 case "customerInvoices":
                     sTitle = oBundle ? oBundle.getText("customerInvoicesTitle") : "Customer Invoices";
+                    bShowNav = true;
+                    break;
+                case "customerReturns":
+                    sTitle = oBundle ? oBundle.getText("customerReturnsTitle") : "Customer Returns Management";
                     bShowNav = true;
                     break;
                 case "login":

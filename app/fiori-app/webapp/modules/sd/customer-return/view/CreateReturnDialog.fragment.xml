@@ -1,0 +1,164 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.ui.layout.form">
+    <Dialog
+        id="dlgCreateCustomerReturn"
+        title="{i18n>createReturnDialogTitle}"
+        contentWidth="880px"
+        contentHeight="580px"
+        resizable="true"
+        draggable="true">
+        <content>
+            <VBox id="vbCreateReturnContainer" class="sapUiSmallMargin">
+                <!-- Header Details Form -->
+                <Panel id="pnlReturnHeaderDetails" headerText="{i18n>returnHeaderDetailsTitle}" expandable="false" class="sapUiTinyMarginBottom">
+                    <f:SimpleForm
+                        id="formCreateReturnHeader"
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="3"
+                        labelSpanL="3"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="0"
+                        emptySpanL="0"
+                        emptySpanM="0"
+                        emptySpanS="0"
+                        columnsXL="2"
+                        columnsL="2"
+                        columnsM="1"
+                        singleContainerFullSize="false">
+                        <f:content>
+                            <core:Title id="titleRefDocInfo" text="{i18n>titleReferenceDocument}" />
+                            <Label id="lblRefSDDoc" text="{i18n>lblReferenceSDDocument}" />
+                            <Input
+                                id="inputRefSDDoc"
+                                value="{createReturnModel>/ReferenceSDDocument}"
+                                placeholder="{i18n>phReferenceSDDoc}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReferenceDocValueHelp"
+                                change=".onReferenceDocChange" />
+
+                            <Label id="lblRefDocCategory" text="{i18n>lblReferenceDocCategory}" />
+                            <Select
+                                id="selRefDocCategory"
+                                selectedKey="{createReturnModel>/ReferenceSDDocumentCategory}">
+                                <core:Item key="M" text="{i18n>catInvoice}" />
+                                <core:Item key="C" text="{i18n>catSalesOrder}" />
+                                <core:Item key="" text="{i18n>catStandalone}" />
+                            </Select>
+
+                            <Label id="lblReturnReason" text="{i18n>lblReturnReason}" required="true" />
+                            <Select
+                                id="selReturnReason"
+                                selectedKey="{createReturnModel>/ReturnsOrderReason}"
+                                items="{returnReasons>/}"
+                                width="100%">
+                                <core:Item key="{returnReasons>ReasonCode}" text="{returnReasons>ReasonCode} - {returnReasons>ReasonText}" />
+                            </Select>
+
+                            <core:Title id="titleCustomerInfo" text="{i18n>titleCustomerSalesArea}" />
+                            <Label id="lblSoldToCustomer" text="{i18n>lblSoldToParty}" required="true" />
+                            <Input
+                                id="inputSoldToCustomer"
+                                value="{createReturnModel>/SoldToParty}"
+                                placeholder="{i18n>phSoldToParty}" />
+
+                            <Label id="lblCustRef" text="{i18n>lblCustomerReference}" />
+                            <Input
+                                id="inputCustRef"
+                                value="{createReturnModel>/PurchaseOrderByCustomer}"
+                                placeholder="{i18n>phCustomerReference}" />
+
+                            <Label id="lblReturnDate" text="{i18n>lblReturnDate}" />
+                            <DatePicker
+                                id="dpReturnDate"
+                                value="{createReturnModel>/CustomerReturnDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="yyyy-MM-dd" />
+
+                            <Label id="lblSalesArea" text="{i18n>lblSalesArea}" />
+                            <HBox id="hbSalesArea" alignItems="Center">
+                                <Text text="{= ${createReturnModel>/SalesOrganization} || '1000' } / {= ${createReturnModel>/DistributionChannel} || '10' } / {= ${createReturnModel>/OrganizationDivision} || '52' }" />
+                            </HBox>
+                        </f:content>
+                    </f:SimpleForm>
+                </Panel>
+
+                <!-- Return Items Table -->
+                <Panel id="pnlReturnItems" headerText="{i18n>returnItemsSectionTitle}" expandable="false">
+                    <Table
+                        id="tblCreateReturnItems"
+                        items="{createReturnModel>/Items}"
+                        noDataText="{i18n>noItemsAddedYet}">
+                        <headerToolbar>
+                            <OverflowToolbar id="tbCreateReturnItems">
+                                <Title text="{i18n>itemsTitle} ({= ${createReturnModel>/Items}.length })" level="H4"/>
+                                <ToolbarSpacer />
+                                <Button
+                                    id="btnAddReturnItem"
+                                    text="{i18n>btnAddItem}"
+                                    icon="sap-icon://add"
+                                    press=".onAddReturnItem" />
+                                <Button
+                                    id="btnDeleteReturnItem"
+                                    text="{i18n>btnDeleteItem}"
+                                    icon="sap-icon://delete"
+                                    type="Reject"
+                                    press=".onDeleteReturnItem" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column id="colNewItemNo" width="4rem">
+                                <Text text="#" />
+                            </Column>
+                            <Column id="colNewItemMaterial" width="11rem">
+                                <Text text="{i18n>colReturnMaterial}" />
+                            </Column>
+                            <Column id="colNewItemQty" width="8rem">
+                                <Text text="{i18n>colReturnQuantity}" />
+                            </Column>
+                            <Column id="colNewItemUnit" width="6rem">
+                                <Text text="{i18n>colUnit}" />
+                            </Column>
+                            <Column id="colNewItemPlant" width="7rem">
+                                <Text text="{i18n>colReturnPlant}" />
+                            </Column>
+                            <Column id="colNewItemStorage" width="7rem">
+                                <Text text="{i18n>colReturnStorageLocation}" />
+                            </Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem id="cliCreateItem">
+                                <cells>
+                                    <Text text="{= ${createReturnModel>ItemIndex} * 10 }" />
+                                    <Input value="{createReturnModel>Material}" placeholder="e.g. 4000000001" />
+                                    <Input value="{createReturnModel>OrderQuantity}" type="Number" placeholder="1.0" />
+                                    <Input value="{createReturnModel>OrderQuantityUnit}" placeholder="KG" />
+                                    <Input value="{createReturnModel>ProductionPlant}" placeholder="1110" />
+                                    <Input value="{createReturnModel>StorageLocation}" placeholder="FG01" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnConfirmCreateReturn"
+                text="{i18n>btnCreateInSAP}"
+                type="Emphasized"
+                icon="sap-icon://save"
+                press=".onConfirmCreateReturn" />
+        </beginButton>
+        <endButton>
+            <Button
+                id="btnCancelCreateReturn"
+                text="{i18n>btnCancel}"
+                press=".onCancelCreateReturnDialog" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

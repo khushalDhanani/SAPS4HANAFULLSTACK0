@@ -239,6 +239,17 @@
                                                 <NumericContent icon="sap-icon://customer-financial-fact-sheet" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
+
+                                        <GenericTile
+                                            id="tileOverviewCustomerReturns"
+                                            header="{i18n>tileCustomerReturnsTitle}"
+                                            subheader="{i18n>tileCustomerReturnsSub}"
+                                            press=".onNavigateToCustomerReturns"
+                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>tileCustomerReturnsUnit}">
+                                                <NumericContent icon="sap-icon://undo" valueColor="Neutral" />
+                                            </TileContent>
+                                        </GenericTile>
                                     </HBox>
                                 </Panel>
 
@@ -543,6 +554,11 @@
                                     <GenericTile id="tileSDCustomerInvoices" header="{i18n>tileCustomerInvoicesTitle}" subheader="{i18n>tileCustomerInvoicesSub}" press=".onNavigateToCustomerInvoices" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>tileCustomerInvoicesUnit}">
                                             <NumericContent icon="sap-icon://money-bills" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileSDCustomerReturns" header="{i18n>tileCustomerReturnsTitle}" subheader="{i18n>tileCustomerReturnsSub}" press=".onNavigateToCustomerReturns" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>tileCustomerReturnsUnit}">
+                                            <NumericContent icon="sap-icon://undo" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
                                 </HBox>

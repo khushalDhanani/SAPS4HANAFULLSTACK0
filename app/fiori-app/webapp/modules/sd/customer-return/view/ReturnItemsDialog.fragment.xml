@@ -1,0 +1,79 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="dlgReturnItems"
+        title="{i18n>returnItemsDialogTitle} - {customerReturnsView>/selectedReturnNumber}"
+        contentWidth="850px"
+        contentHeight="480px"
+        resizable="true"
+        draggable="true">
+        <content>
+            <Table
+                id="tblReturnItems"
+                items="{customerReturnsView>/returnItems}"
+                noDataText="{i18n>noReturnItemsFound}"
+                growing="true"
+                growingScrollToLoad="true"
+                class="sapUiTinyMargin">
+                <headerToolbar>
+                    <OverflowToolbar id="tbReturnItems">
+                        <Title id="txtReturnItemsCount" text="{i18n>returnItemsCountTitle} ({= ${customerReturnsView>/returnItems}.length })" level="H3"/>
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column id="colItemNo" width="4rem">
+                        <Text text="{i18n>colReturnItemNo}" />
+                    </Column>
+                    <Column id="colItemMaterial" minScreenWidth="Tablet" demandPopin="true" width="12rem">
+                        <Text text="{i18n>colReturnMaterial}" />
+                    </Column>
+                    <Column id="colItemQty" hAlign="End" width="8rem">
+                        <Text text="{i18n>colReturnQuantity}" />
+                    </Column>
+                    <Column id="colItemAmount" hAlign="End" minScreenWidth="Tablet" demandPopin="true" width="8rem">
+                        <Text text="{i18n>colReturnNetAmount}" />
+                    </Column>
+                    <Column id="colItemPlant" minScreenWidth="Desktop" demandPopin="true" width="8rem">
+                        <Text text="{i18n>colReturnPlant}" />
+                    </Column>
+                    <Column id="colItemStorage" minScreenWidth="Desktop" demandPopin="true" width="7rem">
+                        <Text text="{i18n>colReturnStorageLocation}" />
+                    </Column>
+                    <Column id="colItemReason" minScreenWidth="Tablet" demandPopin="true" width="9rem">
+                        <Text text="{i18n>colReturnReason}" />
+                    </Column>
+                    <Column id="colItemRefDoc" minScreenWidth="Desktop" demandPopin="true" width="8rem">
+                        <Text text="{i18n>colReturnRefDoc}" />
+                    </Column>
+                </columns>
+                <items>
+                    <ColumnListItem id="cliReturnItem" vAlign="Middle">
+                        <cells>
+                            <Text text="{customerReturnsView>CustomerReturnItem}" />
+                            <ObjectIdentifier
+                                title="{customerReturnsView>Material_Text}"
+                                text="{customerReturnsView>Material}" />
+                            <ObjectNumber
+                                number="{path: 'customerReturnsView>OrderQuantity', formatter: '.formatQuantity'}"
+                                unit="{customerReturnsView>OrderQuantityUnit}" />
+                            <ObjectNumber
+                                number="{path: 'customerReturnsView>NetAmount', formatter: '.formatAmount'}"
+                                unit="{customerReturnsView>Currency}" />
+                            <Text text="{= ${customerReturnsView>PlantName} ? ${customerReturnsView>PlantName} + ' (' + ${customerReturnsView>ProductionPlant} + ')' : ${customerReturnsView>ProductionPlant} }" />
+                            <Text text="{= ${customerReturnsView>StorageLocationName} ? ${customerReturnsView>StorageLocationName} + ' (' + ${customerReturnsView>StorageLocation} + ')' : ${customerReturnsView>StorageLocation} }" />
+                            <Text text="{= ${customerReturnsView>ReturnReason_Text} ? ${customerReturnsView>ReturnReason_Text} : ${customerReturnsView>ReturnReason} }" />
+                            <Text text="{= ${customerReturnsView>ReferenceSDDocument} ? ${customerReturnsView>ReferenceSDDocument} + ' / ' + ${customerReturnsView>ReferenceSDDocumentItem} : '-' }" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+        <beginButton>
+            <Button
+                id="btnCloseReturnItems"
+                text="{i18n>btnClose}"
+                press=".onCloseReturnItemsDialog" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>

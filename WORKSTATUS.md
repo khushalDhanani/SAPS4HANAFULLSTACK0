@@ -2832,6 +2832,153 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Inform user of findings and guidance for VKOA customizing.
 
+## 2026-09-23 16:15 IST
+- **Agent**: Antigravity
+- **Change**: Comprehensive Audit & Verification of Proper Creatable Services in SD Module:
+  - **User Request**: *"Find Proper Creatable service in SD Module."*
+  - **Empirical Investigation & Findings**:
+    1. **Raw Catalog vs. Proper Creatable Distinction**:
+       - The automated catalog scan (`catalog-creatable.csv`) reports 50 services under SD with `creatable_sets > 0` or `post_actions > 0`.
+       - Rigorous inspection of live `$metadata` on DS4 client 220 reveals that over 75% of these are **non-document-creating**:
+         - Factsheet & Object Pages (e.g. `SD_CUSTOMER_INVOICES_MANAGE`, `SD_F1814_SO_FS_SRV`, `SD_F1871_QUOT_FS_SRV`) declare variant config/classification helper sets (`ConfigurationContextSet`, `CharacteristicValueSet`, `ClassificationContextSet`), NOT business documents.
+         - Read-Only CDS View Worklists (`SD_F1873_SO_WL_SRV` with `C_SalesOrderWl_F1873`) lack transactional write handlers and reject POST (`405` / `CX_SADL_ENTITY_CUD_DISABLED`).
+         - Mass Maintenance Cockpits (`SD_MCC_*`) and File Upload Services (`SD_SALES_*_IMPORT`) are spreadsheet/batch tools.
+    2. **Authentic Proper Creatable SD Services Identified**:
+       - **Sales Orders & Inquiries**: `LORD_ODATA_ORDER_SRV` (`POST /HeaderSet` deep insert) — **Proven live** on DS4 client 220 (real documents persisted).
+       - **Outbound Delivery (with reference)**: `LE_SHP_QC_DLVREF_SRV` (`POST /C_DelivWthRefQuickCreate`) — **Proven live** (delivery 13000526).
+       - **Outbound Delivery (direct)**: `SD_SOFM_DELIVERY_SRV_01` (`CreateDeliveryForOrder`).
+       - **Outbound Delivery (without reference)**: `LE_SHP_QC_DLVNOREF_SRV` (`C_DelivWthoutRefQuickCreate` + items).
+       - **Post Goods Issue & Credit Release**: `SD_SOFM_CREDIT_BLOCK_SRV` (`PostGoodsIssue`, `ReleaseCreditOrder`).
+       - **Customer Invoice Creation**: `SD_CUSTOMER_INVOICES_CREATE` (`CreateBillingDocuments`) & `SD_SOFM_INVOICE_SRV` (`createInvoice`).
+       - **Customer Invoice Follow-up / Release**: `SD_CUSTOMER_INVOICES_MANAGE` (`PostBillingDocumentToAccounting`, `CancelBillingDocument`) — **Proven live**.
+       - **Customer Returns**: `SD_F2651_CRT_CREATE_SRV` (`C_CustomerReturnOPg` + `C_CustomerReturnItemOPg`).
+       - **Customer Materials**: `SD_F2499_CUSTOMER_MATERIAL_SRV` (`C_CustomerMaterial_F2499`).
+       - **Sales Item Proposals**: `SD_F2583_SLSITMPRPSL_SRV` (`C_SalesItemProposalTP`).
+       - **In-House Repairs**: `UI_MANAGEINHREPAIRS` (`C_InhRepairObjPg` + actions).
+    3. **Standard SAP Released APIs Status**:
+       - `API_SALES_ORDER_SRV` & `API_SALES_QUOTATION_SRV`: Unaliased in Gateway on DS4 client 220 (HTTP 500 `/IWFND/CM_COS/064`, Basis ticket item 1).
+  - **Files Modified**:
+    - `docs/sd-creatable-services.md`
+    - `WORKSTATUS.md`
+  - **Executed Commands and Results**:
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Present verified findings to user and confirm which SD business capability to implement next.
+
+## 2026-09-23 16:28 IST
+- **Agent**: Antigravity
+- **Change**: Backend Implementation for Customer Returns Management (`SD_F2651_CRT_CREATE_SRV`):
+  - **User Request**: *"Plan Backend First : Customer Returns Management using SD_F2651_CRT_CREATE_SRV"*
+  - **Architectural Implementation Delivered**:
+    1. **CAP Service Contract (`srv/sd/customer-return/service.cds`)**:
+       - Exposes `CustomerReturnService` at `/odata/v4/customer-return` with `@requires: 'authenticated-user'`.
+       - Entities: `@readonly entity CustomerReturns` (Header with return #, type, sold-to, ship-to, reference doc, reference category, order reason, total net value, currency, dates) and `@readonly entity CustomerReturnItems` (Items with return item, material, quantities, plant, storage loc, net amount, return reason).
+       - Query Functions: `getReturnMetrics()` (KPI summary: total returns, total net value, poor quality count, damaged in transit count, other reasons count), `getReturnReasons()` (returns value help from `C_ReturnsOrderReasonVH`), `getReferenceDocuments(search, top)` (returns eligible reference invoices/orders from `C_ReturnsReferenceDocVH`).
+       - Transactional Action: `createCustomerReturn(...)` with header and item payloads.
+    2. **S/4HANA Gateway Adapter (`srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js`)**:
+       - Integrates directly with S/4HANA OData service `/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV` on DS4 client 220.
+       - Implements `_cleanOptions` to sanitize incoming headers and prevent 401 basic auth overrides.
+       - Implements robust `/Date(ms)/` parsing into ISO format (`YYYY-MM-DD`).
+       - Methods: `getCustomerReturns`, `getCustomerReturn`, `getCustomerReturnItems`, `getReturnReasons`, `getReferenceDocuments`.
+       - Transactional `createCustomerReturn`: fetches CSRF token and session cookies, executes `POST /C_CustomerReturnOPg`, creates items via `POST /C_CustomerReturnItemOPg`, and runs mandatory multi-attempt readback verification (`MAX_READBACK_ATTEMPTS = 3`, backoff intervals `[0, 800, 1500]ms`) to guarantee SAP database persistence.
+    3. **CAP Service Handlers (`srv/sd/customer-return/handlers/customerReturn.handler.js`)**:
+       - `READ CustomerReturns`: multi-field search across return document, customer name, reference doc; filtering by return reason and document type; paging support.
+       - `READ CustomerReturnItems`: items lookup filtered by `CustomerReturn` key.
+       - `getReturnMetrics`: KPI calculation across active records.
+       - `getReturnReasons` & `getReferenceDocuments`: value helps delegation.
+       - `createCustomerReturn`: validates mandatory fields (`SoldToParty`, `ReturnsOrderReason`), checks role authorization (`SalesRepresentative`, `SalesManager`, `Admin`), and returns confirmed document.
+    4. **Service Mounting & Client Auth Sync**:
+       - Mounted in `srv/service.cds` via `using from './sd/customer-return/service';`.
+       - Added `"customerReturn"` to `aModelNames` in `AuthService.js` for Bearer token synchronization.
+    5. **Automated Unit Tests**:
+       - `test/unit/sd/customerReturnAdapter.test.js`: 17 tests covering helpers, queries, pagination, search, validation, and readback loop (100% pass).
+       - `test/unit/sd/customerReturnHandler.test.js`: 13 tests covering READ filtering, metrics, value helps, and create action (100% pass).
+  - **Files Modified/Created**:
+    - `srv/sd/customer-return/service.cds` [NEW]
+    - `srv/sd/customer-return/service.js` [NEW]
+    - `srv/sd/customer-return/handlers/customerReturn.handler.js` [NEW]
+    - `srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js` [NEW]
+    - `srv/service.cds`
+    - `app/fiori-app/webapp/service/AuthService.js`
+    - `test/unit/sd/customerReturnAdapter.test.js` [NEW]
+    - `test/unit/sd/customerReturnHandler.test.js` [NEW]
+    - `WORKSTATUS.md`
+  - **Executed Commands and Results**:
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm test -- test/unit/sd/customerReturn`: 2 passed, 2 total test suites; 30 passed, 30 total tests (100% green).
+    - `npm test -- test/unit/sd/`: 5 passed, 5 total test suites; 74 passed, 74 total tests (100% green).
+    - `npm test`: 83 passed, 83 total test suites; 1144 passed, 1144 total tests (100% green).
+    - `npm run lint`: 0 errors.
+    - `npm --prefix app/fiori-app run lint`: 0 findings.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Plan and implement Fiori UI for Customer Returns Management (`SD_F2651_CRT_CREATE_SRV`).
+
+## 2026-09-23 16:45 IST
+- **Agent**: Antigravity
+- **Change**: Full-Stack Fiori UI Implementation & DevTools MCP Live Verification for Customer Returns Management (`SD_F2651_CRT_CREATE_SRV`):
+  - **Fiori Frontend Architecture**:
+    1. **Routing & Manifest Configuration (`app/fiori-app/webapp/manifest.json`)**:
+       - Defined `customerReturnService` OData V4 data source pointing to `/odata/v4/customer-return/`.
+       - Registered `customerReturn` model with `operationMode: "Server"` and `autoExpandSelect: true`.
+       - Added `customerReturns` route (`sd/returns`) with target `TargetCustomerReturns` pointing to view `CustomerReturns`.
+    2. **Shell & Route Sync (`app/fiori-app/webapp/controller/App.controller.js`)**:
+       - Added route matching for `customerReturns` to set active shell tab to `sales-orders` and update shell title to "Customer Returns Management".
+    3. **Dashboard Integration (`Dashboard.view.xml` & `Dashboard.controller.js`)**:
+       - Added `tileOverviewCustomerReturns` in Overview tab.
+       - Added `tileSDCustomerReturns` in Sales & Distribution (SD) tab.
+       - Implemented `onNavigateToCustomerReturns` in `Dashboard.controller.js` to navigate to `#/sd/returns`.
+    4. **Client Service Layer (`app/fiori-app/webapp/modules/sd/customer-return/service/CustomerReturnService.js`)**:
+       - Provides decoupled data retrieval and execution for `getCustomerReturns`, `getCustomerReturnItems`, `getMetrics`, `getReturnReasons`, `getReferenceDocuments`, and `createCustomerReturn`.
+    5. **Main Fiori View (`CustomerReturns.view.xml`)**:
+       - Fiori Page layout with 4 KPI tiles: Total Returns (Neutral), Total Net Value (Good), Poor Quality Reason 101 (Critical), and Transit Damage Reason 102 (Error).
+       - Header action buttons: `+ Create Return` (Emphasized) and `Refresh` (Transparent).
+       - `IconTabBar` with live status filter tabs: All Returns, Quality (101), Transit (102), and Other Reasons.
+       - Live `SearchField` filtering across Return #, Customer, Reference Document, and Reason text.
+       - Responsive `sap.m.Table` displaying Return #, Type badge, Customer Name & ID, Document Date, Reference Document & Category, Reason status with custom icons, Net Amount, and `View Items` action button.
+    6. **View Controller (`CustomerReturns.controller.js`)**:
+       - Extends `BaseController`.
+       - Manages model state for `customerReturnsView`, `createReturnModel`, and `returnReasons`.
+       - Implements formatters: `formatReasonState`, `formatReasonIcon`, `formatAmount`, and `formatQuantity`.
+       - Implements `onTabSelect`, `onSearch`, `_applyFilters`, `_loadMetrics`, and `_loadReasons`.
+       - Implements `onViewItemsPress` and `onCloseReturnItemsDialog` to manage items drilldown modal.
+       - Implements `onCreateReturnPress`, `onAddReturnItem`, `onDeleteReturnItem`, `onReferenceDocChange`, `onReferenceDocValueHelp`, `onConfirmCreateReturn`, and `onCancelCreateReturnDialog`.
+    7. **Dialog Fragments (`ReturnItemsDialog.fragment.xml` & `CreateReturnDialog.fragment.xml`)**:
+       - `ReturnItemsDialog.fragment.xml`: drilldown table displaying Item #, Material description and ID, Quantity with unit, Net Amount with currency, Delivering Plant, Storage Location, and Reference Doc.
+       - `CreateReturnDialog.fragment.xml`: modal with reference document lookup, category select, reason code select, sold-to party, customer reference, return date, sales area, and editable line items table.
+    8. **Localization (`i18n.properties` & `i18n_en.properties`)**:
+       - Added complete text tokens for titles, subtitles, tiles, table headers, buttons, formatters, and dialog messages.
+  - **Automated Unit Tests**:
+    - `test/unit/sd/customerReturnsController.test.js`: 21 tests covering formatters, lifecycle, route matching, metrics, tab filtering, search filtering, items dialog drilldown, create dialog manipulation, validation, success handling, and error mapping (21/21 passed).
+  - **Executed Commands and Results**:
+    - `npm test -- test/unit/sd/customerReturnsController.test.js`: 1 passed, 1 total test suite; 21 passed, 21 total tests (100% green).
+    - `npm test -- test/unit/sd/`: 6 passed, 6 total test suites; 95 passed, 95 total tests (100% green).
+    - `npm test`: 84 passed, 84 total test suites; 1,165 passed, 1,165 total tests (100% green, 0 regressions).
+    - `npm run lint`: 0 errors.
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 1.09 s.
+    - `git diff --check`: Clean (0 errors).
+  - **Live Browser Verification via Chrome DevTools MCP**:
+    - Navigated to `http://localhost:4004/fiori-app/webapp/index.html#/sd/returns`.
+    - Verified all 4 KPI tiles populated with live SAP data: 179 total returns, 115 total net value, 68 quality issue reason 101, 31 transit damage reason 102.
+    - Verified table populated with 179 live records from SAP Gateway `SD_F2651_CRT_CREATE_SRV`.
+    - Verified items drilldown dialog opened on row button click, fetching and displaying SAP line item details (`4000000181`, `50.000 KG`, `325,000.00 INR`).
+    - Verified `Create Customer Return (S/4HANA)` dialog opened cleanly with reference document input, category selector, reason code dropdown, sold-to party, return date, and line items table.
+    - Verified Dashboard navigation: clicked `Customer Returns` tile in Sales (SD) tab, which routed seamlessly to `#/sd/returns`.
+  - **Files Modified/Created**:
+    - `app/fiori-app/webapp/manifest.json`
+    - `app/fiori-app/webapp/controller/App.controller.js`
+    - `app/fiori-app/webapp/view/Dashboard.view.xml`
+    - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+    - `app/fiori-app/webapp/modules/sd/customer-return/service/CustomerReturnService.js` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-return/view/CustomerReturns.view.xml` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-return/controller/CustomerReturns.controller.js` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-return/view/ReturnItemsDialog.fragment.xml` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-return/view/CreateReturnDialog.fragment.xml` [NEW]
+    - `app/fiori-app/webapp/i18n/i18n.properties`
+    - `app/fiori-app/webapp/i18n/i18n_en.properties`
+    - `test/unit/sd/customerReturnsController.test.js` [NEW]
+    - `WORKSTATUS.md`
+  - **Next recommended action**: Stage, commit, and push features or proceed to next creatable capability.
+
 ## Next Steps
 0. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
 1. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.

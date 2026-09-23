@@ -1,0 +1,229 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.customer-return.controller.CustomerReturns"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Page
+        id="customerReturnsPage"
+        showHeader="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Header Toolbar & Title -->
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <Title text="{i18n>customerReturnsTitle}" level="H2" titleStyle="H3" />
+                        <Text text="{i18n>customerReturnsSubtitle}" class="textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <Button
+                            id="btnCreateReturn"
+                            text="{i18n>btnCreateReturn}"
+                            icon="sap-icon://add"
+                            type="Emphasized"
+                            press=".onCreateReturnPress"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnRefreshReturns"
+                            icon="sap-icon://refresh"
+                            text="{i18n>btnRefresh}"
+                            type="Transparent"
+                            press=".onRefresh" />
+                    </HBox>
+                </HBox>
+
+                <!-- KPI Tiles Section -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile
+                        id="kpiTotalReturns"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiTotalReturns}"
+                        subheader="{i18n>kpiTotalReturnsSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalReturnsVal"
+                                value="{customerReturnsView>/totalReturns}"
+                                icon="sap-icon://customer-financial-fact-sheet"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiTotalNetValue"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiTotalNetValue}"
+                        subheader="{i18n>kpiTotalNetValueSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalNetValueVal"
+                                value="{customerReturnsView>/totalNetValueFormatted}"
+                                icon="sap-icon://lead"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiReasonQuality"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiReasonQuality}"
+                        subheader="{i18n>kpiReasonQualitySub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiReasonQualityVal"
+                                value="{customerReturnsView>/poorQualityCount}"
+                                icon="sap-icon://quality-issue"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiReasonTransit"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiReasonTransit}"
+                        subheader="{i18n>kpiReasonTransitSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiReasonTransitVal"
+                                value="{customerReturnsView>/damagedTransitCount}"
+                                icon="sap-icon://shipping-status"
+                                valueColor="Error" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- IconTabBar Filter -->
+                <IconTabBar
+                    id="itbCustomerReturns"
+                    select=".onTabSelect"
+                    headerBackgroundDesign="Transparent"
+                    class="sapUiResponsiveContentPadding">
+                    <items>
+                        <IconTabFilter
+                            id="itfAll"
+                            key="ALL"
+                            text="{i18n>tabAllReturns}"
+                            count="{customerReturnsView>/totalReturns}" />
+                        <IconTabFilter
+                            id="itfQuality"
+                            key="101"
+                            text="{i18n>tabQualityReason}"
+                            count="{customerReturnsView>/poorQualityCount}"
+                            iconColor="Critical" />
+                        <IconTabFilter
+                            id="itfTransit"
+                            key="102"
+                            text="{i18n>tabTransitReason}"
+                            count="{customerReturnsView>/damagedTransitCount}"
+                            iconColor="Negative" />
+                        <IconTabFilter
+                            id="itfOther"
+                            key="OTHER"
+                            text="{i18n>tabOtherReasons}"
+                            count="{customerReturnsView>/otherReasonsCount}" />
+                    </items>
+                    <content>
+                        <!-- Customer Returns Table -->
+                        <Table
+                            id="tblCustomerReturns"
+                            items="{
+                                path: 'customerReturn>/CustomerReturns',
+                                parameters: {
+                                    $count: true
+                                },
+                                sorter: [
+                                    { path: 'CustomerReturnDate', descending: true },
+                                    { path: 'CustomerReturn', descending: true }
+                                ]
+                            }"
+                            growing="true"
+                            growingThreshold="25"
+                            growingScrollToLoad="true"
+                            noDataText="{i18n>customerReturnsNoData}"
+                            updateFinished=".onUpdateFinished"
+                            sticky="ColumnHeaders,HeaderToolbar">
+                            <headerToolbar>
+                                <OverflowToolbar id="tableToolbar">
+                                    <Title
+                                        id="tableTitle"
+                                        text="{= 'Customer Returns (' + (${customerReturnsView>/totalReturns} || '0') + ')' }"
+                                        level="H4" />
+                                    <ToolbarSpacer />
+                                    <SearchField
+                                        id="searchCustomerReturns"
+                                        width="18rem"
+                                        search=".onSearch"
+                                        liveChange=".onSearch"
+                                        placeholder="{i18n>searchReturnsPlaceholder}">
+                                        <layoutData>
+                                            <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                        </layoutData>
+                                    </SearchField>
+                                    <Button
+                                        id="btnRefreshReturnsTable"
+                                        icon="sap-icon://refresh"
+                                        tooltip="{i18n>btnRefresh}"
+                                        press=".onRefresh" />
+                                </OverflowToolbar>
+                            </headerToolbar>
+                            <columns>
+                                <Column id="colReturnNum" width="8rem">
+                                    <Text text="{i18n>colReturnNumber}" />
+                                </Column>
+                                <Column id="colCust" width="14rem" minScreenWidth="Tablet" demandPopin="true">
+                                    <Text text="{i18n>colReturnCustomer}" />
+                                </Column>
+                                <Column id="colDate" width="8rem" minScreenWidth="Desktop" demandPopin="true">
+                                    <Text text="{i18n>colReturnDate}" />
+                                </Column>
+                                <Column id="colRef" width="10rem" minScreenWidth="Tablet" demandPopin="true">
+                                    <Text text="{i18n>colReturnRefDoc}" />
+                                </Column>
+                                <Column id="colReason" width="14rem">
+                                    <Text text="{i18n>colReturnReason}" />
+                                </Column>
+                                <Column id="colAmount" width="9rem" hAlign="End">
+                                    <Text text="{i18n>colReturnNetValue}" />
+                                </Column>
+                                <Column id="colAction" width="7rem" hAlign="Center">
+                                    <Text text="{i18n>colReturnItemsAction}" />
+                                </Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem id="cliCustomerReturn" type="Inactive">
+                                    <cells>
+                                        <ObjectIdentifier
+                                            title="{customerReturn>CustomerReturn}"
+                                            text="{customerReturn>CustomerReturnType}" />
+                                        <ObjectIdentifier
+                                            title="{= ${customerReturn>SoldToPartyName} || ${customerReturn>SoldToParty} || '' }"
+                                            text="{= ${customerReturn>SoldToPartyName} ? ${customerReturn>SoldToParty} : '' }" />
+                                        <Text text="{customerReturn>CustomerReturnDate}" />
+                                        <ObjectStatus
+                                            text="{= ${customerReturn>ReferenceSDDocument} ? ${customerReturn>ReferenceSDDocument} + ' (' + (${customerReturn>ReferenceSDDocumentCategory} || '') + ')' : '-' }"
+                                            state="{= ${customerReturn>ReferenceSDDocument} ? 'Information' : 'None' }" />
+                                        <ObjectStatus
+                                            text="{= ${customerReturn>SDDocumentReasonText} ? ${customerReturn>ReturnsOrderReason} + ' - ' + ${customerReturn>SDDocumentReasonText} : ${customerReturn>ReturnsOrderReason} }"
+                                            state="{path: 'customerReturn>ReturnsOrderReason', formatter: '.formatReasonState'}"
+                                            icon="{path: 'customerReturn>ReturnsOrderReason', formatter: '.formatReasonIcon'}" />
+                                        <ObjectNumber
+                                            number="{path: 'customerReturn>TotalNetAmount', formatter: '.formatAmount'}"
+                                            unit="{customerReturn>TransactionCurrency}"
+                                            state="None" />
+                                        <Button
+                                            id="btnViewItems"
+                                            text="{i18n>btnViewItems}"
+                                            icon="sap-icon://detail-view"
+                                            type="Transparent"
+                                            press=".onViewItemsPress" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </content>
+                </IconTabBar>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

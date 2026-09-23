@@ -73,6 +73,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "customerReturnService": {
+        "uri": "/odata/v4/customer-return/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -158,6 +166,13 @@
       },
       "customerInvoice": {
         "dataSource": "customerInvoiceService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "customerReturn": {
+        "dataSource": "customerReturnService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -260,6 +275,11 @@
           "name": "customerInvoices",
           "pattern": "sd/invoices",
           "target": "TargetCustomerInvoices"
+        },
+        {
+          "name": "customerReturns",
+          "pattern": "sd/returns",
+          "target": "TargetCustomerReturns"
         }
       ],
       "targets": {
@@ -335,6 +355,11 @@
           "id": "customerInvoices",
           "name": "CustomerInvoices",
           "path": "saps4hana.fiori.modules.sd.customer-invoice.view"
+        },
+        "TargetCustomerReturns": {
+          "id": "customerReturns",
+          "name": "CustomerReturns",
+          "path": "saps4hana.fiori.modules.sd.customer-return.view"
         }
       }
     }

@@ -94,7 +94,7 @@ sap.ui.define([
                 "Authorization": sAuthHeader
             };
 
-            var aModelNames = ["", "fiService", "salesInquiry", "salesOrder", "goodsIssue", "goodsReceipt", "warehouseMgmt", "outboundDelivery", "customerInvoice"];
+            var aModelNames = ["", "fiService", "salesInquiry", "salesOrder", "goodsIssue", "goodsReceipt", "warehouseMgmt", "outboundDelivery", "customerInvoice", "customerReturn"];
             aModelNames.forEach(function (sModelName) {
                 var oModel = sModelName ? oComp.getModel(sModelName) : oComp.getModel();
                 if (oModel && typeof oModel.changeHttpHeaders === "function") {
