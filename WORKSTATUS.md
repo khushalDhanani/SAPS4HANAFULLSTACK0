@@ -3,6 +3,53 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-23 14:48 IST
+- **Agent**: Antigravity
+- **Change**: Fix VS Code Syntax Highlighting Corruption in `i18n.properties` & `i18n_en.properties`:
+  1. **Root Cause Analysis**:
+     - Line 603 (`msgCustomerDefaultsFromHistory`) contained an unpaired single quote in `"customer's"`.
+     - VS Code tokenizes `.properties` files using TextMate's `source.ini` grammar (`punctuation.definition.string.begin.ini`).
+     - Because `source.ini` treats single quotes as multi-line string delimiters and there was no closing single quote in the rest of the file (lines 604–942), VS Code treated lines 603 through 942 as one continuous string literal (`string.quoted.single.ini`), causing all comments, keys, and operators to lose their distinctive syntax coloring and turn into a uniform string color.
+  2. **Remediation**:
+     - Updated `msgCustomerDefaultsFromHistory` in both `i18n.properties` and `i18n_en.properties` from `"taken from this customer's previous sales documents"` to `"taken from previous sales documents for this customer"`.
+     - Verified odd/unpaired single quotes across the entire file dropped to 0.
+     - Rebuilt `Component-preload.js` via `npm --prefix app/fiori-app run build`.
+- **Files Modified**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+- **Executed Commands and Results**:
+  - Python unpaired quote analyzer: 0 odd single quotes remaining across entire file.
+  - `diff -u app/fiori-app/webapp/i18n/i18n.properties app/fiori-app/webapp/i18n/i18n_en.properties`: Clean (0 differences, 100% parity).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.05 s; `Component-preload.js` generated cleanly.
+  - `npm --prefix app/fiori-app run lint`: 0 findings, 100% clean.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Inform user and verify syntax highlighting in VS Code.
+
+## 2026-09-23 14:45 IST
+- **Agent**: Antigravity
+- **Change**: Internationalization (i18n) Standardization, Missing Key Remediation & Duplicate Cleanup:
+  1. **Missing Keys Remediation**:
+     - Added `colSoldToParty=Sold-to Party` for `CancelInvoiceDialog.fragment.xml` (eliminated raw technical label display in the Cancel Billing Document dialog).
+     - Added `poPlaceholderPurchasingOrg=e.g. 1010` and `poPlaceholderPurchasingGroup=e.g. 001` aliases alongside existing shorthand keys for `CreatePurchaseOrder.view.xml` (resolved raw placeholder keys on Create PO screen).
+     - Added `poNotFound=Purchase Order not found.` and `detailRefreshed=Purchase Order data refreshed.` for `PurchaseOrderDetail.controller.js` (resolved raw key fallback on error/refresh).
+  2. **Duplicate Keys & Silent Overwrite Elimination**:
+     - Removed redundant duplicate definitions of `giNoOpenItemsText`, `giSelectReservationLabel`, `giSelectReservationPlaceholder`, and `giRefreshReservationsTooltip` (lines 451–454) and consolidated `giNoOpenItemsText` at line 333 with the modern SAP identifier prompt text.
+     - Removed redundant duplicate `colNetAmount` in Customer Invoices section (line 906), replacing it with `colSoldToParty=Sold-to Party`.
+  3. **Parity & Bundle Rebuild**:
+     - Maintained 100% key-for-key parity between `app/fiori-app/webapp/i18n/i18n.properties` and `app/fiori-app/webapp/i18n/i18n_en.properties` (854 unique keys, 0 duplicates, 0 missing keys in webapp).
+     - Rebuilt `Component-preload.js` via `npm --prefix app/fiori-app run build`.
+- **Files Modified**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+- **Executed Commands and Results**:
+  - `diff -u app/fiori-app/webapp/i18n/i18n.properties app/fiori-app/webapp/i18n/i18n_en.properties`: Clean (0 differences, 100% parity).
+  - Python automated scan across all views, fragments, controllers, and services: 854 total keys, 0 duplicates, 0 missing keys.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.27 s; `Component-preload.js` generated cleanly.
+  - `npm --prefix app/fiori-app run lint`: 0 findings, 100% clean.
+  - `npx jest test/unit/purchase-order/ test/unit/sd/ test/unit/le/`: 27 passed, 27 total test suites; 335 passed, 335 total tests (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage and commit the i18n fixes to `feature/CL01`.
+
 ## 2026-09-23 14:35 IST
 - **Agent**: Antigravity
 - **Change**: Customer Invoices Screen Standardization per SAP Fiori / SAPUI5 Design Guidelines:
