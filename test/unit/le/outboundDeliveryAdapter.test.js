@@ -515,11 +515,22 @@ describe('Unit: OutboundDeliveryAdapter', () => {
     test('passes category J, the optional type and the optional date; without a type SAP determines it', async () => {
       mockClient.post.mockResolvedValueOnce({ data: { d: { results: [{ BillingDocument: '90000122' }] } } });
       await adapter.createBillingDocument({ deliveryDocument: '13000522' });
-      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments?ReferenceSDDocument='13000522'&ReferenceSDDocumentCategory='J'");
+      const call0Url = mockClient.post.mock.calls[0][0];
+      expect(call0Url).toContain("/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments?");
+      expect(call0Url).toContain("ReferenceSDDocument='13000522'");
+      expect(call0Url).toContain("ReferenceSDDocumentCategory='J'");
+      expect(call0Url).toContain("RefSDDocWithInvalidPartner=''");
+      expect(call0Url).toContain("BillingDocumentType=''");
+
       mockClient.post.mockClear();
       mockClient.post.mockResolvedValue({ data: { d: { results: [{ BillingDocument: '90000123', MessageType: 'S', Message: 'Document 90000123 saved', BillToParty: '20021', BillToPartyName: 'ABC' }] } } });
       const res = await adapter.createBillingDocument({ deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: '2026-09-22' });
-      expect(mockClient.post.mock.calls[0][0]).toBe("/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments?ReferenceSDDocument='13000526'&ReferenceSDDocumentCategory='J'&BillingDocumentType='F2'&BillingDocumentDate='20260922'");
+      const call1Url = mockClient.post.mock.calls[0][0];
+      expect(call1Url).toContain("ReferenceSDDocument='13000526'");
+      expect(call1Url).toContain("ReferenceSDDocumentCategory='J'");
+      expect(call1Url).toContain("BillingDocumentType='F2'");
+      expect(call1Url).toContain("BillingDocumentDate='20260922'");
+      expect(call1Url).toContain("RequestedBillingDocumentDate='20260922'");
       expect(res.BillingDocument).toBe('90000123');
       expect(res.BillToParty).toBe('20021');
       expect(res.Messages).toEqual([{ MessageType: 'S', MessageId: '', Message: 'Document 90000123 saved' }]);

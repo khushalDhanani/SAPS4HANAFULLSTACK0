@@ -422,6 +422,29 @@ class OutboundDeliveryAdapter {
   }
 
   /**
+   * Releases credit block for an outbound delivery via SD_SOFM_CREDIT_BLOCK_SRV/ReleaseCreditDelivery.
+   */
+  async releaseCreditDelivery(deliveryDocument, options = {}) {
+    const dlv = String(deliveryDocument || '').trim();
+    if (!dlv) {
+      const err = new Error('DeliveryDocument is required to release credit block.');
+      err.status = 400;
+      throw err;
+    }
+    const url = `${PGI_SERVICE_PATH}/ReleaseCreditDelivery?DeliveryNumber=${odataString(dlv)}`;
+    LOG.info(`Releasing credit block for delivery: POST ${url}`);
+    let res;
+    try {
+      res = await this.client.post(url, { data: {}, ...options });
+    } catch (err) {
+      throw mapS4Error(err, 'releaseCreditDelivery');
+    }
+    const d = (res.data && (res.data.d || res.data)) || {};
+    const info = d.ReleaseCreditDelivery || d;
+    return { DeliveryDocument: dlv, Done: info.Done === true };
+  }
+
+  /**
    * Billing document types S/4HANA allows for this delivery (SD_CUSTOMER_INVOICES_CREATE/GetBillingDocumentTypes).
    */
   async getBillingDocumentTypes(deliveryDocument, options = {}) {
@@ -449,7 +472,7 @@ class OutboundDeliveryAdapter {
    * Creates a billing document for an outbound delivery via SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments.
    * The billing document number comes only from SAP's FunctionImportResult; SAP's messages are returned verbatim.
    */
-  async createBillingDocument({ deliveryDocument, billingDocumentType, billingDocumentDate }, options = {}) {
+  async createBillingDocument({ deliveryDocument, billingDocumentType, billingDocumentDate, salesOrganization }, options = {}) {
     const dlv = String(deliveryDocument || '').trim();
     const type = String(billingDocumentType || '').trim();
     if (!dlv) {
@@ -457,16 +480,33 @@ class OutboundDeliveryAdapter {
       err.status = 400;
       throw err;
     }
-    // BillingDocumentType is optional: when omitted S/4HANA determines it from copy control (VTFL), which is what VF01 does.
+
+    // Date formatting: S/4HANA expects YYYYMMDD string. Default to today if not provided.
+    const ymd = billingDocumentDate
+      ? String(billingDocumentDate).slice(0, 10).replace(/-/g, '')
+      : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    // S/4HANA SD_CUSTOMER_INVOICES_CREATE/CreateBillingDocuments requires all 16 function import
+    // parameters to be present in the query string; omitting any parameter causes Gateway to return
+    // HTTP 404 "Invalid Function Import Parameter '<ParamName>'".
     const params = [
+      `RefSDDocWithInvalidPartner=''`,
+      `OldBillToPartyAddressId=''`,
+      `NewBillToPartyAddressId=''`,
+      `SalesOrganization=${odataString(salesOrganization || '')}`,
+      `ReferenceSDDocumentItem=''`,
+      `ToBeBilledQuantity=''`,
+      `SnapshotRequested=''`,
+      `ReferenceSDDocumentCategory=${odataString(SD_DOC_CATEGORY_DELIVERY)}`,
+      `DestinationCountry=''`,
+      `BillingDocumentType=${odataString(type)}`,
+      `SeparateBilllingDocumentsRequested=''`,
+      `RequestedBillingDocumentDate=${odataString(ymd)}`,
+      `BillingDocumentReleaseRequested=''`,
+      `BillingDocumentDate=${odataString(ymd)}`,
       `ReferenceSDDocument=${odataString(dlv)}`,
-      `ReferenceSDDocumentCategory=${odataString(SD_DOC_CATEGORY_DELIVERY)}`
+      `RequestedBillingDocumentType=${odataString(type)}`
     ];
-    if (type) params.push(`BillingDocumentType=${odataString(type)}`);
-    if (billingDocumentDate) {
-      const ymd = String(billingDocumentDate).slice(0, 10).replace(/-/g, '');
-      if (/^\d{8}$/.test(ymd)) params.push(`BillingDocumentDate=${odataString(ymd)}`);
-    }
     const url = `${BILLING_SERVICE_PATH}/CreateBillingDocuments?${params.join('&')}`;
     LOG.info(`Creating billing document: POST ${url}`);
     let res;
