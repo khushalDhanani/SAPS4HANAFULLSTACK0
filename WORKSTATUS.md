@@ -2207,6 +2207,29 @@
   - Pinned UI5 CDN updated to LTS maintenance patch `1.136.22`.
   - Added module-level and runtime defensive normalization in `Component.js`.
 
+## 2026-09-23 12:05 IST
+- **Agent**: Antigravity
+- **Change**: Live SAP Metadata Scan — Creatable Services Identification & Comprehensive Analysis:
+  - **Scan Execution**: Ran `python3 tools/find-creatable.py` against all 1,237 catalogued services on DS4 client 220 (GET `$metadata` only, parallelism 6, timeout 40s per service).
+  - **Result**: 1,237 scanned, **0 errors** (previous Sep 19 scan had 1 timeout on `MD_CUSTOMER_MASTER_SRV_01` — now resolved). 496 services with ≥1 creatable entity set, 524 with ≥1 POST function import, **635 total writable services**, 602 read-only.
+  - **XLSX Rebuild**: Installed `openpyxl` and ran `python3 tools/build-creatable-xlsx.py` — rebuilt `creatable-services.xlsx` (496 services across 19 module sheets: FI 121, MM-Purch 45, PP 40, Basis 38, SD 38, EHS 36, PM 31, CO 30, ATP 27, DFS 17, QM 16, MDG 13, EWM 12, HR 7, Legal 6, MM-Inv 6, Retail 6, LE 4, PS 3).
+  - **App Service Mapping**: Identified 23 SAP services referenced in `srv/integration/s4hana/`. Categorized each by CREATE status:
+    - **4 proven live**: `LORD_ODATA_ORDER_SRV` (sales order/inquiry), `LE_SHP_QC_DLVREF_SRV` (delivery), `MM_PUR_PO_MAINT_V2_SRV` (PO), `MMIM_GR4PO_DL_SRV` (goods receipt).
+    - **2 code done, awaiting supervised POST**: `SD_SOFM_CREDIT_BLOCK_SRV` (PGI), `SD_CUSTOMER_INVOICES_CREATE` (billing).
+    - **7 used for READ with untapped CREATE capability**: `PACK_OUTBDLV_SRV`, `PICKLIST_PAPER_SRV`, `SIMPLE_INB_DLV_SRV`, `SD_SOF`, `UI_RESERVATION_ITM_MNG_V2`, `LO_BM_BATCH_SRV`, `SD_F1873_SO_WL_SRV`.
+    - **8 read-only by metadata design**: `C_PURCHASEORDER_FS_SRV`, `C_STOCKQUANTITYVALUEBYTYPE_CDS`, `FAC_GL_JOURNALENTRY_VER_SRV`, `SD_F2369_INQY_FS_SRV`, `SD_F2370_INQY_WL_SRV`, `MMIM_MATERIAL_DATA_SRV`, `MMIM_MULTIPLE_MATERIAL_SRV`, `ZAPI_GETBUPA_SRV`.
+    - **2 blocked**: `API_MATERIAL_DOCUMENT_SRV` (not registered), `ZMMIM_MATDOC_SRV` (HTTP 501).
+  - **Key Unused Creatable Services Identified**: `LE_SHP_QC_DLVNOREF_SRV` (delivery without ref), `SD_SOFM_DELIVERY_SRV_01` (alt delivery), `SD_CUSTOMER_INVOICES_MANAGE` (billing follow-up), `SD_PRE_BIL_DOC_MANAGE` (preliminary billing), `MM_PUR_RFQ_MAINT_V2_SRV` (RFQ), `FAC_GL_JOURNALENTRY_MANAGE_SRV` (journal entry posting).
+  - **Blocked Services Reiterated**: 74 no-alias (Item 1), 1 empty-alias (Item 1b), 9+ unregistered (Item 2), V4 not published (Item 3). All tracked in `docs/ticket-gateway-remediation-ds4.md`.
+- **Files Regenerated**:
+  - `catalog-creatable.csv` (23 Sep 12:05 IST, 1,237 rows, 0 errors)
+  - `creatable-services.xlsx` (23 Sep 12:06 IST, 496 creatable services, 19 module sheets)
+- **Executed Commands and Results**:
+  - `python3 tools/find-creatable.py`: 1,237 scanned, 0 errors, 635 writable services.
+  - `pip3 install openpyxl && python3 tools/build-creatable-xlsx.py`: 496 services → `creatable-services.xlsx`.
+- **No source code changes made** — analysis and regeneration of reference data only.
+- **Next recommended action**: Review the creatable services report; decide which development-ready features (items 8–15) to build next; follow up on Basis ticket for blocked services.
+
 ## Next Steps
 0. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
 1. Review the uncommitted 2026-09-22 13:30–14:55 IST changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
