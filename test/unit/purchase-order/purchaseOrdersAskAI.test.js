@@ -286,18 +286,102 @@ describe('PurchaseOrders Ask AI helpers', () => {
 
     test('_aggregateRows computes exact per-supplier / status / month figures', () => {
         const rows = [
-            { po: '1', supplier: 'S1', supplierName: 'Alpha', netAmount: '100.5', currency: 'INR', status: 'Sent', company: '1000', type: 'NB', created: '2026-09-01' },
-            { po: '2', supplier: 'S1', supplierName: 'Alpha', netAmount: '50', currency: 'INR', status: 'Draft', company: '1000', type: 'NB', created: '2026-09-15' },
-            { po: '3', supplier: 'S2', supplierName: 'Beta', netAmount: '900', currency: 'USD', status: 'Sent', company: '1140', type: 'ZINT', created: '2026-08-20' }
+            { po: '1', supplier: 'S1', supplierName: 'Alpha', netAmount: '100.5', currency: 'INR', status: 'Sent', company: '1000', type: 'NB', purchOrg: '1000', purchGroup: '001', createdBy: 'A', created: '2026-09-01' },
+            { po: '2', supplier: 'S1', supplierName: 'Alpha', netAmount: '50', currency: 'INR', status: 'Draft', company: '1000', type: 'NB', purchOrg: '1000', purchGroup: '002', createdBy: 'A', created: '2026-09-15' },
+            { po: '3', supplier: 'S2', supplierName: 'Beta', netAmount: '900', currency: 'USD', status: 'Sent', company: '1140', type: 'ZINT', purchOrg: '1140', purchGroup: '001', createdBy: 'B', created: '2026-08-20' }
         ];
         const a = ControllerClass._aggregateRows(rows);
         expect(a.rows).toBe(3);
         expect(a.netByCurrency).toEqual({ INR: 150.5, USD: 900 });
         expect(a.topSuppliersByCount[0]).toEqual({ supplier: 'S1 Alpha', count: 2, net: { INR: 150.5 } });
         expect(a.topSuppliersByNet[0].supplier).toBe('S2 Beta');
-        expect(a.byStatus).toEqual({ Sent: 2, Draft: 1 });
-        expect(a.byMonth).toEqual({ '2026-09': 2, '2026-08': 1 });
+        expect(a.byStatus).toEqual([{ key: 'Sent', count: 2, net: { INR: 100.5, USD: 900 } }, { key: 'Draft', count: 1, net: { INR: 50 } }]);
+        expect(a.byMonth.map(e => e.key + ':' + e.count)).toEqual(['2026-09:2', '2026-08:1']);
+        expect(a.byPurchGroup).toEqual([{ key: '001', count: 2, net: { INR: 100.5, USD: 900 } }, { key: '002', count: 1, net: { INR: 50 } }]);
+        expect(a.byPurchOrg.map(e => e.key)).toEqual(['1000', '1140']);
+        expect(a.byCreatedBy[0]).toEqual({ key: 'A', count: 2, net: { INR: 150.5 } });
+        expect(a.byCurrency.map(e => e.key)).toEqual(['INR', 'USD']);
         expect(ControllerClass._buildAISystemPrompt(rows)).toContain('AGGREGATES over the included purchase orders');
+    });
+
+    test('item questions fetch line items in PO batches and add item aggregates to the prompt', async () => {
+        const { c } = mkController('Which material is ordered most and in which plant?');
+        expect(ControllerClass._asksAboutItems('how many POs per group')).toBe(false);
+        const pos = Array.from({ length: 90 }, (_, i) => 'P' + i);
+        const bindCalls = [];
+        c.byId = id => id === 'purchaseOrdersTable' ? {
+            getBinding: () => ({ getCurrentContexts: () => [], getCount: () => 90, getFilters: () => [] }),
+            getModel: () => ({ bindList: (path, ctx, sorters, filters) => {
+                bindCalls.push({ path, n: filters && filters[0] && filters[0].filters ? filters[0].filters.length : 0 });
+                if (path === '/PurchaseOrderItems') {
+                    const k = filters[0].filters.length;
+                    return { requestContexts: () => Promise.resolve(Array.from({ length: k }, (_, i) => ({ getObject: () => ({ PurchaseOrder: filters[0].filters[i].v, PurchaseOrderItem: '00010', Material: i % 2 ? 'M1' : 'M2', PurchaseOrderItemText: 'T', Plant: '1120', OrderQuantity: '2.5', PurchaseOrderQuantityUnit: 'KG', NetAmount: '10', DocumentCurrency: 'INR' }) }))), destroy: jest.fn() };
+                }
+                return { requestContexts: () => Promise.resolve(pos.map(po => ({ getObject: () => ({ PurchaseOrder: po }) }))), getCount: () => 90, destroy: jest.fn() };
+            } })
+        } : null;
+        mockPost.mockResolvedValue({ answer: 'M2', model: 'm' });
+        await c.onAIAsk();
+        const itemCalls = bindCalls.filter(b => b.path === '/PurchaseOrderItems');
+        expect(itemCalls.map(b => b.n)).toEqual([40, 40, 10]);
+        const sys = mockPost.mock.calls[0][1].system;
+        expect(sys).toContain('ITEM_AGGREGATES');
+        expect(sys).toContain('"byMaterial":[{"key":"M2 T","items":45,"qty":{"KG":112.5},"net":{"INR":450}}');
+        expect(sys).toContain('"purchaseOrders":90');
+        expect(sys).toContain('PURCHASE_ORDER_ITEMS');
+    });
+
+    test('_extractSearchTerms keeps product words and drops stop words / PO numbers', () => {
+        expect(ControllerClass._extractSearchTerms('Do we have any purchase orders for Apple Macbook pro?')).toEqual(['Apple', 'Macbook', 'pro']);
+        expect(ControllerClass._extractSearchTerms('How many POs per purchasing group?')).toEqual([]);
+        expect(ControllerClass._extractSearchTerms('status of 6100000059')).toEqual([]);
+    });
+
+    test('search terms trigger a whole-list item search and matching PO headers join the context', async () => {
+        const { c } = mkController('Any POs for Macbook?');
+        const paths = [];
+        c.byId = id => id === 'purchaseOrdersTable' ? {
+            getBinding: () => ({ getCurrentContexts: () => [], getCount: () => 3, getFilters: () => [] }),
+            getModel: () => ({ bindList: (path, ctx, sorters, filters) => {
+                paths.push(path + (filters && filters[0] && filters[0].filters ? ':' + filters[0].filters.length : ''));
+                if (path === '/PurchaseOrderItems') {
+                    return { requestContexts: () => Promise.resolve([{ getObject: () => ({ PurchaseOrder: '8000000052', PurchaseOrderItem: '00010', Material: '8000009753', PurchaseOrderItemText: 'Apple Macbook Pro 14", M5', OrderQuantity: '2', PurchaseOrderQuantityUnit: 'NOS', NetAmount: '400000', DocumentCurrency: 'INR' }) }]), getCount: () => 37, destroy: jest.fn() };
+                }
+                if (filters && filters[0] && filters[0].filters && filters[0].filters[0].path === 'PurchaseOrder') {
+                    return { requestContexts: () => Promise.resolve([{ getObject: () => ({ PurchaseOrder: '8000000052', SupplierName: 'iStore' }) }]), destroy: jest.fn() };
+                }
+                return { requestContexts: () => Promise.resolve([{ getObject: () => ({ PurchaseOrder: '1' }) }]), getCount: () => 3, destroy: jest.fn() };
+            } })
+        } : null;
+        mockPost.mockResolvedValue({ answer: 'yes', model: 'm' });
+        await c.onAIAsk();
+        expect(paths).toContain('/PurchaseOrderItems:1');
+        const sys = mockPost.mock.calls[0][1].system;
+        expect(sys).toContain('ITEM_SEARCH: a server-side search over ALL purchase order items');
+        expect(sys).toContain('ALL the terms ["Macbook"] found 37 matching line items');
+        expect(sys).toContain('"bySupplier":[{"key":"? iStore","items":1');
+        expect(sys).toContain('Apple Macbook Pro 14');
+        expect(sys).toContain('"supplierName":"iStore"');
+    });
+
+    test('search falls back from ALL terms to ANY term when nothing matches', async () => {
+        const { c } = mkController('Macbook or laptop');
+        const modes = [];
+        c.byId = id => id === 'purchaseOrdersTable' ? {
+            getBinding: () => ({ getCurrentContexts: () => [], getCount: () => 0, getFilters: () => [] }),
+            getModel: () => ({ bindList: (path, ctx, sorters, filters) => {
+                if (path === '/PurchaseOrderItems') {
+                    modes.push(filters[0].and);
+                    const hit = filters[0].and === false;
+                    return { requestContexts: () => Promise.resolve(hit ? [{ getObject: () => ({ PurchaseOrder: '1', PurchaseOrderItemText: 'Laptop' }) }] : []), getCount: () => hit ? 8 : 0, destroy: jest.fn() };
+                }
+                return { requestContexts: () => Promise.resolve([]), getCount: () => 0, destroy: jest.fn() };
+            } })
+        } : null;
+        mockPost.mockResolvedValue({ answer: 'x', model: 'm' });
+        await c.onAIAsk();
+        expect(modes).toEqual([true, false]);
+        expect(mockPost.mock.calls[0][1].system).toContain('ANY of the terms ["Macbook","laptop"] found 8');
     });
 
     test('onAIClear resets the conversation', () => {

@@ -496,6 +496,78 @@ sap.ui.define([
             }).catch(function () { oBinding.destroy(); return null; });
         },
 
+        /**
+         * Line items of the context purchase orders (for item / material / plant / quantity questions).
+         * Reads PurchaseOrderItems in batches of PO numbers (OR filter) to keep URLs short; capped at AI_ITEM_ROWS.
+         */
+        _fetchItemsForPOs: function (aPoNumbers) {
+            var oTable = this.byId("purchaseOrdersTable");
+            var oModel = oTable && typeof oTable.getModel === "function" ? oTable.getModel() : null;
+            var aPos = (aPoNumbers || []).filter(Boolean).slice(0, PurchaseOrdersController.AI_ITEM_POS);
+            if (!oModel || typeof oModel.bindList !== "function" || !aPos.length) { return Promise.resolve([]); }
+            var aBatches = [];
+            for (var i = 0; i < aPos.length; i += 40) { aBatches.push(aPos.slice(i, i + 40)); }
+            return Promise.all(aBatches.map(function (aBatch) {
+                var oFilter = new Filter({ filters: aBatch.map(function (sPo) { return new Filter("PurchaseOrder", FilterOperator.EQ, sPo); }), and: false });
+                var oBinding = oModel.bindList("/PurchaseOrderItems", undefined, [new Sorter("PurchaseOrder", true), new Sorter("PurchaseOrderItem", false)], [oFilter]);
+                return oBinding.requestContexts(0, PurchaseOrdersController.AI_ITEM_ROWS)
+                    .then(function (aCtx) { var a = aCtx.map(function (c) { return PurchaseOrdersController._toAIItem(c.getObject()); }); oBinding.destroy(); return a; })
+                    .catch(function () { oBinding.destroy(); return []; });
+            })).then(function (aAll) {
+                return [].concat.apply([], aAll).slice(0, PurchaseOrdersController.AI_ITEM_ROWS);
+            });
+        },
+
+        /**
+         * Server-side text search over ALL purchase order items (item text / material) for the search terms in the question,
+         * plus the header rows of the matching POs. Resolves {{terms, count, items, headers}} or null.
+         */
+        _searchItems: function (sQuestion) {
+            var aTerms = PurchaseOrdersController._extractSearchTerms(sQuestion);
+            var oTable = this.byId("purchaseOrdersTable");
+            var oModel = oTable && typeof oTable.getModel === "function" ? oTable.getModel() : null;
+            if (!aTerms.length || !oModel || typeof oModel.bindList !== "function") { return Promise.resolve(null); }
+            var that = this;
+            var termFilter = function (t) {
+                return new Filter({ filters: [new Filter("PurchaseOrderItemText", FilterOperator.Contains, t), new Filter("Material", FilterOperator.Contains, t)], and: false });
+            };
+            var run = function (bAnd) {
+                var oFilter = new Filter({ filters: aTerms.map(termFilter), and: bAnd });
+                var oBinding = oModel.bindList("/PurchaseOrderItems", undefined, [new Sorter("PurchaseOrder", true), new Sorter("PurchaseOrderItem", false)], [oFilter], { $count: true });
+                return oBinding.requestContexts(0, PurchaseOrdersController.AI_SEARCH_ROWS).then(function (aCtx) {
+                    var r = { items: aCtx.map(function (c) { return PurchaseOrdersController._toAIItem(c.getObject()); }), count: oBinding.getCount() };
+                    oBinding.destroy();
+                    return r;
+                }).catch(function () { oBinding.destroy(); return { items: [], count: 0 }; });
+            };
+            // all terms must match (precise, e.g. "Apple Macbook Pro"); if nothing matches, fall back to any term
+            return run(true).then(function (r) {
+                if (r.count || aTerms.length === 1) { r.mode = "all"; return r; }
+                return run(false).then(function (r2) { r2.mode = "any"; return r2; });
+            }).then(function (r) {
+                var aPos = r.items.map(function (i) { return i.po; }).filter(function (p, i, a) { return p && a.indexOf(p) === i; }).slice(0, 80);
+                return that._fetchHeadersForPOs(aPos).then(function (aHeaders) {
+                    return { terms: aTerms, mode: r.mode, count: r.count, items: r.items, headers: aHeaders };
+                });
+            });
+        },
+
+        /** Header rows for specific PO numbers (OR-filter batches of 40). */
+        _fetchHeadersForPOs: function (aPoNumbers) {
+            var oTable = this.byId("purchaseOrdersTable");
+            var oModel = oTable && typeof oTable.getModel === "function" ? oTable.getModel() : null;
+            if (!oModel || !aPoNumbers.length) { return Promise.resolve([]); }
+            var aBatches = [];
+            for (var i = 0; i < aPoNumbers.length; i += 40) { aBatches.push(aPoNumbers.slice(i, i + 40)); }
+            return Promise.all(aBatches.map(function (aBatch) {
+                var oFilter = new Filter({ filters: aBatch.map(function (sPo) { return new Filter("PurchaseOrder", FilterOperator.EQ, sPo); }), and: false });
+                var oBinding = oModel.bindList("/PurchaseOrders", undefined, undefined, [oFilter]);
+                return oBinding.requestContexts(0, aBatch.length)
+                    .then(function (aCtx) { var a = aCtx.map(function (c) { return PurchaseOrdersController._toAIRow(c.getObject()); }); oBinding.destroy(); return a; })
+                    .catch(function () { oBinding.destroy(); return []; });
+            })).then(function (aAll) { return [].concat.apply([], aAll); });
+        },
+
         /** Compact rows currently loaded in the table (fallback context). */
         _getLoadedPurchaseOrders: function () {
             var oTable = this.byId("purchaseOrdersTable");
@@ -597,15 +669,29 @@ sap.ui.define([
             this._scrollAIChatToBottom();
             var oAnswer = null, oScope;
             var oPayload;
+            var bItems = PurchaseOrdersController._asksAboutItems(sQuestion);
             return Promise.all([
-                this._fetchAIContextRows().then(function (aRows) { return that._fetchMentionedPurchaseOrders(sQuestion, aRows); }),
+                this._fetchAIContextRows().then(function (aRows) { return that._fetchMentionedPurchaseOrders(sQuestion, aRows); })
+                    .then(function (oCtx) {
+                        if (!bItems) { return oCtx; }
+                        return that._fetchItemsForPOs(oCtx.rows.map(function (r) { return r.po; })).then(function (aItems) { oCtx.items = aItems; return oCtx; });
+                    }),
                 PurchaseOrdersController._asksAboutStatus(sQuestion) ? this._getAIStatusBreakdown() : null,
-                this._fetchTopPOsByNet(15)
+                this._fetchTopPOsByNet(15),
+                this._searchItems(sQuestion)
             ]).then(function (aRes) {
                 var oCtx = aRes[0];
                 oScope = that._getAIScope(oCtx.rows.length);
                 oScope.statusCounts = aRes[1];
                 oScope.topPOsByNet = aRes[2];
+                oScope.items = oCtx.items || null;
+                oScope.search = aRes[3];
+                if (oScope.search && oScope.search.headers.length) {
+                    // make the matching POs part of the context rows (deduplicated) so supplier/status questions work
+                    var mSeen = {};
+                    oCtx.rows.forEach(function (r) { mSeen[r.po] = true; });
+                    oScope.search.headers.forEach(function (r) { if (!mSeen[r.po]) { oCtx.rows.push(r); mSeen[r.po] = true; } });
+                }
                 oScope.shown = oCtx.rows.length;
                 that._oLastAIScope = oScope;
                 oPayload = {
@@ -717,6 +803,75 @@ sap.ui.define([
     /** Max purchase orders sent as AI context per question (newest first, current filters). ponytail: fixed cap; raise or page when the model/context allows. */
     PurchaseOrdersController.AI_CONTEXT_ROWS = 300;
 
+    /** Item context caps: line items are read for at most AI_ITEM_POS purchase orders and AI_ITEM_ROWS items in total. */
+    PurchaseOrdersController.AI_ITEM_POS = 120;
+    PurchaseOrdersController.AI_ITEM_ROWS = 600;
+
+    PurchaseOrdersController.AI_SEARCH_ROWS = 200;
+
+    /** Words worth searching for in item texts: >= 3 letters/digits, not in the stop list, not a 10-digit PO number. */
+    PurchaseOrdersController._extractSearchTerms = function (sText) {
+        var STOP = ("a an the and or of for to in on at by with from into about as is are was were be been do does did have has had " +
+            "how many much what which who whom whose when where why show list give me find get tell count total sum number amount value " +
+            "top most least highest lowest largest smallest biggest all any some each per every this that these those there their " +
+            "purchase purchasing order orders ordered ordering po pos document documents item items line lines material materials product products plant plants receive receives receiving " +
+            "supplier suppliers vendor vendors status open approved draft rejected pending released sent complete completed created " +
+            "quantity qty unit units pcs nos pieces piece price prices net gross delivery date month year week day today yesterday recent latest new old " +
+            "please can could would should you your we our my also only just with without between above below more than less " +
+            "table format summary summarize summarise group grouped wise breakdown compare comparison company code org organisation organization " +
+            "search searching look looking exist exists exists existing available data details detail info information report").split(/\s+/);
+        var m = {};
+        STOP.forEach(function (w) { m[w] = true; });
+        var aFound = String(sText || "").match(/[A-Za-z][A-Za-z0-9-]{2,}/g) || [];
+        return aFound.map(function (w) { return w.replace(/^-+|-+$/g, ""); })
+            .filter(function (w, i, a) { return w.length >= 3 && !m[w.toLowerCase()] && !/^\d+$/.test(w) && a.indexOf(w) === i; })
+            .slice(0, 5);
+    };
+
+    PurchaseOrdersController._asksAboutItems = function (sText) {
+        return /\b(item|line|material|product|qty|quantit|plant|storage|deliver|price|unit\b|kg\b|requisition|tax|mat(erial)? ?group)/i.test(String(sText || ""));
+    };
+
+    PurchaseOrdersController._toAIItem = function (it) {
+        it = it || {};
+        return {
+            po: it.PurchaseOrder, item: it.PurchaseOrderItem, material: it.Material, text: it.PurchaseOrderItemText,
+            matGroup: it.MaterialGroup, plant: it.Plant, sloc: it.StorageLocation || undefined,
+            qty: it.OrderQuantity, unit: it.PurchaseOrderQuantityUnit, price: it.NetPriceAmount, net: it.NetAmount, cur: it.DocumentCurrency,
+            delivery: it.FirstDeliveryDate ? String(it.FirstDeliveryDate).slice(0, 10) : null,
+            status: it.PurchaseOrderItemStatus || undefined, requisitioner: it.RequisitionerName || undefined
+        };
+    };
+
+    /** Exact item aggregates: per material, material group, plant and PO (count, quantity by unit, net by currency). */
+    PurchaseOrdersController._aggregateItems = function (aItems, aHeaders) {
+        aItems = aItems || [];
+        var mSup = {};
+        (aHeaders || []).forEach(function (h) { mSup[h.po] = (h.supplier || "?") + (h.supplierName ? " " + h.supplierName : ""); });
+        var groups = { byMaterial: function (i) { return (i.material || "?") + (i.text ? " " + i.text : ""); }, byMatGroup: function (i) { return i.matGroup || "?"; },
+            byPlant: function (i) { return i.plant || "?"; }, byPO: function (i) { return i.po; }, byRequisitioner: function (i) { return i.requisitioner || "?"; } };
+        if (aHeaders) { groups.bySupplier = function (i) { return mSup[i.po] || "?"; }; }
+        var out = { items: aItems.length, purchaseOrders: {} };
+        Object.keys(groups).forEach(function (k) { out[k] = {}; });
+        aItems.forEach(function (i) {
+            out.purchaseOrders[i.po] = 1;
+            Object.keys(groups).forEach(function (k) {
+                var key = groups[k](i), e = out[k][key] || (out[k][key] = { items: 0, qty: {}, net: {} });
+                e.items += 1;
+                var q = Number(i.qty), n = Number(i.net);
+                if (i.unit && !isNaN(q)) { e.qty[i.unit] = (e.qty[i.unit] || 0) + q; }
+                if (i.cur && !isNaN(n)) { e.net[i.cur] = (e.net[i.cur] || 0) + n; }
+            });
+        });
+        out.purchaseOrders = Object.keys(out.purchaseOrders).length;
+        var round = function (o) { var r = {}; Object.keys(o).forEach(function (c) { r[c] = Math.round(o[c] * 1000) / 1000; }); return r; };
+        Object.keys(groups).forEach(function (k) {
+            out[k] = Object.keys(out[k]).map(function (key) { return { key: key, items: out[k][key].items, qty: round(out[k][key].qty), net: round(out[k][key].net) }; })
+                .sort(function (a, b) { return b.items - a.items; }).slice(0, 40);
+        });
+        return out;
+    };
+
     /** SAP PurchasingDocumentStatus codes counted for the AI (server-side $count each). */
     PurchaseOrdersController.AI_STATUS_CODES = ["01", "02", "03", "04", "05", "08", "38"];
 
@@ -769,32 +924,41 @@ sap.ui.define([
      * hundreds of rows itself: per supplier (count + net by currency), per status, per company, per type, per month.
      */
     PurchaseOrdersController._aggregateRows = function (aRows) {
-        function add(o, k, v) { o[k] = (o[k] || 0) + v; }
-        var bySupplier = {}, byStatus = {}, byCompany = {}, byType = {}, byMonth = {}, netByCurrency = {};
-        (aRows || []).forEach(function (r) {
-            var sSup = (r.supplier || "?") + (r.supplierName ? " " + r.supplierName : "");
-            var o = bySupplier[sSup] || (bySupplier[sSup] = { count: 0, net: {} });
-            o.count += 1;
-            var fNet = Number(r.netAmount);
-            if (r.currency && !isNaN(fNet)) { add(o.net, r.currency, fNet); add(netByCurrency, r.currency, fNet); }
-            add(byStatus, r.status || "?", 1);
-            add(byCompany, r.company || "?", 1);
-            add(byType, r.type || "?", 1);
-            if (r.created) { add(byMonth, String(r.created).slice(0, 7), 1); }
-        });
-        function top(o, iN, fnVal) {
-            return Object.keys(o).map(function (k) { return [k, o[k]]; })
-                .sort(function (a, b) { return fnVal(b[1]) - fnVal(a[1]); }).slice(0, iN);
-        }
-        var round = function (o) { var r = {}; Object.keys(o).forEach(function (c) { r[c] = Math.round(o[c] * 100) / 100; }); return r; };
-        return {
-            rows: (aRows || []).length,
-            netByCurrency: round(netByCurrency),
-            topSuppliersByCount: top(bySupplier, 15, function (v) { return v.count; }).map(function (p) { return { supplier: p[0], count: p[1].count, net: round(p[1].net) }; }),
-            topSuppliersByNet: top(bySupplier, 15, function (v) { var m = 0; Object.keys(v.net).forEach(function (c) { m = Math.max(m, v.net[c]); }); return m; })
-                .map(function (p) { return { supplier: p[0], count: p[1].count, net: round(p[1].net) }; }),
-            byStatus: byStatus, byCompany: byCompany, byType: byType, byMonth: byMonth
+        aRows = aRows || [];
+        // count + net-by-currency for every categorical field the model may be asked to group by
+        var GROUPS = { status: "status", company: "company", type: "type", purchOrg: "purchOrg", purchGroup: "purchGroup",
+            createdBy: "createdBy", currency: "currency", month: function (r) { return r.created ? String(r.created).slice(0, 7) : null; } };
+        var bySupplier = {}, netByCurrency = {}, oBy = {};
+        Object.keys(GROUPS).forEach(function (k) { oBy[k] = {}; });
+        var bump = function (o, k, fNet, sCur) {
+            var e = o[k] || (o[k] = { count: 0, net: {} });
+            e.count += 1;
+            if (sCur && !isNaN(fNet)) { e.net[sCur] = (e.net[sCur] || 0) + fNet; }
         };
+        aRows.forEach(function (r) {
+            var fNet = Number(r.netAmount), sCur = r.currency;
+            bump(bySupplier, (r.supplier || "?") + (r.supplierName ? " " + r.supplierName : ""), fNet, sCur);
+            if (sCur && !isNaN(fNet)) { netByCurrency[sCur] = (netByCurrency[sCur] || 0) + fNet; }
+            Object.keys(GROUPS).forEach(function (k) {
+                var g = GROUPS[k], v = typeof g === "function" ? g(r) : r[g];
+                bump(oBy[k], v == null || v === "" ? "?" : String(v), fNet, sCur);
+            });
+        });
+        var round = function (o) { var r = {}; Object.keys(o).forEach(function (c) { r[c] = Math.round(o[c] * 100) / 100; }); return r; };
+        var flat = function (o, iMax) {
+            return Object.keys(o).map(function (k) { return { key: k, count: o[k].count, net: round(o[k].net) }; })
+                .sort(function (a, b) { return b.count - a.count; }).slice(0, iMax || 50);
+        };
+        var maxNet = function (v) { var m = 0; Object.keys(v.net).forEach(function (c) { m = Math.max(m, v.net[c]); }); return m; };
+        var out = {
+            rows: aRows.length,
+            netByCurrency: round(netByCurrency),
+            topSuppliersByCount: flat(bySupplier, 15).map(function (e) { return { supplier: e.key, count: e.count, net: e.net }; }),
+            topSuppliersByNet: Object.keys(bySupplier).sort(function (a, b) { return maxNet(bySupplier[b]) - maxNet(bySupplier[a]); }).slice(0, 15)
+                .map(function (k) { return { supplier: k, count: bySupplier[k].count, net: round(bySupplier[k].net) }; })
+        };
+        Object.keys(GROUPS).forEach(function (k) { out["by" + k.charAt(0).toUpperCase() + k.slice(1)] = flat(oBy[k]); });
+        return out;
     };
 
     /** 10-digit SAP document numbers mentioned in free text (de-duplicated, max 5). */
@@ -828,7 +992,19 @@ sap.ui.define([
                 ", sorted by the server (exact; use this for any 'largest / top N purchase orders' question) = " + JSON.stringify(oScope.topPOsByNet) : "") +
             "\n\nAGGREGATES over the included purchase orders (exact, computed by the application - use these for counts, sums, rankings and top-N instead of adding up rows yourself) = " +
             JSON.stringify(PurchaseOrdersController._aggregateRows(aRows)) +
-            "\n\nNEVER enumerate or scan the rows one by one in your answer; if a question needs a ranking or figure that is not in TOP_PURCHASE_ORDERS_BY_NET_AMOUNT, AGGREGATES or SCOPE, say briefly that it is not available and suggest a filter. Keep answers short." +
+            (oScope.search ? "\n\nITEM_SEARCH: a server-side search over ALL purchase order items (whole list, item text and material) for " +
+                (oScope.search.mode === "any" ? "ANY of the terms " : "ALL the terms ") + JSON.stringify(oScope.search.terms) + " found " + oScope.search.count + " matching line items" +
+                (oScope.search.count > oScope.search.items.length ? " (the " + oScope.search.items.length + " most recent are listed)" : "") +
+                ". SEARCH_AGGREGATES (exact: per material, supplier, plant, PO and requisitioner - item count, quantity by unit, net by currency; use these for totals) = " +
+                JSON.stringify(PurchaseOrdersController._aggregateItems(oScope.search.items, oScope.search.headers)) +
+                ". Matching items = " + JSON.stringify(oScope.search.items) +
+                ". Their purchase order headers are included in PURCHASE_ORDERS. Use ITEM_SEARCH to answer questions about these terms; " +
+                "0 matches means no such item exists in SAP." : "") +
+            (oScope.items ? "\n\nITEM_AGGREGATES over the line items of the included purchase orders (exact; per material, material group, plant, PO and requisitioner: item count, quantity by unit, net by currency) = " +
+                JSON.stringify(PurchaseOrdersController._aggregateItems(oScope.items)) +
+                "\n\nPURCHASE_ORDER_ITEMS (line items of the " + PurchaseOrdersController._aggregateItems(oScope.items).purchaseOrders + " most recent included purchase orders) = " + JSON.stringify(oScope.items) : "") +
+            "\n\nAGGREGATES contains, for the included rows, count and net-by-currency per supplier, status, company, type (byType), purchasing organisation (byPurchOrg), purchasing group (byPurchGroup), creator (byCreatedBy), currency and month. " +
+            "NEVER enumerate or scan the rows one by one in your answer; if a question needs a ranking or figure that is not in TOP_PURCHASE_ORDERS_BY_NET_AMOUNT, AGGREGATES or SCOPE, say briefly that it is not available and suggest a filter. Keep answers short." +
             "\n\nPURCHASE_ORDERS = " + JSON.stringify(aRows);
     };
 

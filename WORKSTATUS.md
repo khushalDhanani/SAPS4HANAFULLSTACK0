@@ -1998,6 +1998,58 @@
 - **Validation**: jest `test/unit/purchase-order` + `test/unit/ai` 236/236 · eslint 0 · ui5lint no findings · UI5 build OK. **Live on the Mac**: `$orderby` on `PurchaseOrderNetAmount` works through the S/4 projection; "Top 5 po form all" → 300000076 Viva-Tech 538,635,625 · 400000016 New Gurusar Carne 500,000,000 · 300000636 Panchhi Chems 390,220,000 · 300001494 Viva-Api Labs 225,000,000 · 300001878 Dynamic Mercantile 217,190,950 INR — identical to the server-sorted list, 8.3 s, no reasoning leak. Server stopped afterwards.
 - **Commit state**: uncommitted.
 
+## 2026-09-22 17:15 IST
+- **Agent**: Claude (Cowork)
+- **Issue**: AI chat returned "request entity too large" (HTTP 413). The chat payload (300 POs + aggregates + top list + history ≈ 90–100 kB) exceeds the CAP OData body-parser default of 100 kB on `POST /odata/v4/ai/chat` (the fallback path when the SSE stream cannot start).
+- **Fix**: `srv/ai/service.cds` annotated `@cds.server.body_parser.limit: '4mb'` (service-scoped, other services unchanged); `server.js` stream route `express.json` limit 2 mb → 4 mb for headroom.
+- **Validation**: `cds compile` OK · eslint 0 · jest `test/unit/ai` 8/8 · sandbox reproduction with a 150 kB body: `/odata/v4/ai/chat` → 200 (was 413), `/ai/chat/stream` → 200.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 17:20 IST
+- **Agent**: Claude (Cowork)
+- **Issue**: "How many POs per purchasing group?" → model said the breakdown is not in the aggregates (correct: AGGREGATES only had status/company/type/month, and the prompt forbids counting rows).
+- **Fix**: `_aggregateRows` generalised — count + net-by-currency per supplier and per status, company, type, purchasing org, purchasing group, creator, currency and month (`byStatus`, `byCompany`, `byType`, `byPurchOrg`, `byPurchGroup`, `byCreatedBy`, `byCurrency`, `byMonth`; each a list sorted by count, max 50 keys). Prompt lists these groupings. Preload rebuilt.
+- **Validation**: jest `test/unit/purchase-order` 228/228 (aggregate test extended) · ui5lint no findings · UI5 build OK. **Live on the Mac**: "How many POs per purchasing group?" → 103: 150, 101: 90, 106: 21, 131: 17, 122: 6, 104/111/128: 3, … (15 groups) in 8.3 s — identical to the app-computed `byPurchGroup`. Server stopped afterwards.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 17:27 IST
+- **Agent**: Claude (Cowork)
+- **Issue**: line-item questions (material, plant, quantity, delivery, price) could not be answered — items were only fetched for PO numbers typed explicitly.
+- **Fix**: `PurchaseOrders.controller.js` — when the question matches item vocabulary (`_asksAboutItems`: item/line/material/product/qty/quantity/plant/storage/deliver/price/unit/kg/requisition/tax/material group), `_fetchItemsForPOs()` reads `PurchaseOrderItems` for the context POs (newest first, max `AI_ITEM_POS` = 120 POs, OR-filter batches of 40 PO numbers to keep URLs short, cap `AI_ITEM_ROWS` = 600 items). `_toAIItem` compacts each item; `_aggregateItems` computes exact item count / quantity-by-unit / net-by-currency per material, material group, plant, PO and requisitioner (top 40 each). Prompt gains `ITEM_AGGREGATES` and `PURCHASE_ORDER_ITEMS` blocks only for such questions. Verified live that `/PurchaseOrderItems` is queryable across POs through the S/4 projection (6,158 items) and that the OR filter on `PurchaseOrder` works. Preload rebuilt.
+- **Tests**: `purchaseOrdersAskAI.test.js` +1 (keyword detection, 40/40/10 batching, aggregates + items in prompt).
+- **Validation**: jest `test/unit/purchase-order` 229/229 · ui5lint no findings · UI5 build OK. **Live on the Mac**: 164 items for the 120 most recent POs in 2.2 s; "Which material is ordered most … and which plant receives the most items?" → 1000000944 Dicamol-4254 filter aid, 13 line items, 13,175 KG; plant 1120, 77 items — identical to the app aggregates (20 s incl. model reasoning). Server stopped afterwards.
+- **Commit state**: uncommitted.
+
+## 2026-09-22 17:36 IST
+- **Agent**: Claude (Cowork)
+- **Issue**: item search by text ("Macbook", "Apple Macbook Pro") returned "no such items" — item context only covered the 120 most recent POs; the 37 MacBook items are older.
+- **Fix**: `PurchaseOrders.controller.js`
+  - `_extractSearchTerms(question)`: content words (≥3 chars, not in a stop list of question/procurement vocabulary, not PO numbers, max 5).
+  - `_searchItems(question)`: server-side search over **all** `PurchaseOrderItems` (`contains` on `PurchaseOrderItemText` or `Material`, verified case-insensitive on this S/4 backend; `tolower` is not supported there). Terms are ANDed first ("Apple Macbook Pro" → 23 items); if nothing matches, falls back to ANY term. Up to `AI_SEARCH_ROWS` = 200 items, plus `_fetchHeadersForPOs()` (OR batches of 40) for the matching PO headers, which are merged into the context rows so supplier/status questions work.
+  - Prompt gains `ITEM_SEARCH` (terms, mode, server count, matching items) and `SEARCH_AGGREGATES` (`_aggregateItems(items, headers)` now also groups **by supplier** via the header join) — needed because the model otherwise tried to sum the 144 matches by hand and leaked reasoning.
+  - Stop list extended (ordered/ordering/purchasing/receive, unit/units/pcs/nos/pieces).
+- **Tests**: `purchaseOrdersAskAI.test.js` +3 (term extraction; whole-list search + header join in prompt; ALL→ANY fallback), 232/232.
+- **Validation**: ui5lint no findings · UI5 build OK. **Live on the Mac**: "Do we have purchase orders for Apple Macbook Pro? Which suppliers and how many units?" → Yes; Venus Data Products 28 units (19 items), Ami Technocrats 2, Trade Well IT Solution 1, SACHIN MFG Site 2 1; total 32 NOS — identical to the app aggregates (23 items, mode ALL), 7.6 s. Server stopped afterwards.
+- **Commit state**: uncommitted.
+
+## 2026-09-23 09:38 IST
+- **Agent**: Antigravity
+- **Issue**: MCP Server loading errors:
+  - `ui5-mcp-server` failed on IDE initialization with `npm error code ENOTEMPTY: directory not empty, rename '/Users/khushaldhanani/.npm/_npx/8cfde77b709a3c72/node_modules/@ui5/mcp-server' -> '/Users/khushaldhanani/.npm/_npx/8cfde77b709a3c72/node_modules/@ui5/.mcp-server-LXPJLGQI'`.
+  - Servers configured in `~/.gemini/config/mcp_config.json` used `npx -y <pkg>@latest`, causing network registry checks on every tool call (up to 60+ seconds latency) and race conditions in temporary `_npx` cache directories.
+- **Fix**:
+  - Removed corrupted directory and temporary artifacts from `~/.npm/_npx/8cfde77b709a3c72/node_modules/@ui5/`.
+  - Installed `@ui5/mcp-server`, `@sap-ux/fiori-mcp-server`, and `chrome-devtools-mcp` globally in Node v22.23.1 environment.
+  - Reconfigured `~/.gemini/config/mcp_config.json` to execute node directly with the installed entrypoints (`@ui5/mcp-server/bin/ui5mcp.js`, `@sap-ux/fiori-mcp-server/dist/index.js`, and `chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js` with `--no-usage-statistics` and `--no-performance-crux`).
+- **Validation**:
+  - Direct stdio JSON-RPC initialization verified for all 3 servers:
+    - `ui5mcp.js`: returns `UI5 v0.3.0` serverInfo and executes `get_project_info` in 0.2s with full metadata.
+    - `fiori-mcp`: returns `fiori-mcp v1.13.0` serverInfo and executes `list_sap_systems` in 0.1s returning `S4HANA_DEV`.
+    - `chrome-devtools-mcp`: returns `chrome_devtools v1.9.0` serverInfo without telemetry noise.
+  - `npm test -- test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 25/25 passed.
+  - `git diff --check`: clean (0 errors).
+- **Commit state**: uncommitted.
+
 ## Current Status
 - **2026-09-22 13:59 IST (uncommitted)**: module-by-module pass closed the remaining audit residuals — Master Data (material-type scope config, customer defaults history-only, cache age shown), SD (no proposed dates/ship-to, totals only from real HeaderSet fields, no silent blank defaults), WM (GR no first-row proposals + lookup warnings, GI batch stock summed, no synthetic 9999/0), MM (failed supplier lookup flagged). Gates green (cds compile, eslint, jest 966/966, ui5lint, ui5 build, diff --check).
 - **2026-09-22 13:16 IST (uncommitted)**: remaining audit items closed — `999` default removed (config required), synthesized PlantName, dev-auth username-as-password and implicit Admin, S/4 HTTP timeout, UI silent catches, Orders Due KPIs server-side, doc banners. Gates green (cds compile, eslint, jest 965/965, ui5lint, ui5 build, diff --check).

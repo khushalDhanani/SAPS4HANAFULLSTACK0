@@ -1,5 +1,6 @@
 @(requires: 'authenticated-user')
 @path: '/odata/v4/ai'
+@cds.server.body_parser.limit: '4mb'   // chat context (up to 300 POs + aggregates + history) exceeds the 100kb default
 service AIService {
     type AIAnswer {
         answer           : String;

@@ -154,7 +154,7 @@ cds.on('bootstrap', (app) => {
 
     // AI assistant streaming endpoint (SSE). Runs behind the CAP auth middlewares so cds.context.user is set.
     const express = require('express');
-    app.post('/ai/chat/stream', express.json({ limit: '2mb' }), ...cds.middlewares.before, require('./srv/ai/service').streamHandler);
+    app.post('/ai/chat/stream', express.json({ limit: '4mb' }), ...cds.middlewares.before, require('./srv/ai/service').streamHandler);
 
     // Serve Component-preload.js from dist if available, or return empty JS comment with HTTP 200 in development
     // to eliminate 404 net::ERR_ABORTED and module system loading failure warnings
