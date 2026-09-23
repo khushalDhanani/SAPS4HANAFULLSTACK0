@@ -225,6 +225,29 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(postOptions).toEqual({ fetchCsrfToken: false });
         });
 
+        it('sanitizes incoming headers so client x-csrf-token, cookie, or authorization never overwrite S/4HANA session tokens', async () => {
+            const executeHttpRequest = jest.fn()
+                .mockResolvedValueOnce(csrfResponse)
+                .mockResolvedValueOnce({ status: 200, data: {}, headers: {} });
+            const { client } = makeClient({ executeHttpRequest });
+
+            await client.post('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/Action', {
+                data: {},
+                headers: {
+                    'x-csrf-token': 'browser-stale-csrf',
+                    cookie: 'browser-session=123',
+                    authorization: 'Bearer user-token',
+                    'x-custom-header': 'safe-val'
+                }
+            });
+
+            const [, postConfig] = executeHttpRequest.mock.calls[1];
+            expect(postConfig.headers['x-csrf-token']).toBe('TOKEN-1');
+            expect(postConfig.headers.Cookie).toBe('SAP_SESSIONID_DS4_220=abc; sap-usercontext=sap-client=220');
+            expect(postConfig.headers.authorization).toBeUndefined();
+            expect(postConfig.headers['x-custom-header']).toBe('safe-val');
+        });
+
         it('uses an explicit csrfPath when the caller provides one', async () => {
             const executeHttpRequest = jest.fn()
                 .mockResolvedValueOnce(csrfResponse)

@@ -327,6 +327,14 @@ class S4HttpClient {
         const { data = {}, headers = {}, csrfPath } = options;
         const destination = await this._requireDestination(options);
         const session = await this.fetchCsrfSession(csrfPath || serviceRootOf(path), destination, options);
+        const cleanHeaders = { ...headers };
+        delete cleanHeaders['x-csrf-token'];
+        delete cleanHeaders['X-CSRF-Token'];
+        delete cleanHeaders['cookie'];
+        delete cleanHeaders['Cookie'];
+        delete cleanHeaders['authorization'];
+        delete cleanHeaders['Authorization'];
+
         const requestConfig = {
             method: 'post',
             url: path,
@@ -338,7 +346,7 @@ class S4HttpClient {
                 ...S4HttpClient.sapClientHeader(destination),
                 ...(session.token ? { 'x-csrf-token': session.token } : {}),
                 ...(session.cookie ? { Cookie: session.cookie } : {}),
-                ...headers
+                ...cleanHeaders
             }
         };
         return this._send(destination, requestConfig, 'POST', path, options);

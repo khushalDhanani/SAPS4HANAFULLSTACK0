@@ -170,10 +170,116 @@ describe('Unit: CustomerInvoiceAdapter', () => {
       await expect(adapter.postBillingDocumentToAccounting({ billingDocument: '' }))
         .rejects.toThrow('BillingDocument is required to post to accounting.');
     });
+
+    test('sanitizes CAP request object so browser headers are not passed to S4HttpClient', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: { d: { results: [{ Message: 'Document 31000111 has been saved.' }] } }
+      });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '31000111',
+            AccountingDocument: '9000000100',
+            FiscalYear: '2026',
+            AccountingTransferStatus: 'C'
+          }
+        }
+      });
+
+      const fakeCapReq = {
+        data: { BillingDocument: '31000111' },
+        headers: { 'x-csrf-token': 'browser-cap-token', cookie: 'local-session=1' },
+        reject: jest.fn()
+      };
+
+      await adapter.postBillingDocumentToAccounting({ billingDocument: '31000111' }, fakeCapReq);
+      expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      const passedOptions = mockHttpClient.post.mock.calls[0][1];
+      expect(passedOptions.headers).toBeUndefined();
+    });
+
+    test('throws 400 when SAP returns MessageType E in FunctionImportResult', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: {
+          d: {
+            results: [{
+              BillingDocument: '30000029',
+              MessageType: 'E',
+              Message: 'Payment term AT03 not defined'
+            }]
+          }
+        }
+      });
+
+      await expect(adapter.postBillingDocumentToAccounting({ billingDocument: '30000029' }))
+        .rejects.toThrow('Payment term AT03 not defined');
+    });
+
+    test('throws 400 when readback indicates document is Pro Forma (Status D)', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: { d: { results: [{ Message: 'Document 34000001 has been saved.' }] } }
+      });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '34000001',
+            AccountingDocument: '',
+            AccountingTransferStatus: 'D'
+          }
+        }
+      });
+
+      await expect(adapter.postBillingDocumentToAccounting({ billingDocument: '34000001' }))
+        .rejects.toThrow(/Pro Forma invoice/);
+    });
+
+    test('throws 400 when readback indicates document is cancelled (Status E)', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: { d: { results: [] } }
+      });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '90000017',
+            AccountingDocument: '',
+            AccountingTransferStatus: 'E'
+          }
+        }
+      });
+
+      await expect(adapter.postBillingDocumentToAccounting({ billingDocument: '90000017' }))
+        .rejects.toThrow(/cancelled \(Status E\)/);
+    });
+
+    test('maps SAP ASSERTION_FAILED HTTP 500 error to friendly 400 business error', async () => {
+      mockHttpClient.post.mockRejectedValue(
+        new Error("S/4HANA POST ... failed: HTTP 500 - <code>ASSERTION_FAILED</code><message>Runtime Error: 'ASSERTION_FAILED'</message>")
+      );
+
+      await expect(adapter.postBillingDocumentToAccounting({ billingDocument: '31000055' }))
+        .rejects.toThrow(/Posting Block \(Status A\)/);
+    });
+
+    test('enhances account determination error when SAP returns saved with error in account determination', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: {
+          d: {
+            results: [{
+              BillingDocument: '600000000',
+              MessageType: 'E',
+              Message: 'Document 600000000 saved (error in account determination).'
+            }]
+          }
+        }
+      });
+
+      await expect(adapter.postBillingDocumentToAccounting({ billingDocument: '600000000' }))
+        .rejects.toThrow(/table VKOA/);
+    });
   });
 
   describe('cancelBillingDocument', () => {
-    test('executes POST and extracts cancellation document number from FunctionImportResult', async () => {
+    test('executes POST and confirms cancellation and reversal document number via readback', async () => {
       mockHttpClient.post.mockResolvedValue({
         data: {
           d: {
@@ -188,6 +294,16 @@ describe('Unit: CustomerInvoiceAdapter', () => {
           }
         }
       });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '31000112',
+            BillingDocumentIsCancelled: true,
+            AccountingTransferStatus: 'E',
+            CancelledBillingDocument: '90000053'
+          }
+        }
+      });
 
       const res = await adapter.cancelBillingDocument({ billingDocument: '31000112' });
 
@@ -197,8 +313,10 @@ describe('Unit: CustomerInvoiceAdapter', () => {
 
       expect(res.BillingDocument).toBe('31000112');
       expect(res.CancellationDocument).toBe('90000053');
+      expect(res.BillingDocumentIsCancelled).toBe(true);
+      expect(res.AccountingTransferStatus).toBe('E');
       expect(res.Success).toBe(true);
-      expect(res.Message).toBe('Document 90000053 has been saved.');
+      expect(res.Message).toContain('90000053');
     });
 
     test('throws 400 when billing document is missing', async () => {

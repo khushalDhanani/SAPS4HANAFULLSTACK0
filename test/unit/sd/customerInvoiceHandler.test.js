@@ -69,6 +69,45 @@ describe('Unit: CustomerInvoiceService Handlers', () => {
       expect(res).toHaveLength(1);
       expect(res[0].BillingDocument).toBe('31000111');
     });
+
+    test('filters by AccountingTransferStatus NE C (Pending)', async () => {
+      const mockInvoices = [
+        { BillingDocument: '31000111', AccountingTransferStatus: 'C', BillingDocumentIsCancelled: false },
+        { BillingDocument: '31000112', AccountingTransferStatus: '', BillingDocumentIsCancelled: false },
+        { BillingDocument: '31000113', AccountingTransferStatus: 'A', BillingDocumentIsCancelled: false }
+      ];
+      customerInvoiceAdapter.getBillingDocuments.mockResolvedValue({ results: mockInvoices, count: 3 });
+
+      const req = {
+        _queryOptions: { $filter: "(AccountingTransferStatus ne 'C' and BillingDocumentIsCancelled eq false)", $count: 'true' },
+        query: {},
+        error: jest.fn()
+      };
+
+      const res = await handlers['READ_CustomerInvoices'](req);
+      expect(res).toHaveLength(2);
+      expect(res.$count).toBe(2);
+      expect(res.map(i => i.BillingDocument)).toEqual(['31000112', '31000113']);
+    });
+
+    test('filters by contains in $filter', async () => {
+      const mockInvoices = [
+        { BillingDocument: '31000111', SoldToParty: '1000', SoldToPartyFullName: 'Alpha Corp', BillingDocumentType: 'F2' },
+        { BillingDocument: '32000222', SoldToParty: '2000', SoldToPartyFullName: 'Beta Corp', BillingDocumentType: 'F2' }
+      ];
+      customerInvoiceAdapter.getBillingDocuments.mockResolvedValue({ results: mockInvoices, count: 2 });
+
+      const req = {
+        _queryOptions: { $filter: "contains(SoldToPartyFullName, 'Beta')", $count: 'true' },
+        query: {},
+        error: jest.fn()
+      };
+
+      const res = await handlers['READ_CustomerInvoices'](req);
+      expect(res).toHaveLength(1);
+      expect(res.$count).toBe(1);
+      expect(res[0].BillingDocument).toBe('32000222');
+    });
   });
 
   describe('getInvoiceMetrics', () => {
@@ -133,6 +172,58 @@ describe('Unit: CustomerInvoiceService Handlers', () => {
       expect(res.Success).toBe(true);
       expect(res.AccountingDocument).toBe('9000000100');
       expect(res.Message).toContain('already released to accounting');
+    });
+
+    test('rejects release of Pro Forma status D document with 400', async () => {
+      customerInvoiceAdapter.getBillingDocument.mockResolvedValue({
+        BillingDocument: '34000001',
+        BillingDocumentIsCancelled: false,
+        AccountingTransferStatus: 'D'
+      });
+
+      const req = {
+        data: { BillingDocument: '34000001' },
+        error: jest.fn()
+      };
+
+      await handlers['releaseInvoiceToAccounting'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Status D'));
+      expect(customerInvoiceAdapter.postBillingDocumentToAccounting).not.toHaveBeenCalled();
+    });
+
+    test('rejects release of cancelled status E document with 400', async () => {
+      customerInvoiceAdapter.getBillingDocument.mockResolvedValue({
+        BillingDocument: '90000017',
+        BillingDocumentIsCancelled: false,
+        AccountingTransferStatus: 'E',
+        SDDocumentCategory: 'N'
+      });
+
+      const req = {
+        data: { BillingDocument: '90000017' },
+        error: jest.fn()
+      };
+
+      await handlers['releaseInvoiceToAccounting'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Cannot release cancelled billing document'));
+      expect(customerInvoiceAdapter.postBillingDocumentToAccounting).not.toHaveBeenCalled();
+    });
+
+    test('rejects release of posting blocked status A document with 400', async () => {
+      customerInvoiceAdapter.getBillingDocument.mockResolvedValue({
+        BillingDocument: '31000055',
+        BillingDocumentIsCancelled: false,
+        AccountingTransferStatus: 'A'
+      });
+
+      const req = {
+        data: { BillingDocument: '31000055' },
+        error: jest.fn()
+      };
+
+      await handlers['releaseInvoiceToAccounting'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Status A'));
+      expect(customerInvoiceAdapter.postBillingDocumentToAccounting).not.toHaveBeenCalled();
     });
 
     test('delegates to adapter when eligible', async () => {

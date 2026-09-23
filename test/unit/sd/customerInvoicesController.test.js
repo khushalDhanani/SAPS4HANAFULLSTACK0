@@ -104,6 +104,15 @@ const MockFragment = {
     })
 };
 
+const MockMessaging = {
+    getMessageModel: jest.fn().mockReturnValue(new MockJSONModel([]))
+};
+
+const MockBusyIndicator = {
+    show: jest.fn(),
+    hide: jest.fn()
+};
+
 beforeAll(() => {
     global.sap = {
         ui: {
@@ -114,6 +123,8 @@ beforeAll(() => {
                     MockFilter,
                     MockFilterOperator,
                     MockFragment,
+                    MockMessaging,
+                    MockBusyIndicator,
                     MockMessageBox,
                     MockMessageToast,
                     MockCustomerInvoiceService
@@ -249,12 +260,16 @@ describe("CustomerInvoices Controller", () => {
         };
 
         controller.onReleaseToAccountingPress(oEvent);
+        await Promise.resolve();
+        await Promise.resolve();
 
         expect(MockMessageBox.confirm).toHaveBeenCalled();
         expect(MockCustomerInvoiceService.releaseInvoiceToAccounting).toHaveBeenCalledWith(
             "31000111",
             undefined
         );
+        expect(MockBusyIndicator.show).toHaveBeenCalled();
+        expect(MockBusyIndicator.hide).toHaveBeenCalled();
     });
 
     test("onCancelInvoicePress opens dialog and onConfirmCancelInvoice calls service", async () => {
@@ -276,21 +291,24 @@ describe("CustomerInvoices Controller", () => {
             "31000112",
             undefined
         );
+        expect(MockBusyIndicator.show).toHaveBeenCalled();
+        expect(MockBusyIndicator.hide).toHaveBeenCalled();
         expect(MockMessageBox.success).toHaveBeenCalled();
     });
 
     test("onInvoiceSelectionChange updates selection state and flags", () => {
         controller.onInit();
-        const mockInvoice = {
+        const mockInvoiceB = {
             BillingDocument: "31000111",
-            AccountingTransferStatus: "A",
+            AccountingTransferStatus: "B",
             BillingDocumentIsCancelled: false
         };
+        let currentSelected = mockInvoiceB;
         const oEvent = {
             getSource: () => ({
                 getSelectedItem: () => ({
                     getBindingContext: () => ({
-                        getObject: () => mockInvoice
+                        getObject: () => currentSelected
                     })
                 })
             })
@@ -302,7 +320,16 @@ describe("CustomerInvoices Controller", () => {
         expect(viewModel.getProperty("/hasSelectedInvoice")).toBe(true);
         expect(viewModel.getProperty("/canReleaseSelected")).toBe(true);
         expect(viewModel.getProperty("/canCancelSelected")).toBe(true);
-        expect(viewModel.getProperty("/selectedInvoice")).toEqual(mockInvoice);
+        expect(viewModel.getProperty("/selectedInvoice")).toEqual(mockInvoiceB);
+
+        // Status A (Posting Blocked) should NOT allow direct release
+        currentSelected = {
+            BillingDocument: "31000055",
+            AccountingTransferStatus: "A",
+            BillingDocumentIsCancelled: false
+        };
+        controller.onInvoiceSelectionChange(oEvent);
+        expect(viewModel.getProperty("/canReleaseSelected")).toBe(false);
     });
 
     test("onInvoiceSelectionChange handles deselection", () => {
@@ -344,5 +371,30 @@ describe("CustomerInvoices Controller", () => {
         controller.onToolbarCancelPress();
         await controller._pCancelDialog;
         expect(controller._oCancelDialog.open).toHaveBeenCalled();
+    });
+
+    test("formatters correctly handle status E, B, A, blank and category N", () => {
+        expect(controller.formatInvoiceStatusText(false, "E")).toBe("statusCancelled");
+        expect(controller.formatInvoiceStatusText(false, "A", "N")).toBe("statusCancelled");
+        expect(controller.formatInvoiceStatusText(false, "B")).toBe("statusAccountDeterminationError");
+        expect(controller.formatInvoiceStatusText(false, "A")).toBe("statusPostingBlocked");
+        expect(controller.formatInvoiceStatusText(false, "")).toBe("statusAccountingInterfaceError");
+        expect(controller.formatInvoiceStatusState(false, "E")).toBe("Error");
+        expect(controller.formatInvoiceStatusState(false, "B")).toBe("Error");
+        expect(controller.formatInvoiceStatusState(false, "A")).toBe("Warning");
+        expect(controller.formatInvoiceStatusIcon(false, "E")).toBe("sap-icon://sys-cancel");
+        expect(controller.formatInvoiceStatusIcon(false, "A")).toBe("sap-icon://locked");
+        expect(controller.formatInvoiceStatusIcon(false, "B")).toBe("sap-icon://alert");
+
+        expect(controller.formatReleaseEnabled(false, "E", "M")).toBe(false);
+        expect(controller.formatReleaseEnabled(false, "A", "N")).toBe(false);
+        expect(controller.formatReleaseEnabled(false, "C", "M")).toBe(false);
+        expect(controller.formatReleaseEnabled(false, "D", "M")).toBe(false);
+        expect(controller.formatReleaseEnabled(false, "A", "M")).toBe(false);
+        expect(controller.formatReleaseEnabled(false, "B", "M")).toBe(true);
+
+        expect(controller.formatCancelEnabled(false, "E", "M")).toBe(false);
+        expect(controller.formatCancelEnabled(false, "A", "N")).toBe(false);
+        expect(controller.formatCancelEnabled(false, "A", "M")).toBe(true);
     });
 });

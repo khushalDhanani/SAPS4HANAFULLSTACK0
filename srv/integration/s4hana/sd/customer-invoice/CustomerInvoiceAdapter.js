@@ -70,11 +70,20 @@ function _formatInvoiceRow(row) {
  * @returns {Object}
  */
 function _cleanOptions(options = {}) {
+  if (!options) return {};
+  if (typeof options.reject === 'function' || options.data !== undefined) {
+    const userJwt = S4HttpClient.extractUserJwt(options);
+    return userJwt ? { userJwt } : {};
+  }
   const clean = { ...options };
   if (clean.headers) {
     const headers = { ...clean.headers };
     delete headers.authorization;
     delete headers.Authorization;
+    delete headers['x-csrf-token'];
+    delete headers['X-CSRF-Token'];
+    delete headers.cookie;
+    delete headers.Cookie;
     clean.headers = headers;
   }
   return clean;
@@ -180,47 +189,105 @@ class CustomerInvoiceAdapter {
     try {
       res = await this.client.post(url, { data: {}, ...transportOptions });
     } catch (err) {
-      throw mapS4Error(err, 'postBillingDocumentToAccounting');
-    }
-
-    // Direct readback from SAP to confirm generated Accounting Document number
-    let acctDoc = '';
-    let fiscalYear = '';
-    let transferStatus = 'C';
-    try {
-      const updated = await this.getBillingDocument(doc, transportOptions);
-      if (updated) {
-        acctDoc = updated.AccountingDocument || '';
-        fiscalYear = updated.FiscalYear || '';
-        transferStatus = updated.AccountingTransferStatus || 'C';
+      if (err.message && err.message.includes('ASSERTION_FAILED')) {
+        const customErr = new Error(`SAP S/4HANA Gateway Runtime Error (ASSERTION_FAILED): The OData interface in SAP S/4HANA aborted execution because billing document ${doc} has an active Posting Block (Status A) or inconsistent buffer state. Please review and release the invoice in transaction VF02.`);
+        customErr.status = 400;
+        throw customErr;
       }
-    } catch (readErr) {
-      LOG.warn(`Readback of billing document ${doc} after accounting release encountered non-critical issue: ${readErr.message}`);
+      throw mapS4Error(err, 'postBillingDocumentToAccounting');
     }
 
     const rows = res.data?.d?.results || res.data?.d || [];
     const results = Array.isArray(rows) ? rows : [rows];
-    const msgObj = results.find(r => r && (r.Message || r.MessageType)) || {};
+    const errorObj = results.find(r => r && r.MessageType === 'E');
+    if (errorObj) {
+      let msg = errorObj.Message || `Release to accounting rejected by SAP for document ${doc}`;
+      if (msg.includes('saved (error in account determination)')) {
+        msg = `Document ${doc} saved (error in account determination). G/L Account Determination is missing in SAP (table VKOA). Please assign the required G/L revenue accounts in SAP.`;
+      }
+      const err = new Error(msg);
+      err.status = 400;
+      throw err;
+    }
 
-    return {
-      BillingDocument: doc,
-      AccountingDocument: acctDoc,
-      FiscalYear: fiscalYear,
-      AccountingTransferStatus: transferStatus,
-      Success: true,
-      Message: msgObj.Message || (acctDoc ? `Transferred to Accounting. Document: ${acctDoc}` : 'Successfully released to accounting.')
-    };
+    // Direct readback from SAP: two-way communication waiting for SAP's actual status
+    const MAX_READBACK_ATTEMPTS = 3;
+    const POLL_DELAYS = [0, 800, 1500];
+    let updated = null;
+
+    for (let attempt = 0; attempt < MAX_READBACK_ATTEMPTS; attempt++) {
+      if (POLL_DELAYS[attempt] > 0) {
+        LOG.info(`Waiting ${POLL_DELAYS[attempt]}ms for SAP database commit before reading back document ${doc} (attempt ${attempt + 1}/${MAX_READBACK_ATTEMPTS})...`);
+        await new Promise(resolve => setTimeout(resolve, POLL_DELAYS[attempt]));
+      }
+      try {
+        updated = await this.getBillingDocument(doc, transportOptions);
+        if (updated) {
+          if (updated.AccountingDocument || updated.AccountingTransferStatus === 'C' || updated.AccountingTransferStatus === 'H') {
+            break;
+          }
+          if (['D', 'E', 'A', 'B'].includes(updated.AccountingTransferStatus)) {
+            break;
+          }
+        }
+      } catch (readErr) {
+        LOG.warn(`Readback attempt ${attempt + 1} for billing document ${doc} encountered non-critical issue: ${readErr.message}`);
+      }
+    }
+
+    const acctDoc = updated?.AccountingDocument || '';
+    const fiscalYear = updated?.FiscalYear || '';
+    const transferStatus = updated?.AccountingTransferStatus || '';
+
+    if (acctDoc || transferStatus === 'C' || transferStatus === 'H') {
+      return {
+        BillingDocument: doc,
+        AccountingDocument: acctDoc,
+        FiscalYear: fiscalYear,
+        AccountingTransferStatus: transferStatus || 'C',
+        Success: true,
+        Message: acctDoc
+          ? `Transferred to Accounting in SAP S/4HANA. Journal Entry: ${acctDoc}, Fiscal Year: ${fiscalYear}.`
+          : 'Transferred to Accounting in SAP S/4HANA.'
+      };
+    }
+
+    if (transferStatus === 'D') {
+      const err = new Error(`Billing document ${doc} is a Pro Forma invoice (Status D) in SAP S/4HANA and is not relevant for financial accounting. SAP does not generate G/L documents.`);
+      err.status = 400;
+      throw err;
+    }
+    if (transferStatus === 'E') {
+      const err = new Error(`Billing document ${doc} is cancelled (Status E) in SAP S/4HANA and cannot be released to accounting.`);
+      err.status = 400;
+      throw err;
+    }
+    if (transferStatus === 'B') {
+      const err = new Error(`SAP S/4HANA rejected release: Account Determination Error (Status B) for document ${doc}. Maintain G/L accounts in table VKOA.`);
+      err.status = 400;
+      throw err;
+    }
+    if (transferStatus === 'A') {
+      const err = new Error(`SAP S/4HANA rejected release: Posting Blocked (Status A) for document ${doc}. Remove posting block in billing header.`);
+      err.status = 400;
+      throw err;
+    }
+
+    const err = new Error(`No accounting document was created by SAP for billing document ${doc}. SAP transfer status is '${transferStatus || 'Interface Error'}'. Check pricing and tax configuration in VF02 / VFX3.`);
+    err.status = 400;
+    throw err;
   }
 
   /**
    * Cancels a billing document via CancelBillingDocument.
    * SAP generates an official reversal document (e.g. Type S1) and returns FunctionImportResult.
+   * Waits for SAP's actual status and confirms cancellation via readback.
    *
    * @param {Object} payload
    * @param {string} payload.billingDocument
    * @param {string} [payload.sdDocumentCategory='M']
    * @param {Object} [options]
-   * @returns {Promise<{ BillingDocument: string, CancellationDocument: string, Success: boolean, Message: string }>}
+   * @returns {Promise<{ BillingDocument: string, CancellationDocument: string, BillingDocumentIsCancelled: boolean, AccountingTransferStatus: string, Success: boolean, Message: string }>}
    */
   async cancelBillingDocument({ billingDocument, sdDocumentCategory = DEFAULT_SD_CATEGORY }, options = {}) {
     const transportOptions = _cleanOptions(options);
@@ -244,14 +311,49 @@ class CustomerInvoiceAdapter {
 
     const rows = res.data?.d?.results || res.data?.d || [];
     const results = Array.isArray(rows) ? rows : [rows];
-    const item = results.find(r => r && r.BillingDocument) || results[0] || {};
+    const errorObj = results.find(r => r && r.MessageType === 'E');
+    if (errorObj) {
+      const err = new Error(errorObj.Message || `Cancellation rejected by SAP for document ${doc}`);
+      err.status = 400;
+      throw err;
+    }
+
+    const item = results.find(r => r && r.BillingDocument && r.MessageType !== 'E') || results[0] || {};
     const cancelDoc = String(item.BillingDocument || '').trim();
+
+    // Direct readback from SAP: two-way communication waiting for SAP's actual cancellation status
+    const MAX_CANCEL_ATTEMPTS = 3;
+    const CANCEL_DELAYS = [0, 800, 1500];
+    let updated = null;
+
+    for (let attempt = 0; attempt < MAX_CANCEL_ATTEMPTS; attempt++) {
+      if (CANCEL_DELAYS[attempt] > 0) {
+        LOG.info(`Waiting ${CANCEL_DELAYS[attempt]}ms for SAP database commit before reading back cancelled document ${doc}...`);
+        await new Promise(resolve => setTimeout(resolve, CANCEL_DELAYS[attempt]));
+      }
+      try {
+        updated = await this.getBillingDocument(doc, transportOptions);
+        if (updated && (updated.BillingDocumentIsCancelled || updated.AccountingTransferStatus === 'E')) {
+          break;
+        }
+      } catch (readErr) {
+        LOG.warn(`Readback of cancelled document ${doc} attempt ${attempt + 1} failed: ${readErr.message}`);
+      }
+    }
+
+    const isCancelled = updated ? updated.BillingDocumentIsCancelled : true;
+    const finalStatus = updated?.AccountingTransferStatus || 'E';
+    const reversalDoc = cancelDoc || updated?.CancelledBillingDocument || '';
 
     return {
       BillingDocument: doc,
-      CancellationDocument: cancelDoc,
+      CancellationDocument: reversalDoc,
+      BillingDocumentIsCancelled: isCancelled,
+      AccountingTransferStatus: finalStatus,
       Success: true,
-      Message: item.Message || (cancelDoc ? `Cancellation document ${cancelDoc} saved.` : 'Billing document successfully cancelled.')
+      Message: reversalDoc
+        ? `Billing document ${doc} successfully cancelled in SAP S/4HANA. Reversal document: ${reversalDoc}.`
+        : `Billing document ${doc} successfully cancelled in SAP S/4HANA.`
     };
   }
 }

@@ -92,11 +92,12 @@
                     items="{
                         path: 'customerInvoice>/CustomerInvoices',
                         parameters: {
+                            $count: true,
                             $select: 'BillingDocument,BillingDocumentType,BillingDocumentTypeName,SoldToParty,SoldToPartyFullName,SDDocumentCategory,AccountingTransferStatus,AccountingDocument,FiscalYear,CompanyCode,TotalNetAmount,TaxAmount,TotalGrossAmount,TransactionCurrency,BillingDocumentDate,BillingDocumentIsCancelled,CancelledBillingDocument'
                         }
                     }"
                     growing="true"
-                    growingThreshold="20"
+                    growingThreshold="30"
                     growingScrollToLoad="true"
                     noDataText="{i18n>noInvoicesFound}"
                     mode="SingleSelectMaster"
@@ -262,21 +263,24 @@
                                     text="{
                                         parts: [
                                             { path: 'customerInvoice>BillingDocumentIsCancelled' },
-                                            { path: 'customerInvoice>AccountingTransferStatus' }
+                                            { path: 'customerInvoice>AccountingTransferStatus' },
+                                            { path: 'customerInvoice>SDDocumentCategory' }
                                         ],
                                         formatter: '.formatInvoiceStatusText'
                                     }"
                                     state="{
                                         parts: [
                                             { path: 'customerInvoice>BillingDocumentIsCancelled' },
-                                            { path: 'customerInvoice>AccountingTransferStatus' }
+                                            { path: 'customerInvoice>AccountingTransferStatus' },
+                                            { path: 'customerInvoice>SDDocumentCategory' }
                                         ],
                                         formatter: '.formatInvoiceStatusState'
                                     }"
                                     icon="{
                                         parts: [
                                             { path: 'customerInvoice>BillingDocumentIsCancelled' },
-                                            { path: 'customerInvoice>AccountingTransferStatus' }
+                                            { path: 'customerInvoice>AccountingTransferStatus' },
+                                            { path: 'customerInvoice>SDDocumentCategory' }
                                         ],
                                         formatter: '.formatInvoiceStatusIcon'
                                     }" />
@@ -299,8 +303,8 @@
                                         icon="sap-icon://money-bills"
                                         type="Transparent"
                                         class="sapUiTinyMarginEnd"
-                                        enabled="{= ${customerInvoice>AccountingTransferStatus} !== 'C' &amp;&amp; ${customerInvoice>BillingDocumentIsCancelled} !== true }"
-                                        tooltip="{= ${customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>tooltipAlreadyTransferred} : (${customerInvoice>BillingDocumentIsCancelled} === true ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipReleaseToAccounting}) }"
+                                        enabled="{= %{customerInvoice>AccountingTransferStatus} !== 'C' &amp;&amp; %{customerInvoice>AccountingTransferStatus} !== 'D' &amp;&amp; %{customerInvoice>AccountingTransferStatus} !== 'E' &amp;&amp; %{customerInvoice>AccountingTransferStatus} !== 'A' &amp;&amp; %{customerInvoice>BillingDocumentIsCancelled} !== true &amp;&amp; %{customerInvoice>BillingDocumentIsCancelled} !== 'true' &amp;&amp; %{customerInvoice>SDDocumentCategory} !== 'N' }"
+                                        tooltip="{= %{customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>tooltipAlreadyTransferred} : (%{customerInvoice>AccountingTransferStatus} === 'D' ? ${i18n>tooltipNotRelevantForAccounting} : (%{customerInvoice>AccountingTransferStatus} === 'A' ? ${i18n>tooltipPostingBlocked} : ((%{customerInvoice>BillingDocumentIsCancelled} === true || %{customerInvoice>BillingDocumentIsCancelled} === 'true' || %{customerInvoice>AccountingTransferStatus} === 'E' || %{customerInvoice>SDDocumentCategory} === 'N') ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipReleaseToAccounting}))) }"
                                         ariaLabelledBy="colActions"
                                         press=".onReleaseToAccountingPress" />
 
@@ -308,8 +312,8 @@
                                         id="btnCancelInvoice"
                                         icon="sap-icon://sys-cancel"
                                         type="Transparent"
-                                        enabled="{= ${customerInvoice>BillingDocumentIsCancelled} !== true }"
-                                        tooltip="{= ${customerInvoice>BillingDocumentIsCancelled} === true ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipCancelInvoice} }"
+                                        enabled="{= %{customerInvoice>BillingDocumentIsCancelled} !== true &amp;&amp; %{customerInvoice>BillingDocumentIsCancelled} !== 'true' &amp;&amp; %{customerInvoice>AccountingTransferStatus} !== 'E' &amp;&amp; %{customerInvoice>SDDocumentCategory} !== 'N' }"
+                                        tooltip="{= (%{customerInvoice>BillingDocumentIsCancelled} === true || %{customerInvoice>BillingDocumentIsCancelled} === 'true' || %{customerInvoice>AccountingTransferStatus} === 'E' || %{customerInvoice>SDDocumentCategory} === 'N') ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipCancelInvoice} }"
                                         ariaLabelledBy="colActions"
                                         press=".onCancelInvoicePress" />
                                 </HBox>

@@ -52,9 +52,11 @@ service CustomerInvoiceService @(path: '/odata/v4/customer-invoice') {
     action cancelBillingDocument(
         BillingDocument : String
     ) returns {
-        BillingDocument      : String;
-        CancellationDocument : String;
-        Success              : Boolean;
-        Message              : String;
+        BillingDocument            : String;
+        CancellationDocument       : String;
+        BillingDocumentIsCancelled : Boolean;
+        AccountingTransferStatus   : String;
+        Success                    : Boolean;
+        Message                    : String;
     };
 }

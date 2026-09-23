@@ -4,10 +4,12 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "sap/ui/core/Fragment",
+    "sap/ui/core/Messaging",
+    "sap/ui/core/BusyIndicator",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
     "saps4hana/fiori/modules/sd/customer-invoice/service/CustomerInvoiceService"
-], function (Controller, JSONModel, Filter, FilterOperator, Fragment, MessageBox, MessageToast, CustomerInvoiceService) {
+], function (Controller, JSONModel, Filter, FilterOperator, Fragment, Messaging, BusyIndicator, MessageBox, MessageToast, CustomerInvoiceService) {
     "use strict";
 
     return Controller.extend("saps4hana.fiori.modules.sd.customer-invoice.controller.CustomerInvoices", {
@@ -72,12 +74,23 @@ sap.ui.define([
             var oViewModel = this.getView().getModel("customerInvoicesView");
             var oModel = this.getView().getModel("customerInvoice");
 
-            CustomerInvoiceService.getMetrics(oModel).then(function (m) {
+            return CustomerInvoiceService.getMetrics(oModel).then(function (m) {
                 if (m) {
                     oViewModel.setProperty("/totalInvoices", m.totalInvoices || 0);
                     oViewModel.setProperty("/pendingAccountingCount", m.pendingAccountingCount || 0);
                     oViewModel.setProperty("/transferredCount", m.transferredCount || 0);
                     oViewModel.setProperty("/cancelledCount", m.cancelledCount || 0);
+
+                    var sSearch = (oViewModel.getProperty("/searchQuery") || "").trim();
+                    if (!sSearch) {
+                        var sTab = oViewModel.getProperty("/selectedTab") || "all";
+                        var iCount = sTab === "pending"
+                            ? m.pendingAccountingCount
+                            : (sTab === "transferred"
+                                ? m.transferredCount
+                                : (sTab === "cancelled" ? m.cancelledCount : m.totalInvoices));
+                        oViewModel.setProperty("/displayCount", iCount || 0);
+                    }
                 }
             }).catch(function (err) {
                 // Non-critical metric failure
@@ -86,13 +99,35 @@ sap.ui.define([
 
         onTabSelect: function (oEvent) {
             var sKey = oEvent.getParameter("key") || oEvent.getSource().getSelectedKey();
-            this.getView().getModel("customerInvoicesView").setProperty("/selectedTab", sKey);
+            var oViewModel = this.getView().getModel("customerInvoicesView");
+            oViewModel.setProperty("/selectedTab", sKey);
+
+            var sSearch = (oViewModel.getProperty("/searchQuery") || "").trim();
+            if (!sSearch) {
+                var iCount = sKey === "pending"
+                    ? oViewModel.getProperty("/pendingAccountingCount")
+                    : (sKey === "transferred"
+                        ? oViewModel.getProperty("/transferredCount")
+                        : (sKey === "cancelled" ? oViewModel.getProperty("/cancelledCount") : oViewModel.getProperty("/totalInvoices")));
+                oViewModel.setProperty("/displayCount", iCount || 0);
+            }
+
             this._applyFilters();
         },
 
         onSearch: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getSource().getValue();
-            this.getView().getModel("customerInvoicesView").setProperty("/searchQuery", sQuery);
+            var sQuery = oEvent.getParameter("query") || oEvent.getSource().getValue() || "";
+            var oViewModel = this.getView().getModel("customerInvoicesView");
+            oViewModel.setProperty("/searchQuery", sQuery);
+            if (!sQuery.trim()) {
+                var sTab = oViewModel.getProperty("/selectedTab") || "all";
+                var iCount = sTab === "pending"
+                    ? oViewModel.getProperty("/pendingAccountingCount")
+                    : (sTab === "transferred"
+                        ? oViewModel.getProperty("/transferredCount")
+                        : (sTab === "cancelled" ? oViewModel.getProperty("/cancelledCount") : oViewModel.getProperty("/totalInvoices")));
+                oViewModel.setProperty("/displayCount", iCount || 0);
+            }
             this._applyFilters();
         },
 
@@ -153,11 +188,28 @@ sap.ui.define([
             var oFinalFilter = aFilters.length > 0 ? new Filter({ filters: aFilters, and: true }) : null;
             oBinding.filter(oFinalFilter);
 
-            // Update display count dynamically
+            // Update display count dynamically from server count or loaded length
             var that = this;
             oBinding.attachEventOnce("dataReceived", function () {
-                var iCount = oBinding.getLength ? oBinding.getLength() : 0;
-                that.getView().getModel("customerInvoicesView").setProperty("/displayCount", iCount);
+                var oVM = that.getView().getModel("customerInvoicesView");
+                var iServerCount = (typeof oBinding.getCount === "function") ? oBinding.getCount() : null;
+                if (iServerCount !== null && iServerCount !== undefined) {
+                    oVM.setProperty("/displayCount", iServerCount);
+                } else {
+                    var sCurrentTab = oVM.getProperty("/selectedTab") || "all";
+                    var sCurrentSearch = (oVM.getProperty("/searchQuery") || "").trim();
+                    if (!sCurrentSearch) {
+                        var iTabCount = sCurrentTab === "pending"
+                            ? oVM.getProperty("/pendingAccountingCount")
+                            : (sCurrentTab === "transferred"
+                                ? oVM.getProperty("/transferredCount")
+                                : (sCurrentTab === "cancelled" ? oVM.getProperty("/cancelledCount") : oVM.getProperty("/totalInvoices")));
+                        oVM.setProperty("/displayCount", iTabCount || 0);
+                    } else {
+                        var iCount = oBinding.getLength ? oBinding.getLength() : 0;
+                        oVM.setProperty("/displayCount", iCount);
+                    }
+                }
             });
         },
 
@@ -174,9 +226,9 @@ sap.ui.define([
             var oContext = oSelectedItem.getBindingContext("customerInvoice");
             var oData = oContext ? oContext.getObject() : null;
             if (oData) {
-                var bIsCancelled = oData.BillingDocumentIsCancelled === true || oData.BillingDocumentIsCancelled === "true";
-                var bCanRelease = !bIsCancelled && oData.AccountingTransferStatus !== "C";
-                var bCanCancel = !bIsCancelled;
+                var bIsCancelled = oData.BillingDocumentIsCancelled === true || oData.BillingDocumentIsCancelled === "true" || oData.AccountingTransferStatus === "E" || oData.SDDocumentCategory === "N";
+                var bCanRelease = !bIsCancelled && oData.AccountingTransferStatus !== "C" && oData.AccountingTransferStatus !== "D" && oData.AccountingTransferStatus !== "E" && oData.AccountingTransferStatus !== "A" && oData.SDDocumentCategory !== "N";
+                var bCanCancel = !bIsCancelled && oData.AccountingTransferStatus !== "E" && oData.SDDocumentCategory !== "N";
 
                 oViewModel.setProperty("/hasSelectedInvoice", true);
                 oViewModel.setProperty("/canReleaseSelected", bCanRelease);
@@ -229,22 +281,45 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("customerInvoice");
 
+            BusyIndicator.show(0);
             CustomerInvoiceService.releaseInvoiceToAccounting(sDoc, oModel).then(function (res) {
-                var sAcctDoc = (res && res.AccountingDocument) || "";
-                var sMsg = sAcctDoc
-                    ? that._getText("msgReleaseAccountingSuccessWithDoc", [sDoc, sAcctDoc])
-                    : that._getText("msgReleaseAccountingSuccess", [sDoc]);
+                BusyIndicator.hide();
+                // Immediately refresh table to reflect live SAP status in UI
+                that.onRefresh();
 
-                MessageBox.success(sMsg, {
-                    title: that._getText("titleReleaseAccountingSuccess"),
+                var sAcctDoc = (res && res.AccountingDocument) || "";
+                var sStatus = (res && res.AccountingTransferStatus) || "";
+                if (sAcctDoc || sStatus === "C") {
+                    var sMsg = sAcctDoc
+                        ? that._getText("msgReleaseAccountingSuccessWithDoc", [sDoc, sAcctDoc])
+                        : that._getText("msgReleaseAccountingSuccess", [sDoc]);
+
+                    MessageBox.success(sMsg, {
+                        title: that._getText("titleReleaseAccountingSuccess"),
+                        onClose: function () {
+                            that.onRefresh();
+                        }
+                    });
+                } else {
+                    var sWarnMsg = (res && res.Message) || that._getText("msgReleaseAccountingError");
+                    MessageBox.warning(sWarnMsg, {
+                        title: that._getText("titleReleaseAccountingError"),
+                        onClose: function () {
+                            that.onRefresh();
+                        }
+                    });
+                }
+            }).catch(function (err) {
+                BusyIndicator.hide();
+                // Immediately refresh table to display current authentic SAP state
+                that.onRefresh();
+
+                var sErrMsg = that._extractErrorMessage(err, "msgReleaseAccountingError");
+                MessageBox.error(sErrMsg, {
+                    title: that._getText("titleReleaseAccountingError"),
                     onClose: function () {
                         that.onRefresh();
                     }
-                });
-            }).catch(function (err) {
-                var sErrMsg = (err && (err.message || err.error)) || that._getText("msgReleaseAccountingError");
-                MessageBox.error(sErrMsg, {
-                    title: that._getText("titleReleaseAccountingError")
                 });
             });
         },
@@ -292,8 +367,13 @@ sap.ui.define([
             var oModel = this.getView().getModel("customerInvoice");
 
             this.onCloseCancelInvoiceDialog();
+            BusyIndicator.show(0);
 
             CustomerInvoiceService.cancelBillingDocument(sDoc, oModel).then(function (res) {
+                BusyIndicator.hide();
+                // Immediately refresh table to reflect cancellation in UI
+                that.onRefresh();
+
                 var sCancelDoc = (res && res.CancellationDocument) || "";
                 var sMsg = sCancelDoc
                     ? that._getText("msgCancelInvoiceSuccessWithDoc", [sDoc, sCancelDoc])
@@ -306,11 +386,60 @@ sap.ui.define([
                     }
                 });
             }).catch(function (err) {
-                var sErrMsg = (err && (err.message || err.error)) || that._getText("msgCancelInvoiceError");
+                BusyIndicator.hide();
+                // Immediately refresh table to reflect current SAP state
+                that.onRefresh();
+
+                var sErrMsg = that._extractErrorMessage(err, "msgCancelInvoiceError");
                 MessageBox.error(sErrMsg, {
-                    title: that._getText("titleCancelInvoiceError")
+                    title: that._getText("titleCancelInvoiceError"),
+                    onClose: function () {
+                        that.onRefresh();
+                    }
                 });
             });
+        },
+
+        _extractErrorMessage: function (err, sFallbackKey) {
+            var sRaw = "";
+            if (!err) return this._getText(sFallbackKey);
+            if (err.error && err.error.message) sRaw = err.error.message;
+            else if (err.response && err.response.data && err.response.data.error && err.response.data.error.message) {
+                sRaw = err.response.data.error.message;
+            } else {
+                try {
+                    if (Messaging && typeof Messaging.getMessageModel === "function") {
+                        var aMessages = Messaging.getMessageModel().getData() || [];
+                        for (var i = aMessages.length - 1; i >= 0; i--) {
+                            var oMsg = aMessages[i];
+                            if (oMsg && oMsg.message && !oMsg.message.startsWith("Communication error")) {
+                                sRaw = oMsg.message;
+                                break;
+                            }
+                        }
+                    }
+                } catch (_) {}
+                if (!sRaw && err.message && err.message.indexOf(" - ") !== -1) {
+                    var aParts = err.message.split(" - ");
+                    if (aParts.length > 1 && aParts[aParts.length - 1].trim()) {
+                        sRaw = aParts[aParts.length - 1].trim();
+                    }
+                }
+            }
+            var sMsg = sRaw || err.message || this._getText(sFallbackKey);
+            if (sMsg.indexOf("ASSERTION_FAILED") !== -1 || sMsg.indexOf("Runtime Error") !== -1) {
+                return "SAP Gateway Runtime Error (ASSERTION_FAILED): The OData interface in SAP S/4HANA aborted execution because the billing document has an active Posting Block (Status A) or inconsistent buffer state.\n\nGuidance: Release cannot be performed via OData while a Posting Block is active. Open the document in SAP GUI (transaction VF02), verify pricing/tax conditions, and release to accounting directly from VF02.";
+            }
+            if (sMsg.indexOf("Payment term") !== -1 && sMsg.indexOf("not defined") !== -1) {
+                return sMsg + "\n\nGuidance: The payment term assigned to this document is missing in SAP FI customizing (table T052 / transaction OBB8). To release this invoice, maintain the payment term in SAP or update the invoice in VF02.";
+            }
+            if (sMsg.indexOf("saved (error in account determination)") !== -1) {
+                return sMsg + "\n\nExplanation: SAP S/4HANA saved the billing document with Status B, but failed to create the G/L accounting document because G/L account determination is not configured.\n\nGuidance: Maintain revenue/tax G/L account assignment in SAP customizing (transaction VKOA) for this Billing Type and Sales Organization.";
+            }
+            if (sMsg.indexOf("account determination") !== -1 || sMsg.indexOf("T030K") !== -1) {
+                return sMsg + "\n\nGuidance: G/L Account Determination is missing in SAP (table VKOA / transaction VKOA). Please assign the required G/L revenue/tax accounts in SAP.";
+            }
+            return sMsg;
         },
 
         _getText: function (sKey, aArgs) {
@@ -318,42 +447,71 @@ sap.ui.define([
             return oResourceBundle.getText(sKey, aArgs);
         },
 
-        formatInvoiceStatusText: function (bIsCancelled, sAccountingStatus) {
-            if (bIsCancelled === true || bIsCancelled === "true") {
+        formatInvoiceStatusText: function (bIsCancelled, sAccountingStatus, sCategory) {
+            if (bIsCancelled === true || bIsCancelled === "true" || sAccountingStatus === "E" || sCategory === "N") {
                 return this._getText("statusCancelled");
             }
-            if (sAccountingStatus === "C") {
+            if (sAccountingStatus === "C" || sAccountingStatus === "H") {
                 return this._getText("statusTransferredToAccounting");
             }
-            return this._getText("statusPendingAccounting");
+            if (sAccountingStatus === "D") {
+                return this._getText("statusNotRelevantForAccounting");
+            }
+            if (sAccountingStatus === "B") {
+                return this._getText("statusAccountDeterminationError");
+            }
+            if (sAccountingStatus === "A") {
+                return this._getText("statusPostingBlocked");
+            }
+            if (!sAccountingStatus || sAccountingStatus === "") {
+                return this._getText("statusAccountingInterfaceError");
+            }
+            return this._getText("statusPostingError");
         },
 
-        formatInvoiceStatusState: function (bIsCancelled, sAccountingStatus) {
-            if (bIsCancelled === true || bIsCancelled === "true") {
+        formatInvoiceStatusState: function (bIsCancelled, sAccountingStatus, sCategory) {
+            if (bIsCancelled === true || bIsCancelled === "true" || sAccountingStatus === "E" || sCategory === "N") {
                 return "Error";
             }
-            if (sAccountingStatus === "C") {
+            if (sAccountingStatus === "C" || sAccountingStatus === "H") {
                 return "Success";
             }
-            return "Warning";
+            if (sAccountingStatus === "D") {
+                return "None";
+            }
+            if (sAccountingStatus === "A") {
+                return "Warning";
+            }
+            return "Error";
         },
 
-        formatInvoiceStatusIcon: function (bIsCancelled, sAccountingStatus) {
-            if (bIsCancelled === true || bIsCancelled === "true") {
+        formatInvoiceStatusIcon: function (bIsCancelled, sAccountingStatus, sCategory) {
+            if (bIsCancelled === true || bIsCancelled === "true" || sAccountingStatus === "E" || sCategory === "N") {
                 return "sap-icon://sys-cancel";
             }
-            if (sAccountingStatus === "C") {
+            if (sAccountingStatus === "C" || sAccountingStatus === "H") {
                 return "sap-icon://accept";
             }
-            return "sap-icon://pending";
+            if (sAccountingStatus === "D") {
+                return "sap-icon://document-text";
+            }
+            if (sAccountingStatus === "A") {
+                return "sap-icon://locked";
+            }
+            return "sap-icon://alert";
         },
 
-        formatReleaseEnabled: function (bIsCancelled, sAccountingStatus) {
-            return bIsCancelled !== true && bIsCancelled !== "true" && sAccountingStatus !== "C";
+        formatReleaseEnabled: function (bIsCancelled, sAccountingStatus, sCategory) {
+            return bIsCancelled !== true && bIsCancelled !== "true" &&
+                sAccountingStatus !== "C" && sAccountingStatus !== "H" &&
+                sAccountingStatus !== "D" && sAccountingStatus !== "E" &&
+                sAccountingStatus !== "A" &&
+                sCategory !== "N";
         },
 
-        formatCancelEnabled: function (bIsCancelled) {
-            return bIsCancelled !== true && bIsCancelled !== "true";
+        formatCancelEnabled: function (bIsCancelled, sAccountingStatus, sCategory) {
+            return bIsCancelled !== true && bIsCancelled !== "true" &&
+                sAccountingStatus !== "E" && sCategory !== "N";
         }
     });
 });
