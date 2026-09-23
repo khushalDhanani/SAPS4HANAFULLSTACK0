@@ -58,6 +58,42 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(result[0].SalesOrder).toBe('5000104');
     });
 
+    test('filters by IsDeliverable when requested in query', async () => {
+      const mockOrders = [
+        { SalesOrder: '5000104', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
+        { SalesOrder: '5000461', IsDeliverable: false, SalesDocApprovalStatus: 'A' }
+      ];
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
+
+      const req = {
+        data: { IsDeliverable: 'true' },
+        query: {}
+      };
+
+      const result = await handlers['READ_OrdersDueForDelivery'](req);
+      expect(result).toHaveLength(1);
+      expect(result[0].SalesOrder).toBe('5000104');
+      expect(result[0].IsDeliverable).toBe(true);
+    });
+
+    test('filters by SalesDocApprovalStatus when requested in query', async () => {
+      const mockOrders = [
+        { SalesOrder: '5000104', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
+        { SalesOrder: '5000461', IsDeliverable: false, SalesDocApprovalStatus: 'A' }
+      ];
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(mockOrders);
+
+      const req = {
+        data: { SalesDocApprovalStatus: 'A' },
+        query: {}
+      };
+
+      const result = await handlers['READ_OrdersDueForDelivery'](req);
+      expect(result).toHaveLength(1);
+      expect(result[0].SalesOrder).toBe('5000461');
+      expect(result[0].SalesDocApprovalStatus).toBe('A');
+    });
+
     test('calls req.error when adapter rejects', async () => {
       const err = new Error('Gateway timeout');
       err.status = 502;
@@ -203,14 +239,19 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
   describe('getOrdersDueMetrics function', () => {
     test('counts schedule lines and distinct shipping points over the full unpaged set', async () => {
       outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue([
-        { SalesOrder: '5000104', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1120' },
-        { SalesOrder: '5000104', SalesOrderItem: '20', ScheduleLine: '1', ShippingPoint: '1120' },
-        { SalesOrder: '5000105', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1112' },
-        { SalesOrder: '5000106', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '' }
+        { SalesOrder: '5000104', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1120', IsDeliverable: true, SalesDocApprovalStatus: 'B' },
+        { SalesOrder: '5000104', SalesOrderItem: '20', ScheduleLine: '1', ShippingPoint: '1120', IsDeliverable: true, SalesDocApprovalStatus: '' },
+        { SalesOrder: '5000105', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '1112', IsDeliverable: false, SalesDocApprovalStatus: 'A' },
+        { SalesOrder: '5000106', SalesOrderItem: '10', ScheduleLine: '1', ShippingPoint: '', IsDeliverable: false, SalesDocApprovalStatus: 'C' }
       ]);
       const req = { error: jest.fn() };
       const res = await handlers['getOrdersDueMetrics'](req);
-      expect(res).toEqual({ scheduleLineCount: 4, shippingPointCount: 2 });
+      expect(res).toEqual({
+        scheduleLineCount: 4,
+        readyToDeliverCount: 2,
+        inApprovalCount: 1,
+        shippingPointCount: 2
+      });
       expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith({});
       expect(req.error).not.toHaveBeenCalled();
     });

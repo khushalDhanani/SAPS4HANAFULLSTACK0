@@ -146,6 +146,41 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(orders).toHaveLength(1);
       expect(orders[0].SalesOrder).toBe('5000461');
       expect(orders[0].SalesDocApprovalStatus).toBe('A');
+      expect(orders[0].IsDeliverable).toBe(false);
+    });
+
+    test('enriches released orders with SalesDocApprovalStatus B and marks IsDeliverable true', async () => {
+      mockClient.get.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              {
+                SalesOrder: '5000104',
+                SalesOrderItem: '000010',
+                ScheduleLine: '0001',
+                ShippingPoint: '1120',
+                DelivBlockReasonForSchedLine: ''
+              }
+            ]
+          }
+        }
+      }).mockResolvedValueOnce({
+        status: 200,
+        data: {
+          d: {
+            results: [
+              { SalesOrder: '5000104', SalesDocApprovalStatus: 'B' }
+            ]
+          }
+        }
+      });
+
+      const orders = await adapter.getOrdersDueForDelivery({ salesOrder: '5000104' });
+      expect(orders).toHaveLength(1);
+      expect(orders[0].SalesOrder).toBe('5000104');
+      expect(orders[0].SalesDocApprovalStatus).toBe('B');
+      expect(orders[0].IsDeliverable).toBe(true);
     });
 
     test('caches approval status map in-memory for 60s to prevent extra SAP calls on successive reads', async () => {

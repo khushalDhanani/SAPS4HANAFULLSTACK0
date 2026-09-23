@@ -2071,18 +2071,78 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Review with user and commit to `feature/CL01`.
 
+## 2026-09-23 11:25 IST
+- **Agent**: Antigravity
+- **Change**: Outbound Delivery Worklist Segmentation & Sales Order Approval Status Mapping Fix (Audit Rows 30 & 31):
+  - **Issue**:
+    1. Newly created `ZDOM` sales orders in DS4 client 220 enter status `'A'` ("In Approval") via SAP S/4HANA Flexible Workflow (`WS02000006`). Delivery creation (`C_DelivWthRefQuickCreate`) returns SAP Gateway error `V2/478` ("Subsequent documents not possible due to approval status of the document").
+    2. S/4HANA `LE_SHP_QC_DLVREF_SRV/C_SalesOrderDueForDeliveryVH` does not contain workflow approval fields; approval status is enriched via cross-service lookup to `SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873`.
+    3. In `OutboundDeliveryAdapter.js`, `_fetchApprovalStatusMap` previously used `$filter=(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')`, which excluded released orders (status `'B'`) from the status map. Consequently, approved/released orders had their status fall back to `''` ("Not Relevant"), preventing the green "Released" badge from displaying in Fiori.
+    4. On the Orders Due for Delivery screen, all due schedule lines were mixed together in a single table, causing shipping clerks to see unapproved/rejected orders mixed with actionable orders, with Create Delivery buttons disabled.
+  - **Fix Delivered**:
+    1. **OutboundDeliveryAdapter.js**:
+       - Fixed `_fetchApprovalStatusMap`: Changed `$filter=(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')` to `$filter=SalesDocApprovalStatus ne ''` so `'B'` (Released) is included in the map.
+       - In `_formatOrderResults`: Added computation of `IsDeliverable = !delivBlock && approvalStatus !== 'unknown' && (approvalStatus === 'B' || !approvalStatus)`.
+    2. **CAP Service Model (`service.cds`) & Handler (`outboundDelivery.handler.js`)**:
+       - Added `IsDeliverable : Boolean;` to `OrdersDueForDelivery` entity.
+       - Enriched `getOrdersDueMetrics()` to return `{ scheduleLineCount, readyToDeliverCount, inApprovalCount, shippingPointCount }`.
+       - Implemented in-memory filtering in `READ OrdersDueForDelivery` for `IsDeliverable` and `SalesDocApprovalStatus` using `extractFilterParam` from `srv/common/filterUtils.js` before `applyPaging`.
+       - Enriched `getOrdersDueMetrics` handler to calculate `readyToDeliverCount` and `inApprovalCount` across the full unpaged due schedule lines.
+    3. **Fiori UI5 Presentation (`OrdersDueForDelivery.view.xml` & `OrdersDueForDelivery.controller.js`)**:
+       - Added KPI cards: "Ready to Deliver" (`kpiReadyOrders`, Good state) and "In Approval" (`kpiInApprovalOrders`, Critical state) alongside total schedule lines.
+       - Added `SegmentedButton` in `tableToolbar` with tabs:
+         - `ready`: Ready to Deliver (default tab — displays only deliverable schedule lines)
+         - `inApproval`: In Approval (displays orders blocked by workflow approval)
+         - `all`: All Due Lines (full list)
+       - Bound table header title dynamically to `ordersDueView>/displayCount` to reflect active tab count.
+       - Implemented `onTabSelect` and `_applyCombinedFilters()` to filter table by `IsDeliverable = true` on `ready`, `SalesDocApprovalStatus = 'A'` on `inApproval`, and full set on `all`, combined with live search query.
+       - Added explicit SAP Flexible Workflow guidance in `msgOrderInApproval`: "Sales Order {0} is currently in approval (SAP Flexible Workflow). It must be approved in SAP (My Inbox or Manage Sales Orders) before an outbound delivery can be created."
+       - Maintained 100% key parity between `i18n.properties` and `i18n_en.properties`.
+       - Rebuilt `Component-preload.js`.
+    4. **Documentation**:
+       - Updated Rows 30 and 31 in `docs/data-lineage-audit.md` to reflect segmented KPIs, default deliverable filtering, and status `'B'` query resolution.
+  - **Files Modified**:
+    - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`
+    - `srv/le/outbound-delivery/service.cds`
+    - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`
+    - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`
+    - `app/fiori-app/webapp/i18n/i18n.properties`
+    - `app/fiori-app/webapp/i18n/i18n_en.properties`
+    - `docs/data-lineage-audit.md`
+    - `test/unit/le/outboundDeliveryAdapter.test.js`
+    - `test/unit/le/outboundDeliveryHandler.test.js`
+    - `test/unit/le/ordersDueForDeliveryController.test.js`
+  - **Executed Commands & Results**:
+    - `npx cds compile srv`: Succeeded with 0 errors.
+    - `npm test -- test/unit/le/ordersDueForDeliveryController.test.js`: 1 passed, 19/19 tests green.
+    - `npm test -- test/unit/le/`: 4 passed, 4 suites, 71/71 tests green (100%).
+    - `npm run lint`: Succeeded with 0 errors.
+    - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `cd app/fiori-app && npm run build`: Build succeeded in 1.43 s (`Component-preload.js` generated).
+    - `git diff --check`: Clean (0 errors).
+    - `npm test`: 78 passed, 78 test suites, 1068 passed, 1068 total tests (100% green).
+  - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
+
 ## Current Status
+- **2026-09-23 11:25 IST (uncommitted)**: Outbound delivery worklist segmentation implemented, status 'B' (Released) mapping fixed in `OutboundDeliveryAdapter.js`, `IsDeliverable` flag and KPI metrics enriched, and warning guidance for SAP Flexible Workflow added. All repository gates green (`cds compile`, `eslint`, `ui5lint`, `ui5 build`, Jest LE tests 71/71, full repo test suite 1068/1068, `git diff --check`).
 - **2026-09-23 11:00 IST (uncommitted)**: Journal entry role enforcement updated to strictly require `FinanceViewer` or `Admin`, closing the pending 403 test in `test/integration/fi/journalEntry.test.js` and establishing proper segregation of duties for financial accounting data. Gates green (`cds compile`, `eslint`, `ui5lint`, Jest FI tests 37/37, `git diff --check`).
 - **2026-09-22 13:59 IST (uncommitted)**: module-by-module pass closed the remaining audit residuals — Master Data (material-type scope config, customer defaults history-only, cache age shown), SD (no proposed dates/ship-to, totals only from real HeaderSet fields, no silent blank defaults), WM (GR no first-row proposals + lookup warnings, GI batch stock summed, no synthetic 9999/0), MM (failed supplier lookup flagged). Gates green (cds compile, eslint, jest 966/966, ui5lint, ui5 build, diff --check).
 - **2026-09-22 13:16 IST (uncommitted)**: remaining audit items closed — `999` default removed (config required), synthesized PlantName, dev-auth username-as-password and implicit Admin, S/4 HTTP timeout, UI silent catches, Orders Due KPIs server-side, doc banners. Gates green (cds compile, eslint, jest 965/965, ui5lint, ui5 build, diff --check).
 - **2026-09-22 12:56 IST (uncommitted)**: audit items 13, 22, 23, 24, 26, 27, 40, 41, 42 applied; all gates green (cds compile, eslint, jest 959/959, ui5lint, ui5 build, diff --check). `999` DifferenceStorageType still open.
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm test`: **78 passed, 78 total test suites; 1061 passed, 1061 total tests (100% green)**.
+  - `npm test`: **78 passed, 78 total test suites; 1068 passed, 1068 total tests (100% green)**.
+  - `npm test -- test/unit/le/`: **4 passed, 4 total test suites; 71 passed, 71 total tests (100% green)**.
   - `npm test -- test/integration/fi/journalEntry.test.js`: **1 passed, 1 total test suite; 4 passed, 4 total tests (100% green)**.
   - `npm test -- test/unit/fi/`: **3 passed, 3 total test suites; 33 passed, 33 total tests (100% green)**.
   - `npm test -- test/unit/sales-order/`: **5 passed, 5 total test suites; 69 passed, 69 total tests (100% green)**.
   - `npm test -- test/unit/purchase-order/`: **19 suites passed, 207 passed, 207 total tests (100% green)**.
+  - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
+  - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
+  - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.
+  - `npm test -- test/unit/wm/goodsReceiptService.test.js`: **41 passed, 41 total tests (100% green)**.
+  - `npm test -- test/unit/wm/goodsReceiptController.test.js`: **20 passed, 20 total tests (100% green)**.
   - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
   - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
   - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.

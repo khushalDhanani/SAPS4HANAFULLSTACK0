@@ -30,7 +30,11 @@ sap.ui.define([
             var bCanCreateDelivery = (AuthService && typeof AuthService.canCreateDelivery === "function") ? AuthService.canCreateDelivery() : true;
             var oViewModel = new JSONModel({
                 totalCount: "-",
+                readyCount: "-",
+                inApprovalCount: "-",
                 shippingPointCount: "-",
+                displayCount: "-",
+                selectedTab: "ready",
                 canCreateDelivery: bCanCreateDelivery
             });
             this.getView().setModel(oViewModel, "ordersDueView");
@@ -61,6 +65,7 @@ sap.ui.define([
                 oRouter.getRoute("ordersDueForDelivery").attachPatternMatched(this._onRouteMatched, this);
             }
 
+            this._applyCombinedFilters();
             this._loadServerMetrics();
         },
 
@@ -74,6 +79,7 @@ sap.ui.define([
                     oVm.setProperty("/canCreateDelivery", AuthService.canCreateDelivery());
                 }
             }
+            this._applyCombinedFilters();
             var oTable = this.byId("ordersDueTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {
@@ -101,30 +107,84 @@ sap.ui.define([
             return OutboundDeliveryService.getOrdersDueMetrics()
                 .then(function (oMetrics) {
                     var bOk = oMetrics && typeof oMetrics.scheduleLineCount === "number" && typeof oMetrics.shippingPointCount === "number";
-                    oViewModel.setProperty("/totalCount", bOk ? oMetrics.scheduleLineCount : "-");
-                    oViewModel.setProperty("/shippingPointCount", bOk ? oMetrics.shippingPointCount : "-");
+                    var nTotal = bOk ? oMetrics.scheduleLineCount : "-";
+                    var nReady = bOk && typeof oMetrics.readyToDeliverCount === "number" ? oMetrics.readyToDeliverCount : "-";
+                    var nApproval = bOk && typeof oMetrics.inApprovalCount === "number" ? oMetrics.inApprovalCount : "-";
+                    var nSP = bOk ? oMetrics.shippingPointCount : "-";
+
+                    oViewModel.setProperty("/totalCount", nTotal);
+                    oViewModel.setProperty("/readyCount", nReady);
+                    oViewModel.setProperty("/inApprovalCount", nApproval);
+                    oViewModel.setProperty("/shippingPointCount", nSP);
+
+                    var sTab = oViewModel.getProperty("/selectedTab") || "ready";
+                    var sDisplay = sTab === "ready" ? nReady : (sTab === "inApproval" ? nApproval : nTotal);
+                    oViewModel.setProperty("/displayCount", sDisplay);
                 })
                 .catch(function () {
                     oViewModel.setProperty("/totalCount", "-");
+                    oViewModel.setProperty("/readyCount", "-");
+                    oViewModel.setProperty("/inApprovalCount", "-");
                     oViewModel.setProperty("/shippingPointCount", "-");
+                    oViewModel.setProperty("/displayCount", "-");
                 });
         },
 
-        onSearch: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue");
-            var oTable = this.byId("ordersDueTable");
-            var oBinding = oTable ? oTable.getBinding("items") : null;
+        onTabSelect: function (oEvent) {
+            var sKey = oEvent && typeof oEvent.getParameter === "function"
+                ? (oEvent.getParameter("key") || (oEvent.getParameter("item") && oEvent.getParameter("item").getKey()))
+                : null;
+            if (!sKey) {
+                var oSeg = (typeof this.byId === "function")
+                    ? this.byId("segApprovalStatus")
+                    : (this.getView && typeof this.getView().byId === "function" ? this.getView().byId("segApprovalStatus") : null);
+                sKey = oSeg && typeof oSeg.getSelectedKey === "function" ? oSeg.getSelectedKey() : "ready";
+            }
+            var oViewModel = this.getView && typeof this.getView().getModel === "function" ? this.getView().getModel("ordersDueView") : null;
+            if (oViewModel) {
+                oViewModel.setProperty("/selectedTab", sKey);
+                var sDisplay = sKey === "ready"
+                    ? oViewModel.getProperty("/readyCount")
+                    : (sKey === "inApproval" ? oViewModel.getProperty("/inApprovalCount") : oViewModel.getProperty("/totalCount"));
+                oViewModel.setProperty("/displayCount", sDisplay);
+            }
+            this._applyCombinedFilters();
+        },
+
+        onSearch: function () {
+            this._applyCombinedFilters();
+        },
+
+        _applyCombinedFilters: function () {
+            var oTable = (typeof this.byId === "function")
+                ? this.byId("ordersDueTable")
+                : (this.getView && typeof this.getView().byId === "function" ? this.getView().byId("ordersDueTable") : null);
+            var oBinding = oTable && typeof oTable.getBinding === "function" ? oTable.getBinding("items") : null;
             if (!oBinding) return;
 
             var aFilters = [];
-            if (sQuery && sQuery.trim() !== "") {
-                var sTrimmed = sQuery.trim();
+            var oViewModel = this.getView && typeof this.getView().getModel === "function" ? this.getView().getModel("ordersDueView") : null;
+            var sTab = (oViewModel && typeof oViewModel.getProperty === "function" && oViewModel.getProperty("/selectedTab")) || "ready";
+
+            if (sTab === "ready") {
+                aFilters.push(new Filter("IsDeliverable", FilterOperator.EQ, true));
+            } else if (sTab === "inApproval") {
+                aFilters.push(new Filter("SalesDocApprovalStatus", FilterOperator.EQ, "A"));
+            }
+
+            var oSearchField = (typeof this.byId === "function")
+                ? this.byId("searchOrdersDue")
+                : (this.getView && typeof this.getView().byId === "function" ? this.getView().byId("searchOrdersDue") : null);
+            var sQuery = oSearchField && typeof oSearchField.getValue === "function" ? oSearchField.getValue() : "";
+            if (sQuery && sQuery.trim()) {
+                var q = sQuery.trim();
                 aFilters.push(new Filter({
                     filters: [
-                        new Filter("SalesOrder", FilterOperator.Contains, sTrimmed),
-                        new Filter("ShipToParty", FilterOperator.Contains, sTrimmed),
-                        new Filter("ShippingPoint", FilterOperator.Contains, sTrimmed),
-                        new Filter("DelivBlockReasonForSchedLine", FilterOperator.Contains, sTrimmed)
+                        new Filter("SalesOrder", FilterOperator.Contains, q),
+                        new Filter("SoldToParty", FilterOperator.Contains, q),
+                        new Filter("SoldToPartyName", FilterOperator.Contains, q),
+                        new Filter("ShippingPoint", FilterOperator.Contains, q),
+                        new Filter("Material", FilterOperator.Contains, q)
                     ],
                     and: false
                 }));
@@ -145,6 +205,7 @@ sap.ui.define([
                     }
                 }
             }
+            this._loadServerMetrics();
         },
 
         onCreateDeliveryPress: function (oEvent) {
@@ -160,7 +221,7 @@ sap.ui.define([
                 return;
             }
             if (sApprovalStatus === "A") {
-                MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval and cannot be delivered.", [sSalesOrder]));
+                MessageBox.warning(this._text("msgOrderInApproval", "Sales Order {0} is currently in approval (SAP Flexible Workflow). It must be approved in SAP (My Inbox or Manage Sales Orders) before an outbound delivery can be created.", [sSalesOrder]));
                 return;
             }
             if (sApprovalStatus === "C") {

@@ -1,7 +1,7 @@
 const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const s4Config = require('../../../common/s4Config');
-const { applyPaging } = require('../../../common/filterUtils');
+const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 
 /**
  * Registers Outbound Delivery business handlers on the CAP service.
@@ -13,7 +13,19 @@ function registerOutboundDeliveryHandlers(srv) {
   srv.on('READ', 'OrdersDueForDelivery', async (req) => {
     try {
       const orders = await outboundDeliveryAdapter.getOrdersDueForDelivery(req);
-      return applyPaging(orders, req);
+      let filtered = orders;
+      const isDeliverableParam = extractFilterParam(req, 'IsDeliverable');
+      const approvalStatusParam = extractFilterParam(req, 'SalesDocApprovalStatus');
+
+      if (isDeliverableParam !== null) {
+        const targetBool = String(isDeliverableParam).toLowerCase() === 'true';
+        filtered = filtered.filter(o => Boolean(o.IsDeliverable) === targetBool);
+      }
+      if (approvalStatusParam !== null) {
+        filtered = filtered.filter(o => String(o.SalesDocApprovalStatus || '') === String(approvalStatusParam));
+      }
+
+      return applyPaging(filtered, req);
     } catch (err) {
       LOG.error(`Failed to read due orders: ${err.message}`);
       return req.error(err.status || 500, err.message);
@@ -113,8 +125,20 @@ function registerOutboundDeliveryHandlers(srv) {
       if (!Array.isArray(rows)) {
         throw new Error('Orders due for delivery could not be read from S/4HANA');
       }
-      const shippingPoints = new Set(rows.map(r => r && r.ShippingPoint).filter(Boolean));
-      return { scheduleLineCount: rows.length, shippingPointCount: shippingPoints.size };
+      const shippingPoints = new Set();
+      let readyToDeliverCount = 0;
+      let inApprovalCount = 0;
+      for (const r of rows) {
+        if (r && r.ShippingPoint) shippingPoints.add(r.ShippingPoint);
+        if (r && r.IsDeliverable) readyToDeliverCount++;
+        if (r && r.SalesDocApprovalStatus === 'A') inApprovalCount++;
+      }
+      return {
+        scheduleLineCount: rows.length,
+        readyToDeliverCount,
+        inApprovalCount,
+        shippingPointCount: shippingPoints.size
+      };
     } catch (err) {
       LOG.error(`Failed to compute orders-due metrics: ${err.message}`);
       return req.error(err.status || 502, err.message);

@@ -30,6 +30,34 @@
                 <!-- KPI Section -->
                 <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
                     <GenericTile
+                        id="kpiReadyOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiReady}"
+                        subheader="{i18n>ordersDueKpiReadySub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiReadyOrdersVal"
+                                value="{ordersDueView>/readyCount}"
+                                icon="sap-icon://accept"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiInApprovalOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiInApproval}"
+                        subheader="{i18n>ordersDueKpiInApprovalSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiInApprovalOrdersVal"
+                                value="{ordersDueView>/inApprovalCount}"
+                                icon="sap-icon://pending"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
                         id="kpiDueOrders"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
                         header="{i18n>ordersDueKpiTotal}"
@@ -53,7 +81,7 @@
                                 id="kpiShippingPointsVal"
                                 value="{ordersDueView>/shippingPointCount}"
                                 icon="sap-icon://map-fill"
-                                valueColor="Good" />
+                                valueColor="Neutral" />
                         </TileContent>
                     </GenericTile>
                 </HBox>
@@ -105,12 +133,19 @@
                         <OverflowToolbar id="tableToolbar">
                             <Title
                                 id="tableTitle"
-                                text="{= 'Orders Due for Delivery (' + (${ordersDueView>/totalCount} || '0') + ')' }"
+                                text="{= 'Orders Due for Delivery (' + (${ordersDueView>/displayCount} || ${ordersDueView>/readyCount} || '0') + ')' }"
                                 level="H4" />
                             <ToolbarSpacer />
+                            <SegmentedButton id="segApprovalStatus" selectedKey="{ordersDueView>/selectedTab}" selectionChange=".onTabSelect">
+                                <items>
+                                    <SegmentedButtonItem id="segBtnReady" key="ready" text="{i18n>ordersDueTabReady}" icon="sap-icon://accept" />
+                                    <SegmentedButtonItem id="segBtnInApproval" key="inApproval" text="{i18n>ordersDueTabInApproval}" icon="sap-icon://pending" />
+                                    <SegmentedButtonItem id="segBtnAll" key="all" text="{i18n>ordersDueTabAll}" />
+                                </items>
+                            </SegmentedButton>
                             <SearchField
                                 id="searchOrdersDue"
-                                width="18rem"
+                                width="16rem"
                                 search=".onSearch"
                                 liveChange=".onSearch"
                                 placeholder="{i18n>ordersDueSearchPlaceholder}">

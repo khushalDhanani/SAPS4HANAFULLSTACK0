@@ -292,7 +292,7 @@ class OutboundDeliveryAdapter {
 
     const map = new Map();
     try {
-      let filter = "(SalesDocApprovalStatus ne '' and SalesDocApprovalStatus ne 'B')";
+      let filter = "SalesDocApprovalStatus ne ''";
       if (so) {
         filter = `SalesOrder eq ${odataString(so)} and ${filter}`;
       }
@@ -330,22 +330,28 @@ class OutboundDeliveryAdapter {
    */
   _formatOrderResults(rawResults, approvalStatusMap = new Map()) {
     const isUnknown = approvalStatusMap === null;
-    return rawResults.map(r => ({
-      SalesOrder: r.SalesOrder,
-      SalesOrderItem: r.SalesOrderItem,
-      ScheduleLine: r.ScheduleLine,
-      ShippingPoint: r.ShippingPoint,
-      DeliveryCreationDate: _parseODataV2Date(r.DeliveryCreationDate),
-      DeliveryPriority: r.DeliveryPriority || '',
-      Route: r.Route || '',
-      ForwardingAgent: r.ForwardingAgent || '',
-      GoodsIssueDate: _parseODataV2Date(r.GoodsIssueDate),
-      ShipToParty: r.ShipToParty || '',
-      DelivBlockReasonForSchedLine: r.DelivBlockReasonForSchedLine || '',
-      SalesDocApprovalStatus: isUnknown
+    return rawResults.map(r => {
+      const approvalStatus = isUnknown
         ? 'unknown'
-        : ((approvalStatusMap && typeof approvalStatusMap.get === 'function' ? approvalStatusMap.get(r.SalesOrder) : '') || '')
-    }));
+        : ((approvalStatusMap && typeof approvalStatusMap.get === 'function' ? approvalStatusMap.get(r.SalesOrder) : '') || '');
+      const delivBlock = r.DelivBlockReasonForSchedLine || '';
+      const isDeliverable = !delivBlock && approvalStatus !== 'unknown' && (approvalStatus === 'B' || !approvalStatus);
+      return {
+        SalesOrder: r.SalesOrder,
+        SalesOrderItem: r.SalesOrderItem,
+        ScheduleLine: r.ScheduleLine,
+        ShippingPoint: r.ShippingPoint,
+        DeliveryCreationDate: _parseODataV2Date(r.DeliveryCreationDate),
+        DeliveryPriority: r.DeliveryPriority || '',
+        Route: r.Route || '',
+        ForwardingAgent: r.ForwardingAgent || '',
+        GoodsIssueDate: _parseODataV2Date(r.GoodsIssueDate),
+        ShipToParty: r.ShipToParty || '',
+        DelivBlockReasonForSchedLine: delivBlock,
+        SalesDocApprovalStatus: approvalStatus,
+        IsDeliverable: isDeliverable
+      };
+    });
   }
 
   /**

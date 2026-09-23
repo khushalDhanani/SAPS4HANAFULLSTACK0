@@ -52,7 +52,10 @@ const MockFilterType = {
 const MockBaseController = {
     prototype: {
         onNavBack: jest.fn(),
-        getContentDensityClass: () => "sapUiSizeCompact"
+        getContentDensityClass: () => "sapUiSizeCompact",
+        byId: function (id) {
+            return this.getView ? this.getView().byId(id) : null;
+        }
     },
     extend: function (name, proto) {
         function Controller() {
@@ -145,10 +148,12 @@ describe("OrdersDueForDelivery Controller", () => {
             }),
             getModel: jest.fn((name) => models[name]),
             getId: jest.fn().mockReturnValue("testOrdersDueView"),
-            addDependent: jest.fn()
+            addDependent: jest.fn(),
+            byId: jest.fn((id) => (id === "ordersDueTable" ? mockTable : null))
         };
 
         controller.getView = jest.fn().mockReturnValue(mockView);
+        controller.byId = jest.fn((id) => mockView.byId(id));
         controller.getOwnerComponent = jest.fn().mockReturnValue({
             getRouter: () => mockRouter,
             getModel: () => null
@@ -165,7 +170,12 @@ describe("OrdersDueForDelivery Controller", () => {
     });
 
     test("_loadServerMetrics takes KPI counts from getOrdersDueMetrics (full set, not the loaded page)", async () => {
-        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({ scheduleLineCount: 57, shippingPointCount: 3 });
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({
+            scheduleLineCount: 57,
+            readyToDeliverCount: 42,
+            inApprovalCount: 12,
+            shippingPointCount: 3
+        });
         controller.onInit();
         await Promise.resolve();
         await Promise.resolve();
@@ -173,7 +183,10 @@ describe("OrdersDueForDelivery Controller", () => {
         const viewModel = mockView.getModel("ordersDueView");
         expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalled();
         expect(viewModel.getProperty("/totalCount")).toBe(57);
+        expect(viewModel.getProperty("/readyCount")).toBe(42);
+        expect(viewModel.getProperty("/inApprovalCount")).toBe(12);
         expect(viewModel.getProperty("/shippingPointCount")).toBe(3);
+        expect(viewModel.getProperty("/displayCount")).toBe(42);
     });
 
     test("_loadServerMetrics shows '-' (never 0) when the server metrics call fails", async () => {
@@ -184,24 +197,62 @@ describe("OrdersDueForDelivery Controller", () => {
 
         const viewModel = mockView.getModel("ordersDueView");
         expect(viewModel.getProperty("/totalCount")).toBe("-");
+        expect(viewModel.getProperty("/readyCount")).toBe("-");
+        expect(viewModel.getProperty("/inApprovalCount")).toBe("-");
         expect(viewModel.getProperty("/shippingPointCount")).toBe("-");
+        expect(viewModel.getProperty("/displayCount")).toBe("-");
     });
 
-    test("onSearch applies filter on table items", () => {
+    test("onTabSelect applies IsDeliverable filter for ready tab and updates displayCount", () => {
+        controller.onInit();
         controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
 
-        const mockEvent = {
-            getParameter: (p) => (p === "query" ? "1120" : "")
-        };
+        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "ready" : null) });
+        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
+        const viewModel = mockView.getModel("ordersDueView");
+        expect(viewModel.getProperty("/selectedTab")).toBe("ready");
+    });
 
-        controller.onSearch(mockEvent);
+    test("onTabSelect applies SalesDocApprovalStatus filter for inApproval tab", () => {
+        controller.onInit();
+        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+
+        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "inApproval" : null) });
+        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
+        const viewModel = mockView.getModel("ordersDueView");
+        expect(viewModel.getProperty("/selectedTab")).toBe("inApproval");
+    });
+
+    test("onTabSelect removes approval filter for all tab", () => {
+        controller.onInit();
+        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+
+        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "all" : null) });
+        expect(mockBinding.filter).toHaveBeenCalledWith([], MockFilterType.Application);
+        const viewModel = mockView.getModel("ordersDueView");
+        expect(viewModel.getProperty("/selectedTab")).toBe("all");
+    });
+
+    test("onSearch applies filter on table items combining tab filter and search query", () => {
+        controller.onInit();
+        const mockSearchField = { getValue: () => "1120" };
+        controller.byId = jest.fn((id) => {
+            if (id === "ordersDueTable") return mockTable;
+            if (id === "searchOrdersDue") return mockSearchField;
+            return null;
+        });
+
+        controller.onSearch();
         expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
     });
 
-    test("onRefresh refreshes table items binding", () => {
+    test("onRefresh refreshes table items binding and reloads server metrics", () => {
+        controller.onInit();
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
         controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
         controller.onRefresh();
         expect(mockBinding.refresh).toHaveBeenCalled();
+        expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalled();
     });
 
     test("onCreateDeliveryPress extracts row properties and opens dialog", () => {

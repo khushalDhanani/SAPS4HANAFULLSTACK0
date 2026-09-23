@@ -18,6 +18,7 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
             ShipToParty                 : String(10);
             DelivBlockReasonForSchedLine: String(2);
             SalesDocApprovalStatus      : String(10);
+            IsDeliverable               : Boolean;
     };
 
     @readonly
@@ -79,7 +80,9 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getOrdersDueMetrics() returns {
-        scheduleLineCount : Integer;
-        shippingPointCount: Integer;
+        scheduleLineCount  : Integer;
+        readyToDeliverCount: Integer;
+        inApprovalCount    : Integer;
+        shippingPointCount : Integer;
     };
 }
