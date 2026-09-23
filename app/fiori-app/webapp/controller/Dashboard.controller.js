@@ -271,6 +271,10 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },
 
+        onNavigateToCustomerInvoices: function () {
+            this.getOwnerComponent().getRouter().navTo("customerInvoices");
+        },
+
         switchToTab: function (sKey) {
             if (sKey) {
                 var oTabBar = this.byId("dashboardTabBar");

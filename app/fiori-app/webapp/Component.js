@@ -9,8 +9,9 @@ sap.ui.define([
     "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService",
     "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService",
     "saps4hana/fiori/modules/sd/sales-order/service/SalesOrderService",
-    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService"
-], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService) {
+    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService",
+    "saps4hana/fiori/modules/sd/customer-invoice/service/CustomerInvoiceService"
+], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService, CustomerInvoiceService) {
     "use strict";
 
     // Defensive normalization for UI5 MessageToast dock validation issue (SAP DINC0487249)
@@ -84,6 +85,10 @@ sap.ui.define([
             var oOutboundDeliveryModel = this.getModel("outboundDelivery");
             if (oOutboundDeliveryModel && OutboundDeliveryService && typeof OutboundDeliveryService.setModel === "function") {
                 OutboundDeliveryService.setModel(oOutboundDeliveryModel);
+            }
+            var oCustomerInvoiceModel = this.getModel("customerInvoice");
+            if (oCustomerInvoiceModel && CustomerInvoiceService && typeof CustomerInvoiceService.setModel === "function") {
+                CustomerInvoiceService.setModel(oCustomerInvoiceModel);
             }
 
             // Synchronize active authentication headers across all OData V4 models before routing starts

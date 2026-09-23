@@ -57,6 +57,8 @@ sap.ui.define([
                 this._updateShell("wmGoodsIssue");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
+            } else if (sHash.indexOf("sd/invoices") === 0) {
+                this._updateShell("customerInvoices");
             } else if (sHash.indexOf("dashboard") === 0) {
                 this._updateShell("dashboard");
             }
@@ -142,6 +144,10 @@ sap.ui.define([
                     break;
                 case "ordersDueForDelivery":
                     sTitle = oBundle ? oBundle.getText("ordersDueForDeliveryTitle") : "Orders Due for Delivery";
+                    bShowNav = true;
+                    break;
+                case "customerInvoices":
+                    sTitle = oBundle ? oBundle.getText("customerInvoicesTitle") : "Customer Invoices";
                     bShowNav = true;
                     break;
                 case "login":

@@ -2125,6 +2125,7 @@
   - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
 
 ## Current Status
+- **2026-09-23 13:15 IST (uncommitted)**: Customer Invoices Management (`SD_CUSTOMER_INVOICES_MANAGE`) implemented end-to-end. Real SAP backend actions verified live on DS4 220: `PostBillingDocumentToAccounting` (created FI Doc `9000000100`) and `CancelBillingDocument` (created Reversal Doc `90000053`). Full stack delivered: Gateway adapter, CAP service & handlers, UI5 worklist view with KPI tiles and cancel dialog, manifest/Component/App/Dashboard wiring, 100% i18n key parity, 28 new unit tests. All 81 repo test suites (1097 tests) 100% green, 0 lint errors, 0 git diff errors.
 - **2026-09-23 11:25 IST (uncommitted)**: Outbound delivery worklist segmentation implemented, status 'B' (Released) mapping fixed in `OutboundDeliveryAdapter.js`, `IsDeliverable` flag and KPI metrics enriched, and warning guidance for SAP Flexible Workflow added. All repository gates green (`cds compile`, `eslint`, `ui5lint`, `ui5 build`, Jest LE tests 71/71, full repo test suite 1068/1068, `git diff --check`).
 - **2026-09-23 11:00 IST (uncommitted)**: Journal entry role enforcement updated to strictly require `FinanceViewer` or `Admin`, closing the pending 403 test in `test/integration/fi/journalEntry.test.js` and establishing proper segregation of duties for financial accounting data. Gates green (`cds compile`, `eslint`, `ui5lint`, Jest FI tests 37/37, `git diff --check`).
 - **2026-09-22 13:59 IST (uncommitted)**: module-by-module pass closed the remaining audit residuals — Master Data (material-type scope config, customer defaults history-only, cache age shown), SD (no proposed dates/ship-to, totals only from real HeaderSet fields, no silent blank defaults), WM (GR no first-row proposals + lookup warnings, GI batch stock summed, no synthetic 9999/0), MM (failed supplier lookup flagged). Gates green (cds compile, eslint, jest 966/966, ui5lint, ui5 build, diff --check).
@@ -2132,7 +2133,8 @@
 - **2026-09-22 12:56 IST (uncommitted)**: audit items 13, 22, 23, 24, 26, 27, 40, 41, 42 applied; all gates green (cds compile, eslint, jest 959/959, ui5lint, ui5 build, diff --check). `999` DifferenceStorageType still open.
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm test`: **78 passed, 78 total test suites; 1068 passed, 1068 total tests (100% green)**.
+  - `npm test`: **81 passed, 81 total test suites; 1097 passed, 1097 total tests (100% green)**.
+  - `npm test -- test/unit/sd/`: **3 passed, 3 total test suites; 28 passed, 28 total tests (100% green)**.
   - `npm test -- test/unit/le/`: **4 passed, 4 total test suites; 71 passed, 71 total tests (100% green)**.
   - `npm test -- test/integration/fi/journalEntry.test.js`: **1 passed, 1 total test suite; 4 passed, 4 total tests (100% green)**.
   - `npm test -- test/unit/fi/`: **3 passed, 3 total test suites; 33 passed, 33 total tests (100% green)**.
@@ -2305,13 +2307,64 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Expose `releaseCreditDelivery` on the CAP outbound delivery service and Fiori Orders Due for Delivery screen when a delivery encounters credit hold; proceed with next pending items.
 
+## 2026-09-23 13:15 IST
+- **Agent**: Antigravity
+- **Change**: SD Customer Invoices Management & Follow-up Actions (`SD_CUSTOMER_INVOICES_MANAGE`) — Release to Accounting & Cancel Billing Document:
+  - **Live SAP S/4HANA Backend Proofs (DS4 Client 220)**:
+    - **PostBillingDocumentToAccounting**: Executed live against billing document `31000111`. SAP Gateway returned HTTP 200 OK and generated official FI Accounting Document `9000000100` in Fiscal Year `2026` (`AccountingTransferStatus: "C"`). Verified persisted directly in SAP backend.
+    - **Billing Document Creation & Cancellation**: Created billing document `31000112` for delivery `13000515`. Executed `CancelBillingDocument` against `31000112`. SAP Gateway returned HTTP 200 OK and generated official reversal billing document `90000053` (`BillingDocumentType: "S1"`, `SDDocumentCategory: "N"`). Verified persisted directly in SAP backend.
+  - **Integration Layer (`srv/integration/s4hana/sd/customer-invoice/`)**:
+    - `CustomerInvoiceAdapter.js`: Added S/4HANA Gateway adapter for `SD_CUSTOMER_INVOICES_MANAGE` providing `getCustomerInvoices` (with paging, filtering, search against `C_BillingDocument_F0797`), `postBillingDocumentToAccounting`, and `cancelBillingDocument`.
+  - **CAP Service Layer (`srv/sd/customer-invoice/`)**:
+    - `service.cds`: Created `CustomerInvoiceService` with projection `CustomerInvoices`, `getInvoiceMetrics`, and bound actions `releaseInvoiceToAccounting` and `cancelBillingDocument`.
+    - `service.js` & `customerInvoice.handler.js`: Implemented service handlers with authorization guards (`BillingAdmin`, `BillingClerk`, `Admin`), status validation, error classification, and metrics computation.
+  - **SAPUI5 / Fiori Presentation Layer (`app/fiori-app/`)**:
+    - `CustomerInvoiceService.js`: Frontend service wrapper managing OData V4 operations and fallback handling.
+    - `CustomerInvoices.view.xml`: Responsive worklist view with KPI header tiles (Total Invoices, Pending Accounting Release, Transferred to Accounting, Cancelled), IconTabBar filters, responsive Table with status formatters, and row action buttons ("Release to G/L", "Cancel").
+    - `CancelInvoiceDialog.fragment.xml`: Confirmation dialog showing warnings and confirming document cancellation.
+    - `CustomerInvoices.controller.js`: UI controller managing tab filters, search, busy dialogs, confirmation dialogs, success messages with document numbers, and live table refresh.
+    - Navigation & Manifest: Wired dataSource `customerInvoiceService`, model `customerInvoice`, route `customerInvoices` (`sd/invoices`), shell navigation header title, and dashboard tile under Overview and SD tabs.
+    - Internationalization: Added 24 translation keys to `i18n.properties` and `i18n_en.properties` with 100% key parity.
+    - Build: Generated preload bundle `Component-preload.js` via UI5 tooling.
+  - **Automated Tests**:
+    - `test/unit/sd/customerInvoiceAdapter.test.js`: 12/12 unit tests passed.
+    - `test/unit/sd/customerInvoiceHandler.test.js`: 10/10 unit tests passed.
+    - `test/unit/sd/customerInvoicesController.test.js`: 6/6 unit tests passed.
+  - **Files Created/Modified**:
+    - `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js` [NEW]
+    - `srv/sd/customer-invoice/service.cds` [NEW]
+    - `srv/sd/customer-invoice/service.js` [NEW]
+    - `srv/sd/customer-invoice/handlers/customerInvoice.handler.js` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-invoice/service/CustomerInvoiceService.js` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-invoice/view/CustomerInvoices.view.xml` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-invoice/view/CancelInvoiceDialog.fragment.xml` [NEW]
+    - `app/fiori-app/webapp/modules/sd/customer-invoice/controller/CustomerInvoices.controller.js` [NEW]
+    - `app/fiori-app/webapp/manifest.json`
+    - `app/fiori-app/webapp/Component.js`
+    - `app/fiori-app/webapp/controller/App.controller.js`
+    - `app/fiori-app/webapp/view/Dashboard.view.xml`
+    - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+    - `app/fiori-app/webapp/i18n/i18n.properties`
+    - `app/fiori-app/webapp/i18n/i18n_en.properties`
+    - `test/unit/sd/customerInvoiceAdapter.test.js` [NEW]
+    - `test/unit/sd/customerInvoiceHandler.test.js` [NEW]
+    - `test/unit/sd/customerInvoicesController.test.js` [NEW]
+  - **Executed Commands and Results**:
+    - `npm test`: 81 passed, 81 total test suites; 1097 passed, 1097 total tests (100% green).
+    - `npm test -- test/unit/sd/`: 3 passed, 3 total test suites; 28 passed, 28 total tests (100% green).
+    - `npm run lint`: 0 errors.
+    - `npm --prefix app/fiori-app run lint`: 0 findings.
+    - `cd app/fiori-app && npm run build`: Preload built cleanly.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Review with user and commit to `feature/CL01`.
+
 ## Next Steps
 0. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
 1. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
 2. Select next development-ready capability to build from the verified list:
    - Delivery without reference (`LE_SHP_QC_DLVNOREF_SRV`)
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
-   - Billing document follow-up & cancellation (`SD_CUSTOMER_INVOICES_MANAGE`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)
    - Reservation creation (`UI_RESERVATION_ITM_MNG_V2`)
 3. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.

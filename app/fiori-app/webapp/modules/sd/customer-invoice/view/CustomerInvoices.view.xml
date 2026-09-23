@@ -1,0 +1,268 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.sd.customer-invoice.controller.CustomerInvoices"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Page
+        id="customerInvoicesPage"
+        showHeader="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Header Toolbar & Title -->
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <Title text="{i18n>customerInvoicesTitle}" level="H2" titleStyle="H3" />
+                        <Text text="{i18n>customerInvoicesSubtitle}" class="textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <Button
+                            id="btnRefreshInvoices"
+                            icon="sap-icon://refresh"
+                            text="{i18n>btnRefresh}"
+                            type="Transparent"
+                            press=".onRefresh" />
+                    </HBox>
+                </HBox>
+
+                <!-- KPI Section -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile
+                        id="kpiTotalInvoices"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiTotalInvoicesTitle}"
+                        subheader="{i18n>kpiTotalInvoicesSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTotalInvoicesVal"
+                                value="{customerInvoicesView>/totalInvoices}"
+                                icon="sap-icon://sales-order-item"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiPendingAccounting"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiPendingAccountingTitle}"
+                        subheader="{i18n>kpiPendingAccountingSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiPendingAccountingVal"
+                                value="{customerInvoicesView>/pendingAccountingCount}"
+                                icon="sap-icon://pending"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiTransferredAccounting"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiTransferredTitle}"
+                        subheader="{i18n>kpiTransferredSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiTransferredVal"
+                                value="{customerInvoicesView>/transferredCount}"
+                                icon="sap-icon://accept"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiCancelledInvoices"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>kpiCancelledTitle}"
+                        subheader="{i18n>kpiCancelledSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiCancelledVal"
+                                value="{customerInvoicesView>/cancelledCount}"
+                                icon="sap-icon://sys-cancel"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- Customer Invoices Table -->
+                <Table
+                    id="tblCustomerInvoices"
+                    items="{
+                        path: 'customerInvoice>/CustomerInvoices',
+                        parameters: {
+                            $select: 'BillingDocument,BillingDocumentType,BillingDocumentTypeName,SoldToParty,SoldToPartyFullName,SDDocumentCategory,AccountingTransferStatus,AccountingDocument,FiscalYear,CompanyCode,TotalNetAmount,TaxAmount,TotalGrossAmount,TransactionCurrency,BillingDocumentDate,BillingDocumentIsCancelled,CancelledBillingDocument'
+                        }
+                    }"
+                    growing="true"
+                    growingThreshold="20"
+                    growingScrollToLoad="true"
+                    noDataText="{i18n>noInvoicesFound}">
+
+                    <headerToolbar>
+                        <OverflowToolbar id="toolbarInvoices">
+                            <Title
+                                id="titleInvoicesCount"
+                                text="{= ${customerInvoicesView>/displayCount} ? ${i18n>tableInvoicesCountTitle} + ' (' + ${customerInvoicesView>/displayCount} + ')' : ${i18n>tableInvoicesTitle} }"
+                                level="H3" />
+                            <ToolbarSpacer />
+
+                            <!-- Segmented Filter Buttons -->
+                            <SegmentedButton
+                                id="segBtnInvoiceFilter"
+                                selectedKey="{customerInvoicesView>/selectedTab}"
+                                selectionChange=".onTabSelect">
+                                <items>
+                                    <SegmentedButtonItem key="all" text="{i18n>tabAllInvoices}" />
+                                    <SegmentedButtonItem key="pending" text="{i18n>tabPendingAccounting}" />
+                                    <SegmentedButtonItem key="transferred" text="{i18n>tabTransferred}" />
+                                    <SegmentedButtonItem key="cancelled" text="{i18n>tabCancelled}" />
+                                </items>
+                            </SegmentedButton>
+
+                            <SearchField
+                                id="searchInvoices"
+                                width="250px"
+                                placeholder="{i18n>searchInvoicesPlaceholder}"
+                                search=".onSearch"
+                                liveChange=".onLiveSearch" />
+
+                            <Button
+                                id="btnTableRefresh"
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>btnRefresh}"
+                                type="Transparent"
+                                press=".onRefresh" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+
+                    <columns>
+                        <Column id="colBillingDocument" width="8rem">
+                            <Text text="{i18n>colBillingDocument}" />
+                        </Column>
+                        <Column id="colType" width="6rem">
+                            <Text text="{i18n>colBillingType}" />
+                        </Column>
+                        <Column id="colCustomer" minScreenWidth="Tablet" demandPopin="true">
+                            <Text text="{i18n>colCustomer}" />
+                        </Column>
+                        <Column id="colDate" minScreenWidth="Desktop" demandPopin="true" width="7rem">
+                            <Text text="{i18n>colBillingDate}" />
+                        </Column>
+                        <Column id="colNetAmount" minScreenWidth="Tablet" demandPopin="true" hAlign="End" width="8rem">
+                            <Text text="{i18n>colNetAmount}" />
+                        </Column>
+                        <Column id="colTaxAmount" minScreenWidth="Desktop" demandPopin="true" hAlign="End" width="7rem">
+                            <Text text="{i18n>colTaxAmount}" />
+                        </Column>
+                        <Column id="colGrossAmount" hAlign="End" width="8rem">
+                            <Text text="{i18n>colGrossAmount}" />
+                        </Column>
+                        <Column id="colAccountingStatus" width="10rem">
+                            <Text text="{i18n>colAccountingStatus}" />
+                        </Column>
+                        <Column id="colAccountingDocument" minScreenWidth="Desktop" demandPopin="true" width="9rem">
+                            <Text text="{i18n>colAccountingDocument}" />
+                        </Column>
+                        <Column id="colActions" width="14rem" hAlign="Center">
+                            <Text text="{i18n>colActions}" />
+                        </Column>
+                    </columns>
+
+                    <items>
+                        <ColumnListItem id="cliCustomerInvoice" vAlign="Middle">
+                            <cells>
+                                <!-- Document Number -->
+                                <ObjectIdentifier
+                                    id="txtInvoiceNumber"
+                                    title="{customerInvoice>BillingDocument}" />
+
+                                <!-- Type -->
+                                <Text
+                                    id="txtInvoiceType"
+                                    text="{customerInvoice>BillingDocumentType}" />
+
+                                <!-- Customer -->
+                                <VBox>
+                                    <Text
+                                        id="txtCustomerName"
+                                        text="{customerInvoice>SoldToPartyFullName}"
+                                        class="sapUiTinyMarginBottom" />
+                                    <Text
+                                        id="txtCustomerCode"
+                                        text="{customerInvoice>SoldToParty}"
+                                        class="textMuted" />
+                                </VBox>
+
+                                <!-- Date -->
+                                <Text
+                                    id="txtInvoiceDate"
+                                    text="{customerInvoice>BillingDocumentDate}" />
+
+                                <!-- Net Amount -->
+                                <ObjectNumber
+                                    id="numNetAmount"
+                                    number="{customerInvoice>TotalNetAmount}"
+                                    unit="{customerInvoice>TransactionCurrency}" />
+
+                                <!-- Tax Amount -->
+                                <ObjectNumber
+                                    id="numTaxAmount"
+                                    number="{customerInvoice>TaxAmount}"
+                                    unit="{customerInvoice>TransactionCurrency}" />
+
+                                <!-- Gross Amount -->
+                                <ObjectNumber
+                                    id="numGrossAmount"
+                                    number="{customerInvoice>TotalGrossAmount}"
+                                    unit="{customerInvoice>TransactionCurrency}"
+                                    state="Success" />
+
+                                <!-- Accounting Status -->
+                                <ObjectStatus
+                                    id="statusAccounting"
+                                    text="{= ${customerInvoice>BillingDocumentIsCancelled} ? ${i18n>statusCancelled} : (${customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>statusTransferredToAccounting} : ${i18n>statusPendingAccounting}) }"
+                                    state="{= ${customerInvoice>BillingDocumentIsCancelled} ? 'Error' : (${customerInvoice>AccountingTransferStatus} === 'C' ? 'Success' : 'Warning') }"
+                                    icon="{= ${customerInvoice>BillingDocumentIsCancelled} ? 'sap-icon://sys-cancel' : (${customerInvoice>AccountingTransferStatus} === 'C' ? 'sap-icon://accept' : 'sap-icon://pending') }" />
+
+                                <!-- Accounting Document -->
+                                <VBox>
+                                    <Text
+                                        id="txtAccountingDoc"
+                                        text="{= ${customerInvoice>AccountingDocument} ? ${customerInvoice>AccountingDocument} : '-' }" />
+                                    <Text
+                                        id="txtFiscalYear"
+                                        text="{= ${customerInvoice>FiscalYear} ? ('FY ' + ${customerInvoice>FiscalYear}) : '' }"
+                                        class="textMuted" />
+                                </VBox>
+
+                                <!-- Action Buttons -->
+                                <HBox justifyContent="Center" alignItems="Center">
+                                    <Button
+                                        id="btnReleaseToAccounting"
+                                        text="{i18n>btnReleaseToAccounting}"
+                                        icon="sap-icon://money-bills"
+                                        type="Accept"
+                                        class="sapUiTinyMarginEnd"
+                                        enabled="{= ${customerInvoice>AccountingTransferStatus} !== 'C' &amp;&amp; !${customerInvoice>BillingDocumentIsCancelled} }"
+                                        tooltip="{= ${customerInvoice>AccountingTransferStatus} === 'C' ? ${i18n>tooltipAlreadyTransferred} : (${customerInvoice>BillingDocumentIsCancelled} ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipReleaseToAccounting}) }"
+                                        press=".onReleaseToAccountingPress" />
+
+                                    <Button
+                                        id="btnCancelInvoice"
+                                        text="{i18n>btnCancelInvoice}"
+                                        icon="sap-icon://sys-cancel"
+                                        type="Reject"
+                                        enabled="{= !${customerInvoice>BillingDocumentIsCancelled} }"
+                                        tooltip="{= ${customerInvoice>BillingDocumentIsCancelled} ? ${i18n>tooltipInvoiceCancelled} : ${i18n>tooltipCancelInvoice} }"
+                                        press=".onCancelInvoicePress" />
+                                </HBox>
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

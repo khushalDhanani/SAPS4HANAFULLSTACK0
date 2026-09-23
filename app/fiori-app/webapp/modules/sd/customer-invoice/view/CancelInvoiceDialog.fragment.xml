@@ -1,0 +1,66 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.ui.layout.form">
+
+    <Dialog
+        id="cancelInvoiceDialog"
+        title="{i18n>cancelInvoiceDialogTitle}"
+        type="Message"
+        state="Warning"
+        contentWidth="450px">
+
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip
+                    text="{i18n>cancelInvoiceWarning}"
+                    type="Warning"
+                    showIcon="true"
+                    class="sapUiSmallMarginBottom" />
+
+                <f:SimpleForm
+                    editable="false"
+                    layout="ResponsiveGridLayout"
+                    labelSpanXL="4"
+                    labelSpanL="4"
+                    labelSpanM="4"
+                    labelSpanS="12"
+                    columnsM="1"
+                    columnsL="1"
+                    columnsXL="1">
+                    <f:content>
+                        <Label text="{i18n>colBillingDocument}" />
+                        <Text text="{cancelInvoiceModel>/BillingDocument}" />
+
+                        <Label text="{i18n>colBillingType}" />
+                        <Text text="{cancelInvoiceModel>/BillingDocumentType} - {cancelInvoiceModel>/BillingDocumentTypeName}" />
+
+                        <Label text="{i18n>colSoldToParty}" />
+                        <Text text="{cancelInvoiceModel>/SoldToPartyFullName} ({cancelInvoiceModel>/SoldToParty})" />
+
+                        <Label text="{i18n>colGrossAmount}" />
+                        <ObjectNumber
+                            number="{cancelInvoiceModel>/TotalGrossAmount}"
+                            unit="{cancelInvoiceModel>/TransactionCurrency}" />
+                    </f:content>
+                </f:SimpleForm>
+            </VBox>
+        </content>
+
+        <beginButton>
+            <Button
+                id="btnConfirmCancelInvoice"
+                text="{i18n>btnConfirmCancelInvoice}"
+                type="Reject"
+                icon="sap-icon://sys-cancel"
+                press=".onConfirmCancelInvoice" />
+        </beginButton>
+
+        <endButton>
+            <Button
+                id="btnCloseCancelInvoiceDialog"
+                text="{i18n>btnCancel}"
+                press=".onCloseCancelInvoiceDialog" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

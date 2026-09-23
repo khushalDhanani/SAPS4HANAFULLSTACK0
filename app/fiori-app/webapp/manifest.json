@@ -65,6 +65,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "customerInvoiceService": {
+        "uri": "/odata/v4/customer-invoice/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -143,6 +151,13 @@
       },
       "outboundDelivery": {
         "dataSource": "outboundDeliveryService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "customerInvoice": {
+        "dataSource": "customerInvoiceService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -240,6 +255,11 @@
           "name": "ordersDueForDelivery",
           "pattern": "le/orders-due",
           "target": "TargetOrdersDueForDelivery"
+        },
+        {
+          "name": "customerInvoices",
+          "pattern": "sd/invoices",
+          "target": "TargetCustomerInvoices"
         }
       ],
       "targets": {
@@ -310,6 +330,11 @@
           "id": "ordersDueForDelivery",
           "name": "OrdersDueForDelivery",
           "path": "saps4hana.fiori.modules.le.outbound-delivery.view"
+        },
+        "TargetCustomerInvoices": {
+          "id": "customerInvoices",
+          "name": "CustomerInvoices",
+          "path": "saps4hana.fiori.modules.sd.customer-invoice.view"
         }
       }
     }

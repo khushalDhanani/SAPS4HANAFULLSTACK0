@@ -529,6 +529,11 @@
                                             <NumericContent icon="sap-icon://shipping-status" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tileSDCustomerInvoices" header="{i18n>tileCustomerInvoicesTitle}" subheader="{i18n>tileCustomerInvoicesSub}" press=".onNavigateToCustomerInvoices" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>tileCustomerInvoicesUnit}">
+                                            <NumericContent icon="sap-icon://money-bills" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                 </HBox>
                             </VBox>
                         </IconTabFilter>
