@@ -33,6 +33,9 @@ sap.ui.define([
                 readyCount: "-",
                 inApprovalCount: "-",
                 shippingPointCount: "-",
+                distinctOrdersCount: "-",
+                readyOrdersCount: "-",
+                inApprovalOrdersCount: "-",
                 displayCount: "-",
                 selectedTab: "ready",
                 canCreateDelivery: bCanCreateDelivery
@@ -111,11 +114,17 @@ sap.ui.define([
                     var nReady = bOk && typeof oMetrics.readyToDeliverCount === "number" ? oMetrics.readyToDeliverCount : "-";
                     var nApproval = bOk && typeof oMetrics.inApprovalCount === "number" ? oMetrics.inApprovalCount : "-";
                     var nSP = bOk ? oMetrics.shippingPointCount : "-";
+                    var nOrdersTotal = bOk && typeof oMetrics.distinctOrdersCount === "number" ? oMetrics.distinctOrdersCount : "-";
+                    var nOrdersReady = bOk && typeof oMetrics.readyOrdersCount === "number" ? oMetrics.readyOrdersCount : "-";
+                    var nOrdersApproval = bOk && typeof oMetrics.inApprovalOrdersCount === "number" ? oMetrics.inApprovalOrdersCount : "-";
 
                     oViewModel.setProperty("/totalCount", nTotal);
                     oViewModel.setProperty("/readyCount", nReady);
                     oViewModel.setProperty("/inApprovalCount", nApproval);
                     oViewModel.setProperty("/shippingPointCount", nSP);
+                    oViewModel.setProperty("/distinctOrdersCount", nOrdersTotal);
+                    oViewModel.setProperty("/readyOrdersCount", nOrdersReady);
+                    oViewModel.setProperty("/inApprovalOrdersCount", nOrdersApproval);
 
                     var sTab = oViewModel.getProperty("/selectedTab") || "ready";
                     var sDisplay = sTab === "ready" ? nReady : (sTab === "inApproval" ? nApproval : nTotal);
@@ -126,6 +135,9 @@ sap.ui.define([
                     oViewModel.setProperty("/readyCount", "-");
                     oViewModel.setProperty("/inApprovalCount", "-");
                     oViewModel.setProperty("/shippingPointCount", "-");
+                    oViewModel.setProperty("/distinctOrdersCount", "-");
+                    oViewModel.setProperty("/readyOrdersCount", "-");
+                    oViewModel.setProperty("/inApprovalOrdersCount", "-");
                     oViewModel.setProperty("/displayCount", "-");
                 });
         },

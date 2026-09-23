@@ -743,7 +743,9 @@ sap.ui.define([
 
             SalesOrderService.createSalesOrder(oPayload).then(function (sOrderId) {
                 BusyIndicator.hide();
-                MessageBox.success("Sales Order " + sOrderId + " has been successfully created in SAP S/4HANA.", {
+                var sSuccessMsg = (typeof that.getText === "function" && that.getText("msgOrderCreatedInApproval", [sOrderId])) ||
+                    ("Sales Order " + sOrderId + " has been successfully created in SAP S/4HANA (Approval Status: In Approval via SAP Flexible Workflow WS02000006). An authorized approver must release the order before an outbound delivery can be created.");
+                MessageBox.success(sSuccessMsg, {
                     title: "Sales Order Created",
                     actions: ["Create Another", "Worklist", "Close"],
                     emphasizedAction: "Worklist",

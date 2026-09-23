@@ -33,7 +33,7 @@
                         id="kpiReadyOrders"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
                         header="{i18n>ordersDueKpiReady}"
-                        subheader="{i18n>ordersDueKpiReadySub}">
+                        subheader="{= (${ordersDueView>/readyOrdersCount} !== '-' &amp;&amp; ${ordersDueView>/readyOrdersCount} !== undefined) ? (${ordersDueView>/readyOrdersCount} + ' orders (' + ${ordersDueView>/readyCount} + ' lines)') : ${i18n>ordersDueKpiReadySub} }">
                         <TileContent>
                             <NumericContent
                                 id="kpiReadyOrdersVal"
@@ -47,7 +47,7 @@
                         id="kpiInApprovalOrders"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
                         header="{i18n>ordersDueKpiInApproval}"
-                        subheader="{i18n>ordersDueKpiInApprovalSub}">
+                        subheader="{= (${ordersDueView>/inApprovalOrdersCount} !== '-' &amp;&amp; ${ordersDueView>/inApprovalOrdersCount} !== undefined) ? (${ordersDueView>/inApprovalOrdersCount} + ' orders (' + ${ordersDueView>/inApprovalCount} + ' lines)') : ${i18n>ordersDueKpiInApprovalSub} }">
                         <TileContent>
                             <NumericContent
                                 id="kpiInApprovalOrdersVal"
@@ -61,7 +61,7 @@
                         id="kpiDueOrders"
                         class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
                         header="{i18n>ordersDueKpiTotal}"
-                        subheader="{i18n>ordersDueKpiTotalSub}">
+                        subheader="{= (${ordersDueView>/distinctOrdersCount} !== '-' &amp;&amp; ${ordersDueView>/distinctOrdersCount} !== undefined) ? (${ordersDueView>/distinctOrdersCount} + ' orders (' + ${ordersDueView>/totalCount} + ' lines)') : ${i18n>ordersDueKpiTotalSub} }">
                         <TileContent>
                             <NumericContent
                                 id="kpiDueOrdersVal"

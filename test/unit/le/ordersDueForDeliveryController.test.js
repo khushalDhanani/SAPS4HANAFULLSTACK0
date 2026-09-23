@@ -174,7 +174,10 @@ describe("OrdersDueForDelivery Controller", () => {
             scheduleLineCount: 57,
             readyToDeliverCount: 42,
             inApprovalCount: 12,
-            shippingPointCount: 3
+            shippingPointCount: 3,
+            distinctOrdersCount: 38,
+            readyOrdersCount: 29,
+            inApprovalOrdersCount: 8
         });
         controller.onInit();
         await Promise.resolve();
@@ -186,6 +189,9 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(viewModel.getProperty("/readyCount")).toBe(42);
         expect(viewModel.getProperty("/inApprovalCount")).toBe(12);
         expect(viewModel.getProperty("/shippingPointCount")).toBe(3);
+        expect(viewModel.getProperty("/distinctOrdersCount")).toBe(38);
+        expect(viewModel.getProperty("/readyOrdersCount")).toBe(29);
+        expect(viewModel.getProperty("/inApprovalOrdersCount")).toBe(8);
         expect(viewModel.getProperty("/displayCount")).toBe(42);
     });
 
@@ -200,6 +206,9 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(viewModel.getProperty("/readyCount")).toBe("-");
         expect(viewModel.getProperty("/inApprovalCount")).toBe("-");
         expect(viewModel.getProperty("/shippingPointCount")).toBe("-");
+        expect(viewModel.getProperty("/distinctOrdersCount")).toBe("-");
+        expect(viewModel.getProperty("/readyOrdersCount")).toBe("-");
+        expect(viewModel.getProperty("/inApprovalOrdersCount")).toBe("-");
         expect(viewModel.getProperty("/displayCount")).toBe("-");
     });
 

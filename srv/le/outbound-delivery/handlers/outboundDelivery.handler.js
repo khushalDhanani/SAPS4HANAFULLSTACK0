@@ -126,18 +126,30 @@ function registerOutboundDeliveryHandlers(srv) {
         throw new Error('Orders due for delivery could not be read from S/4HANA');
       }
       const shippingPoints = new Set();
+      const distinctOrders = new Set();
+      const readyOrders = new Set();
+      const inApprovalOrders = new Set();
       let readyToDeliverCount = 0;
       let inApprovalCount = 0;
       for (const r of rows) {
-        if (r && r.ShippingPoint) shippingPoints.add(r.ShippingPoint);
-        if (r && r.IsDeliverable) readyToDeliverCount++;
-        if (r && r.SalesDocApprovalStatus === 'A') inApprovalCount++;
+        if (!r) continue;
+        if (r.ShippingPoint) shippingPoints.add(r.ShippingPoint);
+        if (r.SalesOrder) {
+          distinctOrders.add(r.SalesOrder);
+          if (r.IsDeliverable) readyOrders.add(r.SalesOrder);
+          if (r.SalesDocApprovalStatus === 'A') inApprovalOrders.add(r.SalesOrder);
+        }
+        if (r.IsDeliverable) readyToDeliverCount++;
+        if (r.SalesDocApprovalStatus === 'A') inApprovalCount++;
       }
       return {
         scheduleLineCount: rows.length,
         readyToDeliverCount,
         inApprovalCount,
-        shippingPointCount: shippingPoints.size
+        shippingPointCount: shippingPoints.size,
+        distinctOrdersCount: distinctOrders.size,
+        readyOrdersCount: readyOrders.size,
+        inApprovalOrdersCount: inApprovalOrders.size
       };
     } catch (err) {
       LOG.error(`Failed to compute orders-due metrics: ${err.message}`);

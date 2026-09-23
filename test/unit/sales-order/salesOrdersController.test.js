@@ -206,6 +206,28 @@ describe("SalesOrders Controller", () => {
         expect(controller.formatter.statusState("C")).toBe("Success");
     });
 
+    test("formatter translates SalesDocApprovalStatus to labels, semantic states, and icons", () => {
+        expect(controller.formatter.approvalStatusText("A")).toBe("In Approval");
+        expect(controller.formatter.approvalStatusText("B")).toBe("Released");
+        expect(controller.formatter.approvalStatusText("C")).toBe("Rejected");
+        expect(controller.formatter.approvalStatusText("D")).toBe("To Be Reworked");
+        expect(controller.formatter.approvalStatusText("")).toBe("Not Relevant");
+        expect(controller.formatter.approvalStatusText("unknown")).toBe("Unknown");
+
+        expect(controller.formatter.approvalStatusState("A")).toBe("Warning");
+        expect(controller.formatter.approvalStatusState("B")).toBe("Success");
+        expect(controller.formatter.approvalStatusState("C")).toBe("Error");
+        expect(controller.formatter.approvalStatusState("D")).toBe("Warning");
+        expect(controller.formatter.approvalStatusState("unknown")).toBe("Warning");
+        expect(controller.formatter.approvalStatusState("")).toBe("None");
+
+        expect(controller.formatter.approvalStatusIcon("A")).toBe("sap-icon://pending");
+        expect(controller.formatter.approvalStatusIcon("B")).toBe("sap-icon://accept");
+        expect(controller.formatter.approvalStatusIcon("C")).toBe("sap-icon://decline");
+        expect(controller.formatter.approvalStatusIcon("D")).toBe("sap-icon://reopen-page");
+        expect(controller.formatter.approvalStatusIcon("")).toBe("");
+    });
+
     test("onUpdateFinished updates totalCount from binding $count parameter without scraping loaded rows", () => {
         controller.onInit();
 

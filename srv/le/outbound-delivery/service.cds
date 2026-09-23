@@ -80,9 +80,12 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getOrdersDueMetrics() returns {
-        scheduleLineCount  : Integer;
-        readyToDeliverCount: Integer;
-        inApprovalCount    : Integer;
-        shippingPointCount : Integer;
+        scheduleLineCount     : Integer;
+        readyToDeliverCount   : Integer;
+        inApprovalCount       : Integer;
+        shippingPointCount    : Integer;
+        distinctOrdersCount   : Integer;
+        readyOrdersCount      : Integer;
+        inApprovalOrdersCount : Integer;
     };
 }
