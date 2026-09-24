@@ -3,6 +3,20 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-24 16:20 IST
+- **Agent**: Antigravity
+- **Change**: Fix MTA Validation descriptor check in CI pipeline by excluding unbuilt generation paths (`mbt validate -x paths`):
+  1. **Root Cause**: In headless CI environments (and pre-build states), build artifact directories (`gen/srv`, `gen/db`, `gen`) are generated during `before-all` build commands (`npx cds build --production`). When `mbt validate` was executed directly, it failed with semantic validation errors reporting that unbuilt generated paths did not exist.
+  2. **Solution Delivered**:
+     - Configured `"validate:mta": "mbt validate -x paths"` in `package.json`.
+     - Validates MTA schema, modules, resources, bindings, parameters, and references without false-failing on unbuilt build-generation paths.
+  3. **Files Modified**:
+     - `package.json`
+     - `WORKSTATUS.md`
+  4. **Validation Results**:
+     - `npm run validate:mta`: **Passed with exit code 0 (`[INFO] validating the MTA project`)**.
+     - `git diff --check`: **Clean (0 errors)**.
+
 ## 2026-09-24 16:15 IST
 - **Agent**: Antigravity
 - **Change**: Fix CI Headless Test Pipeline Failure in GitHub Actions and Achieve 100% Green Test Suite (85/85 suites, 1,227/1,227 tests):

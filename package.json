@@ -14,7 +14,7 @@
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "jest test/e2e --runInBand",
     "lint": "eslint .",
-    "validate:mta": "mbt validate",
+    "validate:mta": "mbt validate -x paths",
     "build:mta": "mbt build"
   },
   "license": "ISC",
