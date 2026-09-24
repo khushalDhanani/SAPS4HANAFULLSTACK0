@@ -13,6 +13,10 @@
   ],
   "CompanyCodeVH": [
     {
+      "CompanyCode": "1000",
+      "CompanyCodeName": "Aether Industries Limited"
+    },
+    {
       "CompanyCode": "1010",
       "CompanyCodeName": "Company Code 1010"
     }
@@ -34,13 +38,15 @@
       "Supplier": "10300001",
       "SupplierName": "Domestic Supplier 1",
       "CityName": "Walldorf",
-      "CompanyCode": "1000"
+      "CompanyCode": "1000",
+      "SupplierAccountGroup": "ZDOM"
     },
     {
       "Supplier": "10300002",
       "SupplierName": "Domestic Supplier 2",
       "CityName": "Berlin",
-      "CompanyCode": "1000"
+      "CompanyCode": "1000",
+      "SupplierAccountGroup": "ZDOM"
     }
   ],
   "MaterialVH": [

@@ -161,11 +161,28 @@ sap.ui.define([
                 sField = FILTER_ID_MAP[sControlId] || sControlId;
             }
 
-            if (sField === "Supplier" || sField === "PurchasingOrganization") {
+            if (sField === "Supplier") {
                 var oFbCompanyCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
                 var sCoCode = oFbCompanyCode && typeof oFbCompanyCode.getValue === "function" ? oFbCompanyCode.getValue().trim() : "";
                 if (sCoCode) {
                     aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode));
+                }
+                var oFbDocType = typeof this.byId === "function" ? this.byId("fbDocType") : null;
+                var sDocType = oFbDocType && typeof oFbDocType.getValue === "function" ? oFbDocType.getValue().trim() : "";
+                if (sDocType === "ZDOM") {
+                    aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZDOM"));
+                }
+            } else if (sField === "PurchasingOrganization") {
+                var oFbCompanyCodePurch = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
+                var sCoCodePurch = oFbCompanyCodePurch && typeof oFbCompanyCodePurch.getValue === "function" ? oFbCompanyCodePurch.getValue().trim() : "";
+                if (sCoCodePurch) {
+                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCodePurch));
+                }
+            } else if (sField === "CompanyCode") {
+                var oFbDocTypeComp = typeof this.byId === "function" ? this.byId("fbDocType") : null;
+                var sDocTypeComp = oFbDocTypeComp && typeof oFbDocTypeComp.getValue === "function" ? oFbDocTypeComp.getValue().trim() : "";
+                if (sDocTypeComp === "ZDOM") {
+                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, "1000"));
                 }
             } else if (sField === "PurchaseOrderType") {
                 aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.StartsWith, "Z"));

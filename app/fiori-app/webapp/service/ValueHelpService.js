@@ -24,7 +24,7 @@ sap.ui.define([
 
     var oValueHelpConfig = {
         "/DocumentTypeVH": { title: "Select Document Type", key: "PurchasingDocumentType", desc: "PurchasingDocumentType_Text" },
-        "/CompanyCodeVH": { title: "Select Company Code", key: "CompanyCode", desc: "CompanyCodeName" },
+        "/CompanyCodeVH": { title: "Select Company Code", key: "CompanyCode", desc: "CompanyCodeName", info: "CompanyCode" },
         "/PurchasingOrgVH": { title: "Select Purchasing Org", key: "PurchasingOrganization", desc: "PurchasingOrganizationName" },
         "/PurchasingGroupVH": { title: "Select Purchasing Group", key: "PurchasingGroup", desc: "PurchasingGroupName" },
         "/SupplierVH": { title: "Select Supplier", key: "Supplier", desc: "SupplierName", info: "CompanyCode" },
@@ -188,8 +188,25 @@ sap.ui.define([
                 return;
             }
 
+            var sDialogTitle = oConf.title;
+            if (sPath === "/SupplierVH") {
+                var bHasZDomFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "SupplierAccountGroup" && (f.oValue1 === "ZDOM" || f.sValue === "ZDOM");
+                });
+                if (bHasZDomFilter) {
+                    sDialogTitle = "Select Domestic Supplier";
+                }
+            } else if (sPath === "/CompanyCodeVH") {
+                var bHasDomCoFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "CompanyCode" && (f.oValue1 === "1000" || f.sValue === "1000");
+                });
+                if (bHasDomCoFilter) {
+                    sDialogTitle = "Select Domestic Company Code";
+                }
+            }
+
             var oSelectDialog = new SelectDialog({
-                title: oConf.title,
+                title: sDialogTitle,
                 contentWidth: "42rem",
                 growing: true,
                 growingThreshold: 50,
@@ -239,6 +256,7 @@ sap.ui.define([
                             oSelectedData.OrganizationBPName1 = oSelectedData.OrganizationBPName1 || oBindingContext.getProperty("OrganizationBPName1") || "";
                             oSelectedData.CityName = oSelectedData.CityName || oBindingContext.getProperty("CityName") || "";
                             oSelectedData.Country = oSelectedData.Country || oBindingContext.getProperty("Country") || "";
+                            oSelectedData.SupplierAccountGroup = oSelectedData.SupplierAccountGroup || oBindingContext.getProperty("SupplierAccountGroup") || "";
 
                             oSelectedData.Material = oSelectedData.Material || oBindingContext.getProperty("Material") || sKey;
                             oSelectedData.MaterialName = oSelectedData.MaterialName || oBindingContext.getProperty("MaterialName") || oBindingContext.getProperty("Material_Text") || oSelectedItem.getDescription() || "";
@@ -277,7 +295,9 @@ sap.ui.define([
                 if (sPath === "/MaterialVH") {
                     oTemplateConfig.info = "{= ${MaterialType} ? (${MaterialType} + (${MaterialBaseUnit} ? ' • ' + ${MaterialBaseUnit} : '')) : (${MaterialBaseUnit} || '') }";
                 } else if (sPath === "/SupplierVH") {
-                    oTemplateConfig.info = "{= ${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '' }";
+                    oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : '') + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
+                } else if (sPath === "/CompanyCodeVH") {
+                    oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic' : '' }";
                 } else if (sPath === "/PlantVH") {
                     oTemplateConfig.info = "{= ${PurchasingOrganization} ? 'PurchOrg ' + ${PurchasingOrganization} : '' }";
                 } else if (sPath === "/StorageLocationVH") {

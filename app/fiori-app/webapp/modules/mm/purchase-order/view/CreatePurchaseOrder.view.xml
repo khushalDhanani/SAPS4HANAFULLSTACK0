@@ -95,7 +95,7 @@
                                     change=".onCompanyCodeChange" liveChange=".onCompanyCodeChange" suggestionItemSelected=".onCompanyCodeSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CompanyCodeVH', templateShareable: false}">
                                     <suggestionItems>
-                                        <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{CompanyCodeName}" />
+                                        <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{= ${CompanyCodeName} + (${CompanyCode} === '1000' ? ' [Domestic]' : '') }" />
                                     </suggestionItems>
                                 </Input>
 
@@ -165,7 +165,7 @@
                                     change=".onSupplierChange" liveChange=".onSupplierLiveChange" suggestionItemSelected=".onSupplierSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/SupplierVH', templateShareable: false}">
                                     <suggestionItems>
-                                        <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{= ${SupplierName} + (${CompanyCode} ? ' (' + ${CompanyCode} + ')' : '') }" />
+                                        <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{= ${SupplierName} + (${SupplierAccountGroup} === 'ZDOM' ? ' [Domestic]' : '') + (${CompanyCode} ? ' (' + ${CompanyCode} + ')' : '') }" />
                                     </suggestionItems>
                                 </Input>
 

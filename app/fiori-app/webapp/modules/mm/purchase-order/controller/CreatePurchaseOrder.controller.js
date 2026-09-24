@@ -70,6 +70,8 @@ sap.ui.define([
                 if (oCurrentModel) {
                     PurchaseOrderModel.applyConfigurationDefaults(oCurrentModel, oConfigData);
                     PurchaseOrderModel.updateStatus(oCurrentModel);
+                    that._refreshSupplierBinding();
+                    that._refreshCompanyCodeBinding();
                 }
                 return oConfigData;
             }).catch(function (err) {
@@ -109,6 +111,7 @@ sap.ui.define([
             var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
             var sCurrentVal = sVal !== null && sVal !== undefined ? sVal : (oModel.getProperty("/header/PurchaseOrderType") || "");
             PurchaseOrderModel.setDocumentType(oModel, sCurrentVal, this._oConfigData);
+            this._onDocTypeSelectedCheck(sCurrentVal);
         },
 
         /**
@@ -122,6 +125,7 @@ sap.ui.define([
                 var sText = (typeof oItem.getAdditionalText === "function" && oItem.getAdditionalText()) || (typeof oItem.getText === "function" && oItem.getText()) || "";
                 var oModel = this.getView().getModel("newPO");
                 PurchaseOrderModel.setDocumentType(oModel, sKey, this._oConfigData, sText);
+                this._onDocTypeSelectedCheck(sKey);
             }
         },
 
@@ -150,6 +154,9 @@ sap.ui.define([
             }
             if ((sField === "CompanyCode" || sField === "PurchasingOrganization") && this._oConfigData) {
                 PurchaseOrderModel.validateCompanyCodePurchasingOrg(oModel, this._oConfigData);
+            }
+            if (sField === "CompanyCode") {
+                this._refreshSupplierBinding();
             }
             PurchaseOrderModel.validateSingleField(oModel, sField);
             PurchaseOrderModel.updateStatus(oModel);
@@ -580,7 +587,21 @@ sap.ui.define([
                 // Header fields
                 if (sField === "PurchaseOrderType" || sField === "PurchaseOrderTypeText") {
                     aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.StartsWith, "Z"));
-                } else if (sField === "Supplier" || sField === "PurchasingOrganization") {
+                } else if (sField === "CompanyCode") {
+                    var sDocTypeComp = oModel.getProperty("/header/PurchaseOrderType");
+                    if (sDocTypeComp && String(sDocTypeComp).trim().toUpperCase() === "ZDOM") {
+                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, "1000"));
+                    }
+                } else if (sField === "Supplier") {
+                    var sCompanyCode = oModel.getProperty("/header/CompanyCode");
+                    if (sCompanyCode && String(sCompanyCode).trim() !== "") {
+                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
+                    }
+                    var sDocType = oModel.getProperty("/header/PurchaseOrderType");
+                    if (sDocType && String(sDocType).trim().toUpperCase() === "ZDOM") {
+                        aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZDOM"));
+                    }
+                } else if (sField === "PurchasingOrganization") {
                     var sCompanyCode = oModel.getProperty("/header/CompanyCode");
                     if (sCompanyCode && String(sCompanyCode).trim() !== "") {
                         aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
@@ -589,6 +610,76 @@ sap.ui.define([
             }
 
             return aFilters;
+        },
+
+        /**
+         * Re-applies active contextual filters (e.g. CompanyCode, SupplierAccountGroup for ZDOM)
+         * to the inSupplier suggestion items binding so autocomplete suggestions strictly reflect
+         * the current document type context.
+         * @private
+         */
+        _refreshSupplierBinding: function () {
+            var oSupplierInput = typeof this.byId === "function" ? this.byId("inSupplier") : null;
+            if (oSupplierInput && typeof oSupplierInput.getBinding === "function") {
+                var oBinding = oSupplierInput.getBinding("suggestionItems");
+                if (oBinding && typeof oBinding.filter === "function") {
+                    var aFilters = this._buildContextFilters(oSupplierInput);
+                    oBinding.filter(aFilters);
+                }
+            }
+        },
+
+        /**
+         * Re-applies active contextual filters (e.g. CompanyCode eq 1000 for ZDOM)
+         * to the inCompanyCode suggestion items binding so autocomplete suggestions strictly reflect
+         * the current document type context.
+         * @private
+         */
+        _refreshCompanyCodeBinding: function () {
+            var oCompanyInput = typeof this.byId === "function" ? this.byId("inCompanyCode") : null;
+            if (oCompanyInput && typeof oCompanyInput.getBinding === "function") {
+                var oBinding = oCompanyInput.getBinding("suggestionItems");
+                if (oBinding && typeof oBinding.filter === "function") {
+                    var aFilters = this._buildContextFilters(oCompanyInput);
+                    oBinding.filter(aFilters);
+                }
+            }
+        },
+
+        /**
+         * Checks supplier and company validity against the newly selected document type.
+         * If ZDOM is selected and the supplier is known to be non-domestic, displays a warning.
+         * If ZDOM is selected and the company code is not 1000, displays a warning.
+         * @param {string} sDocType
+         * @private
+         */
+        _onDocTypeSelectedCheck: function (sDocType) {
+            this._refreshSupplierBinding();
+            this._refreshCompanyCodeBinding();
+            var oModel = this.getView().getModel("newPO");
+            if (!oModel) return;
+            var sCleanDocType = String(sDocType || "").trim().toUpperCase();
+            if (sCleanDocType === "ZDOM") {
+                var sExistingSupplier = oModel.getProperty("/header/Supplier");
+                var sExistingAccountGroup = oModel.getProperty("/header/SupplierAccountGroup");
+                if (sExistingSupplier && sExistingAccountGroup && sExistingAccountGroup !== "ZDOM") {
+                    PurchaseOrderModel.setFieldValidation(
+                        oModel,
+                        "Supplier",
+                        "Warning",
+                        this.getText("poValSupplierNotDomestic", null, "Selected supplier is not a domestic supplier. Please choose a domestic supplier for document type ZDOM.")
+                    );
+                }
+                var sExistingCoCode = oModel.getProperty("/header/CompanyCode");
+                if (sExistingCoCode && sExistingCoCode !== "1000") {
+                    PurchaseOrderModel.setFieldValidation(
+                        oModel,
+                        "CompanyCode",
+                        "Warning",
+                        this.getText("poValCompanyCodeNotDomestic", null, "Selected Company Code is not a domestic company for document type ZDOM (expected 1000 - Aether Industries Limited).")
+                    );
+                }
+            }
         },
 
         onValueHelpRequest: function (oEvent) {
@@ -653,6 +744,7 @@ sap.ui.define([
                                    (oData && (oData.PurchasingDocumentType_Text || oData.PurchasingDocumentType)) ||
                                    (sKey === oDefaultDoc.code ? oDefaultDoc.text : sKey);
                     PurchaseOrderModel.setDocumentType(oModel, sKey, this._oConfigData, sDocText);
+                    this._onDocTypeSelectedCheck(sKey);
                     break;
 
                 case "Supplier":
@@ -661,10 +753,18 @@ sap.ui.define([
                     if (oData && oData.CompanyCode && !oModel.getProperty("/header/CompanyCode")) {
                         oModel.setProperty("/header/CompanyCode", oData.CompanyCode);
                     }
+                    if (oData && oData.SupplierAccountGroup) {
+                        oModel.setProperty("/header/SupplierAccountGroup", oData.SupplierAccountGroup);
+                    }
                     this.onSupplierChange(sKey);
                     break;
 
                 case "CompanyCode":
+                    oModel.setProperty("/header/" + sField, sKey);
+                    PurchaseOrderModel.markUserModified(oModel, sField, true);
+                    this._onFieldChange(sField);
+                    this._refreshSupplierBinding();
+                    break;
                 case "PurchasingOrganization":
                 case "PurchasingGroup":
                 case "Currency":

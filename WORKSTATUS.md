@@ -3,6 +3,104 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-24 17:45 IST
+- **Agent**: Antigravity
+- **Change**: Restrict Company Code Value Help, Suggestions, and FilterBar to Domestic Company (`CompanyCode eq '1000'`) when `ZDOM` Document Type is Selected:
+  1. **User Requirement & Problem Statement**:
+     - In Create PO (`/mm/purchase-orders/create`), when Order Type = `ZDOM`, show only Domestic Company in the Company selection.
+     - Previously, the Company Code input (`inCompanyCode`) displayed all company codes available in SAP S/4HANA (70+ generic/template company codes, plus `2000` Aether Specialty Chem Ltd).
+  2. **SAP S/4HANA Backend & Metadata Discovery**:
+     - Verified live SAP S/4HANA entity `C_MM_CompanyCodeValueHelp` (`CompanyCodeVH`).
+     - In SAP S/4HANA Purchasing Document Types configuration, document type `ZDOM` has description `"Dom. Aether In.LTD."` which designates company code `1000` (*Aether Industries Limited*). In contrast, document type `ZDOS` corresponds to `"Dom.Aether Spec.Chem"` (*Company code `2000`*).
+     - Confirmed that for `ZDOM`, the Domestic Company is strictly Company Code `1000`.
+  3. **Solutions Delivered**:
+     - **Contextual Filtering in `CreatePurchaseOrder.controller.js`**:
+       Updated `_buildContextFilters` for `sField === "CompanyCode"` to check `PurchaseOrderType`. When `ZDOM` is active, appends `new Filter("CompanyCode", FilterOperator.EQ, "1000")`.
+     - **Dynamic Autocomplete & Suggestion Binding Synchronization**:
+       Added `_refreshCompanyCodeBinding()` method and wired it to `onDocTypeChange`, `onDocTypeSelect`, `_loadConfigurationAndDefaults`, and `_handleValueHelpSelected` so `suggestionItems` for `inCompanyCode` are instantly restricted to `1000` when `ZDOM` is chosen.
+     - **Proactive Validation Warning on Mismatched Company Code**:
+       Enhanced `_onDocTypeSelectedCheck` to alert the user with a localized warning (`poValCompanyCodeNotDomestic`) if `ZDOM` is selected while a non-1000 company code is currently populated in header state.
+     - **Enhanced Value Help Dialog & Item Badging (`ValueHelpService.js`)**:
+       - Dynamically updates dialog title to `"Select Domestic Company Code"` when `CompanyCode eq '1000'` filter is present.
+       - Badges Company Code `1000` with `"Domestic"` in `StandardListItem` info property.
+       - Configured `info: "CompanyCode"` in `oValueHelpConfig["/CompanyCodeVH"]`.
+     - **Suggestion Item Visual Cues (`CreatePurchaseOrder.view.xml`)**:
+       Enhanced `inCompanyCode` `suggestionItems` `additionalText` template expression to append `' [Domestic]'` when `CompanyCode === '1000'`.
+     - **FilterBar Context Filtering (`PurchaseOrders.controller.js`)**:
+       Updated list report `_buildFilterBarContextFilters` to apply `CompanyCode eq '1000'` when `fbDocType` is filtered to `ZDOM`.
+     - **Localization (`i18n.properties`)**:
+       Added `poValCompanyCodeNotDomestic=Company code {0} is not a domestic company (1000 is required for ZDOM)`.
+     - **Unit & Integration Test Coverage**:
+       - Added 4 new unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` validating CompanyCode context filter generation for `ZDOM`, binding refresh via `_refreshCompanyCodeBinding`, and warning state when a non-1000 company code is selected.
+       - Updated `CompanyCodeVH` test fixtures in `test/fixtures/purchase-order/valueHelps.json`.
+  4. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+     - `app/fiori-app/webapp/service/ValueHelpService.js`
+     - `app/fiori-app/webapp/i18n/i18n.properties`
+     - `test/fixtures/purchase-order/valueHelps.json`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  5. **Validation Results**:
+     - `npm test`: **88/88 test suites passed, 1,279/1,279 tests passed (100% green)**.
+     - `npx jest test/unit/purchase-order/`: **23/23 test suites passed, 318/318 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 890 ms (`Component-preload.js` generated)**.
+     - `npm run lint`: **ESLint clean (0 errors, 0 warnings)**.
+     - `npx cds compile srv`: **Clean compilation (code 0)**.
+     - `npm run validate:mta`: **Passed with exit code 0 (`mbt validate -x paths`)**.
+     - `git diff --check`: **Clean (0 errors)**.
+
+
+
+## 2026-09-24 17:35 IST
+- **Agent**: Antigravity
+- **Change**: Restrict Supplier Value Help and Autocomplete Suggestions to Domestic Suppliers (`SupplierAccountGroup eq 'ZDOM'`) when `ZDOM` Document Type is Selected:
+  1. **User Requirement & Problem Statement**:
+     - When selecting Document Type `ZDOM` (Domestic Purchase Order), the Supplier input (`inSupplier`) should only display and suggest Domestic Suppliers.
+     - Previously, `_buildContextFilters` in `CreatePurchaseOrder.controller.js` filtered solely on `CompanyCode`, returning both domestic vendors (`ZDOM`) and internal sites/plants (`ZINT`).
+  2. **SAP S/4HANA Backend & Metadata Discovery**:
+     - Verified live SAP S/4HANA entity `C_MM_SupplierValueHelp` (`SupplierVH`).
+     - Inspected all 4,376 suppliers in SAP S/4HANA: discovered distinct `SupplierAccountGroup` values are strictly `ZDOM` (Domestic Suppliers) and `ZINT` (Internal Sites / Plant-to-Plant).
+     - Confirmed live OData filtering: `SupplierVH?$filter=CompanyCode eq '1000' and SupplierAccountGroup eq 'ZDOM'` correctly returns domestic suppliers (e.g. `100002` New A V Sons Super Store Pvt Ltd, `100003` New Gurusar Carne Service, etc.).
+  3. **Solutions Delivered**:
+     - **Contextual Filtering in `CreatePurchaseOrder.controller.js`**:
+       Updated `_buildContextFilters` to check `PurchaseOrderType`. When `ZDOM` is active, appends `new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZDOM")` alongside `CompanyCode`.
+     - **Dynamic Autocomplete & Suggestion Binding Synchronization**:
+       Added `_refreshSupplierBinding()` method and wired it to `onDocTypeChange`, `onDocTypeSelect`, `_loadConfigurationAndDefaults`, `_onFieldChange` (for `CompanyCode`), and `_handleValueHelpSelected` so suggestion items bindings are instantly updated when document context changes.
+     - **Proactive Validation Warning on Mismatched Suppliers**:
+       Added `_onDocTypeSelectedCheck` to alert the user with a localized warning (`poValSupplierNotDomestic`) if `ZDOM` is selected while a known non-domestic supplier is currently populated.
+     - **Enhanced Value Help Dialog & Item Badging (`ValueHelpService.js`)**:
+       - Dynamically updates dialog title to `"Select Domestic Supplier"` when `SupplierAccountGroup eq 'ZDOM'` filter is present.
+       - Badges domestic suppliers with `Domestic • CoCode <cc>` in `StandardListItem` info property.
+       - Captures `SupplierAccountGroup` into `oSelectedData` on dialog confirmation.
+     - **FilterBar Context Filtering (`PurchaseOrders.controller.js`)**:
+       Updated list report `_buildFilterBarContextFilters` to also apply `SupplierAccountGroup eq 'ZDOM'` when `fbDocType` is filtered to `ZDOM`.
+     - **Suggestion Item Visual Cues (`CreatePurchaseOrder.view.xml`)**:
+       Enhanced `inSupplier` `suggestionItems` `additionalText` template to include `[Domestic]` when `SupplierAccountGroup === 'ZDOM'`.
+     - **Unit & Integration Test Coverage**:
+       - Added 6 new unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` validating context filter generation, binding refresh, warning state on non-domestic supplier, and account group extraction.
+       - Updated `SupplierVH` test fixtures in `test/fixtures/purchase-order/valueHelps.json`.
+  4. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+     - `app/fiori-app/webapp/service/ValueHelpService.js`
+     - `app/fiori-app/webapp/i18n/i18n.properties`
+     - `test/fixtures/purchase-order/valueHelps.json`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  5. **Validation Results**:
+     - `npm test`: **88/88 test suites passed, 1,275/1,275 tests passed (100% green)**.
+     - `npx jest test/unit/purchase-order/`: **23/23 test suites passed, 314/314 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded (`Component-preload.js` generated in 1.22 s)**.
+     - `npm run lint`: **ESLint clean (0 errors, 0 warnings)**.
+     - `npx cds compile srv`: **Clean compilation (code 0)**.
+     - `npm run validate:mta`: **Passed with exit code 0 (`mbt validate -x paths`)**.
+     - `git diff --check`: **Clean (0 errors)**.
+
 ## 2026-09-24 17:00 IST
 - **Agent**: Antigravity
 - **Change**: Modularize monolithic `PurchaseOrderModel.js` (Audit Item 7) into dedicated Single-Responsibility Modules:

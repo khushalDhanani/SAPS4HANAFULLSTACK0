@@ -847,4 +847,178 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(freshModel.getProperty('/configDerived/PurchaseOrderType')).toBe(false);
         });
     });
+
+    describe('Domestic Supplier Filtering for ZDOM', () => {
+        it('should build context filter with SupplierAccountGroup EQ ZDOM and CompanyCode for inSupplier when docType is ZDOM', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
+            oModel.setProperty('/header/CompanyCode', '1000');
+
+            const mockSource = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(2);
+            expect(filters[0].sPath).toBe('CompanyCode');
+            expect(filters[0].sOperator).toBe('EQ');
+            expect(filters[0].sValue).toBe('1000');
+
+            expect(filters[1].sPath).toBe('SupplierAccountGroup');
+            expect(filters[1].sOperator).toBe('EQ');
+            expect(filters[1].sValue).toBe('ZDOM');
+        });
+
+        it('should NOT add SupplierAccountGroup filter for inSupplier when docType is not ZDOM (e.g. ZINT)', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZINT');
+            oModel.setProperty('/header/CompanyCode', '1000');
+
+            const mockSource = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(1);
+            expect(filters[0].sPath).toBe('CompanyCode');
+            expect(filters[0].sOperator).toBe('EQ');
+            expect(filters[0].sValue).toBe('1000');
+        });
+
+        it('should build SupplierAccountGroup EQ ZDOM filter when docType is ZDOM and CompanyCode is empty', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
+            oModel.setProperty('/header/CompanyCode', '');
+
+            const mockSource = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(1);
+            expect(filters[0].sPath).toBe('SupplierAccountGroup');
+            expect(filters[0].sOperator).toBe('EQ');
+            expect(filters[0].sValue).toBe('ZDOM');
+        });
+
+        it('should refresh supplier suggestion binding via _refreshSupplierBinding', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
+            oModel.setProperty('/header/CompanyCode', '1000');
+
+            const mockBinding = {
+                filter: jest.fn()
+            };
+            const mockSupplierInput = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier',
+                getBinding: jest.fn((name) => (name === 'suggestionItems' ? mockBinding : null))
+            };
+            controller.byId = jest.fn((sId) => (sId === 'inSupplier' ? mockSupplierInput : null));
+
+            controller._refreshSupplierBinding();
+
+            expect(mockSupplierInput.getBinding).toHaveBeenCalledWith('suggestionItems');
+            expect(mockBinding.filter).toHaveBeenCalled();
+            const appliedFilters = mockBinding.filter.mock.calls[0][0];
+            expect(appliedFilters).toHaveLength(2);
+            expect(appliedFilters[1].sPath).toBe('SupplierAccountGroup');
+            expect(appliedFilters[1].sValue).toBe('ZDOM');
+        });
+
+        it('should display warning on Supplier if docType changes to ZDOM while an internal/non-domestic supplier was chosen', () => {
+            oModel.setProperty('/header/Supplier', '1110');
+            oModel.setProperty('/header/SupplierAccountGroup', 'ZINT');
+
+            controller._onDocTypeSelectedCheck('ZDOM');
+
+            expect(oModel.getProperty('/errors/Supplier/state')).toBe('Warning');
+            expect(oModel.getProperty('/errors/Supplier/text')).toContain('not a domestic supplier');
+        });
+
+        it('should capture SupplierAccountGroup from oData when supplier is selected from Value Help', () => {
+            const mockSource = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier'
+            };
+            const mockData = {
+                Supplier: '100002',
+                SupplierName: 'New A V Sons Super Store Pvt Ltd',
+                CompanyCode: '1000',
+                SupplierAccountGroup: 'ZDOM'
+            };
+
+            controller._handleValueHelpSelected(mockSource, '100002', null, mockData);
+
+            expect(oModel.getProperty('/header/Supplier')).toBe('100002');
+            expect(oModel.getProperty('/header/SupplierAccountGroup')).toBe('ZDOM');
+            expect(oModel.getProperty('/header/CompanyCode')).toBe('1000');
+        });
+
+        it('should build context filter with CompanyCode EQ 1000 for inCompanyCode when docType is ZDOM', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
+
+            const mockSource = {
+                getId: () => 'inCompanyCode',
+                getBindingContext: () => null,
+                getBindingPath: () => 'CompanyCode'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(1);
+            expect(filters[0].sPath).toBe('CompanyCode');
+            expect(filters[0].sOperator).toBe('EQ');
+            expect(filters[0].sValue).toBe('1000');
+        });
+
+        it('should NOT add CompanyCode filter for inCompanyCode when docType is not ZDOM (e.g. ZINT)', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZINT');
+
+            const mockSource = {
+                getId: () => 'inCompanyCode',
+                getBindingContext: () => null,
+                getBindingPath: () => 'CompanyCode'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(0);
+        });
+
+        it('should refresh company suggestion binding via _refreshCompanyCodeBinding', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
+
+            const mockBinding = {
+                filter: jest.fn()
+            };
+            const mockCompanyInput = {
+                getId: () => 'inCompanyCode',
+                getBindingContext: () => null,
+                getBindingPath: () => 'CompanyCode',
+                getBinding: jest.fn((name) => (name === 'suggestionItems' ? mockBinding : null))
+            };
+            controller.byId = jest.fn((sId) => (sId === 'inCompanyCode' ? mockCompanyInput : null));
+
+            controller._refreshCompanyCodeBinding();
+
+            expect(mockCompanyInput.getBinding).toHaveBeenCalledWith('suggestionItems');
+            expect(mockBinding.filter).toHaveBeenCalled();
+            const appliedFilters = mockBinding.filter.mock.calls[0][0];
+            expect(appliedFilters).toHaveLength(1);
+            expect(appliedFilters[0].sPath).toBe('CompanyCode');
+            expect(appliedFilters[0].sValue).toBe('1000');
+        });
+
+        it('should display warning on CompanyCode if docType changes to ZDOM while a non-1000 company code is selected', () => {
+            oModel.setProperty('/header/CompanyCode', '2000');
+
+            controller._onDocTypeSelectedCheck('ZDOM');
+
+            expect(oModel.getProperty('/errors/CompanyCode/state')).toBe('Warning');
+            expect(oModel.getProperty('/errors/CompanyCode/text')).toContain('not a domestic company');
+        });
+    });
 });
