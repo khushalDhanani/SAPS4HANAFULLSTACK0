@@ -264,143 +264,175 @@ class PurchaseOrderAdapter {
     const useCache = options.useCache ?? !options.executeHttpRequest;
     const cacheKey = `${rootUrl}:${dest.url || ''}:${options.userJwt || 'default'}`;
 
+    if (options.forceRefresh) {
+      this.metricsCache.delete(cacheKey);
+    }
+
+    const fetchMetrics = async () => {
+      const reqHeaders = {
+        'Accept': 'application/json',
+        ...(dest.headers || {}),
+        ...(options.headers || {})
+      };
+
+      const toCount = (value) => {
+        if (value === null || value === undefined || String(value).trim() === '') return null;
+        const n = Number(String(value).trim());
+        return Number.isInteger(n) && n >= 0 ? n : null;
+      };
+
+      let lastError = null;
+      let authFailed = false;
+
+      // OData V2 $inlinecount (d.__count) or V4 @odata.count; null when SAP returned no count.
+      const fetchCount = async (serviceRelPath) => {
+        if (authFailed) return null;
+        try {
+          const res = await executeFn(dest, { method: 'get', url: `${rootUrl}${serviceRelPath}`, headers: reqHeaders });
+          const data = res && res.data;
+          return toCount(data?.d?.__count ?? data?.['@odata.count']);
+        } catch (err) {
+          lastError = err.message || String(err);
+          const status = err.response?.status || err.status;
+          if (status === 401 || String(lastError).includes('401')) {
+            authFailed = true;
+          }
+          LOG.warn(`Dashboard metric unavailable (${serviceRelPath.split('?')[0]}): ${err.message}`);
+          return null;
+        }
+      };
+
+      // Plain-text /$count responses.
+      const fetchRawCount = async (serviceRelPath) => {
+        if (authFailed) return null;
+        try {
+          const res = await executeFn(dest, {
+            method: 'get',
+            url: `${rootUrl}${serviceRelPath}`,
+            headers: { ...reqHeaders, 'Accept': 'text/plain, */*' }
+          });
+          return toCount(res && res.data);
+        } catch (err) {
+          lastError = err.message || String(err);
+          const status = err.response?.status || err.status;
+          if (status === 401 || String(lastError).includes('401')) {
+            authFailed = true;
+          }
+          LOG.warn(`Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
+          return null;
+        }
+      };
+
+      const sources = {
+        totalCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs?$inlinecount=allpages&$top=1&$select=PurchaseOrder'),
+        supplierCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_SupplierValueHelp?$inlinecount=allpages&$top=1'),
+        productCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_MaterialValueHelp?$inlinecount=allpages&$top=1'),
+        fiDocCount: () => fetchCount('/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified?$inlinecount=allpages&$top=1'),
+        salesInquiryCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370?$inlinecount=allpages&$top=1'),
+        customerCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/I_Customer_VH?$inlinecount=allpages&$top=1'),
+        openSalesOrderCount: () => fetchCount("/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'"),
+        totalSalesOrderCount: () => fetchCount('/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1'),
+        bpCount: () => fetchRawCount('/sap/opu/odata/sap/ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count'),
+        glAccountCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_GLAccountStdVH?$inlinecount=allpages&$top=1'),
+        costCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_CostCenterVH?$inlinecount=allpages&$top=1'),
+        profitCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_ProfitCenterStdVH?$inlinecount=allpages&$top=1'),
+        fixedAssetCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_MasterFixedAssetStdVH?$inlinecount=allpages&$top=1'),
+        wbsElementCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_WBSElementBasicDataStdVH?$inlinecount=allpages&$top=1'),
+        internalOrderCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_InternalOrderStdVH?$inlinecount=allpages&$top=1'),
+        purchaseContractCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseContractValHelp?$inlinecount=allpages&$top=1'),
+        companyCodeCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_CompanyCodeValueHelp?$inlinecount=allpages&$top=1'),
+        plantCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_PlantValueHelp?$inlinecount=allpages&$top=1'),
+        storageLocationCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp?$inlinecount=allpages&$top=1'),
+        materialGroupCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_MaterialGroupValueHelp?$inlinecount=allpages&$top=1'),
+        purchasingOrgCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingOrgValueHelp?$inlinecount=allpages&$top=1'),
+        purchasingGroupCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingGroupValueHelp?$inlinecount=allpages&$top=1'),
+        warehouseCount: () => fetchCount('/sap/opu/odata/sap/API_WAREHOUSE/Warehouse?$inlinecount=allpages&$top=1'),
+        openReservationCount: () => fetchCount('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem?$inlinecount=allpages&$top=1&$filter=ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false'),
+        inboundDeliveryCount: () => fetchCount('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$inlinecount=allpages&$top=1'),
+        gatewayCatalogCount: () => fetchRawCount('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection/$count')
+      };
+
+      const MASTER_DATA_METRIC_KEYS = new Set([
+        'supplierCount',
+        'productCount',
+        'customerCount',
+        'bpCount',
+        'glAccountCount',
+        'costCenterCount',
+        'profitCenterCount',
+        'fixedAssetCount',
+        'wbsElementCount',
+        'internalOrderCount',
+        'purchaseContractCount',
+        'companyCodeCount',
+        'plantCount',
+        'storageLocationCount',
+        'materialGroupCount',
+        'purchasingOrgCount',
+        'purchasingGroupCount',
+        'warehouseCount',
+        'gatewayCatalogCount'
+      ]);
+
+      const keys = Object.keys(sources);
+
+      // Probe totalCount first to verify backend authentication & reachability before firing remaining queries.
+      // If S/4HANA returns 401 Unauthorized, authFailed is set and the remaining 25 queries
+      // immediately return null without making HTTP calls, preventing SU01 user locks and 26x gateway load.
+      const firstKey = keys[0]; // 'totalCount'
+      const firstValue = await sources[firstKey]();
+
+      const otherKeys = keys.slice(1);
+      const otherValues = await Promise.all(otherKeys.map(async (key) => {
+        if (authFailed) return null;
+        if (useCache && !options.forceRefresh && MASTER_DATA_METRIC_KEYS.has(key)) {
+          const cachedCount = this.masterDataCountCache.get(key);
+          if (cachedCount !== undefined) {
+            return cachedCount;
+          }
+          const val = await sources[key]();
+          if (val !== null) {
+            this.masterDataCountCache.set(key, val);
+          }
+          return val;
+        }
+        return await sources[key]();
+      }));
+
+      const values = [firstValue, ...otherValues];
+
+      const metrics = {};
+      const unavailable = [];
+      keys.forEach((key, i) => {
+        metrics[key] = values[i];
+        if (values[i] === null) unavailable.push(key);
+      });
+      metrics.unavailable = unavailable;
+      // When these figures were read from SAP. A cached answer keeps its original asOf, so the screen can say how old it is.
+      metrics.asOf = new Date().toISOString();
+      if (unavailable.length === keys.length && lastError) {
+        metrics.error = lastError.includes('401')
+          ? `SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client ${s4Config.getClient()}.`
+          : `SAP S/4HANA backend unavailable: ${lastError}`;
+      }
+
+      return metrics;
+    };
+
     if (useCache && !options.forceRefresh) {
-      const cached = this.metricsCache.get(cacheKey);
-      if (cached) {
-        return cached;
-      }
+      return await this.metricsCache.getOrSet(
+        cacheKey,
+        fetchMetrics,
+        (metrics) => (metrics?.unavailable?.length === 26 ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000))
+      );
     }
 
-    const reqHeaders = {
-      'Accept': 'application/json',
-      ...(dest.headers || {}),
-      ...(options.headers || {})
-    };
-
-    const toCount = (value) => {
-      if (value === null || value === undefined || String(value).trim() === '') return null;
-      const n = Number(String(value).trim());
-      return Number.isInteger(n) && n >= 0 ? n : null;
-    };
-
-    let lastError = null;
-
-    // OData V2 $inlinecount (d.__count) or V4 @odata.count; null when SAP returned no count.
-    const fetchCount = async (serviceRelPath) => {
-      try {
-        const res = await executeFn(dest, { method: 'get', url: `${rootUrl}${serviceRelPath}`, headers: reqHeaders });
-        const data = res && res.data;
-        return toCount(data?.d?.__count ?? data?.['@odata.count']);
-      } catch (err) {
-        lastError = err.message || String(err);
-        LOG.warn(`Dashboard metric unavailable (${serviceRelPath.split('?')[0]}): ${err.message}`);
-        return null;
-      }
-    };
-
-    // Plain-text /$count responses.
-    const fetchRawCount = async (serviceRelPath) => {
-      try {
-        const res = await executeFn(dest, {
-          method: 'get',
-          url: `${rootUrl}${serviceRelPath}`,
-          headers: { ...reqHeaders, 'Accept': 'text/plain, */*' }
-        });
-        return toCount(res && res.data);
-      } catch (err) {
-        lastError = err.message || String(err);
-        LOG.warn(`Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
-        return null;
-      }
-    };
-
-    const sources = {
-      totalCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs?$inlinecount=allpages&$top=1&$select=PurchaseOrder'),
-      supplierCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_SupplierValueHelp?$inlinecount=allpages&$top=1'),
-      productCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_MaterialValueHelp?$inlinecount=allpages&$top=1'),
-      fiDocCount: () => fetchCount('/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified?$inlinecount=allpages&$top=1'),
-      salesInquiryCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370?$inlinecount=allpages&$top=1'),
-      customerCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/I_Customer_VH?$inlinecount=allpages&$top=1'),
-      openSalesOrderCount: () => fetchCount("/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'"),
-      totalSalesOrderCount: () => fetchCount('/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1'),
-      bpCount: () => fetchRawCount('/sap/opu/odata/sap/ZAPI_GETBUPA_SRV/BusinessPartnerSet/$count'),
-      glAccountCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_GLAccountStdVH?$inlinecount=allpages&$top=1'),
-      costCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_CostCenterVH?$inlinecount=allpages&$top=1'),
-      profitCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_ProfitCenterStdVH?$inlinecount=allpages&$top=1'),
-      fixedAssetCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_MasterFixedAssetStdVH?$inlinecount=allpages&$top=1'),
-      wbsElementCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_WBSElementBasicDataStdVH?$inlinecount=allpages&$top=1'),
-      internalOrderCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_InternalOrderStdVH?$inlinecount=allpages&$top=1'),
-      purchaseContractCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseContractValHelp?$inlinecount=allpages&$top=1'),
-      companyCodeCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_CompanyCodeValueHelp?$inlinecount=allpages&$top=1'),
-      plantCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_PlantValueHelp?$inlinecount=allpages&$top=1'),
-      storageLocationCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp?$inlinecount=allpages&$top=1'),
-      materialGroupCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_MaterialGroupValueHelp?$inlinecount=allpages&$top=1'),
-      purchasingOrgCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingOrgValueHelp?$inlinecount=allpages&$top=1'),
-      purchasingGroupCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingGroupValueHelp?$inlinecount=allpages&$top=1'),
-      warehouseCount: () => fetchCount('/sap/opu/odata/sap/API_WAREHOUSE/Warehouse?$inlinecount=allpages&$top=1'),
-      openReservationCount: () => fetchCount('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem?$inlinecount=allpages&$top=1&$filter=ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false'),
-      inboundDeliveryCount: () => fetchCount('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$inlinecount=allpages&$top=1'),
-      gatewayCatalogCount: () => fetchRawCount('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection/$count')
-    };
-
-    const MASTER_DATA_METRIC_KEYS = new Set([
-      'supplierCount',
-      'productCount',
-      'customerCount',
-      'bpCount',
-      'glAccountCount',
-      'costCenterCount',
-      'profitCenterCount',
-      'fixedAssetCount',
-      'wbsElementCount',
-      'internalOrderCount',
-      'purchaseContractCount',
-      'companyCodeCount',
-      'plantCount',
-      'storageLocationCount',
-      'materialGroupCount',
-      'purchasingOrgCount',
-      'purchasingGroupCount',
-      'warehouseCount',
-      'gatewayCatalogCount'
-    ]);
-
-    const keys = Object.keys(sources);
-    const values = await Promise.all(keys.map(async (key) => {
-      if (useCache && !options.forceRefresh && MASTER_DATA_METRIC_KEYS.has(key)) {
-        const cachedCount = this.masterDataCountCache.get(key);
-        if (cachedCount !== undefined) {
-          return cachedCount;
-        }
-        const val = await sources[key]();
-        if (val !== null) {
-          this.masterDataCountCache.set(key, val);
-        }
-        return val;
-      }
-      return await sources[key]();
-    }));
-
-    const metrics = {};
-    const unavailable = [];
-    keys.forEach((key, i) => {
-      metrics[key] = values[i];
-      if (values[i] === null) unavailable.push(key);
-    });
-    metrics.unavailable = unavailable;
-    // When these figures were read from SAP. A cached answer keeps its original asOf, so the screen can say how old it is.
-    metrics.asOf = new Date().toISOString();
-    if (unavailable.length === keys.length && lastError) {
-      metrics.error = lastError.includes('401')
-        ? `SAP S/4HANA backend logon rejected (HTTP 401 Unauthorized): Check credentials or SU01 lock status for configured user on system DS4 client ${s4Config.getClient()}.`
-        : `SAP S/4HANA backend unavailable: ${lastError}`;
+    const result = await fetchMetrics();
+    if (useCache) {
+      const ttl = result?.unavailable?.length === 26 ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000);
+      this.metricsCache.set(cacheKey, result, ttl);
     }
-
-    if (useCache && unavailable.length < keys.length) {
-      this.metricsCache.set(cacheKey, metrics);
-    }
-
-    return metrics;
+    return result;
   }
 }
 

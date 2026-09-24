@@ -58,9 +58,9 @@ sap.ui.define([
                 MessageToast.show((typeof that.getText === "function" && that.getText("msgOrderDefaultsUnavailable")) || "Order defaults could not be loaded from SAP. Enter the organisational data manually.");
             });
 
-            if (this._oConfigData) {
+            // Optimistically apply cached configuration while refetching in background
+            if (this._oConfigData && !bForce) {
                 this._updateOrganizationalFilters();
-                return Promise.all([pDefaults, Promise.resolve(this._oConfigData)]);
             }
 
             var oSalesOrderModel = (this.getModel && this.getModel("salesOrder")) || null;
@@ -87,6 +87,7 @@ sap.ui.define([
                 return oConfigData;
             }).catch(function (err) {
                 console.warn("[CreateSalesOrder] Error loading config data:", err);
+                return that._oConfigData || null;
             })]);
         },
 
@@ -308,9 +309,20 @@ sap.ui.define([
                 return;
             }
 
-            var oListItem = oEvent.getParameter("listItem");
-            var sPath = oListItem.getBindingContext("newOrder").getPath();
+            var oListItem = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("listItem") : null;
+            if (!oListItem) {
+                return;
+            }
+            var oContext = typeof oListItem.getBindingContext === "function" ? oListItem.getBindingContext("newOrder") : null;
+            if (!oContext || typeof oContext.getPath !== "function") {
+                return;
+            }
+
+            var sPath = oContext.getPath();
             var iIndex = parseInt(sPath.split("/").pop(), 10);
+            if (isNaN(iIndex) || iIndex < 0 || iIndex >= aItems.length) {
+                return;
+            }
 
             aItems.splice(iIndex, 1);
             aItems.forEach(function (itm, idx) {

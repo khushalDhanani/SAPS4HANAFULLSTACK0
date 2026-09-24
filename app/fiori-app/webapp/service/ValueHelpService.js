@@ -192,7 +192,7 @@ sap.ui.define([
                 title: oConf.title,
                 contentWidth: "42rem",
                 growing: true,
-                growingThreshold: 25,
+                growingThreshold: 50,
                 search: function (oSearchEvent) {
                     var sValue = oSearchEvent.getParameter("value");
                     var aSearchFilters = [];

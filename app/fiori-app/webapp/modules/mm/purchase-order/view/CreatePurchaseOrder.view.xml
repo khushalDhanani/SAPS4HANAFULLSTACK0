@@ -5,7 +5,8 @@
     xmlns:f="sap.ui.layout.form"
     xmlns:core="sap.ui.core"
     xmlns:uxap="sap.uxap"
-    xmlns:layout="sap.ui.layout">
+    xmlns:layout="sap.ui.layout"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
 
     <Page
         id="createPOPage"
@@ -63,11 +64,12 @@
                             singleContainerFullSize="false">
                             <f:content>
                                 <Label text="{i18n>colDocType}" required="true" />
-                                <Input id="inDocType" value="{newPO>/header/PurchaseOrderType}" placeholder="{i18n>poPlaceholderDocType}" maxLength="4" required="true"
+                                <Input id="inDocType" app:field="PurchaseOrderType" value="{newPO>/header/PurchaseOrderType}" placeholder="{i18n>poPlaceholderDocType}" maxLength="4" required="true"
                                     valueState="{newPO>/errors/PurchaseOrderType/state}"
                                     valueStateText="{newPO>/errors/PurchaseOrderType/text}"
-                                    change=".onDocTypeChange" liveChange=".onDocTypeChange" suggestionItemSelected=".onDocTypeSelect"
-                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/DocumentTypeVH', templateShareable: false}">
+                                    description="{newPO>/header/PurchaseOrderTypeText}"
+                                    change=".onDocTypeChange" liveChange=".onDocTypeLiveChange" suggestionItemSelected=".onDocTypeSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/DocumentTypeVH', filters: [{path: 'PurchasingDocumentType', operator: 'StartsWith', value1: 'Z'}], templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
                                     </suggestionItems>
@@ -81,13 +83,13 @@
                                     icon="{newPO>/header/StatusIcon}" />
 
                                 <Label text="{i18n>salesInquiryLabelDocDate}" required="true" />
-                                <DatePicker id="inDocDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true"
+                                <DatePicker id="inDocDate" app:field="DocumentDate" value="{newPO>/header/DocumentDate}" valueFormat="yyyy-MM-dd" displayFormat="dd-MM-yyyy" required="true"
                                     valueState="{newPO>/errors/DocumentDate/state}"
                                     valueStateText="{newPO>/errors/DocumentDate/text}"
                                     change=".onDocDateChange" />
 
                                 <Label text="{i18n>colCompany}" required="true" />
-                                <Input id="inCompanyCode" value="{newPO>/header/CompanyCode}" placeholder="{i18n>poPlaceholderCompanyCode}" maxLength="4"
+                                <Input id="inCompanyCode" app:field="CompanyCode" value="{newPO>/header/CompanyCode}" placeholder="{i18n>poPlaceholderCompanyCode}" maxLength="4"
                                     valueState="{newPO>/errors/CompanyCode/state}"
                                     valueStateText="{newPO>/errors/CompanyCode/text}"
                                     change=".onCompanyCodeChange" liveChange=".onCompanyCodeChange" suggestionItemSelected=".onCompanyCodeSelect"
@@ -98,7 +100,7 @@
                                 </Input>
 
                                 <Label text="{i18n>colPurchasingOrg}" required="true" />
-                                <Input id="inPurchOrg" value="{newPO>/header/PurchasingOrganization}" placeholder="{i18n>poPlaceholderPurchasingOrg}" maxLength="4"
+                                <Input id="inPurchOrg" app:field="PurchasingOrganization" value="{newPO>/header/PurchasingOrganization}" placeholder="{i18n>poPlaceholderPurchasingOrg}" maxLength="4"
                                     valueState="{newPO>/errors/PurchasingOrganization/state}"
                                     valueStateText="{newPO>/errors/PurchasingOrganization/text}"
                                     change=".onPurchOrgChange" liveChange=".onPurchOrgChange" suggestionItemSelected=".onPurchOrgSelect"
@@ -109,7 +111,7 @@
                                 </Input>
 
                                 <Label text="{i18n>colPurchasingGroup}" required="true" />
-                                <Input id="inPurchGrp" value="{newPO>/header/PurchasingGroup}" placeholder="{i18n>poPlaceholderPurchasingGroup}" maxLength="3"
+                                <Input id="inPurchGrp" app:field="PurchasingGroup" value="{newPO>/header/PurchasingGroup}" placeholder="{i18n>poPlaceholderPurchasingGroup}" maxLength="3"
                                     valueState="{newPO>/errors/PurchasingGroup/state}"
                                     valueStateText="{newPO>/errors/PurchasingGroup/text}"
                                     change=".onPurchGrpChange" liveChange=".onPurchGrpChange" suggestionItemSelected=".onPurchGrpSelect"
@@ -157,7 +159,7 @@
                             singleContainerFullSize="false">
                             <f:content>
                                 <Label text="{i18n>colSupplier}" required="true" />
-                                <Input id="inSupplier" value="{newPO>/header/Supplier}" placeholder="{i18n>poPlaceholderSupplier}" maxLength="10"
+                                <Input id="inSupplier" app:field="Supplier" value="{newPO>/header/Supplier}" placeholder="{i18n>poPlaceholderSupplier}" maxLength="10"
                                     valueState="{newPO>/errors/Supplier/state}"
                                     valueStateText="{newPO>/errors/Supplier/text}"
                                     change=".onSupplierChange" liveChange=".onSupplierLiveChange" suggestionItemSelected=".onSupplierSelect"
@@ -168,7 +170,7 @@
                                 </Input>
 
                                 <Label text="{= ${newPO>/configDerived/Currency} ? ${i18n>labelCurrency} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelCurrency} }" required="true" />
-                                <Input id="inCurrency" value="{newPO>/header/Currency}" placeholder="{i18n>poPlaceholderCurrency}" maxLength="5"
+                                <Input id="inCurrency" app:field="Currency" value="{newPO>/header/Currency}" placeholder="{i18n>poPlaceholderCurrency}" maxLength="5"
                                     valueState="{newPO>/errors/Currency/state}"
                                     valueStateText="{newPO>/errors/Currency/text}"
                                     change=".onCurrencyChange" liveChange=".onCurrencyChange" suggestionItemSelected=".onCurrencySelect"
@@ -179,7 +181,7 @@
                                 </Input>
 
                                 <Label text="{= ${newPO>/configDerived/PaymentTerms} ? ${i18n>labelPaymentTerms} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelPaymentTerms} }" />
-                                <Input id="inPaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="{i18n>poPlaceholderPaymentTerms}" maxLength="4"
+                                <Input id="inPaymentTerms" app:field="PaymentTerms" value="{newPO>/header/PaymentTerms}" placeholder="{i18n>poPlaceholderPaymentTerms}" maxLength="4"
                                     valueState="{newPO>/errors/PaymentTerms/state}"
                                     valueStateText="{newPO>/errors/PaymentTerms/text}"
                                     change=".onPaymentTermsChange" liveChange=".onPaymentTermsChange" suggestionItemSelected=".onPaymentTermsSelect"
@@ -190,7 +192,7 @@
                                 </Input>
 
                                 <Label text="{= ${newPO>/configDerived/IncotermsClassification} ? ${i18n>labelIncoterms} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelIncoterms} }" />
-                                <Input id="inIncoterms" value="{newPO>/header/IncotermsClassification}" placeholder="{i18n>poPlaceholderIncoterms}" maxLength="3"
+                                <Input id="inIncoterms" app:field="IncotermsClassification" value="{newPO>/header/IncotermsClassification}" placeholder="{i18n>poPlaceholderIncoterms}" maxLength="3"
                                     valueState="{newPO>/errors/IncotermsClassification/state}"
                                     valueStateText="{newPO>/errors/IncotermsClassification/text}"
                                     change=".onIncotermsChange" liveChange=".onIncotermsChange" suggestionItemSelected=".onIncotermsSelect"
@@ -201,7 +203,7 @@
                                 </Input>
 
                                 <Label text="{= ${newPO>/configDerived/IncotermsLocation1} ? ${i18n>labelIncotermsLoc} + ' (' + ${i18n>labelFromLastPo} + ')' : ${i18n>labelIncotermsLoc} }" />
-                                <Input id="inIncotermsLoc" value="{newPO>/header/IncotermsLocation1}" placeholder="{i18n>poPlaceholderIncotermsLoc}" maxLength="70"
+                                <Input id="inIncotermsLoc" app:field="IncotermsLocation1" value="{newPO>/header/IncotermsLocation1}" placeholder="{i18n>poPlaceholderIncotermsLoc}" maxLength="70"
                                     valueState="{newPO>/errors/IncotermsLocation1/state}"
                                     valueStateText="{newPO>/errors/IncotermsLocation1/text}"
                                     change=".onIncotermsLocChange" liveChange=".onIncotermsLocChange" />
@@ -241,7 +243,7 @@
                             <ColumnListItem>
                                 <cells>
                                      <Text text="{newPO>PurchaseOrderItem}" />
-                                    <Input value="{newPO>Plant}" placeholder="{i18n>poPlaceholderPlant}" required="true"
+                                    <Input app:field="Plant" value="{newPO>Plant}" placeholder="{i18n>poPlaceholderPlant}" required="true"
                                         valueState="{newPO>errors/Plant/state}"
                                         valueStateText="{newPO>errors/Plant/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -250,7 +252,7 @@
                                             <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>StorageLocation}" placeholder="{i18n>poPlaceholderStorageLocation}" required="true"
+                                    <Input app:field="StorageLocation" value="{newPO>StorageLocation}" placeholder="{i18n>poPlaceholderStorageLocation}" required="true"
                                         valueState="{newPO>errors/StorageLocation/state}"
                                         valueStateText="{newPO>errors/StorageLocation/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -259,7 +261,7 @@
                                             <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>Material}" placeholder="{i18n>poPlaceholderMaterial}" required="true"
+                                    <Input app:field="Material" value="{newPO>Material}" placeholder="{i18n>poPlaceholderMaterial}" required="true"
                                         valueState="{newPO>errors/Material/state}"
                                         valueStateText="{newPO>errors/Material/text}"
                                         change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
@@ -273,7 +275,7 @@
                                         valueState="{newPO>errors/OrderQuantity/state}"
                                         valueStateText="{newPO>errors/OrderQuantity/text}"
                                         change=".onCalculateNetAmount" liveChange=".onCalculateNetAmount" />
-                                    <Input value="{newPO>UnitOfMeasure}" placeholder="{i18n>poPlaceholderUnit}" required="true"
+                                    <Input app:field="UnitOfMeasure" value="{newPO>UnitOfMeasure}" placeholder="{i18n>poPlaceholderUnit}" required="true"
                                         valueState="{newPO>errors/UnitOfMeasure/state}"
                                         valueStateText="{newPO>errors/UnitOfMeasure/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -286,7 +288,7 @@
                                         valueState="{newPO>errors/NetPriceAmount/state}"
                                         valueStateText="{newPO>errors/NetPriceAmount/text}"
                                         change=".onCalculateNetAmount" liveChange=".onCalculateNetAmount" />
-                                    <Input value="{newPO>TaxCode}" placeholder="{i18n>poPlaceholderTaxCode}" maxLength="2"
+                                    <Input app:field="TaxCode" value="{newPO>TaxCode}" placeholder="{i18n>poPlaceholderTaxCode}" maxLength="2"
                                         valueState="{newPO>errors/TaxCode/state}"
                                         valueStateText="{newPO>errors/TaxCode/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"

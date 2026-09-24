@@ -345,7 +345,7 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             oModel.setProperty('/header/Supplier', '10300001');
             oModel.setProperty('/header/Currency', 'EUR');
             oModel.setProperty('/header/DocumentDate', '2026-09-07');
-            oModel.setProperty('/header/PurchaseOrderType', 'NB');
+            oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
             oModel.setProperty('/items', [
                 {
                     PurchaseOrderItem: '10',

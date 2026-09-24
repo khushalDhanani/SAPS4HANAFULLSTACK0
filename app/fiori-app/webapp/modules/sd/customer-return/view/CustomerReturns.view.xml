@@ -209,7 +209,7 @@
                                             icon="{path: 'customerReturn>ReturnsOrderReason', formatter: '.formatReasonIcon'}" />
                                         <ObjectNumber
                                             number="{path: 'customerReturn>TotalNetAmount', formatter: '.formatAmount'}"
-                                            unit="{= ${customerReturn>TotalNetAmount} && parseFloat(${customerReturn>TotalNetAmount}) !== 0 ? ${customerReturn>TransactionCurrency} : '' }"
+                                            unit="{= ${customerReturn>TotalNetAmount} &amp;&amp; parseFloat(${customerReturn>TotalNetAmount}) !== 0 ? ${customerReturn>TransactionCurrency} : '' }"
                                             state="{path: 'customerReturn>TotalNetAmount', formatter: '.formatAmountState'}" />
                                         <Button
                                             id="btnViewItems"

@@ -43,6 +43,58 @@ sap.ui.define([
             return "";
         },
 
+        DEFAULT_DOC_TYPE: {
+            code: "ZDOM",
+            text: "Dom. Aether In.LTD."
+        },
+
+        /**
+         * Optional external text resolver function (e.g. bound BaseController.getText)
+         */
+        _fnTextResolver: null,
+
+        setTextResolver: function (fnResolver) {
+            this._fnTextResolver = fnResolver;
+        },
+
+        /**
+         * Resolves text via external resolver, UI5 Core library bundle, or formatted fallback.
+         * @param {string} sKey - i18n key
+         * @param {string[]} [aArgs] - optional positional arguments for {0}, {1}
+         * @param {string} [sFallback] - optional default English string
+         * @returns {string}
+         */
+        getText: function (sKey, aArgs, sFallback) {
+            if (typeof this._fnTextResolver === "function") {
+                var sResolved = this._fnTextResolver(sKey, aArgs, sFallback);
+                if (sResolved && sResolved !== sKey) {
+                    return sResolved;
+                }
+            }
+            try {
+                var oGlobal = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+                var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+                if (oSap && oSap.ui && typeof oSap.ui.getCore === "function") {
+                    var oCore = oSap.ui.getCore();
+                    var oBundle = oCore.getLibraryResourceBundle ? oCore.getLibraryResourceBundle("saps4hana.fiori") : null;
+                    if (oBundle && typeof oBundle.getText === "function") {
+                        var sBundled = oBundle.getText(sKey, aArgs);
+                        if (sBundled && sBundled !== sKey) {
+                            return sBundled;
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            var sResult = sFallback !== undefined ? sFallback : sKey;
+            if (Array.isArray(aArgs) && aArgs.length > 0) {
+                aArgs.forEach(function (arg, idx) {
+                    sResult = sResult.replace(new RegExp("\\{" + idx + "\\}", "g"), arg);
+                });
+            }
+            return sResult;
+        },
+
         HEADER_FIELD_CONFIG: {
             PurchaseOrderType: { controlId: "inDocType", label: "Document Type", section: "General Data", example: "NB" },
             CompanyCode: { controlId: "inCompanyCode", label: "Company Code", section: "General Data", example: "1010" },
@@ -118,6 +170,7 @@ sap.ui.define([
                 },
                 header: {
                     PurchaseOrderType: "",
+                    PurchaseOrderTypeText: "",
                     CompanyCode: "",
                     PurchasingOrganization: "",
                     PurchasingGroup: "",
@@ -350,7 +403,7 @@ sap.ui.define([
         computeStatus: function (oData) {
             if (!oData || !oData.header) {
                 return {
-                    text: "Draft (Incomplete)",
+                    text: this.getText("poStatusDraftIncomplete", null, "Draft (Incomplete)"),
                     state: "Warning",
                     icon: "sap-icon://alert",
                     complete: false
@@ -360,11 +413,10 @@ sap.ui.define([
             var sDocType = (oData.header.PurchaseOrderType || "").trim();
             var aErrors = this.validateUI(oData);
             var bComplete = aErrors.length === 0;
-            var sTypeLabel = sDocType || "Draft";
 
             if (bComplete) {
                 return {
-                    text: "Ready to Create",
+                    text: this.getText("poStatusReadyToCreate", null, "Ready to Create"),
                     state: "Success",
                     icon: "sap-icon://accept",
                     complete: true
@@ -373,7 +425,7 @@ sap.ui.define([
 
             if (sDocType) {
                 return {
-                    text: "Draft",
+                    text: this.getText("poStatusDraft", null, "Draft"),
                     state: "Information",
                     icon: "sap-icon://edit",
                     complete: false
@@ -381,7 +433,7 @@ sap.ui.define([
             }
 
             return {
-                text: "Draft",
+                text: this.getText("poStatusDraft", null, "Draft"),
                 state: "Warning",
                 icon: "sap-icon://alert",
                 complete: false
@@ -415,6 +467,158 @@ sap.ui.define([
         },
 
         /**
+         * Checks whether a Document Type satisfies domain rules:
+         * Must start with 'Z' and not exceed 4 characters (e.g. ZDOM, ZDOS, ZIMP, ZCAP).
+         *
+         * @param {string} sDocType
+         * @returns {boolean}
+         */
+        isValidDocType: function (sDocType) {
+            var s = String(sDocType || "").trim().toUpperCase();
+            return s.startsWith("Z") && s.length <= 4;
+        },
+
+        /**
+         * Validates a Purchase Order Document Type against domain rules.
+         *
+         * @param {string} sDocType
+         * @returns {{ valid: boolean, state: string, text: string }}
+         */
+        validateDocType: function (sDocType) {
+            var sValTrim = String(sDocType || "").trim().toUpperCase();
+            if (!sValTrim) {
+                return {
+                    valid: false,
+                    state: "Error",
+                    text: this.getText("poValDocTypeRequired", null, "Document Type is required (e.g. ZDOM).")
+                };
+            }
+            if (this.isValidDocType(sValTrim)) {
+                return {
+                    valid: true,
+                    state: "None",
+                    text: ""
+                };
+            }
+            return {
+                valid: false,
+                state: "Error",
+                text: this.getText("poValDocTypeZRequired", null, "Only Z-related document types (e.g. ZDOM, ZDOS, ZIMP, ZCAP) are supported.")
+            };
+        },
+
+        /**
+         * Resolves the active default Document Type and description.
+         *
+         * @param {Object} [oConfigData]
+         * @returns {{ code: string, text: string }}
+         */
+        getDefaultDocType: function (oConfigData) {
+            var oFallback = this.DEFAULT_DOC_TYPE || {
+                code: "ZDOM",
+                text: "Dom. Aether In.LTD."
+            };
+            if (oConfigData && Array.isArray(oConfigData.documentTypes)) {
+                var oMatch = oConfigData.documentTypes.find(function (dt) {
+                    return dt && dt.PurchasingDocumentType === oFallback.code;
+                });
+                if (oMatch) {
+                    return {
+                        code: oMatch.PurchasingDocumentType,
+                        text: oMatch.PurchasingDocumentType_Text || oFallback.text
+                    };
+                }
+            }
+            return oFallback;
+        },
+
+        /**
+         * Sets and validates Document Type on the model, enforcing domain rules (Z-prefix and max length 4).
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sDocType
+         * @param {Object} [oConfigData]
+         * @param {string} [sDocTypeText]
+         */
+        setDocumentType: function (oModel, sDocType, oConfigData, sDocTypeText) {
+            if (!oModel) return;
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            var sTrimmed = String(sDocType || "").trim().toUpperCase();
+
+            var fnSetProperty = function (sPath, vVal) {
+                if (typeof oModel.setProperty === "function") {
+                    oModel.setProperty(sPath, vVal);
+                } else if (oData) {
+                    var aParts = sPath.replace(/^\//, "").split("/");
+                    var oTarget = oData;
+                    for (var i = 0; i < aParts.length - 1; i++) {
+                        if (!oTarget[aParts[i]]) oTarget[aParts[i]] = {};
+                        oTarget = oTarget[aParts[i]];
+                    }
+                    oTarget[aParts[aParts.length - 1]] = vVal;
+                }
+            };
+
+            if (!sTrimmed) {
+                this.markUserModified(oModel, "PurchaseOrderType", false);
+                if (oConfigData) {
+                    this.applyConfigurationDefaults(oModel, oConfigData);
+                } else {
+                    var oDefaultDoc = this.getDefaultDocType(oConfigData);
+                    fnSetProperty("/header/PurchaseOrderType", oDefaultDoc.code);
+                    fnSetProperty("/header/PurchaseOrderTypeText", oDefaultDoc.text);
+                    fnSetProperty("/errors/PurchaseOrderType", { state: "None", text: "" });
+                }
+                this.validateSingleField(oModel, "PurchaseOrderType");
+            } else {
+                this.markUserModified(oModel, "PurchaseOrderType", true);
+                var oValidation = this.validateDocType(sTrimmed);
+                if (oValidation.valid) {
+                    fnSetProperty("/header/PurchaseOrderType", sTrimmed);
+                    if (sDocTypeText !== undefined && sDocTypeText !== null) {
+                        fnSetProperty("/header/PurchaseOrderTypeText", sDocTypeText);
+                    }
+                    fnSetProperty("/errors/PurchaseOrderType", { state: "None", text: "" });
+                    this.validateSingleField(oModel, "PurchaseOrderType");
+                } else {
+                    fnSetProperty("/header/PurchaseOrderType", "");
+                    fnSetProperty("/header/PurchaseOrderTypeText", "");
+                    fnSetProperty("/errors/PurchaseOrderType", {
+                        state: "Error",
+                        text: oValidation.text
+                    });
+                }
+            }
+            this.updateStatus(oModel);
+        },
+
+        /**
+         * Handles live change input for Document Type, validating domain prefix on keystroke.
+         *
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {string} sVal
+         */
+        updateDocTypeLive: function (oModel, sVal) {
+            if (!oModel) return;
+            var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
+            if (sVal !== null && sVal !== undefined) {
+                this.markUserModified(oModel, "PurchaseOrderType", true);
+                var sTrim = String(sVal).trim().toUpperCase();
+                if (this.isValidDocType(sTrim)) {
+                    if (typeof oModel.setProperty === "function") {
+                        oModel.setProperty("/header/PurchaseOrderType", sTrim);
+                        oModel.setProperty("/errors/PurchaseOrderType", { state: "None", text: "" });
+                    } else if (oData && oData.header) {
+                        oData.header.PurchaseOrderType = sTrim;
+                        if (oData.errors) oData.errors.PurchaseOrderType = { state: "None", text: "" };
+                    }
+                }
+            }
+            this.validateSingleField(oModel, "PurchaseOrderType");
+            this.updateStatus(oModel);
+        },
+
+        /**
          * Validates a single field contextually and updates that field's state.
          *
          * @param {sap.ui.model.json.JSONModel} oModel
@@ -436,42 +640,43 @@ sap.ui.define([
 
                 switch (sField) {
                     case "PurchaseOrderType":
-                        if (!sValTrim) oState = { state: "Error", text: "Document Type is required (e.g. NB)." };
+                        var oDocResult = this.validateDocType(sValTrim);
+                        oState = { state: oDocResult.state, text: oDocResult.text };
                         break;
                     case "CompanyCode":
-                        if (!sValTrim) oState = { state: "Error", text: "Company Code is required (4-character code, e.g. 1010)." };
+                        if (!sValTrim) oState = { state: "Error", text: this.getText("poValCompanyCodeRequired", null, "Company Code is required (4-character code, e.g. 1010).") };
                         break;
                     case "PurchasingOrganization":
-                        if (!sValTrim) oState = { state: "Error", text: "Purchasing Organization is required (e.g. 1010)." };
+                        if (!sValTrim) oState = { state: "Error", text: this.getText("poValPurchOrgRequired", null, "Purchasing Organization is required (e.g. 1010).") };
                         break;
                     case "PurchasingGroup":
-                        if (!sValTrim) oState = { state: "Error", text: "Purchasing Group is required (3-character code, e.g. 001)." };
+                        if (!sValTrim) oState = { state: "Error", text: this.getText("poValPurchGrpRequired", null, "Purchasing Group is required (3-character code, e.g. 001).") };
                         break;
                     case "Supplier":
-                        if (!sValTrim) oState = { state: "Error", text: "Supplier account is required (e.g. 10300001)." };
+                        if (!sValTrim) oState = { state: "Error", text: this.getText("poValSupplierRequired", null, "Supplier account is required (e.g. 10300001).") };
                         break;
                     case "Currency":
                         if (!sValTrim) {
-                            oState = { state: "Error", text: "Currency is required (e.g. EUR, USD)." };
+                            oState = { state: "Error", text: this.getText("poValCurrencyRequired", null, "Currency is required (e.g. EUR, USD).") };
                         } else if (!/^[A-Za-z]{3}$/.test(sValTrim)) {
-                            oState = { state: "Error", text: "Currency must be a 3-letter ISO code (e.g. EUR)." };
+                            oState = { state: "Error", text: this.getText("poValCurrencyIso", null, "Currency must be a 3-letter ISO code (e.g. EUR).") };
                         }
                         break;
                     case "DocumentDate":
-                        if (!sValTrim) oState = { state: "Error", text: "Document Date is required." };
+                        if (!sValTrim) oState = { state: "Error", text: this.getText("poValDocDateRequired", null, "Document Date is required.") };
                         break;
                     case "IncotermsClassification":
-                        if (sValTrim.length > 3) oState = { state: "Error", text: "Incoterms classification must not exceed 3 characters (e.g. EXW)." };
+                        if (sValTrim.length > 3) oState = { state: "Error", text: this.getText("poValIncotermsMaxLen", null, "Incoterms classification must not exceed 3 characters (e.g. EXW).") };
                         break;
                     case "IncotermsLocation1":
                         if (oHeader.IncotermsClassification && !sValTrim) {
-                            oState = { state: "Error", text: "Incoterms Location 1 is required when Incoterms is specified." };
+                            oState = { state: "Error", text: this.getText("poValIncotermsLocRequired", null, "Incoterms Location 1 is required when Incoterms is specified.") };
                         } else if (sValTrim.length > 70) {
-                            oState = { state: "Error", text: "Incoterms Location 1 must not exceed 70 characters." };
+                            oState = { state: "Error", text: this.getText("poValIncotermsLocMaxLen", null, "Incoterms Location 1 must not exceed 70 characters.") };
                         }
                         break;
                     case "PaymentTerms":
-                        if (sValTrim.length > 4) oState = { state: "Error", text: "Payment Terms must not exceed 4 characters (e.g. 0001)." };
+                        if (sValTrim.length > 4) oState = { state: "Error", text: this.getText("poValPaymentTermsMaxLen", null, "Payment Terms must not exceed 4 characters (e.g. 0001).") };
                         break;
                     default:
                         break;
@@ -493,34 +698,34 @@ sap.ui.define([
 
                     switch (sField) {
                         case "Material":
-                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Material is required (e.g. TG11)." };
+                            if (!sItemValTrim) oState = { state: "Error", text: this.getText("poValItemMaterialRequired", [sItemNo], sItemNo + ": Material is required (e.g. TG11).") };
                             break;
                         case "Plant":
-                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Plant is required (e.g. 1010)." };
+                            if (!sItemValTrim) oState = { state: "Error", text: this.getText("poValItemPlantRequired", [sItemNo], sItemNo + ": Plant is required (e.g. 1010).") };
                             break;
                         case "StorageLocation":
-                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Storage Location is required (e.g. 101A)." };
+                            if (!sItemValTrim) oState = { state: "Error", text: this.getText("poValItemStorageLocRequired", [sItemNo], sItemNo + ": Storage Location is required (e.g. 101A).") };
                             break;
                         case "UnitOfMeasure":
-                            if (!sItemValTrim) oState = { state: "Error", text: sItemNo + ": Unit of Measure is required (e.g. PC)." };
+                            if (!sItemValTrim) oState = { state: "Error", text: this.getText("poValItemUnitRequired", [sItemNo], sItemNo + ": Unit of Measure is required (e.g. PC).") };
                             break;
                         case "OrderQuantity":
                             var fQty = parseFloat(sItemValTrim);
                             if (!sItemValTrim || isNaN(fQty) || fQty <= 0) {
-                                oState = { state: "Error", text: sItemNo + ": Order Quantity must be greater than 0." };
+                                oState = { state: "Error", text: this.getText("poValItemQtyPositive", [sItemNo], sItemNo + ": Order Quantity must be greater than 0.") };
                             }
                             break;
                         case "NetPriceAmount":
                             if (sItemValTrim) {
                                 var fPrice = parseFloat(sItemValTrim);
                                 if (isNaN(fPrice) || fPrice < 0) {
-                                    oState = { state: "Error", text: sItemNo + ": Net Price must be a non-negative number." };
+                                    oState = { state: "Error", text: this.getText("poValItemNetPricePositive", [sItemNo], sItemNo + ": Net Price must be a non-negative number.") };
                                 }
                             }
                             break;
                         case "TaxCode":
                             if (sItemValTrim.length > 2) {
-                                oState = { state: "Error", text: sItemNo + ": Tax Code must not exceed 2 characters." };
+                                oState = { state: "Error", text: this.getText("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code must not exceed 2 characters.") };
                             }
                             break;
                         default:
@@ -571,120 +776,132 @@ sap.ui.define([
             };
 
             if (!oHeader.PurchaseOrderType || !String(oHeader.PurchaseOrderType).trim()) {
-                oHeaderErrors.PurchaseOrderType = { state: "Error", text: "Document Type is required (e.g. NB)." };
+                oHeaderErrors.PurchaseOrderType = { state: "Error", text: this.getText("poValDocTypeRequired", null, "Document Type is required (e.g. ZDOM).") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Document Type is required.",
+                    title: this.getText("poValSummaryDocTypeReq", null, "Document Type is required."),
                     field: "General Data / Document Type",
-                    description: "Select or enter a purchasing document type (e.g. NB for standard orders).",
+                    description: this.getText("poValSummaryDocTypeDesc", null, "Select or enter a Z-related document type (e.g. ZDOM). Use the dropdown (▼) to choose from available types."),
                     controlId: "inDocType"
                 });
+            } else {
+                var oDocVal = this.validateDocType(oHeader.PurchaseOrderType);
+                if (!oDocVal.valid) {
+                    oHeaderErrors.PurchaseOrderType = { state: "Error", text: oDocVal.text };
+                    aErrorList.push({
+                        type: "Error",
+                        title: this.getText("poValSummaryDocTypeInvalid", null, "Document Type: invalid selection."),
+                        field: "General Data / Document Type",
+                        description: oDocVal.text,
+                        controlId: "inDocType"
+                    });
+                }
             }
             if (!oHeader.CompanyCode || !String(oHeader.CompanyCode).trim()) {
-                oHeaderErrors.CompanyCode = { state: "Error", text: "Company Code is required (e.g. 1010)." };
+                oHeaderErrors.CompanyCode = { state: "Error", text: this.getText("poValCompanyCodeRequired", null, "Company Code is required (e.g. 1010).") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Company Code is required.",
+                    title: this.getText("poValSummaryCoCodeReq", null, "Company Code is required."),
                     field: "General Data / Company Code",
-                    description: "Specify an active 4-character Company Code (e.g. 1010) registered in your SAP organization.",
+                    description: this.getText("poValSummaryCoCodeDesc", null, "Specify an active 4-character Company Code (e.g. 1010) registered in your SAP organization."),
                     controlId: "inCompanyCode"
                 });
             }
             if (!oHeader.PurchasingOrganization || !String(oHeader.PurchasingOrganization).trim()) {
-                oHeaderErrors.PurchasingOrganization = { state: "Error", text: "Purchasing Organization is required (e.g. 1010)." };
+                oHeaderErrors.PurchasingOrganization = { state: "Error", text: this.getText("poValPurchOrgRequired", null, "Purchasing Organization is required (e.g. 1010).") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Purchasing Organization is required.",
+                    title: this.getText("poValSummaryPurchOrgReq", null, "Purchasing Organization is required."),
                     field: "General Data / Purchasing Org",
-                    description: "Enter a valid Purchasing Organization responsible for this procurement document.",
+                    description: this.getText("poValSummaryPurchOrgDesc", null, "Enter a valid Purchasing Organization responsible for this procurement document."),
                     controlId: "inPurchOrg"
                 });
             }
             if (!oHeader.PurchasingGroup || !String(oHeader.PurchasingGroup).trim()) {
-                oHeaderErrors.PurchasingGroup = { state: "Error", text: "Purchasing Group is required (e.g. 001)." };
+                oHeaderErrors.PurchasingGroup = { state: "Error", text: this.getText("poValPurchGrpRequired", null, "Purchasing Group is required (e.g. 001).") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Purchasing Group is required.",
+                    title: this.getText("poValSummaryPurchGrpReq", null, "Purchasing Group is required."),
                     field: "General Data / Purchasing Group",
-                    description: "Specify a 3-character buyer purchasing group (e.g. 001).",
+                    description: this.getText("poValSummaryPurchGrpDesc", null, "Specify a 3-character buyer purchasing group (e.g. 001)."),
                     controlId: "inPurchGrp"
                 });
             }
             if (!oHeader.Supplier || !String(oHeader.Supplier).trim()) {
-                oHeaderErrors.Supplier = { state: "Error", text: "Supplier is required (e.g. 10300001)." };
+                oHeaderErrors.Supplier = { state: "Error", text: this.getText("poValSupplierRequired", null, "Supplier is required (e.g. 10300001).") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Supplier is required.",
+                    title: this.getText("poValSummarySupplierReq", null, "Supplier is required."),
                     field: "Supplier & Commercial Terms / Supplier",
-                    description: "Enter or select an active SAP Business Partner / Supplier ID.",
+                    description: this.getText("poValSummarySupplierDesc", null, "Enter or select an active SAP Business Partner / Supplier ID."),
                     controlId: "inSupplier"
                 });
             }
             if (!oHeader.Currency || !String(oHeader.Currency).trim()) {
-                oHeaderErrors.Currency = { state: "Error", text: "Currency is required (e.g. EUR, USD)." };
+                oHeaderErrors.Currency = { state: "Error", text: this.getText("poValCurrencyRequired", null, "Currency is required (e.g. EUR, USD).") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Currency is required.",
+                    title: this.getText("poValSummaryCurrencyReq", null, "Currency is required."),
                     field: "Supplier & Commercial Terms / Currency",
-                    description: "Enter a valid 3-letter ISO currency code (e.g. EUR, USD).",
+                    description: this.getText("poValSummaryCurrencyDesc", null, "Enter a valid 3-letter ISO currency code (e.g. EUR, USD)."),
                     controlId: "inCurrency"
                 });
             } else if (!/^[A-Za-z]{3}$/.test(String(oHeader.Currency).trim())) {
-                oHeaderErrors.Currency = { state: "Error", text: "Currency must be a valid 3-letter ISO code." };
+                oHeaderErrors.Currency = { state: "Error", text: this.getText("poValCurrencyIso", null, "Currency must be a valid 3-letter ISO code.") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Currency must be a 3-letter ISO code (e.g. EUR).",
+                    title: this.getText("poValCurrencyIso", null, "Currency must be a 3-letter ISO code (e.g. EUR)."),
                     field: "Supplier & Commercial Terms / Currency",
-                    description: "Use an authorized ISO currency code (e.g. EUR, USD, INR).",
+                    description: this.getText("poValSummaryCurrencyDesc", null, "Use an authorized ISO currency code (e.g. EUR, USD, INR)."),
                     controlId: "inCurrency"
                 });
             }
             if (!oHeader.DocumentDate || !String(oHeader.DocumentDate).trim()) {
-                oHeaderErrors.DocumentDate = { state: "Error", text: "Document Date is required." };
+                oHeaderErrors.DocumentDate = { state: "Error", text: this.getText("poValDocDateRequired", null, "Document Date is required.") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Document Date is required.",
+                    title: this.getText("poValSummaryDocDateReq", null, "Document Date is required."),
                     field: "General Data / Document Date",
-                    description: "Choose the creation or document date for this purchase order.",
+                    description: this.getText("poValSummaryDocDateDesc", null, "Choose the creation or document date for this purchase order."),
                     controlId: "inDocDate"
                 });
             }
             if (oHeader.IncotermsClassification && String(oHeader.IncotermsClassification).trim().length > 3) {
-                oHeaderErrors.IncotermsClassification = { state: "Error", text: "Incoterms must not exceed 3 characters." };
+                oHeaderErrors.IncotermsClassification = { state: "Error", text: this.getText("poValIncotermsMaxLen", null, "Incoterms must not exceed 3 characters.") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Incoterms must not exceed 3 characters.",
+                    title: this.getText("poValIncotermsMaxLen", null, "Incoterms must not exceed 3 characters."),
                     field: "Supplier & Commercial Terms / Incoterms",
-                    description: "Enter a 3-letter Incoterms classification (e.g. EXW, FOB, CIF).",
+                    description: this.getText("poValSummaryIncotermsDesc", null, "Enter a 3-letter Incoterms classification (e.g. EXW, FOB, CIF)."),
                     controlId: "inIncoterms"
                 });
             }
             if (oHeader.IncotermsClassification && (!oHeader.IncotermsLocation1 || !String(oHeader.IncotermsLocation1).trim())) {
-                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: "Incoterms Location is required when Incoterms is specified." };
+                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: this.getText("poValIncotermsLocRequired", null, "Incoterms Location is required when Incoterms is specified.") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Incoterms Location is required when Incoterms is specified.",
+                    title: this.getText("poValIncotermsLocRequired", null, "Incoterms Location is required when Incoterms is specified."),
                     field: "Supplier & Commercial Terms / Incoterms Location",
-                    description: "Provide the primary delivery location for Incoterms.",
+                    description: this.getText("poValSummaryIncotermsLocDesc", null, "Provide the primary delivery location for Incoterms."),
                     controlId: "inIncotermsLoc"
                 });
             } else if (oHeader.IncotermsLocation1 && String(oHeader.IncotermsLocation1).trim().length > 70) {
-                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: "Incoterms Location 1 exceeds maximum length of 70 characters." };
+                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: this.getText("poValIncotermsLocMaxLen", null, "Incoterms Location 1 exceeds maximum length of 70 characters.") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Incoterms Location 1 exceeds 70 characters.",
+                    title: this.getText("poValIncotermsLocMaxLen", null, "Incoterms Location 1 exceeds 70 characters."),
                     field: "Supplier & Commercial Terms / Incoterms Location",
-                    description: "Shorten Incoterms Location 1 to at most 70 characters.",
+                    description: this.getText("poValSummaryIncotermsLocDesc", null, "Shorten Incoterms Location 1 to at most 70 characters."),
                     controlId: "inIncotermsLoc"
                 });
             }
             if (oHeader.PaymentTerms && String(oHeader.PaymentTerms).trim().length > 4) {
-                oHeaderErrors.PaymentTerms = { state: "Error", text: "Payment Terms exceeds maximum length of 4 characters." };
+                oHeaderErrors.PaymentTerms = { state: "Error", text: this.getText("poValPaymentTermsMaxLen", null, "Payment Terms exceeds maximum length of 4 characters.") };
                 aErrorList.push({
                     type: "Error",
-                    title: "Payment Terms exceeds 4 characters.",
+                    title: this.getText("poValPaymentTermsMaxLen", null, "Payment Terms exceeds 4 characters."),
                     field: "Supplier & Commercial Terms / Payment Terms",
-                    description: "Enter a standard 4-character payment terms code (e.g. 0001).",
+                    description: this.getText("poValSummaryPayTermsDesc", null, "Enter a standard 4-character payment terms code (e.g. 0001)."),
                     controlId: "inPaymentTerms"
                 });
             }
@@ -693,12 +910,13 @@ sap.ui.define([
             if (aItems.length === 0) {
                 aErrorList.push({
                     type: "Error",
-                    title: "Please add at least one line item.",
+                    title: this.getText("poValSummaryAtLeastOneItem", null, "Please add at least one line item."),
                     field: "Items Table",
-                    description: "Click 'Add Item' to insert at least one purchasing line item.",
+                    description: this.getText("poValSummaryAtLeastOneItemDesc", null, "Click 'Add Item' to insert at least one purchasing line item."),
                     controlId: "poItemsTable"
                 });
             } else {
+                var that = this;
                 aItems.forEach(function (item, idx) {
                     var sItemNo = item.PurchaseOrderItem || "Item #" + (idx + 1);
                     item.errors = item.errors || {};
@@ -711,10 +929,10 @@ sap.ui.define([
                     item.errors.TaxCode = { state: "None", text: "" };
 
                     if (!item.Material || !String(item.Material).trim()) {
-                        item.errors.Material = { state: "Error", text: "Material is required." };
+                        item.errors.Material = { state: "Error", text: that.getText("poValMaterialRequired", null, "Material is required.") };
                         aErrorList.push({
                             type: "Error",
-                            title: sItemNo + ": Material is required.",
+                            title: that.getText("poValItemMaterialRequired", [sItemNo], sItemNo + ": Material is required."),
                             field: sItemNo + " / Material",
                             description: "Select a valid material master number (e.g. TG11).",
                             itemIndex: idx,
@@ -723,10 +941,10 @@ sap.ui.define([
                         });
                     }
                     if (!item.Plant || !String(item.Plant).trim()) {
-                        item.errors.Plant = { state: "Error", text: "Plant is required." };
+                        item.errors.Plant = { state: "Error", text: that.getText("poValItemPlantRequired", [""], "Plant is required.") };
                         aErrorList.push({
                             type: "Error",
-                            title: sItemNo + ": Plant is required.",
+                            title: that.getText("poValItemPlantRequired", [sItemNo], sItemNo + ": Plant is required."),
                             field: sItemNo + " / Plant",
                             description: "Specify an authorized plant (e.g. 1010).",
                             itemIndex: idx,
@@ -735,10 +953,10 @@ sap.ui.define([
                         });
                     }
                     if (!item.StorageLocation || !String(item.StorageLocation).trim()) {
-                        item.errors.StorageLocation = { state: "Error", text: "Storage Location is required." };
+                        item.errors.StorageLocation = { state: "Error", text: that.getText("poValItemStorageLocRequired", [""], "Storage Location is required.") };
                         aErrorList.push({
                             type: "Error",
-                            title: sItemNo + ": Storage Location is required.",
+                            title: that.getText("poValItemStorageLocRequired", [sItemNo], sItemNo + ": Storage Location is required."),
                             field: sItemNo + " / Storage Location",
                             description: "Specify the receiving storage location within the plant (e.g. 101A).",
                             itemIndex: idx,
@@ -747,10 +965,10 @@ sap.ui.define([
                         });
                     }
                     if (!item.UnitOfMeasure || !String(item.UnitOfMeasure).trim()) {
-                        item.errors.UnitOfMeasure = { state: "Error", text: "Unit of Measure is required." };
+                        item.errors.UnitOfMeasure = { state: "Error", text: that.getText("poValItemUnitRequired", [""], "Unit of Measure is required.") };
                         aErrorList.push({
                             type: "Error",
-                            title: sItemNo + ": Unit of Measure is required.",
+                            title: that.getText("poValItemUnitRequired", [sItemNo], sItemNo + ": Unit of Measure is required."),
                             field: sItemNo + " / Unit of Measure",
                             description: "Specify the order unit of measure (e.g. PC, KG).",
                             itemIndex: idx,
@@ -760,10 +978,10 @@ sap.ui.define([
                     }
                     var fQty = parseFloat(item.OrderQuantity);
                     if (!item.OrderQuantity || isNaN(fQty) || fQty <= 0) {
-                        item.errors.OrderQuantity = { state: "Error", text: "Order Quantity must be greater than 0." };
+                        item.errors.OrderQuantity = { state: "Error", text: that.getText("poValItemQtyPositive", [""], "Order Quantity must be greater than 0.") };
                         aErrorList.push({
                             type: "Error",
-                            title: sItemNo + ": Order Quantity must be greater than 0.",
+                            title: that.getText("poValItemQtyPositive", [sItemNo], sItemNo + ": Order Quantity must be greater than 0."),
                             field: sItemNo + " / Quantity",
                             description: "Enter a positive numeric quantity.",
                             itemIndex: idx,
@@ -774,10 +992,10 @@ sap.ui.define([
                     if (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && String(item.NetPriceAmount).trim() !== "") {
                         var fPrice = parseFloat(item.NetPriceAmount);
                         if (isNaN(fPrice) || fPrice < 0) {
-                            item.errors.NetPriceAmount = { state: "Error", text: "Net Price must be non-negative." };
+                            item.errors.NetPriceAmount = { state: "Error", text: that.getText("poValItemNetPricePositive", [""], "Net Price must be non-negative.") };
                             aErrorList.push({
                                 type: "Error",
-                                title: sItemNo + ": Net Price must be non-negative.",
+                                title: that.getText("poValItemNetPricePositive", [sItemNo], sItemNo + ": Net Price must be non-negative."),
                                 field: sItemNo + " / Net Price",
                                 description: "Enter 0.00 or a positive net price.",
                                 itemIndex: idx,
@@ -787,10 +1005,10 @@ sap.ui.define([
                         }
                     }
                     if (item.TaxCode && String(item.TaxCode).trim().length > 2) {
-                        item.errors.TaxCode = { state: "Error", text: "Tax Code exceeds 2 characters." };
+                        item.errors.TaxCode = { state: "Error", text: that.getText("poValItemTaxCodeMaxLen", [""], "Tax Code exceeds 2 characters.") };
                         aErrorList.push({
                             type: "Error",
-                            title: sItemNo + ": Tax Code exceeds 2 characters.",
+                            title: that.getText("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code exceeds 2 characters."),
                             field: sItemNo + " / Tax Code",
                             description: "Enter a 2-character SAP tax code (e.g. V1, I0).",
                             itemIndex: idx,
@@ -806,7 +1024,7 @@ sap.ui.define([
             if (bHasError) {
                 sSummary = aErrorList.length === 1
                     ? aErrorList[0].title
-                    : aErrorList.length + " validation errors found. Please correct the highlighted fields.";
+                    : this.getText("poValSummaryMultiErrors", [aErrorList.length], aErrorList.length + " validation errors found. Please correct the highlighted fields.");
             }
 
             if (typeof oModel.setProperty === "function") {
@@ -1017,7 +1235,7 @@ sap.ui.define([
 
             var sSummary = aErrorList.length === 1
                 ? aErrorList[0].title
-                : aErrorList.length + " errors returned by backend. Please review and resolve.";
+                : this.getText("poValBackendErrorsSummary", [aErrorList.length], aErrorList.length + " errors returned by backend. Please review and resolve.");
 
             if (typeof oModel.setProperty === "function") {
                 oModel.setProperty("/errors", oHeaderErrors);
@@ -1181,18 +1399,23 @@ sap.ui.define([
                 oReport.applied.DocumentDate = sToday;
             }
 
-            // 2. Document Type (e.g. ZDOM) driving applicable configuration
+            // 2. Document Type driving applicable configuration
+            var sDefaultCode = (this.DEFAULT_DOC_TYPE && this.DEFAULT_DOC_TYPE.code) || "ZDOM";
+            var sDefaultText = (this.DEFAULT_DOC_TYPE && this.DEFAULT_DOC_TYPE.text) || "Dom. Aether In.LTD.";
             var sCurrentDocType = (oHeader.PurchaseOrderType || "").trim();
-            var bZdomAvailable = aDocTypes.some(function (dt) {
-                return dt && (dt.PurchasingDocumentType === "ZDOM");
+            var bDefaultAvailable = aDocTypes.some(function (dt) {
+                return dt && (dt.PurchasingDocumentType === sDefaultCode);
             });
 
-            // If Document Type is not user modified, and ZDOM is available in config, select ZDOM
-            if (!oUserModified.PurchaseOrderType && bZdomAvailable && sCurrentDocType === "") {
-                oHeader.PurchaseOrderType = "ZDOM";
-                sCurrentDocType = "ZDOM";
+            // If Document Type is not user modified, and default is available in config, select default
+            if (!oUserModified.PurchaseOrderType && bDefaultAvailable && sCurrentDocType === "") {
+                oHeader.PurchaseOrderType = sDefaultCode;
+                oHeader.PurchaseOrderTypeText = sDefaultText;
+                sCurrentDocType = sDefaultCode;
                 oConfigDerived.PurchaseOrderType = true;
-                oReport.applied.PurchaseOrderType = "ZDOM";
+                oReport.applied.PurchaseOrderType = sDefaultCode;
+            } else if (oHeader.PurchaseOrderType === sDefaultCode && !oHeader.PurchaseOrderTypeText) {
+                oHeader.PurchaseOrderTypeText = sDefaultText;
             }
 
             // 3. Confirm Company Code = 1000 ONLY when confirmed valid/configured in master data
@@ -1425,7 +1648,7 @@ sap.ui.define([
             });
 
             if (oOrgRecord && oOrgRecord.CompanyCode && oOrgRecord.CompanyCode !== sCoCode) {
-                var sMsg = "Purchasing Organization " + sPurchOrg + " belongs to Company Code " + oOrgRecord.CompanyCode + ", not " + sCoCode + ".";
+                var sMsg = this.getText("poValPurchOrgCoCodeMismatch", [sPurchOrg, oOrgRecord.CompanyCode, sCoCode], "Purchasing Organization " + sPurchOrg + " belongs to Company Code " + oOrgRecord.CompanyCode + ", not " + sCoCode + ".");
                 this.setFieldValidation(oModel, "PurchasingOrganization", "Error", sMsg);
                 return { isValid: false, message: sMsg };
             }

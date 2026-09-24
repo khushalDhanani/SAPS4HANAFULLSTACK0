@@ -51,9 +51,9 @@ function normalizePurchaseOrderData(data, context = {}) {
         }
         const price = Number(item.NetPriceAmount) || 0;
         const calculatedNetAmount = (qty * price).toFixed(2);
-        const itemRequisitioner = (item.RequisitionerName && String(item.RequisitionerName).trim() !== '')
-            ? String(item.RequisitionerName).trim()
-            : defaultRequisitioner;
+        // Requisitioner identity must be strictly owned by the server's authenticated context
+        // to protect the audit trail and prevent client-side impersonation.
+        const itemRequisitioner = defaultRequisitioner;
 
         const rawUnit = item.UnitOfMeasure || item.OrderQuantityUnit || item.BaseUnit || item.Unit;
         if (!rawUnit || String(rawUnit).trim() === '') {
@@ -69,7 +69,7 @@ function normalizePurchaseOrderData(data, context = {}) {
             OrderQuantity: String(item.OrderQuantity).trim(),
             UnitOfMeasure: unitOfMeasure,
             NetPriceAmount: price.toFixed(2),
-            NetAmount: item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount,
+            NetAmount: calculatedNetAmount,
             RequisitionerName: itemRequisitioner,
             MaterialGroup: item.MaterialGroup ? String(item.MaterialGroup).trim() : undefined,
             PurchaseOrderItemCategory: item.PurchaseOrderItemCategory ? String(item.PurchaseOrderItemCategory).trim() : undefined,

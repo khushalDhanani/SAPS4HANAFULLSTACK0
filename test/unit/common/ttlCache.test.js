@@ -117,4 +117,16 @@ describe('Unit: TtlCache', () => {
         expect(result).toBe('success');
         expect(retryFn).toHaveBeenCalledTimes(1);
     });
+
+    test('getOrSet supports dynamic TTL function based on resolved value', async () => {
+        const cache = new TtlCache({ defaultTtlMs: 5000 });
+        const ttlFn = jest.fn((val) => (val.status === 'fail' ? 20 : 1000));
+
+        await cache.getOrSet('k1', async () => ({ status: 'fail' }), ttlFn);
+        expect(ttlFn).toHaveBeenCalledWith({ status: 'fail' });
+
+        expect(cache.get('k1')).toEqual({ status: 'fail' });
+        await new Promise(r => setTimeout(r, 35));
+        expect(cache.get('k1')).toBeUndefined(); // Expired after 20ms
+    });
 });

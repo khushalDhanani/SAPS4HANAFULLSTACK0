@@ -112,7 +112,7 @@ function mapToS4Payload(header, items, options = {}) {
                 OrderQuantity: formattedQty,
                 PurchaseOrderQuantityUnit: item.UnitOfMeasure,
                 NetPriceAmount: formattedPrice,
-                RequisitionerName: item.RequisitionerName || defaultRequisitioner,
+                RequisitionerName: options.user || item.RequisitionerName || defaultRequisitioner,
                 ...(item.PurchaseOrderItemText ? { PurchaseOrderItemText: item.PurchaseOrderItemText } : {}),
                 ...(item.StorageLocation ? { StorageLocation: item.StorageLocation } : {}),
                 ...(item.MaterialGroup ? { MaterialGroup: item.MaterialGroup } : {}),

@@ -71,16 +71,63 @@ describe('Unit: Purchase Order Creation Payload Sanitization', () => {
         expect(sentPayload.items[0].OrderQuantity).toBe('10');
     });
 
+    it('PurchaseOrderService.createPurchaseOrder should strip PurchaseOrderTypeText and UI-only properties from header', async () => {
+        mockODataClient.post.mockResolvedValueOnce({ value: '4500001007' });
+
+        const rawPayload = {
+            header: {
+                PurchaseOrderType: 'ZDOM',
+                PurchaseOrderTypeText: 'Dom. Aether In.LTD.',
+                CompanyCode: '1000',
+                PurchasingOrganization: '1000',
+                PurchasingGroup: '001',
+                Supplier: '10300001',
+                DocumentDate: '2026-09-24',
+                Currency: 'EUR',
+                IncotermsClassification: 'EXW',
+                IncotermsLocation1: 'Factory Gate',
+                PaymentTerms: '0001',
+                StatusText: 'Ready to Create',
+                StatusState: 'Success',
+                StatusIcon: 'sap-icon://accept',
+                PurchasingCompletenessStatus: true,
+                nonExistentField: 'leakedValue'
+            },
+            items: []
+        };
+
+        const result = await PurchaseOrderService.createPurchaseOrder(rawPayload);
+
+        expect(result).toBe('4500001007');
+        expect(mockODataClient.post).toHaveBeenCalledTimes(1);
+
+        const [, sentPayload] = mockODataClient.post.mock.calls[0];
+        expect(sentPayload.header.PurchaseOrderType).toBe('ZDOM');
+        expect(sentPayload.header.CompanyCode).toBe('1000');
+        expect(sentPayload.header.PaymentTerms).toBe('0001');
+
+        // Verify UI-only and non-schema attributes are strictly stripped
+        expect(sentPayload.header).not.toHaveProperty('PurchaseOrderTypeText');
+        expect(sentPayload.header).not.toHaveProperty('StatusText');
+        expect(sentPayload.header).not.toHaveProperty('StatusState');
+        expect(sentPayload.header).not.toHaveProperty('StatusIcon');
+        expect(sentPayload.header).not.toHaveProperty('PurchasingCompletenessStatus');
+        expect(sentPayload.header).not.toHaveProperty('nonExistentField');
+    });
+
     it('PurchaseOrderService.createPurchaseOrder should handle payload without items array gracefully', async () => {
         mockODataClient.post.mockResolvedValueOnce({ value: '4500001006' });
 
         const rawPayload = {
-            header: { PurchaseOrderType: 'NB' }
+            header: { PurchaseOrderType: 'NB', PurchaseOrderTypeText: 'Standard' }
         };
 
         const result = await PurchaseOrderService.createPurchaseOrder(rawPayload);
 
         expect(result).toBe('4500001006');
         expect(mockODataClient.post).toHaveBeenCalledTimes(1);
+        const [, sentPayload] = mockODataClient.post.mock.calls[0];
+        expect(sentPayload.header.PurchaseOrderType).toBe('NB');
+        expect(sentPayload.header).not.toHaveProperty('PurchaseOrderTypeText');
     });
 });

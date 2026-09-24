@@ -96,6 +96,74 @@ sap.ui.define([
         },
 
         /**
+         * Sanitizes the purchase order creation payload by stripping UI-only state properties,
+         * errors objects, and non-schema attributes before dispatching to CAP OData.
+         *
+         * @param {Object} oPayload Raw UI payload
+         * @returns {Object} Clean payload conforming to CAP action schema
+         */
+        _sanitizePayload: function (oPayload) {
+            if (!oPayload) {
+                return { header: {}, items: [] };
+            }
+
+            var rawHeader = oPayload.header || {};
+            var rawItems = Array.isArray(oPayload.items) ? oPayload.items : [];
+
+            var ALLOWED_HEADER_FIELDS = [
+                "PurchaseOrderType",
+                "CompanyCode",
+                "PurchasingOrganization",
+                "PurchasingGroup",
+                "Supplier",
+                "DocumentDate",
+                "Currency",
+                "IncotermsClassification",
+                "IncotermsLocation1",
+                "PaymentTerms"
+            ];
+
+            var ALLOWED_ITEM_FIELDS = [
+                "PurchaseOrderItem",
+                "Material",
+                "PurchaseOrderItemText",
+                "Plant",
+                "StorageLocation",
+                "MaterialGroup",
+                "PurchaseOrderItemCategory",
+                "AccountAssignmentCategory",
+                "OrderQuantity",
+                "UnitOfMeasure",
+                "NetPriceAmount",
+                "TaxCode",
+                "NetAmount",
+                "RequisitionerName"
+            ];
+
+            var cleanHeader = {};
+            ALLOWED_HEADER_FIELDS.forEach(function (field) {
+                if (rawHeader[field] !== undefined && rawHeader[field] !== null) {
+                    cleanHeader[field] = rawHeader[field];
+                }
+            });
+
+            var cleanItems = rawItems.map(function (item) {
+                var cleanItem = {};
+                ALLOWED_ITEM_FIELDS.forEach(function (field) {
+                    if (item[field] !== undefined && item[field] !== null) {
+                        cleanItem[field] = item[field];
+                    }
+                });
+                return cleanItem;
+            });
+
+            return {
+                header: cleanHeader,
+                items: cleanItems
+            };
+        },
+
+        /**
          * Dispatches createPurchaseOrder action to the CAP OData service.
          *
          * @param {Object} oPayload
@@ -105,18 +173,7 @@ sap.ui.define([
          */
         createPurchaseOrder: function (oPayload) {
             var sUrl = SERVICE_BASE + "/createPurchaseOrder";
-            var oCleanPayload = oPayload;
-            if (oPayload && Array.isArray(oPayload.items)) {
-                oCleanPayload = {
-                    header: oPayload.header,
-                    items: oPayload.items.map(function (item) {
-                        var oClean = Object.assign({}, item);
-                        delete oClean.errors;
-                        delete oClean.NetAmountIsEstimate;
-                        return oClean;
-                    })
-                };
-            }
+            var oCleanPayload = this._sanitizePayload(oPayload);
             return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
                 if (!result) return "";
                 return result.value || result.PurchaseOrder || result;

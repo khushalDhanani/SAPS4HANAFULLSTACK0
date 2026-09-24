@@ -59,14 +59,14 @@ sap.ui.define([
             });
         },
 
-        _loadConfigurationAndDefaults: function () {
+        _loadConfigurationAndDefaults: function (bForce) {
             var that = this;
             var oModel = this.getView().getModel("newInquiry");
 
-            if (this._oConfigData) {
+            // Optimistically apply cached configuration while refetching in background
+            if (this._oConfigData && !bForce) {
                 SalesInquiryModel.applyConfigurationDefaults(oModel, this._oConfigData);
                 this._updateOrganizationalFilters();
-                return Promise.resolve(this._oConfigData);
             }
 
             var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
@@ -83,6 +83,7 @@ sap.ui.define([
                 return oConfigData;
             }).catch(function (err) {
                 console.warn("[CreateSalesInquiry] Error loading config data:", err);
+                return that._oConfigData || null;
             });
         },
 
@@ -311,12 +312,17 @@ sap.ui.define([
         },
 
         onDeleteItem: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem");
-            if (oItem) {
-                var sPath = oItem.getBindingContext("newInquiry").getPath();
-                var oModel = this.getView().getModel("newInquiry");
-                SalesInquiryModel.deleteItem(oModel, sPath);
+            var oItem = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("listItem") : null;
+            if (!oItem) {
+                return;
             }
+            var oContext = typeof oItem.getBindingContext === "function" ? oItem.getBindingContext("newInquiry") : null;
+            if (!oContext || typeof oContext.getPath !== "function") {
+                return;
+            }
+            var sPath = oContext.getPath();
+            var oModel = this.getView().getModel("newInquiry");
+            SalesInquiryModel.deleteItem(oModel, sPath);
         },
 
         onItemMaterialChange: function (oEvent) {

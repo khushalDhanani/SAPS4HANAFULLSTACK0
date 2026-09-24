@@ -3,7 +3,397 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-24 13:50 IST
+- **Agent**: Antigravity
+- **Change**: Shield S/4HANA backend from unauthenticated/failure query storms and eliminate 26x parallel HTTP round-trips via in-flight promise coalescing and short-TTL caching in `getDashboardMetrics`:
+  1. **User Requirement & Problem Statement (Backend Audit Item 3)**:
+     - `getDashboardMetrics()` previously fired 26 separate HTTP round-trips to S/4HANA simultaneously (`Promise.all([...26 items...])`).
+     - On failure or unauthenticated states (e.g. HTTP 401 Unauthorized), `unavailable.length === keys.length` bypassed `metricsCache.set()`, leaving failures uncached. Every subsequent dashboard refresh or polling event immediately re-executed all 26 HTTP round-trips against SAP.
+     - Concurrent callers (e.g. `Dashboard`, `PurchaseOrders`, `SalesOrders`, `SalesInquiries`, and `JournalEntries` controllers all querying `/getDashboardMetrics()` on application load) missed the cache before the first query resolved, causing dogpiling/cache stampedes of up to 130 concurrent S/4HANA requests.
+     - Lack of fast-fail on 401 Unauthorized risked triggering SAP SU01 user account locks (`login/fails_to_user_lock`).
+  2. **Solution Delivered**:
+     - **In-Flight Request Coalescing**: Refactored `PurchaseOrderAdapter.getDashboardMetrics()` to use `this.metricsCache.getOrSet(cacheKey, fetchMetrics, ttlFn)`. Concurrent invocations share the exact same in-flight execution promise, collapsing multiple parallel client calls into a single batch of requests.
+     - **Dynamic TTL & Negative Failure Caching**: Enhanced `TtlCache.prototype.getOrSet` to support dynamic TTL calculation functions `(val) => number`. When S/4HANA is unavailable or logon is rejected (`unavailable.length === 26`), the failure state is cached with a 15-second negative TTL (`DASHBOARD_FAILURE_TTL_MS`), completely shielding SAP Gateway from storm loops while allowing automatic recovery.
+     - **Fast-Fail on 401 Unauthorized**: Sequenced `totalCount` (`C_PurchaseOrderFs`) as an initial authentication/liveness probe before dispatching the remaining 25 queries. If the probe rejects with HTTP 401 Unauthorized, remaining queries are immediately skipped (`authFailed = true`), limiting failed logon attempts to exactly 1 request and preventing SU01 account lockouts.
+     - **Master Data Caching & Cache Invalidation**: Preserved 5-minute caching for slow-changing master data counts, 30-second caching for transactional metrics, and clean cache bypass when `forceRefresh: true` or `clearMetricsCache()` is invoked.
+  3. **Files Modified**:
+     - `srv/common/TtlCache.js`
+     - `srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter.js`
+     - `test/unit/common/ttlCache.test.js`
+     - `test/unit/dashboard/dashboardMetrics.test.js`
+     - `WORKSTATUS.md`
+  4. **Validation Results**:
+     - `npx jest test/unit/dashboard/dashboardMetrics.test.js`: **1 suite passed, 35/35 tests passed (100% green)**.
+     - `npx jest test/unit/common/ttlCache.test.js`: **1 suite passed, 10/10 tests passed (100% green)**.
+     - `npx jest test/unit/`: **74 suites passed, 1175/1175 tests passed (100% green)**.
+     - `git diff --check`: **Clean (0 errors, 0 warnings)**.
+  5. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 12:15 IST
+- **Agent**: Antigravity
+- **Change**: Close defensive null-safety gaps in table item deletion and row context resolution:
+  1. **User Requirement**:
+     - Identified unguarded chain calls in `onDeleteItem`: `oEvent.getParameter("listItem").getBindingContext(...)` without verifying that `oEvent`, `getParameter("listItem")`, and `getBindingContext("newPO")` exist first, risking uncaught runtime TypeError if fired unexpectedly.
+     - Hardened `onDeleteItem` in `CreatePurchaseOrder.controller.js` with comprehensive defensive null checks:
+       - Safely checks `oEvent && typeof oEvent.getParameter === "function"`
+       - Guards `oItem = oEvent.getParameter("listItem")`
+       - Guards `oContext = oItem.getBindingContext("newPO")` and `oContext.getPath()`
+       - Validates index parsing (`!isNaN(iIndex) && iIndex >= 0`) before invoking `PurchaseOrderModel.deleteItem`.
+     - Hardened `onCalculateNetAmount` in `CreatePurchaseOrder.controller.js` to defensively guard `oEvent.getSource()` and `getBindingContext("newPO")`.
+     - Standardized matching defensive null-safety in `CreateSalesOrder.controller.js` and `CreateSalesInquiry.controller.js` `onDeleteItem` handlers.
+     - Added comprehensive unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js`:
+       - Tested `onDeleteItem` with `null`, empty object, missing `listItem`, missing binding context, and invalid path; verified 0 errors thrown.
+       - Tested functional item deletion and re-numbering.
+       - Tested `onCalculateNetAmount` with `null`, empty object, missing source, and missing binding context.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`
+     - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 261/261 tests passed (100% green)**.
+     - `npx jest test/unit/sd/ test/unit/sales-order/`: **12 suites passed, 189/189 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.16 s** (`Component-preload.js` generated).
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 12:05 IST
+- **Agent**: Antigravity
+- **Change**: Move Document Type business/domain validation from controller to PurchaseOrderModel:
+  1. **User Requirement**:
+     - Identified domain validation rules (Z-prefix requirement, max length 4, default fallbacks, error state generation) residing directly within `CreatePurchaseOrder.controller.js` (`onDocTypeChange` and `onDocTypeLiveChange`).
+     - Refactored `PurchaseOrderModel.js` to house all Document Type business rules:
+       - `isValidDocType(sDocType)`: Checks whether doc type starts with 'Z' and has length <= 4.
+       - `validateDocType(sDocType)`: Returns structured validation result `{ valid, state, text }` with localized error messages.
+       - `getDefaultDocType(oConfigData)`: Centralized resolution of active default doc type (code & text).
+       - `setDocumentType(oModel, sDocType, oConfigData, sDocTypeText)`: Handles empty clearing/default re-application, invalid input rejection, property setting, field validation, and status update.
+       - `updateDocTypeLive(oModel, sVal)`: Validates keystroke domain prefix and synchronizes header property.
+       - Refactored `validateSingleField` and `validateForm` in `PurchaseOrderModel.js` to reuse `validateDocType`, removing legacy duplicated lists.
+     - Refactored `CreatePurchaseOrder.controller.js` to act strictly as a thin event-wiring layer:
+       - `_getDefaultDocType()` delegates to `PurchaseOrderModel.getDefaultDocType(this._oConfigData)`.
+       - `onDocTypeLiveChange` delegates to `PurchaseOrderModel.updateDocTypeLive(oModel, sVal)`.
+       - `onDocTypeChange` delegates to `PurchaseOrderModel.setDocumentType(oModel, sCurrentVal, this._oConfigData)`.
+       - `onDocTypeSelect` delegates to `PurchaseOrderModel.setDocumentType(oModel, sKey, this._oConfigData, sText)`.
+       - `_handleValueHelpSelected` delegates to `PurchaseOrderModel.setDocumentType(oModel, sKey, this._oConfigData, sDocText)`.
+     - Updated unit tests:
+       - Fixed legacy test fixture in `createPurchaseOrderStatus.test.js` to use standard valid document type `'ZDOM'`.
+       - Added tests in `headerValueHelpSelection.test.js` verifying `isValidDocType`, `validateDocType`, and `setDocumentType`.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `test/unit/purchase-order/createPurchaseOrderStatus.test.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 258/258 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.15 s** (`Component-preload.js` generated).
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 11:35 IST
+- **Agent**: Antigravity
+- **Change**: Externalize all user-facing strings to i18n resource bundles across Create Purchase Order and Purchase Orders list:
+  1. **User Requirement**:
+     - Identified hardcoded English user-facing text across the Create Purchase Order flow: validation messages, `MessageToast` / `MessageBox` strings, error titles ("Authentication Failed", "Document Locked / Conflict", "Gateway Timeout", "Backend Error", etc.), and list view connection/error statuses.
+     - Added 27 new resource keys with 100% key parity across `app/fiori-app/webapp/i18n/i18n.properties` and `app/fiori-app/webapp/i18n/i18n_en.properties`:
+       - Error titles & messages: `poErrTitleAuthFailed`, `poErrMsgAuthFailed`, `poErrTitleLocked`, `poErrMsgLocked`, `poErrTitleTimeout`, `poErrMsgTimeout`, `poErrTitleBackend`, `poErrTitleUnavailable`, `poErrMsgUnavailable`, `poErrUnexpected`, etc.
+       - Validation & warnings: `poValDocTypeZRequired`, `poValSupplierRequired`, `poValCompanyCodeRequired`, `poValPurchOrgRequired`, `poValPurchGrpRequired`, `poValCurrencyRequired`, `poValMaterialRequired`, `poValPlantRequired`, `poValQuantityPositive`, `poValNetPriceNonNegative`, `poValUomRequired`, `poValIncotermsBothRequired`, `poValPurchOrgCoCodeMismatch`, `poValBackendErrorsSummary`.
+       - Status & toast strings: `poStatusDraftIncomplete`, `poStatusReadyToCreate`, `poStatusDraft`, `poMsgCreatedSuccess`, `poMsgSupplierDefaultsApplied`, `poLoadErrorMsg`, `poStatusAuthError`, `poStatusConnError`, `poAuthErrorTitle`, `poAuthErrorMsg`, `poLoadErrorTitle`, `poStatusConnected`.
+     - Enhanced `BaseController.getText(sKey, aArgs, sFallback)`:
+       - Inspects `this.getResourceBundle()` safely.
+       - If bundle is missing or key is not found, formats indexed placeholders (`{0}`, `{1}`) into `sFallback` and returns `sFallback` rather than raw untranslated key names.
+     - Enhanced `PurchaseOrderModel.js`:
+       - Added `_fnTextResolver`, `setTextResolver(fn)`, and `getText(sKey, aArgs, sFallback)`.
+       - Replaced hardcoded status labels (`Draft (Incomplete)`, `Ready to Create`, `Draft`), single-field validation messages, form-level validation messages, backend error summaries, and company code mismatch warnings with localized keys.
+     - Updated `CreatePurchaseOrder.controller.js`:
+       - In `onInit`, registers `PurchaseOrderModel.setTextResolver(this.getText.bind(this))` and cleans up in `onExit`.
+       - Replaced all hardcoded error titles, `_getErrorMessageConfig` messages, supplier defaults toasts, creation success toasts, and error status updates with `this.getText(...)`.
+       - Fixed `_getErrorMessageConfig` defaulting bug to accurately evaluate status-specific fallbacks (401, 403, 404, 409, 503, 504).
+     - Updated `PurchaseOrders.controller.js`:
+       - Replaced hardcoded connection status badge texts and list load error `MessageBox.error` with bundle keys.
+     - Added comprehensive unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` validating:
+       - Error message config mapping for HTTP 401, 403, 404, 409, 503, 504.
+       - PurchaseOrderModel localized text resolver for status labels and field errors.
+       - Supplier defaults toast localization.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/i18n/i18n.properties`
+     - `app/fiori-app/webapp/i18n/i18n_en.properties`
+     - `app/fiori-app/webapp/controller/BaseController.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 254/254 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 835 ms** (`Component-preload.js` generated).
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 11:10 IST
+- **Agent**: Antigravity
+- **Change**: Standardize OData V4 model retrieval across `CreatePurchaseOrder.controller.js`:
+  1. **User Requirement**:
+     - Identified inconsistent model retrieval across controller methods (`this.getModel()` in `_onPatternMatched` & `onItemMaterialChange` vs `(this.getModel && this.getModel("purchaseOrder")) || null` in `onItemMaterialSelect` and `_handleValueHelpSelected`).
+     - Investigated `manifest.json`: confirmed there is NO named model `"purchaseOrder"`; the default unnamed model `""` is the OData V4 service (`mainService`) hosting `MaterialVH`, `DocumentTypeVH`, `CompanyCodeVH`, etc.
+     - Confirmed `this.getModel` is always defined on `BaseController`, making defensive existence checks (`this.getModel &&`) redundant and misleading.
+     - Replaced both instances of `(this.getModel && this.getModel("purchaseOrder")) || null` with standard `this.getModel()`.
+     - Added unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` validating that `PurchaseOrderService.getMaterialDetails` receives the default unnamed OData model in both `onItemMaterialSelect` and `_handleValueHelpSelected`.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 251/251 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 943 ms** (`Component-preload.js` generated).
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 11:05 IST
+- **Agent**: Antigravity
+- **Change**: Replace fragile `setTimeout(..., 100)` UI timing with promise-based rendering lifecycle hooks:
+  1. **User Requirement**:
+     - Eliminating hardcoded 100ms rendering delay in `_openMessagePopover` and `_navigateToErrorTarget`.
+     - Replaced racy timers with promise-based lifecycle hook `_whenRendered(oControl)`:
+       - If the control's DOM element is already rendered (`oControl.getDomRef() !== null`), resolves immediately with 0ms delay.
+       - If pending render, attaches a one-time `onAfterRendering` event delegate via `oControl.addEventDelegate` and unregisters itself via `removeEventDelegate` immediately upon execution.
+       - Includes a fail-safe timer (500ms) to prevent hanging if a control is destroyed or kept permanently hidden.
+     - Added `_focusAndScrollIntoView(oControl)` to reliably focus and smoothly scroll header inputs or table cells into view once rendered.
+     - Added comprehensive unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` validating immediate resolution, delegate registration/unregistration, popover opening, and error target navigation.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 249/249 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.20 s** (`Component-preload.js` generated).
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 11:00 IST
+- **Agent**: Antigravity
+- **Change**: Replace fragile control-ID substring matching with robust customData and lookup resolution in Value Help and Context Filters:
+  1. **User Requirement**:
+     - Eliminating fragile control-ID string sniffing (`indexOf("Material") !== -1`, `indexOf("TaxCode") !== -1`, etc.) in `_buildContextFilters` and `_handleValueHelpSelected`.
+     - Replaced with robust 3-tier field resolution in `_resolveSourceField(oSource)`:
+       1. Declarative customData: `oSource.data("field")` (e.g. `app:field="Material"` in XML views).
+       2. Bound model property path: `oSource.getBindingPath("value")` (extracts property name from row binding e.g. `Material`, `Plant`, `StorageLocation`).
+       3. Precise control ID lookup table: `FIELD_ID_MAP` mapping explicit control IDs (`inDocType`, `inCompanyCode`, etc.) without substring sniffing.
+     - Added `xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"` to `CreatePurchaseOrder.view.xml` and annotated header and line item inputs with declarative `app:field="..."`.
+     - Cleaned up `_handleValueHelpSelected` into clear, type-safe `switch (sField)` branches for line items (`Material`, `Plant`, `StorageLocation`, `TaxCode`, `UnitOfMeasure`) and header fields (`PurchaseOrderType`, `Supplier`, commercial terms).
+     - Applied matching robust ID resolution to `_buildFilterBarContextFilters` in `PurchaseOrders.controller.js`.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 244/244 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 986 ms** (`Component-preload.js` generated).
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 10:55 IST
+- **Agent**: Antigravity
+- **Change**: Centralize default document type business constants (`DEFAULT_DOC_TYPE`) in model and controller:
+  1. **User Requirement**:
+     - Eliminating hardcoded string literals (`"ZDOM"` and `"Dom. Aether In.LTD."`) repeated across `_resetModel`, `onDocTypeChange`, `_handleValueHelpSelected`, and `onSuggest`.
+     - Centralized default document type definition in `PurchaseOrderModel.DEFAULT_DOC_TYPE` as single source of truth.
+     - Added helper `_getDefaultDocType()` in `CreatePurchaseOrder.controller.js` that dynamically looks up the configured document type from `_oConfigData` or falls back to `PurchaseOrderModel.DEFAULT_DOC_TYPE`.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 238/238 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.00 s**.
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 10:50 IST
+- **Agent**: Antigravity
+- **Change**: Remove test-only special case for `"NB"` embedded in production `onDocTypeChange`:
+  1. **User Requirement**:
+     - Removed hardcoded special case `else if (sTrimmed === "NB") { ... }` from `onDocTypeChange` in `CreatePurchaseOrder.controller.js`.
+     - Production code strictly enforces Z-related document types (`StartsWith('Z')`) without artificial backdoor test branches.
+     - Updated unit tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` to test against actual valid Z-types (`ZCAP`) instead of `"NB"`.
+  2. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  3. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 238/238 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.01 s**.
+     - `git diff --check`: **Clean (0 errors)**.
+  4. **Next Steps**: Continue review and testing.
+
+## 2026-09-24 10:45 IST
+- **Agent**: Antigravity
+- **Change**: Refactor duplicate field change & select handlers into generic `_onFieldChange` and `_onFieldSelect` helpers:
+  1. **User Requirement**:
+     - Identified heavy duplication across `onCompanyCodeChange/Select`, `onPurchOrgChange/Select`, `onPurchGrpChange/Select`, `onCurrencyChange/Select`, `onPaymentTermsChange/Select`, `onIncotermsChange/Select`.
+     - Collapsed identical patterns (mark user-modified → set property from selected item → validate single field / cross-field config → update status) into generic helpers `_onFieldChange(sField, oEvent)` and `_onFieldSelect(sField, oEvent)`.
+     - Also enhanced `onSuggest` for `inDocType` so default prefilled `"ZDOM"` does not restrict the suggestion dropdown from listing all 16 Z-types.
+  2. **Implementation Details**:
+     - **`CreatePurchaseOrder.controller.js`**:
+       - Added `_onFieldChange(sField, oEvent)` handling user-modification flag, cross-field validation (`CompanyCode`/`PurchasingOrganization`), single field validation, and status update.
+       - Added `_onFieldSelect(sField, oEvent)` extracting selected key, updating header model, and triggering `_onFieldChange`.
+       - Replaced repetitive boilerplate across `CompanyCode`, `PurchasingOrganization`, `PurchasingGroup`, `Currency`, `PaymentTerms`, `IncotermsClassification`, and `IncotermsLocation1` with concise 1-line delegates.
+       - Net reduction: ~120 lines of repetitive code, preventing drift across field handlers.
+  3. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `WORKSTATUS.md`
+  4. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 238/238 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.15 s** (`Component-preload.js` generated cleanly).
+     - `git diff --check`: **Clean (0 errors)**.
+  5. **Next Steps**: Continue code refinement and test live in browser.
+
+## 2026-09-24 10:40 IST
+- **Agent**: Antigravity
+- **Change**: Fix "Select Document Type" Value Help dialog in Create Purchase Order to display all 16 Z-related document types (`StartsWith 'Z'`) instead of restricting to only `ZDOM`:
+  1. **Root Cause**:
+     - In `CreatePurchaseOrder.controller.js` (`_buildContextFilters`), `inDocType` was passing `aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.EQ, "ZDOM"))`, which caused the "Select Document Type" Value Help dialog (`ValueHelpService.openValueHelp`) to display only 1 item (`ZDOM`) rather than all available Z-types.
+     - Additionally, `ValueHelpService.js` had `growingThreshold: 25` for `SelectDialog`.
+  2. **User Confirmation**:
+     - User confirmed via prompt question: *"Show all Z-related document types (all 16 Z-types: ZDOM, ZDOS, ZIMP, ZCAP, ZSTO, ZSER, etc.)"*.
+  3. **Implementation Details**:
+     - **`CreatePurchaseOrder.controller.js`**:
+       - In `_buildContextFilters`, changed `FilterOperator.EQ, "ZDOM"` to `FilterOperator.StartsWith, "Z"`. This allows all 16 Z-related PO types (`ZCAP`, `ZDIA`, `ZDIS`, `ZDOM`, `ZDOS`, `ZHSA`, `ZHSS`, `ZIMP`, `ZIMS`, `ZINT`, `ZLOG`, `ZNVM`, `ZRTV`, `ZSER`, `ZSTO`, `ZSUB`) to appear in the Value Help dialog.
+     - **`ValueHelpService.js`**:
+       - Increased `SelectDialog` `growingThreshold` from 25 to 50 so that all document types and master data items are fetched and rendered immediately without truncation.
+     - **`test/unit/purchase-order/headerValueHelpSelection.test.js`**:
+       - Added tests verifying `_buildContextFilters` returns `PurchasingDocumentType StartsWith 'Z'` for `inDocType`.
+       - Added tests verifying selection of non-ZDOM types (e.g. `ZDOS` with description `Dom.Aether Spec.Chem`) via `_handleValueHelpSelected`.
+  4. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/service/ValueHelpService.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+     - `WORKSTATUS.md`
+  5. **Validation Results**:
+     - `npx jest test/unit/purchase-order/`: **20 suites passed, 238/238 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 798 ms**.
+     - `git diff --check`: **Clean (0 errors)**.
+  6. **Next Steps**: Test live in browser on `/mm/purchase-orders/create` to verify clicking the Value Help icon on Document Type displays all 16 Z-types.
+
+## 2026-09-24 10:30 IST
+- **Agent**: Antigravity
+- **Change**: Restrict Document Type dropdown and Value Help across Purchase Orders to only show Z-related types (`ZDOM`, `ZDOS`, `ZIMP`, `ZIMS`, `ZCAP`, `ZSER`, etc.) with `ZDOM` as default:
+  1. **User Requirement**:
+     - User confirmed via interactive question: *"Show all 16 Z-types (ZDOM, ZDOS, ZIMP, ZIMS, ZCAP, ZSER, etc.) in the Type dropdown and Value Help, with ZDOM as default"*.
+     - Standard non-Z types (`NB`, `FO`, `UB`, `DB`, `ENB`, etc.) from standard SAP are filtered out.
+  2. **Implementation Details**:
+     - **`CreatePurchaseOrder.view.xml`**:
+       - `inDocType`: Set `value="{newPO>/header/PurchaseOrderType}"` (maxLength 4), `description="{newPO>/header/PurchaseOrderTypeText}"`.
+       - `suggestionItems`: Configured filter `[{path: 'PurchasingDocumentType', operator: 'StartsWith', value1: 'Z'}]`.
+       - `<core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />`.
+     - **`CreatePurchaseOrder.controller.js`**:
+       - `_resetModel`: Defaults to `PurchaseOrderType: "ZDOM"` and `PurchaseOrderTypeText: "Dom. Aether In.LTD."`.
+       - `onDocTypeLiveChange` & `onDocTypeChange`: Allows any valid Z-type (`StartsWith('Z')`, length <= 4), displays its description, and rejects non-Z types with error `"Only Z-related document types (e.g. ZDOM, ZDOS, ZIMP, ZCAP) are supported."`.
+       - `onDocTypeSelect`: Sets both code and description upon selecting any Z-type suggestion.
+       - `_buildContextFilters`: Restricts Value Help dialog to `FilterOperator.StartsWith, 'Z'`.
+       - `_handleValueHelpSelected`: Populates selected Z-type code and description.
+     - **`PurchaseOrders.view.xml` & `PurchaseOrders.controller.js`**:
+       - Filter Bar `fbDocType` suggestions filtered with `PurchasingDocumentType StartsWith 'Z'`.
+       - `_buildFilterBarContextFilters`: Added `PurchasingDocumentType StartsWith 'Z'` for `fbDocType`.
+     - **`PurchaseOrderModel.js`**:
+       - Updated `validateSingleField` and `validateForm` to validate that `PurchaseOrderType` starts with `'Z'`.
+     - **`test/unit/purchase-order/headerValueHelpSelection.test.js`**:
+       - Updated tests to verify acceptance of any valid Z-type (e.g. `ZCAP`, `ZDOS`) and rejection of non-Z types.
+  3. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/PurchaseOrders.view.xml`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+  4. **Validation Results**:
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 765 ms** (`Component-preload.js` generated cleanly).
+     - `npx jest test/unit/purchase-order/`: **20 suites, 236/236 tests passed**.
+     - `git diff --check`: Clean (0 errors).
+  5. **Next Steps**: Test live in browser on `/mm/purchase-orders/create` to verify dropdown and Value Help show only the 16 Z-types.
+
+
+## 2026-09-24 10:20 IST
+- **Agent**: Antigravity
+- **Change**: Restrict Document Type strictly to `ZDOM` and display only `Dom. Aether In.LTD.` on `/mm/purchase-orders/create`:
+  1. **Requirement Clarification**:
+     - User requested that the Document Type input (`inDocType`) in `CreatePurchaseOrder.view.xml` (L66-L74) must strictly restrict selection to `ZDOM` and display only the description text `Dom. Aether In.LTD.` without exposing the technical code `ZDOM` to the end-user.
+  2. **Implementation Details**:
+     - **`CreatePurchaseOrder.view.xml`**:
+       - Bound `value="{newPO>/header/PurchaseOrderTypeText}"` with `maxLength="40"`.
+       - Filtered `suggestionItems="{path: '/DocumentTypeVH', filters: [{path: 'PurchasingDocumentType', operator: 'EQ', value1: 'ZDOM'}], templateShareable: false}"`.
+       - Rendered `<core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType_Text}" />` without `additionalText`, so suggestions show only `Dom. Aether In.LTD.`.
+     - **`CreatePurchaseOrder.controller.js`**:
+       - `_resetModel`: Pre-populates `PurchaseOrderType: "ZDOM"` and `PurchaseOrderTypeText: "Dom. Aether In.LTD."` on view initialization.
+       - `onDocTypeLiveChange` & `onDocTypeChange`: Synchronizes both `PurchaseOrderType` ("ZDOM") and `PurchaseOrderTypeText` ("Dom. Aether In.LTD.") and strictly restricts valid entry to `Dom. Aether In.LTD.` (or `ZDOM` internally). Rejects any other document type with error `"Only 'Dom. Aether In.LTD.' is supported."`.
+       - `onDocTypeSelect`: When suggestion item is chosen, sets `/header/PurchaseOrderType` = `sKey` (`ZDOM`) and `/header/PurchaseOrderTypeText` = `sText` (`Dom. Aether In.LTD.`).
+       - `_buildContextFilters`: Restricts Value Help dialog queries for `inDocType` to filter `PurchasingDocumentType EQ 'ZDOM'`.
+       - `_handleValueHelpSelected`: Properly sets both key (`ZDOM`) and display text (`Dom. Aether In.LTD.`).
+     - **`PurchaseOrderModel.js`**:
+       - Added `PurchaseOrderTypeText: ""` to initial model header structure.
+       - Updated `applyConfigurationDefaults` to set `PurchaseOrderTypeText: "Dom. Aether In.LTD."` whenever `PurchaseOrderType` is defaulted to `ZDOM`.
+       - Updated `validateSingleField` and `validateForm` to validate that `PurchaseOrderType` matches `ZDOM` / `Dom. Aether In.LTD.`.
+     - **`test/unit/purchase-order/headerValueHelpSelection.test.js`**:
+       - Added unit tests for ZDOM / Dom. Aether In.LTD. value help selection, suggestion selection, and invalid type rejection.
+  3. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+     - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+  4. **Validation Results**:
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded** (`Component-preload.js` generated cleanly).
+     - `npx jest test/unit/purchase-order/`: **20 suites, 235/235 tests passed**.
+     - `npm test -- test/unit/`: **74 suites, 1140/1140 tests passed**.
+     - `git diff --check`: Clean (0 errors).
+  5. **Next Steps**: Live UI verification on `/mm/purchase-orders/create` to confirm Document Type shows `Dom. Aether In.LTD.` cleanly.
+
+
+## 2026-09-24 10:05 IST
+- **Agent**: Antigravity
+- **Change**: Debug & Fix — "Dom. Aether In.LTD." shown in Type field on `/mm/purchase-orders/create`:
+  1. **Root Cause Analysis**:
+     - SAP `I_PurchasingDocumentType` (from `C_PURCHASEORDER_FS_SRV`) stores document type `ZDOM` with `PurchasingDocumentType_Text = "Dom. Aether In.LTD."` (abbreviation for **Dom**estic **Aether In**dustries **LTD.**).
+     - `applyConfigurationDefaults` (in `PurchaseOrderModel.js`) auto-selects `ZDOM` on form load if it is available in the `DocumentTypeVH` list.
+     - The `inDocType` input was wired to `liveChange=".onDocTypeChange"` — this called `applyConfigurationDefaults` on every keystroke, which re-locked the field to `ZDOM` mid-typing, preventing the user from clearing and changing it.
+     - `validateSingleField` only checked "is it empty?" — it did not check "is the value a valid 4-char code?" — so accidentally typing the description text `Dom. Aether In.LTD.` instead of the code `ZDOM` passed client validation silently.
+     - Pre-existing: `CustomerReturns.view.xml` line 212 had a raw `&&` in an XML expression binding (XML entity violation causing build error).
+  2. **Fixes Applied**:
+     - **`CreatePurchaseOrder.view.xml`**: Changed `liveChange=".onDocTypeChange"` → `liveChange=".onDocTypeLiveChange"` to decouple live-typing from config-defaults re-application.
+     - **`CreatePurchaseOrder.controller.js`**:
+       - Added `onDocTypeLiveChange` — lightweight handler that only marks `userModified` and runs format validation. Does NOT call `applyConfigurationDefaults`.
+       - Refactored `onDocTypeChange` (blur/Enter): detects when user typed the description text (value length > 4 or contains spaces/dots), sets `Error` state with message `"Enter the document type code (e.g. ZDOM, NB) — not the description text. Use the dropdown to select."`. Only re-applies config defaults when field is explicitly cleared (to allow auto-re-selection of ZDOM).
+       - `onDocTypeSelect` (suggestion selected): clears any format error immediately — valid key selected from dropdown.
+     - **`PurchaseOrderModel.js`** (`validateSingleField` + `validateForm`): Added format check for `PurchaseOrderType`: length > 4 chars or contains spaces/dots → `Error` state with descriptive message.
+     - **`CustomerReturns.view.xml`**: Fixed pre-existing XML entity violation — replaced raw `&&` with `&amp;&amp;` at line 212 (unrelated to main fix but was blocking build).
+  3. **Files Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+     - `app/fiori-app/webapp/modules/sd/customer-return/view/CustomerReturns.view.xml`
+  4. **Validation Results**:
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 792 ms** (`Component-preload.js` generated cleanly — XML entity error fixed).
+     - `npm test -- test/unit/purchase-order/ test/unit/sd/`: **27 suites, 351/351 tests passed**.
+     - `git diff --check`: Clean.
+  5. **Next**: Navigate to `/mm/purchase-orders/create` and verify: ZDOM auto-selects on load, clearing the field allows re-typing a different code (`NB`, `FO`, etc.), and typing description text now shows an `Error` valueState with a clear guidance message.
+
 ## 2026-09-24 09:44 IST
+
 - **Agent**: Antigravity
 - **Change**: Fix `sd/returns` list page — date/amount/reason display bugs:
   1. **Root Cause Analysis** (via live SAP + debug scripts):
@@ -2594,7 +2984,122 @@
     - `npm test`: 78 passed, 78 test suites, 1068 passed, 1068 total tests (100% green).
   - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
 
+- **2026-09-24 13:15 IST**:
+  - **Task**: Backend Data Integrity & Security — Enforce authenticated RequisitionerName on line items in `purchaseOrder.mapper.js` and `PurchaseOrderMapper.js`.
+  - **Root Cause**: While `purchaseOrder.handler.js` properly used `resolveUserIdentity(req)` to securely authenticate the requester identity, `normalizePurchaseOrderData` in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js` permitted the client to override the line item requisitioner via `item.RequisitionerName`. A client could spoof or tamper with `RequisitionerName`, bypassing audit controls and attributing line items to arbitrary third-party users.
+  - **Solution Delivered**:
+    1. **Domain-Level Requisitioner Enforcement (`purchaseOrder.mapper.js`)**:
+       - Updated `normalizePurchaseOrderData` to assign `const itemRequisitioner = defaultRequisitioner`, where `defaultRequisitioner` is authoritatively derived from `context.user` (`resolveUserIdentity(req)`). Any client-supplied `item.RequisitionerName` is unconditionally ignored.
+    2. **Integration Mapper Precedence (`PurchaseOrderMapper.js`)**:
+       - Updated `mapToS4Payload` in `srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper.js` to strictly prioritize `options.user` over any item-level property, ensuring that S/4HANA deep-insert payloads always carry the authenticated identity.
+    3. **Automated Unit Testing (`domainMapping.test.js` & `payloadMapping.test.js`)**:
+       - Updated unit tests in `test/unit/purchase-order/domainMapping.test.js` to assert that client-supplied `RequisitionerName: 'ATTACKER_SPOOFED_USER'` is discarded and replaced with the authenticated identity from context (or `'SYSTEM'`).
+       - Updated unit tests in `test/unit/purchase-order/payloadMapping.test.js` to assert that `options.user` takes strict precedence over any client-sent value.
+  - **Files Modified**:
+    - `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`
+    - `srv/integration/s4hana/mm/purchase-order/PurchaseOrderMapper.js`
+    - `test/unit/purchase-order/domainMapping.test.js`
+    - `test/unit/purchase-order/payloadMapping.test.js`
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/purchase-order/payloadMapping.test.js test/unit/purchase-order/domainMapping.test.js`: 2 passed, 16/16 tests green.
+    - `npx jest test/unit/purchase-order/ test/unit/sd/`: 27 passed, 27 suites, 385/385 tests green (100%).
+    - `npx jest test/integration/purchase-order/ test/e2e/purchase-order/`: 8 passed, 8 suites, 41/41 tests green (100%).
+    - `git diff --check`: Clean (0 errors).
+  - **Next Recommended Action**: Proceed with next backend security audit items.
+
+- **2026-09-24 13:00 IST**:
+  - **Task**: Backend Data Integrity & Security — Always recalculate and own NetAmount on the server in `purchaseOrder.mapper.js`.
+  - **Root Cause**: In `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`, line 72 used `NetAmount: item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount`. While the server computed `calculatedNetAmount = (qty * price).toFixed(2)`, it discarded the calculation if the client provided its own `item.NetAmount`. A buggy, out-of-sync, or malicious client could submit an arbitrary `NetAmount` (e.g. `0.01` or mismatched totals) that the backend blindly accepted.
+  - **Solution Delivered**:
+    1. **Server Owns NetAmount Calculation (`purchaseOrder.mapper.js`)**:
+       - Changed `NetAmount: calculatedNetAmount` in `normalizePurchaseOrderData`, unconditionally enforcing server calculation `(qty * price).toFixed(2)` and ignoring client-provided `item.NetAmount`.
+    2. **Automated Unit Testing (`domainMapping.test.js`)**:
+       - Added test case verifying that client-supplied `NetAmount` (e.g. `0.01` against 4 units at 25.00) is completely ignored in favor of the server's calculated `100.00`.
+  - **Files Modified**:
+    - `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`
+    - `test/unit/purchase-order/domainMapping.test.js`
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/purchase-order/domainMapping.test.js`: 1 passed, 9/9 tests green.
+    - `npx jest test/unit/purchase-order/ test/unit/sd/`: 27 passed, 27 suites, 384/384 tests green (100%).
+    - `npx jest test/integration/purchase-order/ test/e2e/purchase-order/`: 8 passed, 8 suites, 41/41 tests green (100%).
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next Recommended Action**: Proceed with remaining backend data integrity and security audit items.
+
+- **2026-09-24 12:50 IST**:
+  - **Task**: Fix PO Creation HTTP 400 error `Property "PurchaseOrderTypeText" does not exist in header`.
+  - **Root Cause**: The client-side UI model includes `PurchaseOrderTypeText` in `header` to display the human-readable document type description (e.g. `Dom. Aether In.LTD.`) alongside `PurchaseOrderType` (`ZDOM`). While `CreatePurchaseOrder.controller.js` explicitly deleted other UI properties (`StatusText`, `StatusState`, `StatusIcon`, `PurchasingCompletenessStatus`) prior to backend dispatch, `PurchaseOrderTypeText` was not deleted. Furthermore, `PurchaseOrderService.createPurchaseOrder` did not sanitize the `header` object against `type POHeader` in `service.cds`. Consequently, when submitting a new PO, CAP's strict OData V4 protocol validator rejected the action invocation with HTTP 400 Bad Request: `Property "PurchaseOrderTypeText" does not exist in header`.
+  - **Solution Delivered**:
+    1. **Service-Layer Schema Sanitization (`PurchaseOrderService.js`)**:
+       - Implemented `_sanitizePayload(oPayload)` in `PurchaseOrderService.js` matching the established pattern in `SalesOrderService.js` and `SalesInquiryService.js`.
+       - Whitelisted strictly allowed `POHeader` schema attributes (`PurchaseOrderType`, `CompanyCode`, `PurchasingOrganization`, `PurchasingGroup`, `Supplier`, `DocumentDate`, `Currency`, `IncotermsClassification`, `IncotermsLocation1`, `PaymentTerms`).
+       - Whitelisted strictly allowed `POItem` schema attributes, automatically stripping UI error models, `NetAmountIsEstimate`, and any extraneous UI state properties.
+       - Dispatched sanitized payloads through `createPurchaseOrder`.
+    2. **Controller Payload Hygiene (`CreatePurchaseOrder.controller.js`)**:
+       - Added explicit deletion of `PurchaseOrderTypeText` in `oCleanHeader` prior to invoking `PurchaseOrderService.createPurchaseOrder`.
+    3. **Automated Unit Tests (`purchaseOrderPayloadSanitization.test.js`)**:
+       - Enhanced unit tests in `purchaseOrderPayloadSanitization.test.js` to assert that `PurchaseOrderTypeText`, `StatusText`, `StatusState`, `StatusIcon`, `PurchasingCompletenessStatus`, and unknown non-schema attributes are stripped from `header` while valid header attributes (`PurchaseOrderType`, `CompanyCode`, `PaymentTerms`, etc.) are preserved.
+  - **Files Modified**:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/service/PurchaseOrderService.js`
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+    - `test/unit/purchase-order/purchaseOrderPayloadSanitization.test.js`
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/purchase-order/purchaseOrderPayloadSanitization.test.js`: 1 passed, 3/3 tests green.
+    - `npx jest test/unit/purchase-order/ test/unit/sd/`: 27 passed, 27 suites, 383/383 tests green (100%).
+    - `npx jest test/integration/purchase-order/ test/e2e/purchase-order/`: 8 passed, 8 suites, 41/41 tests green (100%).
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 802 ms (`Component-preload.js` generated).
+    - `git diff --check`: Clean (0 errors).
+  - **Next Recommended Action**: Test PO creation live in browser at `http://localhost:4004/saps4hana-fiori-app/index.html#createPurchaseOrder`.
+
+- **2026-09-24 12:25 IST**:
+  - **Task**: Audit Item 10 - Stale config caching elimination in `CreatePurchaseOrder.controller.js`, `CreateSalesOrder.controller.js`, and `CreateSalesInquiry.controller.js`.
+  - **Root Cause**: `_loadConfigurationAndDefaults` cached `_oConfigData` on initial route entry and returned early on subsequent route entries (`return Promise.resolve(this._oConfigData);`). As a result, mid-session server-side configuration changes (document types, plant configurations, default units, etc.) were never refetched unless the user fully refreshed or restarted the application.
+  - **Solution Delivered**:
+    1. **Stale-While-Revalidate Configuration Loading**:
+       - Refactored `_loadConfigurationAndDefaults(bForce)` in `CreatePurchaseOrder.controller.js`:
+         - If `this._oConfigData` is present and `!bForce`, immediately applies cached configuration to the newly initialized `newPO` model and updates organizational filters for fast UX responsiveness without blocking UI rendering.
+         - Concurrently issues an asynchronous fetch via `PurchaseOrderService.loadConfiguration(oPoModel)` to retrieve fresh configuration from the server.
+         - On completion, updates `this._oConfigData = oConfigData` and reapplies updated configuration defaults (`PurchaseOrderModel.applyConfigurationDefaults`), preserving user-modified fields while picking up any updated server-side options or defaults.
+         - Added fallback handling returning existing `this._oConfigData` on network failure.
+    2. **SD Controllers Alignment**:
+       - Applied identical stale-while-revalidate pattern to `CreateSalesOrder.controller.js` and `CreateSalesInquiry.controller.js` to ensure consistent live configuration synchronization across all transactional creation flows.
+    3. **Lifecycle Cleanup**:
+       - Added `this._oConfigData = null;` to `onExit` in `CreatePurchaseOrder.controller.js` to avoid retaining stale session state when navigating away.
+       - Added defensive checks in `_resetModel` for `this.getOwnerComponent()` and `this.getView().setModel()` during model initialization.
+    4. **Unit Tests & Regression Protection**:
+       - Added test cases in `test/unit/purchase-order/headerValueHelpSelection.test.js`:
+         - Verified that subsequent calls to `_loadConfigurationAndDefaults()` trigger fresh backend queries (`PurchaseOrderService.loadConfiguration`).
+         - Verified that pattern matching route navigation resets model and fetches fresh configuration.
+         - Verified `_oConfigData` is cleared on `onExit()`.
+  - **Files Modified**:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+    - `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`
+    - `app/fiori-app/webapp/modules/sd/sales-inquiry/controller/CreateSalesInquiry.controller.js`
+    - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/purchase-order/ test/unit/sd/`: 27 passed, 27 suites, 382/382 tests green (100%).
+    - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js`: 1 passed, 39/39 tests green.
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 937 ms (`Component-preload.js` generated).
+    - `git diff --check`: Clean (0 errors).
+  - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
+
 ## Current Status
+- **2026-09-24 13:15 IST (uncommitted)**: Enforced authenticated RequisitionerName on line items in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js` and `PurchaseOrderMapper.js`. Eliminated client-side identity spoofing by locking `RequisitionerName` to `context.user` (`resolveUserIdentity(req)`), ignoring any client-sent value. Updated unit tests in `domainMapping.test.js` and `payloadMapping.test.js`, all 27 PO/SD unit test suites (385 tests) and 8 integration/e2e suites (41 tests) passing, `git diff --check` clean.
+- **2026-09-24 13:00 IST (uncommitted)**: Enforced server calculation ownership for `NetAmount` in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`. Removed fallback `item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount`, preventing client-side tampering or mismatched totals. Server now unconditionally calculates `NetAmount = (qty * price).toFixed(2)`. Added unit test in `domainMapping.test.js`, all 27 PO/SD unit test suites (384 tests) and 8 integration/e2e suites (41 tests) passing, `npx cds compile srv` clean, `git diff --check` clean.
+- **2026-09-24 12:50 IST (uncommitted)**: Resolved PO Creation HTTP 400 Bad Request error (`Property "PurchaseOrderTypeText" does not exist in header`). Implemented `_sanitizePayload` with schema whitelisting (`ALLOWED_HEADER_FIELDS`, `ALLOWED_ITEM_FIELDS`) in `PurchaseOrderService.js` matching SD service patterns, and explicitly stripped `PurchaseOrderTypeText` in `CreatePurchaseOrder.controller.js`. Added unit tests in `purchaseOrderPayloadSanitization.test.js`, all 27 PO/SD unit test suites (383 tests) and 8 integration/e2e suites (41 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 12:25 IST (uncommitted)**: Eliminated stale config caching in `CreatePurchaseOrder.controller.js`, `CreateSalesOrder.controller.js`, and `CreateSalesInquiry.controller.js` (Audit Item 10). Implemented stale-while-revalidate pattern in `_loadConfigurationAndDefaults` that optimistically applies existing config defaults while asynchronously refetching fresh configuration from the backend on every route entry, updating model state and clearing `_oConfigData` on `onExit`. All 27 PO and SD test suites (382 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 12:15 IST (uncommitted)**: Closed defensive null-safety gaps in table item deletion (`onDeleteItem`) and row calculation handlers across MM and SD creation flows (`CreatePurchaseOrder.controller.js`, `CreateSalesOrder.controller.js`, `CreateSalesInquiry.controller.js`). Added guards for `oEvent.getParameter("listItem")`, binding contexts, path strings, and parsed indices (`isNaN` / bounds checks) preventing runtime TypeErrors if events fire unexpectedly or controls are disposed mid-event. Added unit tests in `headerValueHelpSelection.test.js`, all 20 PO test suites (261 tests) and 12 SD test suites (189 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 12:05 IST (uncommitted)**: Moved Document Type business/domain validation out of `CreatePurchaseOrder.controller.js` into `PurchaseOrderModel.js`. Added `isValidDocType`, `validateDocType`, `getDefaultDocType`, `setDocumentType`, and `updateDocTypeLive` in `PurchaseOrderModel`. Refactored `validateSingleField` and `validateForm` to reuse `validateDocType`. Converted `CreatePurchaseOrder.controller.js` into a thin event-wiring layer (`onDocTypeChange`, `onDocTypeLiveChange`, `onDocTypeSelect`, `_handleValueHelpSelected`, `_getDefaultDocType` all delegate directly). Updated test fixture in `createPurchaseOrderStatus.test.js`, added unit tests in `headerValueHelpSelection.test.js`, all 20 PO test suites (258 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 11:35 IST (uncommitted)**: Externalized all user-facing strings to i18n resource bundles (`i18n.properties` & `i18n_en.properties` with 100% key parity). Added 27 new resource keys covering error titles/messages (HTTP 401, 403, 404, 409, 503, 504), single-field & form validation, backend error summaries, status badges (`poStatusDraftIncomplete`, `poStatusReadyToCreate`, `poStatusDraft`), and list view connection/load error states. Enhanced `BaseController.getText(sKey, aArgs, sFallback)` to gracefully format placeholders into fallbacks when bundle is absent, added `PurchaseOrderModel.setTextResolver` to wire domain validation into Fiori resource bundles, and updated `CreatePurchaseOrder.controller.js` and `PurchaseOrders.controller.js`. Added unit tests in `headerValueHelpSelection.test.js`, all 20 PO test suites (254 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 11:10 IST (uncommitted)**: Standardized OData V4 model retrieval across `CreatePurchaseOrder.controller.js`. Removed latent bug where `(this.getModel && this.getModel("purchaseOrder")) || null` looked for a non-existent `"purchaseOrder"` model in `manifest.json` (resolving to null) with redundant existence guards. Standardized to `this.getModel()` across all calls to `PurchaseOrderService` (`_onPatternMatched`, `onItemMaterialChange`, `onItemMaterialSelect`, `_handleValueHelpSelected`), retrieving the default unnamed OData V4 service. Added unit tests in `headerValueHelpSelection.test.js`, all 20 PO test suites (251 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 11:05 IST (uncommitted)**: Replaced racy `setTimeout(..., 100)` delays in `_openMessagePopover` and `_navigateToErrorTarget` in `CreatePurchaseOrder.controller.js` with promise-based lifecycle rendering hooks `_whenRendered(oControl)` and `_focusAndScrollIntoView(oControl)`. Utilizes one-time `onAfterRendering` event delegates via `addEventDelegate` with immediate self-cleanup (`removeEventDelegate`), resolving instantly (0ms delay) when DOM is already painted and eliminating timing race conditions across devices. All 20 PO test suites (249 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
+- **2026-09-24 11:00 IST (uncommitted)**: Eliminated fragile control-ID substring matching (`sId.indexOf(...) !== -1`) in `CreatePurchaseOrder.controller.js` and `PurchaseOrders.controller.js`. Implemented `_resolveSourceField(oSource)` prioritizing declarative `data("field")` (annotated via `app:field="..."` in `CreatePurchaseOrder.view.xml`), bound property path `getBindingPath("value")`, and an explicit `FIELD_ID_MAP` lookup table. Refactored `_handleValueHelpSelected` into clean `switch(sField)` blocks and robust `_buildContextFilters` for both line item and header value help. All 20 PO test suites (244 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
 - **2026-09-23 15:18 IST (uncommitted)**: Pro Forma billing documents (`34000001` / Status `D`) and SAP Gateway error handling resolved. Pro Forma invoices are defined in SAP ERP (`I_AccountingTransferStatus('D')`) as "Billing document is not relevant for accounting" and never generate G/L journal entries. Enforced validation in `CustomerInvoiceAdapter.js` on `MessageType: 'E'` and readback confirmation of G/L document. Guarded CAP handler against releasing status `D` (HTTP 400), updated UI formatters (`Not Relevant for G/L`, `Posting Blocked`), disabled release button for status `D`, and excluded status `D` from the Pending tab and KPI count. UI rebuilt, 58/58 unit tests green.
 - **2026-09-23 15:10 IST (uncommitted)**: Customer Invoices `FormatException` (`D is not a valid boolean value`) resolved by switching to raw binding syntax `%{...}` in `CustomerInvoices.view.xml`. S/4HANA CSRF token validation failure (HTTP 403) on `releaseInvoiceToAccounting` resolved by sanitizing incoming request headers in `S4HttpClient.js` and `CustomerInvoiceAdapter.js` (stripping client CSRF tokens and cookies from overriding S/4HANA session tokens). Rebuilt UI5 bundle, added unit tests, all 81 test suites green.
 - **2026-09-23 14:58 IST (uncommitted)**: Customer Invoices Table Count (Fixed 30 Bug) resolved: added `$count: true` to `tblCustomerInvoices` binding parameters, updated `CustomerInvoices.controller.js` to read `@odata.count` via `oBinding.getCount()`, and enhanced CAP handler with `AccountingTransferStatus ne 'C'` and `contains(...)` search filtering.

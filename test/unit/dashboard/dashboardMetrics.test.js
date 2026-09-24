@@ -535,4 +535,65 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         await poAdapter.getDashboardMetrics(opts);
         expect(mockExecute).toHaveBeenCalledTimes(52);
     });
+
+    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 26 requests', async () => {
+        poAdapter.clearMetricsCache();
+        let resolveExecute;
+        const delayedExecution = new Promise((resolve) => { resolveExecute = resolve; });
+        const mockExecute = jest.fn().mockImplementation((dest, config) => {
+            return delayedExecution.then(() => liveSap()(dest, config));
+        });
+        const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
+
+        // 3 concurrent callers invoke getDashboardMetrics at the exact same moment
+        const p1 = poAdapter.getDashboardMetrics(opts);
+        const p2 = poAdapter.getDashboardMetrics(opts);
+        const p3 = poAdapter.getDashboardMetrics(opts);
+
+        // Resolve the underlying HTTP calls
+        resolveExecute();
+        const [m1, m2, m3] = await Promise.all([p1, p2, p3]);
+
+        // Only 26 calls executed total (1 single pass), not 3 * 26 = 78
+        expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(m1).toEqual(m2);
+        expect(m2).toEqual(m3);
+        expect(m1.totalCount).toBe(2729);
+    });
+
+    test('caches failed/unavailable responses with negative TTL to shield backend from repeated storms', async () => {
+        poAdapter.clearMetricsCache();
+        const failMock = jest.fn().mockRejectedValue(new Error('500 Internal Server Error'));
+        const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: failMock, useCache: true, negativeTtlMs: 2000 };
+
+        const metrics1 = await poAdapter.getDashboardMetrics(opts);
+        expect(failMock).toHaveBeenCalledTimes(26);
+        expect(metrics1.unavailable.length).toBe(26);
+        expect(metrics1.error).toContain('500 Internal Server Error');
+
+        // Subsequent call within negative TTL should return cached failure without re-executing 26 calls
+        const metrics2 = await poAdapter.getDashboardMetrics(opts);
+        expect(failMock).toHaveBeenCalledTimes(26); // No new calls!
+        expect(metrics2).toEqual(metrics1);
+    });
+
+    test('fast-fails on 401 Unauthorized probe and halts remaining 25 calls to avoid SU01 lockouts', async () => {
+        poAdapter.clearMetricsCache();
+        const authFailMock = jest.fn().mockRejectedValue(new Error('HTTP 401 Unauthorized: logon rejected'));
+        const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: authFailMock, useCache: true };
+
+        const metrics = await poAdapter.getDashboardMetrics(opts);
+
+        // Crucial: Only the 1st probe call executed, avoiding 25 more 401 errors
+        expect(authFailMock).toHaveBeenCalledTimes(1);
+        expect(metrics.unavailable.length).toBe(26);
+        expect(metrics.error).toContain('HTTP 401 Unauthorized');
+        expect(metrics.totalCount).toBeNull();
+        expect(metrics.supplierCount).toBeNull();
+
+        // Second call within negative TTL also returns cached failure with 0 new calls
+        const metrics2 = await poAdapter.getDashboardMetrics(opts);
+        expect(authFailMock).toHaveBeenCalledTimes(1);
+        expect(metrics2).toEqual(metrics);
+    });
 });

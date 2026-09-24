@@ -77,27 +77,23 @@ sap.ui.define([
                     var oStatus = that.byId("connectionStatus");
                     if (oError) {
                         var iStatus = oError.statusCode || oError.status || (oError.response && oError.response.statusCode) || 500;
-                        var sMessage = oError.message || "Failed to load Purchase Orders from SAP S/4HANA.";
+                        var sMessage = oError.message || that.getText("poLoadErrorMsg", null, "Failed to load Purchase Orders from SAP S/4HANA.");
                         if (oStatus) {
                             oStatus.setState("Error");
-                            oStatus.setText(iStatus === 401 ? "S/4HANA Auth Error (401)" : "Connection Error (" + iStatus + ")");
+                            oStatus.setText(iStatus === 401 ? that.getText("poStatusAuthError", null, "S/4HANA Auth Error (401)") : that.getText("poStatusConnError", [iStatus], "Connection Error (" + iStatus + ")"));
                             oStatus.setIcon("sap-icon://alert");
                         }
                         if (iStatus === 401) {
                             MessageBox.error(
-                                "Failed to load Purchase Orders from SAP S/4HANA.\n\n" +
-                                "The SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\n" +
-                                "Action Required:\n" +
-                                "1. Verify that the password in .env.local is current.\n" +
-                                "2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts.",
-                                { title: "S/4HANA Authentication Error" }
+                                that.getText("poAuthErrorMsg", null, "Failed to load Purchase Orders from SAP S/4HANA.\n\nThe SAP S/4HANA Gateway rejected the configured credentials with HTTP 401 Unauthorized.\n\nAction Required:\n1. Verify that the password in .env.local is current.\n2. Check transaction SU01 in SAP to ensure user account is not locked due to failed logon attempts."),
+                                { title: that.getText("poAuthErrorTitle", null, "S/4HANA Authentication Error") }
                             );
                         } else {
-                            MessageBox.error(sMessage, { title: "Error Loading Purchase Orders" });
+                            MessageBox.error(sMessage, { title: that.getText("poLoadErrorTitle", null, "Error Loading Purchase Orders") });
                         }
                     } else if (oStatus) {
                         oStatus.setState("Success");
-                        oStatus.setText("Live S/4HANA");
+                        oStatus.setText(that.getText("poStatusConnected", null, "Live S/4HANA"));
                         oStatus.setIcon("sap-icon://connected");
                     }
                 });
@@ -149,20 +145,30 @@ sap.ui.define([
         _buildFilterBarContextFilters: function (oSource) {
             var aFilters = [];
             if (!oSource) return aFilters;
-            var sId = typeof oSource.getId === "function" ? oSource.getId() : (oSource.id || "");
 
-            if (sId.indexOf("fbSupplier") !== -1) {
+            var sField = "";
+            if (typeof oSource.data === "function") {
+                sField = oSource.data("field") || "";
+            }
+            if (!sField) {
+                var sId = typeof oSource.getId === "function" ? oSource.getId() : (oSource.id || "");
+                var sControlId = sId.indexOf("--") !== -1 ? sId.split("--").pop() : sId;
+                var FILTER_ID_MAP = {
+                    "fbSupplier": "Supplier",
+                    "fbPurchasingOrg": "PurchasingOrganization",
+                    "fbDocType": "PurchaseOrderType"
+                };
+                sField = FILTER_ID_MAP[sControlId] || sControlId;
+            }
+
+            if (sField === "Supplier" || sField === "PurchasingOrganization") {
                 var oFbCompanyCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
                 var sCoCode = oFbCompanyCode && typeof oFbCompanyCode.getValue === "function" ? oFbCompanyCode.getValue().trim() : "";
                 if (sCoCode) {
                     aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode));
                 }
-            } else if (sId.indexOf("fbPurchasingOrg") !== -1) {
-                var oFbCoCode = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;
-                var sCoCode2 = oFbCoCode && typeof oFbCoCode.getValue === "function" ? oFbCoCode.getValue().trim() : "";
-                if (sCoCode2) {
-                    aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, sCoCode2));
-                }
+            } else if (sField === "PurchaseOrderType") {
+                aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.StartsWith, "Z"));
             }
 
             return aFilters;

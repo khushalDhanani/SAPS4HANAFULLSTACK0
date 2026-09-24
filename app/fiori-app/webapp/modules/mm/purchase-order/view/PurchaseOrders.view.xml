@@ -137,7 +137,7 @@
                                         showSuggestion="true"
                                         filterSuggests="false"
                                         suggest=".onSuggest"
-                                        suggestionItems="{path: '/DocumentTypeVH', templateShareable: false}">
+                                        suggestionItems="{path: '/DocumentTypeVH', filters: [{path: 'PurchasingDocumentType', operator: 'StartsWith', value1: 'Z'}], templateShareable: false}">
                                         <suggestionItems>
                                             <core:ListItem key="{PurchasingDocumentType}" text="{PurchasingDocumentType}" additionalText="{PurchasingDocumentType_Text}" />
                                         </suggestionItems>

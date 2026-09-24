@@ -15,14 +15,27 @@ sap.ui.define([
 
     return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.CreatePurchaseOrder", {
         onInit: function () {
+            PurchaseOrderModel.setTextResolver(this.getText.bind(this));
             this._resetModel(false);
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.getRoute("createPurchaseOrder").attachPatternMatched(this._onRouteMatched, this);
         },
 
+        /**
+         * Resolves default document type and text from configuration or model constant.
+         * @returns {{ code: string, text: string }}
+         */
+        _getDefaultDocType: function () {
+            return PurchaseOrderModel.getDefaultDocType(this._oConfigData);
+        },
+
         _resetModel: function (bLoadConfig) {
-            var sUser = PurchaseOrderModel.getCurrentUserName(this.getOwnerComponent());
+            var oOwnerComponent = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
+            var sUser = PurchaseOrderModel.getCurrentUserName(oOwnerComponent);
             var oModel = PurchaseOrderModel.createInitialModel(sUser);
+            var oDefaultDoc = this._getDefaultDocType();
+            oModel.setProperty("/header/PurchaseOrderType", oDefaultDoc.code);
+            oModel.setProperty("/header/PurchaseOrderTypeText", oDefaultDoc.text);
             this.getView().setModel(oModel, "newPO");
             PurchaseOrderModel.updateStatus(oModel);
             if (this._oMessagePopover) {
@@ -33,12 +46,23 @@ sap.ui.define([
             }
         },
 
-        _loadConfigurationAndDefaults: function () {
+        /**
+         * Loads configuration data (document types, company codes, purchasing orgs, groups)
+         * from SAP S/4HANA / CAP backend.
+         * Applies any cached configuration immediately for instant responsiveness, then refetches
+         * fresh configuration asynchronously on every route entry so server-side configuration changes
+         * are reflected without requiring a full application reload.
+         *
+         * @param {boolean} [bForce=false] - If true, ignores cache and forces a fresh network load
+         * @returns {Promise<Object>}
+         */
+        _loadConfigurationAndDefaults: function (bForce) {
             var that = this;
             var oModel = this.getView().getModel("newPO");
-            if (this._oConfigData) {
+
+            // Optimistically apply existing configuration while refetching in background
+            if (this._oConfigData && !bForce) {
                 PurchaseOrderModel.applyConfigurationDefaults(oModel, this._oConfigData);
-                return Promise.resolve(this._oConfigData);
             }
 
             var oPoModel = this.getModel();
@@ -51,6 +75,7 @@ sap.ui.define([
                 return oConfigData;
             }).catch(function (err) {
                 console.warn("[CreatePurchaseOrder] Error loading config data:", err);
+                return that._oConfigData || null;
             });
         },
 
@@ -66,27 +91,38 @@ sap.ui.define([
             }
         },
 
+        /**
+         * Lightweight liveChange handler for the Document Type input.
+         * Delegates domain validation to PurchaseOrderModel.
+         */
+        onDocTypeLiveChange: function (oEvent) {
+            var oModel = this.getView().getModel("newPO");
+            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
+            PurchaseOrderModel.updateDocTypeLive(oModel, sVal);
+        },
+
+        /**
+         * Full change handler for the Document Type input (fires on blur / Enter).
+         * Delegates domain validation, default recovery, and error state tracking to PurchaseOrderModel.
+         */
         onDocTypeChange: function (oEvent) {
             var oModel = this.getView().getModel("newPO");
             var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                PurchaseOrderModel.markUserModified(oModel, "PurchaseOrderType", true);
-            }
-            if (this._oConfigData) {
-                PurchaseOrderModel.applyConfigurationDefaults(oModel, this._oConfigData);
-            }
-            PurchaseOrderModel.validateSingleField(oModel, "PurchaseOrderType");
-            PurchaseOrderModel.updateStatus(oModel);
+            var sCurrentVal = sVal !== null && sVal !== undefined ? sVal : (oModel.getProperty("/header/PurchaseOrderType") || "");
+            PurchaseOrderModel.setDocumentType(oModel, sCurrentVal, this._oConfigData);
         },
 
+        /**
+         * Handles suggestion selection for Document Type.
+         * Delegates domain setting and validation to PurchaseOrderModel.
+         */
         onDocTypeSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
+            var oItem = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("selectedItem") : null;
             if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
+                var sKey = (typeof oItem.getKey === "function" && oItem.getKey()) || (typeof oItem.getText === "function" && oItem.getText()) || "";
+                var sText = (typeof oItem.getAdditionalText === "function" && oItem.getAdditionalText()) || (typeof oItem.getText === "function" && oItem.getText()) || "";
                 var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/PurchaseOrderType", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PurchaseOrderType", true);
-                this.onDocTypeChange();
+                PurchaseOrderModel.setDocumentType(oModel, sKey, this._oConfigData, sText);
             }
         },
 
@@ -97,74 +133,55 @@ sap.ui.define([
             PurchaseOrderModel.updateStatus(oModel);
         },
 
-        onCompanyCodeChange: function (oEvent) {
+        /**
+         * Generic field change helper for header fields.
+         * Marks field as user-modified, validates cross-field dependencies (CompanyCode/PurchOrg),
+         * validates the field, and updates overall form status.
+         *
+         * @param {string} sField - Header field key (e.g. 'CompanyCode', 'Currency')
+         * @param {sap.ui.base.Event} [oEvent] - UI5 change event
+         */
+        _onFieldChange: function (sField, oEvent) {
             var oModel = this.getView().getModel("newPO");
             var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
             if (sVal !== null && sVal !== undefined) {
-                PurchaseOrderModel.markUserModified(oModel, "CompanyCode", true);
+                PurchaseOrderModel.markUserModified(oModel, sField, true);
+            } else {
+                PurchaseOrderModel.markUserModified(oModel, sField, true);
             }
-            if (this._oConfigData) {
+            if ((sField === "CompanyCode" || sField === "PurchasingOrganization") && this._oConfigData) {
                 PurchaseOrderModel.validateCompanyCodePurchasingOrg(oModel, this._oConfigData);
             }
-            PurchaseOrderModel.validateSingleField(oModel, "CompanyCode");
+            PurchaseOrderModel.validateSingleField(oModel, sField);
             PurchaseOrderModel.updateStatus(oModel);
         },
 
-        onCompanyCodeSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
+        /**
+         * Generic field suggestion selection helper for header fields.
+         * Sets the selected key on the model header, marks field as modified, and runs field change validation.
+         *
+         * @param {string} sField - Header field key (e.g. 'CompanyCode', 'Currency')
+         * @param {sap.ui.base.Event} oEvent - UI5 suggestionItemSelected event
+         */
+        _onFieldSelect: function (sField, oEvent) {
+            var oItem = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("selectedItem") : null;
             if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
+                var sKey = (typeof oItem.getKey === "function" && oItem.getKey()) || (typeof oItem.getText === "function" && oItem.getText()) || "";
                 var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/CompanyCode", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "CompanyCode", true);
-                this.onCompanyCodeChange();
+                oModel.setProperty("/header/" + sField, sKey);
+                PurchaseOrderModel.markUserModified(oModel, sField, true);
+                this._onFieldChange(sField);
             }
         },
 
-        onPurchOrgChange: function (oEvent) {
-            var oModel = this.getView().getModel("newPO");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                PurchaseOrderModel.markUserModified(oModel, "PurchasingOrganization", true);
-            }
-            if (this._oConfigData) {
-                PurchaseOrderModel.validateCompanyCodePurchasingOrg(oModel, this._oConfigData);
-            }
-            PurchaseOrderModel.validateSingleField(oModel, "PurchasingOrganization");
-            PurchaseOrderModel.updateStatus(oModel);
-        },
+        onCompanyCodeChange: function (oEvent) { this._onFieldChange("CompanyCode", oEvent); },
+        onCompanyCodeSelect: function (oEvent) { this._onFieldSelect("CompanyCode", oEvent); },
 
-        onPurchOrgSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/PurchasingOrganization", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PurchasingOrganization", true);
-                this.onPurchOrgChange();
-            }
-        },
+        onPurchOrgChange: function (oEvent) { this._onFieldChange("PurchasingOrganization", oEvent); },
+        onPurchOrgSelect: function (oEvent) { this._onFieldSelect("PurchasingOrganization", oEvent); },
 
-        onPurchGrpChange: function (oEvent) {
-            var oModel = this.getView().getModel("newPO");
-            var sVal = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("value") : null;
-            if (sVal !== null && sVal !== undefined) {
-                PurchaseOrderModel.markUserModified(oModel, "PurchasingGroup", true);
-            }
-            PurchaseOrderModel.validateSingleField(oModel, "PurchasingGroup");
-            PurchaseOrderModel.updateStatus(oModel);
-        },
-
-        onPurchGrpSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/PurchasingGroup", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PurchasingGroup", true);
-                this.onPurchGrpChange();
-            }
-        },
+        onPurchGrpChange: function (oEvent) { this._onFieldChange("PurchasingGroup", oEvent); },
+        onPurchGrpSelect: function (oEvent) { this._onFieldSelect("PurchasingGroup", oEvent); },
 
         onSupplierLiveChange: function () {
             var oModel = this.getView().getModel("newPO");
@@ -213,7 +230,7 @@ sap.ui.define([
                 .then(function (oDefaults) {
                     if (!oDefaults) return;
                     if (oDefaults.source === "lookup failed") {
-                        MessageToast.show("Supplier history could not be read from SAP. Enter currency, payment terms and Incoterms manually.");
+                        MessageToast.show(that.getText("poMsgSupplierHistoryFailed", null, "Supplier history could not be read from SAP. Enter currency, payment terms and Incoterms manually."));
                         return;
                     }
                     var oReport = PurchaseOrderModel.deriveSupplierDefaults(oModel, sSupplier, oDefaults);
@@ -221,8 +238,8 @@ sap.ui.define([
                         var aAppliedFields = Object.keys(oReport.applied).map(function (k) {
                             return k + ": " + oReport.applied[k];
                         });
-                        var sSourceInfo = oReport.source ? (" (" + oReport.source + ")") : " (from last PO)";
-                        MessageToast.show("Supplier defaults applied" + sSourceInfo + ": " + aAppliedFields.join(", "));
+                        var sSourceInfo = oReport.source ? (" (" + oReport.source + ")") : that.getText("poMsgSupplierDefaultsFromLastPO", null, " (from last PO)");
+                        MessageToast.show(that.getText("poMsgSupplierDefaultsApplied", [sSourceInfo, aAppliedFields.join(", ")], "Supplier defaults applied" + sSourceInfo + ": " + aAppliedFields.join(", ")));
                     }
                 })
                 .catch(function (err) {
@@ -230,63 +247,16 @@ sap.ui.define([
                 });
         },
 
-        onCurrencyChange: function () {
-            var oModel = this.getView().getModel("newPO");
-            PurchaseOrderModel.markUserModified(oModel, "Currency", true);
-            PurchaseOrderModel.validateSingleField(oModel, "Currency");
-            PurchaseOrderModel.updateStatus(oModel);
-        },
+        onCurrencyChange: function (oEvent) { this._onFieldChange("Currency", oEvent); },
+        onCurrencySelect: function (oEvent) { this._onFieldSelect("Currency", oEvent); },
 
-        onCurrencySelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/Currency", sKey);
-                this.onCurrencyChange();
-            }
-        },
+        onPaymentTermsChange: function (oEvent) { this._onFieldChange("PaymentTerms", oEvent); },
+        onPaymentTermsSelect: function (oEvent) { this._onFieldSelect("PaymentTerms", oEvent); },
 
-        onPaymentTermsChange: function () {
-            var oModel = this.getView().getModel("newPO");
-            PurchaseOrderModel.markUserModified(oModel, "PaymentTerms", true);
-            PurchaseOrderModel.validateSingleField(oModel, "PaymentTerms");
-            PurchaseOrderModel.updateStatus(oModel);
-        },
+        onIncotermsChange: function (oEvent) { this._onFieldChange("IncotermsClassification", oEvent); },
+        onIncotermsSelect: function (oEvent) { this._onFieldSelect("IncotermsClassification", oEvent); },
 
-        onPaymentTermsSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/PaymentTerms", sKey);
-                this.onPaymentTermsChange();
-            }
-        },
-
-        onIncotermsChange: function () {
-            var oModel = this.getView().getModel("newPO");
-            PurchaseOrderModel.markUserModified(oModel, "IncotermsClassification", true);
-            PurchaseOrderModel.validateSingleField(oModel, "IncotermsClassification");
-            PurchaseOrderModel.updateStatus(oModel);
-        },
-
-        onIncotermsSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (oItem) {
-                var sKey = oItem.getKey() || oItem.getText();
-                var oModel = this.getView().getModel("newPO");
-                oModel.setProperty("/header/IncotermsClassification", sKey);
-                this.onIncotermsChange();
-            }
-        },
-
-        onIncotermsLocChange: function () {
-            var oModel = this.getView().getModel("newPO");
-            PurchaseOrderModel.markUserModified(oModel, "IncotermsLocation1", true);
-            PurchaseOrderModel.validateSingleField(oModel, "IncotermsLocation1");
-            PurchaseOrderModel.updateStatus(oModel);
-        },
+        onIncotermsLocChange: function (oEvent) { this._onFieldChange("IncotermsLocation1", oEvent); },
 
         onItemMaterialChange: function (oEvent) {
             var oSource = oEvent.getSource();
@@ -299,7 +269,10 @@ sap.ui.define([
             var sPlant = oModel.getProperty(sPath + "/Plant") || "";
 
             if (!sVal || sVal.trim() === "") {
-                oModel.setProperty(sPath + "/errors/Material", { state: "Error", text: "Material is required" });
+                oModel.setProperty(sPath + "/errors/Material", {
+                    state: "Error",
+                    text: this.getText("poValMaterialRequired", null, "Material is required")
+                });
             } else {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
                 // Directly retrieve and set Unit and master data from S/4HANA material configuration on manual input
@@ -355,7 +328,7 @@ sap.ui.define([
             // Ensure Unit and master data is derived from S/4HANA if not already present
             var that = this;
             if (!oMaterialData || !oMaterialData.MaterialBaseUnit || !oMaterialData.MaterialGroup) {
-                var oPoModel = (this.getModel && this.getModel("purchaseOrder")) || null;
+                var oPoModel = this.getModel();
                 PurchaseOrderService.getMaterialDetails(oPoModel, sKey, sPlant).then(function (oMat) {
                     if (oMat) {
                         PurchaseOrderModel.applyMaterialDefaults(oModel, sPath, oMat, true);
@@ -411,6 +384,70 @@ sap.ui.define([
             this.getView().addDependent(this._oMessagePopover);
         },
 
+        /**
+         * Resolves a promise when the given control has a valid DOM reference.
+         * If the control is already rendered, resolves immediately without waiting.
+         * Otherwise attaches a one-time onAfterRendering event delegate.
+         * @param {sap.ui.core.Control} oControl The control to wait for
+         * @returns {Promise<sap.ui.core.Control>}
+         */
+        _whenRendered: function (oControl) {
+            return new Promise(function (resolve) {
+                if (!oControl) {
+                    resolve(null);
+                    return;
+                }
+                var oDomRef = typeof oControl.getDomRef === "function" ? oControl.getDomRef() : null;
+                if (oDomRef) {
+                    resolve(oControl);
+                    return;
+                }
+                if (typeof oControl.addEventDelegate === "function") {
+                    var iFallbackTimer;
+                    var oDelegate = {
+                        onAfterRendering: function () {
+                            if (iFallbackTimer) {
+                                clearTimeout(iFallbackTimer);
+                            }
+                            if (typeof oControl.removeEventDelegate === "function") {
+                                oControl.removeEventDelegate(oDelegate);
+                            }
+                            resolve(oControl);
+                        }
+                    };
+                    oControl.addEventDelegate(oDelegate);
+                    // Fail-safe timeout in case the control is never rendered (e.g. destroyed or kept hidden)
+                    iFallbackTimer = setTimeout(function () {
+                        if (typeof oControl.removeEventDelegate === "function") {
+                            oControl.removeEventDelegate(oDelegate);
+                        }
+                        resolve(oControl);
+                    }, 500);
+                } else {
+                    // Fallback for mock/test objects without addEventDelegate
+                    resolve(oControl);
+                }
+            });
+        },
+
+        /**
+         * Focuses and smoothly scrolls the given control into view once its DOM is ready.
+         * @param {sap.ui.core.Control} oControl
+         */
+        _focusAndScrollIntoView: function (oControl) {
+            if (!oControl) return;
+            this._whenRendered(oControl).then(function (oRenderedControl) {
+                if (!oRenderedControl) return;
+                if (typeof oRenderedControl.focus === "function") {
+                    oRenderedControl.focus();
+                }
+                var oDomRef = typeof oRenderedControl.getDomRef === "function" ? oRenderedControl.getDomRef() : null;
+                if (oDomRef && typeof oDomRef.scrollIntoView === "function") {
+                    oDomRef.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            });
+        },
+
         _openMessagePopover: function () {
             var oBtn = this.byId("btnMessages");
             if (!oBtn) return;
@@ -418,53 +455,45 @@ sap.ui.define([
                 this._initMessagePopover();
             }
             var that = this;
-            setTimeout(function () {
-                if (!that._oMessagePopover.isOpen() && oBtn.getDomRef()) {
-                    that._oMessagePopover.openBy(oBtn);
+            this._whenRendered(oBtn).then(function (oButtonControl) {
+                if (oButtonControl && that._oMessagePopover && !that._oMessagePopover.isOpen()) {
+                    var oDom = typeof oButtonControl.getDomRef === "function" ? oButtonControl.getDomRef() : null;
+                    if (oDom || typeof that._oMessagePopover.openBy === "function") {
+                        that._oMessagePopover.openBy(oButtonControl);
+                    }
                 }
-            }, 100);
+            });
         },
 
         _navigateToErrorTarget: function (oError) {
             if (!oError) return;
 
             var that = this;
-            setTimeout(function () {
-                // 1. Header input targeting by control ID
-                if (typeof oError.controlId === "string" && oError.controlId !== "poItemsTable") {
-                    var oControl = that.byId(oError.controlId);
-                    if (oControl) {
-                        if (typeof oControl.focus === "function") {
-                            oControl.focus();
-                        }
-                        var oDomRef = oControl.getDomRef();
-                        if (oDomRef && typeof oDomRef.scrollIntoView === "function") {
-                            oDomRef.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }
-                        return;
-                    }
+            // 1. Header input targeting by control ID
+            if (typeof oError.controlId === "string" && oError.controlId !== "poItemsTable") {
+                var oControl = this.byId(oError.controlId);
+                if (oControl) {
+                    this._focusAndScrollIntoView(oControl);
+                    return;
                 }
+            }
 
-                // 2. Line Item Table cell targeting
-                var oTable = that.byId("poItemsTable");
-                if (oTable) {
+            // 2. Line Item Table cell targeting
+            var oTable = this.byId("poItemsTable");
+            if (oTable) {
+                this._whenRendered(oTable).then(function (oRenderedTable) {
+                    if (!oRenderedTable) return;
                     var iItemIndex = oError.itemIndex !== undefined ? oError.itemIndex : 0;
-                    var aTableItems = oTable.getItems();
+                    var aTableItems = typeof oRenderedTable.getItems === "function" ? oRenderedTable.getItems() : [];
                     if (aTableItems && aTableItems[iItemIndex]) {
                         var oRow = aTableItems[iItemIndex];
-                        var aCells = oRow.getCells();
+                        var aCells = typeof oRow.getCells === "function" ? oRow.getCells() : [];
                         var iCellIndex = oError.cellIndex !== undefined ? oError.cellIndex : 1;
                         var oTargetCell = aCells[iCellIndex] || oRow;
-                        if (typeof oTargetCell.focus === "function") {
-                            oTargetCell.focus();
-                        }
-                        var oCellDom = oTargetCell.getDomRef();
-                        if (oCellDom && typeof oCellDom.scrollIntoView === "function") {
-                            oCellDom.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }
+                        that._focusAndScrollIntoView(oTargetCell);
                     }
-                }
-            }, 100);
+                });
+            }
         },
 
         onMessageButtonPress: function (oEvent) {
@@ -475,28 +504,74 @@ sap.ui.define([
             this._oMessagePopover.toggle(oSource);
         },
 
+        /**
+         * Robustly resolves the logical field name from an event source control.
+         * Priority:
+         * 1. Declarative customData: data("field") or data-field
+         * 2. Bound property path on 'value'
+         * 3. Precise Control ID lookup table
+         *
+         * @param {sap.ui.core.Control} oSource
+         * @returns {string} Logical field name (e.g. 'Material', 'CompanyCode', 'PurchaseOrderType')
+         */
+        _resolveSourceField: function (oSource) {
+            if (!oSource) return "";
+
+            // 1. Declarative customData: data("field")
+            if (typeof oSource.data === "function") {
+                var sCustomDataField = oSource.data("field");
+                if (sCustomDataField && typeof sCustomDataField === "string") {
+                    return sCustomDataField.trim();
+                }
+            }
+
+            // 2. Bound property path on 'value'
+            if (typeof oSource.getBindingPath === "function") {
+                var sPath = oSource.getBindingPath("value");
+                if (sPath) {
+                    var sClean = sPath.split("/").pop();
+                    if (sClean) {
+                        return sClean;
+                    }
+                }
+            }
+
+            // 3. Precise Control ID lookup table
+            var sId = (typeof oSource.getId === "function" ? oSource.getId() : "") || "";
+            var sControlName = sId.indexOf("--") !== -1 ? sId.split("--").pop() : sId;
+
+            var FIELD_ID_MAP = {
+                "inDocType": "PurchaseOrderType",
+                "inCompanyCode": "CompanyCode",
+                "inPurchOrg": "PurchasingOrganization",
+                "inPurchGrp": "PurchasingGroup",
+                "inSupplier": "Supplier",
+                "inCurrency": "Currency",
+                "inPaymentTerms": "PaymentTerms",
+                "inIncoterms": "IncotermsClassification",
+                "inIncotermsLoc": "IncotermsLocation1",
+                "inDocDate": "DocumentDate"
+            };
+
+            return FIELD_ID_MAP[sControlName] || sControlName;
+        },
+
         _buildContextFilters: function (oSource) {
             var aFilters = [];
             var oModel = this.getView().getModel("newPO");
             if (!oModel || !oSource) return aFilters;
 
-            var oRowContext = oSource.getBindingContext("newPO");
-            var sValPath = oSource.getBindingPath("value");
-            var sId = oSource.getId() || "";
+            var sField = this._resolveSourceField(oSource);
+            var oRowContext = typeof oSource.getBindingContext === "function" ? oSource.getBindingContext("newPO") : null;
 
             if (oRowContext) {
                 // Line item row context
-                if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
+                if (sField === "Material" || sField === "StorageLocation") {
                     var sPlant = oRowContext.getProperty("Plant");
                     if (sPlant && String(sPlant).trim() !== "") {
                         aFilters.push(new Filter("Plant", FilterOperator.EQ, String(sPlant).trim()));
                     }
-                } else if (sValPath === "StorageLocation" || sId.indexOf("StorageLocation") !== -1) {
-                    var sRowPlant = oRowContext.getProperty("Plant");
-                    if (sRowPlant && String(sRowPlant).trim() !== "") {
-                        aFilters.push(new Filter("Plant", FilterOperator.EQ, String(sRowPlant).trim()));
-                    }
-                } else if (sValPath === "Plant" || sId.indexOf("Plant") !== -1) {
+                } else if (sField === "Plant") {
                     var sPurchOrg = oModel.getProperty("/header/PurchasingOrganization");
                     if (sPurchOrg && String(sPurchOrg).trim() !== "") {
                         aFilters.push(new Filter("PurchasingOrganization", FilterOperator.EQ, String(sPurchOrg).trim()));
@@ -504,15 +579,12 @@ sap.ui.define([
                 }
             } else {
                 // Header fields
-                if (sValPath === "Supplier" || sId.indexOf("inSupplier") !== -1) {
+                if (sField === "PurchaseOrderType" || sField === "PurchaseOrderTypeText") {
+                    aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.StartsWith, "Z"));
+                } else if (sField === "Supplier" || sField === "PurchasingOrganization") {
                     var sCompanyCode = oModel.getProperty("/header/CompanyCode");
                     if (sCompanyCode && String(sCompanyCode).trim() !== "") {
                         aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
-                    }
-                } else if (sValPath === "PurchasingOrganization" || sId.indexOf("inPurchOrg") !== -1) {
-                    var sCoCode = oModel.getProperty("/header/CompanyCode");
-                    if (sCoCode && String(sCoCode).trim() !== "") {
-                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCoCode).trim()));
                     }
                 }
             }
@@ -532,89 +604,78 @@ sap.ui.define([
 
         _handleValueHelpSelected: function (oSource, sKey, oSelectedItem, oData) {
             if (!oSource || !sKey) return;
-            var sId = oSource.getId() || "";
-            var oRowContext = oSource.getBindingContext("newPO");
+            var sField = this._resolveSourceField(oSource);
+            var oRowContext = typeof oSource.getBindingContext === "function" ? oSource.getBindingContext("newPO") : null;
             var oModel = this.getView().getModel("newPO");
 
             // Line items table fields
             if (oRowContext) {
                 var sRowPath = oRowContext.getPath();
-                var sValPath = oSource.getBindingPath("value");
 
-                if (sValPath === "Material" || sId.indexOf("Material") !== -1) {
-                    var sPlant = oModel.getProperty(sRowPath + "/Plant") || "";
-                    var oMatData = oData || {
-                        Material: sKey,
-                        MaterialName: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
-                    };
-                    PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
-                    var that = this;
-                    if (!oData || !oData.MaterialBaseUnit || !oData.MaterialGroup) {
-                        var oPoModel = (this.getModel && this.getModel("purchaseOrder")) || null;
-                        PurchaseOrderService.getMaterialDetails(oPoModel, sKey, sPlant).then(function (oMat) {
-                            if (oMat) {
-                                PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMat, true);
-                                that.onItemFieldChange();
-                            }
-                        });
-                    }
-                    this.onItemFieldChange();
-                } else if (sValPath === "UnitOfMeasure" || sId.indexOf("UnitOfMeasure") !== -1) {
-                    oModel.setProperty(sRowPath + "/UnitOfMeasure", sKey);
-                    oModel.setProperty(sRowPath + "/errors/UnitOfMeasure", { state: "None", text: "" });
-                    this.onItemFieldChange();
-                } else if (sValPath === "Plant" || sId.indexOf("Plant") !== -1) {
-                    oModel.setProperty(sRowPath + "/Plant", sKey);
-                    oModel.setProperty(sRowPath + "/errors/Plant", { state: "None", text: "" });
-                    this.onItemFieldChange();
-                } else if (sValPath === "StorageLocation" || sId.indexOf("StorageLocation") !== -1) {
-                    oModel.setProperty(sRowPath + "/StorageLocation", sKey);
-                    oModel.setProperty(sRowPath + "/errors/StorageLocation", { state: "None", text: "" });
-                    this.onItemFieldChange();
-                } else if (sValPath === "TaxCode" || sId.indexOf("TaxCode") !== -1) {
-                    oModel.setProperty(sRowPath + "/TaxCode", sKey);
-                    oModel.setProperty(sRowPath + "/errors/TaxCode", { state: "None", text: "" });
-                    this.onItemFieldChange();
+                switch (sField) {
+                    case "Material":
+                        var sPlant = oModel.getProperty(sRowPath + "/Plant") || "";
+                        var oMatData = oData || {
+                            Material: sKey,
+                            MaterialName: (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || ""
+                        };
+                        PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
+                        var that = this;
+                        if (!oData || !oData.MaterialBaseUnit || !oData.MaterialGroup) {
+                            var oPoModel = this.getModel();
+                            PurchaseOrderService.getMaterialDetails(oPoModel, sKey, sPlant).then(function (oMat) {
+                                if (oMat) {
+                                    PurchaseOrderModel.applyMaterialDefaults(oModel, sRowPath, oMat, true);
+                                    that.onItemFieldChange();
+                                }
+                            });
+                        }
+                        this.onItemFieldChange();
+                        break;
+
+                    case "UnitOfMeasure":
+                    case "Plant":
+                    case "StorageLocation":
+                    case "TaxCode":
+                        oModel.setProperty(sRowPath + "/" + sField, sKey);
+                        oModel.setProperty(sRowPath + "/errors/" + sField, { state: "None", text: "" });
+                        this.onItemFieldChange();
+                        break;
                 }
                 return;
             }
 
             // Header fields
-            if (sId.indexOf("inDocType") !== -1) {
-                oModel.setProperty("/header/PurchaseOrderType", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PurchaseOrderType", true);
-                this.onDocTypeChange();
-            } else if (sId.indexOf("inCompanyCode") !== -1) {
-                oModel.setProperty("/header/CompanyCode", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "CompanyCode", true);
-                this.onCompanyCodeChange();
-            } else if (sId.indexOf("inPurchOrg") !== -1) {
-                oModel.setProperty("/header/PurchasingOrganization", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PurchasingOrganization", true);
-                this.onPurchOrgChange();
-            } else if (sId.indexOf("inPurchGrp") !== -1) {
-                oModel.setProperty("/header/PurchasingGroup", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PurchasingGroup", true);
-                this.onPurchGrpChange();
-            } else if (sId.indexOf("inSupplier") !== -1) {
-                oModel.setProperty("/header/Supplier", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "Supplier", true);
-                if (oData && oData.CompanyCode && !oModel.getProperty("/header/CompanyCode")) {
-                    oModel.setProperty("/header/CompanyCode", oData.CompanyCode);
-                }
-                this.onSupplierChange(sKey);
-            } else if (sId.indexOf("inCurrency") !== -1) {
-                oModel.setProperty("/header/Currency", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "Currency", true);
-                this.onCurrencyChange();
-            } else if (sId.indexOf("inPaymentTerms") !== -1) {
-                oModel.setProperty("/header/PaymentTerms", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "PaymentTerms", true);
-                this.onPaymentTermsChange();
-            } else if (sId.indexOf("inIncoterms") !== -1) {
-                oModel.setProperty("/header/IncotermsClassification", sKey);
-                PurchaseOrderModel.markUserModified(oModel, "IncotermsClassification", true);
-                this.onIncotermsChange();
+            switch (sField) {
+                case "PurchaseOrderType":
+                    var oDefaultDoc = this._getDefaultDocType();
+                    var sDocText = (oSelectedItem && typeof oSelectedItem.getDescription === "function" && oSelectedItem.getDescription()) ||
+                                   (oSelectedItem && typeof oSelectedItem.getTitle === "function" && oSelectedItem.getTitle()) ||
+                                   (oData && (oData.PurchasingDocumentType_Text || oData.PurchasingDocumentType)) ||
+                                   (sKey === oDefaultDoc.code ? oDefaultDoc.text : sKey);
+                    PurchaseOrderModel.setDocumentType(oModel, sKey, this._oConfigData, sDocText);
+                    break;
+
+                case "Supplier":
+                    oModel.setProperty("/header/Supplier", sKey);
+                    PurchaseOrderModel.markUserModified(oModel, "Supplier", true);
+                    if (oData && oData.CompanyCode && !oModel.getProperty("/header/CompanyCode")) {
+                        oModel.setProperty("/header/CompanyCode", oData.CompanyCode);
+                    }
+                    this.onSupplierChange(sKey);
+                    break;
+
+                case "CompanyCode":
+                case "PurchasingOrganization":
+                case "PurchasingGroup":
+                case "Currency":
+                case "PaymentTerms":
+                case "IncotermsClassification":
+                case "IncotermsLocation1":
+                    oModel.setProperty("/header/" + sField, sKey);
+                    PurchaseOrderModel.markUserModified(oModel, sField, true);
+                    this._onFieldChange(sField);
+                    break;
             }
         },
 
@@ -622,6 +683,12 @@ sap.ui.define([
             var oSource = oEvent.getSource();
             var sValue = oEvent.getParameter("suggestValue");
             var aContextFilters = this._buildContextFilters(oSource);
+            var sField = this._resolveSourceField(oSource);
+            var oDefaultDoc = this._getDefaultDocType();
+
+            if (sField === "PurchaseOrderType" && sValue === oDefaultDoc.code) {
+                sValue = "";
+            }
 
             ValueHelpService.applySuggestionFilter(oSource, sValue, aContextFilters);
         },
@@ -645,9 +712,22 @@ sap.ui.define([
         },
 
         onDeleteItem: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem");
-            var sPath = oItem.getBindingContext("newPO").getPath();
-            var iIndex = parseInt(sPath.split("/")[2], 10);
+            var oItem = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("listItem") : null;
+            if (!oItem) {
+                return;
+            }
+            var oContext = typeof oItem.getBindingContext === "function" ? oItem.getBindingContext("newPO") : null;
+            if (!oContext || typeof oContext.getPath !== "function") {
+                return;
+            }
+
+            var sPath = oContext.getPath();
+            var aParts = sPath ? sPath.split("/") : [];
+            var iIndex = aParts.length > 2 ? parseInt(aParts[2], 10) : NaN;
+            if (isNaN(iIndex) || iIndex < 0) {
+                return;
+            }
+
             var oModel = this.getView().getModel("newPO");
             PurchaseOrderModel.deleteItem(oModel, iIndex);
             PurchaseOrderModel.updateStatus(oModel);
@@ -657,8 +737,11 @@ sap.ui.define([
         },
 
         onCalculateNetAmount: function (oEvent) {
-            var oContext = oEvent.getSource().getBindingContext("newPO");
-            if (!oContext) return;
+            var oSource = oEvent && typeof oEvent.getSource === "function" ? oEvent.getSource() : null;
+            var oContext = oSource && typeof oSource.getBindingContext === "function" ? oSource.getBindingContext("newPO") : null;
+            if (!oContext || typeof oContext.getPath !== "function") {
+                return;
+            }
 
             var sPath = oContext.getPath();
             var oModel = this.getView().getModel("newPO");
@@ -672,7 +755,7 @@ sap.ui.define([
 
         _getErrorMessageConfig: function (oError) {
             var iStatus = (oError && oError.status) || 500;
-            var sMessage = (oError && oError.message) || "An unexpected error occurred.";
+            var sMessage = (oError && oError.message) || "";
 
             if (oError && oError.responseText) {
                 try {
@@ -690,44 +773,44 @@ sap.ui.define([
             switch (iStatus) {
                 case 400:
                     return {
-                        title: "Invalid Input",
-                        message: sMessage
+                        title: this.getText("poErrTitleInvalidInput", null, "Invalid Input"),
+                        message: sMessage || this.getText("poErrTitleInvalidInput", null, "Invalid Input")
                     };
                 case 401:
                     return {
-                        title: "Authentication Failed",
-                        message: "Your session is unauthenticated or has expired. Please log in again."
+                        title: this.getText("poErrTitleAuthFailed", null, "Authentication Failed"),
+                        message: this.getText("poErrMsgAuthFailed", null, "Your session is unauthenticated or has expired. Please log in again.")
                     };
                 case 403:
                     return {
-                        title: "Authorization Denied",
-                        message: sMessage || "You do not have permission to create Purchase Orders in this Purchasing Organization or Group."
+                        title: this.getText("poErrTitleAuthDenied", null, "Authorization Denied"),
+                        message: sMessage || this.getText("poErrMsgAuthDenied", null, "You do not have permission to create Purchase Orders in this Purchasing Organization or Group.")
                     };
                 case 404:
                     return {
-                        title: "Resource Not Found",
-                        message: sMessage || "One or more referenced master data records (Supplier, Material, Plant) were not found in SAP."
+                        title: this.getText("poErrTitleNotFound", null, "Resource Not Found"),
+                        message: sMessage || this.getText("poErrMsgNotFound", null, "One or more referenced master data records (Supplier, Material, Plant) were not found in SAP.")
                     };
                 case 409:
                     return {
-                        title: "Document Locked / Conflict",
-                        message: sMessage || "The purchasing record or supplier is currently locked in SAP S/4HANA by another process. Please retry shortly."
+                        title: this.getText("poErrTitleLocked", null, "Document Locked / Conflict"),
+                        message: sMessage || this.getText("poErrMsgLocked", null, "The purchasing record or supplier is currently locked in SAP S/4HANA by another process. Please retry shortly.")
                     };
                 case 422:
                     return {
-                        title: "Business Validation Error",
+                        title: this.getText("poErrTitleValidation", null, "Business Validation Error"),
                         message: sMessage
                     };
                 case 502:
                 case 503:
                     return {
-                        title: "S/4HANA Backend Unavailable",
-                        message: "The SAP S/4HANA backend system is currently unreachable. Please check connectivity or destination configuration."
+                        title: this.getText("poErrTitleUnavailable", null, "S/4HANA Backend Unavailable"),
+                        message: this.getText("poErrMsgUnavailable", null, "The SAP S/4HANA backend system is currently unreachable. Please check connectivity or destination configuration.")
                     };
                 case 500:
                 default:
                     return {
-                        title: "Application Error",
+                        title: this.getText("poErrTitleAppError", null, "Application Error"),
                         message: sMessage
                     };
             }
@@ -756,6 +839,7 @@ sap.ui.define([
 
             // Clean UI-only fields from payload before submitting to backend
             var oCleanHeader = Object.assign({}, oData.header);
+            delete oCleanHeader.PurchaseOrderTypeText;
             delete oCleanHeader.StatusText;
             delete oCleanHeader.StatusState;
             delete oCleanHeader.StatusIcon;
@@ -774,7 +858,7 @@ sap.ui.define([
             })
                 .then(function (sNewPO) {
                     BusyIndicator.hide();
-                    MessageToast.show("Purchase Order Created: " + sNewPO);
+                    MessageToast.show(that.getText("poMsgCreatedSuccess", [sNewPO], "Purchase Order Created: " + sNewPO));
                     that.onNavBack();
                 })
                 .catch(function (oError) {
@@ -802,6 +886,8 @@ sap.ui.define([
         },
 
         onExit: function () {
+            PurchaseOrderModel.setTextResolver(null);
+            this._oConfigData = null;
             if (this._oMessagePopover) {
                 this._oMessagePopover.destroy();
                 this._oMessagePopover = null;

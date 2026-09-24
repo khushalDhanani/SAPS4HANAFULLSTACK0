@@ -108,7 +108,7 @@ class TtlCache {
    *
    * @param {string} key
    * @param {() => Promise<any>} fetchFn
-   * @param {number} [ttlMs]
+   * @param {number|((val: any) => number)} [ttlMs]
    * @returns {Promise<any>}
    */
   async getOrSet(key, fetchFn, ttlMs) {
@@ -125,7 +125,8 @@ class TtlCache {
       try {
         const val = await fetchFn();
         if (val !== undefined) {
-          this.set(key, val, ttlMs);
+          const resolvedTtl = typeof ttlMs === 'function' ? ttlMs(val) : ttlMs;
+          this.set(key, val, resolvedTtl);
         }
         return val;
       } finally {
