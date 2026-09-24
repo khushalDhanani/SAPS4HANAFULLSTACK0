@@ -209,7 +209,8 @@ describe("CustomerReturns Controller", () => {
         };
 
         mockRouter = {
-            getRoute: jest.fn().mockReturnValue(mockRoute)
+            getRoute: jest.fn().mockReturnValue(mockRoute),
+            navTo: jest.fn()
         };
 
         mockView = {
@@ -264,18 +265,43 @@ describe("CustomerReturns Controller", () => {
             expect(controller.formatReasonIcon("999")).toBe("sap-icon://notes");
         });
 
-        test("formatAmount formats numbers with 2 decimals", () => {
-            expect(controller.formatAmount(null)).toBe("0.00");
-            expect(controller.formatAmount("")).toBe("0.00");
+        test("formatAmount shows '-' for null/empty/zero, formatted number otherwise", () => {
+            expect(controller.formatAmount(null)).toBe("-");
+            expect(controller.formatAmount("")).toBe("-");
+            expect(controller.formatAmount(0)).toBe("-");
+            expect(controller.formatAmount("0.00")).toBe("-");
             expect(controller.formatAmount("1234.5")).toBe("1,234.50");
             expect(controller.formatAmount(500)).toBe("500.00");
         });
 
-        test("formatQuantity formats numbers with 3 decimals", () => {
-            expect(controller.formatQuantity(null)).toBe("0.000");
-            expect(controller.formatQuantity("")).toBe("0.000");
+        test("formatQuantity shows '-' for null/empty, formatted number otherwise", () => {
+            expect(controller.formatQuantity(null)).toBe("-");
+            expect(controller.formatQuantity("")).toBe("-");
             expect(controller.formatQuantity("5.5")).toBe("5.500");
             expect(controller.formatQuantity(10)).toBe("10.000");
+        });
+
+        test("formatReason shows '-' when both fields empty, combined string otherwise", () => {
+            expect(controller.formatReason("", "")).toBe("-");
+            expect(controller.formatReason(null, null)).toBe("-");
+            expect(controller.formatReason("101", "")).toBe("101");
+            expect(controller.formatReason("101", "Poor quality")).toBe("101 - Poor quality");
+            expect(controller.formatReason("", "Poor quality")).toBe("Poor quality");
+        });
+
+        test("formatDate parses ISO date string to DD MMM YYYY", () => {
+            expect(controller.formatDate(null)).toBe("-");
+            expect(controller.formatDate("")).toBe("-");
+            expect(controller.formatDate("2025-07-07")).toBe("07 Jul 2025");
+            expect(controller.formatDate("/Date(1751846400000)/")).toBe("07 Jul 2025");
+        });
+
+        test("formatAmountState returns 'None' for zero/null, 'Good' otherwise", () => {
+            expect(controller.formatAmountState(null)).toBe("None");
+            expect(controller.formatAmountState(0)).toBe("None");
+            expect(controller.formatAmountState("0.00")).toBe("None");
+            expect(controller.formatAmountState(500)).toBe("Good");
+            expect(controller.formatAmountState("1234.5")).toBe("Good");
         });
     });
 
@@ -408,132 +434,13 @@ describe("CustomerReturns Controller", () => {
     });
 
     // -------------------------------------------------------------------------
-    // Create Return Dialog & Actions
+    // Create Return Navigation
     // -------------------------------------------------------------------------
-    describe("Create Return Dialog & Actions", () => {
-        test("onCreateReturnPress opens create dialog with default data", async () => {
+    describe("Create Return Navigation", () => {
+        test("onCreateReturnPress navigates to createCustomerReturn route", () => {
             controller.onInit();
             controller.onCreateReturnPress();
-            await controller._pCreateDialog;
-
-            expect(controller._oCreateDialog.open).toHaveBeenCalled();
-            const createModel = models["createReturnModel"];
-            expect(createModel.getProperty("/CustomerReturnType")).toBe("ZRET");
-            expect(createModel.getProperty("/ReturnsOrderReason")).toBe("101");
-            expect(createModel.getProperty("/Items").length).toBe(1);
-        });
-
-        test("onCancelCreateReturnDialog closes dialog", async () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-            await controller._pCreateDialog;
-
-            controller.onCancelCreateReturnDialog();
-            expect(controller._oCreateDialog.close).toHaveBeenCalled();
-        });
-
-        test("onAddReturnItem and onDeleteReturnItem manipulate items list", () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-
-            const createModel = models["createReturnModel"];
-            expect(createModel.getProperty("/Items").length).toBe(1);
-
-            controller.onAddReturnItem();
-            expect(createModel.getProperty("/Items").length).toBe(2);
-            expect(createModel.getProperty("/Items")[1].ItemIndex).toBe(2);
-
-            controller.onDeleteReturnItem();
-            expect(createModel.getProperty("/Items").length).toBe(1);
-
-            // Should not delete below 1
-            controller.onDeleteReturnItem();
-            expect(createModel.getProperty("/Items").length).toBe(1);
-        });
-
-        test("onReferenceDocChange updates ReferenceSDDocument on all items", () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-
-            const oEvent = {
-                getParameter: jest.fn().mockReturnValue("90000050")
-            };
-            controller.onReferenceDocChange(oEvent);
-
-            const createModel = models["createReturnModel"];
-            expect(createModel.getProperty("/Items")[0].ReferenceSDDocument).toBe("90000050");
-        });
-
-        test("onConfirmCreateReturn rejects when SoldToParty is missing", () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-
-            const createModel = models["createReturnModel"];
-            createModel.setProperty("/SoldToParty", "");
-
-            controller.onConfirmCreateReturn();
-            expect(MockMessageBox.error).toHaveBeenCalled();
-            expect(MockCustomerReturnService.createCustomerReturn).not.toHaveBeenCalled();
-        });
-
-        test("onConfirmCreateReturn rejects when Material is missing", () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-
-            const createModel = models["createReturnModel"];
-            createModel.setProperty("/SoldToParty", "100000");
-            createModel.setProperty("/Items", [{ Material: "" }]);
-
-            controller.onConfirmCreateReturn();
-            expect(MockMessageBox.error).toHaveBeenCalled();
-            expect(MockCustomerReturnService.createCustomerReturn).not.toHaveBeenCalled();
-        });
-
-        test("onConfirmCreateReturn calls service, closes dialog, and shows success", async () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-            await controller._pCreateDialog;
-
-            const createModel = models["createReturnModel"];
-            createModel.setProperty("/SoldToParty", "100000");
-            createModel.setProperty("/ReturnsOrderReason", "101");
-            createModel.setProperty("/ReferenceSDDocument", "90000000");
-            createModel.setProperty("/Items", [
-                {
-                    Material: "4000000001",
-                    OrderQuantity: "2.000",
-                    OrderQuantityUnit: "KG",
-                    ProductionPlant: "1110",
-                    StorageLocation: "FG01"
-                }
-            ]);
-
-            controller.onConfirmCreateReturn();
-            await Promise.resolve();
-            await Promise.resolve();
-
-            expect(MockCustomerReturnService.createCustomerReturn).toHaveBeenCalled();
-            expect(controller._oCreateDialog.close).toHaveBeenCalled();
-            expect(MockMessageBox.success).toHaveBeenCalled();
-        });
-
-        test("onConfirmCreateReturn handles service failure with MessageBox.error", async () => {
-            controller.onInit();
-            controller.onCreateReturnPress();
-            await controller._pCreateDialog;
-
-            MockCustomerReturnService.createCustomerReturn.mockRejectedValueOnce(new Error("SAP Backend Error 500"));
-
-            const createModel = models["createReturnModel"];
-            createModel.setProperty("/SoldToParty", "100000");
-            createModel.setProperty("/ReturnsOrderReason", "101");
-            createModel.setProperty("/Items", [{ Material: "4000000001", OrderQuantity: "1" }]);
-
-            controller.onConfirmCreateReturn();
-            await Promise.resolve();
-            await Promise.resolve();
-
-            expect(MockMessageBox.error).toHaveBeenCalled();
+            expect(mockRouter.navTo).toHaveBeenCalledWith("createCustomerReturn");
         });
     });
 });

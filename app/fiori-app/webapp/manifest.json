@@ -280,6 +280,11 @@
           "name": "customerReturns",
           "pattern": "sd/returns",
           "target": "TargetCustomerReturns"
+        },
+        {
+          "name": "createCustomerReturn",
+          "pattern": "sd/returns/create",
+          "target": "TargetCreateCustomerReturn"
         }
       ],
       "targets": {
@@ -359,6 +364,11 @@
         "TargetCustomerReturns": {
           "id": "customerReturns",
           "name": "CustomerReturns",
+          "path": "saps4hana.fiori.modules.sd.customer-return.view"
+        },
+        "TargetCreateCustomerReturn": {
+          "id": "createCustomerReturn",
+          "name": "CreateCustomerReturn",
           "path": "saps4hana.fiori.modules.sd.customer-return.view"
         }
       }

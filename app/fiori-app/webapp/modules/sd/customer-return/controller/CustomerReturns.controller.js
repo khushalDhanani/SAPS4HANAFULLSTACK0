@@ -67,20 +67,50 @@ sap.ui.define([
             return "sap-icon://notes";
         },
 
+        formatDate: function (sDate) {
+            if (!sDate) return "-";
+            // Accept ISO string from CAP ("YYYY-MM-DD") or raw /Date(ms)/ from SAP
+            var d;
+            if (typeof sDate === "string" && sDate.indexOf("/Date(") === 0) {
+                var ms = parseInt(sDate.replace(/\/Date\((\d+).*/, "$1"), 10);
+                d = isNaN(ms) ? null : new Date(ms);
+            } else {
+                d = new Date(sDate);
+            }
+            if (!d || isNaN(d.getTime())) return sDate;
+            // Format as DD MMM YYYY (e.g. 07 Jul 2025)
+            var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            var day = String(d.getUTCDate()).padStart(2, "0");
+            return day + " " + months[d.getUTCMonth()] + " " + d.getUTCFullYear();
+        },
+
         formatAmount: function (vAmount) {
             if (vAmount == null || vAmount === "") {
-                return "0.00";
+                return "-";
             }
             var f = parseFloat(vAmount);
-            return isNaN(f) ? "0.00" : f.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (isNaN(f) || f === 0) return "-";
+            return f.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        },
+
+        formatAmountState: function (vAmount) {
+            var f = parseFloat(vAmount);
+            if (isNaN(f) || f === 0 || vAmount == null || vAmount === "") return "None";
+            return "Good";
+        },
+
+        formatReason: function (sReason, sReasonText) {
+            if (!sReason && !sReasonText) return "-";
+            if (!sReasonText) return sReason;
+            return sReason ? sReason + " - " + sReasonText : sReasonText;
         },
 
         formatQuantity: function (vQty) {
             if (vQty == null || vQty === "") {
-                return "0.000";
+                return "-";
             }
             var f = parseFloat(vQty);
-            return isNaN(f) ? "0.000" : f.toFixed(3);
+            return isNaN(f) ? "-" : f.toFixed(3);
         },
 
         // =========================================================================
@@ -375,25 +405,10 @@ sap.ui.define([
         },
 
         onCreateReturnPress: function () {
-            var that = this;
-            this._oCreateReturnModel.setData(this._getDefaultCreateData());
-
-            if (!this._pCreateDialog) {
-                var sViewId = (this.getView && typeof this.getView().getId === "function") ? this.getView().getId() : undefined;
-                this._pCreateDialog = Fragment.load({
-                    id: sViewId,
-                    name: "saps4hana.fiori.modules.sd.customer-return.view.CreateReturnDialog",
-                    controller: this
-                }).then(function (oDialog) {
-                    that.getView().addDependent(oDialog);
-                    return oDialog;
-                });
+            var oRouter = this.getOwnerComponent() ? this.getOwnerComponent().getRouter() : null;
+            if (oRouter) {
+                oRouter.navTo("createCustomerReturn");
             }
-
-            this._pCreateDialog.then(function (oDialog) {
-                that._oCreateDialog = oDialog;
-                oDialog.open();
-            });
         },
 
         onCancelCreateReturnDialog: function () {

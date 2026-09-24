@@ -4,10 +4,15 @@ const { odataString } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
 
 const SERVICE_PATH = '/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV';
+const TRANSACTIONAL_SERVICE_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
 const HEADER_ENTITY_SET = 'C_CustomerReturnOPg';
 const ITEM_ENTITY_SET = 'C_CustomerReturnItemOPg';
 const REASON_VH_SET = 'C_ReturnsOrderReasonVH';
 const REF_DOC_VH_SET = 'C_ReturnsReferenceDocVH';
+const SOLD_TO_VH_SET = 'C_SoldToValueHelp';
+const MATERIAL_VH_SET = 'I_MaterialStdVH';
+const PLANT_VH_SET = 'I_AllwdPlantsPerSlsOrgVH';
+const DOC_TYPE_VH_SET = 'C_CustomerReturnTypeManageVH';
 
 const DEFAULT_RETURN_TYPE = 'ZRET'; // Standard Return Order Type in Client 220
 const MAX_READBACK_ATTEMPTS = 3;
@@ -247,11 +252,138 @@ class CustomerReturnAdapter {
       const rawResults = response?.data?.d?.results || [];
       return rawResults.map(r => ({
         ReasonCode: String(r.ReturnsOrderReason || '').trim(),
-        ReasonText: r.SDDocumentReasonText || r.ReturnsOrderReasonDesc || ''
+        ReasonText: r.ReturnsOrderReason_Text || r.SDDocumentReasonText || r.ReturnsOrderReasonDesc || ''
       }));
     } catch (err) {
       LOG.error(`Failed to fetch return reasons`, err);
       throw mapS4Error(err, 'Failed to retrieve Return Reasons from S/4HANA');
+    }
+  }
+
+  /**
+   * Fetches Customer records from S/4HANA value help for returns.
+   *
+   * @param {Object} [options={}]
+   * @returns {Promise<Array>}
+   */
+  async getCustomers(options = {}) {
+    const cleanOpts = _cleanOptions(options);
+    const queryParams = new URLSearchParams();
+    const top = cleanOpts.top || 50;
+    queryParams.set('$top', String(top));
+    queryParams.set('$orderby', 'Customer asc');
+
+    if (cleanOpts.search) {
+      const safe = odataString(String(cleanOpts.search).trim());
+      queryParams.set('$filter', `substringof(${safe}, Customer) or substringof(${safe}, OrganizationBPName1)`);
+    }
+
+    const endpoint = `${SERVICE_PATH}/${SOLD_TO_VH_SET}?${queryParams.toString()}`;
+
+    try {
+      LOG.info(`Fetching customers: GET ${endpoint}`);
+      const response = await this.client.get(endpoint, cleanOpts);
+      const rawResults = response?.data?.d?.results || [];
+      return rawResults.map(r => ({
+        Customer: String(r.Customer || '').trim(),
+        CustomerName: r.OrganizationBPName1 || r.CustomerName || '',
+        OrganizationBPName1: r.OrganizationBPName1 || r.CustomerName || '',
+        CityName: r.CityName || ''
+      }));
+    } catch (err) {
+      LOG.error('Failed to fetch customers', err);
+      throw mapS4Error(err, 'Failed to retrieve Customers from S/4HANA');
+    }
+  }
+
+  /**
+   * Fetches Material records from S/4HANA value help for return line items.
+   *
+   * @param {Object} [options={}]
+   * @returns {Promise<Array>}
+   */
+  async getMaterials(options = {}) {
+    const cleanOpts = _cleanOptions(options);
+    const queryParams = new URLSearchParams();
+    const top = cleanOpts.top || 50;
+    queryParams.set('$top', String(top));
+    queryParams.set('$orderby', 'Material asc');
+
+    if (cleanOpts.search) {
+      const safe = odataString(String(cleanOpts.search).trim());
+      queryParams.set('$filter', `substringof(${safe}, Material) or substringof(${safe}, Material_Text)`);
+    }
+
+    const endpoint = `${SERVICE_PATH}/${MATERIAL_VH_SET}?${queryParams.toString()}`;
+
+    try {
+      LOG.info(`Fetching materials: GET ${endpoint}`);
+      const response = await this.client.get(endpoint, cleanOpts);
+      const rawResults = response?.data?.d?.results || [];
+      return rawResults.map(r => ({
+        Material: String(r.Material || '').trim(),
+        Material_Text: r.Material_Text || ''
+      }));
+    } catch (err) {
+      LOG.error('Failed to fetch materials', err);
+      throw mapS4Error(err, 'Failed to retrieve Materials from S/4HANA');
+    }
+  }
+
+  /**
+   * Fetches Delivering Plants from S/4HANA value help.
+   *
+   * @param {Object} [options={}]
+   * @returns {Promise<Array>}
+   */
+  async getPlants(options = {}) {
+    const cleanOpts = _cleanOptions(options);
+    const endpoint = `${SERVICE_PATH}/${PLANT_VH_SET}?$top=50&$orderby=Plant asc`;
+
+    try {
+      LOG.info(`Fetching plants: GET ${endpoint}`);
+      const response = await this.client.get(endpoint, cleanOpts);
+      const rawResults = response?.data?.d?.results || [];
+      const seen = new Set();
+      const plants = [];
+      for (const r of rawResults) {
+        const pCode = String(r.Plant || '').trim();
+        if (pCode && !seen.has(pCode)) {
+          seen.add(pCode);
+          plants.push({
+            Plant: pCode,
+            PlantName: r.PlantName || ''
+          });
+        }
+      }
+      return plants;
+    } catch (err) {
+      LOG.error('Failed to fetch plants', err);
+      throw mapS4Error(err, 'Failed to retrieve Plants from S/4HANA');
+    }
+  }
+
+  /**
+   * Fetches Customer Return Document Types from S/4HANA.
+   *
+   * @param {Object} [options={}]
+   * @returns {Promise<Array>}
+   */
+  async getDocumentTypes(options = {}) {
+    const cleanOpts = _cleanOptions(options);
+    const endpoint = `${SERVICE_PATH}/${DOC_TYPE_VH_SET}?$orderby=CustomerReturnType asc`;
+
+    try {
+      LOG.info(`Fetching document types: GET ${endpoint}`);
+      const response = await this.client.get(endpoint, cleanOpts);
+      const rawResults = response?.data?.d?.results || [];
+      return rawResults.map(r => ({
+        CustomerReturnType: String(r.CustomerReturnType || '').trim(),
+        CustomerReturnType_Text: r.CustomerReturnType_Text || ''
+      }));
+    } catch (err) {
+      LOG.error('Failed to fetch document types', err);
+      throw mapS4Error(err, 'Failed to retrieve Document Types from S/4HANA');
     }
   }
 
@@ -297,8 +429,8 @@ class CustomerReturnAdapter {
   }
 
   /**
-   * Creates a Customer Return document in S/4HANA via SD_F2651_CRT_CREATE_SRV
-   * and verifies persistence via direct readback.
+   * Creates a Customer Return document in S/4HANA via transactional LORD_ODATA_ORDER_SRV
+   * (Lean Order framework) deep insert, then confirms persistence via direct readback from SD_F2651_CRT_CREATE_SRV.
    *
    * @param {Object} payload
    * @param {Object} [options={}]
@@ -319,66 +451,75 @@ class CustomerReturnAdapter {
     const cleanOpts = _cleanOptions(options);
     const returnType = payload.CustomerReturnType || DEFAULT_RETURN_TYPE;
 
-    // 1. Assemble Header Payload
-    const headerPayload = {
-      CustomerReturnType: returnType,
-      SoldToParty: String(payload.SoldToParty).trim(),
-      ReturnsOrderReason: String(payload.ReturnsOrderReason).trim(),
-      ReferenceSDDocument: payload.ReferenceSDDocument ? String(payload.ReferenceSDDocument).trim() : '',
-      ReferenceSDDocumentCategory: payload.ReferenceSDDocumentCategory || (payload.ReferenceSDDocument ? 'M' : ''),
+    // 1. Build Deep Items for LORD_ODATA_ORDER_SRV
+    const rawItems = Array.isArray(payload.Items) && payload.Items.length > 0
+      ? payload.Items
+      : [{ Material: payload.Material, OrderQuantity: payload.OrderQuantity, OrderQuantityUnit: payload.OrderQuantityUnit, ProductionPlant: payload.ProductionPlant }];
+
+    const deepItems = rawItems.filter(it => it && it.Material).map(it => {
+      const itemObj = {
+        MaterialID: String(it.Material).trim(),
+        OrderQty: String(it.OrderQuantity || '1.000'),
+        SalesUnit: it.OrderQuantityUnit || 'KG',
+        Plant: it.ProductionPlant || it.Plant || '1110'
+      };
+      if (it.UnitPrice && !isNaN(Number(it.UnitPrice))) {
+        itemObj.PriceCondSet = [
+          {
+            CondTypeCode: 'ZPR1',
+            AmountInternal: String(it.UnitPrice),
+            RateUnitExternal: it.Currency || 'INR'
+          }
+        ];
+      }
+      return itemObj;
+    });
+
+    if (deepItems.length === 0) {
+      const err = new Error('At least one line item with a Material is required to create a Customer Return');
+      err.code = 400;
+      throw err;
+    }
+
+    // 2. Assemble Deep Insert Payload for Lean Order Framework
+    const deepPayload = {
+      SalesOrderTypeCode: returnType,
       SalesOrganization: payload.SalesOrganization || '1000',
       DistributionChannel: payload.DistributionChannel || '10',
-      OrganizationDivision: payload.OrganizationDivision || '52',
-      PurchaseOrderByCustomer: payload.PurchaseOrderByCustomer || ''
+      Division: payload.OrganizationDivision || '52',
+      SoldToPartyID: String(payload.SoldToParty).trim(),
+      PurchaseOrderNumber: payload.PurchaseOrderByCustomer
+        ? String(payload.PurchaseOrderByCustomer).trim()
+        : `RET-${Date.now().toString().slice(-6)}`,
+      ItemSet: deepItems
     };
 
     if (payload.CustomerReturnDate) {
       const d = new Date(payload.CustomerReturnDate);
       if (!isNaN(d.getTime())) {
-        headerPayload.CustomerReturnDate = `/Date(${d.getTime()})/`;
+        deepPayload.PurchaseOrderDate = `/Date(${d.getTime()})/`;
+        deepPayload.RequestedDeliveryDate = `/Date(${d.getTime()})/`;
       }
     }
 
-    const endpoint = `${SERVICE_PATH}/${HEADER_ENTITY_SET}`;
+    const endpoint = `${TRANSACTIONAL_SERVICE_PATH}/HeaderSet`;
 
     try {
-      LOG.info(`Creating Customer Return header in S/4HANA: POST ${endpoint}`, headerPayload);
+      LOG.info(`Creating Customer Return via LORD_ODATA_ORDER_SRV deep insert: POST ${endpoint}`, deepPayload);
 
-      // Execute Header POST
-      const response = await this.client.post(endpoint, headerPayload, cleanOpts);
-      const createdHeader = response?.data?.d;
-      const returnNumber = String(createdHeader?.CustomerReturn || '').trim();
+      const response = await this.client.post(endpoint, { data: deepPayload }, cleanOpts);
+      const createdHeader = response?.data?.d || response?.data;
+      const returnNumber = String(createdHeader?.SalesOrderID || '').trim();
 
       if (!returnNumber) {
-        throw new Error('S/4HANA returned success but no Customer Return number was generated.');
+        const error = new Error('Sales Order / Customer Return number not returned from SAP S/4HANA');
+        error.code = 502;
+        throw error;
       }
 
-      LOG.info(`Customer Return header created with document number: ${returnNumber}`);
+      LOG.info(`Customer Return successfully created in S/4HANA with document number: ${returnNumber}`);
 
-      // 2. If Items Provided, Create Items Sequentially
-      if (Array.isArray(payload.Items) && payload.Items.length > 0) {
-        const itemEndpoint = `${SERVICE_PATH}/${ITEM_ENTITY_SET}`;
-        for (let idx = 0; idx < payload.Items.length; idx++) {
-          const item = payload.Items[idx];
-          const itemPayload = {
-            CustomerReturn: returnNumber,
-            CustomerReturnItem: String((idx + 1) * 10),
-            Material: String(item.Material || '').trim(),
-            OrderQuantity: String(item.OrderQuantity || '1.000'),
-            OrderQuantityUnit: item.OrderQuantityUnit || 'KG',
-            ProductionPlant: item.ProductionPlant || '1110',
-            StorageLocation: item.StorageLocation || 'FG01',
-            ReturnReason: item.ReturnReason || payload.ReturnsOrderReason,
-            ReferenceSDDocument: item.ReferenceSDDocument || payload.ReferenceSDDocument || '',
-            ReferenceSDDocumentItem: item.ReferenceSDDocumentItem ? String(item.ReferenceSDDocumentItem) : ''
-          };
-
-          LOG.info(`Posting Customer Return item ${itemPayload.CustomerReturnItem}: POST ${itemEndpoint}`);
-          await this.client.post(itemEndpoint, itemPayload, cleanOpts);
-        }
-      }
-
-      // 3. Mandatory Readback Loop: Confirm Real S/4HANA Database Persistence
+      // 3. Mandatory Readback Loop: Confirm Real S/4HANA Database Persistence from SD_F2651_CRT_CREATE_SRV
       let verifiedDoc = null;
       for (let attempt = 0; attempt < MAX_READBACK_ATTEMPTS; attempt++) {
         const delay = READBACK_DELAYS_MS[attempt];
@@ -395,19 +536,22 @@ class CustomerReturnAdapter {
         }
       }
 
-      const totalNet = verifiedDoc?.TotalNetAmount ?? (createdHeader?.TotalNetAmount ? Number(createdHeader.TotalNetAmount) : null);
-      const currency = verifiedDoc?.TransactionCurrency || createdHeader?.TransactionCurrency || 'INR';
+      const totalNet = verifiedDoc?.TotalNetAmount ?? (createdHeader?.TotalAmount ? Number(createdHeader.TotalAmount) : (createdHeader?.NetAmount ? Number(createdHeader.NetAmount) : null));
+      const currency = verifiedDoc?.TransactionCurrency || createdHeader?.DocumentCurrency || 'INR';
 
       return {
         CustomerReturn: returnNumber,
         CustomerReturnType: returnType,
-        SoldToParty: headerPayload.SoldToParty,
+        SoldToParty: deepPayload.SoldToPartyID,
         TotalNetAmount: totalNet,
         TransactionCurrency: currency,
         Success: true,
         Message: `Customer Return ${returnNumber} successfully created and verified in SAP S/4HANA.`
       };
     } catch (err) {
+      if (err.code === 400 || err.code === 403 || err.code === 502) {
+        throw err;
+      }
       LOG.error(`Failed to create Customer Return in S/4HANA`, err);
       throw mapS4Error(err, 'Failed to create Customer Return in S/4HANA');
     }

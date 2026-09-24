@@ -1,8 +1,9 @@
 sap.ui.define([
     "saps4hana/fiori/service/ODataClient",
     "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator"
-], function (ODataClient, Filter, FilterOperator) {
+    "sap/ui/model/FilterOperator",
+    "sap/ui/core/Messaging"
+], function (ODataClient, Filter, FilterOperator, Messaging) {
     "use strict";
 
     var SERVICE_BASE = "/odata/v4/customer-return";
@@ -89,6 +90,38 @@ sap.ui.define([
             });
         },
 
+        getCustomers: function (sSearch, iTop) {
+            var sSearchVal = sSearch ? String(sSearch).trim() : "";
+            var iTopVal = iTop || 50;
+            var sUrl = SERVICE_BASE + "/getCustomers(search='" + encodeURIComponent(sSearchVal) + "',top=" + iTopVal + ")";
+            return ODataClient.get(sUrl).then(function (res) {
+                return (res && res.value) || res || [];
+            });
+        },
+
+        getMaterials: function (sSearch, iTop) {
+            var sSearchVal = sSearch ? String(sSearch).trim() : "";
+            var iTopVal = iTop || 50;
+            var sUrl = SERVICE_BASE + "/getMaterials(search='" + encodeURIComponent(sSearchVal) + "',top=" + iTopVal + ")";
+            return ODataClient.get(sUrl).then(function (res) {
+                return (res && res.value) || res || [];
+            });
+        },
+
+        getPlants: function () {
+            var sUrl = SERVICE_BASE + "/getPlants()";
+            return ODataClient.get(sUrl).then(function (res) {
+                return (res && res.value) || res || [];
+            });
+        },
+
+        getDocumentTypes: function () {
+            var sUrl = SERVICE_BASE + "/getDocumentTypes()";
+            return ODataClient.get(sUrl).then(function (res) {
+                return (res && res.value) || res || [];
+            });
+        },
+
         getReferenceDocuments: function (sSearch, iTop, oModel) {
             var oTargetModel = oModel || _oModel;
             var sSearchVal = sSearch ? String(sSearch).trim() : "";
@@ -121,6 +154,30 @@ sap.ui.define([
                 return oAction.execute().then(function () {
                     var oCtx = oAction.getBoundContext();
                     return oCtx ? oCtx.getObject() : null;
+                }).catch(function (oErr) {
+                    var sBackendMsg = "";
+                    try {
+                        var aMessages = [];
+                        if (typeof Messaging !== "undefined" && Messaging && typeof Messaging.getMessageModel === "function") {
+                            aMessages = Messaging.getMessageModel().getData() || [];
+                        }
+                        if (Array.isArray(aMessages)) {
+                            for (var i = aMessages.length - 1; i >= 0; i--) {
+                                if (aMessages[i].type === "Error" && aMessages[i].message && aMessages[i].message.indexOf("Communication error") === -1) {
+                                    sBackendMsg = aMessages[i].message;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                    if (sBackendMsg) {
+                        var oRichErr = new Error(sBackendMsg);
+                        oRichErr.originalError = oErr;
+                        throw oRichErr;
+                    }
+                    throw oErr;
                 });
             }
 

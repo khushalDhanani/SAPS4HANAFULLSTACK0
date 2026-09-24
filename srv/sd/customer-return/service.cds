@@ -75,6 +75,36 @@ service CustomerReturnService @(path: '/odata/v4/customer-return') {
     };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
+    function getCustomers(
+        search : String,
+        top    : Integer
+    ) returns array of {
+        Customer     : String(10);
+        CustomerName : String(80);
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
+    function getMaterials(
+        search : String,
+        top    : Integer
+    ) returns array of {
+        Material      : String(40);
+        Material_Text : String(40);
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
+    function getPlants() returns array of {
+        Plant     : String(4);
+        PlantName : String(30);
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
+    function getDocumentTypes() returns array of {
+        CustomerReturnType      : String(4);
+        CustomerReturnType_Text : String(40);
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getReferenceDocuments(
         search : String,
         top    : Integer

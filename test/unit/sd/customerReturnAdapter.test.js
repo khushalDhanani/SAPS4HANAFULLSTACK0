@@ -220,13 +220,13 @@ describe('Unit: CustomerReturnAdapter', () => {
   });
 
   describe('getReturnReasons', () => {
-    test('fetches return reasons value help', async () => {
+    test('fetches return reasons and maps ReturnsOrderReason_Text property', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
             results: [
-              { ReturnsOrderReason: '101', SDDocumentReasonText: 'Poor quality' },
-              { ReturnsOrderReason: '102', SDDocumentReasonText: 'Damaged in transit' }
+              { ReturnsOrderReason: '101', ReturnsOrderReason_Text: 'Poor quality' },
+              { ReturnsOrderReason: '102', ReturnsOrderReason_Text: 'Damaged in transit' }
             ]
           }
         }
@@ -236,6 +236,115 @@ describe('Unit: CustomerReturnAdapter', () => {
       expect(res.length).toBe(2);
       expect(res[0].ReasonCode).toBe('101');
       expect(res[0].ReasonText).toBe('Poor quality');
+    });
+
+    test('falls back to SDDocumentReasonText if ReturnsOrderReason_Text is missing', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({
+        data: {
+          d: {
+            results: [
+              { ReturnsOrderReason: '004', SDDocumentReasonText: 'Customer recommendation' }
+            ]
+          }
+        }
+      });
+
+      const res = await adapter.getReturnReasons();
+      expect(res.length).toBe(1);
+      expect(res[0].ReasonCode).toBe('004');
+      expect(res[0].ReasonText).toBe('Customer recommendation');
+    });
+  });
+
+  describe('getCustomers', () => {
+    test('fetches customers from C_SoldToValueHelp with filter and top', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({
+        data: {
+          d: {
+            results: [
+              { Customer: '10082', OrganizationBPName1: 'Bajaj Healthcare Limited', CityName: 'Mumbai' }
+            ]
+          }
+        }
+      });
+
+      const res = await adapter.getCustomers({ search: 'Bajaj', top: 10 });
+      expect(mockHttpClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('C_SoldToValueHelp'),
+        expect.anything()
+      );
+      expect(res.length).toBe(1);
+      expect(res[0].Customer).toBe('10082');
+      expect(res[0].OrganizationBPName1).toBe('Bajaj Healthcare Limited');
+    });
+  });
+
+  describe('getMaterials', () => {
+    test('fetches materials from I_MaterialStdVH with filter and top', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({
+        data: {
+          d: {
+            results: [
+              { Material: '4000000001', Material_Text: 'X-265 Active' }
+            ]
+          }
+        }
+      });
+
+      const res = await adapter.getMaterials({ search: '40000', top: 5 });
+      expect(mockHttpClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('I_MaterialStdVH'),
+        expect.anything()
+      );
+      expect(res.length).toBe(1);
+      expect(res[0].Material).toBe('4000000001');
+    });
+  });
+
+  describe('getPlants', () => {
+    test('fetches plants from I_AllwdPlantsPerSlsOrgVH', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({
+        data: {
+          d: {
+            results: [
+              { Plant: '1110', PlantName: 'Ascend Plant 1' },
+              { Plant: '1110', PlantName: 'Ascend Plant 1' }, // duplicate to test deduplication
+              { Plant: '1130', PlantName: 'Ascend Plant 2' }
+            ]
+          }
+        }
+      });
+
+      const res = await adapter.getPlants();
+      expect(mockHttpClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/I_AllwdPlantsPerSlsOrgVH'),
+        expect.anything()
+      );
+      expect(res.length).toBe(2);
+      expect(res[0].Plant).toBe('1110');
+      expect(res[1].Plant).toBe('1130');
+    });
+  });
+
+  describe('getDocumentTypes', () => {
+    test('fetches document types from C_CustomerReturnTypeManageVH', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({
+        data: {
+          d: {
+            results: [
+              { CustomerReturnType: 'ZRET', CustomerReturnType_Text: 'Sales Return Order' }
+            ]
+          }
+        }
+      });
+
+      const res = await adapter.getDocumentTypes();
+      expect(mockHttpClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/C_CustomerReturnTypeManageVH'),
+        expect.anything()
+      );
+      expect(res.length).toBe(1);
+      expect(res[0].CustomerReturnType).toBe('ZRET');
     });
   });
 
@@ -277,31 +386,21 @@ describe('Unit: CustomerReturnAdapter', () => {
       );
     });
 
-    test('creates header and item, confirms persistence via readback', async () => {
-      // 1. Header POST response
+    test('creates customer return via LORD_ODATA_ORDER_SRV deep insert, confirms persistence via readback', async () => {
+      // 1. Deep insert POST response
       mockHttpClient.post.mockResolvedValueOnce({
         data: {
           d: {
-            CustomerReturn: '4500099',
-            CustomerReturnType: 'ZRET',
-            SoldToParty: '10082',
-            TotalNetAmount: '15000.00',
-            TransactionCurrency: 'INR'
+            SalesOrderID: '4500099',
+            SalesOrderTypeCode: 'ZRET',
+            SoldToPartyID: '10082',
+            TotalAmount: '15000.00',
+            DocumentCurrency: 'INR'
           }
         }
       });
 
-      // 2. Item POST response
-      mockHttpClient.post.mockResolvedValueOnce({
-        data: {
-          d: {
-            CustomerReturn: '4500099',
-            CustomerReturnItem: '10'
-          }
-        }
-      });
-
-      // 3. Readback GET response
+      // 2. Readback GET response
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -329,13 +428,52 @@ describe('Unit: CustomerReturnAdapter', () => {
       };
 
       const res = await adapter.createCustomerReturn(payload);
-      expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
+      expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      expect(mockHttpClient.post).toHaveBeenCalledWith(
+        '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV/HeaderSet',
+        expect.objectContaining({
+          data: expect.objectContaining({
+            SalesOrderTypeCode: 'ZRET',
+            SoldToPartyID: '10082',
+            ItemSet: expect.arrayContaining([
+              expect.objectContaining({ MaterialID: '4000000001', OrderQty: '10' })
+            ])
+          })
+        }),
+        expect.any(Object)
+      );
       expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
       expect(res.CustomerReturn).toBe('4500099');
       expect(res.Success).toBe(true);
       expect(res.TotalNetAmount).toBe(15000.00);
       expect(res.TransactionCurrency).toBe('INR');
       expect(res.Message).toContain('4500099 successfully created and verified');
+    });
+
+    test('rejects when no items with material are provided', async () => {
+      await expect(
+        adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', Items: [] })
+      ).rejects.toThrow('At least one line item with a Material is required');
+    });
+
+    test('throws 502 when SAP returns empty SalesOrderID / CustomerReturn number', async () => {
+      mockHttpClient.post.mockResolvedValueOnce({
+        data: {
+          d: {
+            SalesOrderID: ''
+          }
+        }
+      });
+      await expect(
+        adapter.createCustomerReturn({
+          SoldToParty: '10082',
+          ReturnsOrderReason: '101',
+          Items: [{ Material: '4000000001' }]
+        })
+      ).rejects.toMatchObject({
+        code: 502,
+        message: expect.stringContaining('Sales Order / Customer Return number not returned')
+      });
     });
   });
 });

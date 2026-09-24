@@ -154,6 +154,54 @@ describe('Unit: CustomerReturnService Handlers', () => {
     });
   });
 
+  describe('getCustomers', () => {
+    test('delegates to adapter with search and top params', async () => {
+      const custs = [{ Customer: '10082', OrganizationBPName1: 'Bajaj Healthcare Limited' }];
+      customerReturnAdapter.getCustomers.mockResolvedValueOnce(custs);
+
+      const req = { data: { search: 'Bajaj', top: 10 }, error: jest.fn() };
+      const res = await handlers['getCustomers'](req);
+      expect(customerReturnAdapter.getCustomers).toHaveBeenCalledWith({ search: 'Bajaj', top: 10 });
+      expect(res).toBe(custs);
+    });
+  });
+
+  describe('getMaterials', () => {
+    test('delegates to adapter with search and top params', async () => {
+      const mats = [{ Material: '4000000001', Material_Text: 'X-265 Active' }];
+      customerReturnAdapter.getMaterials.mockResolvedValueOnce(mats);
+
+      const req = { data: { search: '40000', top: 10 }, error: jest.fn() };
+      const res = await handlers['getMaterials'](req);
+      expect(customerReturnAdapter.getMaterials).toHaveBeenCalledWith({ search: '40000', top: 10 });
+      expect(res).toBe(mats);
+    });
+  });
+
+  describe('getPlants', () => {
+    test('delegates to adapter', async () => {
+      const plants = [{ Plant: '1110', PlantName: 'Ascend Plant 1' }];
+      customerReturnAdapter.getPlants.mockResolvedValueOnce(plants);
+
+      const req = { error: jest.fn() };
+      const res = await handlers['getPlants'](req);
+      expect(customerReturnAdapter.getPlants).toHaveBeenCalled();
+      expect(res).toBe(plants);
+    });
+  });
+
+  describe('getDocumentTypes', () => {
+    test('delegates to adapter', async () => {
+      const docTypes = [{ CustomerReturnType: 'ZRET', CustomerReturnType_Text: 'Sales Return Order' }];
+      customerReturnAdapter.getDocumentTypes.mockResolvedValueOnce(docTypes);
+
+      const req = { error: jest.fn() };
+      const res = await handlers['getDocumentTypes'](req);
+      expect(customerReturnAdapter.getDocumentTypes).toHaveBeenCalled();
+      expect(res).toBe(docTypes);
+    });
+  });
+
   describe('createCustomerReturn', () => {
     test('rejects missing SoldToParty with 400', async () => {
       const req = {
@@ -200,6 +248,24 @@ describe('Unit: CustomerReturnService Handlers', () => {
       const res = await handlers['createCustomerReturn'](req);
       expect(customerReturnAdapter.createCustomerReturn).toHaveBeenCalled();
       expect(res).toEqual(mockResult);
+    });
+
+    test('forwards 501 when adapter throws missing persistence capability error', async () => {
+      const err = new Error('SD_F2651_CRT_CREATE_SRV lacks persistence');
+      err.code = 501;
+      customerReturnAdapter.createCustomerReturn.mockRejectedValueOnce(err);
+
+      const req = {
+        data: {
+          SoldToParty: '10082',
+          ReturnsOrderReason: '101'
+        },
+        user: { is: jest.fn().mockReturnValue(true) },
+        reject: jest.fn()
+      };
+
+      await handlers['createCustomerReturn'](req);
+      expect(req.reject).toHaveBeenCalledWith(501, expect.stringContaining('SD_F2651_CRT_CREATE_SRV lacks persistence'));
     });
   });
 });

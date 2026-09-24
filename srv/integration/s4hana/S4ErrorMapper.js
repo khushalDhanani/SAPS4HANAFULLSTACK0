@@ -90,14 +90,14 @@ function _extractErrorCode(error) {
     const odataError = error.response?.data?.error;
     if (odataError?.code) return odataError.code;
 
-    if (error.code) return error.code;
+    if (error.code !== undefined && error.code !== null) return String(error.code);
 
     if (typeof error.message === 'string') {
         const jsonMatch = error.message.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
-                if (parsed.error?.code) return parsed.error.code;
+                if (parsed.error?.code) return String(parsed.error.code);
             } catch (_e) {
                 // Ignore
             }
@@ -139,7 +139,7 @@ function mapS4Error(error) {
     const message = extractS4ErrorMessage(error);
     const code = _extractErrorCode(error);
     const sMessageLower = message.toLowerCase();
-    const sCodeUpper = code.toUpperCase();
+    const sCodeUpper = String(code).toUpperCase();
     const httpStatus = error.response?.status;
     const errorCode = error.code ? String(error.code).toUpperCase() : '';
 

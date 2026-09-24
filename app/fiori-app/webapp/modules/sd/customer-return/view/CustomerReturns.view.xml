@@ -199,18 +199,18 @@
                                         <ObjectIdentifier
                                             title="{= ${customerReturn>SoldToPartyName} || ${customerReturn>SoldToParty} || '' }"
                                             text="{= ${customerReturn>SoldToPartyName} ? ${customerReturn>SoldToParty} : '' }" />
-                                        <Text text="{customerReturn>CustomerReturnDate}" />
+                                        <Text text="{path: 'customerReturn>CustomerReturnDate', formatter: '.formatDate'}" />
                                         <ObjectStatus
                                             text="{= ${customerReturn>ReferenceSDDocument} ? ${customerReturn>ReferenceSDDocument} + ' (' + (${customerReturn>ReferenceSDDocumentCategory} || '') + ')' : '-' }"
                                             state="{= ${customerReturn>ReferenceSDDocument} ? 'Information' : 'None' }" />
                                         <ObjectStatus
-                                            text="{= ${customerReturn>SDDocumentReasonText} ? ${customerReturn>ReturnsOrderReason} + ' - ' + ${customerReturn>SDDocumentReasonText} : ${customerReturn>ReturnsOrderReason} }"
+                                            text="{parts: [{path: 'customerReturn>ReturnsOrderReason'}, {path: 'customerReturn>SDDocumentReasonText'}], formatter: '.formatReason'}"
                                             state="{path: 'customerReturn>ReturnsOrderReason', formatter: '.formatReasonState'}"
                                             icon="{path: 'customerReturn>ReturnsOrderReason', formatter: '.formatReasonIcon'}" />
                                         <ObjectNumber
                                             number="{path: 'customerReturn>TotalNetAmount', formatter: '.formatAmount'}"
-                                            unit="{customerReturn>TransactionCurrency}"
-                                            state="None" />
+                                            unit="{= ${customerReturn>TotalNetAmount} && parseFloat(${customerReturn>TotalNetAmount}) !== 0 ? ${customerReturn>TransactionCurrency} : '' }"
+                                            state="{path: 'customerReturn>TotalNetAmount', formatter: '.formatAmountState'}" />
                                         <Button
                                             id="btnViewItems"
                                             text="{i18n>btnViewItems}"

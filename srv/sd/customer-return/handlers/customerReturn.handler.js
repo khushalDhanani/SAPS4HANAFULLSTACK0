@@ -124,7 +124,55 @@ function registerCustomerReturnHandlers(srv) {
     }
   });
 
-  // 5. getReferenceDocuments
+  // 5. getCustomers
+  srv.on('getCustomers', async (req) => {
+    try {
+      const search = req.data?.search;
+      const top = req.data?.top;
+      return await customerReturnAdapter.getCustomers({ search, top });
+    } catch (err) {
+      LOG.error('Failed to retrieve customers', err);
+      req.error(err.code || 500, err.message || 'Failed to retrieve customers');
+    }
+  });
+
+  // 6. getMaterials
+  srv.on('getMaterials', async (req) => {
+    try {
+      const search = req.data?.search;
+      const top = req.data?.top;
+      return await customerReturnAdapter.getMaterials({ search, top });
+    } catch (err) {
+      LOG.error('Failed to retrieve materials', err);
+      req.error(err.code || 500, err.message || 'Failed to retrieve materials');
+    }
+  });
+
+  // 7. getPlants
+  srv.on('getPlants', async (req) => {
+    try {
+      return await customerReturnAdapter.getPlants();
+    } catch (err) {
+      LOG.error('Failed to retrieve plants', err);
+      req.error(err.code || 500, err.message || 'Failed to retrieve plants');
+    }
+  });
+
+  // 8. getDocumentTypes
+  srv.on('getDocumentTypes', async (_req) => {
+    try {
+      const types = await customerReturnAdapter.getDocumentTypes();
+      if (Array.isArray(types) && types.length > 0) {
+        return types;
+      }
+      return [{ CustomerReturnType: 'ZRET', CustomerReturnType_Text: 'Sales Return Order' }];
+    } catch (err) {
+      LOG.error('Failed to retrieve document types', err);
+      return [{ CustomerReturnType: 'ZRET', CustomerReturnType_Text: 'Sales Return Order' }];
+    }
+  });
+
+  // 9. getReferenceDocuments
   srv.on('getReferenceDocuments', async (req) => {
     try {
       const search = req.data?.search;
@@ -184,8 +232,18 @@ function registerCustomerReturnHandlers(srv) {
       const result = await customerReturnAdapter.createCustomerReturn(payload);
       return result;
     } catch (err) {
-      LOG.error('Failed to execute createCustomerReturn', err);
-      req.error(err.code || 500, err.message || 'Failed to create Customer Return');
+      LOG.error('Failed to execute createCustomerReturn:', err.message);
+      const httpCode = (typeof err.status === 'number' && err.status >= 400 && err.status < 600)
+        ? err.status
+        : (typeof err.code === 'number' && err.code >= 400 && err.code < 600)
+          ? err.code
+          : (Number(err.code) >= 400 && Number(err.code) < 600)
+            ? Number(err.code)
+            : 400;
+      if (typeof req.reject === 'function') {
+        return req.reject(httpCode, err.message || 'Failed to create Customer Return');
+      }
+      return req.error(httpCode, err.message || 'Failed to create Customer Return');
     }
   });
 }

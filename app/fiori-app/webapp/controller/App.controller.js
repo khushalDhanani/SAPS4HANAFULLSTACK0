@@ -59,6 +59,8 @@ sap.ui.define([
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
                 this._updateShell("customerInvoices");
+            } else if (sHash.indexOf("sd/returns/create") === 0) {
+                this._updateShell("createCustomerReturn");
             } else if (sHash.indexOf("sd/returns") === 0) {
                 this._updateShell("customerReturns");
             } else if (sHash.indexOf("dashboard") === 0) {
@@ -156,6 +158,10 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("customerReturnsTitle") : "Customer Returns Management";
                     bShowNav = true;
                     break;
+                case "createCustomerReturn":
+                    sTitle = oBundle ? oBundle.getText("createReturnPageTitle") : "Create Customer Return";
+                    bShowNav = true;
+                    break;
                 case "login":
                 case "default":
                 default:
@@ -190,6 +196,8 @@ sap.ui.define([
                 this.onNavBack("salesInquiries");
             } else if (sRoute === "createSalesOrder") {
                 this.onNavBack("salesOrders");
+            } else if (sRoute === "createCustomerReturn") {
+                this.onNavBack("customerReturns");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsIssue" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {
