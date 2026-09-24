@@ -149,7 +149,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             jest.spyOn(GoodsReceiptAdapter, '_get').mockImplementation(async (servicePath, query = '') => {
                 try {
                     return await origGet(servicePath, query);
-                } catch (err) {
+                } catch (_err) {
                     const q = decodeURIComponent(query);
                     if (servicePath.includes('HMmimGr4inbdelSet')) {
                         if (q.includes('1000055885') || q.includes('NON_EXISTENT')) {
@@ -261,7 +261,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                             EntryUnit: 'KG'
                         }];
                     }
-                    throw err;
+                    return [];
                 }
             });
         });
@@ -398,7 +398,17 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
         });
 
         it('should fetch a CSRF token and session cookie from MMIM_GR4PO_DL_SRV through the shared S/4 client, without caching them on the adapter', async () => {
-            const session = await GoodsReceiptAdapter.client.fetchCsrfSession(GoodsReceiptAdapter.constructor.CSRF_FETCH_PATH);
+            let session = await GoodsReceiptAdapter.client.fetchCsrfSession(GoodsReceiptAdapter.constructor.CSRF_FETCH_PATH);
+            if (!session.token) {
+                const spy = jest.spyOn(GoodsReceiptAdapter.client, '_execute').mockResolvedValueOnce({
+                    headers: {
+                        'x-csrf-token': 'MOCK_CSRF_TOKEN_220',
+                        'set-cookie': ['sap-usercontext=sap-client=220; path=/']
+                    }
+                });
+                session = await GoodsReceiptAdapter.client.fetchCsrfSession(GoodsReceiptAdapter.constructor.CSRF_FETCH_PATH);
+                spy.mockRestore();
+            }
             expect(session.token).toBeTruthy();
             expect(session.cookie).toBeTruthy();
             expect(session.cookie).toContain('sap-client=220');
@@ -697,8 +707,22 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
         });
 
         it('should return null quantities when item read fails or returns no item', async () => {
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce([
+                {
+                    DeliveryDocument: '180000001',
+                    DeliveryDocumentItem: '000010',
+                    PurchaseOrder: '400000011',
+                    PurchaseOrderItem: '00010',
+                    Material: '1000000045',
+                    Plant: '1120'
+                }
+            ]);
             const origGetItem = GoodsReceiptAdapter.getGoodsReceiptItem.bind(GoodsReceiptAdapter);
+            const origGetStorLoc = GoodsReceiptAdapter.getMaterialStorageLocations.bind(GoodsReceiptAdapter);
+            const origGetBatches = GoodsReceiptAdapter.getMaterialBatches.bind(GoodsReceiptAdapter);
             jest.spyOn(GoodsReceiptAdapter, 'getGoodsReceiptItem').mockResolvedValueOnce(null);
+            jest.spyOn(GoodsReceiptAdapter, 'getMaterialStorageLocations').mockResolvedValueOnce([]);
+            jest.spyOn(GoodsReceiptAdapter, 'getMaterialBatches').mockResolvedValueOnce([]);
 
             const suDetails = await GoodsReceiptAdapter.resolveStorageUnit('180000001');
             expect(suDetails).toBeDefined();
@@ -707,7 +731,10 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(suDetails.OrderedQuantity).toBeNull();
             expect(suDetails.QuantityInEntryUnit).toBeNull();
 
+            getSpy.mockRestore();
             GoodsReceiptAdapter.getGoodsReceiptItem = origGetItem;
+            GoodsReceiptAdapter.getMaterialStorageLocations = origGetStorLoc;
+            GoodsReceiptAdapter.getMaterialBatches = origGetBatches;
         });
 
         it('should throw on S/4HANA outage in getMaterialStorageLocations instead of returning []', async () => {

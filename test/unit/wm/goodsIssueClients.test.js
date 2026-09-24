@@ -1471,6 +1471,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
     });
 
     it('should filter zero-stock batches from AvailableBatches and avoid auto-picking empty batch in resolveIdentifier', async () => {
+      const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([
+        { Reservation: '375047', OrderID: '1001952' }
+      ]);
       const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
         {
           ReservationNo: '375047',
@@ -1499,11 +1502,15 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.ActiveItem.Batch).toBe('');
       expect(res.AvailableStock).toBe(0);
 
+      spyGet.mockRestore();
       spyOpen.mockRestore();
       spyBatches.mockRestore();
     });
 
     it('should preserve unknown stock as null in AvailableBatches and AvailableStock, never defaulting to 0', async () => {
+      const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([
+        { Reservation: '375048', OrderID: '1001953' }
+      ]);
       const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
         {
           ReservationNo: '375048',
@@ -1534,6 +1541,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       // Unknown stock must remain null, never silent 0
       expect(res.AvailableStock).toBeNull();
 
+      spyGet.mockRestore();
       spyOpen.mockRestore();
       spyBatches.mockRestore();
     });
