@@ -21,9 +21,10 @@ sap.ui.define([
     }
 
     var PurchaseOrderModel = {
-        /** Reference to extracted validator and defaults modules */
+        /** Reference to extracted validator, defaults, and rules modules */
         validator: _validator,
         defaults: _defaults,
+        rules: _validator ? _validator.rules : null,
 
         /**
          * Resolves the current logged-in user name from Fiori Launchpad container or owner component user model.

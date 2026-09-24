@@ -1,13 +1,34 @@
 (function (root, factory) {
     "use strict";
     if (typeof module !== "undefined" && module.exports) {
-        module.exports = factory();
+        var PurchaseOrderRules = require("./PurchaseOrderRules");
+        module.exports = factory(PurchaseOrderRules);
     }
     if (typeof sap !== "undefined" && sap.ui && typeof sap.ui.define === "function" && typeof module === "undefined") {
-        sap.ui.define([], factory);
+        sap.ui.define([
+            "./PurchaseOrderRules"
+        ], factory);
     }
-})(this, function () {
+})(this, function (InjectedRules) {
     "use strict";
+
+    var _rules = InjectedRules;
+    if (!_rules && typeof require === "function") {
+        try {
+            _rules = require("./PurchaseOrderRules");
+        } catch (e) {}
+    }
+
+    var CURRENCY_REGEX = (_rules && _rules.PATTERNS && _rules.PATTERNS.CURRENCY) || /^[A-Za-z]{3}$/;
+    var DOC_TYPE_PREFIX_REGEX = (_rules && _rules.PATTERNS && _rules.PATTERNS.DOC_TYPE_PREFIX) || /^Z/;
+    var HEADER_RULES = (_rules && _rules.HEADER) || {};
+    var ITEM_RULES = (_rules && _rules.ITEM) || {};
+
+    var DOC_TYPE_MAX_LEN = (HEADER_RULES.PurchaseOrderType && HEADER_RULES.PurchaseOrderType.maxLen) || 4;
+    var INCOTERMS_MAX_LEN = (HEADER_RULES.IncotermsClassification && HEADER_RULES.IncotermsClassification.maxLen) || 3;
+    var INCOTERMS_LOC_MAX_LEN = (HEADER_RULES.IncotermsLocation1 && HEADER_RULES.IncotermsLocation1.maxLen) || 70;
+    var PAYMENT_TERMS_MAX_LEN = (HEADER_RULES.PaymentTerms && HEADER_RULES.PaymentTerms.maxLen) || 4;
+    var TAX_CODE_MAX_LEN = (ITEM_RULES.TaxCode && ITEM_RULES.TaxCode.maxLen) || 2;
 
     var DEFAULT_HEADER_FIELD_CONFIG = {
         PurchaseOrderType: { controlId: "inDocType", label: "Document Type", section: "General Data", example: "ZDOM" },
@@ -34,6 +55,9 @@
     };
 
     var PurchaseOrderValidator = {
+        /** Reference to authoritative schema rules */
+        rules: _rules,
+
         /**
          * Optional external text resolver function (e.g. bound BaseController.getText)
          */
@@ -90,7 +114,7 @@
          */
         isValidDocType: function (sDocType) {
             var s = String(sDocType || "").trim().toUpperCase();
-            return s.startsWith("Z") && s.length <= 4;
+            return DOC_TYPE_PREFIX_REGEX.test(s) && s.length <= DOC_TYPE_MAX_LEN;
         },
 
         /**
@@ -213,7 +237,7 @@
                     case "Currency":
                         if (!sValTrim) {
                             oState = { state: "Error", text: fnResolve("poValCurrencyRequired", null, "Currency is required (e.g. EUR, USD).") };
-                        } else if (!/^[A-Za-z]{3}$/.test(sValTrim)) {
+                        } else if (!CURRENCY_REGEX.test(sValTrim)) {
                             oState = { state: "Error", text: fnResolve("poValCurrencyIso", null, "Currency must be a 3-letter ISO code (e.g. EUR).") };
                         }
                         break;
@@ -221,17 +245,17 @@
                         if (!sValTrim) oState = { state: "Error", text: fnResolve("poValDocDateRequired", null, "Document Date is required.") };
                         break;
                     case "IncotermsClassification":
-                        if (sValTrim.length > 3) oState = { state: "Error", text: fnResolve("poValIncotermsMaxLen", null, "Incoterms classification must not exceed 3 characters (e.g. EXW).") };
+                        if (sValTrim.length > INCOTERMS_MAX_LEN) oState = { state: "Error", text: fnResolve("poValIncotermsMaxLen", null, "Incoterms classification must not exceed " + INCOTERMS_MAX_LEN + " characters (e.g. EXW).") };
                         break;
                     case "IncotermsLocation1":
                         if (oHeader.IncotermsClassification && !sValTrim) {
                             oState = { state: "Error", text: fnResolve("poValIncotermsLocRequired", null, "Incoterms Location 1 is required when Incoterms is specified.") };
-                        } else if (sValTrim.length > 70) {
-                            oState = { state: "Error", text: fnResolve("poValIncotermsLocMaxLen", null, "Incoterms Location 1 must not exceed 70 characters.") };
+                        } else if (sValTrim.length > INCOTERMS_LOC_MAX_LEN) {
+                            oState = { state: "Error", text: fnResolve("poValIncotermsLocMaxLen", null, "Incoterms Location 1 must not exceed " + INCOTERMS_LOC_MAX_LEN + " characters.") };
                         }
                         break;
                     case "PaymentTerms":
-                        if (sValTrim.length > 4) oState = { state: "Error", text: fnResolve("poValPaymentTermsMaxLen", null, "Payment Terms must not exceed 4 characters (e.g. 0001).") };
+                        if (sValTrim.length > PAYMENT_TERMS_MAX_LEN) oState = { state: "Error", text: fnResolve("poValPaymentTermsMaxLen", null, "Payment Terms must not exceed " + PAYMENT_TERMS_MAX_LEN + " characters (e.g. 0001).") };
                         break;
                     default:
                         break;
@@ -279,8 +303,8 @@
                             }
                             break;
                         case "TaxCode":
-                            if (sItemValTrim.length > 2) {
-                                oState = { state: "Error", text: fnResolve("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code must not exceed 2 characters.") };
+                            if (sItemValTrim.length > TAX_CODE_MAX_LEN) {
+                                oState = { state: "Error", text: fnResolve("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code must not exceed " + TAX_CODE_MAX_LEN + " characters.") };
                             }
                             break;
                         default:
@@ -407,7 +431,7 @@
                     description: fnResolve("poValSummaryCurrencyDesc", null, "Enter a valid 3-letter ISO currency code (e.g. EUR, USD)."),
                     controlId: "inCurrency"
                 });
-            } else if (!/^[A-Za-z]{3}$/.test(String(oHeader.Currency).trim())) {
+            } else if (!CURRENCY_REGEX.test(String(oHeader.Currency).trim())) {
                 oHeaderErrors.Currency = { state: "Error", text: fnResolve("poValCurrencyIso", null, "Currency must be a valid 3-letter ISO code.") };
                 aErrorList.push({
                     type: "Error",
@@ -427,13 +451,13 @@
                     controlId: "inDocDate"
                 });
             }
-            if (oHeader.IncotermsClassification && String(oHeader.IncotermsClassification).trim().length > 3) {
-                oHeaderErrors.IncotermsClassification = { state: "Error", text: fnResolve("poValIncotermsMaxLen", null, "Incoterms must not exceed 3 characters.") };
+            if (oHeader.IncotermsClassification && String(oHeader.IncotermsClassification).trim().length > INCOTERMS_MAX_LEN) {
+                oHeaderErrors.IncotermsClassification = { state: "Error", text: fnResolve("poValIncotermsMaxLen", null, "Incoterms must not exceed " + INCOTERMS_MAX_LEN + " characters.") };
                 aErrorList.push({
                     type: "Error",
-                    title: fnResolve("poValIncotermsMaxLen", null, "Incoterms must not exceed 3 characters."),
+                    title: fnResolve("poValIncotermsMaxLen", null, "Incoterms must not exceed " + INCOTERMS_MAX_LEN + " characters."),
                     field: "Supplier & Commercial Terms / Incoterms",
-                    description: fnResolve("poValSummaryIncotermsDesc", null, "Enter a 3-letter Incoterms classification (e.g. EXW, FOB, CIF)."),
+                    description: fnResolve("poValSummaryIncotermsDesc", null, "Enter a " + INCOTERMS_MAX_LEN + "-letter Incoterms classification (e.g. EXW, FOB, CIF)."),
                     controlId: "inIncoterms"
                 });
             }
@@ -446,23 +470,23 @@
                     description: fnResolve("poValSummaryIncotermsLocDesc", null, "Provide the primary delivery location for Incoterms."),
                     controlId: "inIncotermsLoc"
                 });
-            } else if (oHeader.IncotermsLocation1 && String(oHeader.IncotermsLocation1).trim().length > 70) {
-                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: fnResolve("poValIncotermsLocMaxLen", null, "Incoterms Location 1 exceeds maximum length of 70 characters.") };
+            } else if (oHeader.IncotermsLocation1 && String(oHeader.IncotermsLocation1).trim().length > INCOTERMS_LOC_MAX_LEN) {
+                oHeaderErrors.IncotermsLocation1 = { state: "Error", text: fnResolve("poValIncotermsLocMaxLen", null, "Incoterms Location 1 exceeds maximum length of " + INCOTERMS_LOC_MAX_LEN + " characters.") };
                 aErrorList.push({
                     type: "Error",
-                    title: fnResolve("poValIncotermsLocMaxLen", null, "Incoterms Location 1 exceeds 70 characters."),
+                    title: fnResolve("poValIncotermsLocMaxLen", null, "Incoterms Location 1 exceeds " + INCOTERMS_LOC_MAX_LEN + " characters."),
                     field: "Supplier & Commercial Terms / Incoterms Location",
-                    description: fnResolve("poValSummaryIncotermsLocDesc", null, "Shorten Incoterms Location 1 to at most 70 characters."),
+                    description: fnResolve("poValSummaryIncotermsLocDesc", null, "Shorten Incoterms Location 1 to at most " + INCOTERMS_LOC_MAX_LEN + " characters."),
                     controlId: "inIncotermsLoc"
                 });
             }
-            if (oHeader.PaymentTerms && String(oHeader.PaymentTerms).trim().length > 4) {
-                oHeaderErrors.PaymentTerms = { state: "Error", text: fnResolve("poValPaymentTermsMaxLen", null, "Payment Terms exceeds maximum length of 4 characters.") };
+            if (oHeader.PaymentTerms && String(oHeader.PaymentTerms).trim().length > PAYMENT_TERMS_MAX_LEN) {
+                oHeaderErrors.PaymentTerms = { state: "Error", text: fnResolve("poValPaymentTermsMaxLen", null, "Payment Terms exceeds maximum length of " + PAYMENT_TERMS_MAX_LEN + " characters.") };
                 aErrorList.push({
                     type: "Error",
-                    title: fnResolve("poValPaymentTermsMaxLen", null, "Payment Terms exceeds 4 characters."),
+                    title: fnResolve("poValPaymentTermsMaxLen", null, "Payment Terms exceeds " + PAYMENT_TERMS_MAX_LEN + " characters."),
                     field: "Supplier & Commercial Terms / Payment Terms",
-                    description: fnResolve("poValSummaryPayTermsDesc", null, "Enter a standard 4-character payment terms code (e.g. 0001)."),
+                    description: fnResolve("poValSummaryPayTermsDesc", null, "Enter a standard " + PAYMENT_TERMS_MAX_LEN + "-character payment terms code (e.g. 0001)."),
                     controlId: "inPaymentTerms"
                 });
             }
@@ -564,13 +588,13 @@
                             });
                         }
                     }
-                    if (item.TaxCode && String(item.TaxCode).trim().length > 2) {
-                        item.errors.TaxCode = { state: "Error", text: fnResolve("poValItemTaxCodeMaxLen", [""], "Tax Code exceeds 2 characters.") };
+                    if (item.TaxCode && String(item.TaxCode).trim().length > TAX_CODE_MAX_LEN) {
+                        item.errors.TaxCode = { state: "Error", text: fnResolve("poValItemTaxCodeMaxLen", [""], "Tax Code exceeds " + TAX_CODE_MAX_LEN + " characters.") };
                         aErrorList.push({
                             type: "Error",
-                            title: fnResolve("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code exceeds 2 characters."),
+                            title: fnResolve("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code exceeds " + TAX_CODE_MAX_LEN + " characters."),
                             field: sItemNo + " / Tax Code",
-                            description: "Enter a 2-character SAP tax code (e.g. V1, I0).",
+                            description: "Enter a " + TAX_CODE_MAX_LEN + "-character SAP tax code (e.g. V1, I0).",
                             itemIndex: idx,
                             cellIndex: 7,
                             controlId: "poItemsTable"
