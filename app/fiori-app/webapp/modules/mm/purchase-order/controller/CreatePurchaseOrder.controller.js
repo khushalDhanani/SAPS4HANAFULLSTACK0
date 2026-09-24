@@ -33,9 +33,6 @@ sap.ui.define([
             var oOwnerComponent = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
             var sUser = PurchaseOrderModel.getCurrentUserName(oOwnerComponent);
             var oModel = PurchaseOrderModel.createInitialModel(sUser);
-            var oDefaultDoc = this._getDefaultDocType();
-            oModel.setProperty("/header/PurchaseOrderType", oDefaultDoc.code);
-            oModel.setProperty("/header/PurchaseOrderTypeText", oDefaultDoc.text);
             this.getView().setModel(oModel, "newPO");
             PurchaseOrderModel.updateStatus(oModel);
             if (this._oMessagePopover) {
@@ -63,6 +60,7 @@ sap.ui.define([
             // Optimistically apply existing configuration while refetching in background
             if (this._oConfigData && !bForce) {
                 PurchaseOrderModel.applyConfigurationDefaults(oModel, this._oConfigData);
+                PurchaseOrderModel.updateStatus(oModel);
             }
 
             var oPoModel = this.getModel();
@@ -71,6 +69,7 @@ sap.ui.define([
                 var oCurrentModel = that.getView().getModel("newPO");
                 if (oCurrentModel) {
                     PurchaseOrderModel.applyConfigurationDefaults(oCurrentModel, oConfigData);
+                    PurchaseOrderModel.updateStatus(oCurrentModel);
                 }
                 return oConfigData;
             }).catch(function (err) {

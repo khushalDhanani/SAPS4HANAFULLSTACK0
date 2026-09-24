@@ -96,7 +96,7 @@ sap.ui.define([
         },
 
         HEADER_FIELD_CONFIG: {
-            PurchaseOrderType: { controlId: "inDocType", label: "Document Type", section: "General Data", example: "NB" },
+            PurchaseOrderType: { controlId: "inDocType", label: "Document Type", section: "General Data", example: "ZDOM" },
             CompanyCode: { controlId: "inCompanyCode", label: "Company Code", section: "General Data", example: "1010" },
             PurchasingOrganization: { controlId: "inPurchOrg", label: "Purchasing Organization", section: "General Data", example: "1010" },
             PurchasingGroup: { controlId: "inPurchGrp", label: "Purchasing Group", section: "General Data", example: "001" },

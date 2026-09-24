@@ -3032,6 +3032,42 @@
     - `npm test`: 78 passed, 78 test suites, 1068 passed, 1068 total tests (100% green).
   - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
 
+- **2026-09-24 16:47 IST**:
+  - **Task**: Backend/Frontend Consistency & Default PurchaseOrderType Alignment (Audit Item 6).
+  - **Root Cause**:
+    1. In `CreatePurchaseOrder.controller.js`, `_resetModel` was imperatively executing `oModel.setProperty("/header/PurchaseOrderType", oDefaultDoc.code)` and `PurchaseOrderTypeText`, immediately overwriting the initial model before backend master data configuration was evaluated. This bypassed the configuration-driven defaulting logic in `PurchaseOrderModel.applyConfigurationDefaults`.
+    2. In `PurchaseOrderModel.js`, `HEADER_FIELD_CONFIG.PurchaseOrderType.example` retained an outdated example value `"NB"`, creating a discrepancy with the project's standardized `"ZDOM"` document type and domain rules requiring Z-types.
+    3. In `purchaseOrder.mapper.js`, verified that `normalizePurchaseOrderData` already enforces strict validation (`throw new Error('PurchaseOrderType (Document Type) is required')`), ensuring no backend layer silently substitutes `"NB"` or any unsupplied default.
+  - **Solution Delivered**:
+    1. **Eliminated Imperative Overwrite in Controller (`CreatePurchaseOrder.controller.js`)**:
+       - Removed `oModel.setProperty("/header/PurchaseOrderType", ...)` and `PurchaseOrderTypeText` from `_resetModel`.
+       - Initial model starts with clean empty document type from `PurchaseOrderModel.createInitialModel(sUser)`.
+       - Defaults are derived solely via `PurchaseOrderModel.applyConfigurationDefaults(oModel, oConfigData)` when confirmed in backend master data, ensuring consistent single-source-of-truth lifecycle management matching `CreateSalesOrder`.
+       - Ensured `PurchaseOrderModel.updateStatus` is called after applying configuration defaults.
+    2. **Field Metadata Alignment (`PurchaseOrderModel.js`)**:
+       - Updated `HEADER_FIELD_CONFIG.PurchaseOrderType.example` from `"NB"` to `"ZDOM"`, aligning documentation/field definitions with `DEFAULT_DOC_TYPE` (`ZDOM`).
+    3. **Automated Unit Testing (`headerValueHelpSelection.test.js`)**:
+       - Added test verifying `HEADER_FIELD_CONFIG` specifies `ZDOM` instead of `NB`.
+       - Added test verifying `_resetModel` initializes the model cleanly without hardcoded document type mutations prior to configuration loading.
+       - Added test verifying `_loadConfigurationAndDefaults` applies `DEFAULT_DOC_TYPE` (`ZDOM`) through `applyConfigurationDefaults` only when confirmed in master data configuration.
+       - Added test verifying `_loadConfigurationAndDefaults` leaves `PurchaseOrderType` empty if not confirmed in configuration.
+  - **Files Modified**:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`
+    - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js`
+    - `test/unit/purchase-order/headerValueHelpSelection.test.js`
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js`: 1 passed, 43/43 tests green.
+    - `npx jest test/unit/purchase-order/ test/unit/sd/`: 27 passed, 27 suites, 389/389 tests green (100%).
+    - `npx jest test/integration/purchase-order/ test/e2e/purchase-order/`: 8 passed, 8 suites, 41/41 tests green (100%).
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 864 ms (`Component-preload.js` generated).
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run lint`: Succeeded with 0 errors, 0 warnings.
+    - `git diff --check`: Clean (0 errors).
+    - `npm test`: 85 passed, 85 suites, 1,231 passed, 1,231 total tests (100% green).
+  - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
+
 - **2026-09-24 13:15 IST**:
   - **Task**: Backend Data Integrity & Security — Enforce authenticated RequisitionerName on line items in `purchaseOrder.mapper.js` and `PurchaseOrderMapper.js`.
   - **Root Cause**: While `purchaseOrder.handler.js` properly used `resolveUserIdentity(req)` to securely authenticate the requester identity, `normalizePurchaseOrderData` in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js` permitted the client to override the line item requisitioner via `item.RequisitionerName`. A client could spoof or tamper with `RequisitionerName`, bypassing audit controls and attributing line items to arbitrary third-party users.
@@ -3138,6 +3174,7 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-24 16:47 IST (uncommitted)**: Resolved Default PurchaseOrderType layer inconsistency and eliminated dead controller overwrite (Audit Item 6). Removed imperative `oModel.setProperty("/header/PurchaseOrderType", ...)` and `PurchaseOrderTypeText` from `CreatePurchaseOrder.controller.js` `_resetModel`, allowing `createInitialModel` to start with a clean empty document type and letting `PurchaseOrderModel.applyConfigurationDefaults` control defaulting from backend master data. Updated `PurchaseOrderModel.HEADER_FIELD_CONFIG.PurchaseOrderType.example` from `"NB"` to `"ZDOM"`, verified backend mapper strictly rejects missing document type rather than defaulting, added 4 unit tests in `headerValueHelpSelection.test.js`, all 85 test suites (1,231 tests) green, `ui5lint` 0 findings, `ui5 build` OK, `cds compile` clean, `git diff --check` clean.
 - **2026-09-24 13:15 IST (uncommitted)**: Enforced authenticated RequisitionerName on line items in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js` and `PurchaseOrderMapper.js`. Eliminated client-side identity spoofing by locking `RequisitionerName` to `context.user` (`resolveUserIdentity(req)`), ignoring any client-sent value. Updated unit tests in `domainMapping.test.js` and `payloadMapping.test.js`, all 27 PO/SD unit test suites (385 tests) and 8 integration/e2e suites (41 tests) passing, `git diff --check` clean.
 - **2026-09-24 13:00 IST (uncommitted)**: Enforced server calculation ownership for `NetAmount` in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`. Removed fallback `item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount`, preventing client-side tampering or mismatched totals. Server now unconditionally calculates `NetAmount = (qty * price).toFixed(2)`. Added unit test in `domainMapping.test.js`, all 27 PO/SD unit test suites (384 tests) and 8 integration/e2e suites (41 tests) passing, `npx cds compile srv` clean, `git diff --check` clean.
 - **2026-09-24 12:50 IST (uncommitted)**: Resolved PO Creation HTTP 400 Bad Request error (`Property "PurchaseOrderTypeText" does not exist in header`). Implemented `_sanitizePayload` with schema whitelisting (`ALLOWED_HEADER_FIELDS`, `ALLOWED_ITEM_FIELDS`) in `PurchaseOrderService.js` matching SD service patterns, and explicitly stripped `PurchaseOrderTypeText` in `CreatePurchaseOrder.controller.js`. Added unit tests in `purchaseOrderPayloadSanitization.test.js`, all 27 PO/SD unit test suites (383 tests) and 8 integration/e2e suites (41 tests) passing, UI5 linter 0 findings, UI5 preload build succeeded, `git diff --check` clean.
@@ -3160,13 +3197,13 @@
 - **2026-09-22 12:56 IST (uncommitted)**: audit items 13, 22, 23, 24, 26, 27, 40, 41, 42 applied; all gates green (cds compile, eslint, jest 959/959, ui5lint, ui5 build, diff --check). `999` DifferenceStorageType still open.
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm test`: **81 passed, 81 total test suites; 1097 passed, 1097 total tests (100% green)**.
-  - `npm test -- test/unit/sd/`: **3 passed, 3 total test suites; 28 passed, 28 total tests (100% green)**.
+  - `npm test`: **85 passed, 85 total test suites; 1,231 passed, 1,231 total tests (100% green)**.
+  - `npm test -- test/unit/sd/`: **7 passed, 7 total test suites; 116 passed, 116 total tests (100% green)**.
   - `npm test -- test/unit/le/`: **4 passed, 4 total test suites; 71 passed, 71 total tests (100% green)**.
   - `npm test -- test/integration/fi/journalEntry.test.js`: **1 passed, 1 total test suite; 4 passed, 4 total tests (100% green)**.
   - `npm test -- test/unit/fi/`: **3 passed, 3 total test suites; 33 passed, 33 total tests (100% green)**.
   - `npm test -- test/unit/sales-order/`: **5 passed, 5 total test suites; 69 passed, 69 total tests (100% green)**.
-  - `npm test -- test/unit/purchase-order/`: **19 suites passed, 207 passed, 207 total tests (100% green)**.
+  - `npm test -- test/unit/purchase-order/`: **20 suites passed, 270 passed, 270 total tests (100% green)**.
   - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
   - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
   - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.

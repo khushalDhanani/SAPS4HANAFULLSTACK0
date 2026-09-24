@@ -789,4 +789,62 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(controller._oConfigData).toBeNull();
         });
     });
+
+    describe('Default PurchaseOrderType Consistency Across Layers (Audit Item 6)', () => {
+        it('HEADER_FIELD_CONFIG should specify ZDOM as example document type, not NB', () => {
+            expect(PurchaseOrderModel.HEADER_FIELD_CONFIG.PurchaseOrderType.example).toBe('ZDOM');
+        });
+
+        it('_resetModel should initialize clean model without hardcoding PurchaseOrderType before configuration', () => {
+            controller.getOwnerComponent = jest.fn(() => ({
+                getModel: jest.fn(() => null)
+            }));
+            controller._resetModel(false);
+            const oNewModel = controller.getView().setModel.mock.calls[0][0];
+            expect(oNewModel.getProperty('/header/PurchaseOrderType')).toBe('');
+            expect(oNewModel.getProperty('/header/PurchaseOrderTypeText')).toBe('');
+        });
+
+        it('_loadConfigurationAndDefaults should apply DEFAULT_DOC_TYPE (ZDOM) when confirmed in config', async () => {
+            const mockConfig = {
+                documentTypes: [
+                    { PurchasingDocumentType: 'ZDOM', PurchasingDocumentType_Text: 'Dom. Aether In.LTD.' },
+                    { PurchasingDocumentType: 'ZCAP', PurchasingDocumentType_Text: 'Capital Goods PO' }
+                ],
+                companyCodes: [],
+                purchasingOrgs: [],
+                purchasingGroups: []
+            };
+            mockPurchaseOrderService.loadConfiguration.mockResolvedValueOnce(mockConfig);
+
+            await controller._loadConfigurationAndDefaults(true);
+
+            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('ZDOM');
+            expect(oModel.getProperty('/header/PurchaseOrderTypeText')).toBe('Dom. Aether In.LTD.');
+            expect(oModel.getProperty('/configDerived/PurchaseOrderType')).toBe(true);
+        });
+
+        it('_loadConfigurationAndDefaults should NOT set ZDOM if ZDOM is not in backend documentTypes', async () => {
+            const freshModel = PurchaseOrderModel.createInitialModel('TESTUSER');
+            controller.getView = jest.fn(() => ({
+                getModel: jest.fn((sName) => (sName === 'newPO' ? freshModel : null)),
+                setModel: jest.fn()
+            }));
+
+            const unconfirmedConfig = {
+                documentTypes: [
+                    { PurchasingDocumentType: 'ZCAP', PurchasingDocumentType_Text: 'Capital Goods PO' }
+                ],
+                companyCodes: [],
+                purchasingOrgs: [],
+                purchasingGroups: []
+            };
+            mockPurchaseOrderService.loadConfiguration.mockResolvedValueOnce(unconfirmedConfig);
+
+            await controller._loadConfigurationAndDefaults(true);
+
+            expect(freshModel.getProperty('/header/PurchaseOrderType')).toBe('');
+            expect(freshModel.getProperty('/configDerived/PurchaseOrderType')).toBe(false);
+        });
+    });
 });
