@@ -3,6 +3,39 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-24 17:00 IST
+- **Agent**: Antigravity
+- **Change**: Modularize monolithic `PurchaseOrderModel.js` (Audit Item 7) into dedicated Single-Responsibility Modules:
+  1. **User Requirement & Problem Statement**:
+     - `PurchaseOrderModel.js` was a 1,660-line monolithic file mixing model state shape/initialization, field-level validation, status computation, material/supplier default derivation, and cross-field business rules.
+     - Splitting into focused modules (`PurchaseOrderModel` for state shape & facade orchestrator, `PurchaseOrderValidator` for validation logic, and `PurchaseOrderDefaults` for defaulting & derivation) mirrors the backend separation (`srv/mm/purchase-order/validation/`, `srv/mm/purchase-order/mapping/`).
+  2. **Solutions Delivered**:
+     - **Extracted `PurchaseOrderValidator.js` (944 lines)**:
+       Encapsulates all validation concerns: `isValidDocType`, `validateDocType`, `validateUI`, `validateSingleField`, `validateForm`, `applyBackendErrors`, `clearErrors`, `setFieldValidation`, and `validateCompanyCodePurchasingOrg`. Supports configurable text resolution for localized i18n messages.
+     - **Extracted `PurchaseOrderDefaults.js` (515 lines)**:
+       Encapsulates all defaulting & derivation rules: `getDefaultDocType`, `setDocumentType`, `updateDocTypeLive`, `applyMaterialDefaults`, `applyConfigurationDefaults`, and `deriveSupplierDefaults`. Respects `userModified` flags and guards against unexpected overwrites.
+     - **Refactored `PurchaseOrderModel.js` (609 lines)**:
+       Contains pure state shape (`createInitialModel`), item operations (`addItem`, `deleteItem`, `calculateItemNetAmount`), status computation (`computeStatus`, `updateStatus`), user modification tracking (`markUserModified`), and user identity resolution (`getCurrentUserName`). Exposes a complete facade layer delegating to `PurchaseOrderValidator` and `PurchaseOrderDefaults` preserving 100% backward compatibility for all controllers and tests.
+     - **Cross-Environment AMD & CommonJS Support**:
+       Configured universal UMD loader wrapper across `PurchaseOrderValidator` and `PurchaseOrderDefaults` so standard UI5 AMD loader in browser and Jest test runners (both mock `sap.ui.define` and Node CommonJS `require`) load dependencies seamlessly without overwriting global test states.
+     - **Automated Unit Testing (`purchaseOrderValidator.test.js` & `purchaseOrderDefaults.test.js`)**:
+       Created 2 new dedicated unit test suites containing 24 new unit tests directly verifying validator and defaults logic. Total test suite expanded from 85 suites (1,231 tests) to 87 suites (1,255 tests).
+  3. **Files Created & Modified**:
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator.js` (Created)
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderDefaults.js` (Created)
+     - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js` (Refactored)
+     - `test/unit/purchase-order/purchaseOrderValidator.test.js` (Created)
+     - `test/unit/purchase-order/purchaseOrderDefaults.test.js` (Created)
+     - `WORKSTATUS.md`
+  4. **Validation Results**:
+     - `npm test`: **87/87 test suites passed, 1,255/1,255 tests passed (100% green)**.
+     - `npx jest test/unit/purchase-order/`: **22/22 test suites passed, 294/294 tests passed (100% green)**.
+     - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded (`Component-preload.js` generated)**.
+     - `npx cds compile srv`: **Clean compilation (code 0)**.
+     - `npm run lint`: **ESLint clean (0 errors, 0 warnings)**.
+     - `git diff --check`: **Clean (0 errors)**.
+
 ## 2026-09-24 16:20 IST
 - **Agent**: Antigravity
 - **Change**: Fix MTA Validation descriptor check in CI pipeline by excluding unbuilt generation paths (`mbt validate -x paths`):
@@ -3029,7 +3062,40 @@
     - `cd app/fiori-app && npm run lint`: Success! No findings detected (0 errors, 0 warnings).
     - `cd app/fiori-app && npm run build`: Build succeeded in 1.43 s (`Component-preload.js` generated).
     - `git diff --check`: Clean (0 errors).
-    - `npm test`: 78 passed, 78 test suites, 1068 passed, 1068 total tests (100% green).
+- **2026-09-24 17:00 IST**:
+  - **Task**: Frontend Model Modularization & Architecture Boundary Separation (Audit Item 7).
+  - **Root Cause**:
+    - `PurchaseOrderModel.js` was a 1,660-line monolithic module mixing state shape, field-level validation, status computation, material/supplier default derivation, and cross-field business rules.
+    - Lack of separation made unit testing individual validation and defaulting behaviors cumbersome, contrasting with the backend which maintains distinct `validation/` and `mapping/` modules.
+  - **Solution Delivered**:
+    1. **Extracted `PurchaseOrderValidator.js`**:
+       - Implemented standalone module containing `isValidDocType`, `validateDocType`, `validateUI`, `validateSingleField`, `validateForm`, `applyBackendErrors`, `clearErrors`, `setFieldValidation`, and `validateCompanyCodePurchasingOrg`.
+       - Supports text resolver injection for i18n localization with formatted fallbacks.
+    2. **Extracted `PurchaseOrderDefaults.js`**:
+       - Implemented standalone module containing `getDefaultDocType`, `setDocumentType`, `updateDocTypeLive`, `applyMaterialDefaults`, `applyConfigurationDefaults`, and `deriveSupplierDefaults`.
+       - Strictly respects user modification flags (`userModified`) and guards against unexpected overrides.
+    3. **Refactored `PurchaseOrderModel.js` as Facade Orchestrator**:
+       - Streamlined from 1,660 to 609 lines, focusing on model state shape (`createInitialModel`), item operations (`addItem`, `deleteItem`, `calculateItemNetAmount`), status computation (`computeStatus`, `updateStatus`), user modification tracking (`markUserModified`), and user resolution (`getCurrentUserName`).
+       - Implemented delegation facades for all validator and defaults methods, preserving 100% backward compatibility for all controllers and test suites.
+    4. **Universal AMD & CommonJS Support**:
+       - Added robust UMD pattern preventing Node test runners (which mock `sap.ui.define` with single-argument signatures) from overwriting global model definitions while maintaining full compatibility with UI5 AMD browser runtime.
+    5. **Automated Unit Testing**:
+       - Created `purchaseOrderValidator.test.js` (11 tests) and `purchaseOrderDefaults.test.js` (13 tests), expanding repo test coverage to 87 test suites and 1,255 tests.
+  - **Files Created & Modified**:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator.js` (Created)
+    - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderDefaults.js` (Created)
+    - `app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel.js` (Refactored)
+    - `test/unit/purchase-order/purchaseOrderValidator.test.js` (Created)
+    - `test/unit/purchase-order/purchaseOrderDefaults.test.js` (Created)
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/purchase-order/`: 22 passed, 22 suites, 294/294 tests green (100%).
+    - `npm test`: 87 passed, 87 suites, 1,255/1,255 tests green (100%).
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm --prefix app/fiori-app run build`: Build succeeded (`Component-preload.js` generated).
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npm run lint`: Succeeded with 0 errors, 0 warnings.
+    - `git diff --check`: Clean (0 errors).
   - **Next Recommended Action**: Review with user and commit to `feature/CL01`.
 
 - **2026-09-24 16:47 IST**:
@@ -3174,6 +3240,7 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-24 17:00 IST (uncommitted)**: Modularized monolithic `PurchaseOrderModel.js` into focused, single-responsibility modules (Audit Item 7). Extracted `PurchaseOrderValidator.js` (944 lines) covering field-level, doc type, UI completeness, form, cross-field, and backend error mappings. Extracted `PurchaseOrderDefaults.js` (515 lines) covering configuration, material, and supplier defaulting/derivations. Streamlined `PurchaseOrderModel.js` (from 1,660 to 609 lines) for state shape, item actions, and facade delegations preserving 100% backward compatibility. Added UMD loaders for seamless dual-runtime support (UI5 AMD in browser, CommonJS in Jest). Added dedicated unit tests (`purchaseOrderValidator.test.js` and `purchaseOrderDefaults.test.js`), expanding test suite to 87 test suites and 1,255 tests (100% green). All gates green (`ui5lint` 0 findings, `ui5 build` OK, `cds compile` OK, `eslint` 0 findings, `git diff --check` clean).
 - **2026-09-24 16:47 IST (uncommitted)**: Resolved Default PurchaseOrderType layer inconsistency and eliminated dead controller overwrite (Audit Item 6). Removed imperative `oModel.setProperty("/header/PurchaseOrderType", ...)` and `PurchaseOrderTypeText` from `CreatePurchaseOrder.controller.js` `_resetModel`, allowing `createInitialModel` to start with a clean empty document type and letting `PurchaseOrderModel.applyConfigurationDefaults` control defaulting from backend master data. Updated `PurchaseOrderModel.HEADER_FIELD_CONFIG.PurchaseOrderType.example` from `"NB"` to `"ZDOM"`, verified backend mapper strictly rejects missing document type rather than defaulting, added 4 unit tests in `headerValueHelpSelection.test.js`, all 85 test suites (1,231 tests) green, `ui5lint` 0 findings, `ui5 build` OK, `cds compile` clean, `git diff --check` clean.
 - **2026-09-24 13:15 IST (uncommitted)**: Enforced authenticated RequisitionerName on line items in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js` and `PurchaseOrderMapper.js`. Eliminated client-side identity spoofing by locking `RequisitionerName` to `context.user` (`resolveUserIdentity(req)`), ignoring any client-sent value. Updated unit tests in `domainMapping.test.js` and `payloadMapping.test.js`, all 27 PO/SD unit test suites (385 tests) and 8 integration/e2e suites (41 tests) passing, `git diff --check` clean.
 - **2026-09-24 13:00 IST (uncommitted)**: Enforced server calculation ownership for `NetAmount` in `srv/mm/purchase-order/mapping/purchaseOrder.mapper.js`. Removed fallback `item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount`, preventing client-side tampering or mismatched totals. Server now unconditionally calculates `NetAmount = (qty * price).toFixed(2)`. Added unit test in `domainMapping.test.js`, all 27 PO/SD unit test suites (384 tests) and 8 integration/e2e suites (41 tests) passing, `npx cds compile srv` clean, `git diff --check` clean.
@@ -3197,13 +3264,13 @@
 - **2026-09-22 12:56 IST (uncommitted)**: audit items 13, 22, 23, 24, 26, 27, 40, 41, 42 applied; all gates green (cds compile, eslint, jest 959/959, ui5lint, ui5 build, diff --check). `999` DifferenceStorageType still open.
 - **Branch**: `feature/CL01`
 - **Build Status**: **100% Green** across repository test suites:
-  - `npm test`: **85 passed, 85 total test suites; 1,231 passed, 1,231 total tests (100% green)**.
+  - `npm test`: **87 passed, 87 total test suites; 1,255 passed, 1,255 total tests (100% green)**.
   - `npm test -- test/unit/sd/`: **7 passed, 7 total test suites; 116 passed, 116 total tests (100% green)**.
   - `npm test -- test/unit/le/`: **4 passed, 4 total test suites; 71 passed, 71 total tests (100% green)**.
   - `npm test -- test/integration/fi/journalEntry.test.js`: **1 passed, 1 total test suite; 4 passed, 4 total tests (100% green)**.
   - `npm test -- test/unit/fi/`: **3 passed, 3 total test suites; 33 passed, 33 total tests (100% green)**.
   - `npm test -- test/unit/sales-order/`: **5 passed, 5 total test suites; 69 passed, 69 total tests (100% green)**.
-  - `npm test -- test/unit/purchase-order/`: **20 suites passed, 270 passed, 270 total tests (100% green)**.
+  - `npm test -- test/unit/purchase-order/`: **22 suites passed, 294 passed, 294 total tests (100% green)**.
   - `npm test -- test/unit/purchase-order/formatter.test.js`: **12 passed, 12 total tests (100% green)**.
   - `npm test -- test/unit/fi/journalEntryService.test.js`: **3 passed, 3 total tests (100% green)**.
   - `npm test -- test/unit/dashboard/dashboardMetrics.test.js`: **31 passed, 31 total tests (100% green)**.
