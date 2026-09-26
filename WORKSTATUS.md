@@ -3,6 +3,43 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-26 12:56 IST
+- **Agent**: Antigravity
+- **Change**: Comprehensive Audit and Resolution of Incomplete Metrics on Orders Due for Delivery (`/le/orders-due`):
+  1. **Root Cause Analysis & Investigation**:
+     - User reported data on `/le/orders-due` showing `-` instead of authentic metrics.
+     - Inspected the full data pipeline from SAP S/4HANA backend to CAP layer to frontend models.
+     - Verified that the CAP service layer (`outboundDelivery.handler.js` and `service.cds` function `getOrdersDueMetrics()`) accurately calculates 7 metrics from live SAP S/4HANA DS4 Client 220 data:
+       - `scheduleLineCount`: 232
+       - `readyToDeliverCount`: 158
+       - `inApprovalCount`: 73
+       - `shippingPointCount`: 2
+       - `distinctOrdersCount`: 171
+       - `readyOrdersCount`: 113
+       - `inApprovalOrdersCount`: 57
+     - Identified defect in `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js` (lines 125–133): `getOrdersDueMetrics()` stripped 5 out of 7 properties, returning only `{ scheduleLineCount, shippingPointCount }`.
+     - In `OrdersDueForDelivery.controller.js`, `readyToDeliverCount`, `inApprovalCount`, `distinctOrdersCount`, `readyOrdersCount`, and `inApprovalOrdersCount` were `undefined`, triggering fallbacks that populated `-` on KPI tiles, subheaders, and the Table Title count `Orders Due for Delivery (-)`.
+  2. **Code Remediation**:
+     - `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js`: Updated `getOrdersDueMetrics()` to return all 7 metric fields with proper type safety.
+     - `test/unit/le/ordersDueForDeliveryController.test.js`: Updated mock service fixture for `getOrdersDueMetrics` to supply all 7 metrics with appropriate defaults.
+     - Rebuilt UI5 preload bundle via `npm --prefix app/fiori-app run build`.
+  3. **Verification via DevTools MCP (`chrome-devtools-mcp`) & Browser Screenshot**:
+     - Reloaded `http://localhost:4004/fiori-app/webapp/index.html#/le/orders-due` with cache bypassed.
+     - Verified live figures on UI:
+       - Tile 1 "Ready to Deliver": `158` (Subheader: `113 orders (158 lines)`)
+       - Tile 2 "In Approval": `73` (Subheader: `57 orders (73 lines)`)
+       - Tile 3 "Due Schedule Lines": `232` (Subheader: `171 orders (232 lines)`)
+       - Tile 4 "Shipping Points": `2` (Subheader: `Distinct across all due lines`)
+       - Table Header Title: `Orders Due for Delivery (158)` on Ready tab; dynamically switches to `(73)` on In Approval tab and `(232)` on All Due Lines tab.
+       - Table rows inspected: Each row populated with complete Sales Order number, Item/Line, Ship-to Party, Shipping Point, Goods Issue Date, Delivery Block ("None"), Approval Status ("Released"), and active "Create Delivery" action.
+       - Delivery Follow-Up panel: Confirmed status query against real SAP delivery `80000062`.
+       - Captured screenshot saved to `orders_due_kpis_verified.png`.
+  4. **Executed Commands and Results**:
+     - `npx jest test/unit/le/ordersDueForDeliveryController.test.js`: 25/25 passed (100%).
+     - `npm test`: 91/91 test suites passed, 1,384/1,384 tests passed (100% green, 0 regressions).
+     - `git diff --check`: Passed cleanly with zero whitespace or syntax errors.
+
+
 ## 2026-09-26 12:30 IST
 - **Agent**: Antigravity
 - **Change**: Implementation, Live S/4HANA Verification, and Full-Stack Integration of Delivery Without Reference (`LE_SHP_QC_DLVNOREF_SRV`):
@@ -4265,7 +4302,7 @@
   - **Next recommended action**: Review with user and test live posting in UI (`#/sd/returns/create`).
 
 ## Next Steps
-0. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`) and live Delivery Without Reference in Orders Due (`#/le/orders-due`).
+0. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
 1. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
 2. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
 3. Select next development-ready capability to build from the verified list:

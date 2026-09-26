@@ -88,7 +88,15 @@ const MockOutboundDeliveryService = {
     createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
     createDeliveryWithoutRef: jest.fn().mockResolvedValue({ OutboundDelivery: "80000059" }),
     getDeliveryStatus: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526", DeliveryDocumentType: "ZLF", SoldToParty: "10082", OverallPickingStatus: "A", OverallGoodsMovementStatus: "A", OverallDelivReltdBillgStatus: "A" }),
-    getOrdersDueMetrics: jest.fn().mockResolvedValue({ scheduleLineCount: 0, shippingPointCount: 0 })
+    getOrdersDueMetrics: jest.fn().mockResolvedValue({
+        scheduleLineCount: 0,
+        readyToDeliverCount: 0,
+        inApprovalCount: 0,
+        shippingPointCount: 0,
+        distinctOrdersCount: 0,
+        readyOrdersCount: 0,
+        inApprovalOrdersCount: 0
+    })
 };
 
 beforeAll(() => {

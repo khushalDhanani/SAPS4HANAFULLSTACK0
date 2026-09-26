@@ -128,7 +128,15 @@ sap.ui.define([
                 if (!oData || typeof oData.scheduleLineCount !== "number" || typeof oData.shippingPointCount !== "number") {
                     throw new Error("getOrdersDueMetrics returned no figures");
                 }
-                return { scheduleLineCount: oData.scheduleLineCount, shippingPointCount: oData.shippingPointCount };
+                return {
+                    scheduleLineCount: oData.scheduleLineCount,
+                    readyToDeliverCount: typeof oData.readyToDeliverCount === "number" ? oData.readyToDeliverCount : 0,
+                    inApprovalCount: typeof oData.inApprovalCount === "number" ? oData.inApprovalCount : 0,
+                    shippingPointCount: oData.shippingPointCount,
+                    distinctOrdersCount: typeof oData.distinctOrdersCount === "number" ? oData.distinctOrdersCount : 0,
+                    readyOrdersCount: typeof oData.readyOrdersCount === "number" ? oData.readyOrdersCount : 0,
+                    inApprovalOrdersCount: typeof oData.inApprovalOrdersCount === "number" ? oData.inApprovalOrdersCount : 0
+                };
             });
         },
 
