@@ -102,6 +102,8 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         PortOfLoading: String;
         PortOfDischarge: String;
         ContactPerson: String;
+        PaymentTerms: String;
+        PaymentTermCode: String;
     }
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])
@@ -120,6 +122,10 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         SalesOfficeName: String;
         SalesGroup: String;
         SalesGroupName: String;
+        PaymentTerms: String;
+        validForSalesArea: Boolean;
+        salesAreaError: String;
+        maintainedSalesAreasSummary: String;
         derived: Boolean;
     };
 

@@ -212,6 +212,26 @@ sap.ui.define([
                 if (bHas100SeriesFilter) {
                     sDialogTitle = "Select Purchasing Group (100 Series)";
                 }
+            } else if (sPath === "/SoldToPartyVH" || sPath === "/CustomerVH") {
+                var aAreaTokens = [];
+                var aFilteredContext = [];
+                aActiveContextFilters.forEach(function (f) {
+                    if (f && (f.sPath === "SalesOrganization" || f.sPath === "SalesOrg")) {
+                        aAreaTokens.push(f.oValue1 || f.sValue);
+                    } else if (f && (f.sPath === "DistributionChannel" || f.sPath === "DistChannel")) {
+                        aAreaTokens.push(f.oValue1 || f.sValue);
+                    } else if (f && (f.sPath === "Division" || f.sPath === "OrganizationDivision")) {
+                        aAreaTokens.push(f.oValue1 || f.sValue);
+                    } else {
+                        aFilteredContext.push(f);
+                    }
+                });
+                if (aAreaTokens.length > 0) {
+                    sDialogTitle = (sPath === "/CustomerVH" ? "Select Ship-to Party" : "Select Sold-to Party") +
+                        " (Sales Area: " + aAreaTokens.join(" / ") + ")";
+                }
+                // C_SoldToValueHelp has no SalesOrganization/DistributionChannel/Division properties in SAP CDS
+                aActiveContextFilters = aFilteredContext;
             }
 
             var oSelectDialog = new SelectDialog({

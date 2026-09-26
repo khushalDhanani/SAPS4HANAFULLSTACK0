@@ -3,6 +3,94 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-26 16:47 IST
+- **Agent**: Antigravity
+- **Change**: Enhanced End-to-End Frontend Process for Customer Sales Area Handling in Sales Orders & Inquiries:
+  1. **Context-Aware Value Help Dialog Header (`ValueHelpService.js`)**:
+     - Updated `ValueHelpService.js` to inspect contextual Sales Area tokens (`SalesOrganization`, `DistributionChannel`, `Division`) passed when opening `/SoldToPartyVH` or `/CustomerVH`.
+     - Formats dialog title to display active Sales Area: `Select Sold-to Party (Sales Area: 1000 / 10 / 52)`.
+     - Strips organizational filters before querying OData entity `C_SoldToValueHelp`, ensuring full compliance with S/4HANA CDS entity structure (avoiding OData 400 invalid property errors).
+  2. **Controller Context Injection (`CreateSalesOrder.controller.js`, `CreateSalesInquiry.controller.js`)**:
+     - Updated `onValueHelpRequest` in both controllers to pass active header Sales Area filters when opening Sold-to Party and Ship-to Party dialogs.
+  3. **Inline Visual Guidance (`CreateSalesOrder.view.xml`, `CreateSalesInquiry.view.xml`)**:
+     - Added an inline `MessageStrip` (`type="Error"`, `showIcon="true"`) between `<headerToolbar>` and `<f:SimpleForm>` bound to `errors/SoldToParty/state` and `errors/SoldToParty/text`.
+     - Provides prominent, immediate visual guidance to the user on customer sales area mismatches right beside the customer inputs.
+  4. **Validation & Verification**:
+     - Executed `npm test`: **91/91 test suites passed, 1,410/1,410 tests passed (100% green, 0 regressions)**.
+     - Executed `npm --prefix app/fiori-app run build`: Succeeded in 1.01 s (`Component-preload.js` generated).
+     - Executed `npm run lint`: Clean (0 errors, 0 warnings).
+     - Executed `git diff --check`: Clean (0 errors).
+
+## 2026-09-26 16:35 IST
+- **Agent**: Antigravity
+- **Change**: Root Cause Analysis & Resolution for Customer Sales Area Maintenance Error in Create Sales Order (`Sold-to party 10629 not maintained for sales area 1000 10 52`):
+  1. **Empirical Master Data Discovery & Root Cause Analysis (SAP S/4HANA DS4 Client 220)**:
+     - Error: `400 (Bad Request): Failed to create Sales Order: Sold-to party 10629 not maintained for sales area 1000 10 52`.
+     - Queried live Gateway OData service `/sap/opu/odata/sap/FAR_CUSTOMER_LIST_V2/C_CustomerList?$filter=Customer eq '10629'`.
+     - Proved that Customer `10629` (`SUN PHARMACEUTICAL INDUSTRIES LTD.`) is maintained in SAP S/4HANA **ONLY** for Sales Area:
+       - Sales Organization: `1000`
+       - Distribution Channel: `10`
+       - Division: `00` (Company Code `1000`, Sales Office `SO10`, Sales Group `100`, Payment Terms `PT11`).
+     - Customer `10629` is **NOT extended to Sales Area `1000 10 52`** (Domestic Sales Division `52`).
+     - Tested whether order type `ZDOM` can be created with Division `00` (`1000 10 00`): SAP Gateway rejected with `V1/212 "No pricing procedure could be determined"` because pricing determination (`Z1`/`ZD`) in S/4HANA is configured strictly for Sales Area `1000 10 52`.
+     - Valid domestic customers maintained for `1000 10 52` include `10135` (Divi's Laboratories Limited), `10000` (3A Chemie Private Limited), `10001` (Aarey Drugs & Pharmaceuticals Ltd), `10002` (Aarti Drugs Limited), etc.
+     - Identified UI gap: `inSoldToParty` Value Help (`SoldToPartyVH`) uses `C_SoldToValueHelp` which lists all business partners globally without sales area filtering. When the user entered `10629`, `getCustomerDefaults` fetched name details without checking sales area validity, leaving the user with a green/valid UI until submission.
+  2. **Full-Stack Implementation & Early Validation**:
+     - **Backend Service & Adapter (`SalesInquiryAdapter.js`, `service.cds`)**:
+       - Added `customerSalesAreaCache` (5m TTL) in `SalesInquiryAdapter`.
+       - In `getCustomerDefaults(sCustomer, sOrg, sChannel, sDivision)`, queried `FAR_CUSTOMER_LIST_V2/C_CustomerList?$filter=Customer eq '${sCust}'`.
+       - Verified customer maintenance for the provided sales area:
+         - When matched: returns `validForSalesArea: true`, and extracts authentic `PaymentTerms`, `SalesOffice`, `SalesGroup`.
+         - When mismatched: returns `validForSalesArea: false`, `salesAreaError: "Sold-to party ${sCust} not maintained for sales area ${sOrg} ${sChannel} ${sDivision}"`, and `maintainedSalesAreasSummary: "${maintainedSalesAreas}"`.
+       - Updated `function getCustomerDefaults(...)` return types in both `srv/sd/sales-order/service.cds` and `srv/sd/sales-inquiry/service.cds` to expose `validForSalesArea`, `salesAreaError`, `maintainedSalesAreasSummary`, and `PaymentTerms`.
+     - **Frontend Model & Controllers (`SalesOrderModel.js`, `CreateSalesOrder.controller.js`, `CreateSalesInquiry.controller.js`)**:
+       - In `CreateSalesOrder.controller.js`:
+         - In `onSoldToPartyChange`: Evaluates `oDefaults.validForSalesArea`. If `false`, sets `errors/SoldToParty` to `{ state: "Error", text: sErrText }`, displays warning `MessageBox.warning` detailing the exact mismatch and maintained sales area, and blocks order submission. If `true`, clears error state and applies authentic payment terms.
+         - In `onSalesOrgChange`, `onDistChannelChange`, `onDivisionChange`: Dynamically re-triggers `this.onSoldToPartyChange()` whenever the sales area is adjusted while a customer is entered.
+         - In `onSaveOrder` error handler: Highlights `errors/SoldToParty` with error state and provides actionable guidance directing users to choose a valid customer for `1000 10 52` or extend the customer in SAP GUI (`BP`/`XD01`).
+       - In `SalesOrderModel.js`:
+         - `applyCustomerDefaults`: Applies `PaymentTerms` if provided.
+         - `validateSingleField`: Preserves sales area mismatch error state on `SoldToParty`.
+       - In `CreateSalesInquiry.controller.js`:
+         - Enhanced `_deriveCustomerData` to similarly evaluate `validForSalesArea` and warn on mismatch.
+  3. **Unit & Regression Testing**:
+     - Added 2 new unit tests in `test/unit/sales-order/salesOrderAdapter.test.js`:
+       - `getCustomerDefaults validates sales area and returns validForSalesArea: false for mismatched sales area`
+       - `getCustomerDefaults validates sales area and returns validForSalesArea: true and authentic PaymentTerms when matched`
+     - Added 2 new unit tests in `test/unit/sales-order/createSalesOrderController.test.js`:
+       - `onSoldToPartyChange sets error state and displays warning dialog when customer is not maintained for sales area`
+       - `onSoldToPartyChange clears error state and applies payment terms when customer is valid for sales area`
+     - Executed `npm test`: **91/91 test suites passed, 1,410/1,410 tests passed (100% green, 0 regressions)**.
+     - Executed `npm --prefix app/fiori-app run build`: Succeeded in 1.07 s (`Component-preload.js` generated).
+     - Executed `npm run lint`: Clean (0 errors, 0 warnings).
+     - Executed `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+     - Executed `npx cds compile srv`: Clean (code 0).
+     - Executed `git diff --check`: Clean (0 errors).
+
+## 2026-09-26 15:55 IST
+- **Agent**: Antigravity
+- **Change**: Check & Debug Create Sales Order Data Posting Issues in SAP S/4HANA (`/sd/sales-orders` and `/sd/sales-orders/create`):
+  1. **Empirical Backend Investigation & SAP Gateway Metadata Discovery**:
+     - Discovered root causes for missing data posting in SAP S/4HANA (DS4 Client 220):
+       a) **Customer PO Date (`CustomerPurchaseOrderDate`)**: User-entered PO date was completely omitted from the Deep Insert `headerPayload` sent to SAP Gateway service `LORD_ODATA_ORDER_SRV/HeaderSet`. Mapped to `PurchaseOrderDate` formatted as OData date `/Date(epoch)/`.
+       b) **Distinct Ship-to Party (`ShipToParty`)**: Was omitted from `HeaderPartnerSet` in Deep Insert, causing SAP Gateway to default the Ship-to party to the Sold-to party. Mapped to `HeaderPartnerSet: [{ PartnerFunctionCode: 'SH', CustomerID: header.ShipToParty }]`.
+       c) **Line Item Description (`SalesOrderItemText` / `ItemDescr`)**: User-entered or material-defaulted item text was omitted from the item Deep Insert payload, leaving line descriptions blank in SAP. Mapped to `itemObj.ItemDescr`.
+       d) **Payment Terms (`PaymentTerms` / `PaymentTermCode`)**: Dropped during domain normalization and payload mapping. Added to `type OrderHeader` in `service.cds`, `salesInquiry.mapper.js`, `SalesInquiryMapper.js`, and `SalesInquiryAdapter.js` (`PaymentTermCode`).
+       e) **Commercial Extension Fields (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, `ContactPerson`)**: Verified against live SAP `$metadata` that standard SAP service `LORD_ODATA_ORDER_SRV/HeaderSet` has no properties for these fields (passing them directly returns HTTP 400 Bad Request). Added `notTransmitted` tracking and informative UI tooltips in `CreateSalesOrder.view.xml` directing users to maintain these in SAP GUI (VA02) if required for incompletion clearance.
+  2. **Live SAP S/4HANA Empirical Verification (DS4 Client 220)**:
+     - Tested live creation with `PurchaseOrderDate` -> successfully created Sales Order `5000468` with authentic PO Date in SAP.
+     - Tested live creation with `HeaderPartnerSet` (`SH`) -> successfully created Sales Order `5000469` with distinct Ship-to party in SAP.
+     - Tested live creation with `PaymentTermCode` -> successfully created Sales Order `5000470` with specified payment terms in SAP.
+     - Confirmed `ZDOM` (Domestic Sales, 1000/10/52) is the authoritative creatable order type (attempting `OR` fails in SAP with missing pricing procedure error).
+  3. **Unit & Regression Testing**:
+     - Added 2 new unit tests in `test/unit/sales-order/salesOrderAdapter.test.js`:
+       - `transmits PurchaseOrderDate, distinct ShipToParty via HeaderPartnerSet, PaymentTermCode, and custom ItemDescr in Deep Insert payload`
+       - `filters out unsupported extension fields and returns them in notTransmitted for sales order`
+     - Executed `npm test`: 91/91 test suites passed, 1,406/1,406 tests passed (100% green, 0 regressions).
+     - Executed `npm --prefix app/fiori-app run build`: Succeeded in 843 ms (`Component-preload.js` generated).
+     - Executed `npm run lint`: Clean (0 errors, 0 warnings).
+     - Executed `git diff --check`: Clean (0 errors).
+
 ## 2026-09-26 14:55 IST
 - **Agent**: Antigravity
 - **Change**: Universal Enforcement of Allowed Company Codes (`1000, 2000`) across all 16 PO types in SAP S/4HANA (`/mm/purchase-orders/create`):
@@ -3786,6 +3874,8 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-26 15:55 IST (uncommitted)**: Investigated and fixed Sales Order data posting issues in SAP S/4HANA (`/sd/sales-orders` and `/sd/sales-orders/create`). Identified why user-entered fields were omitted: Customer PO Date (`CustomerPurchaseOrderDate` -> `PurchaseOrderDate`), distinct Ship-to Party (`ShipToParty` -> `HeaderPartnerSet` with `SH`), line item description (`SalesOrderItemText` -> `ItemDescr`), and payment terms (`PaymentTerms` -> `PaymentTermCode`) were not transmitted in the OData Deep Insert payload to SAP Gateway (`LORD_ODATA_ORDER_SRV`). Proved live against real S/4HANA DS4 Client 220 that passing these fields successfully persists them into SAP (verified live SOs `5000468`, `5000469`, and `5000470`). Documented that 4 commercial extension fields (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, `ContactPerson`) are not exposed as properties by `LORD_ODATA_ORDER_SRV/HeaderSet` and must be maintained in SAP GUI (VA02); added UI tooltips and `notTransmitted` return handling. All repo gates green: `npm test` 91/91 suites, 1,406/1,406 tests 100% passed; `npm run lint` clean; `ui5 build` OK; `git diff --check` clean.
+- **2026-09-26 14:55 IST (uncommitted)**: Universal Enforcement of Allowed Company Codes (`1000, 2000`) across all 16 PO types in SAP S/4HANA (`/mm/purchase-orders/create`). Verified all 16 PO types in `config/schema/purchaseOrderRules.json`, regenerated `PurchaseOrderRules.js`, synchronized validators and controller warnings. Added matrix unit tests in `poTypeDynamicRules.test.js`. All 91 test suites (1,404 tests) green.
 - **2026-09-26 13:45 IST (uncommitted)**: Restricted Company Code field on Create Purchase Order (`/mm/purchase-orders/create`) strictly to enterprise domestic codes `1000` (Aether Industries Limited) and `2000` (Aether Specialty Chem Ltd). Filtered both autocomplete suggestions and F4 Value Help dialogs, completely eliminating 67 SAP country template codes. Synchronized authoritative rules schema (`config/schema/purchaseOrderRules.json`), regenerated `PurchaseOrderRules.js`, updated `CreatePurchaseOrder.view.xml`, `CreatePurchaseOrder.controller.js`, `ValueHelpService.js`, and unit tests. Verified live in Chrome DevTools MCP with screenshot confirmation. All repository gates green: `npm test` 91/91 suites, 1,388/1,388 tests 100% passed; `npm run lint` clean; `ui5 build` OK; `git diff --check` clean.
 - **2026-09-26 13:20 IST (uncommitted)**: Restricted Purchasing Group strictly to 100-Series on Create Purchase Order (`/mm/purchase-orders/create`). Filtered suggestions and F4 dialog to 41 enterprise 100-series groups (100–140), defaulted to 101 (Procurement Team-E). All 91 test suites (1,387 tests) passed.
 - **2026-09-26 11:10 IST (uncommitted)**: Verified PO creation across all 16 PO types (`ZCAP`, `ZDIA`, `ZDIS`, `ZDOM`, `ZDOS`, `ZHSA`, `ZHSS`, `ZIMP`, `ZIMS`, `ZINT`, `ZLOG`, `ZNVM`, `ZRTV`, `ZSER`, `ZSTO`, `ZSUB`). Tested each type individually and fixed mapping and data issues (InvoicingParty default, NetPriceQuantity, AccountAssignment child entity `to_PurOrdAcctAssignmentTP`, ZSER item category normalization to 0 with account assignment K, ASCL purchasing org alignment to AS02). Proved real live S/4HANA DS4 Client 220 PO creation and direct readback for 15/16 PO types with authentic SAP document numbers (`8000000082`, `4100000006`, `4200000003`, `300002045`, `3000000007`, `4300000004`, `4400000002`, `400000340`, `4000000005`, `8700000018`, `9000000052`, `6000000034`, `8500000110`, `7000000018`, `7500000051`). Verified 16/16 S/4HANA drafts created (HTTP 201) with distinct DraftUUID. Documented Gateway V2 limitation for `ZINT` (per SAP Note 2656910). All repo gates green: `npm test` 89/89 suites, 1,358/1,358 tests 100% green; UI5 linter 0 findings; `git diff --check` clean.

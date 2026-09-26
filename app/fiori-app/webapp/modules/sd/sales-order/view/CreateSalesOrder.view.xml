@@ -119,6 +119,13 @@
                                 <Title text="{i18n>salesOrderPanelCustomerTerms}" level="H3" />
                             </Toolbar>
                         </headerToolbar>
+                        <MessageStrip
+                            id="msgCustomerSalesAreaWarning"
+                            text="{newOrder>/errors/SoldToParty/text}"
+                            type="Error"
+                            showIcon="true"
+                            visible="{= ${newOrder>/errors/SoldToParty/state} === 'Error' &amp;&amp; !!${newOrder>/errors/SoldToParty/text} }"
+                            class="sapUiTinyMarginBottom" />
                         <f:SimpleForm
                             id="orderCustomerForm"
                             editable="true"
@@ -175,16 +182,16 @@
                                 </Input>
 
                                 <Label text="{i18n>salesOrderCustomerGroup2}" />
-                                <Input id="inCustomerGroup2" value="{newOrder>/header/CustomerGroup2}" placeholder="{i18n>salesOrderPlaceholderCustomerGroup2}" maxLength="3" change=".onHeaderFieldChange" />
+                                <Input id="inCustomerGroup2" value="{newOrder>/header/CustomerGroup2}" placeholder="{i18n>salesOrderPlaceholderCustomerGroup2}" maxLength="3" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
 
                                 <Label text="{i18n>salesOrderPortOfLoading}" />
-                                <Input id="inPortOfLoading" value="{newOrder>/header/PortOfLoading}" placeholder="{i18n>salesOrderPlaceholderPortLoading}" maxLength="50" change=".onHeaderFieldChange" />
+                                <Input id="inPortOfLoading" value="{newOrder>/header/PortOfLoading}" placeholder="{i18n>salesOrderPlaceholderPortLoading}" maxLength="50" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
 
                                 <Label text="{i18n>salesOrderPortOfDischarge}" />
-                                <Input id="inPortOfDischarge" value="{newOrder>/header/PortOfDischarge}" placeholder="{i18n>salesOrderPlaceholderPortDischarge}" maxLength="50" change=".onHeaderFieldChange" />
+                                <Input id="inPortOfDischarge" value="{newOrder>/header/PortOfDischarge}" placeholder="{i18n>salesOrderPlaceholderPortDischarge}" maxLength="50" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
 
                                 <Label text="{i18n>salesOrderContactPerson}" />
-                                <Input id="inContactPerson" value="{newOrder>/header/ContactPerson}" placeholder="{i18n>salesOrderPlaceholderContactPerson}" maxLength="10" change=".onHeaderFieldChange" />
+                                <Input id="inContactPerson" value="{newOrder>/header/ContactPerson}" placeholder="{i18n>salesOrderPlaceholderContactPerson}" maxLength="10" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
                             </f:content>
                         </f:SimpleForm>
                     </Panel>

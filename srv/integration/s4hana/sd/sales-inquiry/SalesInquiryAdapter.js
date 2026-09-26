@@ -234,6 +234,7 @@ class SalesInquiryAdapter {
     this._s4hanaFS = null;
     this._s4hanaSO = null;
     this.customerMasterCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.customerSalesAreaCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
     this.salesOfficeVhCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
     this.salesGroupVhCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
     this.inquiryTypesCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
@@ -249,6 +250,7 @@ class SalesInquiryAdapter {
     if (this.salesOfficeVhCache) this.salesOfficeVhCache.clear();
     if (this.salesGroupVhCache) this.salesGroupVhCache.clear();
     if (this.customerMasterCache) this.customerMasterCache.clear();
+    if (this.customerSalesAreaCache) this.customerSalesAreaCache.clear();
     if (this.inquiryTypesCache) this.inquiryTypesCache.clear();
   }
 
@@ -275,6 +277,7 @@ class SalesInquiryAdapter {
    */
   clearCache() {
     this.customerMasterCache.clear();
+    if (this.customerSalesAreaCache) this.customerSalesAreaCache.clear();
     this.salesOfficeVhCache.clear();
     this.salesGroupVhCache.clear();
     this.inquiryTypesCache.clear();
@@ -1040,11 +1043,18 @@ class SalesInquiryAdapter {
         SalesOfficeName: '',
         SalesGroup: '',
         SalesGroupName: '',
+        PaymentTerms: '',
+        validForSalesArea: true,
+        salesAreaError: '',
+        maintainedSalesAreasSummary: '',
         derived: false
       };
     }
 
     const sCust = String(sCustomer).trim();
+    const sOrg = _sOrg ? String(_sOrg).trim() : '';
+    const sChannel = _sChannel ? String(_sChannel).trim() : '';
+    const sDivision = _sDivision ? String(_sDivision).trim() : '';
     let sName = '';
     let sCity = '';
     let sCountry = '';
@@ -1054,12 +1064,16 @@ class SalesInquiryAdapter {
     let sOfficeName = '';
     let sGroup = '';
     let sGroupName = '';
+    let sPaymentTerms = '';
+    let bValidForSalesArea = true;
+    let sSalesAreaError = '';
+    let sMaintainedSalesAreasSummary = '';
 
     await this.init();
     if (this.s4hanaWL) {
       try {
-        // Parallel fetch: Customer master data (cached) + Customer historical inquiries
-        const [custResult, inqResult] = await Promise.allSettled([
+        // Parallel fetch: Customer master data (cached) + Customer historical inquiries + Customer sales areas (cached)
+        const [custResult, inqResult, salesAreaResult] = await Promise.allSettled([
           this.customerMasterCache.getOrSet(sCust, async () => {
             const custRows = await this.s4hanaWL.run(
               SELECT.from('SD_F2370_INQY_WL_SRV.I_Customer_VH').where({ Customer: sCust }).limit(1)
@@ -1082,13 +1096,30 @@ class SalesInquiryAdapter {
                 .where({ SoldToParty: sCust })
                 .limit(5)
             );
+          })(),
+
+          (async () => {
+            if (!this.client || typeof this.client.get !== 'function') return null;
+            if (process.env.NODE_ENV === 'test' && !this.client.get._isMockFunction) return null;
+            return await this.customerSalesAreaCache.getOrSet(sCust, async () => {
+              try {
+                const res = await this.client.get(`/sap/opu/odata/sap/FAR_CUSTOMER_LIST_V2/C_CustomerList?$filter=Customer eq '${sCust}'`);
+                const items = Array.isArray(res.data?.d?.results) ? res.data.d.results : (Array.isArray(res.data?.value) ? res.data.value : []);
+                return items;
+              } catch (e) {
+                LOG.warn('FAR_CUSTOMER_LIST_V2 customer sales area lookup warning:', e.message);
+                return null;
+              }
+            });
           })()
         ]);
 
+        let bCustMasterFound = false;
         if (custResult.status === 'fulfilled' && custResult.value) {
           sName = custResult.value.Name || '';
           sCity = custResult.value.City || '';
           sCountry = custResult.value.Country || '';
+          bCustMasterFound = true;
         }
 
         const rawInqs = inqResult.status === 'fulfilled' ? inqResult.value : [];
@@ -1097,6 +1128,39 @@ class SalesInquiryAdapter {
           if (inq?.TransactionCurrency && !sCurrency) { sCurrency = inq.TransactionCurrency; bDerived = true; }
           if (inq?.SalesOffice && !sOffice) { sOffice = inq.SalesOffice; bDerived = true; }
           if (inq?.SalesGroup && !sGroup) { sGroup = inq.SalesGroup; bDerived = true; }
+        }
+
+        // Evaluate customer sales area maintenance from FAR_CUSTOMER_LIST_V2
+        if (salesAreaResult.status === 'fulfilled' && Array.isArray(salesAreaResult.value) && salesAreaResult.value.length > 0) {
+          const aRecords = salesAreaResult.value;
+          const firstRec = aRecords[0];
+          if (!bCustMasterFound) {
+            if (!sName && firstRec.CustomerName) sName = firstRec.CustomerName;
+            if (!sCity && firstRec.CityName) sCity = firstRec.CityName;
+            if (!sCountry && firstRec.Country) sCountry = firstRec.Country;
+          }
+
+          if (sOrg || sChannel || sDivision) {
+            const matchingArea = aRecords.find(r =>
+              (!sOrg || r.SalesOrganization === sOrg) &&
+              (!sChannel || r.DistributionChannel === sChannel) &&
+              (!sDivision || r.Division === sDivision)
+            );
+
+            if (matchingArea) {
+              bValidForSalesArea = true;
+              if (matchingArea.SalesOffice && !sOffice) sOffice = matchingArea.SalesOffice;
+              if (matchingArea.SalesGroup && !sGroup) sGroup = matchingArea.SalesGroup;
+              if (matchingArea.CustomerPaymentTerms || matchingArea.PaymentTerms) {
+                sPaymentTerms = matchingArea.CustomerPaymentTerms || matchingArea.PaymentTerms;
+              }
+            } else {
+              bValidForSalesArea = false;
+              const aAreas = aRecords.map(r => `${r.SalesOrganization || ''} ${r.DistributionChannel || ''} ${r.Division || ''}`.trim()).filter(Boolean);
+              sMaintainedSalesAreasSummary = [...new Set(aAreas)].join(', ');
+              sSalesAreaError = `Sold-to party ${sCust} not maintained for sales area ${sOrg} ${sChannel} ${sDivision}`;
+            }
+          }
         }
 
         // Sales office name is master data for a known office; no office or group is ever picked from the
@@ -1145,6 +1209,10 @@ class SalesInquiryAdapter {
       SalesOfficeName: sOfficeName,
       SalesGroup: sGroup,
       SalesGroupName: sGroupName,
+      PaymentTerms: sPaymentTerms,
+      validForSalesArea: bValidForSalesArea,
+      salesAreaError: sSalesAreaError,
+      maintainedSalesAreasSummary: sMaintainedSalesAreasSummary,
       derived: bDerived
     };
   }
@@ -1268,11 +1336,15 @@ class SalesInquiryAdapter {
           }
           const cleanItemUnit = String(itemUnit).trim().toUpperCase();
 
+          const itemDesc = itm.SalesOrderItemText || itm.ItemDescr;
           const itemObj = {
             MaterialID: resolvedMaterial || itm.Material || '',
             OrderQty: String(qty.toFixed(3)),
             SalesUnit: cleanItemUnit
           };
+          if (itemDesc && String(itemDesc).trim() !== '') {
+            itemObj.ItemDescr = String(itemDesc).trim();
+          }
           if (itm.Plant && String(itm.Plant).trim() !== '') {
             itemObj.Plant = String(itm.Plant).trim().toUpperCase();
           }
@@ -1317,9 +1389,41 @@ class SalesInquiryAdapter {
         PurchaseOrderNumber: custRef,
         ItemSet: deepItems
       };
+      const poDate = header.PurchaseOrderDate || header.CustomerPurchaseOrderDate;
+      if (poDate) {
+        const formattedPoDate = _formatODataV2Date(poDate);
+        if (formattedPoDate) headerPayload.PurchaseOrderDate = formattedPoDate;
+      }
       if (header.RequestedDeliveryDate) {
         const formattedHdrDate = _formatODataV2Date(header.RequestedDeliveryDate);
         if (formattedHdrDate) headerPayload.RequestedDeliveryDate = formattedHdrDate;
+      }
+      const payTerms = header.PaymentTerms || header.PaymentTermCode;
+      if (payTerms && String(payTerms).trim() !== '') {
+        headerPayload.PaymentTermCode = String(payTerms).trim();
+      }
+      if (header.ShipToParty && String(header.ShipToParty).trim() !== '') {
+        headerPayload.HeaderPartnerSet = [
+          {
+            PartnerFunctionCode: 'SH',
+            CustomerID: String(header.ShipToParty).trim()
+          }
+        ];
+      }
+
+      // Extension fields: only those the service exposes can be transmitted
+      const notTransmitted = [];
+      const providedExt = INQUIRY_EXTENSION_FIELDS.filter(f => String(header[f] ?? '').trim() !== '');
+      if (providedExt.length > 0) {
+        const fields = await this._getLeanOrderFields(destination, executeFn);
+        for (const f of providedExt) {
+          if (fields.header.has(f)) headerPayload[f] = String(header[f]).trim();
+          else notTransmitted.push(f);
+        }
+        if (notTransmitted.length > 0) {
+          LOG.warn(`LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
+            + ' the sales order will stay incomplete until these are maintained directly in SAP or the service is extended.');
+        }
       }
 
       let createResp;
@@ -1368,7 +1472,7 @@ class SalesInquiryAdapter {
         TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
         TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
         TransactionCurrency: sapCurrency,
-        notTransmitted: []
+        notTransmitted: notTransmitted
       };
     }
 

@@ -153,6 +153,10 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesOfficeName: String;
         SalesGroup: String;
         SalesGroupName: String;
+        PaymentTerms: String;
+        validForSalesArea: Boolean;
+        salesAreaError: String;
+        maintainedSalesAreasSummary: String;
         derived: Boolean;
     };
 

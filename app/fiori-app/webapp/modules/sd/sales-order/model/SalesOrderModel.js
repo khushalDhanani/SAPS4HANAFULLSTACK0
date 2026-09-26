@@ -187,6 +187,9 @@ sap.ui.define([
             if (oCustomerData.SalesGroup) {
                 oModel.setProperty("/header/SalesGroup", oCustomerData.SalesGroup);
             }
+            if (oCustomerData.PaymentTerms) {
+                oModel.setProperty("/header/PaymentTerms", oCustomerData.PaymentTerms);
+            }
         },
 
         /**
@@ -269,6 +272,11 @@ sap.ui.define([
                         sError = "Sold-to Party (Customer) is required";
                     } else if (String(vVal).trim().length > 10) {
                         sError = "Sold-to Party cannot exceed 10 characters";
+                    } else {
+                        var oCurrentErr = oModel.getProperty("/errors/SoldToParty");
+                        if (oCurrentErr && oCurrentErr.state === "Error" && oCurrentErr.text && oCurrentErr.text.indexOf("not maintained") !== -1) {
+                            sError = oCurrentErr.text;
+                        }
                     }
                     break;
                 case "TransactionCurrency":

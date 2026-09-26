@@ -129,6 +129,13 @@
                                 <Title text="{i18n>salesInquiryPanelCustomerTerms}" level="H3" />
                             </Toolbar>
                         </headerToolbar>
+                        <MessageStrip
+                            id="msgCustomerSalesAreaWarning"
+                            text="{newInquiry>/errors/SoldToParty/text}"
+                            type="Error"
+                            showIcon="true"
+                            visible="{= ${newInquiry>/errors/SoldToParty/state} === 'Error' &amp;&amp; !!${newInquiry>/errors/SoldToParty/text} }"
+                            class="sapUiTinyMarginBottom" />
                         <f:SimpleForm
                             id="inquiryCustomerForm"
                             editable="true"

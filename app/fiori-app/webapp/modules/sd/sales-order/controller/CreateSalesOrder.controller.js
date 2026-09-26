@@ -118,6 +118,10 @@ sap.ui.define([
             SalesOrderModel.validateSingleField(oModel, "SalesOrganization");
             this._updateOrganizationalFilters();
             SalesOrderModel.updateStatus(oModel);
+            var sCust = oModel.getProperty("/header/SoldToParty");
+            if (sCust && sCust.trim() !== "") {
+                this.onSoldToPartyChange();
+            }
         },
 
         onSalesOrgSelect: function (oEvent) {
@@ -134,6 +138,10 @@ sap.ui.define([
             SalesOrderModel.validateSingleField(oModel, "DistributionChannel");
             this._updateOrganizationalFilters();
             SalesOrderModel.updateStatus(oModel);
+            var sCust = oModel.getProperty("/header/SoldToParty");
+            if (sCust && sCust.trim() !== "") {
+                this.onSoldToPartyChange();
+            }
         },
 
         onDistChannelSelect: function (oEvent) {
@@ -149,6 +157,10 @@ sap.ui.define([
             var oModel = this.getView().getModel("newOrder");
             SalesOrderModel.validateSingleField(oModel, "OrganizationDivision");
             SalesOrderModel.updateStatus(oModel);
+            var sCust = oModel.getProperty("/header/SoldToParty");
+            if (sCust && sCust.trim() !== "") {
+                this.onSoldToPartyChange();
+            }
         },
 
         onDivisionSelect: function (oEvent) {
@@ -181,10 +193,25 @@ sap.ui.define([
             var sDist = oModel.getProperty("/header/DistributionChannel");
             var sDiv = oModel.getProperty("/header/OrganizationDivision");
 
-            var that = this;
             SalesOrderService.getCustomerDefaults(sCustomer, sOrg, sDist, sDiv).then(function (oDefaults) {
                 if (oDefaults) {
                     SalesOrderModel.applyCustomerDefaults(oModel, oDefaults);
+                    if (oDefaults.validForSalesArea === false) {
+                        var sErrText = oDefaults.salesAreaError || ("Customer " + sCustomer + " is not maintained for sales area " + sOrg + " " + sDist + " " + sDiv);
+                        oModel.setProperty("/errors/SoldToParty", {
+                            state: "Error",
+                            text: sErrText
+                        });
+                        MessageBox.warning(
+                            "Sold-to party " + sCustomer + (oDefaults.CustomerName ? " (" + oDefaults.CustomerName + ")" : "") +
+                            " is not maintained for sales area " + (sOrg || "-") + " " + (sDist || "-") + " " + (sDiv || "-") + ".\n\n" +
+                            "Maintained in SAP S/4HANA for: " + (oDefaults.maintainedSalesAreasSummary || "another sales area") + ".\n\n" +
+                            "Please select a customer maintained for " + (sOrg || "-") + " / " + (sDist || "-") + " / " + (sDiv || "-") + " (e.g. 10135 Divi's Laboratories, 10000 3A Chemie) or extend Customer " + sCustomer + " to Sales Area " + (sOrg || "-") + " " + (sDist || "-") + " " + (sDiv || "-") + " in SAP GUI (transaction BP / XD01).",
+                            { title: "Customer Sales Area Mismatch" }
+                        );
+                    } else {
+                        oModel.setProperty("/errors/SoldToParty", { state: "None", text: "" });
+                    }
                     if (oDefaults.derived) {
                         MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsFromHistory")) || "Currency, sales office and sales group were taken from this customer's previous sales documents. Verify before submitting.");
                     }
@@ -596,6 +623,19 @@ sap.ui.define([
                 if (sChannel) {
                     aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
                 }
+            } else if (sId.indexOf("inSoldToParty") !== -1 || sId.indexOf("inShipToParty") !== -1) {
+                var sOrgCust = oModel.getProperty("/header/SalesOrganization");
+                var sDistCust = oModel.getProperty("/header/DistributionChannel");
+                var sDivCust = oModel.getProperty("/header/OrganizationDivision");
+                if (sOrgCust) {
+                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrgCust));
+                }
+                if (sDistCust) {
+                    aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sDistCust));
+                }
+                if (sDivCust) {
+                    aInitialFilters.push(new Filter("Division", FilterOperator.EQ, sDivCust));
+                }
             }
 
             ValueHelpService.openValueHelp(oView, oInput, function (sKey, oSelectedItem, oData) {
@@ -774,7 +814,15 @@ sap.ui.define([
                 var sErrMsg = (error && error.message) ? error.message : "An unexpected error occurred.";
                 oModel.setProperty("/errorMessage", sErrMsg);
                 oModel.setProperty("/hasError", true);
+                if (sErrMsg.indexOf("not maintained for sales area") !== -1 || sErrMsg.indexOf("Sold-to party") !== -1) {
+                    oModel.setProperty("/errors/SoldToParty", {
+                        state: "Error",
+                        text: sErrMsg
+                    });
+                    sErrMsg += "\n\nPlease select a customer maintained for this sales area (e.g. 10135 Divi's Laboratories, 10000 3A Chemie) or extend the customer in SAP GUI (transaction BP / XD01).";
+                }
                 MessageBox.error("Failed to create Sales Order: " + sErrMsg);
+                SalesOrderModel.updateStatus(oModel);
             });
         },
 

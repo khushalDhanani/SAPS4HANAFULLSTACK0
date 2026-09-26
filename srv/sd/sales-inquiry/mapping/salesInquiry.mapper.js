@@ -92,7 +92,9 @@ function normalizeSalesDocumentData(data, options = {}) {
         CustomerGroup2: rawHeader.CustomerGroup2 ? String(rawHeader.CustomerGroup2).trim().toUpperCase() : '',
         PortOfLoading: rawHeader.PortOfLoading ? String(rawHeader.PortOfLoading).trim() : '',
         PortOfDischarge: rawHeader.PortOfDischarge ? String(rawHeader.PortOfDischarge).trim() : '',
-        ContactPerson: rawHeader.ContactPerson ? String(rawHeader.ContactPerson).trim() : ''
+        ContactPerson: rawHeader.ContactPerson ? String(rawHeader.ContactPerson).trim() : '',
+        PaymentTerms: rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : (rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : ''),
+        PaymentTermCode: rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : (rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : '')
     };
 
     return {

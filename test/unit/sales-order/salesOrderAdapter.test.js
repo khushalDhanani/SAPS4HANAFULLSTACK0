@@ -236,6 +236,127 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 })
             ).rejects.toThrow('Material 4000000091 is not listed for customer 10135');
         });
+
+        test('transmits PurchaseOrderDate, distinct ShipToParty via HeaderPartnerSet, PaymentTermCode, and custom ItemDescr in Deep Insert payload', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000468',
+                        NetAmount: '500.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                ShipToParty: '1000000001',
+                CustomerPurchaseOrderDate: '2026-09-25',
+                PaymentTerms: '0001',
+                TransactionCurrency: 'INR'
+            };
+
+            const items = [
+                {
+                    SalesOrderItem: '000010',
+                    Material: '4000000123',
+                    SalesOrderItemText: 'Custom item description for chemical order',
+                    OrderQuantity: 2,
+                    OrderQuantityUnit: 'KG',
+                    Plant: '1120',
+                    NetPriceAmount: 250.00
+                }
+            ];
+
+            const result = await adapter.createSalesOrder(header, items, {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000468');
+
+            const callConfig = mockExecute.mock.calls[0][1];
+            const payload = callConfig.data;
+
+            // Verify PO Date
+            expect(payload.PurchaseOrderDate).toMatch(/^\/Date\(\d+\)\/$/);
+
+            // Verify HeaderPartnerSet with SH partner
+            expect(payload.HeaderPartnerSet).toEqual([
+                {
+                    PartnerFunctionCode: 'SH',
+                    CustomerID: '1000000001'
+                }
+            ]);
+
+            // Verify PaymentTermCode
+            expect(payload.PaymentTermCode).toBe('0001');
+
+            // Verify ItemDescr on ItemSet
+            expect(payload.ItemSet[0].ItemDescr).toBe('Custom item description for chemical order');
+        });
+
+        test('filters out unsupported extension fields and returns them in notTransmitted for sales order', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000469',
+                        NetAmount: '500.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
+            });
+
+            jest.spyOn(adapter, '_getLeanOrderFields').mockResolvedValue({
+                header: new Set(['SalesOrderTypeCode', 'SalesOrganization', 'DistributionChannel', 'Division']),
+                item: new Set(['MaterialID', 'OrderQty', 'SalesUnit'])
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                CustomerGroup2: 'SEA',
+                PortOfLoading: 'NHAVA SHEVA',
+                PortOfDischarge: 'BARCELONA',
+                ContactPerson: '24789'
+            };
+
+            const items = [
+                {
+                    SalesOrderItem: '000010',
+                    Material: '4000000123',
+                    OrderQuantity: 2,
+                    OrderQuantityUnit: 'KG',
+                    Plant: '1120'
+                }
+            ];
+
+            const result = await adapter.createSalesOrder(header, items, {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000469');
+            expect(result.notTransmitted).toEqual(
+                expect.arrayContaining(['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'])
+            );
+
+            const callConfig = mockExecute.mock.calls[0][1];
+            const payload = callConfig.data;
+            expect(payload.CustomerGroup2).toBeUndefined();
+            expect(payload.PortOfLoading).toBeUndefined();
+            expect(payload.PortOfDischarge).toBeUndefined();
+            expect(payload.ContactPerson).toBeUndefined();
+        });
     });
 
     describe('createSalesDocument Routing', () => {
@@ -508,6 +629,87 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(defaults.Plant).toBe('1120');
             expect(defaults.TransactionCurrency).toBe('INR');
             expect(defaults.RequestedDeliveryDate).toBeDefined();
+        });
+
+        test('getCustomerDefaults validates sales area and returns validForSalesArea: false for mismatched sales area', async () => {
+            adapter.s4hanaWL = {
+                run: jest.fn().mockImplementation((q) => {
+                    const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                    if (sFrom.includes('I_Customer_VH')) {
+                        return Promise.resolve([{ Customer: '10629', CustomerName: 'SUN PHARMACEUTICAL INDUSTRIES LTD.', CityName: 'Vadodara', Country: 'IN' }]);
+                    }
+                    return Promise.resolve([]);
+                })
+            };
+
+            adapter.client = {
+                get: jest.fn().mockResolvedValue({
+                    data: {
+                        d: {
+                            results: [
+                                {
+                                    Customer: '10629',
+                                    CustomerName: 'SUN PHARMACEUTICAL INDUSTRIES LTD.',
+                                    CompanyCode: '1000',
+                                    SalesOrganization: '1000',
+                                    DistributionChannel: '10',
+                                    Division: '00',
+                                    SalesOffice: 'SO10',
+                                    SalesGroup: '100',
+                                    CustomerPaymentTerms: 'PT11'
+                                }
+                            ]
+                        }
+                    }
+                })
+            };
+
+            const result = await adapter.getCustomerDefaults('10629', '1000', '10', '52');
+            expect(result.Customer).toBe('10629');
+            expect(result.CustomerName).toBe('SUN PHARMACEUTICAL INDUSTRIES LTD.');
+            expect(result.validForSalesArea).toBe(false);
+            expect(result.salesAreaError).toContain('Sold-to party 10629 not maintained for sales area 1000 10 52');
+            expect(result.maintainedSalesAreasSummary).toBe('1000 10 00');
+        });
+
+        test('getCustomerDefaults validates sales area and returns validForSalesArea: true and authentic PaymentTerms when matched', async () => {
+            adapter.s4hanaWL = {
+                run: jest.fn().mockImplementation((q) => {
+                    const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                    if (sFrom.includes('I_Customer_VH')) {
+                        return Promise.resolve([{ Customer: '10135', CustomerName: "Divi's Laboratories Limited", CityName: 'Hyderabad', Country: 'IN' }]);
+                    }
+                    return Promise.resolve([]);
+                })
+            };
+
+            adapter.client = {
+                get: jest.fn().mockResolvedValue({
+                    data: {
+                        d: {
+                            results: [
+                                {
+                                    Customer: '10135',
+                                    CustomerName: "Divi's Laboratories Limited",
+                                    CompanyCode: '1000',
+                                    SalesOrganization: '1000',
+                                    DistributionChannel: '10',
+                                    Division: '52',
+                                    SalesOffice: 'SO10',
+                                    SalesGroup: '100',
+                                    CustomerPaymentTerms: 'PT01'
+                                }
+                            ]
+                        }
+                    }
+                })
+            };
+
+            const result = await adapter.getCustomerDefaults('10135', '1000', '10', '52');
+            expect(result.Customer).toBe('10135');
+            expect(result.validForSalesArea).toBe(true);
+            expect(result.PaymentTerms).toBe('PT01');
+            expect(result.salesAreaError).toBe('');
         });
     });
 });

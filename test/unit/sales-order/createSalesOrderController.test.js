@@ -316,4 +316,57 @@ describe("CreateSalesOrder Controller", () => {
         expect(oModel.getProperty("/header/SalesOrganization")).toBe("1000");
         expect(oModel.getProperty("/items/0/Plant")).toBe("1120");
     });
+
+    test("onSoldToPartyChange sets error state and displays warning dialog when customer is not maintained for sales area", async () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/SoldToParty", "10629");
+
+        mockSalesOrderService.getCustomerDefaults.mockResolvedValueOnce({
+            Customer: "10629",
+            CustomerName: "SUN PHARMACEUTICAL INDUSTRIES LTD.",
+            validForSalesArea: false,
+            maintainedSalesAreasSummary: "1000 10 00",
+            salesAreaError: "Sold-to party 10629 not maintained for sales area 1000 10 52"
+        });
+
+        controller.onSoldToPartyChange();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockSalesOrderService.getCustomerDefaults).toHaveBeenCalledWith("10629", "1000", "10", "52");
+        expect(oModel.getProperty("/errors/SoldToParty/state")).toBe("Error");
+        expect(oModel.getProperty("/errors/SoldToParty/text")).toContain("10629");
+        expect(mockMessageBox.warning).toHaveBeenCalledWith(
+            expect.stringContaining("Sold-to party 10629"),
+            expect.objectContaining({ title: "Customer Sales Area Mismatch" })
+        );
+    });
+
+    test("onSoldToPartyChange clears error state and applies payment terms when customer is valid for sales area", async () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/SoldToParty", "10135");
+
+        mockSalesOrderService.getCustomerDefaults.mockResolvedValueOnce({
+            Customer: "10135",
+            CustomerName: "Divis Laboratories Limited",
+            validForSalesArea: true,
+            PaymentTerms: "PT01"
+        });
+
+        controller.onSoldToPartyChange();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockSalesOrderService.getCustomerDefaults).toHaveBeenCalledWith("10135", "1000", "10", "52");
+        expect(oModel.getProperty("/errors/SoldToParty/state")).toBe("None");
+        expect(oModel.getProperty("/header/PaymentTerms")).toBe("PT01");
+    });
 });

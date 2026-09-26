@@ -56,6 +56,11 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
     if (header.ShipToPartyName) {
         s4Header.ShipToPartyName = String(header.ShipToPartyName).trim();
     }
+    const payTermsInq = header.PaymentTerms || header.PaymentTermCode;
+    if (payTermsInq && String(payTermsInq).trim() !== '') {
+        s4Header.PaymentTerms = String(payTermsInq).trim();
+        s4Header.PaymentTermCode = String(payTermsInq).trim();
+    }
     // Commercial & logistics extension fields: passed through when present, never defaulted
     ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'].forEach(field => {
         if (header[field] && String(header[field]).trim() !== '') {
@@ -148,6 +153,11 @@ function mapToS4OrderPayload(header, items, _options = {}) {
     }
     if (header.ShipToPartyName) {
         s4Header.ShipToPartyName = String(header.ShipToPartyName).trim();
+    }
+    const payTermsOrd = header.PaymentTerms || header.PaymentTermCode;
+    if (payTermsOrd && String(payTermsOrd).trim() !== '') {
+        s4Header.PaymentTerms = String(payTermsOrd).trim();
+        s4Header.PaymentTermCode = String(payTermsOrd).trim();
     }
 
     ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'].forEach(field => {

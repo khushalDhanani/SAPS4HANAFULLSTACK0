@@ -260,6 +260,20 @@ sap.ui.define([
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel && oCurrentModel.getProperty("/header/SoldToParty") === sCustomer) {
                     SalesInquiryModel.deriveCustomerDefaults(oCurrentModel, sCustomer, oDefaults);
+                    if (oDefaults && oDefaults.validForSalesArea === false) {
+                        var sErrText = oDefaults.salesAreaError || ("Customer " + sCustomer + " is not maintained for sales area " + sOrg + " " + sChannel + " " + sDivision);
+                        oCurrentModel.setProperty("/errors/SoldToParty", {
+                            state: "Error",
+                            text: sErrText
+                        });
+                        MessageBox.warning(
+                            "Sold-to party " + sCustomer + (oDefaults.CustomerName ? " (" + oDefaults.CustomerName + ")" : "") +
+                            " is not maintained for sales area " + (sOrg || "-") + " " + (sChannel || "-") + " " + (sDivision || "-") + ".\n\n" +
+                            "Maintained in SAP S/4HANA for: " + (oDefaults.maintainedSalesAreasSummary || "another sales area") + ".\n\n" +
+                            "Please select a customer maintained for " + (sOrg || "-") + " / " + (sChannel || "-") + " / " + (sDivision || "-") + " (e.g. 10135 Divi's Laboratories, 10000 3A Chemie) or extend Customer " + sCustomer + " to Sales Area " + (sOrg || "-") + " " + (sChannel || "-") + " " + (sDivision || "-") + " in SAP GUI (transaction BP / XD01).",
+                            { title: "Customer Sales Area Mismatch" }
+                        );
+                    }
                     if (oDefaults && oDefaults.derived) {
                         MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsFromHistory")) || "Currency, sales office and sales group were taken from this customer's previous sales documents. Verify before submitting.");
                     }
@@ -686,6 +700,19 @@ sap.ui.define([
                 }
                 if (sChannel) {
                     aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
+                }
+            } else if (sId.indexOf("inSoldToParty") !== -1 || sId.indexOf("inShipToParty") !== -1) {
+                var sOrgCust = oModel.getProperty("/header/SalesOrganization");
+                var sDistCust = oModel.getProperty("/header/DistributionChannel");
+                var sDivCust = oModel.getProperty("/header/OrganizationDivision");
+                if (sOrgCust) {
+                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrgCust));
+                }
+                if (sDistCust) {
+                    aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sDistCust));
+                }
+                if (sDivCust) {
+                    aInitialFilters.push(new Filter("Division", FilterOperator.EQ, sDivCust));
                 }
             }
 
