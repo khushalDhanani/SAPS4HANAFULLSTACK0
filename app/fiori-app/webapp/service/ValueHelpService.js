@@ -193,8 +193,13 @@ sap.ui.define([
                 var bHasZDomFilter = aActiveContextFilters.some(function (f) {
                     return f && f.sPath === "SupplierAccountGroup" && (f.oValue1 === "ZDOM" || f.sValue === "ZDOM");
                 });
+                var bHasZIntFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "SupplierAccountGroup" && (f.oValue1 === "ZINT" || f.sValue === "ZINT");
+                });
                 if (bHasZDomFilter) {
                     sDialogTitle = "Select Domestic Supplier";
+                } else if (bHasZIntFilter) {
+                    sDialogTitle = "Select Supplying Plant / Internal Site";
                 }
             } else if (sPath === "/CompanyCodeVH") {
                 var bHasDomCoFilter = aActiveContextFilters.some(function (f) {
@@ -295,7 +300,7 @@ sap.ui.define([
                 if (sPath === "/MaterialVH") {
                     oTemplateConfig.info = "{= ${MaterialType} ? (${MaterialType} + (${MaterialBaseUnit} ? ' • ' + ${MaterialBaseUnit} : '')) : (${MaterialBaseUnit} || '') }";
                 } else if (sPath === "/SupplierVH") {
-                    oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : '') + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
+                    oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : (${SupplierAccountGroup} === 'ZINT' ? 'Internal Plant • ' : '')) + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
                 } else if (sPath === "/CompanyCodeVH") {
                     oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic' : '' }";
                 } else if (sPath === "/PlantVH") {

@@ -171,6 +171,8 @@ sap.ui.define([
                 var sDocType = oFbDocType && typeof oFbDocType.getValue === "function" ? oFbDocType.getValue().trim() : "";
                 if (sDocType === "ZDOM") {
                     aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZDOM"));
+                } else if (sDocType === "ZSTO") {
+                    aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZINT"));
                 }
             } else if (sField === "PurchasingOrganization") {
                 var oFbCompanyCodePurch = typeof this.byId === "function" ? this.byId("fbCompanyCode") : null;

@@ -598,8 +598,11 @@ sap.ui.define([
                         aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
                     }
                     var sDocType = oModel.getProperty("/header/PurchaseOrderType");
-                    if (sDocType && String(sDocType).trim().toUpperCase() === "ZDOM") {
+                    var sCleanDocType = sDocType ? String(sDocType).trim().toUpperCase() : "";
+                    if (sCleanDocType === "ZDOM") {
                         aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZDOM"));
+                    } else if (sCleanDocType === "ZSTO") {
+                        aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZINT"));
                     }
                 } else if (sField === "PurchasingOrganization") {
                     var sCompanyCode = oModel.getProperty("/header/CompanyCode");
@@ -613,7 +616,7 @@ sap.ui.define([
         },
 
         /**
-         * Re-applies active contextual filters (e.g. CompanyCode, SupplierAccountGroup for ZDOM)
+         * Re-applies active contextual filters (e.g. CompanyCode, SupplierAccountGroup for ZDOM/ZSTO)
          * to the inSupplier suggestion items binding so autocomplete suggestions strictly reflect
          * the current document type context.
          * @private
@@ -650,6 +653,7 @@ sap.ui.define([
          * Checks supplier and company validity against the newly selected document type.
          * If ZDOM is selected and the supplier is known to be non-domestic, displays a warning.
          * If ZDOM is selected and the company code is not 1000, displays a warning.
+         * If ZSTO is selected and the supplier is not an internal plant (ZINT), displays a warning.
          * @param {string} sDocType
          * @private
          */
@@ -677,6 +681,17 @@ sap.ui.define([
                         "CompanyCode",
                         "Warning",
                         this.getText("poValCompanyCodeNotDomestic", null, "Selected Company Code is not a domestic company for document type ZDOM (expected 1000 - Aether Industries Limited).")
+                    );
+                }
+            } else if (sCleanDocType === "ZSTO") {
+                var sExistingSupplierSto = oModel.getProperty("/header/Supplier");
+                var sExistingAccountGroupSto = oModel.getProperty("/header/SupplierAccountGroup");
+                if (sExistingSupplierSto && sExistingAccountGroupSto && sExistingAccountGroupSto !== "ZINT") {
+                    PurchaseOrderModel.setFieldValidation(
+                        oModel,
+                        "Supplier",
+                        "Warning",
+                        this.getText("poValSupplierNotInternalPlant", null, "Selected supplier is not an internal plant. Please choose an internal plant / site for document type ZSTO.")
                     );
                 }
             }

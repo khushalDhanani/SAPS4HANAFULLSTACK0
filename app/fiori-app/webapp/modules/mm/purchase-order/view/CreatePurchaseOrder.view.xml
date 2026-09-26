@@ -165,7 +165,7 @@
                                     change=".onSupplierChange" liveChange=".onSupplierLiveChange" suggestionItemSelected=".onSupplierSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/SupplierVH', templateShareable: false}">
                                     <suggestionItems>
-                                        <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{= ${SupplierName} + (${SupplierAccountGroup} === 'ZDOM' ? ' [Domestic]' : '') + (${CompanyCode} ? ' (' + ${CompanyCode} + ')' : '') }" />
+                                        <core:ListItem key="{Supplier}" text="{Supplier}" additionalText="{= ${SupplierName} + (${SupplierAccountGroup} === 'ZDOM' ? ' [Domestic]' : (${SupplierAccountGroup} === 'ZINT' ? ' [Internal Plant]' : '')) + (${CompanyCode} ? ' (' + ${CompanyCode} + ')' : '') }" />
                                     </suggestionItems>
                                 </Input>
 

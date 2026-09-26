@@ -47,6 +47,13 @@
       "CityName": "Berlin",
       "CompanyCode": "1000",
       "SupplierAccountGroup": "ZDOM"
+    },
+    {
+      "Supplier": "1110",
+      "SupplierName": "B21/7– Hojiwala - R&D  Site -1 AETHER INDUSTRY LIMITED",
+      "CityName": "SURAT",
+      "CompanyCode": "1000",
+      "SupplierAccountGroup": "ZINT"
     }
   ],
   "MaterialVH": [

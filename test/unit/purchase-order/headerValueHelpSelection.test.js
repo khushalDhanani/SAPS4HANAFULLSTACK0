@@ -1021,4 +1021,73 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(oModel.getProperty('/errors/CompanyCode/text')).toContain('not a domestic company');
         });
     });
+
+    describe('Internal Plant Supplier Filtering for ZSTO', () => {
+        it('should build context filter with SupplierAccountGroup EQ ZINT and CompanyCode for inSupplier when docType is ZSTO', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZSTO');
+            oModel.setProperty('/header/CompanyCode', '1000');
+
+            const mockSource = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(2);
+            expect(filters[0].sPath).toBe('CompanyCode');
+            expect(filters[0].sOperator).toBe('EQ');
+            expect(filters[0].sValue).toBe('1000');
+
+            expect(filters[1].sPath).toBe('SupplierAccountGroup');
+            expect(filters[1].sOperator).toBe('EQ');
+            expect(filters[1].sValue).toBe('ZINT');
+        });
+
+        it('should refresh supplier suggestion binding with ZINT filter when docType is ZSTO', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZSTO');
+            oModel.setProperty('/header/CompanyCode', '1000');
+
+            const mockBinding = {
+                filter: jest.fn()
+            };
+            const mockSupplierInput = {
+                getId: () => 'inSupplier',
+                getBindingContext: () => null,
+                getBindingPath: () => 'Supplier',
+                getBinding: jest.fn((name) => (name === 'suggestionItems' ? mockBinding : null))
+            };
+            controller.byId = jest.fn((sId) => (sId === 'inSupplier' ? mockSupplierInput : null));
+
+            controller._refreshSupplierBinding();
+
+            expect(mockSupplierInput.getBinding).toHaveBeenCalledWith('suggestionItems');
+            expect(mockBinding.filter).toHaveBeenCalled();
+            const appliedFilters = mockBinding.filter.mock.calls[0][0];
+            expect(appliedFilters).toHaveLength(2);
+            expect(appliedFilters[1].sPath).toBe('SupplierAccountGroup');
+            expect(appliedFilters[1].sValue).toBe('ZINT');
+        });
+
+        it('should display warning on Supplier if docType changes to ZSTO while a non-internal supplier was chosen', () => {
+            oModel.setProperty('/header/Supplier', '100002');
+            oModel.setProperty('/header/SupplierAccountGroup', 'ZDOM');
+
+            controller._onDocTypeSelectedCheck('ZSTO');
+
+            expect(oModel.getProperty('/errors/Supplier/state')).toBe('Warning');
+            expect(oModel.getProperty('/errors/Supplier/text')).toContain('not an internal plant');
+        });
+
+        it('should not display warning on Supplier if docType is ZSTO and chosen supplier is an internal plant (ZINT)', () => {
+            oModel.setProperty('/header/Supplier', '1110');
+            oModel.setProperty('/header/SupplierAccountGroup', 'ZINT');
+            oModel.setProperty('/errors/Supplier', { state: 'None', text: '' });
+
+            controller._onDocTypeSelectedCheck('ZSTO');
+
+            expect(oModel.getProperty('/errors/Supplier/state')).toBe('None');
+            expect(oModel.getProperty('/errors/Supplier/text')).toBe('');
+        });
+    });
 });
