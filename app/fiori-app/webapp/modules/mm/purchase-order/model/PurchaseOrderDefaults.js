@@ -1,13 +1,23 @@
 (function (root, factory) {
     "use strict";
     if (typeof module !== "undefined" && module.exports) {
-        module.exports = factory();
+        var PurchaseOrderRules = require("./PurchaseOrderRules");
+        module.exports = factory(PurchaseOrderRules);
     }
     if (typeof sap !== "undefined" && sap.ui && typeof sap.ui.define === "function" && typeof module === "undefined") {
-        sap.ui.define([], factory);
+        sap.ui.define([
+            "./PurchaseOrderRules"
+        ], factory);
     }
-})(this, function () {
+})(this, function (InjectedRules) {
     "use strict";
+
+    var _rules = InjectedRules;
+    if (!_rules && typeof require === "function") {
+        try {
+            _rules = require("./PurchaseOrderRules");
+        } catch (e) {}
+    }
 
     var DEFAULT_DOC_TYPE_FALLBACK = {
         code: "ZDOM",
@@ -15,6 +25,9 @@
     };
 
     var PurchaseOrderDefaults = {
+        /** Reference to authoritative schema rules */
+        rules: _rules,
+
         /**
          * Resolves the active default Document Type and description.
          *
@@ -91,6 +104,7 @@
 
         /**
          * Sets and validates Document Type on the model, enforcing domain rules (Z-prefix and max length 4).
+         * Reconciles header, line items, and dynamic UI rules according to the PO Type's configuration.
          *
          * @param {sap.ui.model.json.JSONModel} oModel
          * @param {string} sDocType
@@ -106,6 +120,11 @@
             if (!oModel) return;
             var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
             var sTrimmed = String(sDocType || "").trim().toUpperCase();
+
+            if (typeof oConfigData === "string" && !sDocTypeText) {
+                sDocTypeText = oConfigData;
+                oConfigData = null;
+            }
 
             var fnSetProperty = function (sPath, vVal) {
                 if (typeof oModel.setProperty === "function") {
@@ -160,6 +179,85 @@
                         fnSetProperty("/header/PurchaseOrderTypeText", sDocTypeText);
                     }
                     fnSetProperty("/errors/PurchaseOrderType", { state: "None", text: "" });
+
+                    // Reconcile dynamic UI rules and header/item defaults for PO Type
+                    var oPoRule = (_rules && _rules.PO_TYPES && _rules.PO_TYPES[sTrimmed]) || null;
+                    if (oPoRule) {
+                        var oUiRules = {
+                            materialRequired: oPoRule.materialRequired !== false,
+                            storageLocationRequired: oPoRule.storageLocationRequired !== false,
+                            isService: !!oPoRule.isService,
+                            isStockTransfer: !!oPoRule.isStockTransfer,
+                            isReturn: !!oPoRule.isReturn,
+                            isSubcontracting: !!oPoRule.isSubcontracting,
+                            showAccountAssignment: !!(oPoRule.allowedAcctAssignmentCategories && oPoRule.allowedAcctAssignmentCategories.some(function (c) { return c !== ""; })),
+                            showItemCategory: true,
+                            allowedItemCategories: oPoRule.allowedItemCategories || ["0"],
+                            allowedAcctAssignmentCategories: oPoRule.allowedAcctAssignmentCategories || [""]
+                        };
+                        fnSetProperty("/uiRules", oUiRules);
+
+                        var oHeader = (oData && oData.header) || {};
+
+                        // Reconcile Company Code
+                        if (oPoRule.allowedCompanyCodes && oPoRule.allowedCompanyCodes.length > 0) {
+                            var sDefCo = oPoRule.defaultCompanyCode || oPoRule.allowedCompanyCodes[0];
+                            if (!oHeader.CompanyCode || !oPoRule.allowedCompanyCodes.includes(oHeader.CompanyCode) || (!oData.userModified || !oData.userModified.CompanyCode)) {
+                                fnSetProperty("/header/CompanyCode", sDefCo);
+                                fnValidate(oModel, "CompanyCode");
+                            }
+                        }
+
+                        // Reconcile Purchasing Organization
+                        if (oPoRule.allowedPurchOrgs && oPoRule.allowedPurchOrgs.length > 0) {
+                            var sDefPo = oPoRule.defaultPurchOrg || oPoRule.allowedPurchOrgs[0];
+                            if (!oHeader.PurchasingOrganization || !oPoRule.allowedPurchOrgs.includes(oHeader.PurchasingOrganization) || (!oData.userModified || !oData.userModified.PurchasingOrganization)) {
+                                fnSetProperty("/header/PurchasingOrganization", sDefPo);
+                                fnValidate(oModel, "PurchasingOrganization");
+                            }
+                        }
+
+                        // Reconcile Currency
+                        if (oPoRule.allowedCurrencies && oPoRule.allowedCurrencies.length > 0) {
+                            var sDefCurr = oPoRule.defaultCurrency || oPoRule.allowedCurrencies[0];
+                            if (!oHeader.Currency || !oPoRule.allowedCurrencies.includes(oHeader.Currency) || (!oData.userModified || !oData.userModified.Currency)) {
+                                fnSetProperty("/header/Currency", sDefCurr);
+                                fnValidate(oModel, "Currency");
+                            }
+                        }
+
+                        // Reconcile Supplier if current supplier account group conflicts
+                        if (oPoRule.supplierAccountGroup) {
+                            var sCurrentGrp = (oData && oData.header && oData.header.SupplierAccountGroup) || "";
+                            if (sCurrentGrp && sCurrentGrp !== oPoRule.supplierAccountGroup) {
+                                fnSetProperty("/header/Supplier", "");
+                                fnSetProperty("/header/SupplierName", "");
+                                fnSetProperty("/header/SupplierAccountGroup", "");
+                                fnValidate(oModel, "Supplier");
+                            }
+                        }
+
+                        // Reconcile Items
+                        var aItems = (oData && oData.items) || [];
+                        aItems.forEach(function (item, idx) {
+                            if (oPoRule.allowedItemCategories && oPoRule.allowedItemCategories.length > 0) {
+                                if (!item.PurchaseOrderItemCategory || !oPoRule.allowedItemCategories.includes(item.PurchaseOrderItemCategory) || (item.PurchaseOrderItemCategory === "0" && oPoRule.defaultItemCategory && oPoRule.defaultItemCategory !== "0")) {
+                                    item.PurchaseOrderItemCategory = oPoRule.defaultItemCategory || oPoRule.allowedItemCategories[0];
+                                }
+                            }
+                            if (oPoRule.allowedAcctAssignmentCategories) {
+                                if (!item.AccountAssignmentCategory || !oPoRule.allowedAcctAssignmentCategories.includes(item.AccountAssignmentCategory) || (item.AccountAssignmentCategory === "" && oPoRule.defaultAcctAssignmentCategory)) {
+                                    item.AccountAssignmentCategory = oPoRule.defaultAcctAssignmentCategory || "";
+                                }
+                            }
+                            if (oPoRule.allowedPlantPrefix && item.Plant && !String(item.Plant).startsWith(oPoRule.allowedPlantPrefix)) {
+                                item.Plant = "";
+                                item.StorageLocation = "";
+                            }
+                        });
+                        fnSetProperty("/items", aItems);
+                    }
+
                     fnValidate(oModel, "PurchaseOrderType");
                 } else {
                     fnSetProperty("/header/PurchaseOrderType", "");
@@ -294,42 +392,45 @@
                 oHeader.PurchaseOrderTypeText = sDefaultText;
             }
 
-            // 3. Confirm Company Code = 1000 ONLY when confirmed valid/configured in master data
-            var bCoCode1000Confirmed = aCompanyCodes.some(function (cc) {
-                return cc && (cc.CompanyCode === "1000");
+            // 3. Confirm Company Code from PO Rule or fallback 1000 ONLY when confirmed valid/configured in master data
+            var oPoRule = (_rules && _rules.PO_TYPES && _rules.PO_TYPES[sCurrentDocType]) || null;
+            var sTargetCoCode = (oPoRule && oPoRule.defaultCompanyCode) || "1000";
+            var bCoCodeConfirmed = aCompanyCodes.some(function (cc) {
+                return cc && (cc.CompanyCode === sTargetCoCode);
             });
 
-            if (bCoCode1000Confirmed) {
+            if (bCoCodeConfirmed) {
                 if (!oUserModified.CompanyCode) {
-                    oHeader.CompanyCode = "1000";
+                    oHeader.CompanyCode = sTargetCoCode;
                     oConfigDerived.CompanyCode = true;
-                    oReport.applied.CompanyCode = "1000";
-                    fnValidate(oModel, "CompanyCode", "1000");
+                    oReport.applied.CompanyCode = sTargetCoCode;
+                    fnValidate(oModel, "CompanyCode", sTargetCoCode);
                 } else {
                     oReport.skippedDueToUser.CompanyCode = oHeader.CompanyCode;
                 }
             } else {
-                oReport.unconfirmed.push("CompanyCode 1000 is not configured or valid in SAP master data.");
+                oReport.unconfirmed.push("CompanyCode " + sTargetCoCode + " is not configured or valid in SAP master data.");
             }
 
-            // 4. Confirm Purchasing Organization = AE01 ONLY when confirmed valid/configured
-            var bPurchOrgAE01Confirmed = aPurchOrgs.some(function (po) {
-                var bIdMatch = po && (po.PurchasingOrganization === "AE01");
-                var bCoMatch = !po.CompanyCode || po.CompanyCode === "1000";
+            // 4. Confirm Purchasing Organization from PO Rule or fallback AE01 ONLY when confirmed valid/configured
+            var sTargetPurchOrg = (oPoRule && oPoRule.defaultPurchOrg) || "AE01";
+            var bPurchOrgConfirmed = aPurchOrgs.some(function (po) {
+                var bIdMatch = po && (po.PurchasingOrganization === sTargetPurchOrg);
+                var bCoMatch = !po.CompanyCode || po.CompanyCode === sTargetCoCode;
                 return bIdMatch && bCoMatch;
             });
 
-            if (bPurchOrgAE01Confirmed) {
+            if (bPurchOrgConfirmed) {
                 if (!oUserModified.PurchasingOrganization) {
-                    oHeader.PurchasingOrganization = "AE01";
+                    oHeader.PurchasingOrganization = sTargetPurchOrg;
                     oConfigDerived.PurchasingOrganization = true;
-                    oReport.applied.PurchasingOrganization = "AE01";
-                    fnValidate(oModel, "PurchasingOrganization", "AE01");
+                    oReport.applied.PurchasingOrganization = sTargetPurchOrg;
+                    fnValidate(oModel, "PurchasingOrganization", sTargetPurchOrg);
                 } else {
                     oReport.skippedDueToUser.PurchasingOrganization = oHeader.PurchasingOrganization;
                 }
             } else {
-                oReport.unconfirmed.push("Purchasing Organization AE01 is not configured or valid for Company Code 1000.");
+                oReport.unconfirmed.push("Purchasing Organization " + sTargetPurchOrg + " is not configured or valid for Company Code " + sTargetCoCode + ".");
             }
 
             // 5. Purchasing Group validation/defaulting

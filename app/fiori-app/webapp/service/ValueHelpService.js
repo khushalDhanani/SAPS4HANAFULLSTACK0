@@ -37,6 +37,8 @@ sap.ui.define([
         "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName", info: "Plant" },
         "/UnitOfMeasureVH": { title: "Select Unit of Measure", key: "UnitOfMeasure", desc: "UnitOfMeasure_Text" },
         "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" },
+        "/ItemCategoryVH": { title: "Select Item Category", key: "PurchasingDocumentItemCategory", desc: "PurchasingDocumentItemCat_Text" },
+        "/AcctAssignmentCategoryVH": { title: "Select Account Assignment Category", key: "AccountAssignmentCategory", desc: "AccountAssignmentCategory_Text" },
         "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName", descAlt: "SalesDocumentType_Text", info: "Classification" },
         "/SalesOrderTypeVH": { title: "Select Order Type", key: "SalesOrderType", desc: "SalesOrderTypeName", descAlt: "SalesOrderTypeName", info: "Language key" },
         "/SalesOrganizationVH": { title: "Select Sales Organization", key: "SalesOrganization", desc: "SalesOrganization_Text" },

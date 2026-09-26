@@ -96,6 +96,24 @@ function validateCreatePurchaseOrderPayload(data) {
         if (header.PaymentTerms && String(header.PaymentTerms).trim().length > maxPayTermsLen) {
             addError('header.PaymentTerms', `PaymentTerms exceeds maximum length of ${maxPayTermsLen} characters`);
         }
+
+        // PO Type–Wise Dynamic Business Rules for Header
+        const sDocType = header.PurchaseOrderType ? String(header.PurchaseOrderType).trim().toUpperCase() : '';
+        const poRule = RULES.poTypes && RULES.poTypes[sDocType];
+
+        if (poRule) {
+            if (header.CompanyCode && poRule.allowedCompanyCodes && !poRule.allowedCompanyCodes.includes(String(header.CompanyCode).trim())) {
+                addError('header.CompanyCode', `CompanyCode '${header.CompanyCode}' is not permitted for Document Type '${sDocType}'. Permitted: ${poRule.allowedCompanyCodes.join(', ')}`);
+            }
+
+            if (header.PurchasingOrganization && poRule.allowedPurchOrgs && !poRule.allowedPurchOrgs.includes(String(header.PurchasingOrganization).trim())) {
+                addError('header.PurchasingOrganization', `PurchasingOrganization '${header.PurchasingOrganization}' is not permitted for Document Type '${sDocType}'. Permitted: ${poRule.allowedPurchOrgs.join(', ')}`);
+            }
+
+            if (header.Currency && poRule.allowedCurrencies && !poRule.allowedCurrencies.includes(String(header.Currency).trim().toUpperCase())) {
+                addError('header.Currency', `Currency '${header.Currency}' is not permitted for Document Type '${sDocType}'. Permitted: ${poRule.allowedCurrencies.join(', ')}`);
+            }
+        }
     }
 
     // --- Items Validation ---
@@ -106,17 +124,34 @@ function validateCreatePurchaseOrderPayload(data) {
     } else if (items.length > maxItems) {
         addError('items', `Maximum limit of ${maxItems} items exceeded`);
     } else {
+        const sDocType = (header && header.PurchaseOrderType) ? String(header.PurchaseOrderType).trim().toUpperCase() : '';
+        const poRule = RULES.poTypes && RULES.poTypes[sDocType];
+        const bMaterialRequired = poRule ? poRule.materialRequired !== false : true;
+
         items.forEach((item, index) => {
             const itemNumber = item.PurchaseOrderItem || `Item #${index + 1}`;
             const prefix = `items[${index}]`;
 
             // Required item fields
             for (const req of REQUIRED_ITEM_FIELDS) {
+                if (req.field === 'Material' && !bMaterialRequired) {
+                    continue; // Skip mandatory Material check for Service POs (ZSER)
+                }
+                if (req.field === 'StorageLocation' && poRule && poRule.storageLocationRequired === false) {
+                    continue; // Skip mandatory StorageLocation check for Service POs (ZSER)
+                }
                 const val = item[req.field];
                 if (val === undefined || val === null || String(val).trim() === '') {
                     addError(`${prefix}.${req.field}`, `Item ${itemNumber}: field '${req.field}' (${req.label}) is required`);
                 } else if (req.maxLen && String(val).trim().length > req.maxLen) {
                     addError(`${prefix}.${req.field}`, `Item ${itemNumber}: field '${req.field}' exceeds maximum length of ${req.maxLen} characters`);
+                }
+            }
+
+            // For Service POs where Material is blank, item text description is mandatory
+            if (!bMaterialRequired && (!item.Material || String(item.Material).trim() === '')) {
+                if (!item.PurchaseOrderItemText || String(item.PurchaseOrderItemText).trim() === '') {
+                    addError(`${prefix}.PurchaseOrderItemText`, `Item ${itemNumber}: PurchaseOrderItemText is required when Material is not specified`);
                 }
             }
 
@@ -155,6 +190,26 @@ function validateCreatePurchaseOrderPayload(data) {
             const maxAcctLen = (RULES.item.AccountAssignmentCategory && RULES.item.AccountAssignmentCategory.maxLen) || 1;
             if (item.AccountAssignmentCategory && String(item.AccountAssignmentCategory).trim().length > maxAcctLen) {
                 addError(`${prefix}.AccountAssignmentCategory`, `Item ${itemNumber}: AccountAssignmentCategory exceeds maximum length of ${maxAcctLen} character`);
+            }
+
+            // Item Category validation against PO type rules
+            if (poRule && poRule.allowedItemCategories) {
+                const sItemCat = item.PurchaseOrderItemCategory !== undefined && item.PurchaseOrderItemCategory !== null && String(item.PurchaseOrderItemCategory).trim() !== ''
+                    ? String(item.PurchaseOrderItemCategory).trim()
+                    : '0';
+                if (!poRule.allowedItemCategories.includes(sItemCat)) {
+                    addError(`${prefix}.PurchaseOrderItemCategory`, `Item ${itemNumber}: Item Category '${sItemCat}' is not permitted for Document Type '${sDocType}'. Permitted: ${poRule.allowedItemCategories.join(', ')}`);
+                }
+            }
+
+            // Account Assignment Category validation against PO type rules
+            if (poRule && poRule.allowedAcctAssignmentCategories) {
+                const sAcctCat = item.AccountAssignmentCategory !== undefined && item.AccountAssignmentCategory !== null
+                    ? String(item.AccountAssignmentCategory).trim()
+                    : '';
+                if (!poRule.allowedAcctAssignmentCategories.includes(sAcctCat)) {
+                    addError(`${prefix}.AccountAssignmentCategory`, `Item ${itemNumber}: Account Assignment '${sAcctCat}' is not permitted for Document Type '${sDocType}'. Permitted: ${poRule.allowedAcctAssignmentCategories.filter(Boolean).join(', ') || 'None'}`);
+                }
             }
         });
     }

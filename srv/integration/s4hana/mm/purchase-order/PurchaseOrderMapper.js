@@ -95,6 +95,7 @@ function mapToS4Payload(header, items, options = {}) {
         PurchasingOrganization: header.PurchasingOrganization,
         PurchasingGroup: header.PurchasingGroup,
         Supplier: header.Supplier,
+        InvoicingParty: header.InvoicingParty || header.Supplier,
         DocumentCurrency: header.Currency,
         ...(poDateFormatted ? { PurchaseOrderDate: poDateFormatted } : {}),
         ...(header.IncotermsClassification ? { IncotermsClassification: header.IncotermsClassification } : {}),
@@ -105,21 +106,31 @@ function mapToS4Payload(header, items, options = {}) {
             const formattedQty = formatQuantity(item.OrderQuantity);
             const formattedPrice = formatPriceAmount(item.NetPriceAmount);
 
-            return {
+            // S/4HANA Gateway MM_PUR_PO_MAINT_V2_SRV only accepts item categories '0', '2', '3', '5'.
+            // For ZSTO, item category '7' (Stock Transfer) maps to '0' (Standard).
+            // For ZSER, item category '9' (Service) without child service lines maps to '0' (Standard).
+            let s4ItemCat = item.PurchaseOrderItemCategory;
+            if (s4ItemCat === '7' || (s4ItemCat === '9' && !item.to_PurOrdServiceLineTP)) {
+                s4ItemCat = '0';
+            }
+
+            const itemPayload = {
                 PurchaseOrderItem: formattedItemNo,
                 Material: item.Material,
                 Plant: item.Plant,
                 OrderQuantity: formattedQty,
                 PurchaseOrderQuantityUnit: item.UnitOfMeasure,
                 NetPriceAmount: formattedPrice,
+                NetPriceQuantity: item.NetPriceQuantity ? String(item.NetPriceQuantity) : '1',
                 RequisitionerName: options.user || item.RequisitionerName || defaultRequisitioner,
                 ...(item.PurchaseOrderItemText ? { PurchaseOrderItemText: item.PurchaseOrderItemText } : {}),
                 ...(item.StorageLocation ? { StorageLocation: item.StorageLocation } : {}),
                 ...(item.MaterialGroup ? { MaterialGroup: item.MaterialGroup } : {}),
-                ...(item.PurchaseOrderItemCategory ? { PurchaseOrderItemCategory: item.PurchaseOrderItemCategory } : {}),
+                ...(s4ItemCat ? { PurchaseOrderItemCategory: s4ItemCat } : {}),
                 ...(item.AccountAssignmentCategory ? { AccountAssignmentCategory: item.AccountAssignmentCategory } : {}),
                 ...(item.TaxCode ? { TaxCode: item.TaxCode } : {}),
                 ...(item.NetAmount ? { NetAmount: String(item.NetAmount) } : {}),
+                ...(item.IN_GSTControlCode ? { IN_GSTControlCode: String(item.IN_GSTControlCode) } : {}),
                 to_PurOrdScheduleLineTP: [
                     {
                         ScheduleLineOrderQuantity: formattedQty,
@@ -127,6 +138,20 @@ function mapToS4Payload(header, items, options = {}) {
                     }
                 ]
             };
+
+            // Map Account Assignment table if AccountAssignmentCategory or GLAccount/CostCenter is present
+            if (item.AccountAssignmentCategory || item.GLAccount || item.CostCenter) {
+                itemPayload.to_PurOrdAcctAssignmentTP = [
+                    {
+                        PurchaseOrderItem: formattedItemNo,
+                        AccountAssignmentNumber: '01',
+                        ...(item.GLAccount ? { GLAccount: String(item.GLAccount).trim() } : {}),
+                        ...(item.CostCenter ? { CostCenter: String(item.CostCenter).trim() } : {})
+                    }
+                ];
+            }
+
+            return itemPayload;
         })
     };
 

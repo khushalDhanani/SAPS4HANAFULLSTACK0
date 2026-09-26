@@ -43,7 +43,8 @@ function generateRulesContent(schema) {
 
         HEADER: SCHEMA.header,
         ITEM: SCHEMA.item,
-        ITEMS_LIST: SCHEMA.itemsList
+        ITEMS_LIST: SCHEMA.itemsList,
+        PO_TYPES: SCHEMA.poTypes || {}
     };
 
     if (typeof Object.freeze === "function") {
@@ -52,6 +53,9 @@ function generateRulesContent(schema) {
         Object.freeze(PurchaseOrderRules.HEADER);
         Object.freeze(PurchaseOrderRules.ITEM);
         Object.freeze(PurchaseOrderRules.ITEMS_LIST);
+        if (PurchaseOrderRules.PO_TYPES) {
+            Object.freeze(PurchaseOrderRules.PO_TYPES);
+        }
     }
 
     return PurchaseOrderRules;

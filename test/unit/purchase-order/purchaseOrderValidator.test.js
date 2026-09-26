@@ -119,17 +119,17 @@ describe('Unit: PurchaseOrderValidator', () => {
             const data = {
                 header: {
                     PurchaseOrderType: 'ZDOM',
-                    CompanyCode: '1010',
-                    PurchasingOrganization: '1010',
+                    CompanyCode: '1000',
+                    PurchasingOrganization: 'AE01',
                     PurchasingGroup: '001',
                     Supplier: '10300001',
-                    Currency: 'EUR',
+                    Currency: 'INR',
                     DocumentDate: '2026-09-24',
                     IncotermsClassification: 'EXW',
                     IncotermsLocation1: 'BERLIN'
                 },
                 items: [
-                    { Material: 'TG11', Plant: '1010', StorageLocation: '101A', UnitOfMeasure: 'PC', OrderQuantity: '10' }
+                    { Material: 'TG11', Plant: '1000', StorageLocation: '101A', UnitOfMeasure: 'PC', OrderQuantity: '10' }
                 ]
             };
             const errors = PurchaseOrderValidator.validateUI(data);
@@ -145,19 +145,19 @@ describe('Unit: PurchaseOrderValidator', () => {
                 hasError: false,
                 errors: {},
                 header: {
-                    PurchaseOrderType: 'ZDOM',
-                    CompanyCode: '1010',
-                    PurchasingOrganization: '1010',
+                    PurchaseOrderType: 'ZCAP',
+                    CompanyCode: '1000',
+                    PurchasingOrganization: 'AE01',
                     PurchasingGroup: '001',
                     Supplier: '10300001',
-                    Currency: 'EUR',
+                    Currency: 'INR',
                     DocumentDate: '2026-09-24'
                 },
                 items: [
                     {
                         PurchaseOrderItem: '10',
                         Material: 'TG11',
-                        Plant: '1010',
+                        Plant: '1000',
                         StorageLocation: '101A',
                         UnitOfMeasure: 'PC',
                         OrderQuantity: '10',

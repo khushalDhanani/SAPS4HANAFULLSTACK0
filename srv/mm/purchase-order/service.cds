@@ -97,6 +97,8 @@ service PurchaseOrderService {
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'Admin']) entity WBSElementVH as projection on external.I_WBSElementBasicDataStdVH;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'Admin']) entity InternalOrderVH as projection on external.I_InternalOrderStdVH;
     @readonly @(requires: ['Viewer', 'PurchasingManager', 'Admin']) entity PurchaseContractVH as projection on external.C_PurchaseContractValHelp;
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'Admin']) entity ItemCategoryVH as projection on external.I_PurgDocumentItemCategoryText where Language = 'EN';
+    @readonly @(requires: ['Viewer', 'PurchasingManager', 'Admin']) entity AcctAssignmentCategoryVH as projection on external.I_AcctAssignmentCategoryText where Language = 'EN';
 
     type POItem {
         PurchaseOrderItem: String;

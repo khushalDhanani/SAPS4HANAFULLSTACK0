@@ -157,18 +157,18 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
             const oDataCustom = {
                 header: {
                     PurchaseOrderType: 'ZDOM',
-                    CompanyCode: '1010',
-                    PurchasingOrganization: '1010',
+                    CompanyCode: '1000',
+                    PurchasingOrganization: 'AE01',
                     PurchasingGroup: '001',
                     Supplier: '10300001',
-                    Currency: 'USD',
+                    Currency: 'INR',
                     DocumentDate: '2026-09-05'
                 },
                 items: [
                     {
                         PurchaseOrderItem: '10',
                         Material: 'TG12',
-                        Plant: '1010',
+                        Plant: '1000',
                         StorageLocation: '101A',
                         UnitOfMeasure: 'PC',
                         OrderQuantity: '10',
@@ -339,18 +339,18 @@ describe('Unit: Create Purchase Order Status according to Document Type', () => 
 
         it('should pass and clear all error states when all header and item fields are valid', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
-            oModel.setProperty('/header/CompanyCode', '1010');
-            oModel.setProperty('/header/PurchasingOrganization', '1010');
+            oModel.setProperty('/header/CompanyCode', '1000');
+            oModel.setProperty('/header/PurchasingOrganization', 'AE01');
             oModel.setProperty('/header/PurchasingGroup', '001');
             oModel.setProperty('/header/Supplier', '10300001');
-            oModel.setProperty('/header/Currency', 'EUR');
+            oModel.setProperty('/header/Currency', 'INR');
             oModel.setProperty('/header/DocumentDate', '2026-09-07');
             oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
             oModel.setProperty('/items', [
                 {
                     PurchaseOrderItem: '10',
                     Material: 'TG11',
-                    Plant: '1010',
+                    Plant: '1000',
                     StorageLocation: '101A',
                     OrderQuantity: '5',
                     UnitOfMeasure: 'PC',

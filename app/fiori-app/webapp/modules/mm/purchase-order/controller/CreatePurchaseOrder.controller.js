@@ -13,6 +13,13 @@ sap.ui.define([
 ], function (BaseController, MessageBox, MessageToast, MessagePopover, MessageItem, BusyIndicator, Filter, FilterOperator, PurchaseOrderModel, ValueHelpService, PurchaseOrderService) {
     "use strict";
 
+    var PurchaseOrderRules = (PurchaseOrderModel && PurchaseOrderModel.rules) || null;
+    if (!PurchaseOrderRules && typeof require === "function") {
+        try {
+            PurchaseOrderRules = require("../model/PurchaseOrderRules");
+        } catch (e) {}
+    }
+
     return BaseController.extend("saps4hana.fiori.modules.mm.purchase-order.controller.CreatePurchaseOrder", {
         onInit: function () {
             PurchaseOrderModel.setTextResolver(this.getText.bind(this));
@@ -569,6 +576,9 @@ sap.ui.define([
 
             var sField = this._resolveSourceField(oSource);
             var oRowContext = typeof oSource.getBindingContext === "function" ? oSource.getBindingContext("newPO") : null;
+            var sDocType = oModel.getProperty("/header/PurchaseOrderType");
+            var sCleanDocType = sDocType ? String(sDocType).trim().toUpperCase() : "";
+            var oPoRule = (PurchaseOrderRules && PurchaseOrderRules.PO_TYPES && PurchaseOrderRules.PO_TYPES[sCleanDocType]) || null;
 
             if (oRowContext) {
                 // Line item row context
@@ -582,32 +592,80 @@ sap.ui.define([
                     if (sPurchOrg && String(sPurchOrg).trim() !== "") {
                         aFilters.push(new Filter("PurchasingOrganization", FilterOperator.EQ, String(sPurchOrg).trim()));
                     }
+                    if (oPoRule && oPoRule.allowedPlantPrefix) {
+                        aFilters.push(new Filter("Plant", FilterOperator.StartsWith, oPoRule.allowedPlantPrefix));
+                    }
+                } else if (sField === "PurchaseOrderItemCategory") {
+                    if (oPoRule && oPoRule.allowedItemCategories && oPoRule.allowedItemCategories.length > 0) {
+                        if (oPoRule.allowedItemCategories.length === 1) {
+                            aFilters.push(new Filter("PurchasingDocumentItemCategory", FilterOperator.EQ, oPoRule.allowedItemCategories[0]));
+                        } else {
+                            var aCatFilters = oPoRule.allowedItemCategories.map(function (c) {
+                                return new Filter("PurchasingDocumentItemCategory", FilterOperator.EQ, c);
+                            });
+                            aFilters.push(new Filter({ filters: aCatFilters, and: false }));
+                        }
+                    }
+                } else if (sField === "AccountAssignmentCategory") {
+                    if (oPoRule && oPoRule.allowedAcctAssignmentCategories && oPoRule.allowedAcctAssignmentCategories.length > 0) {
+                        if (oPoRule.allowedAcctAssignmentCategories.length === 1) {
+                            aFilters.push(new Filter("AccountAssignmentCategory", FilterOperator.EQ, oPoRule.allowedAcctAssignmentCategories[0]));
+                        } else {
+                            var aAcctFilters = oPoRule.allowedAcctAssignmentCategories.map(function (c) {
+                                return new Filter("AccountAssignmentCategory", FilterOperator.EQ, c);
+                            });
+                            aFilters.push(new Filter({ filters: aAcctFilters, and: false }));
+                        }
+                    }
                 }
             } else {
                 // Header fields
                 if (sField === "PurchaseOrderType" || sField === "PurchaseOrderTypeText") {
                     aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.StartsWith, "Z"));
                 } else if (sField === "CompanyCode") {
-                    var sDocTypeComp = oModel.getProperty("/header/PurchaseOrderType");
-                    if (sDocTypeComp && String(sDocTypeComp).trim().toUpperCase() === "ZDOM") {
-                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, "1000"));
+                    if (oPoRule && oPoRule.allowedCompanyCodes && oPoRule.allowedCompanyCodes.length > 0) {
+                        if (oPoRule.allowedCompanyCodes.length === 1) {
+                            aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, oPoRule.allowedCompanyCodes[0]));
+                        } else {
+                            var aCoFilters = oPoRule.allowedCompanyCodes.map(function (cc) {
+                                return new Filter("CompanyCode", FilterOperator.EQ, cc);
+                            });
+                            aFilters.push(new Filter({ filters: aCoFilters, and: false }));
+                        }
                     }
                 } else if (sField === "Supplier") {
                     var sCompanyCode = oModel.getProperty("/header/CompanyCode");
                     if (sCompanyCode && String(sCompanyCode).trim() !== "") {
                         aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
                     }
-                    var sDocType = oModel.getProperty("/header/PurchaseOrderType");
-                    var sCleanDocType = sDocType ? String(sDocType).trim().toUpperCase() : "";
-                    if (sCleanDocType === "ZDOM") {
-                        aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZDOM"));
-                    } else if (sCleanDocType === "ZSTO") {
-                        aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, "ZINT"));
+                    if (oPoRule && oPoRule.supplierAccountGroup) {
+                        aFilters.push(new Filter("SupplierAccountGroup", FilterOperator.EQ, oPoRule.supplierAccountGroup));
                     }
                 } else if (sField === "PurchasingOrganization") {
                     var sCompanyCode = oModel.getProperty("/header/CompanyCode");
                     if (sCompanyCode && String(sCompanyCode).trim() !== "") {
                         aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, String(sCompanyCode).trim()));
+                    }
+                    if (oPoRule && oPoRule.allowedPurchOrgs && oPoRule.allowedPurchOrgs.length > 0) {
+                        if (oPoRule.allowedPurchOrgs.length === 1) {
+                            aFilters.push(new Filter("PurchasingOrganization", FilterOperator.EQ, oPoRule.allowedPurchOrgs[0]));
+                        } else {
+                            var aPoFilters = oPoRule.allowedPurchOrgs.map(function (po) {
+                                return new Filter("PurchasingOrganization", FilterOperator.EQ, po);
+                            });
+                            aFilters.push(new Filter({ filters: aPoFilters, and: false }));
+                        }
+                    }
+                } else if (sField === "Currency") {
+                    if (oPoRule && oPoRule.allowedCurrencies && oPoRule.allowedCurrencies.length > 0) {
+                        if (oPoRule.allowedCurrencies.length === 1) {
+                            aFilters.push(new Filter("Currency", FilterOperator.EQ, oPoRule.allowedCurrencies[0]));
+                        } else {
+                            var aCurrFilters = oPoRule.allowedCurrencies.map(function (cu) {
+                                return new Filter("Currency", FilterOperator.EQ, cu);
+                            });
+                            aFilters.push(new Filter({ filters: aCurrFilters, and: false }));
+                        }
                     }
                 }
             }
@@ -616,7 +674,7 @@ sap.ui.define([
         },
 
         /**
-         * Re-applies active contextual filters (e.g. CompanyCode, SupplierAccountGroup for ZDOM/ZSTO)
+         * Re-applies active contextual filters (e.g. CompanyCode, SupplierAccountGroup)
          * to the inSupplier suggestion items binding so autocomplete suggestions strictly reflect
          * the current document type context.
          * @private
@@ -633,9 +691,8 @@ sap.ui.define([
         },
 
         /**
-         * Re-applies active contextual filters (e.g. CompanyCode eq 1000 for ZDOM)
-         * to the inCompanyCode suggestion items binding so autocomplete suggestions strictly reflect
-         * the current document type context.
+         * Re-applies active contextual filters
+         * to the inCompanyCode suggestion items binding.
          * @private
          */
         _refreshCompanyCodeBinding: function () {
@@ -650,19 +707,50 @@ sap.ui.define([
         },
 
         /**
+         * Re-applies active contextual filters to Purchasing Org suggestion items.
+         * @private
+         */
+        _refreshPurchOrgBinding: function () {
+            var oPurchOrgInput = typeof this.byId === "function" ? this.byId("inPurchOrg") : null;
+            if (oPurchOrgInput && typeof oPurchOrgInput.getBinding === "function") {
+                var oBinding = oPurchOrgInput.getBinding("suggestionItems");
+                if (oBinding && typeof oBinding.filter === "function") {
+                    var aFilters = this._buildContextFilters(oPurchOrgInput);
+                    oBinding.filter(aFilters);
+                }
+            }
+        },
+
+        /**
+         * Re-applies active contextual filters to Currency suggestion items.
+         * @private
+         */
+        _refreshCurrencyBinding: function () {
+            var oCurrencyInput = typeof this.byId === "function" ? this.byId("inCurrency") : null;
+            if (oCurrencyInput && typeof oCurrencyInput.getBinding === "function") {
+                var oBinding = oCurrencyInput.getBinding("suggestionItems");
+                if (oBinding && typeof oBinding.filter === "function") {
+                    var aFilters = this._buildContextFilters(oCurrencyInput);
+                    oBinding.filter(aFilters);
+                }
+            }
+        },
+
+        /**
          * Checks supplier and company validity against the newly selected document type.
-         * If ZDOM is selected and the supplier is known to be non-domestic, displays a warning.
-         * If ZDOM is selected and the company code is not 1000, displays a warning.
-         * If ZSTO is selected and the supplier is not an internal plant (ZINT), displays a warning.
+         * Enforces configuration-driven checks from PurchaseOrderRules.PO_TYPES.
          * @param {string} sDocType
          * @private
          */
         _onDocTypeSelectedCheck: function (sDocType) {
             this._refreshSupplierBinding();
             this._refreshCompanyCodeBinding();
+            this._refreshPurchOrgBinding();
+            this._refreshCurrencyBinding();
             var oModel = this.getView().getModel("newPO");
             if (!oModel) return;
             var sCleanDocType = String(sDocType || "").trim().toUpperCase();
+
             if (sCleanDocType === "ZDOM") {
                 var sExistingSupplier = oModel.getProperty("/header/Supplier");
                 var sExistingAccountGroup = oModel.getProperty("/header/SupplierAccountGroup");
@@ -693,6 +781,50 @@ sap.ui.define([
                         "Warning",
                         this.getText("poValSupplierNotInternalPlant", null, "Selected supplier is not an internal plant. Please choose an internal plant / site for document type ZSTO.")
                     );
+                }
+            } else {
+                var oPoRule = (PurchaseOrderRules && PurchaseOrderRules.PO_TYPES && PurchaseOrderRules.PO_TYPES[sCleanDocType]) || null;
+                if (oPoRule) {
+                    var sExistingSupplierGen = oModel.getProperty("/header/Supplier");
+                    var sExistingAccountGroupGen = oModel.getProperty("/header/SupplierAccountGroup");
+                    if (sExistingSupplierGen && oPoRule.supplierAccountGroup && sExistingAccountGroupGen && sExistingAccountGroupGen !== oPoRule.supplierAccountGroup) {
+                        PurchaseOrderModel.setFieldValidation(
+                            oModel,
+                            "Supplier",
+                            "Warning",
+                            this.getText("poValSupplierAccountGroupMismatch", [oPoRule.supplierAccountGroup], "Selected supplier account group (" + sExistingAccountGroupGen + ") does not match required group " + oPoRule.supplierAccountGroup + " for " + sCleanDocType + ".")
+                        );
+                    }
+
+                    var sExistingCoCodeGen = oModel.getProperty("/header/CompanyCode");
+                    if (sExistingCoCodeGen && oPoRule.allowedCompanyCodes && !oPoRule.allowedCompanyCodes.includes(sExistingCoCodeGen)) {
+                        PurchaseOrderModel.setFieldValidation(
+                            oModel,
+                            "CompanyCode",
+                            "Warning",
+                            this.getText("poValCompanyCodeMismatch", [sCleanDocType, oPoRule.allowedCompanyCodes.join(", ")], "Selected Company Code " + sExistingCoCodeGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ").")
+                        );
+                    }
+
+                    var sExistingPurchOrgGen = oModel.getProperty("/header/PurchasingOrganization");
+                    if (sExistingPurchOrgGen && oPoRule.allowedPurchOrgs && !oPoRule.allowedPurchOrgs.includes(sExistingPurchOrgGen)) {
+                        PurchaseOrderModel.setFieldValidation(
+                            oModel,
+                            "PurchasingOrganization",
+                            "Warning",
+                            this.getText("poValPurchOrgMismatch", [sCleanDocType, oPoRule.allowedPurchOrgs.join(", ")], "Selected Purchasing Org " + sExistingPurchOrgGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedPurchOrgs.join(", ") + ").")
+                        );
+                    }
+
+                    var sExistingCurrencyGen = oModel.getProperty("/header/Currency");
+                    if (sExistingCurrencyGen && oPoRule.allowedCurrencies && !oPoRule.allowedCurrencies.includes(sExistingCurrencyGen)) {
+                        PurchaseOrderModel.setFieldValidation(
+                            oModel,
+                            "Currency",
+                            "Warning",
+                            this.getText("poValCurrencyMismatch", [sCleanDocType, oPoRule.allowedCurrencies.join(", ")], "Selected Currency " + sExistingCurrencyGen + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCurrencies.join(", ") + ").")
+                        );
+                    }
                 }
             }
         },
@@ -742,6 +874,8 @@ sap.ui.define([
                     case "Plant":
                     case "StorageLocation":
                     case "TaxCode":
+                    case "PurchaseOrderItemCategory":
+                    case "AccountAssignmentCategory":
                         oModel.setProperty(sRowPath + "/" + sField, sKey);
                         oModel.setProperty(sRowPath + "/errors/" + sField, { state: "None", text: "" });
                         this.onItemFieldChange();

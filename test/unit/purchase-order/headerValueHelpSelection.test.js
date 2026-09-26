@@ -870,8 +870,8 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(filters[1].sValue).toBe('ZDOM');
         });
 
-        it('should NOT add SupplierAccountGroup filter for inSupplier when docType is not ZDOM (e.g. ZINT)', () => {
-            oModel.setProperty('/header/PurchaseOrderType', 'ZINT');
+        it('should NOT add SupplierAccountGroup filter for inSupplier when docType has no supplier restriction (e.g. ZLOG)', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'ZLOG');
             oModel.setProperty('/header/CompanyCode', '1000');
 
             const mockSource = {
@@ -975,8 +975,8 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(filters[0].sValue).toBe('1000');
         });
 
-        it('should NOT add CompanyCode filter for inCompanyCode when docType is not ZDOM (e.g. ZINT)', () => {
-            oModel.setProperty('/header/PurchaseOrderType', 'ZINT');
+        it('should NOT add CompanyCode filter for inCompanyCode when docType is unconstrained (e.g. NB)', () => {
+            oModel.setProperty('/header/PurchaseOrderType', 'NB');
 
             const mockSource = {
                 getId: () => 'inCompanyCode',

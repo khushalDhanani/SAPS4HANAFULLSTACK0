@@ -17,7 +17,9 @@ const FS_VALUE_HELP_ENTITIES = [
     'FixedAssetVH',
     'WBSElementVH',
     'InternalOrderVH',
-    'PurchaseContractVH'
+    'PurchaseContractVH',
+    'ItemCategoryVH',
+    'AcctAssignmentCategoryVH'
 ];
 
 const MAINT_VALUE_HELP_ENTITIES = [

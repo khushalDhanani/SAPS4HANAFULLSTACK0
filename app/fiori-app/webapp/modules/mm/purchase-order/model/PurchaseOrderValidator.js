@@ -160,6 +160,10 @@
                 return ["Invalid Purchase Order data."];
             }
 
+            var sDocType = oData.header.PurchaseOrderType;
+            var sCleanDocType = sDocType ? String(sDocType).trim().toUpperCase() : "";
+            var oPoRule = (_rules && _rules.PO_TYPES && _rules.PO_TYPES[sCleanDocType]) || null;
+
             // 1. Header Validation
             if (!oData.header.PurchaseOrderType) aErrors.push("Document Type is required.");
             if (!oData.header.CompanyCode) aErrors.push("Company Code is required.");
@@ -169,6 +173,18 @@
             if (!oData.header.Currency) aErrors.push("Currency is required.");
             if (!oData.header.DocumentDate) aErrors.push("Document Date is required.");
 
+            if (oPoRule) {
+                if (oPoRule.allowedCompanyCodes && oData.header.CompanyCode && !oPoRule.allowedCompanyCodes.includes(oData.header.CompanyCode)) {
+                    aErrors.push("Company Code " + oData.header.CompanyCode + " is not permitted for Document Type " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ").");
+                }
+                if (oPoRule.allowedPurchOrgs && oData.header.PurchasingOrganization && !oPoRule.allowedPurchOrgs.includes(oData.header.PurchasingOrganization)) {
+                    aErrors.push("Purchasing Organization " + oData.header.PurchasingOrganization + " is not permitted for Document Type " + sCleanDocType + " (Allowed: " + oPoRule.allowedPurchOrgs.join(", ") + ").");
+                }
+                if (oPoRule.allowedCurrencies && oData.header.Currency && !oPoRule.allowedCurrencies.includes(oData.header.Currency)) {
+                    aErrors.push("Currency " + oData.header.Currency + " is not permitted for Document Type " + sCleanDocType + " (Allowed: " + oPoRule.allowedCurrencies.join(", ") + ").");
+                }
+            }
+
             if (oData.header.IncotermsClassification && !oData.header.IncotermsLocation1) {
                 aErrors.push("Incoterms Location is required when Incoterms is specified.");
             }
@@ -177,16 +193,35 @@
             if (!oData.items || oData.items.length === 0) {
                 aErrors.push("Please add at least one line item.");
             } else {
+                var bMaterialRequired = oPoRule ? oPoRule.materialRequired !== false : true;
                 oData.items.forEach(function (item, idx) {
                     var sItemNo = item.PurchaseOrderItem || "Item #" + (idx + 1);
-                    if (!item.Material) aErrors.push(sItemNo + ": Material is required.");
+                    if (bMaterialRequired && !item.Material) {
+                        aErrors.push(sItemNo + ": Material is required.");
+                    } else if (!bMaterialRequired && !item.Material && (!item.PurchaseOrderItemText || !String(item.PurchaseOrderItemText).trim())) {
+                        aErrors.push(sItemNo + ": Short Text (Description) is required when Material is omitted.");
+                    }
+
+                    var bStorageLocationRequired = oPoRule ? oPoRule.storageLocationRequired !== false : true;
                     if (!item.Plant) aErrors.push(sItemNo + ": Plant is required.");
-                    if (!item.StorageLocation) aErrors.push(sItemNo + ": Storage Location is required.");
+                    if (bStorageLocationRequired && !item.StorageLocation) aErrors.push(sItemNo + ": Storage Location is required.");
                     if (!item.UnitOfMeasure) aErrors.push(sItemNo + ": Unit of Measure is required.");
 
                     var fQty = parseFloat(item.OrderQuantity);
                     if (!item.OrderQuantity || isNaN(fQty) || fQty <= 0) {
                         aErrors.push(sItemNo + ": Order Quantity must be greater than 0.");
+                    }
+
+                    if (oPoRule) {
+                        if (oPoRule.allowedPlantPrefix && item.Plant && !String(item.Plant).startsWith(oPoRule.allowedPlantPrefix)) {
+                            aErrors.push(sItemNo + ": Plant " + item.Plant + " must start with '" + oPoRule.allowedPlantPrefix + "' for Document Type " + sCleanDocType + ".");
+                        }
+                        if (oPoRule.allowedItemCategories && item.PurchaseOrderItemCategory && !oPoRule.allowedItemCategories.includes(item.PurchaseOrderItemCategory)) {
+                            aErrors.push(sItemNo + ": Item Category " + item.PurchaseOrderItemCategory + " is not allowed for Document Type " + sCleanDocType + " (Allowed: " + oPoRule.allowedItemCategories.join(", ") + ").");
+                        }
+                        if (oPoRule.allowedAcctAssignmentCategories && item.AccountAssignmentCategory && !oPoRule.allowedAcctAssignmentCategories.includes(item.AccountAssignmentCategory)) {
+                            aErrors.push(sItemNo + ": Account Assignment Category " + item.AccountAssignmentCategory + " is not allowed for Document Type " + sCleanDocType + " (Allowed: " + oPoRule.allowedAcctAssignmentCategories.join(", ") + ").");
+                        }
                     }
                 });
             }
@@ -211,6 +246,10 @@
             var oData = typeof oModel.getData === "function" ? oModel.getData() : oModel;
             var oState = { state: "None", text: "" };
 
+            var sDocType = (oData && oData.header && oData.header.PurchaseOrderType) || "";
+            var sCleanDocType = String(sDocType || "").trim().toUpperCase();
+            var oPoRule = (_rules && _rules.PO_TYPES && _rules.PO_TYPES[sCleanDocType]) || null;
+
             if (iItemIndex === undefined || iItemIndex === null) {
                 // Header field validation
                 var oHeader = oData.header || {};
@@ -223,10 +262,18 @@
                         oState = { state: oDocResult.state, text: oDocResult.text };
                         break;
                     case "CompanyCode":
-                        if (!sValTrim) oState = { state: "Error", text: fnResolve("poValCompanyCodeRequired", null, "Company Code is required (4-character code, e.g. 1010).") };
+                        if (!sValTrim) {
+                            oState = { state: "Error", text: fnResolve("poValCompanyCodeRequired", null, "Company Code is required (4-character code, e.g. 1010).") };
+                        } else if (oPoRule && oPoRule.allowedCompanyCodes && !oPoRule.allowedCompanyCodes.includes(sValTrim)) {
+                            oState = { state: "Error", text: "Company Code " + sValTrim + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ")." };
+                        }
                         break;
                     case "PurchasingOrganization":
-                        if (!sValTrim) oState = { state: "Error", text: fnResolve("poValPurchOrgRequired", null, "Purchasing Organization is required (e.g. 1010).") };
+                        if (!sValTrim) {
+                            oState = { state: "Error", text: fnResolve("poValPurchOrgRequired", null, "Purchasing Organization is required (e.g. 1010).") };
+                        } else if (oPoRule && oPoRule.allowedPurchOrgs && !oPoRule.allowedPurchOrgs.includes(sValTrim)) {
+                            oState = { state: "Error", text: "Purchasing Organization " + sValTrim + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedPurchOrgs.join(", ") + ")." };
+                        }
                         break;
                     case "PurchasingGroup":
                         if (!sValTrim) oState = { state: "Error", text: fnResolve("poValPurchGrpRequired", null, "Purchasing Group is required (3-character code, e.g. 001).") };
@@ -239,6 +286,8 @@
                             oState = { state: "Error", text: fnResolve("poValCurrencyRequired", null, "Currency is required (e.g. EUR, USD).") };
                         } else if (!CURRENCY_REGEX.test(sValTrim)) {
                             oState = { state: "Error", text: fnResolve("poValCurrencyIso", null, "Currency must be a 3-letter ISO code (e.g. EUR).") };
+                        } else if (oPoRule && oPoRule.allowedCurrencies && !oPoRule.allowedCurrencies.includes(sValTrim)) {
+                            oState = { state: "Error", text: "Currency " + sValTrim + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCurrencies.join(", ") + ")." };
                         }
                         break;
                     case "DocumentDate":
@@ -274,16 +323,31 @@
                     var iVal = sValue !== undefined ? sValue : (oItem[sField] || "");
                     var sItemValTrim = String(iVal || "").trim();
                     var sItemNo = oItem.PurchaseOrderItem || "Item #" + (iItemIndex + 1);
+                    var bMaterialRequired = oPoRule ? oPoRule.materialRequired !== false : true;
 
                     switch (sField) {
                         case "Material":
-                            if (!sItemValTrim) oState = { state: "Error", text: fnResolve("poValItemMaterialRequired", [sItemNo], sItemNo + ": Material is required (e.g. TG11).") };
+                            if (bMaterialRequired && !sItemValTrim) {
+                                oState = { state: "Error", text: fnResolve("poValItemMaterialRequired", [sItemNo], sItemNo + ": Material is required (e.g. TG11).") };
+                            }
+                            break;
+                        case "PurchaseOrderItemText":
+                            if (!bMaterialRequired && !oItem.Material && !sItemValTrim) {
+                                oState = { state: "Error", text: sItemNo + ": Short Text (Description) is required when Material is omitted." };
+                            }
                             break;
                         case "Plant":
-                            if (!sItemValTrim) oState = { state: "Error", text: fnResolve("poValItemPlantRequired", [sItemNo], sItemNo + ": Plant is required (e.g. 1010).") };
+                            if (!sItemValTrim) {
+                                oState = { state: "Error", text: fnResolve("poValItemPlantRequired", [sItemNo], sItemNo + ": Plant is required (e.g. 1010).") };
+                            } else if (oPoRule && oPoRule.allowedPlantPrefix && !sItemValTrim.startsWith(oPoRule.allowedPlantPrefix)) {
+                                oState = { state: "Error", text: sItemNo + ": Plant " + sItemValTrim + " must start with '" + oPoRule.allowedPlantPrefix + "' for " + sCleanDocType + "." };
+                            }
                             break;
                         case "StorageLocation":
-                            if (!sItemValTrim) oState = { state: "Error", text: fnResolve("poValItemStorageLocRequired", [sItemNo], sItemNo + ": Storage Location is required (e.g. 101A).") };
+                            var bStorageLocReq = oPoRule ? oPoRule.storageLocationRequired !== false : true;
+                            if (bStorageLocReq && !sItemValTrim) {
+                                oState = { state: "Error", text: fnResolve("poValItemStorageLocRequired", [sItemNo], sItemNo + ": Storage Location is required (e.g. 101A).") };
+                            }
                             break;
                         case "UnitOfMeasure":
                             if (!sItemValTrim) oState = { state: "Error", text: fnResolve("poValItemUnitRequired", [sItemNo], sItemNo + ": Unit of Measure is required (e.g. PC).") };
@@ -305,6 +369,16 @@
                         case "TaxCode":
                             if (sItemValTrim.length > TAX_CODE_MAX_LEN) {
                                 oState = { state: "Error", text: fnResolve("poValItemTaxCodeMaxLen", [sItemNo], sItemNo + ": Tax Code must not exceed " + TAX_CODE_MAX_LEN + " characters.") };
+                            }
+                            break;
+                        case "PurchaseOrderItemCategory":
+                            if (oPoRule && oPoRule.allowedItemCategories && sItemValTrim && !oPoRule.allowedItemCategories.includes(sItemValTrim)) {
+                                oState = { state: "Error", text: sItemNo + ": Item Category " + sItemValTrim + " is not allowed for " + sCleanDocType + " (Allowed: " + oPoRule.allowedItemCategories.join(", ") + ")." };
+                            }
+                            break;
+                        case "AccountAssignmentCategory":
+                            if (oPoRule && oPoRule.allowedAcctAssignmentCategories && sItemValTrim && !oPoRule.allowedAcctAssignmentCategories.includes(sItemValTrim)) {
+                                oState = { state: "Error", text: sItemNo + ": Account Assignment Category " + sItemValTrim + " is not allowed for " + sCleanDocType + " (Allowed: " + oPoRule.allowedAcctAssignmentCategories.join(", ") + ")." };
                             }
                             break;
                         default:
@@ -345,6 +419,10 @@
             var oHeader = oData.header || {};
             var aItems = oData.items || [];
             var aErrorList = [];
+
+            var sDocType = oHeader.PurchaseOrderType;
+            var sCleanDocType = sDocType ? String(sDocType).trim().toUpperCase() : "";
+            var oPoRule = (_rules && _rules.PO_TYPES && _rules.PO_TYPES[sCleanDocType]) || null;
 
             // Header errors
             var oHeaderErrors = {
@@ -391,6 +469,16 @@
                     description: fnResolve("poValSummaryCoCodeDesc", null, "Specify an active 4-character Company Code (e.g. 1010) registered in your SAP organization."),
                     controlId: "inCompanyCode"
                 });
+            } else if (oPoRule && oPoRule.allowedCompanyCodes && !oPoRule.allowedCompanyCodes.includes(String(oHeader.CompanyCode).trim())) {
+                var sCoErr = "Company Code " + oHeader.CompanyCode + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ").";
+                oHeaderErrors.CompanyCode = { state: "Error", text: sCoErr };
+                aErrorList.push({
+                    type: "Error",
+                    title: sCoErr,
+                    field: "General Data / Company Code",
+                    description: "Select an eligible Company Code for document type " + sCleanDocType + ".",
+                    controlId: "inCompanyCode"
+                });
             }
             if (!oHeader.PurchasingOrganization || !String(oHeader.PurchasingOrganization).trim()) {
                 oHeaderErrors.PurchasingOrganization = { state: "Error", text: fnResolve("poValPurchOrgRequired", null, "Purchasing Organization is required (e.g. 1010).") };
@@ -399,6 +487,16 @@
                     title: fnResolve("poValSummaryPurchOrgReq", null, "Purchasing Organization is required."),
                     field: "General Data / Purchasing Org",
                     description: fnResolve("poValSummaryPurchOrgDesc", null, "Enter a valid Purchasing Organization responsible for this procurement document."),
+                    controlId: "inPurchOrg"
+                });
+            } else if (oPoRule && oPoRule.allowedPurchOrgs && !oPoRule.allowedPurchOrgs.includes(String(oHeader.PurchasingOrganization).trim())) {
+                var sPoErr = "Purchasing Organization " + oHeader.PurchasingOrganization + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedPurchOrgs.join(", ") + ").";
+                oHeaderErrors.PurchasingOrganization = { state: "Error", text: sPoErr };
+                aErrorList.push({
+                    type: "Error",
+                    title: sPoErr,
+                    field: "General Data / Purchasing Org",
+                    description: "Select an eligible Purchasing Organization for document type " + sCleanDocType + ".",
                     controlId: "inPurchOrg"
                 });
             }
@@ -438,6 +536,16 @@
                     title: fnResolve("poValCurrencyIso", null, "Currency must be a 3-letter ISO code (e.g. EUR)."),
                     field: "Supplier & Commercial Terms / Currency",
                     description: fnResolve("poValSummaryCurrencyDesc", null, "Use an authorized ISO currency code (e.g. EUR, USD, INR)."),
+                    controlId: "inCurrency"
+                });
+            } else if (oPoRule && oPoRule.allowedCurrencies && !oPoRule.allowedCurrencies.includes(String(oHeader.Currency).trim())) {
+                var sCurrErr = "Currency " + oHeader.Currency + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCurrencies.join(", ") + ").";
+                oHeaderErrors.Currency = { state: "Error", text: sCurrErr };
+                aErrorList.push({
+                    type: "Error",
+                    title: sCurrErr,
+                    field: "Supplier & Commercial Terms / Currency",
+                    description: "Select an authorized currency for document type " + sCleanDocType + ".",
                     controlId: "inCurrency"
                 });
             }
@@ -501,18 +609,22 @@
                     controlId: "poItemsTable"
                 });
             } else {
+                var bMaterialRequired = oPoRule ? oPoRule.materialRequired !== false : true;
                 aItems.forEach(function (item, idx) {
                     var sItemNo = item.PurchaseOrderItem || "Item #" + (idx + 1);
                     item.errors = item.errors || {};
                     item.errors.Plant = { state: "None", text: "" };
                     item.errors.StorageLocation = { state: "None", text: "" };
                     item.errors.Material = { state: "None", text: "" };
+                    item.errors.PurchaseOrderItemText = { state: "None", text: "" };
                     item.errors.OrderQuantity = { state: "None", text: "" };
                     item.errors.UnitOfMeasure = { state: "None", text: "" };
                     item.errors.NetPriceAmount = { state: "None", text: "" };
                     item.errors.TaxCode = { state: "None", text: "" };
+                    item.errors.PurchaseOrderItemCategory = { state: "None", text: "" };
+                    item.errors.AccountAssignmentCategory = { state: "None", text: "" };
 
-                    if (!item.Material || !String(item.Material).trim()) {
+                    if (bMaterialRequired && (!item.Material || !String(item.Material).trim())) {
                         item.errors.Material = { state: "Error", text: fnResolve("poValMaterialRequired", null, "Material is required.") };
                         aErrorList.push({
                             type: "Error",
@@ -523,7 +635,19 @@
                             cellIndex: 3,
                             controlId: "poItemsTable"
                         });
+                    } else if (!bMaterialRequired && !item.Material && (!item.PurchaseOrderItemText || !String(item.PurchaseOrderItemText).trim())) {
+                        item.errors.PurchaseOrderItemText = { state: "Error", text: "Short Text (Description) is required when Material is omitted." };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sItemNo + ": Short Text (Description) is required.",
+                            field: sItemNo + " / Description",
+                            description: "Enter a descriptive short text for this service/blanket line item.",
+                            itemIndex: idx,
+                            cellIndex: 4,
+                            controlId: "poItemsTable"
+                        });
                     }
+
                     if (!item.Plant || !String(item.Plant).trim()) {
                         item.errors.Plant = { state: "Error", text: fnResolve("poValItemPlantRequired", [""], "Plant is required.") };
                         aErrorList.push({
@@ -535,7 +659,20 @@
                             cellIndex: 1,
                             controlId: "poItemsTable"
                         });
+                    } else if (oPoRule && oPoRule.allowedPlantPrefix && !String(item.Plant).trim().startsWith(oPoRule.allowedPlantPrefix)) {
+                        var sPlantErr = sItemNo + ": Plant " + item.Plant + " must start with '" + oPoRule.allowedPlantPrefix + "' for " + sCleanDocType + ".";
+                        item.errors.Plant = { state: "Error", text: sPlantErr };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sPlantErr,
+                            field: sItemNo + " / Plant",
+                            description: "Select a plant matching the company code / plant prefix for " + sCleanDocType + ".",
+                            itemIndex: idx,
+                            cellIndex: 1,
+                            controlId: "poItemsTable"
+                        });
                     }
+
                     if (!item.StorageLocation || !String(item.StorageLocation).trim()) {
                         item.errors.StorageLocation = { state: "Error", text: fnResolve("poValItemStorageLocRequired", [""], "Storage Location is required.") };
                         aErrorList.push({
@@ -597,6 +734,33 @@
                             description: "Enter a " + TAX_CODE_MAX_LEN + "-character SAP tax code (e.g. V1, I0).",
                             itemIndex: idx,
                             cellIndex: 7,
+                            controlId: "poItemsTable"
+                        });
+                    }
+
+                    if (oPoRule && oPoRule.allowedItemCategories && item.PurchaseOrderItemCategory && !oPoRule.allowedItemCategories.includes(String(item.PurchaseOrderItemCategory).trim())) {
+                        var sCatErr = sItemNo + ": Item Category " + item.PurchaseOrderItemCategory + " is not allowed for " + sCleanDocType + " (Allowed: " + oPoRule.allowedItemCategories.join(", ") + ").";
+                        item.errors.PurchaseOrderItemCategory = { state: "Error", text: sCatErr };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sCatErr,
+                            field: sItemNo + " / Item Category",
+                            description: "Choose an authorized item category for " + sCleanDocType + ".",
+                            itemIndex: idx,
+                            cellIndex: 1,
+                            controlId: "poItemsTable"
+                        });
+                    }
+                    if (oPoRule && oPoRule.allowedAcctAssignmentCategories && item.AccountAssignmentCategory && !oPoRule.allowedAcctAssignmentCategories.includes(String(item.AccountAssignmentCategory).trim())) {
+                        var sAcctErr = sItemNo + ": Account Assignment Category " + item.AccountAssignmentCategory + " is not allowed for " + sCleanDocType + " (Allowed: " + oPoRule.allowedAcctAssignmentCategories.join(", ") + ").";
+                        item.errors.AccountAssignmentCategory = { state: "Error", text: sAcctErr };
+                        aErrorList.push({
+                            type: "Error",
+                            title: sAcctErr,
+                            field: sItemNo + " / Account Assignment",
+                            description: "Choose an authorized account assignment category for " + sCleanDocType + ".",
+                            itemIndex: idx,
+                            cellIndex: 2,
                             controlId: "poItemsTable"
                         });
                     }

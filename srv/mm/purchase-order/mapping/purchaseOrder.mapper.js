@@ -33,6 +33,7 @@ function normalizePurchaseOrderData(data, context = {}) {
         PurchasingOrganization: String(data.header.PurchasingOrganization || '').trim(),
         PurchasingGroup: String(data.header.PurchasingGroup || '').trim(),
         Supplier: String(data.header.Supplier || '').trim(),
+        InvoicingParty: data.header.InvoicingParty ? String(data.header.InvoicingParty).trim() : undefined,
         Currency: String(data.header.Currency || '').trim().toUpperCase(),
         DocumentDate: data.header.DocumentDate ? String(data.header.DocumentDate).trim() : new Date().toISOString().split('T')[0],
         IncotermsClassification: data.header.IncotermsClassification ? String(data.header.IncotermsClassification).trim() : undefined,
@@ -69,11 +70,16 @@ function normalizePurchaseOrderData(data, context = {}) {
             OrderQuantity: String(item.OrderQuantity).trim(),
             UnitOfMeasure: unitOfMeasure,
             NetPriceAmount: price.toFixed(2),
+            NetPriceQuantity: item.NetPriceQuantity ? String(item.NetPriceQuantity).trim() : '1',
             NetAmount: calculatedNetAmount,
             RequisitionerName: itemRequisitioner,
+            PurchaseOrderItemText: item.PurchaseOrderItemText ? String(item.PurchaseOrderItemText).trim() : undefined,
             MaterialGroup: item.MaterialGroup ? String(item.MaterialGroup).trim() : undefined,
             PurchaseOrderItemCategory: item.PurchaseOrderItemCategory ? String(item.PurchaseOrderItemCategory).trim() : undefined,
             AccountAssignmentCategory: item.AccountAssignmentCategory ? String(item.AccountAssignmentCategory).trim() : undefined,
+            GLAccount: item.GLAccount ? String(item.GLAccount).trim() : undefined,
+            CostCenter: item.CostCenter ? String(item.CostCenter).trim() : undefined,
+            IN_GSTControlCode: item.IN_GSTControlCode ? String(item.IN_GSTControlCode).trim() : undefined,
             TaxCode: item.TaxCode ? String(item.TaxCode).trim() : undefined
         };
     });

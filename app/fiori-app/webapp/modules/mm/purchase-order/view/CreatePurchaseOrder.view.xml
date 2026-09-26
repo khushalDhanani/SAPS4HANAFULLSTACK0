@@ -229,20 +229,40 @@
                         delete=".onDeleteItem">
                         <columns>
                             <Column width="4rem"><Text text="{i18n>poColItem}" /></Column>
-                            <Column width="9rem"><Text text="{i18n>poColPlant}" /></Column>
-                            <Column width="9rem"><Text text="{i18n>poColStorageLocation}" /></Column>
-                            <Column width="11rem"><Text text="{i18n>poColMaterial}" /></Column>
+                            <Column width="6.5rem"><Text text="{i18n>poColItemCategory}" /></Column>
+                            <Column width="6.5rem"><Text text="{i18n>poColAccountAssignmentCategory}" /></Column>
+                            <Column width="8.5rem"><Text text="{i18n>poColPlant}" /></Column>
+                            <Column width="8.5rem"><Text text="{i18n>poColStorageLocation}" /></Column>
+                            <Column width="10rem"><Text text="{i18n>poColMaterial}" /></Column>
                             <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>poColDescription}" /></Column>
                             <Column width="7rem" hAlign="End"><Text text="{i18n>poColQuantity}" /></Column>
-                            <Column width="6rem"><Text text="{i18n>poColUnit}" /></Column>
+                            <Column width="5.5rem"><Text text="{i18n>poColUnit}" /></Column>
                             <Column width="7.5rem" hAlign="End"><Text text="{i18n>poColNetPrice}" /></Column>
-                            <Column width="6.5rem"><Text text="{i18n>poColTaxCode}" /></Column>
-                            <Column width="10rem" hAlign="End"><Text text="{i18n>poColNetAmount}" tooltip="{i18n>poTooltipNetAmountEst}" /></Column>
+                            <Column width="6rem"><Text text="{i18n>poColTaxCode}" /></Column>
+                            <Column width="9.5rem" hAlign="End"><Text text="{i18n>poColNetAmount}" tooltip="{i18n>poTooltipNetAmountEst}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
                                 <cells>
-                                     <Text text="{newPO>PurchaseOrderItem}" />
+                                    <Text text="{newPO>PurchaseOrderItem}" />
+                                    <Input app:field="PurchaseOrderItemCategory" value="{newPO>PurchaseOrderItemCategory}" placeholder="{i18n>poPlaceholderItemCat}" maxLength="1"
+                                        valueState="{newPO>errors/PurchaseOrderItemCategory/state}"
+                                        valueStateText="{newPO>errors/PurchaseOrderItemCategory/text}"
+                                        change=".onItemFieldChange" liveChange=".onItemFieldChange"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/ItemCategoryVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{PurchasingDocumentItemCategory}" text="{PurchasingDocumentItemCategory}" additionalText="{PurchasingDocumentItemCat_Text}" />
+                                        </suggestionItems>
+                                    </Input>
+                                    <Input app:field="AccountAssignmentCategory" value="{newPO>AccountAssignmentCategory}" placeholder="{i18n>poPlaceholderAcctAssgt}" maxLength="1"
+                                        valueState="{newPO>errors/AccountAssignmentCategory/state}"
+                                        valueStateText="{newPO>errors/AccountAssignmentCategory/text}"
+                                        change=".onItemFieldChange" liveChange=".onItemFieldChange"
+                                        showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/AcctAssignmentCategoryVH', templateShareable: false}">
+                                        <suggestionItems>
+                                            <core:ListItem key="{AccountAssignmentCategory}" text="{AccountAssignmentCategory}" additionalText="{AccountAssignmentCategory_Text}" />
+                                        </suggestionItems>
+                                    </Input>
                                     <Input app:field="Plant" value="{newPO>Plant}" placeholder="{i18n>poPlaceholderPlant}" required="true"
                                         valueState="{newPO>errors/Plant/state}"
                                         valueStateText="{newPO>errors/Plant/text}"
@@ -252,7 +272,7 @@
                                             <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input app:field="StorageLocation" value="{newPO>StorageLocation}" placeholder="{i18n>poPlaceholderStorageLocation}" required="true"
+                                    <Input app:field="StorageLocation" value="{newPO>StorageLocation}" placeholder="{i18n>poPlaceholderStorageLocation}" required="{= ${newPO>/uiRules/storageLocationRequired} !== false }"
                                         valueState="{newPO>errors/StorageLocation/state}"
                                         valueStateText="{newPO>errors/StorageLocation/text}"
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
@@ -261,7 +281,7 @@
                                             <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input app:field="Material" value="{newPO>Material}" placeholder="{i18n>poPlaceholderMaterial}" required="true"
+                                    <Input app:field="Material" value="{newPO>Material}" placeholder="{i18n>poPlaceholderMaterial}" required="{= ${newPO>/uiRules/materialRequired} !== false }"
                                         valueState="{newPO>errors/Material/state}"
                                         valueStateText="{newPO>errors/Material/text}"
                                         change=".onItemMaterialChange" liveChange=".onItemMaterialChange" suggestionItemSelected=".onItemMaterialSelect"
@@ -270,7 +290,11 @@
                                             <core:ListItem key="{Material}" text="{Material}" additionalText="{= (${MaterialName} || ${Material_Text} || '') + (${MaterialBaseUnit} ? ' (' + ${MaterialBaseUnit} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
-                                    <Input value="{newPO>PurchaseOrderItemText}" placeholder="{i18n>poPlaceholderItemText}" change=".onItemFieldChange" />
+                                    <Input value="{newPO>PurchaseOrderItemText}" placeholder="{i18n>poPlaceholderItemText}"
+                                        required="{= ${newPO>/uiRules/materialRequired} === false &amp;&amp; !${newPO>Material} }"
+                                        valueState="{newPO>errors/PurchaseOrderItemText/state}"
+                                        valueStateText="{newPO>errors/PurchaseOrderItemText/text}"
+                                        change=".onItemFieldChange" liveChange=".onItemFieldChange" />
                                     <Input value="{newPO>OrderQuantity}" type="Number" required="true" textAlign="End"
                                         valueState="{newPO>errors/OrderQuantity/state}"
                                         valueStateText="{newPO>errors/OrderQuantity/text}"

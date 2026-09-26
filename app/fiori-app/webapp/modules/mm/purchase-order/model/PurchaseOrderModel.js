@@ -156,6 +156,18 @@ sap.ui.define([
                 errorMessage: "",
                 errorCount: 0,
                 errorList: [],
+                uiRules: {
+                    materialRequired: true,
+                    storageLocationRequired: true,
+                    isService: false,
+                    isStockTransfer: false,
+                    isReturn: false,
+                    isSubcontracting: false,
+                    showAccountAssignment: false,
+                    showItemCategory: true,
+                    allowedItemCategories: ["0"],
+                    allowedAcctAssignmentCategories: [""]
+                },
                 userModified: {
                     PurchaseOrderType: false,
                     CompanyCode: false,
@@ -231,10 +243,13 @@ sap.ui.define([
                             Plant: { state: "None", text: "" },
                             StorageLocation: { state: "None", text: "" },
                             Material: { state: "None", text: "" },
+                            PurchaseOrderItemText: { state: "None", text: "" },
                             OrderQuantity: { state: "None", text: "" },
                             UnitOfMeasure: { state: "None", text: "" },
                             NetPriceAmount: { state: "None", text: "" },
-                            TaxCode: { state: "None", text: "" }
+                            TaxCode: { state: "None", text: "" },
+                            PurchaseOrderItemCategory: { state: "None", text: "" },
+                            AccountAssignmentCategory: { state: "None", text: "" }
                         }
                     }
                 ]
@@ -253,10 +268,16 @@ sap.ui.define([
             var aItems = oModel.getProperty("/items") || [];
             var iNextItemNo = (aItems.length + 1) * 10;
 
+            var sDocType = oModel.getProperty("/header/PurchaseOrderType") || "";
+            var sCleanDocType = String(sDocType || "").trim().toUpperCase();
+            var oPoRule = (_validator && _validator.rules && _validator.rules.PO_TYPES && _validator.rules.PO_TYPES[sCleanDocType]) || null;
+            var sItemCat = (oPoRule && oPoRule.defaultItemCategory !== undefined) ? oPoRule.defaultItemCategory : "0";
+            var sAcctAssgt = (oPoRule && oPoRule.defaultAcctAssignmentCategory !== undefined) ? oPoRule.defaultAcctAssignmentCategory : "";
+
             aItems.push({
                 PurchaseOrderItem: iNextItemNo.toString(),
-                PurchaseOrderItemCategory: "0",
-                AccountAssignmentCategory: "",
+                PurchaseOrderItemCategory: sItemCat,
+                AccountAssignmentCategory: sAcctAssgt,
                 Material: "",
                 PurchaseOrderItemText: "",
                 MaterialGroup: "",
@@ -273,10 +294,13 @@ sap.ui.define([
                     Plant: { state: "None", text: "" },
                     StorageLocation: { state: "None", text: "" },
                     Material: { state: "None", text: "" },
+                    PurchaseOrderItemText: { state: "None", text: "" },
                     OrderQuantity: { state: "None", text: "" },
                     UnitOfMeasure: { state: "None", text: "" },
                     NetPriceAmount: { state: "None", text: "" },
-                    TaxCode: { state: "None", text: "" }
+                    TaxCode: { state: "None", text: "" },
+                    PurchaseOrderItemCategory: { state: "None", text: "" },
+                    AccountAssignmentCategory: { state: "None", text: "" }
                 }
             });
             oModel.setProperty("/items", aItems);
