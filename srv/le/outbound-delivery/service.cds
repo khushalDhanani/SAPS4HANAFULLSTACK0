@@ -88,4 +88,79 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
         readyOrdersCount      : Integer;
         inApprovalOrdersCount : Integer;
     };
+
+    @readonly
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    entity DeliveryWithoutRefTypes {
+        key DeliveryDocumentType         : String(4);
+            DeliveryDocumentTypeName     : String(20);
+            SDDocumentCategory           : String(4);
+            PrecedingDocumentRequirement : String(1);
+    };
+
+    @readonly
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    entity DeliveryWithoutRefShipToParties {
+        key Customer     : String(10);
+            CustomerName : String(80);
+            CityName     : String(40);
+            Country      : String(3);
+    };
+
+    type DeliveryItemInput {
+        Material               : String;
+        ActualDeliveryQuantity : Decimal(13,3);
+        DeliveryQuantityUnit   : String;
+    };
+
+    @(requires: ['SalesRepresentative', 'WarehouseClerk', 'WarehouseManager', 'SalesManager', 'Admin'])
+    action createDeliveryWithoutRef(
+        ShippingPoint         : String,
+        DeliveryDocumentType  : String,
+        SalesOrganization     : String,
+        DistributionChannel   : String,
+        Division              : String,
+        ShipToParty           : String,
+        Plant                 : String,
+        StorageLocation       : String,
+        PlannedGoodsIssueDate : Date,
+        Items                 : array of DeliveryItemInput
+    ) returns {
+        OutboundDelivery      : String;
+        ShippingPoint         : String;
+        DeliveryDocumentType  : String;
+        PlannedGoodsIssueDate : String;
+        Plant                 : String;
+        StorageLocation       : String;
+        ShipToParty           : String;
+        ItemCount             : Integer;
+    };
+
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getDeliveryWithoutRef(OutboundDelivery : String) returns {
+        OutboundDelivery             : String;
+        ShippingPoint                : String;
+        ShippingPointName            : String;
+        DeliveryDocumentType         : String;
+        DeliveryDocumentTypeName     : String;
+        SalesOrganization            : String;
+        DistributionChannel          : String;
+        Division                     : String;
+        ShipToParty                  : String;
+        CustomerName                 : String;
+        PlannedGoodsIssueDate        : String;
+        Plant                        : String;
+        PlantName                    : String;
+        StorageLocation              : String;
+        StorageLocationName          : String;
+        Items                        : array of {
+            OutboundDelivery         : String;
+            DeliveryDocumentItem     : String;
+            Material                 : String;
+            MaterialName             : String;
+            ActualDeliveryQuantity   : Decimal(13,3);
+            DeliveryQuantityUnit     : String;
+            UnitOfMeasureLongName    : String;
+        };
+    };
 }

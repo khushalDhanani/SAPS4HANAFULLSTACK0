@@ -1,5 +1,6 @@
 const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
+const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const s4Config = require('../../../common/s4Config');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 
@@ -153,6 +154,60 @@ function registerOutboundDeliveryHandlers(srv) {
       };
     } catch (err) {
       LOG.error(`Failed to compute orders-due metrics: ${err.message}`);
+      return req.error(err.status || 502, err.message);
+    }
+  });
+
+  // 7. Delivery Without Reference (LE_SHP_QC_DLVNOREF_SRV) Handlers
+  srv.on('READ', 'DeliveryWithoutRefTypes', async (req) => {
+    try {
+      const types = await deliveryNoRefAdapter.getDeliveryTypes();
+      return applyPaging(types, req);
+    } catch (err) {
+      LOG.error(`Failed to read delivery types without ref: ${err.message}`);
+      return req.error(err.status || 500, err.message);
+    }
+  });
+
+  srv.on('READ', 'DeliveryWithoutRefShipToParties', async (req) => {
+    try {
+      const parties = await deliveryNoRefAdapter.getShipToParties();
+      return applyPaging(parties, req);
+    } catch (err) {
+      LOG.error(`Failed to read ship-to parties: ${err.message}`);
+      return req.error(err.status || 500, err.message);
+    }
+  });
+
+  srv.on('createDeliveryWithoutRef', async (req) => {
+    const data = req.data || {};
+    try {
+      const result = await deliveryNoRefAdapter.createDeliveryWithoutRef({
+        shippingPoint: data.ShippingPoint,
+        deliveryType: data.DeliveryDocumentType,
+        salesOrg: data.SalesOrganization,
+        distChannel: data.DistributionChannel,
+        division: data.Division,
+        shipToParty: data.ShipToParty,
+        plant: data.Plant,
+        storageLocation: data.StorageLocation,
+        plannedGoodsIssueDate: data.PlannedGoodsIssueDate,
+        items: data.Items
+      });
+      return result;
+    } catch (err) {
+      LOG.error(`Error in createDeliveryWithoutRef (${err.status || 500}): ${err.message}`);
+      return req.error(err.status || 500, err.message);
+    }
+  });
+
+  srv.on('getDeliveryWithoutRef', async (req) => {
+    const deliveryId = req.data?.OutboundDelivery;
+    if (!deliveryId) return req.error(400, 'OutboundDelivery parameter is required.');
+    try {
+      return await deliveryNoRefAdapter.getDeliveryWithoutRef(deliveryId);
+    } catch (err) {
+      LOG.error(`getDeliveryWithoutRef failed: ${err.message}`);
       return req.error(err.status || 502, err.message);
     }
   });

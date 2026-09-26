@@ -351,11 +351,17 @@ sap.ui.define([
             if (!Array.isArray(aRoles) || aRoles.length === 0) {
                 return true;
             }
-            if (aScopes.indexOf("Admin") !== -1) {
+            var hasRole = function (sTargetRole) {
+                return aScopes.some(function (sScope) {
+                    if (typeof sScope !== "string") return false;
+                    return sScope === sTargetRole || sScope.endsWith("." + sTargetRole);
+                });
+            };
+            if (hasRole("Admin")) {
                 return true;
             }
             return aRoles.some(function (sRole) {
-                return aScopes.indexOf(sRole) !== -1;
+                return hasRole(sRole);
             });
         },
 

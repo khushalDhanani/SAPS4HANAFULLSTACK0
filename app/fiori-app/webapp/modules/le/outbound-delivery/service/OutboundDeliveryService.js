@@ -215,6 +215,89 @@ sap.ui.define([
                 BillingDocumentType: mParams.billingType ? String(mParams.billingType).trim() : null,
                 BillingDocumentDate: mParams.billingDate ? String(mParams.billingDate).trim() : null
             });
+        },
+
+        /**
+         * Fetch supported delivery document types for delivery without reference.
+         *
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+         * @param {sap.ui.model.Filter[]} [aFilters]
+         * @param {Object} [mParameters]
+         * @returns {Promise<Array>}
+         */
+        getDeliveryWithoutRefTypes: function (oModel, aFilters, mParameters) {
+            if (oModel && typeof oModel.bindList !== "function") {
+                mParameters = aFilters;
+                aFilters = oModel;
+                oModel = _oModel;
+            }
+            return _readEntitySet(oModel || _oModel, "/DeliveryWithoutRefTypes", aFilters, mParameters);
+        },
+
+        /**
+         * Fetch ship-to parties value help for delivery without reference.
+         *
+         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
+         * @param {sap.ui.model.Filter[]} [aFilters]
+         * @param {Object} [mParameters]
+         * @returns {Promise<Array>}
+         */
+        getDeliveryWithoutRefShipToParties: function (oModel, aFilters, mParameters) {
+            if (oModel && typeof oModel.bindList !== "function") {
+                mParameters = aFilters;
+                aFilters = oModel;
+                oModel = _oModel;
+            }
+            return _readEntitySet(oModel || _oModel, "/DeliveryWithoutRefShipToParties", aFilters, mParameters);
+        },
+
+        /**
+         * Create an Outbound Delivery without reference in S/4HANA (LE_SHP_QC_DLVNOREF_SRV).
+         *
+         * @param {Object} mParams
+         * @returns {Promise<Object>} Created Outbound Delivery details from S/4HANA
+         */
+        createDeliveryWithoutRef: function (mParams) {
+            if (!mParams || !mParams.shippingPoint || !mParams.shipToParty || !mParams.plant || !mParams.storageLocation) {
+                return Promise.reject(new Error("ShippingPoint, ShipToParty, Plant, and StorageLocation are required."));
+            }
+            var aItems = (mParams.items || []).map(function (item) {
+                return {
+                    Material: String(item.material || item.Material || "").trim(),
+                    ActualDeliveryQuantity: String(item.quantity || item.ActualDeliveryQuantity || "1"),
+                    DeliveryQuantityUnit: String(item.uom || item.DeliveryQuantityUnit || "KG").trim()
+                };
+            });
+
+            var oPayload = {
+                ShippingPoint: String(mParams.shippingPoint).trim(),
+                DeliveryDocumentType: mParams.deliveryType ? String(mParams.deliveryType).trim() : "LO2",
+                SalesOrganization: mParams.salesOrg ? String(mParams.salesOrg).trim() : "1000",
+                DistributionChannel: mParams.distChannel ? String(mParams.distChannel).trim() : "10",
+                Division: mParams.division ? String(mParams.division).trim() : "52",
+                ShipToParty: String(mParams.shipToParty).trim(),
+                Plant: String(mParams.plant).trim(),
+                StorageLocation: String(mParams.storageLocation).trim(),
+                PlannedGoodsIssueDate: mParams.plannedGoodsIssueDate ? String(mParams.plannedGoodsIssueDate).trim() : null,
+                Items: aItems
+            };
+
+            return ODataClient.post(SERVICE_BASE + "/createDeliveryWithoutRef", oPayload).then(function (result) {
+                return (result && result.value !== undefined) ? result.value : result;
+            });
+        },
+
+        /**
+         * Reads an Outbound Delivery created without reference directly back from S/4HANA.
+         *
+         * @param {string} sDeliveryId
+         * @returns {Promise<Object>}
+         */
+        getDeliveryWithoutRef: function (sDeliveryId) {
+            if (!sDeliveryId) { return Promise.reject(new Error("Delivery ID is required.")); }
+            return ODataClient.get(SERVICE_BASE + "/getDeliveryWithoutRef(OutboundDelivery='" + encodeURIComponent(String(sDeliveryId).trim()) + "')").then(function (result) {
+                return (result && result.value !== undefined) ? result.value : result;
+            });
         }
     };
 });

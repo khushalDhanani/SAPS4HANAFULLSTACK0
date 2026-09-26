@@ -1,0 +1,175 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog
+        id="dlgCreateDeliveryNoRef"
+        title="{i18n>dlgCreateDeliveryNoRefTitle}"
+        type="Message"
+        contentWidth="44rem"
+        class="sapUiSizeCompact"
+        busy="{deliveryNoRefDialog>/busy}">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <form:SimpleForm
+                    id="formCreateDeliveryNoRef"
+                    editable="true"
+                    layout="ResponsiveGridLayout"
+                    labelSpanXL="4"
+                    labelSpanL="4"
+                    labelSpanM="4"
+                    labelSpanS="12"
+                    adjustLabelSpan="false"
+                    emptySpanXL="0"
+                    emptySpanL="0"
+                    emptySpanM="0"
+                    emptySpanS="0"
+                    columnsXL="2"
+                    columnsL="2"
+                    columnsM="2"
+                    singleContainerFullSize="false">
+                    <form:content>
+                        <core:Title text="Header &amp; Organizational Data" />
+
+                        <Label text="{i18n>dlgDeliveryShippingPoint}" required="true" />
+                        <ComboBox
+                            id="comboNoRefShippingPoint"
+                            selectedKey="{deliveryNoRefDialog>/shippingPoint}"
+                            items="{
+                                path: 'outboundDelivery>/ShippingPointVH',
+                                sorter: { path: 'ShippingPoint' }
+                            }"
+                            placeholder="{i18n>dlgDeliveryShippingPointPlaceholder}"
+                            width="100%">
+                            <core:ListItem
+                                key="{outboundDelivery>ShippingPoint}"
+                                text="{= ${outboundDelivery>ShippingPointName} ? ${outboundDelivery>ShippingPoint} + ' - ' + ${outboundDelivery>ShippingPointName} : ${outboundDelivery>ShippingPoint} }" />
+                        </ComboBox>
+
+                        <Label text="{i18n>dlgDeliveryType}" required="true" />
+                        <Select
+                            id="selNoRefDeliveryType"
+                            selectedKey="{deliveryNoRefDialog>/deliveryType}"
+                            width="100%">
+                            <core:Item key="LO2" text="LO2 - Delivery w/o ref." />
+                            <core:Item key="LO" text="LO - Delivery w/o ref." />
+                            <core:Item key="LO3" text="LO3 - Delivery w/o ref." />
+                            <core:Item key="LD" text="LD - Delivery w/o ref." />
+                        </Select>
+
+                        <Label text="{i18n>dlgShipToParty}" required="true" />
+                        <Input
+                            id="inputNoRefShipTo"
+                            value="{deliveryNoRefDialog>/shipToParty}"
+                            placeholder="{i18n>dlgShipToPartyPlaceholder}"
+                            width="100%" />
+
+                        <Label text="{i18n>dlgPlannedGIDate}" required="true" />
+                        <DatePicker
+                            id="dpNoRefGIDate"
+                            value="{deliveryNoRefDialog>/plannedGoodsIssueDate}"
+                            valueFormat="yyyy-MM-dd"
+                            displayFormat="medium"
+                            width="100%" />
+
+                        <core:Title text="Plant &amp; Sales Area Data" />
+
+                        <Label text="{i18n>dlgDelivPlant}" required="true" />
+                        <Input
+                            id="inputNoRefPlant"
+                            value="{deliveryNoRefDialog>/plant}"
+                            placeholder="{i18n>dlgDelivPlantPlaceholder}"
+                            width="100%" />
+
+                        <Label text="{i18n>dlgDelivStorageLocation}" required="true" />
+                        <Input
+                            id="inputNoRefSLoc"
+                            value="{deliveryNoRefDialog>/storageLocation}"
+                            placeholder="{i18n>dlgDelivStorageLocationPlaceholder}"
+                            width="100%" />
+
+                        <Label text="{i18n>dlgSalesOrg}" />
+                        <Input
+                            id="inputNoRefSalesOrg"
+                            value="{deliveryNoRefDialog>/salesOrg}"
+                            width="100%" />
+
+                        <Label text="{i18n>dlgDistChannel} / {i18n>dlgDivision}" />
+                        <HBox width="100%">
+                            <Input
+                                id="inputNoRefDistChannel"
+                                value="{deliveryNoRefDialog>/distChannel}"
+                                width="48%"
+                                class="sapUiTinyMarginEnd" />
+                            <Input
+                                id="inputNoRefDivision"
+                                value="{deliveryNoRefDialog>/division}"
+                                width="48%" />
+                        </HBox>
+                    </form:content>
+                </form:SimpleForm>
+
+                <!-- Line Items Table -->
+                <Table
+                    id="tableNoRefItems"
+                    items="{deliveryNoRefDialog>/items}"
+                    class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title text="{i18n>dlgItemsTitle}" level="H5" />
+                            <ToolbarSpacer />
+                            <Button
+                                id="btnNoRefAddItem"
+                                icon="sap-icon://add"
+                                text="{i18n>btnAddItem}"
+                                type="Transparent"
+                                press=".onAddDeliveryNoRefItem" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column width="4rem"><Text text="{i18n>dlgColItemNo}" /></Column>
+                        <Column width="14rem"><Text text="{i18n>dlgColMaterial}" /></Column>
+                        <Column width="7rem"><Text text="{i18n>dlgColQuantity}" /></Column>
+                        <Column width="5rem"><Text text="{i18n>dlgColUoM}" /></Column>
+                        <Column width="3rem" hAlign="Center"><Text text="" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <Text text="{deliveryNoRefDialog>itemNo}" />
+                                <Input
+                                    value="{deliveryNoRefDialog>material}"
+                                    placeholder="e.g. 4000000186" />
+                                <Input
+                                    value="{deliveryNoRefDialog>quantity}"
+                                    type="Number" />
+                                <Input
+                                    value="{deliveryNoRefDialog>uom}"
+                                    maxLength="3" />
+                                <Button
+                                    icon="sap-icon://delete"
+                                    type="Transparent"
+                                    press=".onDeleteDeliveryNoRefItem"
+                                    tooltip="{i18n>btnDeleteItem}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnConfirmDeliveryNoRef"
+                text="{i18n>btnCreateDelivery}"
+                type="Emphasized"
+                press=".onConfirmCreateDeliveryNoRef" />
+        </beginButton>
+        <endButton>
+            <Button
+                id="btnCancelDeliveryNoRef"
+                text="{i18n>btnCancel}"
+                type="Transparent"
+                press=".onCancelCreateDeliveryNoRef" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

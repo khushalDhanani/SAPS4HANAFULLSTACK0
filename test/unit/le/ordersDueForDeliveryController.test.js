@@ -86,6 +86,7 @@ const MockOutboundDeliveryService = {
         ShippingPoints: ["1120", "1112", "1108", "1109"]
     }),
     createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
+    createDeliveryWithoutRef: jest.fn().mockResolvedValue({ OutboundDelivery: "80000059" }),
     getDeliveryStatus: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526", DeliveryDocumentType: "ZLF", SoldToParty: "10082", OverallPickingStatus: "A", OverallGoodsMovementStatus: "A", OverallDelivReltdBillgStatus: "A" }),
     getOrdersDueMetrics: jest.fn().mockResolvedValue({ scheduleLineCount: 0, shippingPointCount: 0 })
 };
@@ -481,5 +482,105 @@ describe("OrdersDueForDelivery Controller", () => {
             expect.stringContaining("VL03N"),
             expect.any(Object)
         );
+    });
+
+    describe("Delivery Without Reference Dialog & Actions", () => {
+        test("onOpenCreateDeliveryNoRefDialog resets model to defaults", () => {
+            controller.onInit();
+            const dialogModel = mockView.getModel("deliveryNoRefDialog");
+            dialogModel.setProperty("/shippingPoint", "9999");
+            controller._pCreateDeliveryNoRefDialog = Promise.resolve({ open: jest.fn() });
+
+            controller.onOpenCreateDeliveryNoRefDialog();
+
+            expect(dialogModel.getProperty("/shippingPoint")).toBe("1104");
+            expect(dialogModel.getProperty("/deliveryType")).toBe("LO2");
+            expect(dialogModel.getProperty("/plant")).toBe("1110");
+            expect(dialogModel.getProperty("/storageLocation")).toBe("FG01");
+            expect(dialogModel.getProperty("/shipToParty")).toBe("10135");
+            expect(dialogModel.getProperty("/items")).toHaveLength(1);
+        });
+
+        test("onAddDeliveryNoRefItem adds a new line item with incremented item number", () => {
+            controller.onInit();
+            const dialogModel = mockView.getModel("deliveryNoRefDialog");
+            expect(dialogModel.getProperty("/items")).toHaveLength(1);
+
+            controller.onAddDeliveryNoRefItem();
+
+            const items = dialogModel.getProperty("/items");
+            expect(items).toHaveLength(2);
+            expect(items[1].itemNo).toBe("000020");
+            expect(items[1].material).toBe("4000000187");
+        });
+
+        test("onDeleteDeliveryNoRefItem deletes line item when more than one exists", () => {
+            controller.onInit();
+            controller.onAddDeliveryNoRefItem();
+            const dialogModel = mockView.getModel("deliveryNoRefDialog");
+            expect(dialogModel.getProperty("/items")).toHaveLength(2);
+
+            const mockEvent = {
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getPath: () => "/items/1"
+                    })
+                })
+            };
+
+            controller.onDeleteDeliveryNoRefItem(mockEvent);
+            expect(dialogModel.getProperty("/items")).toHaveLength(1);
+        });
+
+        test("onDeleteDeliveryNoRefItem warns and prevents deletion if only one item remains", () => {
+            controller.onInit();
+            const mockEvent = {
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getPath: () => "/items/0"
+                    })
+                })
+            };
+
+            controller.onDeleteDeliveryNoRefItem(mockEvent);
+            expect(MockMessageBox.warning).toHaveBeenCalledWith(expect.stringContaining("At least one line item is required"));
+            expect(mockView.getModel("deliveryNoRefDialog").getProperty("/items")).toHaveLength(1);
+        });
+
+        test("onConfirmCreateDeliveryNoRef validates required fields", () => {
+            controller.onInit();
+            const dialogModel = mockView.getModel("deliveryNoRefDialog");
+            dialogModel.setProperty("/shippingPoint", "");
+
+            controller.onConfirmCreateDeliveryNoRef();
+            expect(MockMessageBox.error).toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.createDeliveryWithoutRef).not.toHaveBeenCalled();
+        });
+
+        test("onConfirmCreateDeliveryNoRef creates delivery and updates follow-up panel", async () => {
+            controller.onInit();
+            controller.onCancelCreateDeliveryNoRef = jest.fn();
+            controller.onRefresh = jest.fn();
+            controller.onLoadDeliveryStatus = jest.fn();
+
+            MockOutboundDeliveryService.createDeliveryWithoutRef.mockResolvedValueOnce({ OutboundDelivery: "80000059" });
+
+            await controller.onConfirmCreateDeliveryNoRef();
+
+            expect(MockOutboundDeliveryService.createDeliveryWithoutRef).toHaveBeenCalledWith(expect.objectContaining({
+                shippingPoint: "1104",
+                deliveryType: "LO2",
+                plant: "1110",
+                storageLocation: "FG01",
+                shipToParty: "10135"
+            }));
+            expect(controller.onCancelCreateDeliveryNoRef).toHaveBeenCalled();
+            expect(mockView.getModel("deliveryFollowUp").getProperty("/delivery")).toBe("80000059");
+            expect(controller.onLoadDeliveryStatus).toHaveBeenCalled();
+            expect(MockMessageBox.success).toHaveBeenCalledWith(
+                expect.stringContaining("80000059"),
+                expect.any(Object)
+            );
+        });
     });
 });

@@ -19,6 +19,14 @@
                     </VBox>
                     <HBox alignItems="Center">
                         <Button
+                            id="btnCreateDeliveryNoRef"
+                            icon="sap-icon://add-document"
+                            text="{i18n>btnCreateDeliveryNoRef}"
+                            type="Emphasized"
+                            press=".onOpenCreateDeliveryNoRefDialog"
+                            visible="{= ${ordersDueView>/canCreateDelivery} !== false }"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
                             id="btnRefreshOrdersDue"
                             icon="sap-icon://refresh"
                             text="{i18n>btnRefresh}"

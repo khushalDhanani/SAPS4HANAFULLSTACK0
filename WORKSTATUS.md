@@ -3,6 +3,68 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-26 12:30 IST
+- **Agent**: Antigravity
+- **Change**: Implementation, Live S/4HANA Verification, and Full-Stack Integration of Delivery Without Reference (`LE_SHP_QC_DLVNOREF_SRV`):
+  1. **User Requirement & SAP Discovery Protocol**:
+     - Implement and prove Delivery Without Reference capability end-to-end adhering strictly to `AGENTS.md` and SAP API Discovery Protocol.
+     - Discover active Gateway service: `LE_SHP_QC_DLVNOREF_SRV` (Title: *Delivery Without Reference Quick Creation*).
+     - Inspect live `$metadata`: Saved to `srv/external/LE_SHP_QC_DLVNOREF_SRV.xml`.
+       - EntitySet: `C_DelivWthoutRefQuickCreate` (`sap:creatable="true"`).
+       - Navigation Property: `to_DeliveryItemQuickCreate` -> `C_DelivItmWthoutRefQuickCrte` (`sap:creatable="true"`).
+       - Value Helps: `C_DelivTypeNoRefVH`, `C_ShippingPointVH`, `C_DeliveryShipToPartyVH`, `C_Materialvaluehelp`.
+  2. **Empirical Findings & Live S/4HANA Discoveries (DS4 Client 220)**:
+     - **Delivery Types**: Standard delivery types with reference (`ZDEX`, `ZLF`) reject without preceding orders (`VL/565 Data of preceding document was not transmitted`). Supported types without reference from `C_DelivTypeNoRefVH`: `LO`, `LO2`, `LO3`, `LD`. `LO2` creates clean outbound deliveries without reference.
+     - **Item Category Determination (Table T184L)**: Standard materials with Item Category Group `0002` (e.g. `4000000123`, `4000000002`) reject with `VL/320 No item category exists (Table T184L LO 0002 )`. Materials with Item Category Group `NORM` (e.g. `4000000186` NODG 150 Kgs Packing, `4000000187` NODG 50 Kgs Packing) pass `T184L` determination cleanly.
+     - **Warehouse Management (WM) Isolation**: In Plant `1120`, storage locations and shipping points `1105`–`1111` / `WAVG` link to Warehouse `W01`, which rejects non-WM items with `L9/023 Material does not exist in warehouse W01`. Plant `1110` with Storage Location `FG01` and Shipping Point `1104` has **NO WM restriction** and creates deliveries seamlessly.
+     - **Incompletion Check (VU/013)**: Requires Gross Weight and Net Weight > 0. Materials `4000000186` and `4000000187` have valid weights (`1.000 KG`) and pass without incompletion blocks.
+     - **Ship-To Party**: Customer `10135` (Divi's Laboratories Limited) is active with partner role `SH` in Sales Area `1000/10/52`.
+  3. **Live S/4HANA Deliveries Created & Verified Directly on SAP Gateway**:
+     - **Delivery `80000059`**:
+       - Deep insert `POST /sap/opu/odata/sap/LE_SHP_QC_DLVNOREF_SRV/C_DelivWthoutRefQuickCreate`
+       - Status: `HTTP 201 Created`
+       - Parameters: SP `1104`, Type `LO2`, Plant `1110`, SLoc `FG01`, Sales Area `1000/10/52`, Ship-To `10135`, Material `4000000186`, Qty `1.000 KG`.
+       - Read back directly from SAP via `C_DelivWthoutRefQuickCreate('80000059')`, `C_DelivItmWthoutRefQuickCrte`, and `LE_SHP_OD_LIST_SRV/C_OutboundDeliveryList('80000059')`.
+     - **Delivery `80000060`**:
+       - Status: `HTTP 201 Created`
+       - Parameters: Same header, Material `4000000187` (`NODG 50 Kgs Packing`), Quantity `2.000 KG`. Proved 100% reproducibility.
+     - **Delivery `80000061`**:
+       - Created via `DeliveryNoRefAdapter.js` directly against live SAP Gateway.
+     - **Delivery `80000062` (Live End-to-End Browser UI Creation via DevTools MCP)**:
+       - Created via the actual Fiori web application in the browser (`chrome-devtools-mcp` automation on `http://localhost:4004/fiori-app/webapp/index.html#/le/orders-due`).
+       - Successfully clicked "Create Delivery (No Reference)", validated default prefill, tested dynamic Add/Delete item rows, and clicked "Create Delivery".
+       - SAP Gateway generated document number **`80000062`**. Displayed success popup, closed dialog, and bound to Delivery Follow-Up panel showing live SAP status: `Type LO2 · Picking A (not started) · Goods movement A (not started) · Billing (not relevant)`.
+       - Direct readback verified from SAP S/4HANA Gateway via `/odata/v4/outbound-delivery/getDeliveryWithoutRef(OutboundDelivery='80000062')`.
+  4. **Full-Stack Implementation Delivered**:
+     - **S/4HANA Integration Layer (`srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js`)**:
+       - `createDeliveryWithoutRef`: Validates parameters, executes deep insert POST to `C_DelivWthoutRefQuickCreate` with `to_DeliveryItemQuickCreate`, and returns SAP delivery number.
+       - `getDeliveryWithoutRef`: Reads header and child items directly back from S/4HANA Gateway.
+       - Value Helps: `getDeliveryTypes`, `getShippingPoints`, `getShipToParties`, `getMaterials`.
+       - Robust Error Handling: Uses `mapS4Error` and throws typed `Error` objects with semantic HTTP status codes.
+     - **CAP Service Layer (`srv/le/outbound-delivery/service.cds` & `outboundDelivery.handler.js`)**:
+       - Entities: `DeliveryWithoutRefTypes`, `DeliveryWithoutRefShipToParties`.
+       - Action: `createDeliveryWithoutRef`.
+       - Function: `getDeliveryWithoutRef`.
+     - **UI5 Presentation Layer (`app/fiori-app/webapp/modules/le/outbound-delivery/`)**:
+       - View: Added toolbar button `Create Delivery (No Reference)` to `OrdersDueForDelivery.view.xml`.
+       - Dialog Fragment: Created `CreateDeliveryNoRefDialog.fragment.xml` with Header/Sales Area form, line items table, and add/delete line item controls.
+       - Controller: Implemented `onOpenCreateDeliveryNoRefDialog`, `onConfirmCreateDeliveryNoRef`, `onCancelCreateDeliveryNoRef`, `onAddDeliveryNoRefItem`, `onDeleteDeliveryNoRefItem`, and automatically binds created delivery to follow-up panel.
+       - Service: Added `getDeliveryWithoutRefTypes`, `getDeliveryWithoutRefShipToParties`, `createDeliveryWithoutRef`, `getDeliveryWithoutRef` in `OutboundDeliveryService.js`.
+       - i18n: Added localized text keys in `i18n.properties`.
+       - Auth Remediation (`AuthService.js`): Enhanced `hasAnyRole` to recognize XSUAA-prefixed scopes (`$XSAPPNAME.Role`) so delivery creation actions are visible to users with assigned BTP roles.
+  5. **Unit Tests Delivered**:
+     - `test/unit/le/deliveryNoRefAdapter.test.js`: 11 unit tests covering date formatting, input validation, deep insert POST, error mapping, readback, and value helps.
+     - `test/unit/le/deliveryNoRefHandler.test.js`: 9 unit tests covering CAP handlers, error mapping, and parameter verification.
+     - `test/unit/le/ordersDueForDeliveryController.test.js`: 6 new unit tests covering dialog reset, add row, delete row, validation, and delivery creation with follow-up binding (25 total controller tests).
+  6. **Executed Commands and Results**:
+     - `npm test`: **91/91 test suites passed, 1,384/1,384 tests passed (100% green, 0 regressions)**.
+     - `npm --prefix app/fiori-app run lint`: **Success! No findings detected (0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run build`: **Build succeeded in 1.15 s** (`Component-preload.js` generated).
+     - `npm run lint`: **Clean (0 errors, 0 warnings)**.
+     - `npx cds compile srv`: **Clean compilation (code 0)**.
+     - `git diff --check`: **Clean (0 errors)**.
+  - **Next recommended action**: Demonstrate live Delivery Without Reference creation in Fiori UI (`#/le/orders-due`).
+
 ## 2026-09-26 11:10 IST
 - **Agent**: Antigravity
 - **Change**: Comprehensive Individual Testing, Verification, and Remediation of PO Creation Across All 16 PO Types:
@@ -4203,11 +4265,10 @@
   - **Next recommended action**: Review with user and test live posting in UI (`#/sd/returns/create`).
 
 ## Next Steps
-0. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), showcasing dynamic rules and real SAP persistence.
+0. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`) and live Delivery Without Reference in Orders Due (`#/le/orders-due`).
 1. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
 2. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
 3. Select next development-ready capability to build from the verified list:
-   - Delivery without reference (`LE_SHP_QC_DLVNOREF_SRV`)
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)
    - Reservation creation (`UI_RESERVATION_ITM_MNG_V2`)
