@@ -433,10 +433,14 @@
                 oReport.unconfirmed.push("Purchasing Organization " + sTargetPurchOrg + " is not configured or valid for Company Code " + sTargetCoCode + ".");
             }
 
-            // 5. Purchasing Group validation/defaulting
+            // 5. Purchasing Group validation/defaulting (prefer 100-series, e.g. 101 Procurement Team-E)
             if (!oHeader.PurchasingGroup && !oUserModified.PurchasingGroup) {
                 var oDefGroup = aPurchGroups.find(function (pg) {
-                    return pg && (pg.PurchasingGroup === "101" || pg.PurchasingGroup === "001");
+                    return pg && pg.PurchasingGroup === "101";
+                }) || aPurchGroups.find(function (pg) {
+                    return pg && pg.PurchasingGroup && String(pg.PurchasingGroup).startsWith("1");
+                }) || aPurchGroups.find(function (pg) {
+                    return pg && pg.PurchasingGroup === "001";
                 });
                 if (oDefGroup) {
                     oHeader.PurchasingGroup = oDefGroup.PurchasingGroup;

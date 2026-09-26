@@ -82,7 +82,7 @@ describe('PO Type-Wise Dynamic Business Rules - 16 Types Matrix', () => {
                 expect(typeof rule.description).toBe('string');
                 expect(rule.description.length).toBeGreaterThan(0);
                 expect(Array.isArray(rule.allowedCompanyCodes)).toBe(true);
-                expect(rule.allowedCompanyCodes.length).toBeGreaterThan(0);
+                expect(rule.allowedCompanyCodes).toEqual(['1000', '2000']);
                 expect(rule.allowedCompanyCodes).toContain(rule.defaultCompanyCode);
 
                 expect(Array.isArray(rule.allowedPurchOrgs)).toBe(true);
@@ -177,13 +177,9 @@ describe('PO Type-Wise Dynamic Business Rules - 16 Types Matrix', () => {
                 const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
                 PurchaseOrderModel.setDocumentType(oModel, docType, rule.description);
 
-                // Valid single field test for CompanyCode
-                const validCcRes = PurchaseOrderValidator.validateSingleField(
-                    oModel,
-                    'CompanyCode',
-                    rule.defaultCompanyCode
-                );
-                expect(validCcRes.state).toBe('None');
+                // Valid single field test for CompanyCode (both 1000 and 2000 permitted for all 16 types)
+                expect(PurchaseOrderValidator.validateSingleField(oModel, 'CompanyCode', '1000').state).toBe('None');
+                expect(PurchaseOrderValidator.validateSingleField(oModel, 'CompanyCode', '2000').state).toBe('None');
 
                 // Valid single field test for Currency
                 const validCurrRes = PurchaseOrderValidator.validateSingleField(
@@ -324,6 +320,50 @@ describe('PO Type-Wise Dynamic Business Rules - 16 Types Matrix', () => {
                 const result = validateCreatePurchaseOrderPayload(payload);
                 expect(result.isValid).toBe(true);
                 expect(result.errors).toHaveLength(0);
+            });
+
+            it(`should accept both 1000 and 2000 as allowed company codes for PO type ${docType}`, () => {
+                const rule = PurchaseOrderRules.PO_TYPES[docType];
+                const plant = rule.allowedPlantPrefix ? `${rule.allowedPlantPrefix}000` : '1000';
+
+                ['1000', '2000'].forEach((coCode) => {
+                    // Test 1: Single field validation in UI validator
+                    const mockModel = new MockJSONModel({
+                        header: { PurchaseOrderType: docType }
+                    });
+                    const fieldRes = PurchaseOrderValidator.validateSingleField(mockModel, 'CompanyCode', coCode);
+                    expect(fieldRes.state).toBe('None');
+
+                    // Test 2: Full backend payload validation
+                    const payload = {
+                        header: {
+                            PurchaseOrderType: docType,
+                            CompanyCode: coCode,
+                            PurchasingOrganization: rule.defaultPurchOrg,
+                            PurchasingGroup: '001',
+                            Supplier: '100001',
+                            Currency: rule.defaultCurrency,
+                            DocumentDate: '2026-09-24'
+                        },
+                        items: [
+                            {
+                                PurchaseOrderItem: '10',
+                                Material: rule.materialRequired ? 'MAT101' : '',
+                                PurchaseOrderItemText: 'Test Line Description',
+                                Plant: plant,
+                                StorageLocation: '100A',
+                                UnitOfMeasure: 'PC',
+                                OrderQuantity: '10',
+                                NetPriceAmount: '100.00',
+                                PurchaseOrderItemCategory: rule.defaultItemCategory,
+                                AccountAssignmentCategory: rule.defaultAcctAssignmentCategory
+                            }
+                        ]
+                    };
+                    const res = validateCreatePurchaseOrderPayload(payload);
+                    expect(res.isValid).toBe(true);
+                    expect(res.errors.filter(e => e.field === 'header.CompanyCode')).toHaveLength(0);
+                });
             });
 
             it(`should reject invalid company code for PO type ${docType}`, () => {

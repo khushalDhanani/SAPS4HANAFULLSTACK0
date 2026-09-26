@@ -93,9 +93,9 @@
                                     valueState="{newPO>/errors/CompanyCode/state}"
                                     valueStateText="{newPO>/errors/CompanyCode/text}"
                                     change=".onCompanyCodeChange" liveChange=".onCompanyCodeChange" suggestionItemSelected=".onCompanyCodeSelect"
-                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CompanyCodeVH', templateShareable: false}">
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/CompanyCodeVH', filters: [{filters: [{path: 'CompanyCode', operator: 'EQ', value1: '1000'}, {path: 'CompanyCode', operator: 'EQ', value1: '2000'}], and: false}], templateShareable: false}">
                                     <suggestionItems>
-                                        <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{= ${CompanyCodeName} + (${CompanyCode} === '1000' ? ' [Domestic]' : '') }" />
+                                        <core:ListItem key="{CompanyCode}" text="{CompanyCode}" additionalText="{= ${CompanyCodeName} + (${CompanyCode} === '1000' ? ' [Domestic - AIL]' : (${CompanyCode} === '2000' ? ' [Domestic - ASCL]' : '')) }" />
                                     </suggestionItems>
                                 </Input>
 
@@ -115,7 +115,7 @@
                                     valueState="{newPO>/errors/PurchasingGroup/state}"
                                     valueStateText="{newPO>/errors/PurchasingGroup/text}"
                                     change=".onPurchGrpChange" liveChange=".onPurchGrpChange" suggestionItemSelected=".onPurchGrpSelect"
-                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PurchasingGroupVH', templateShareable: false}">
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/PurchasingGroupVH', filters: [{path: 'PurchasingGroup', operator: 'StartsWith', value1: '1'}], templateShareable: false}">
                                     <suggestionItems>
                                         <core:ListItem key="{PurchasingGroup}" text="{PurchasingGroup}" additionalText="{PurchasingGroupName}" />
                                     </suggestionItems>

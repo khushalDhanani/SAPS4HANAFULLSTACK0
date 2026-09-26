@@ -63,9 +63,14 @@ const mockMessagePopover = function () {};
 const mockMessageItem = function () {};
 const mockBusyIndicator = {};
 const mockFilter = function (sPath, sOperator, sValue) {
-    this.sPath = sPath;
-    this.sOperator = sOperator;
-    this.sValue = sValue;
+    if (typeof sPath === 'object' && sPath !== null) {
+        this.aFilters = sPath.filters;
+        this.bAnd = sPath.and;
+    } else {
+        this.sPath = sPath;
+        this.sOperator = sOperator;
+        this.sValue = sValue;
+    }
 };
 const mockFilterOperator = {
     EQ: 'EQ',
@@ -959,7 +964,7 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(oModel.getProperty('/header/CompanyCode')).toBe('1000');
         });
 
-        it('should build context filter with CompanyCode EQ 1000 for inCompanyCode when docType is ZDOM', () => {
+        it('should build context filter with CompanyCode 1000 or 2000 for inCompanyCode when docType is ZDOM', () => {
             oModel.setProperty('/header/PurchaseOrderType', 'ZDOM');
 
             const mockSource = {
@@ -970,12 +975,15 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
 
             const filters = controller._buildContextFilters(mockSource);
             expect(filters).toHaveLength(1);
-            expect(filters[0].sPath).toBe('CompanyCode');
-            expect(filters[0].sOperator).toBe('EQ');
-            expect(filters[0].sValue).toBe('1000');
+            expect(filters[0].aFilters).toHaveLength(2);
+            expect(filters[0].bAnd).toBe(false);
+            expect(filters[0].aFilters[0].sPath).toBe('CompanyCode');
+            expect(filters[0].aFilters[0].sValue).toBe('1000');
+            expect(filters[0].aFilters[1].sPath).toBe('CompanyCode');
+            expect(filters[0].aFilters[1].sValue).toBe('2000');
         });
 
-        it('should NOT add CompanyCode filter for inCompanyCode when docType is unconstrained (e.g. NB)', () => {
+        it('should build CompanyCode 1000 or 2000 filter for inCompanyCode even when docType is unconstrained (e.g. NB)', () => {
             oModel.setProperty('/header/PurchaseOrderType', 'NB');
 
             const mockSource = {
@@ -985,7 +993,11 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             };
 
             const filters = controller._buildContextFilters(mockSource);
-            expect(filters).toHaveLength(0);
+            expect(filters).toHaveLength(1);
+            expect(filters[0].aFilters).toHaveLength(2);
+            expect(filters[0].bAnd).toBe(false);
+            expect(filters[0].aFilters[0].sValue).toBe('1000');
+            expect(filters[0].aFilters[1].sValue).toBe('2000');
         });
 
         it('should refresh company suggestion binding via _refreshCompanyCodeBinding', () => {
@@ -1008,17 +1020,26 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(mockBinding.filter).toHaveBeenCalled();
             const appliedFilters = mockBinding.filter.mock.calls[0][0];
             expect(appliedFilters).toHaveLength(1);
-            expect(appliedFilters[0].sPath).toBe('CompanyCode');
-            expect(appliedFilters[0].sValue).toBe('1000');
+            expect(appliedFilters[0].aFilters).toHaveLength(2);
+            expect(appliedFilters[0].aFilters[0].sValue).toBe('1000');
+            expect(appliedFilters[0].aFilters[1].sValue).toBe('2000');
         });
 
-        it('should display warning on CompanyCode if docType changes to ZDOM while a non-1000 company code is selected', () => {
-            oModel.setProperty('/header/CompanyCode', '2000');
+        it('should display warning on CompanyCode if docType changes to ZDOM while a non-enterprise (e.g. 3000) company code is selected', () => {
+            oModel.setProperty('/header/CompanyCode', '3000');
 
             controller._onDocTypeSelectedCheck('ZDOM');
 
             expect(oModel.getProperty('/errors/CompanyCode/state')).toBe('Warning');
-            expect(oModel.getProperty('/errors/CompanyCode/text')).toContain('not a domestic company');
+            expect(oModel.getProperty('/errors/CompanyCode/text')).toContain('not an enterprise domestic company');
+        });
+
+        it('should NOT display warning on CompanyCode for ZDOM when 2000 is selected', () => {
+            oModel.setProperty('/header/CompanyCode', '2000');
+
+            controller._onDocTypeSelectedCheck('ZDOM');
+
+            expect(oModel.getProperty('/errors/CompanyCode/state')).not.toBe('Warning');
         });
     });
 
@@ -1088,6 +1109,45 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
 
             expect(oModel.getProperty('/errors/Supplier/state')).toBe('None');
             expect(oModel.getProperty('/errors/Supplier/text')).toBe('');
+        });
+    });
+
+    describe('Purchasing Group 100-Series Filtering and Value Help', () => {
+        it('should return StartsWith 1 filter for PurchasingGroup in _buildContextFilters', () => {
+            const mockSource = {
+                getId: () => 'inPurchGrp',
+                getBindingContext: () => null,
+                getBindingPath: () => 'PurchasingGroup'
+            };
+
+            const filters = controller._buildContextFilters(mockSource);
+            expect(filters).toHaveLength(1);
+            expect(filters[0].sPath).toBe('PurchasingGroup');
+            expect(filters[0].sOperator).toBe('StartsWith');
+            expect(filters[0].sValue).toBe('1');
+        });
+
+        it('should refresh inPurchGrp suggestion items binding with 100-Series filter', () => {
+            const mockBinding = {
+                filter: jest.fn()
+            };
+            const mockPurchGrpInput = {
+                getId: () => 'inPurchGrp',
+                getBindingContext: () => null,
+                getBindingPath: () => 'PurchasingGroup',
+                getBinding: jest.fn((name) => (name === 'suggestionItems' ? mockBinding : null))
+            };
+            controller.byId = jest.fn((sId) => (sId === 'inPurchGrp' ? mockPurchGrpInput : null));
+
+            controller._refreshPurchGrpBinding();
+
+            expect(mockPurchGrpInput.getBinding).toHaveBeenCalledWith('suggestionItems');
+            expect(mockBinding.filter).toHaveBeenCalled();
+            const appliedFilters = mockBinding.filter.mock.calls[0][0];
+            expect(appliedFilters).toHaveLength(1);
+            expect(appliedFilters[0].sPath).toBe('PurchasingGroup');
+            expect(appliedFilters[0].sOperator).toBe('StartsWith');
+            expect(appliedFilters[0].sValue).toBe('1');
         });
     });
 });

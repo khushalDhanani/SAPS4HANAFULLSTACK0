@@ -155,6 +155,26 @@ describe('Unit: PurchaseOrderDefaults', () => {
             expect(oModel.getProperty('/configDerived/CompanyCode')).toBe(true);
         });
 
+        it('should prioritize 100-series (101 Procurement Team-E) over 001 when defaulting Purchasing Group', () => {
+            const configWith100 = {
+                ...mockConfigData,
+                purchasingGroups: [
+                    { PurchasingGroup: '001', PurchasingGroupName: 'General Buyer' },
+                    { PurchasingGroup: '101', PurchasingGroupName: 'Procurement Team-E' }
+                ]
+            };
+
+            const report = PurchaseOrderDefaults.applyConfigurationDefaults(
+                oModel,
+                configWith100,
+                { code: 'ZDOM', text: 'Domestic PO' },
+                PurchaseOrderValidator
+            );
+
+            expect(report.applied.PurchasingGroup).toBe('101');
+            expect(oModel.getProperty('/header/PurchasingGroup')).toBe('101');
+        });
+
         it('should preserve user modified fields from being overwritten', () => {
             oModel.setProperty('/header/CompanyCode', '2000');
             oModel.setProperty('/userModified/CompanyCode', true);

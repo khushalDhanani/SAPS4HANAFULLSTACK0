@@ -34,7 +34,7 @@
         PurchaseOrderType: { controlId: "inDocType", label: "Document Type", section: "General Data", example: "ZDOM" },
         CompanyCode: { controlId: "inCompanyCode", label: "Company Code", section: "General Data", example: "1010" },
         PurchasingOrganization: { controlId: "inPurchOrg", label: "Purchasing Organization", section: "General Data", example: "1010" },
-        PurchasingGroup: { controlId: "inPurchGrp", label: "Purchasing Group", section: "General Data", example: "001" },
+        PurchasingGroup: { controlId: "inPurchGrp", label: "Purchasing Group", section: "General Data", example: "101" },
         DocumentDate: { controlId: "inDocDate", label: "Document Date", section: "General Data", example: "DD-MM-YYYY" },
         Supplier: { controlId: "inSupplier", label: "Supplier", section: "Supplier & Commercial Terms", example: "10300001" },
         Currency: { controlId: "inCurrency", label: "Currency", section: "Supplier & Commercial Terms", example: "EUR" },
@@ -276,7 +276,11 @@
                         }
                         break;
                     case "PurchasingGroup":
-                        if (!sValTrim) oState = { state: "Error", text: fnResolve("poValPurchGrpRequired", null, "Purchasing Group is required (3-character code, e.g. 001).") };
+                        if (!sValTrim) {
+                            oState = { state: "Error", text: fnResolve("poValPurchGrpRequired", null, "Purchasing Group is required (3-character code, e.g. 101).") };
+                        } else if (!sValTrim.startsWith("1")) {
+                            oState = { state: "Warning", text: fnResolve("poValPurchGrp100Series", null, "Purchasing Group should be in the 100 Series (e.g. 101 Procurement Team-E).") };
+                        }
                         break;
                     case "Supplier":
                         if (!sValTrim) oState = { state: "Error", text: fnResolve("poValSupplierRequired", null, "Supplier account is required (e.g. 10300001).") };
@@ -501,12 +505,12 @@
                 });
             }
             if (!oHeader.PurchasingGroup || !String(oHeader.PurchasingGroup).trim()) {
-                oHeaderErrors.PurchasingGroup = { state: "Error", text: fnResolve("poValPurchGrpRequired", null, "Purchasing Group is required (e.g. 001).") };
+                oHeaderErrors.PurchasingGroup = { state: "Error", text: fnResolve("poValPurchGrpRequired", null, "Purchasing Group is required (e.g. 101).") };
                 aErrorList.push({
                     type: "Error",
                     title: fnResolve("poValSummaryPurchGrpReq", null, "Purchasing Group is required."),
                     field: "General Data / Purchasing Group",
-                    description: fnResolve("poValSummaryPurchGrpDesc", null, "Specify a 3-character buyer purchasing group (e.g. 001)."),
+                    description: fnResolve("poValSummaryPurchGrpDesc", null, "Specify a 3-character buyer purchasing group (e.g. 101)."),
                     controlId: "inPurchGrp"
                 });
             }

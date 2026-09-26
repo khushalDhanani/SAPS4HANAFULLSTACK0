@@ -26,7 +26,7 @@ sap.ui.define([
         "/DocumentTypeVH": { title: "Select Document Type", key: "PurchasingDocumentType", desc: "PurchasingDocumentType_Text" },
         "/CompanyCodeVH": { title: "Select Company Code", key: "CompanyCode", desc: "CompanyCodeName", info: "CompanyCode" },
         "/PurchasingOrgVH": { title: "Select Purchasing Org", key: "PurchasingOrganization", desc: "PurchasingOrganizationName" },
-        "/PurchasingGroupVH": { title: "Select Purchasing Group", key: "PurchasingGroup", desc: "PurchasingGroupName" },
+        "/PurchasingGroupVH": { title: "Select Purchasing Group", key: "PurchasingGroup", desc: "PurchasingGroupName", info: "FaxNumber" },
         "/SupplierVH": { title: "Select Supplier", key: "Supplier", desc: "SupplierName", info: "CompanyCode" },
         "/CurrencyVH": { title: "Select Currency", key: "Currency", desc: "Currency_Text" },
         "/IncotermsClassificationVH": { title: "Select Incoterms", key: "IncotermsClassification", desc: "IncotermsClassificationName" },
@@ -204,11 +204,13 @@ sap.ui.define([
                     sDialogTitle = "Select Supplying Plant / Internal Site";
                 }
             } else if (sPath === "/CompanyCodeVH") {
-                var bHasDomCoFilter = aActiveContextFilters.some(function (f) {
-                    return f && f.sPath === "CompanyCode" && (f.oValue1 === "1000" || f.sValue === "1000");
+                sDialogTitle = "Select Company Code (1000 / 2000)";
+            } else if (sPath === "/PurchasingGroupVH") {
+                var bHas100SeriesFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "PurchasingGroup" && (f.oValue1 === "1" || f.sValue === "1");
                 });
-                if (bHasDomCoFilter) {
-                    sDialogTitle = "Select Domestic Company Code";
+                if (bHas100SeriesFilter) {
+                    sDialogTitle = "Select Purchasing Group (100 Series)";
                 }
             }
 
@@ -304,11 +306,13 @@ sap.ui.define([
                 } else if (sPath === "/SupplierVH") {
                     oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : (${SupplierAccountGroup} === 'ZINT' ? 'Internal Plant • ' : '')) + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
                 } else if (sPath === "/CompanyCodeVH") {
-                    oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic' : '' }";
+                    oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic (AIL)' : (${CompanyCode} === '2000' ? 'Domestic (ASCL)' : '') }";
                 } else if (sPath === "/PlantVH") {
                     oTemplateConfig.info = "{= ${PurchasingOrganization} ? 'PurchOrg ' + ${PurchasingOrganization} : '' }";
                 } else if (sPath === "/StorageLocationVH") {
                     oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
+                } else if (sPath === "/PurchasingGroupVH") {
+                    oTemplateConfig.info = "{= ${FaxNumber} ? ${FaxNumber} : '' }";
                 } else {
                     oTemplateConfig.info = "{" + oConf.info + "}";
                 }

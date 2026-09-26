@@ -1,5 +1,5 @@
 // AUTO-GENERATED from config/schema/purchaseOrderRules.json - DO NOT EDIT MANUALLY
-// Generated on: 2026-09-26T05:01:54.985Z
+// Generated on: 2026-09-26T08:00:44.667Z
 // To regenerate: node tools/generate-po-rules.js
 
 (function (root, factory) {
@@ -138,7 +138,8 @@
             "description": "Asset PO",
             "processType": "Asset",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -175,7 +176,8 @@
             "description": "Deemed Import PO-AIL",
             "processType": "DeemedImport",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -209,6 +211,7 @@
             "description": "Deemed Imp. PO-ASCL",
             "processType": "DeemedImport",
             "allowedCompanyCodes": [
+                "1000",
                 "2000"
             ],
             "defaultCompanyCode": "2000",
@@ -240,7 +243,8 @@
             "description": "Dom. Aether In.LTD.",
             "processType": "Domestic",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -272,6 +276,7 @@
             "description": "Dom.Aether Spec.Chem",
             "processType": "Domestic",
             "allowedCompanyCodes": [
+                "1000",
                 "2000"
             ],
             "defaultCompanyCode": "2000",
@@ -301,7 +306,8 @@
             "description": "High Sea Imp. PO-AIL",
             "processType": "HighSeas",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -370,7 +376,8 @@
             "description": "Imp.Aether In.LTD.",
             "processType": "Import",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -403,6 +410,7 @@
             "description": "Imp.Aether Spec.chem",
             "processType": "Import",
             "allowedCompanyCodes": [
+                "1000",
                 "2000"
             ],
             "defaultCompanyCode": "2000",
@@ -436,7 +444,8 @@
             "description": "Plant to Plant TO",
             "processType": "StockTransfer",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -469,7 +478,8 @@
             "description": "Logistic PO",
             "processType": "Logistics",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -503,7 +513,8 @@
             "description": "Non-Valuated PO",
             "processType": "NonValuated",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -570,7 +581,8 @@
             "description": "Service PO",
             "processType": "Service",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [
@@ -639,7 +651,8 @@
             "description": "Subcontracting PO",
             "processType": "Subcontracting",
             "allowedCompanyCodes": [
-                "1000"
+                "1000",
+                "2000"
             ],
             "defaultCompanyCode": "1000",
             "allowedPurchOrgs": [

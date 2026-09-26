@@ -3,6 +3,158 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-26 14:55 IST
+- **Agent**: Antigravity
+- **Change**: Universal Enforcement of Allowed Company Codes (`1000, 2000`) across all 16 PO types in SAP S/4HANA (`/mm/purchase-orders/create`):
+  1. **Systematic 16 PO Types Matrix Verification**:
+     - Verified all 16 PO types in `config/schema/purchaseOrderRules.json` and generated `PurchaseOrderRules.js`:
+       - `ZCAP`: Asset PO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZDIA`: Deemed Import PO-AIL (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZDIS`: Deemed Imp. PO-ASCL (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `2000`)
+       - `ZDOM`: Dom. Aether In.LTD. (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZDOS`: Dom.Aether Spec.Chem (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `2000`)
+       - `ZHSA`: High Sea Imp. PO-AIL (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZHSS`: High Seas Imp ASCL (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZIMP`: Imp.Aether In.LTD. (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZIMS`: Imp.Aether Spec.chem (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `2000`)
+       - `ZINT`: Plant to Plant TO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZLOG`: Logistic PO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZNVM`: Non-Valuated PO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZRTV`: Vendor Return PO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZSER`: Service PO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+       - `ZSTO`: Company to Company T (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `2000`)
+       - `ZSUB`: Subcontracting PO (`allowedCompanyCodes`: `["1000", "2000"]`, `defaultCompanyCode`: `1000`)
+  2. **Rule Generation & Runtime Synchronization**:
+     - Regenerated `PurchaseOrderRules.js` via `node tools/generate-po-rules.js`.
+     - Confirmed both CAP backend validator (`purchaseOrder.validation.js`) and UI5 frontend validator (`PurchaseOrderValidator.js`) enforce `allowedCompanyCodes: ["1000", "2000"]` for all 16 PO types.
+     - Controller `_onDocTypeSelectedCheck` handles `1000` and `2000` cleanly for `ZDOM`, `ZSTO`, and all generic types, ensuring warning state resets to `"None"`.
+  3. **Unit & Regression Test Coverage**:
+     - Enhanced `test/unit/purchase-order/poTypeDynamicRules.test.js` with matrix tests:
+       - Verified `rule.allowedCompanyCodes.toEqual(['1000', '2000'])` across all 16 PO types.
+       - Asserted both `1000` and `2000` pass single-field UI validation (`validateSingleField`) with `state: "None"` across all 16 PO types.
+       - Asserted both `1000` and `2000` pass full backend creation payload validation (`validateCreatePurchaseOrderPayload`) with `isValid: true` across all 16 PO types.
+       - Asserted invalid company codes (`9999`) are rejected for all 16 PO types.
+  4. **Executed Commands & Results**:
+     - `node tools/generate-po-rules.js`: Success (`PurchaseOrderRules.js` regenerated).
+     - `npx jest test/unit/purchase-order/poTypeDynamicRules.test.js`: 91/91 passed (100%).
+     - `npx jest test/unit/purchase-order/`: 24/24 test suites passed, 417/417 tests passed (100%).
+     - `npm --prefix app/fiori-app run build`: Succeeded in 1.2 s (`Component-preload.js` generated).
+     - `npm run lint`: Clean (0 errors, 0 warnings).
+     - `npm test`: 91/91 test suites passed, 1,404/1,404 tests passed (100% green, 0 regressions).
+     - `git diff --check`: Clean (0 errors).
+
+## 2026-09-26 13:45 IST
+- **Agent**: Antigravity
+- **Change**: Restrict Company Code strictly to enterprise codes `1000` and `2000` on Create Purchase Order (`/mm/purchase-orders/create`):
+  1. **Empirical Master Data Verification (SAP S/4HANA DS4 Client 220)**:
+     - Checked Gateway OData service `/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_CompanyCodeValueHelp`.
+     - Verified that out of 69 company codes in the SAP backend catalog, exactly two belong to the enterprise:
+       - `1000`: Aether Industries Limited (Domestic AIL)
+       - `2000`: Aether Specialty Chem Ltd (Domestic ASCL)
+     - All other 67 codes are dummy/template country codes (`0001`, `0003`, `AE01`, `DE01`, `US01`, etc.) and are now completely excluded from autocomplete and Value Help dialogs.
+  2. **Authoritative Rules & Model Synchronization**:
+     - `config/schema/purchaseOrderRules.json`: Updated `allowedCompanyCodes` to `["1000", "2000"]` across PO types (`ZCAP`, `ZDIA`, `ZDIS`, `ZDOM`, `ZDOS`, `ZHSA`, `ZHSS`, `ZIMP`, `ZIMS`, `ZINT`, `ZLOG`, `ZNVM`, `ZRTV`, `ZSER`, `ZSTO`, `ZSUB`), preserving their specific `defaultCompanyCode` (`1000` or `2000`).
+     - Ran `node tools/generate-po-rules.js` to regenerate frontend `PurchaseOrderRules.js`.
+  3. **UI5 View (`CreatePurchaseOrder.view.xml`)**:
+     - Added declarative filter on `inCompanyCode` `suggestionItems`:
+       `filters: [{filters: [{path: 'CompanyCode', operator: 'EQ', value1: '1000'}, {path: 'CompanyCode', operator: 'EQ', value1: '2000'}], and: false}]`
+     - Updated `additionalText` template to distinguish `[Domestic - AIL]` for 1000 and `[Domestic - ASCL]` for 2000.
+  4. **UI5 Controller (`CreatePurchaseOrder.controller.js`)**:
+     - In `_buildContextFilters` for `sField === "CompanyCode"`: returns multi-filter OR for `1000` and `2000`.
+     - In `_onDocTypeSelectedCheck`: Updated validation check to accept both `1000` and `2000` as valid enterprise domestic company codes for `ZDOM`, clearing any previous warning state upon selecting either code.
+  5. **Value Help Service (`ValueHelpService.js`)**:
+     - Dialog title set to `"Select Company Code (1000 / 2000)"`.
+     - ListItem template info tag formatted as `"Domestic (AIL)"` for 1000 and `"Domestic (ASCL)"` for 2000.
+  6. **i18n & Tests**:
+     - Updated `poValCompanyCodeNotDomestic` in `i18n.properties` and `i18n_en.properties`.
+     - Updated `test/unit/purchase-order/headerValueHelpSelection.test.js` to assert `1000` or `2000` multi-filter across document types and verify valid selection without warnings.
+  7. **Executed Commands & Results**:
+     - `node tools/generate-po-rules.js`: Success (`PurchaseOrderRules.js` regenerated).
+     - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js`: 60/60 passed (100%).
+     - `npx jest test/unit/purchase-order/purchaseOrderRulesSync.test.js`: 14/14 passed (100%).
+     - `npx jest test/unit/purchase-order/`: 24/24 test suites passed, 401/401 tests passed (100%).
+     - `npm --prefix app/fiori-app run build`: Succeeded in 1.45 s (`Component-preload.js` generated).
+     - `npm run lint`: Clean (0 errors, 0 warnings).
+     - `npm test`: 91/91 test suites passed, 1,388/1,388 tests passed (100% green, 0 regressions).
+     - `git diff --check`: Clean (0 errors).
+  8. **Live DevTools MCP Validation & Visual Confirmation**:
+     - Navigated to `http://localhost:4004/fiori-app/webapp/index.html#/mm/purchase-orders/create`.
+     - Opened Value Help on Company Code: Dialog shows title `"Select Company Code (1000 / 2000)"` with exactly 2 items: `1000` (Aether Industries Limited) and `2000` (Aether Specialty Chem Ltd).
+     - Tested autocomplete suggestions on `inCompanyCode`: returns exactly 2 items.
+     - Confirmed selection of `2000` sets value cleanly with `state: "None"` and zero errors.
+
+## 2026-09-26 13:20 IST
+- **Agent**: Antigravity
+- **Change**: Restrict Purchasing Group strictly to 100-Series on Create Purchase Order (`/mm/purchase-orders/create`):
+  1. **Empirical Master Data Discovery (SAP S/4HANA DS4 Client 220)**:
+     - Queried live Gateway OData service `/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_PurchasingGroupValueHelp`.
+     - System contains exactly 44 Purchasing Groups:
+       - **100-Series (41 groups, 100–140)**:
+         - `100`: Cafe (Kajal Kathiriya, `kajal@aether.co.in`)
+         - `101`: Procurement Team-E (Kevin Shah, `kevin@aether.co.in`) [Primary default]
+         - `102`: Store Team (Engg) (Kevin Shah, `kevin@aether.co.in`)
+         - `103`: Procurement Team-R (Jayesh Mourya, `jayesh@aether.co.in`)
+         - `104`: Store Team (RM) (Jayesh Mourya, `jayesh@aether.co.in`)
+         - `105`: Sales Team (Jalpa Mistry, `jalpa@aether.co.in`)
+         - `106`: CIS Team (Dipak Rathod, `dipak@aether.co.in`)
+         - `107`: Finance Team (Sujit Nair, `sujit@aether.co.in`)
+         - `108`: Logistic Team (Hitesh Patel, `hitesh@aether.co.in`)
+         - `109`: Dispatch Team (Paresh Patel, `paresh@aether.co.in`)
+         - `110`: HR & IR Team (Mayur Patel, `mayur@aether.co.in`)
+         - `111`: Admin Team (Vipul Patel, `vipul@aether.co.in`)
+         - `112`: Creative Team (Siddharth Joshi, `siddharth@aether.co.in`)
+         - `113`: Analytical Devlp T (Ashish Bhavsar, `ashish@aether.co.in`)
+         - `114`: Quality Assurance (Ketan Kansagara, `ketan@aether.co.in`)
+         - `115`–`121`: R&D Teams 1 through 7
+         - `122`–`123`: C & I - 1 & 2
+         - `124`–`127`: Production Teams 1 through 4
+         - `128`–`129`: Electrical Teams 1 & 2
+         - `130`–`131`: Maintenance Teams 1 & 2
+         - `132`: Quality Control T
+         - `133`: Process & Project
+         - `134`: EHS Team
+         - `135`: Environment Team
+         - `136`–`138`: R&D Teams 8 through 10
+         - `139`: Production Team-5
+         - `140`: BDM Team
+       - **Standard German Test Groups (3 groups)**:
+         - `001`: Einkäufer 1, `002`: Einkäufer 2, `003`: Einkäufer 3
+  2. **Full-Stack Implementation Delivered**:
+     - **UI5 View (`app/fiori-app/webapp/modules/mm/purchase-order/view/CreatePurchaseOrder.view.xml`)**:
+       - Added declarative filter on `inPurchGrp` suggestion items: `filters: [{path: 'PurchasingGroup', operator: 'StartsWith', value1: '1'}]`.
+       - Updated placeholder text key to `poPlaceholderPurchasingGroup`.
+     - **UI5 Controller (`app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`)**:
+       - In `_buildContextFilters`: Added contextual filter `new Filter("PurchasingGroup", FilterOperator.StartsWith, "1")` for field `PurchasingGroup`.
+       - Added `_refreshPurchGrpBinding()` method to refresh autocomplete suggestion bindings on view load and route match.
+       - Invoked `_refreshPurchGrpBinding()` in `_resetModel()` and `_loadConfigurationAndDefaults()`.
+     - **Domain Defaulting (`app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderDefaults.js`)**:
+       - Updated Purchasing Group defaulting logic in `applyConfigurationDefaults` to prioritize `101` (Procurement Team-E) first, then any group starting with `1`, eliminating the fallback to `001` when 100-series groups are present.
+     - **Value Help Service (`app/fiori-app/webapp/service/ValueHelpService.js`)**:
+       - Added dialog title customization: `"Select Purchasing Group (100 Series)"` when the 100-series contextual filter is active.
+       - Configured `info: "FaxNumber"` on `/PurchasingGroupVH` in `oValueHelpConfig` to display contact person name in the dialog list items.
+     - **Validation & i18n (`PurchaseOrderValidator.js`, `i18n.properties`, `i18n_en.properties`)**:
+       - Updated field example from `001` to `101`.
+       - Added non-blocking Warning state when user manually inputs non-100 series codes: `"Purchasing Group should be in the 100 Series (e.g. 101 Procurement Team-E)."`.
+       - Updated placeholder and validation keys across localized resource bundles.
+  3. **Verification via DevTools MCP (`chrome-devtools-mcp`) & Browser Screenshot**:
+     - Navigated to `http://localhost:4004/fiori-app/webapp/index.html#/mm/purchase-orders/create` with cache ignored.
+     - Evaluated live UI state:
+       - Default prefilled value: `101` (Procurement Team-E)
+       - Autocomplete suggestion items count: 41 (all starting with `1`, 0 non-100 items)
+       - Value Help dialog title: `"Select Purchasing Group (100 Series)"`
+       - Value Help dialog items count: 41 (all starting with `1`, 0 non-100 items, with contact person name in info column)
+     - Screenshot captured and saved to `purchasing_group_100_series.png`.
+  4. **Executed Commands and Results**:
+     - `npx jest test/unit/purchase-order/headerValueHelpSelection.test.js test/unit/purchase-order/purchaseOrderDefaults.test.js`: 68/68 passed (100%).
+     - `npx jest test/unit/purchase-order/`: 24/24 test suites passed, 400/400 tests passed (100% green).
+     - `npm test`: 91/91 test suites passed, 1,387/1,387 tests passed (100% green, 0 regressions).
+     - `npm run lint`: Clean (0 errors, 0 warnings).
+     - `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+     - `npm --prefix app/fiori-app run build`: Build succeeded in 1.05 s (`Component-preload.js` generated).
+     - `git diff --check`: Clean (0 errors).
+
+
+
 ## 2026-09-26 12:56 IST
 - **Agent**: Antigravity
 - **Change**: Comprehensive Audit and Resolution of Incomplete Metrics on Orders Due for Delivery (`/le/orders-due`):
@@ -3634,6 +3786,8 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-26 13:45 IST (uncommitted)**: Restricted Company Code field on Create Purchase Order (`/mm/purchase-orders/create`) strictly to enterprise domestic codes `1000` (Aether Industries Limited) and `2000` (Aether Specialty Chem Ltd). Filtered both autocomplete suggestions and F4 Value Help dialogs, completely eliminating 67 SAP country template codes. Synchronized authoritative rules schema (`config/schema/purchaseOrderRules.json`), regenerated `PurchaseOrderRules.js`, updated `CreatePurchaseOrder.view.xml`, `CreatePurchaseOrder.controller.js`, `ValueHelpService.js`, and unit tests. Verified live in Chrome DevTools MCP with screenshot confirmation. All repository gates green: `npm test` 91/91 suites, 1,388/1,388 tests 100% passed; `npm run lint` clean; `ui5 build` OK; `git diff --check` clean.
+- **2026-09-26 13:20 IST (uncommitted)**: Restricted Purchasing Group strictly to 100-Series on Create Purchase Order (`/mm/purchase-orders/create`). Filtered suggestions and F4 dialog to 41 enterprise 100-series groups (100–140), defaulted to 101 (Procurement Team-E). All 91 test suites (1,387 tests) passed.
 - **2026-09-26 11:10 IST (uncommitted)**: Verified PO creation across all 16 PO types (`ZCAP`, `ZDIA`, `ZDIS`, `ZDOM`, `ZDOS`, `ZHSA`, `ZHSS`, `ZIMP`, `ZIMS`, `ZINT`, `ZLOG`, `ZNVM`, `ZRTV`, `ZSER`, `ZSTO`, `ZSUB`). Tested each type individually and fixed mapping and data issues (InvoicingParty default, NetPriceQuantity, AccountAssignment child entity `to_PurOrdAcctAssignmentTP`, ZSER item category normalization to 0 with account assignment K, ASCL purchasing org alignment to AS02). Proved real live S/4HANA DS4 Client 220 PO creation and direct readback for 15/16 PO types with authentic SAP document numbers (`8000000082`, `4100000006`, `4200000003`, `300002045`, `3000000007`, `4300000004`, `4400000002`, `400000340`, `4000000005`, `8700000018`, `9000000052`, `6000000034`, `8500000110`, `7000000018`, `7500000051`). Verified 16/16 S/4HANA drafts created (HTTP 201) with distinct DraftUUID. Documented Gateway V2 limitation for `ZINT` (per SAP Note 2656910). All repo gates green: `npm test` 89/89 suites, 1,358/1,358 tests 100% green; UI5 linter 0 findings; `git diff --check` clean.
 - **2026-09-26 10:35 IST (uncommitted)**: Verified PO creation across all 16 PO types (`ZCAP`, `ZDIA`, `ZDIS`, `ZDOM`, `ZDOS`, `ZHSA`, `ZHSS`, `ZIMP`, `ZIMS`, `ZINT`, `ZLOG`, `ZNVM`, `ZRTV`, `ZSER`, `ZSTO`, `ZSUB`) with new dedicated CLI tool `tools/test-po-creation-all-types.js`. Proved live SAP S/4HANA DS4 client 220 draft creation for all 16 types (16/16 HTTP 201 Created with distinct `DraftUUID`). Tested full live activation and readback on `ZDOM`, generating SAP Purchase Order `300002043`. Added non-stock service exemption (`storageLocationRequired: false`) for `ZSER` across validation schema, CAP handler, UI5 validator, and view bindings. All repository gates green (`npm test` 89/89 suites, 1,358/1,358 tests 100% passed; `ui5lint` 0 findings; `ui5 build` OK; `cds compile` OK; `git diff --check` clean).
 - **2026-09-26 10:15 IST (uncommitted)**: Implemented PO Type–Wise Dynamic Business Rules for all 16 PO types in Create PO application. Unified schema in `config/schema/purchaseOrderRules.json`, code generator in `tools/generate-po-rules.js`, CAP validations in `purchaseOrder.validation.js`, UI5 validations in `PurchaseOrderValidator.js`, and model reconciliations in `PurchaseOrderDefaults.js` and `PurchaseOrderModel.js`. Added dedicated 75 unit tests in `poTypeDynamicRules.test.js`.

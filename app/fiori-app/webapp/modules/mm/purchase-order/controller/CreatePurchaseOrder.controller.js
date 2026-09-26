@@ -45,6 +45,7 @@ sap.ui.define([
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
             }
+            this._refreshPurchGrpBinding();
             if (bLoadConfig) {
                 this._loadConfigurationAndDefaults();
             }
@@ -79,6 +80,8 @@ sap.ui.define([
                     PurchaseOrderModel.updateStatus(oCurrentModel);
                     that._refreshSupplierBinding();
                     that._refreshCompanyCodeBinding();
+                    that._refreshPurchOrgBinding();
+                    that._refreshPurchGrpBinding();
                 }
                 return oConfigData;
             }).catch(function (err) {
@@ -623,15 +626,16 @@ sap.ui.define([
                 if (sField === "PurchaseOrderType" || sField === "PurchaseOrderTypeText") {
                     aFilters.push(new Filter("PurchasingDocumentType", FilterOperator.StartsWith, "Z"));
                 } else if (sField === "CompanyCode") {
-                    if (oPoRule && oPoRule.allowedCompanyCodes && oPoRule.allowedCompanyCodes.length > 0) {
-                        if (oPoRule.allowedCompanyCodes.length === 1) {
-                            aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, oPoRule.allowedCompanyCodes[0]));
-                        } else {
-                            var aCoFilters = oPoRule.allowedCompanyCodes.map(function (cc) {
-                                return new Filter("CompanyCode", FilterOperator.EQ, cc);
-                            });
-                            aFilters.push(new Filter({ filters: aCoFilters, and: false }));
-                        }
+                    var aAllowedCoCodes = (oPoRule && Array.isArray(oPoRule.allowedCompanyCodes) && oPoRule.allowedCompanyCodes.length > 0)
+                        ? oPoRule.allowedCompanyCodes
+                        : ["1000", "2000"];
+                    if (aAllowedCoCodes.length === 1) {
+                        aFilters.push(new Filter("CompanyCode", FilterOperator.EQ, aAllowedCoCodes[0]));
+                    } else {
+                        var aCoFilters = aAllowedCoCodes.map(function (cc) {
+                            return new Filter("CompanyCode", FilterOperator.EQ, cc);
+                        });
+                        aFilters.push(new Filter({ filters: aCoFilters, and: false }));
                     }
                 } else if (sField === "Supplier") {
                     var sCompanyCode = oModel.getProperty("/header/CompanyCode");
@@ -667,6 +671,8 @@ sap.ui.define([
                             aFilters.push(new Filter({ filters: aCurrFilters, and: false }));
                         }
                     }
+                } else if (sField === "PurchasingGroup") {
+                    aFilters.push(new Filter("PurchasingGroup", FilterOperator.StartsWith, "1"));
                 }
             }
 
@@ -722,6 +728,21 @@ sap.ui.define([
         },
 
         /**
+         * Re-applies active contextual filters (100 Series) to Purchasing Group suggestion items.
+         * @private
+         */
+        _refreshPurchGrpBinding: function () {
+            var oPurchGrpInput = typeof this.byId === "function" ? this.byId("inPurchGrp") : null;
+            if (oPurchGrpInput && typeof oPurchGrpInput.getBinding === "function") {
+                var oBinding = oPurchGrpInput.getBinding("suggestionItems");
+                if (oBinding && typeof oBinding.filter === "function") {
+                    var aFilters = this._buildContextFilters(oPurchGrpInput);
+                    oBinding.filter(aFilters);
+                }
+            }
+        },
+
+        /**
          * Re-applies active contextual filters to Currency suggestion items.
          * @private
          */
@@ -763,13 +784,18 @@ sap.ui.define([
                     );
                 }
                 var sExistingCoCode = oModel.getProperty("/header/CompanyCode");
-                if (sExistingCoCode && sExistingCoCode !== "1000") {
+                if (sExistingCoCode && sExistingCoCode !== "1000" && sExistingCoCode !== "2000") {
                     PurchaseOrderModel.setFieldValidation(
                         oModel,
                         "CompanyCode",
                         "Warning",
-                        this.getText("poValCompanyCodeNotDomestic", null, "Selected Company Code is not a domestic company for document type ZDOM (expected 1000 - Aether Industries Limited).")
+                        this.getText("poValCompanyCodeNotDomestic", null, "Selected Company Code is not an enterprise domestic company for document type ZDOM (expected 1000 - Aether Industries Limited or 2000 - Aether Specialty Chem Ltd).")
                     );
+                } else if (sExistingCoCode) {
+                    var oCoError = oModel.getProperty("/errors/CompanyCode");
+                    if (oCoError && oCoError.state === "Warning") {
+                        PurchaseOrderModel.setFieldValidation(oModel, "CompanyCode", "None", "");
+                    }
                 }
             } else if (sCleanDocType === "ZSTO") {
                 var sExistingSupplierSto = oModel.getProperty("/header/Supplier");
@@ -781,6 +807,20 @@ sap.ui.define([
                         "Warning",
                         this.getText("poValSupplierNotInternalPlant", null, "Selected supplier is not an internal plant. Please choose an internal plant / site for document type ZSTO.")
                     );
+                }
+                var sExistingCoCodeSto = oModel.getProperty("/header/CompanyCode");
+                if (sExistingCoCodeSto && sExistingCoCodeSto !== "1000" && sExistingCoCodeSto !== "2000") {
+                    PurchaseOrderModel.setFieldValidation(
+                        oModel,
+                        "CompanyCode",
+                        "Warning",
+                        this.getText("poValCompanyCodeMismatch", ["ZSTO", "1000, 2000"], "Selected Company Code " + sExistingCoCodeSto + " is not permitted for document type ZSTO (Allowed: 1000, 2000).")
+                    );
+                } else if (sExistingCoCodeSto) {
+                    var oCoErrorSto = oModel.getProperty("/errors/CompanyCode");
+                    if (oCoErrorSto && oCoErrorSto.state === "Warning") {
+                        PurchaseOrderModel.setFieldValidation(oModel, "CompanyCode", "None", "");
+                    }
                 }
             } else {
                 var oPoRule = (PurchaseOrderRules && PurchaseOrderRules.PO_TYPES && PurchaseOrderRules.PO_TYPES[sCleanDocType]) || null;
@@ -804,6 +844,11 @@ sap.ui.define([
                             "Warning",
                             this.getText("poValCompanyCodeMismatch", [sCleanDocType, oPoRule.allowedCompanyCodes.join(", ")], "Selected Company Code " + sExistingCoCodeGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ").")
                         );
+                    } else if (sExistingCoCodeGen) {
+                        var oCoErrorGen = oModel.getProperty("/errors/CompanyCode");
+                        if (oCoErrorGen && oCoErrorGen.state === "Warning") {
+                            PurchaseOrderModel.setFieldValidation(oModel, "CompanyCode", "None", "");
+                        }
                     }
 
                     var sExistingPurchOrgGen = oModel.getProperty("/header/PurchasingOrganization");
