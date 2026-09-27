@@ -32,12 +32,13 @@ sap.ui.define([
                 batch: "",
                 openQty: "0.000",
                 scanQty: "0.000",
-                unit: "KG",
+                unit: "",
                 destBin: "",
                 destType: "",
-                confirmImmediate: true,
                 audioEnabled: true,
                 isSimulation: false,
+                // Mock backend only for local development; never offered to operators.
+                isDevHost: /^(localhost|127\.0\.0\.1)$/.test(((typeof window !== "undefined" && window.location) || {}).hostname || ""),
                 hasMessage: false,
                 messageText: "",
                 messageType: "Information",
@@ -189,7 +190,7 @@ sap.ui.define([
                 oModel.setProperty("/materialDesc", oFirstItem.MaterialDesc);
                 oModel.setProperty("/batch", oFirstItem.Batch || "");
                 oModel.setProperty("/openQty", parseFloat(oFirstItem.OpenQty || 0).toFixed(3));
-                oModel.setProperty("/unit", oFirstItem.Unit || "KG");
+                oModel.setProperty("/unit", oFirstItem.Unit || "");
                 oModel.setProperty("/destBin", oFirstItem.DestStorageBin || oData.Nlpla || "");
                 oModel.setProperty("/destType", oFirstItem.DestStorageType || oData.Nltyp || "");
                 oModel.setProperty("/stepBadgeText", "2. SCAN SU");
@@ -219,7 +220,7 @@ sap.ui.define([
             oModel.setProperty("/materialDesc", oSelected.MaterialDesc);
             oModel.setProperty("/batch", oSelected.Batch || "");
             oModel.setProperty("/openQty", parseFloat(oSelected.OpenQty || 0).toFixed(3));
-            oModel.setProperty("/unit", oSelected.Unit || "KG");
+            oModel.setProperty("/unit", oSelected.Unit || "");
             oModel.setProperty("/destBin", oSelected.DestStorageBin || "");
             oModel.setProperty("/destType", oSelected.DestStorageType || "");
 
@@ -343,10 +344,8 @@ sap.ui.define([
             var sLenum = oModel.getProperty("/storageUnit");
             var nQty = parseFloat(oModel.getProperty("/scanQty") || 0);
             var nOpen = parseFloat(oModel.getProperty("/openQty") || 0);
-            var sUnit = oModel.getProperty("/unit") || "KG";
+            var sUnit = oModel.getProperty("/unit") || "";
             var sLgnum = oModel.getProperty("/warehouse") || "W01";
-            var oItem = oModel.getProperty("/selectedItem") || {};
-            var bConfirm = !!oModel.getProperty("/confirmImmediate");
 
             if (!sTbnum || !sLenum || nQty <= 0) {
                 this._showMessage("Mandatory fields missing. Please scan TR and SU.", "Error");
@@ -360,15 +359,12 @@ sap.ui.define([
                 return;
             }
 
+            // Server re-derives TR item, unit and limits from SAP; only the operator's input is sent.
             var oPayload = {
                 lgnum: sLgnum,
                 tbnum: sTbnum,
-                tbpos: oItem.Tbpos || "0001",
                 lenum: sLenum,
-                qty: nQty,
-                openQty: nOpen,
-                unit: sUnit,
-                confirmImmediate: bConfirm
+                qty: nQty
             };
 
             var that = this;

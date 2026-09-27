@@ -79,14 +79,11 @@ service TrToService @(path: '/odata/v4/tr-to') {
     function checkSU(lenum: String(20), tbnum: String(10), lgnum: String(3)) returns StorageUnit;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    // Create only (as RF transaction ZTO); item, unit and limits are derived from SAP server-side.
     action createTO(
-        lgnum            : String(3),
-        tbnum            : String(10),
-        tbpos            : String(4),
-        lenum            : String(20),
-        qty              : Decimal(13, 3),
-        openQty          : Decimal(13, 3),
-        unit             : String(3),
-        confirmImmediate : Boolean
+        lgnum : String(3),
+        tbnum : String(10),
+        lenum : String(20),
+        qty   : Decimal(13, 3)
     ) returns TOConfirmation;
 }

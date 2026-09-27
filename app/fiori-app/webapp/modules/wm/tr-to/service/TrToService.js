@@ -39,16 +39,13 @@ sap.ui.define([
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
             var sWh = sLgnum || "W01";
+            if (TrToService.isSimulationActive()) {
+                return Promise.resolve(TrToService.getMockTR(sTbnum, sWh));
+            }
             var sUrl = BASE_PATH + "/getTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
 
             return ODataClient.get(sUrl).then(function (oData) {
                 return (oData && oData.value) ? oData.value : oData;
-            }).catch(function (oErr) {
-                // If backend OData is unreachable during live development, provide verified simulation fallback
-                if (TrToService.isSimulationActive() && String(sTbnum).trim().endsWith("663")) {
-                    return TrToService.getMockTR(sTbnum, sWh);
-                }
-                throw oErr;
             });
         },
 
@@ -64,15 +61,13 @@ sap.ui.define([
                 return Promise.reject(new Error("Storage Unit number is required"));
             }
             var sWh = sLgnum || "W01";
+            if (TrToService.isSimulationActive()) {
+                return Promise.resolve(TrToService.getMockSU(sLenum, sTbnum, sWh));
+            }
             var sUrl = BASE_PATH + "/checkSU(lenum='" + encodeURIComponent(sLenum.trim()) + "',tbnum='" + encodeURIComponent(sTbnum ? sTbnum.trim() : "") + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
 
             return ODataClient.get(sUrl).then(function (oData) {
                 return (oData && oData.value) ? oData.value : oData;
-            }).catch(function (oErr) {
-                if (TrToService.isSimulationActive() && String(sLenum).trim().endsWith("43935")) {
-                    return TrToService.getMockSU(sLenum, sTbnum, sWh);
-                }
-                throw oErr;
             });
         },
 
@@ -103,14 +98,13 @@ sap.ui.define([
                 return Promise.reject(new Error("Requested quantity (" + oPayload.qty + ") exceeds open TR quantity (" + oPayload.openQty + ")"));
             }
 
+            if (TrToService.isSimulationActive()) {
+                return Promise.resolve(TrToService.mockCreateTO(oPayload));
+            }
+
             var sUrl = BASE_PATH + "/createTO";
             return ODataClient.post(sUrl, oPayload).then(function (oData) {
                 return (oData && oData.value) ? oData.value : oData;
-            }).catch(function (oErr) {
-                if (TrToService.isSimulationActive()) {
-                    return TrToService.mockCreateTO(oPayload);
-                }
-                throw oErr;
             });
         },
 

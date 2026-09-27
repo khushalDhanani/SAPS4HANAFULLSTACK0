@@ -1,170 +1,45 @@
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
 
-describe('TrToHandler Unit Tests', () => {
-  let mockSrv;
-  let mockAdapter;
+describe('TrToHandler', () => {
   let handlers;
+  let adapter;
+  const req = (data) => ({ data, error: jest.fn((status, msg) => ({ status, msg })) });
 
   beforeEach(() => {
     handlers = {};
-    mockSrv = {
-      on: jest.fn((event, fn) => {
-        handlers[event] = fn;
-      })
-    };
-    mockAdapter = {
-      getTR: jest.fn(),
-      checkSU: jest.fn(),
-      createTO: jest.fn()
-    };
-
-    TrToHandler.init(mockSrv, { adapter: mockAdapter });
+    adapter = { getTR: jest.fn(), checkSU: jest.fn(), createTO: jest.fn() };
+    TrToHandler.init({ on: (event, fn) => { handlers[event] = fn; } }, { adapter });
   });
 
-  describe('Service Event Wiring', () => {
-    it('should register handlers for getTR, checkSU, and createTO', () => {
-      expect(mockSrv.on).toHaveBeenCalledWith('getTR', expect.any(Function));
-      expect(mockSrv.on).toHaveBeenCalledWith('checkSU', expect.any(Function));
-      expect(mockSrv.on).toHaveBeenCalledWith('createTO', expect.any(Function));
-    });
+  it('delegates getTR / checkSU with the request values unchanged (no defaults)', async () => {
+    adapter.getTR.mockResolvedValue({ Tbnum: '0001000663' });
+    adapter.checkSU.mockResolvedValue({ IsValid: true });
+
+    await expect(handlers.getTR(req({ tbnum: '1000663', lgnum: 'W01' }))).resolves.toEqual({ Tbnum: '0001000663' });
+    await handlers.checkSU(req({ lenum: '1000043935', tbnum: '1000663' }));
+
+    expect(adapter.getTR).toHaveBeenCalledWith('1000663', 'W01');
+    expect(adapter.checkSU).toHaveBeenCalledWith('1000043935', '1000663', undefined);
   });
 
-  describe('getTR Handler', () => {
-    it('should reject when tbnum is missing', async () => {
-      const req = {
-        data: {},
-        error: jest.fn((status, msg) => ({ status, msg }))
-      };
+  it('passes only operator input to createTO (item, unit, limits come from SAP)', async () => {
+    adapter.createTO.mockResolvedValue({ TransferOrder: '1036601', Success: true, Confirmed: false });
+    const r = req({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 50, unit: 'KG', openQty: 999, confirmImmediate: true });
 
-      await handlers['getTR'](req);
-      expect(req.error).toHaveBeenCalledWith(400, 'Transfer Requirement number (tbnum) is required');
-    });
-
-    it('should delegate to adapter and return data', async () => {
-      const expectedData = { Tbnum: '0001000663', Items: [] };
-      mockAdapter.getTR.mockResolvedValueOnce(expectedData);
-
-      const req = {
-        data: { tbnum: '0001000663', lgnum: 'W01' },
-        error: jest.fn()
-      };
-
-      const result = await handlers['getTR'](req);
-      expect(mockAdapter.getTR).toHaveBeenCalledWith('0001000663', 'W01');
-      expect(result).toBe(expectedData);
-    });
-
-    it('should return req.error on adapter failure', async () => {
-      const err = new Error('TR not found');
-      err.status = 404;
-      mockAdapter.getTR.mockRejectedValueOnce(err);
-
-      const req = {
-        data: { tbnum: '999999' },
-        error: jest.fn((status, msg) => ({ status, msg }))
-      };
-
-      await handlers['getTR'](req);
-      expect(req.error).toHaveBeenCalledWith(404, 'TR not found');
-    });
+    await expect(handlers.createTO(r)).resolves.toMatchObject({ TransferOrder: '1036601', Confirmed: false });
+    expect(adapter.createTO).toHaveBeenCalledWith({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 50 });
   });
 
-  describe('checkSU Handler', () => {
-    it('should reject when lenum is missing', async () => {
-      const req = {
-        data: { tbnum: '0001000663' },
-        error: jest.fn((status, msg) => ({ status, msg }))
-      };
+  it('maps adapter errors to req.error with their status, 500 when none', async () => {
+    adapter.getTR.mockRejectedValue(Object.assign(new Error('Warehouse is missing or invalid'), { status: 400 }));
+    adapter.createTO.mockRejectedValue(new Error('boom'));
 
-      await handlers['checkSU'](req);
-      expect(req.error).toHaveBeenCalledWith(400, 'Storage Unit number (lenum) is required');
-    });
+    const r1 = req({ tbnum: '1' });
+    await handlers.getTR(r1);
+    expect(r1.error).toHaveBeenCalledWith(400, 'Warehouse is missing or invalid');
 
-    it('should delegate to adapter and return validation data', async () => {
-      const expectedSU = { StorageUnit: '00000000001000043935', IsValid: true };
-      mockAdapter.checkSU.mockResolvedValueOnce(expectedSU);
-
-      const req = {
-        data: { lenum: '1000043935', tbnum: '0001000663', lgnum: 'W01' },
-        error: jest.fn()
-      };
-
-      const result = await handlers['checkSU'](req);
-      expect(mockAdapter.checkSU).toHaveBeenCalledWith('1000043935', '0001000663', 'W01');
-      expect(result).toBe(expectedSU);
-    });
-  });
-
-  describe('createTO Handler (Synchronous - No offline queue)', () => {
-    it('should validate mandatory fields before calling adapter', async () => {
-      const req = {
-        data: {},
-        error: jest.fn((status, msg) => ({ status, msg }))
-      };
-
-      await handlers['createTO'](req);
-      expect(req.error).toHaveBeenCalledWith(400, 'Transfer Requirement number (tbnum) is required');
-
-      req.data = { tbnum: '0001000663' };
-      await handlers['createTO'](req);
-      expect(req.error).toHaveBeenCalledWith(400, 'Storage Unit number (lenum) is required');
-
-      req.data = { tbnum: '0001000663', lenum: '1000043935', qty: 0 };
-      await handlers['createTO'](req);
-      expect(req.error).toHaveBeenCalledWith(400, 'Quantity must be greater than zero');
-    });
-
-    it('should synchronously return TO confirmation from adapter', async () => {
-      const expectedConfirm = {
-        TransferOrder: '0000012345',
-        Success: true,
-        Message: 'Transfer Order created',
-        Confirmed: true
-      };
-      mockAdapter.createTO.mockResolvedValueOnce(expectedConfirm);
-
-      const req = {
-        data: {
-          lgnum: 'W01',
-          tbnum: '0001000663',
-          tbpos: '0001',
-          lenum: '00000000001000043935',
-          qty: 50,
-          unit: 'KG',
-          confirmImmediate: true
-        },
-        error: jest.fn()
-      };
-
-      const result = await handlers['createTO'](req);
-      expect(mockAdapter.createTO).toHaveBeenCalledWith({
-        lgnum: 'W01',
-        tbnum: '0001000663',
-        tbpos: '0001',
-        lenum: '00000000001000043935',
-        qty: 50,
-        unit: 'KG',
-        confirmImmediate: true
-      });
-      expect(result).toBe(expectedConfirm);
-    });
-
-    it('should immediately report failure without offline fallback queue', async () => {
-      const err = new Error('Posting failed in SAP');
-      err.status = 400;
-      mockAdapter.createTO.mockRejectedValueOnce(err);
-
-      const req = {
-        data: {
-          tbnum: '0001000663',
-          lenum: '1000043935',
-          qty: 50
-        },
-        error: jest.fn((status, msg) => ({ status, msg }))
-      };
-
-      await handlers['createTO'](req);
-      expect(req.error).toHaveBeenCalledWith(400, 'Posting failed in SAP');
-    });
+    const r2 = req({});
+    await handlers.createTO(r2);
+    expect(r2.error).toHaveBeenCalledWith(500, 'boom');
   });
 });

@@ -29,6 +29,7 @@
                     class="sapUiTinyMarginEnd" />
                 <Button
                     id="btnToggleSimulation"
+                    visible="{trToView>/isDevHost}"
                     text="{= ${trToView>/isSimulation} ? 'MOCK' : 'LIVE' }"
                     type="{= ${trToView>/isSimulation} ? 'Attention' : 'Transparent' }"
                     tooltip="Toggle Backend Live / Mock Simulation"
@@ -223,18 +224,6 @@
                                     class="sapUiTinyMarginEnd" />
                                 <Text text="Type: " class="sapUiTinyMarginEnd" />
                                 <Text text="{trToView>/destType}" />
-                            </HBox>
-
-                            <!-- 1-Step Pick & Transfer Confirmation Toggle -->
-                            <Label text="{i18n>trToLabelConfirmImmediate}" />
-                            <HBox alignItems="Center">
-                                <Switch
-                                    id="switchConfirmImmediate"
-                                    state="{trToView>/confirmImmediate}"
-                                    customTextOn="Yes"
-                                    customTextOff="No"
-                                    class="sapUiSmallMarginEnd" />
-                                <Text text="{i18n>trToConfirmImmediateHelp}" />
                             </HBox>
 
                         </form:content>

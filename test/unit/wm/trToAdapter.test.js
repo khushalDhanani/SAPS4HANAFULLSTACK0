@@ -1,254 +1,142 @@
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
-describe('TrToAdapter Unit Tests', () => {
-  let mockClient;
-  let adapter;
+const { sapNum } = TrToAdapter._internals;
 
-  beforeEach(() => {
-    mockClient = {
-      destinationName: 'S4HANA_PO_API',
-      get: jest.fn(),
-      post: jest.fn()
-    };
-    adapter = new TrToAdapter({ client: mockClient });
+// Shapes as returned by Z_WM_GET_TR_MATERIAL_LIST / RFC_READ_TABLE (values from W01, TR 1000663).
+const HEADER = { LGNUM: 'W01', TBNUM: '0001000663', BWLVS: '319', BETYP: 'P', BENUM: '0001002749', RSNUM: '0000517858',
+  BDATU: '20260923', STATU: '', VLTYP: '', VLPLA: '', NLTYP: '100', NLPLA: '1002749' };
+const ITEMS = [
+  { LGNUM: 'W01', TBNUM: '0001000663', TBPOS: '0001', MATNR: '000000001000000867', WERKS: '1000', LGORT: 'RM01',
+    CHARG: '', MENGE: '17323.200', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' },
+  { LGNUM: 'W01', TBNUM: '0001000663', TBPOS: '0002', MATNR: '000000001000000869', WERKS: '1000', LGORT: 'RM01',
+    CHARG: '', MENGE: '13929.600', TAMEN: '13929.600', MEINS: 'KG', ELIKZ: 'X' }
+];
+const QUANT = { LQNUM: '0001035375', MATNR: '000000001000000867', WERKS: '1000', LGORT: 'RM01', CHARG: 'IN25003572',
+  VERME: '11.210,000', MEINS: 'KG', LGTYP: 'RM1', LGPLA: 'ONHOLD' };
+
+function fakeRfc({ header = HEADER, items = ITEMS, quants = [QUANT], create } = {}) {
+  return {
+    call: jest.fn(async (fm) => {
+      if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return { ET_TR_HEADER: header ? [header] : [], ET_TR_ITEMS: items };
+      if (fm === 'ZWM_TO_CREATE_FROM_TR') return create;
+      throw new Error(`unexpected ${fm}`);
+    }),
+    readTable: jest.fn(async (table) => (table === 'MAKT' ? [{ MAKTX: 'IPA, Extra Pure' }] : quants))
+  };
+}
+
+describe('TrToAdapter (RFC)', () => {
+  it('getTR maps header/items, computes OpenQty = MENGE - TAMEN, strips leading zeros', async () => {
+    const rfc = fakeRfc();
+    const tr = await new TrToAdapter({ rfc }).getTR('1000663', 'w01');
+
+    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', { IV_TR_NUMBER: '0001000663', IV_LGNUM: 'W01' });
+    expect(tr).toMatchObject({ Tbnum: '0001000663', Bwlvs: '319', Betyp: 'P', Bdatu: '2026-09-23', Nlpla: '1002749' });
+    expect(tr.Items[0]).toMatchObject({ Tbpos: '0001', Material: '1000000867', MaterialDesc: 'IPA, Extra Pure',
+      OpenQty: 17323.2, Unit: 'KG', DeliveryCompleted: false });
+    expect(tr.Items[1]).toMatchObject({ OpenQty: 0, DeliveryCompleted: true });
   });
 
-  describe('getTR', () => {
-    it('should reject when tbnum is missing or empty', async () => {
-      await expect(adapter.getTR('')).rejects.toThrow('Transfer Requirement number (tbnum) is required');
-      await expect(adapter.getTR(null)).rejects.toThrow('Transfer Requirement number (tbnum) is required');
-    });
-
-    it('should successfully fetch and format TR header and items', async () => {
-      mockClient.get.mockResolvedValueOnce({
-        data: {
-          d: {
-            Lgnum: 'W01',
-            Tbnum: '0001000663',
-            Bwlvs: '319',
-            Betyp: 'P',
-            Benum: '0001002749',
-            Rsnum: '0000517858',
-            Bdatu: '/Date(1758585600000)/',
-            Statu: '',
-            Nltyp: '100',
-            Nlpla: 'PROD-01',
-            ToItems: {
-              results: [
-                {
-                  Lgnum: 'W01',
-                  Tbnum: '0001000663',
-                  Tbpos: '0001',
-                  Matnr: '000000001000000867',
-                  Maktx: 'IPA, Extra Pure',
-                  Werks: '1120',
-                  Lgort: 'CS01',
-                  Charg: 'IN25003572',
-                  Menge: '17323.200',
-                  Tamen: '0.000',
-                  Meins: 'KG',
-                  Elikz: ''
-                },
-                {
-                  Lgnum: 'W01',
-                  Tbnum: '0001000663',
-                  Tbpos: '0002',
-                  Matnr: '000000001000000869',
-                  Maktx: 'SOLVESSO 108',
-                  Werks: '1120',
-                  Lgort: 'CS01',
-                  Charg: '',
-                  Menge: '13929.600',
-                  Tamen: '1000.000',
-                  Meins: 'KG',
-                  Elikz: ''
-                }
-              ]
-            }
-          }
-        }
-      });
-
-      const result = await adapter.getTR('1000663', 'W01');
-
-      expect(mockClient.get).toHaveBeenCalledWith(
-        expect.stringContaining("TRHeaderSet(Lgnum='W01',Tbnum='0001000663')?$expand=ToItems")
-      );
-      expect(result.Tbnum).toBe('0001000663');
-      expect(result.Benum).toBe('0001002749');
-      expect(result.Items).toHaveLength(2);
-      expect(result.Items[0].Material).toBe('000000001000000867');
-      expect(result.Items[0].MaterialDesc).toBe('IPA, Extra Pure');
-      expect(result.Items[0].OpenQty).toBe(17323.2);
-      expect(result.Items[1].OpenQty).toBe(12929.6);
-    });
-
-    it('should throw 404 when TR is not returned by S/4HANA', async () => {
-      mockClient.get.mockResolvedValueOnce({ data: { d: null } });
-
-      await expect(adapter.getTR('0001000999', 'W01')).rejects.toThrow(
-        'Transfer Requirement 0001000999 not found in warehouse W01'
-      );
-    });
-
-    it('should translate S/4HANA Gateway error messages cleanly', async () => {
-      const s4Error = new Error('HTTP request failed');
-      s4Error.status = 500;
-      s4Error.response = {
-        status: 500,
-        data: {
-          error: {
-            message: { value: 'Transfer Requirement is currently locked by user OPERATOR1' }
-          }
-        }
-      };
-      mockClient.get.mockRejectedValueOnce(s4Error);
-
-      await expect(adapter.getTR('0001000663', 'W01')).rejects.toThrow(
-        'Failed to retrieve Transfer Requirement 0001000663: Transfer Requirement is currently locked by user OPERATOR1'
-      );
-    });
+  it('getTR returns 404 when SAP has no such TR', async () => {
+    await expect(new TrToAdapter({ rfc: fakeRfc({ header: null }) }).getTR('999', 'W01'))
+      .rejects.toMatchObject({ status: 404, message: 'Transfer Requirement 999 not found in warehouse W01' });
   });
 
-  describe('checkSU', () => {
-    it('should reject when lenum is missing', async () => {
-      await expect(adapter.checkSU('', '0001000663')).rejects.toThrow('Storage Unit number (lenum) is required');
-      await expect(adapter.checkSU(null, '0001000663')).rejects.toThrow('Storage Unit number (lenum) is required');
-    });
-
-    it('should return valid Storage Unit and quants when matched in SAP', async () => {
-      mockClient.get.mockResolvedValueOnce({
-        data: {
-          d: {
-            results: [
-              {
-                Lgnum: 'W01',
-                Lenum: '00000000001000043935',
-                Tbnum: '0001000663',
-                Lgtyp: 'OH1',
-                Lgpla: 'ONHOLD',
-                Letyp: 'E3',
-                IsValid: true,
-                ErrorCode: 'VALID',
-                ErrorMessage: 'Storage Unit verified successfully in bin ONHOLD.',
-                ToQuants: {
-                  results: [
-                    {
-                      Lgnum: 'W01',
-                      Lqnum: '0001035375',
-                      Lenum: '00000000001000043935',
-                      Matnr: '000000001000000867',
-                      Maktx: 'IPA, Extra Pure',
-                      Werks: '1120',
-                      Lgort: 'CS01',
-                      Charg: 'IN25003572',
-                      Verme: '11210.000',
-                      Meins: 'KG',
-                      Lgtyp: 'OH1',
-                      Lgpla: 'ONHOLD'
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-      });
-
-      const result = await adapter.checkSU('1000043935', '1000663', 'W01');
-
-      expect(mockClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('StorageUnitSet?$filter=')
-      );
-      expect(result.IsValid).toBe(true);
-      expect(result.StorageUnit).toBe('00000000001000043935');
-      expect(result.Quants).toHaveLength(1);
-      expect(result.Quants[0].AvailableStock).toBe(11210.0);
-      expect(result.Quants[0].Material).toBe('000000001000000867');
-    });
-
-    it('should return IsValid: false when Storage Unit is not found', async () => {
-      mockClient.get.mockResolvedValueOnce({
-        data: { d: { results: [] } }
-      });
-
-      const result = await adapter.checkSU('9999999999', '1000663', 'W01');
-      expect(result.IsValid).toBe(false);
-      expect(result.ErrorCode).toBe('SU_NOT_FOUND');
-      expect(result.Quants).toEqual([]);
-    });
+  it.each([
+    ['missing warehouse', ['1000663', '']],
+    ['non-numeric TR', ["1' OR '1", 'W01']],
+    ['injection in warehouse', ['1000663', "W' OR"]]
+  ])('rejects %s with 400 before calling SAP', async (_, [tbnum, lgnum]) => {
+    const rfc = fakeRfc();
+    await expect(new TrToAdapter({ rfc }).getTR(tbnum, lgnum)).rejects.toMatchObject({ status: 400 });
+    expect(rfc.call).not.toHaveBeenCalled();
   });
 
-  describe('createTO', () => {
-    it('should validate mandatory parameters', async () => {
-      await expect(adapter.createTO({})).rejects.toThrow('Transfer Requirement number (tbnum) is required');
-      await expect(adapter.createTO({ tbnum: '1000663' })).rejects.toThrow('Storage Unit number (lenum) is required');
-      await expect(adapter.createTO({ tbnum: '1000663', lenum: '1000043935' })).rejects.toThrow(
-        'Quantity must be greater than zero'
-      );
-      await expect(adapter.createTO({ tbnum: '1000663', lenum: '1000043935', qty: 0 })).rejects.toThrow(
-        'Quantity must be greater than zero'
-      );
+  it('checkSU accepts an SU holding an open TR material in the same plant (batch ignored, as ZTO)', async () => {
+    const rfc = fakeRfc();
+    const su = await new TrToAdapter({ rfc }).checkSU('1000043935', '1000663', 'W01');
+
+    expect(rfc.readTable).toHaveBeenCalledWith('LQUA', expect.any(Array),
+      ["LGNUM = 'W01'", "AND LENUM = '00000000001000043935'"]);
+    expect(su).toMatchObject({ IsValid: true, ErrorCode: '', StorageBin: 'ONHOLD' });
+    expect(su.Quants[0]).toMatchObject({ Material: '1000000867', Batch: 'IN25003572', AvailableStock: 11210 });
+  });
+
+  it('checkSU flags an SU whose material is not open on the TR', async () => {
+    const other = { ...QUANT, MATNR: '000000004000000123' };
+    const su = await new TrToAdapter({ rfc: fakeRfc({ quants: [other] }) }).checkSU('1000041619', '1000663', 'W01');
+    expect(su).toMatchObject({ IsValid: false, ErrorCode: 'SU_MATERIAL_MISMATCH' });
+  });
+
+  it('checkSU flags an empty or unknown SU', async () => {
+    const su = await new TrToAdapter({ rfc: fakeRfc({ quants: [] }) }).checkSU('1', '1000663', 'W01');
+    expect(su).toMatchObject({ IsValid: false, ErrorCode: 'SU_NO_STOCK' });
+  });
+
+  it('createTO sends the item exactly as ZTO builds it and returns the TO (create only)', async () => {
+    const rfc = fakeRfc({ create: { EV_SUCCESS: 'S', EV_TANUM: '0001036601', EV_MESSAGE: 'Transfer Order 0001036601 created successfully.' } });
+    const res = await new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 500 });
+
+    expect(rfc.call).toHaveBeenLastCalledWith('ZWM_TO_CREATE_FROM_TR', {
+      IV_LGNUM: 'W01', IV_TBNUM: '0001000663', IV_COMMIT: 'X',
+      IT_ITEMS: [{ TBPOS: '0001', ANFME: '500.000', ALTME: 'KG', CHARG: 'IN25003572', NLTYP: '100', NLPLA: '1002749',
+        VLTYP: 'RM1', VLPLA: 'ONHOLD', VLENR: '00000000001000043935' }]
     });
+    expect(res).toEqual({ TransferOrder: '1036601', Success: true, Message: 'Transfer Order 0001036601 created successfully.', Confirmed: false });
+  });
 
-    it('should synchronously create and confirm Transfer Order in 1 step', async () => {
-      mockClient.post.mockResolvedValueOnce({
-        data: {
-          d: {
-            Tanum: '0000012345',
-            Success: 'S',
-            Message: 'Transfer Order 0000012345 created and confirmed in 1 step.',
-            Confirmed: true
-          }
-        }
-      });
+  it('createTO rejects qty above min(SU stock, TR open) without calling SAP create', async () => {
+    const rfc = fakeRfc();
+    await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 12000 }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining('exceeds the allowed 11210') });
+    expect(rfc.call).not.toHaveBeenCalledWith('ZWM_TO_CREATE_FROM_TR', expect.anything());
+  });
 
-      const result = await adapter.createTO({
-        lgnum: 'W01',
-        tbnum: '0001000663',
-        tbpos: '0001',
-        lenum: '00000000001000043935',
-        qty: 500,
-        unit: 'KG',
-        confirmImmediate: true
-      });
+  it('createTO rejects zero quantity and an invalid SU', async () => {
+    await expect(new TrToAdapter({ rfc: fakeRfc() }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 0 }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(new TrToAdapter({ rfc: fakeRfc({ quants: [] }) }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1', qty: 1 }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining('no available stock') });
+  });
 
-      expect(mockClient.post).toHaveBeenCalledWith(
-        '/sap/opu/odata/sap/ZWM_RF_TRTO_SRV/CreateTO',
-        {
-          Lgnum: 'W01',
-          Tbnum: '0001000663',
-          Tbpos: '0001',
-          Lenum: '00000000001000043935',
-          Qty: '500',
-          Unit: 'KG',
-          ConfirmImmediate: 'X'
-        }
-      );
-      expect(result.TransferOrder).toBe('0000012345');
-      expect(result.Success).toBe(true);
-      expect(result.Confirmed).toBe(true);
-    });
+  it('createTO surfaces the SAP message when ZWM_TO_CREATE_FROM_TR fails', async () => {
+    const rfc = fakeRfc({ create: { EV_SUCCESS: 'E', EV_TANUM: '', EV_MESSAGE: 'Storage bin 100/1002749 does not exist' } });
+    await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 1 }))
+      .rejects.toMatchObject({ status: 400, message: 'Storage bin 100/1002749 does not exist' });
+  });
 
-    it('should throw synchronously on SAP error without queuing', async () => {
-      mockClient.post.mockResolvedValueOnce({
-        data: {
-          d: {
-            Tanum: '',
-            Success: 'E',
-            Message: 'Transfer Requirement is already completed.'
-          }
-        }
-      });
+  it('maps RFC transport errors to 502 with context', async () => {
+    const rfc = { call: jest.fn().mockRejectedValue(new Error('RFC_COMMUNICATION_FAILURE')), readTable: jest.fn() };
+    await expect(new TrToAdapter({ rfc }).getTR('1000663', 'W01'))
+      .rejects.toMatchObject({ status: 502, message: 'Read Transfer Requirement 1000663: RFC_COMMUNICATION_FAILURE' });
+  });
 
-      await expect(
-        adapter.createTO({
-          lgnum: 'W01',
-          tbnum: '0001000663',
-          lenum: '00000000001000043935',
-          qty: 100
-        })
-      ).rejects.toThrow('Transfer Requirement is already completed.');
-    });
+  it('sapNum reads both SAP number formats', () => {
+    expect(sapNum('11.210,000')).toBe(11210);
+    expect(sapNum('11,210.000')).toBe(11210);
+    expect(sapNum('17323.200')).toBe(17323.2);
+    expect(sapNum('1,500 -')).toBe(-1.5);
+    expect(sapNum('')).toBe(0);
+  });
+});
+
+describe('RfcClient', () => {
+  const env = { S4_DESTINATION_URL: 'http://172.27.100.32:8000', S4_RFC_SYSNR: '00', S4_CLIENT: '220', S4_USERNAME: 'U', S4_PASSWORD: 'P' };
+
+  it('returns 503 naming missing settings', () => {
+    expect(() => new RfcClient({}).connectionParams()).toThrow(/S4_RFC_SYSNR/);
+  });
+
+  it('returns 503 when node-rfc is not installed', async () => {
+    const c = new RfcClient(env, () => { throw new Error("Cannot find module 'node-rfc'"); });
+    await expect(c.call('X')).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('readTable splits RFC_READ_TABLE rows by field', async () => {
+    const client = { open: jest.fn(), close: jest.fn(), call: jest.fn().mockResolvedValue({ DATA: [{ WA: ' RM1 |ONHOLD    ' }] }) };
+    const c = new RfcClient(env, () => ({ Client: jest.fn(() => client) }));
+    await expect(c.readTable('LQUA', ['LGTYP', 'LGPLA'], ["LGNUM = 'W01'"])).resolves.toEqual([{ LGTYP: 'RM1', LGPLA: 'ONHOLD' }]);
+    expect(client.close).toHaveBeenCalled();
   });
 });

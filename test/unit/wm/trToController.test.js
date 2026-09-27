@@ -1,3 +1,4 @@
+/* global window */
 /**
  * Unit Tests for TrTo Controller (Zebra MC220 RF Screen 9001 / Tcode ZTO)
  */
@@ -134,7 +135,7 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
             expect(model.getProperty('/canCreateTO')).toBe(false);
             expect(model.getProperty('/openQty')).toBe('0.000');
             expect(model.getProperty('/scanQty')).toBe('0.000');
-            expect(model.getProperty('/confirmImmediate')).toBe(true);
+            expect(model.getProperty('/confirmImmediate')).toBeUndefined(); // create only, as ZTO
             expect(model.getProperty('/stepBadgeText')).toBe('1. ENTER TR');
         });
 
@@ -403,12 +404,8 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
             expect(mockTrToService.createTO).toHaveBeenCalledWith({
                 lgnum: 'W01',
                 tbnum: '0001000663',
-                tbpos: '0001',
                 lenum: '1000043935',
-                qty: 50,
-                openQty: 100,
-                unit: 'KG',
-                confirmImmediate: true
+                qty: 50
             });
             expect(mockMessageBox.success).toHaveBeenCalledWith(
                 expect.stringContaining('Transfer Order 0001010943 created successfully and confirmed.'),

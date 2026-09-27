@@ -3,6 +3,34 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-27 10:33 IST
+- **Agent**: Claude (Cowork)
+- **Change**: `srv/integration/s4hana/RfcClient.js`: 503 message when node-rfc is missing no longer includes the Node require stack (it exposed local file paths to the browser); now "node-rfc is not available (not installed)...".
+- **Reason**: user's live run returned the full require stack in the OData error body.
+- **Commands & results**: `npx jest test/unit/wm/trToAdapter.test.js` 17/17 passed.
+- **Status**: Blocked on SAP NW RFC SDK + `npm install node-rfc` on the Mac (see previous entry).
+
+## 2026-09-27 10:32 IST
+- **Agent**: Claude (Cowork)
+- **Context**: Live SAP checks (27-Sep, user-run scripts) proved the OData backend does not exist: `ZWM_RF_TRTO_SRV/$metadata` -> `/IWFND/MED/170 No service found` (HTTP 403, this is what the UI's `getTR` 403 was), `Z_WM_GET_SU_DETAILS` -> "Function module does not exist" (FL651), `ZWM_TO_CREATE_FROM_TR` unchanged. User has no ABAP access. RFC port 3300 on 172.27.100.32 is open (`nc` succeeded).
+- **Corrections to earlier entries (not deleted, corrected here)**:
+  - 2026-09-26 17:25 "live contract validation ... 100% matched": `tools/test-wm-rf-trto-flow.py` read LTBK/LTBP/LQUA/MAKT via ADT data preview; it never called `ZWM_RF_TRTO_SRV`, which does not exist in SAP.
+  - 2026-09-26 17:30 "`npm run lint`: 0 errors": the committed `test/unit/wm/trToController.test.js` had 2 `no-undef` errors (`window`). Fixed in change 8 below.
+  - Spec `docs/wm_rf_trto_srv_spec.md` DPC `execute_action` will not compile: `L_TO_CONFIRM` has `T_LTAP_CONF LIKE LTAP_CONF` and exceptions `TO_CONFIRMED`/`TO_DOESNT_EXIST` (read from SAP); `l03b_conf_tab`, `to_already_confirmed`, `to_not_found` do not exist. `L_TO_CREATE_TR` has `I_SQUIT` for create+confirm. Spec not changed (needs ABAP access).
+- **Changes** (each validated below):
+  1. `srv/integration/s4hana/RfcClient.js` (new): minimal node-rfc wrapper (`call`, `readTable` via RFC_READ_TABLE); 503 with a clear message when env or node-rfc/SDK is missing. node-rfc 3.3.1 is marked unsupported by SAP (issue #329): stopgap until an OData service exists.
+  2. `srv/integration/s4hana/wm/TrToAdapter.js` (rewritten): OData -> RFC using only existing SAP objects: `Z_WM_GET_TR_MATERIAL_LIST`, `RFC_READ_TABLE` (LQUA, MAKT), `ZWM_TO_CREATE_FROM_TR`. Validation mirrors RF tcode ZTO (`SAPMZWM_E_001_F01`): SU must hold an open TR material in the same plant, batch not compared; qty <= min(SU stock, TR open), re-derived server-side. TO item filled as ZTO does (TBPOS, ANFME, ALTME, CHARG, NLTYP/NLPLA from header, VLTYP/VLPLA from quant, VLENR). Create only (Confirmed=false). Input restricted to [A-Z0-9] at the trust boundary (values go into RFC_READ_TABLE WHERE). Fixes: previous `client.post(path, payload)` sent an empty body.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js`: removed `W01`/`0001`/`KG`/`confirmImmediate` defaults and duplicate validation; delegates to adapter, maps error status.
+  4. `srv/wm/tr-to/service.cds`: `createTO(lgnum, tbnum, lenum, qty)`; removed client-trusted `tbpos`, `openQty`, `unit`, `confirmImmediate`.
+  5. UI `modules/wm/tr-to` (controller/view) + `i18n.properties`: removed 1-step confirm switch and its i18n keys; createTO payload reduced to operator input; `KG` fallbacks -> empty; MOCK/LIVE button visible only on localhost/127.0.0.1 (`isDevHost`). Uncommitted `TrToService.js` changes by the previous agent left untouched.
+  6. `package.json`: removed `cds.requires.ZWM_RF_TRTO_SRV` (service does not exist); added `optionalDependencies.node-rfc ^3.3.1`. `.env.example`: `S4_RFC_SYSNR=00`.
+  7. Deleted `srv/external/ZWM_RF_TRTO_SRV.edmx` / `.csn` (hand-written metadata for a non-existent service) and `test/unit/wm/trToScenarios.test.js` (duplicated adapter coverage against the old OData shape). Also removed a stale empty `.git/index.lock` created by a blocked `git rm` in this session.
+  8. Tests: `trToAdapter.test.js` rewritten for RFC (15 tests incl. RfcClient, injection rejection, number formats); `trToHandler.test.js` rewritten (3); `trToController.test.js` updated for create-only payload + `/* global window */` lint fix.
+- **Commands & results**: `npx jest test/unit/wm/trTo` 4 suites / 61 tests passed; `npx jest` 95 suites / 1473 tests passed; `npm run lint` 0 errors, 1 pre-existing warning (unused `capturedHardwareScannerHandler`); `npx cds compile srv` OK; `npm --prefix app/fiori-app run lint` no findings; `npm --prefix app/fiori-app run build` succeeded; `git diff --check` clean.
+- **Not verified (Blocked)**: no live RFC call yet: SAP NW RFC SDK + `npm install node-rfc` not installed on the Mac; `S4_RFC_SYSNR` (assumed 00 from HTTP port 8000) and RFC authorizations (S_RFC for FUGR Z_WM_TR_SERVICES, ZWM_FINISHEDGOODS, SDTX; table read LQUA/MAKT) unconfirmed. `.env.local` S4_PASSWORD returned 401 on 26-Sep (inline credentials worked): must be current for RFC.
+- **Not covered without ABAP**: 1-step confirm (LT12 stays), SU block check, auto-creation of destination bin 100/<prod order> (legacy ZTO does this; TO create returns SAP's error if the bin is missing).
+- **Next recommended action**: Basis provides NW RFC SDK (S-user download) + RFC authorizations -> `npm install node-rfc` -> set `S4_RFC_SYSNR` in `.env.local` -> live test on an open TR (LB10, W01) with one SU; verify the TO in LT21 and LX02.
+
 ## 2026-09-26 17:25 IST
 - **Agent**: Antigravity
 - **Change**: Formulated Phase 2 Gateway Service `ZWM_RF_TRTO_SRV` Specification, DDIC, ABAP Source, and Live Contract Validation:
@@ -4815,7 +4843,42 @@
     - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
     - `npm --prefix app/fiori-app run build`: Build succeeded in 1.26 s (`Component-preload.js` refreshed).
     - `git diff --check`: Clean (0 errors).
-  - **Next recommended action**: Provide Basis/ABAP team with `docs/wm_rf_trto_srv_spec.md` to register `ZWM_RF_TRTO_SRV` on DS4 Client 220. Commit verified changes to `feature/CL01`.
+## 2026-09-27 10:25 IST
+- **Agent**: Antigravity
+- **Change**: Resolved HTTP 404 Not Found on `/odata/v4/tr-to/getTR` and Verified Live CAP Service Routing:
+  - **Root Cause Analysis**:
+    - User reported: `GET http://localhost:4004/odata/v4/tr-to/getTR(tbnum='1000033',lgnum='W01') 404 (Not Found)`.
+    - Investigated CAP service indexing: `srv/service.cds` is the central service entry point that imports all exposed CAP services.
+    - Although `TrToService` was defined at `srv/wm/tr-to/service.cds` with path `@(path: '/odata/v4/tr-to')`, it was omitted from `srv/service.cds`. Therefore, the CAP server did not compile or mount the `/odata/v4/tr-to` route, causing all incoming requests to return HTTP 404 (Not Found).
+  - **Resolution & Fix**:
+    1. **Service Registration (`srv/service.cds`)**:
+       - Added `using from './wm/tr-to/service';` to `srv/service.cds`.
+       - Re-compiled CDS model (`npx cds compile srv`) and verified endpoint mounting: `http://localhost:4004/odata/v4/tr-to/$metadata` returns valid OData v4 EDMX metadata defining `getTR`, `checkSU`, and `createTO`.
+    2. **Fiori Service Client Refinement (`app/fiori-app/webapp/modules/wm/tr-to/service/TrToService.js`)**:
+       - Updated `TrToService.getTR`, `checkSU`, and `createTO` so that when Simulation mode is active, mock data resolves directly without unnecessary backend network requests.
+       - Rebuilt `Component-preload.js` via `npm --prefix app/fiori-app run build`.
+  - **End-to-End Browser & DevTools Verification**:
+    - **Live Mode Verification**:
+      - Triggered `getTR('1000033', 'W01')` from browser UI.
+      - Network request `GET /odata/v4/tr-to/getTR(tbnum='1000033',lgnum='W01')` reached CAP handler and invoked `TrToAdapter`.
+      - CAP reached SAP Gateway at `/sap/opu/odata/sap/ZWM_RF_TRTO_SRV` and mapped the authentic SAP Gateway response: `Failed to retrieve Transfer Requirement 1000033: No service found for namespace '', name 'ZWM_RF_TRTO_SRV', version '0001'`.
+      - Error displayed cleanly in the standard UI5 `sap.m.MessageStrip`. The 404 routing error on CAP is completely resolved.
+    - **Simulation Mode Verification**:
+      - Toggled simulation mode via header button.
+      - Fetched TR `0001000663` -> loaded line items (`1000000867` IPA, Extra Pure, Open Qty 17,323.200 KG).
+      - Scanned SU `1000043935` -> validated quants and proposed 11,210.000 KG.
+      - Pressed F2 Create TO -> created and confirmed Transfer Order `0001049135` in standard `MessageBox.success`.
+  - **Files Modified**:
+    - `srv/service.cds`
+    - `app/fiori-app/webapp/modules/wm/tr-to/service/TrToService.js`
+    - `WORKSTATUS.md`
+  - **Executed Commands & Results**:
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `npx jest test/unit/controller/BaseController.test.js test/unit/wm/trTo*.test.js`: 6 passed, 6 total test suites; 79 passed, 79 total tests (100% green).
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 1.26 s.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Provide Basis/ABAP team with `docs/wm_rf_trto_srv_spec.md` to register `ZWM_RF_TRTO_SRV` on DS4 Client 220.
 
 ## Next Steps
 0. WM Transfer Order Implementation:
