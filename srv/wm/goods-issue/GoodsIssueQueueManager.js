@@ -73,6 +73,15 @@ class GoodsIssueQueueManager {
    * @param {Object} data
    * @returns {Object}
    */
+  /** Movement-type options for re-posting a queued record (older rows have no MovementType -> 261). */
+  postOptions(item) {
+    return {
+      movementType: item.MovementType || '261',
+      receivingPlant: item.ReceivingPlant || '',
+      receivingStorageLocation: item.ReceivingStorageLocation || ''
+    };
+  }
+
   static buildRecord(data) {
     const sReserv = String(data.ReservationNo || '').trim();
     const sItem = String(data.ReservationItem || '').trim().padStart(4, '0');
@@ -96,6 +105,9 @@ class GoodsIssueQueueManager {
       DifferenceReason: String(data.DifferenceReason || '').trim(),
       DifferenceStorageType: String(data.DifferenceStorageType || '').trim(),
       FinalIssue: Boolean(data.FinalIssue),
+      MovementType: String(data.MovementType || '261').trim(),
+      ReceivingPlant: String(data.ReceivingPlant || '').trim(),
+      ReceivingStorageLocation: String(data.ReceivingStorageLocation || '').trim(),
       SyncStatus: 'QUEUED',
       SyncAttempts: 1,
       LastSyncError: String(data.LastSyncError || 'SAP Gateway posting service unavailable').slice(0, 500),
@@ -317,7 +329,8 @@ class GoodsIssueQueueManager {
           item.DifferenceStorageType,
           item.FinalIssue,
           item.Plant,
-          item.StorageLocation
+          item.StorageLocation,
+          this.postOptions(item)
         );
 
         if (result && result.MaterialDocument) {

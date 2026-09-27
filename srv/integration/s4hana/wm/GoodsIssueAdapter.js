@@ -481,7 +481,10 @@ class GoodsIssueAdapter {
   /**
    * Post goods issue for a single reservation component line (Bound Action)
    */
-  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation) {
+  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options) {
+    if (options !== undefined) {
+      return this.posting.postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options);
+    }
     if (plant !== undefined || storageLocation !== undefined) {
       return this.posting.postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation);
     }

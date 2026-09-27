@@ -75,7 +75,9 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     if (movementType) {
       // Only the movement type this screen posts. 201 (cost center) and 531 (by-product RECEIPT) were listed
       // too, but posting always uses 261, which SAP rejects against a reservation of another movement type.
-      filter += ` and GoodsMovementType eq '${encodeURIComponent(movementType)}'`;
+      // Comma list allowed ("301,311" for the transfer block); values are trusted-listed by the handler.
+      const mvts = String(movementType).split(',').map((m) => m.trim()).filter(Boolean);
+      filter += ` and (${mvts.map((m) => `GoodsMovementType eq '${encodeURIComponent(m)}'`).join(' or ')})`;
     }
     if (sPlant) {
       filter += ` and Plant eq '${encodeURIComponent(sPlant)}'`;
@@ -320,6 +322,9 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           ReservationNo: r.Reservation || '',
           ReservationItem: (r.ReservationItem || '').padStart(4, '0'),
           OrderNo: r.OrderID || '',
+          // 301/311: receiving side of the transfer (field name differs between SAP service versions)
+          ReceivingPlant: r.IssuingOrReceivingPlant || r.ReceivingPlant || '',
+          ReceivingStorageLocation: r.IssuingOrReceivingStorageLoc || r.ReceivingStorageLocation || '',
           Material: r.Product || '',
           MaterialDesc: r.ProductName || '',
           Plant: r.Plant || '',

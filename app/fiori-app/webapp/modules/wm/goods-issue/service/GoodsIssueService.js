@@ -92,12 +92,16 @@ sap.ui.define([
          * @param {string} [sPlant] - Plant code if model is provided
          * @returns {Promise<Array>}
          */
-        fetchOpenReservations: function (oModelOrPlant, sPlant) {
+        fetchOpenReservations: function (oModelOrPlant, sPlant, sMovementTypes) {
             var oModel = _isModel(oModelOrPlant) ? oModelOrPlant : _oModel;
             var sPlantVal = _isModel(oModelOrPlant) ? sPlant : oModelOrPlant;
             var aFilters = [];
             if (sPlantVal && typeof sPlantVal === "string" && sPlantVal.trim()) {
                 aFilters.push(new _Filter("Plant", _FilterOperator.EQ, sPlantVal.trim()));
+            }
+            if (sMovementTypes) {
+                // "261" or "301,311" — the handler splits the list
+                aFilters.push(new _Filter("MovementType", _FilterOperator.EQ, sMovementTypes));
             }
             return _readEntitySet(oModel, "/OpenReservations", aFilters);
         },
@@ -192,7 +196,10 @@ sap.ui.define([
                 OrderNo: oPayload.OrderNo ? String(oPayload.OrderNo).trim() : "",
                 MaterialDesc: oPayload.MaterialDesc ? String(oPayload.MaterialDesc).trim() : "",
                 Plant: oPayload.Plant ? String(oPayload.Plant).trim() : "",
-                StorageLocation: oPayload.StorageLocation ? String(oPayload.StorageLocation).trim() : ""
+                StorageLocation: oPayload.StorageLocation ? String(oPayload.StorageLocation).trim() : "",
+                MovementType: oPayload.MovementType ? String(oPayload.MovementType).trim() : "261",
+                ReceivingPlant: oPayload.ReceivingPlant ? String(oPayload.ReceivingPlant).trim() : "",
+                ReceivingStorageLocation: oPayload.ReceivingStorageLocation ? String(oPayload.ReceivingStorageLocation).trim() : ""
             };
 
             return ODataClient.post(BASE_PATH + "/postGoodsIssue", oBody);

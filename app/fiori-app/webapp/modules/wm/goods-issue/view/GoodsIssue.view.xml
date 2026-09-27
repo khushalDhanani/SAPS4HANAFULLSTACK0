@@ -10,7 +10,7 @@
     <Page
         id="goodsIssuePage"
         showHeader="true"
-        title="{i18n>giPageTitle}"
+        title="{= ${giView>/mode} === '261' ? ${i18n>giPageTitle} : ${i18n>giTpPageTitle} + ' (' + ${giView>/mode} + ')' }"
         showNavButton="true"
         navButtonPress=".onNavBack"
         showFooter="true"
@@ -60,6 +60,18 @@
                     icon="sap-icon://activity-items"
                     validated="{= !!${giView>/activeItem} }">
                     <VBox class="sapUiSmallMargin">
+                        <!-- Separate blocks: Goods Issue for order (261) vs Transfer Posting (301 / 311) -->
+                        <SegmentedButton
+                            id="segMode"
+                            selectedKey="{giView>/mode}"
+                            selectionChange=".onModeChange"
+                            class="sapUiSmallMarginBottom">
+                            <items>
+                                <SegmentedButtonItem key="261" text="{i18n>giMode261}" icon="sap-icon://product" />
+                                <SegmentedButtonItem key="301" text="{i18n>giMode301}" icon="sap-icon://journey-arrive" />
+                                <SegmentedButtonItem key="311" text="{i18n>giMode311}" icon="sap-icon://move" />
+                            </items>
+                        </SegmentedButton>
                         <!-- Section 1: Select Reference Reservation from Live SAP Data -->
                         <MessageStrip
                             id="reservationsUnavailableStrip"
@@ -239,6 +251,11 @@
 
                                 <Label text="{i18n>giLabelPlantLocation}" />
                                 <Text text="{giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation}" />
+
+                                <Label text="{i18n>giReceivingPlantLocation}" visible="{= ${giView>/mode} !== '261' }" />
+                                <Text
+                                    text="{= (${giView>/activeItem/ReceivingPlant} ? ${giView>/activeItem/ReceivingPlant} + ' / ' + (${giView>/activeItem/ReceivingStorageLocation} || '-') : ${i18n>giReceivingFromReservation}) + ' (Mvt ' + ${giView>/activeItem/MovementType} + ')' }"
+                                    visible="{= ${giView>/mode} !== '261' }" />
 
                                 <Label text="{i18n>giConfirmedStockLabel}" />
                                 <ObjectNumber

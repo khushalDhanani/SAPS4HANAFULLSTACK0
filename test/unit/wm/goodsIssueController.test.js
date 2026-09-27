@@ -497,6 +497,41 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
         });
     });
 
+    describe('Movement type blocks (261 / 301 / 311)', () => {
+        it.each(['261', '301', '311'])('type %s shows only its own reservation list', async (mvt) => {
+            controller.getView().getModel('giView').setProperty('/mode', mvt);
+            await controller.onModeChange();
+            expect(mockGoodsIssueService.fetchOpenReservations).toHaveBeenLastCalledWith(expect.anything(), undefined, mvt);
+        });
+
+        it('accepts a 301 reservation in the transfer block and posts it with its own movement type', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/mode', '301');
+            mockGoodsIssueService.fetchOpenItems.mockResolvedValueOnce([
+                { ReservationNo: '519366', ReservationItem: '0001', Material: '8000001648', MovementType: '301', OpenQty: 21, Unit: 'EA',
+                    Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1130', ReceivingStorageLocation: 'CS02' }
+            ]);
+            await controller._loadReservationDetails('519366');
+            expect(oModel.getProperty('/itemsUnavailable')).toBe(false);
+            const item = oModel.getProperty('/resolved/Items')[0];
+            oModel.setProperty('/activeItem', item);
+            oModel.setProperty('/issueQty', 21);
+            mockGoodsIssueService.postGoodsIssue.mockReturnValueOnce(new Promise(() => {}));
+            controller.onPostGoodsIssue();
+            expect(mockGoodsIssueService.postGoodsIssue).toHaveBeenCalledWith(expect.objectContaining({
+                MovementType: '301', ReceivingPlant: '1130', ReceivingStorageLocation: 'CS02'
+            }));
+        });
+
+        it('points a 301 reservation opened in the 261 block to type 301', async () => {
+            mockGoodsIssueService.fetchOpenItems.mockResolvedValueOnce([
+                { ReservationNo: '519366', ReservationItem: '0001', Material: '8000001648', MovementType: '301', OpenQty: 21 }
+            ]);
+            await controller._loadReservationDetails('519366');
+            expect(controller.getView().getModel('giView').getProperty('/itemsUnavailableMsg')).toMatch(/Select type 301 above/);
+        });
+    });
+
     describe('Reservation movement type guard', () => {
         it('rejects a reservation that is not movement type 261 (e.g. 301 transfer)', async () => {
             mockGoodsIssueService.fetchOpenItems.mockResolvedValueOnce([

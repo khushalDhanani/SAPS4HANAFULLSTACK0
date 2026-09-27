@@ -6,6 +6,9 @@ const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
  * Domain client for SAP S/4HANA Goods Issue Posting and Batch Submission.
  * Enforces AGENTS.md rules: no mock persistence, transparent failure when SAP posting service is unavailable.
  */
+// Movement types this screen may post against a reservation (trust boundary for the posting action).
+const POSTABLE_MOVEMENT_TYPES = ['261', '301', '311'];
+
 class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
@@ -15,7 +18,15 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /**
    * Post goods issue for a single reservation component line (Bound Action)
    */
-  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation) {
+  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
+    const sMvt = String(options.movementType || '261').trim();
+    if (!POSTABLE_MOVEMENT_TYPES.includes(sMvt)) {
+      const err = new Error(`Movement type ${sMvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
+      err.status = 400;
+      throw err;
+    }
+    const sRecvPlant = String(options.receivingPlant || '').trim();
+    const sRecvSLoc = String(options.receivingStorageLocation || '').trim();
     const sReserv = String(reservationNo || '').trim();
     const rawItem = reservationItem != null ? String(reservationItem).trim() : '';
     const sItem = rawItem ? rawItem.padStart(4, '0') : '';
@@ -82,6 +93,8 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
     // Tier 1: Attempt Custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4
     try {
+      // The RAP action only posts 261; a transfer (301/311) goes straight to the standard API.
+      if (sMvt !== '261') throw new Error(`ZUI_GI_ORDER_RSV_O4 posts movement type 261 only; ${sMvt} uses API_MATERIAL_DOCUMENT_SRV`);
       const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
       const response = await this._post(path, {
         IssueQty: nQty,
@@ -114,7 +127,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
         const v2Item = {
           Material: material || '',
-          GoodsMovementType: '261',
+          GoodsMovementType: sMvt,
           EntryUnit: effectiveUnit,
           QuantityInEntryUnit: String(nQty),
           Reservation: sReserv,
@@ -123,12 +136,16 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         };
         if (plant) v2Item.Plant = plant;
         if (storageLocation) v2Item.StorageLocation = storageLocation;
+        // Transfer target; when empty SAP takes it from the reservation.
+        if (sRecvPlant) v2Item.IssuingOrReceivingPlant = sRecvPlant;
+        if (sRecvSLoc) v2Item.IssuingOrReceivingStorageLoc = sRecvSLoc;
 
         const v2Payload = {
-          GoodsMovementCode: '03',
+          // 03 = goods issue, 04 = transfer posting
+          GoodsMovementCode: sMvt === '261' ? '03' : '04',
           PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
           DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
-          MaterialDocumentHeaderText: `GI Resv ${sReserv}`,
+          MaterialDocumentHeaderText: `${sMvt === '261' ? 'GI' : `TP ${sMvt}`} Resv ${sReserv}`,
           to_MaterialDocumentItem: {
             results: [v2Item]
           }
@@ -146,11 +163,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             DifferenceCleared: nDiffQty > 0,
             DifferenceQty: nDiffQty,
             Success: true,
-            Message: `Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
+            Message: `${sMvt === '261' ? 'Goods Issue' : 'Transfer posting'} ${sMvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
           };
         }
       } catch (v2Err) {
-        throw this._buildPostingUnavailableError(v4Err, v2Err, 'single-item Goods Issue');
+        throw this._buildPostingUnavailableError(v4Err, v2Err, `single-item movement ${sMvt}`);
       }
     }
   }

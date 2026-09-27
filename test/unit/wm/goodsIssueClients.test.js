@@ -185,6 +185,12 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(otherResv.ItemCount).toBe(99);
     });
 
+    it('filters the transfer block by 301 or 311', async () => {
+      const mockAdapter = { _get: jest.fn().mockResolvedValue([]) };
+      await new GoodsIssueReservationsClient({ adapter: mockAdapter }).getOpenReservations('301,311', '');
+      expect(mockAdapter._get.mock.calls[0][1]).toContain(encodeURIComponent("(GoodsMovementType eq '301' or GoodsMovementType eq '311')"));
+    });
+
     it('reads only the list fields, newest first, 1000 items per page by default', async () => {
       const mockAdapter = { _get: jest.fn().mockResolvedValue([]) };
       await new GoodsIssueReservationsClient({ adapter: mockAdapter }).getOpenReservations('261', '1120');
@@ -886,6 +892,32 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.MaterialDocument).toBe('4900009999');
       expect(res.DifferenceCleared).toBe(true);
       expect(res.DifferenceQty).toBe(2);
+    });
+
+    it('posts a 311 transfer via API_MATERIAL_DOCUMENT_SRV (code 04, receiving plant/sloc), skipping the 261-only RAP action', async () => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012345', MaterialDocumentYear: '2026' })
+      };
+      const res = await new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+        '519366', '1', '8000001648', 21, 'EA', '', 0, '', '', false, '1120', 'HS01',
+        { movementType: '311', receivingPlant: '1120', receivingStorageLocation: 'CS02' }
+      );
+      expect(mockAdapter._post).toHaveBeenCalledTimes(1);
+      const [path, body] = mockAdapter._post.mock.calls[0];
+      expect(path).toContain('API_MATERIAL_DOCUMENT_SRV');
+      expect(body.GoodsMovementCode).toBe('04');
+      expect(body.to_MaterialDocumentItem.results[0]).toMatchObject({
+        GoodsMovementType: '311', Reservation: '519366', ReservationItem: '0001',
+        Plant: '1120', StorageLocation: 'HS01', IssuingOrReceivingPlant: '1120', IssuingOrReceivingStorageLoc: 'CS02'
+      });
+      expect(res).toMatchObject({ Success: true, MaterialDocument: '4900012345' });
+      expect(res.Message).toMatch(/Transfer posting 311/);
+    });
+
+    it('rejects movement types other than 261 / 301 / 311', async () => {
+      await expect(new GoodsIssuePostingClient().postGoodsIssue('1', '1', 'M', 1, 'KG', '', 0, '', '', false, '', '', { movementType: '551' }))
+        .rejects.toMatchObject({ status: 400 });
     });
 
     it('should validate items in submitGoodsIssueRequest', async () => {

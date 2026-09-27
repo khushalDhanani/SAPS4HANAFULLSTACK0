@@ -3,6 +3,30 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-27 12:24 IST
+- **Agent**: Claude (Cowork)
+- **Request**: `/wm/goods-issue` — show the reservation list type-wise: selecting 261 shows only 261, etc.
+- **Change**: step 1 segmented button now has one block per movement type — "261 Goods Issue for Order", "301 Transfer Plant to Plant", "311 Transfer within Plant" (`/mode` = the movement type, replaces GI/TP). Each block loads only its own type (`MovementType eq '<mvt>'`), page title per type, receiving plant row for 301/311, a reservation of another type says "Select type <mvt> above." Files: `GoodsIssue.controller.js`, `GoodsIssue.view.xml`, `i18n.properties`, `goodsIssueController.test.js` (it.each over 261/301/311). Backend unchanged.
+- **Executed**: `npx jest test/unit test/integration/wm`: 1465 passed. eslint (changed test): clean. UI5 lint: 0 findings. build: succeeded. `git diff --check`: clean.
+- **Live verification (DS4, browser)**: 261 -> 142 reservations, only 261 (~0.5 s); 301 -> 29, only 301 (first 519366); 311 -> 71, only 311 (first 519367); titles switch per type; screenshot confirms three buttons.
+- **Next recommended action**: unchanged — `node tools/show-resv-item.js 519366` to map the receiving plant/sloc field.
+
+## 2026-09-27 12:21 IST
+- **Agent**: Claude (Cowork)
+- **Request**: `/wm/goods-issue` — movement types 301 and 311 as a separate block; user chose "list + post transfers".
+- **Change**:
+  1. UI (`GoodsIssue.view.xml`, controller, i18n): `SegmentedButton` in step 1 — "Goods Issue (261)" / "Transfer Posting (301 / 311)" (`/mode` GI|TP). Each block has its own reservation list (`onModeChange` resets the wizard and reloads), page title per block, "Receiving Plant / Location" row in step 2 for transfers ("Taken by SAP from the reservation" when the service gives none). Movement-type guard is per block; a 301/311 reservation opened in the GI block says "Switch to 'Transfer Posting (301 / 311)'" (and vice versa). Posting payload carries the line's `MovementType` + `ReceivingPlant` / `ReceivingStorageLocation`.
+  2. `GoodsIssueService.js`: `fetchOpenReservations(model, plant, movementTypes)` adds `MovementType eq '261'` / `'301,311'`; `postGoodsIssue` sends MovementType / receiving fields.
+  3. Handler: OpenReservations accepts a comma list of 261/301/311 (anything else -> 261); `postGoodsIssue` passes `{ movementType, receivingPlant, receivingStorageLocation }` and stores them in the queue; queue retry re-posts with the stored movement type.
+  4. `GoodsIssuePostingClient.postGoodsIssue(..., options)`: movement type allow-list 261/301/311 (400 otherwise). Non-261 skips the RAP action (261-only) and posts via `API_MATERIAL_DOCUMENT_SRV` with `GoodsMovementCode '04'`, `GoodsMovementType 301|311`, reservation reference and, when known, `IssuingOrReceivingPlant` / `IssuingOrReceivingStorageLoc`.
+  5. `GoodsIssueReservationsClient`: list filter supports several movement types; items return `ReceivingPlant` / `ReceivingStorageLocation` (from `IssuingOrReceivingPlant|ReceivingPlant`, `IssuingOrReceivingStorageLoc|ReceivingStorageLocation`).
+  6. Queue (`db/wm/goods-issue-queue.cds`): `MovementType` (default 261), `ReceivingPlant`, `ReceivingStorageLocation`; `GoodsIssueQueueManager.postOptions(item)` used by drain and retry. `service.cds`: action params + GIItems fields.
+  7. Tests: 311 posting payload (code 04, receiving fields, RAP skipped), movement type 551 rejected, 301/311 list filter, controller block switch / 301 accepted in TP and posted with its type / 301 in GI points to TP. New tool `tools/show-resv-item.js <resv> [item]`.
+- **Executed**: `npx jest test/unit test/integration/wm`: 1463 passed. `npx eslint` (changed): clean (1 pre-existing warning in `trToController.test.js`, not touched). `npm --prefix app/fiori-app run lint`: 0 findings. build: succeeded. `npx cds compile srv`: ok. `git diff --check`: clean.
+- **Live verification (DS4, browser)**: GI block 142 reservations (261). Transfer block 100 reservations (301 + 311) in ~0.4 s, includes 519366 (301, 1120/HS01, 21 NOS) and 519367 (311). Clicking the segmented button switches list and title.
+- **Open / not verified**: receiving plant/sloc came back empty for 519366 — neither field name is on `UI_RESERVATION_ITM_MNG_V2` (or it is blank); posting relies on SAP taking it from the reservation. No transfer was posted (posting services still unavailable -> would go to the Dispatch Queue). The shell header above the page still says "Goods Issue ... (261)" (app-level title).
+- **Next recommended action**: `node tools/show-resv-item.js 519366` and send the field list, so the receiving plant/sloc field can be mapped; post one 311 test once `API_MATERIAL_DOCUMENT_SRV` is registered.
+
 ## 2026-09-27 12:03 IST
 - **Agent**: Claude (Cowork)
 - **Request**: `/wm/goods-issue` "so many data is not coming or showing properly" -> check and fix all.

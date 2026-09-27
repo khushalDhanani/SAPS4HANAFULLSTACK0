@@ -5,6 +5,7 @@ const { extractFilterParam, applyPaging } = require('../../../common/filterUtils
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
 const GI_MOVEMENT_TYPE = '261';
+const LIST_MOVEMENT_TYPES = ['261', '301', '311'];
 
 class GoodsIssueHandler {
   static init(srv) {
@@ -24,7 +25,9 @@ class GoodsIssueHandler {
     // READ OpenReservations: query distinct open reservations for Goods Issue
     srv.on('READ', 'OpenReservations', async (req) => {
       const plant = _extractFilterParam(req, 'Plant') || '';
-      const mvtType = _extractFilterParam(req, 'MovementType') || GI_MOVEMENT_TYPE;
+      // '261' (goods issue block) or '301,311' (transfer block); anything else falls back to 261.
+      const mvtParam = _extractFilterParam(req, 'MovementType') || GI_MOVEMENT_TYPE;
+      const mvtType = mvtParam.split(',').every((m) => LIST_MOVEMENT_TYPES.includes(m.trim())) ? mvtParam : GI_MOVEMENT_TYPE;
       const reservNo = _extractFilterParam(req, 'ReservationNo');
       const orderNo = _extractFilterParam(req, 'OrderNo');
 
@@ -108,8 +111,12 @@ class GoodsIssueHandler {
         OrderNo,
         MaterialDesc,
         Plant,
-        StorageLocation
+        StorageLocation,
+        MovementType,
+        ReceivingPlant,
+        ReceivingStorageLocation
       } = req.data;
+      const postOptions = { movementType: MovementType || GI_MOVEMENT_TYPE, receivingPlant: ReceivingPlant, receivingStorageLocation: ReceivingStorageLocation };
 
       if (!ReservationNo || !ReservationItem) {
         return req.error(400, 'ReservationNo and ReservationItem are required');
@@ -133,7 +140,8 @@ class GoodsIssueHandler {
           DifferenceStorageType,
           FinalIssue,
           Plant,
-          StorageLocation
+          StorageLocation,
+          postOptions
         );
         return Object.assign({
           Queued: false,
@@ -166,6 +174,9 @@ class GoodsIssueHandler {
               DifferenceReason,
               DifferenceStorageType,
               FinalIssue,
+              MovementType: postOptions.movementType,
+              ReceivingPlant,
+              ReceivingStorageLocation,
               LastSyncError: err.message
             });
           } catch (queueErr) {
@@ -305,7 +316,8 @@ class GoodsIssueHandler {
           item.DifferenceStorageType,
           item.FinalIssue,
           item.Plant,
-          item.StorageLocation
+          item.StorageLocation,
+          GoodsIssueQueueManager.postOptions(item)
         );
 
         // Update queue item

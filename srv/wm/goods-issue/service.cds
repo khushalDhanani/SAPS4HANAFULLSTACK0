@@ -41,6 +41,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             OpenQty         : Decimal(13, 3);
             MovementType    : String(3);
             MovementTypeName: String(20);
+            ReceivingPlant  : String(4);
+            ReceivingStorageLocation : String(4);
             PackagingUnits  : array of PackagingUnit;
     };
 
@@ -245,7 +247,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         OrderNo               : String(12),
         MaterialDesc          : String(80),
         Plant                 : String(4),
-        StorageLocation       : String(4)
+        StorageLocation       : String(4),
+        MovementType          : String(3),
+        ReceivingPlant        : String(4),
+        ReceivingStorageLocation : String(4)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

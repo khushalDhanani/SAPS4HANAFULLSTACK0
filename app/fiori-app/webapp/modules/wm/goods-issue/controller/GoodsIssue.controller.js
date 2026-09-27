@@ -27,6 +27,8 @@ sap.ui.define([
                 activeItem: null,    // Selected component for issue
                 availableStock: 0,
                 stockLoading: false,
+                // Selected movement type block: "261" goods issue for order, "301" / "311" transfer posting
+                mode: "261",
                 lineBatchManaged: false,
                 issueQty: 0,
                 issueQtyState: "None",
@@ -128,7 +130,7 @@ sap.ui.define([
             MessageToast.show(bCurrent ? "Audio cues muted" : "Audio cues enabled");
         },
 
-        onResetWorkflow: function () {
+        onResetWorkflow: function (bSilent) {
             var oModel = this.getView().getModel("giView");
             oModel.setProperty("/selectedReservation", "");
             oModel.setProperty("/currentStep", 1);
@@ -171,7 +173,7 @@ sap.ui.define([
                     oWizard.goToStep(oStep1);
                 }
             }
-            MessageToast.show("Goods Issue workflow reset");
+            if (bSilent !== true) MessageToast.show("Goods Issue workflow reset");
         },
 
         _playBeep: function (bSuccess) {
@@ -209,7 +211,7 @@ sap.ui.define([
 
         loadOpenReservations: function (sPlant) {
             // Reuse a load that is already running for the same plant instead of starting another SAP scan.
-            var sKey = sPlant || "";
+            var sKey = this._modeMovementTypes().join(",") + "|" + (sPlant || "");
             if (this._oResvLoad && this._oResvLoad.key === sKey) {
                 return this._oResvLoad.promise;
             }
@@ -235,7 +237,7 @@ sap.ui.define([
             oModel.setProperty("/reservationsUnavailable", false);
             oModel.setProperty("/reservationsUnavailableMsg", "");
             var oDataModel = this.getModel("goodsIssue");
-            return GoodsIssueService.fetchOpenReservations(oDataModel, sPlant)
+            return GoodsIssueService.fetchOpenReservations(oDataModel, sPlant, this._modeMovementTypes().join(","))
                 .then(function (aReservations) {
                     var aResvs = aReservations || [];
                     oModel.setProperty("/openReservations", aResvs);
@@ -264,6 +266,20 @@ sap.ui.define([
                 .finally(function () {
                     that.setBusy(false);
                 });
+        },
+
+        _modeMovementTypes: function () {
+            return [this.getView().getModel("giView").getProperty("/mode") || "261"];
+        },
+
+        /**
+         * Switch between the Goods Issue (261) and Transfer Posting (301 / 311) blocks: separate reservation lists.
+         */
+        onModeChange: function () {
+            var oModel = this.getView().getModel("giView");
+            this.onResetWorkflow(true);
+            oModel.setProperty("/openReservations", []);
+            return this.loadOpenReservations();
         },
 
         onRefreshReservations: function () {
@@ -397,22 +413,24 @@ sap.ui.define([
             var oDataModel = this.getModel("goodsIssue");
             return GoodsIssueService.fetchOpenItems(oDataModel, sOrderNo, sReservationNo)
                 .then(function (aAll) {
-                    // This screen posts movement type 261 only. A typed/scanned reservation of another type
-                    // (live: 519366 = 301 transfer) must not be offered for a 261 posting.
-                    var aItems = (aAll || []).filter(function (i) { return !i.MovementType || i.MovementType === "261"; });
+                    // Each block shows and posts only its own movement type (261, 301 or 311).
+                    // A typed/scanned reservation of another type (live: 519366 = 301) points to its block.
+                    var aMvts = that._modeMovementTypes();
+                    var aItems = (aAll || []).filter(function (i) { return !i.MovementType || aMvts.indexOf(i.MovementType) !== -1; });
                     if ((aAll || []).length && !aItems.length) {
                         var oFirst = aAll[0];
+                        var bKnown = ["261", "301", "311"].indexOf(oFirst.MovementType) !== -1;
                         throw new Error("Reservation " + sReservationNo + " is for movement type " + oFirst.MovementType +
                             (oFirst.MovementTypeName ? " (" + oFirst.MovementTypeName + ")" : "") +
-                            ", not 261 Goods Issue for Order. Post it with the matching transaction.");
+                            (bKnown ? ". Select type " + oFirst.MovementType + " above." : ", which this screen does not post."));
                     }
                     that._playBeep(true);
                     var oResolved = {
                         ReservationNo: sReservationNo,
                         OrderNo: sOrderNo || (aItems && aItems[0] ? aItems[0].OrderNo : ""),
                         Plant: (oResv && oResv.Plant) ? oResv.Plant : (aItems && aItems[0] ? aItems[0].Plant : ""),
-                        MovementType: (oResv && oResv.MovementType) ? oResv.MovementType : "",
-                        MovementTypeName: (oResv && oResv.MovementTypeName) ? oResv.MovementTypeName : "",
+                        MovementType: (oResv && oResv.MovementType) ? oResv.MovementType : (aItems[0] ? aItems[0].MovementType : ""),
+                        MovementTypeName: (oResv && oResv.MovementTypeName) ? oResv.MovementTypeName : (aItems[0] ? aItems[0].MovementTypeName : ""),
                         Items: aItems || []
                     };
                     oModel.setProperty("/resolved", oResolved);
@@ -1291,7 +1309,10 @@ sap.ui.define([
                 OrderNo: oResolved.OrderNo || "",
                 MaterialDesc: oActive.MaterialDesc || "",
                 Plant: oActive.Plant || oResolved.Plant || "",
-                StorageLocation: oActive.StorageLocation || ""
+                StorageLocation: oActive.StorageLocation || "",
+                MovementType: oActive.MovementType || oResolved.MovementType || "261",
+                ReceivingPlant: oActive.ReceivingPlant || "",
+                ReceivingStorageLocation: oActive.ReceivingStorageLocation || ""
             };
 
             // ── Pre-posting SAP stock revalidation ──

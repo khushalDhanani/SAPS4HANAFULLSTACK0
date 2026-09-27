@@ -19,6 +19,9 @@ entity GoodsIssueQueue : cuid, managed {
     DifferenceReason      : String(4);
     DifferenceStorageType : String(3);
     FinalIssue            : Boolean;
+    MovementType          : String(3) default '261';
+    ReceivingPlant        : String(4);
+    ReceivingStorageLocation : String(4);
     SyncStatus            : String(30);   // 'QUEUED', 'SYNCING', 'POSTED_IN_SAP', 'FAILED'
     SyncAttempts          : Integer default 0;
     LastSyncError         : String(500);
