@@ -267,6 +267,10 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt");
         },
 
+        onNavigateToTrTo: function () {
+            this.getOwnerComponent().getRouter().navTo("wmTrTo");
+        },
+
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },

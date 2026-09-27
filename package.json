@@ -182,6 +182,16 @@
             "path": "/sap/opu/odata/sap/SD_F1873_SO_WL_SRV"
           }
         }
+      },
+      "ZWM_RF_TRTO_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/ZWM_RF_TRTO_SRV",
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/ZWM_RF_TRTO_SRV"
+          }
+        }
       }
     },
     "log": {
@@ -195,7 +205,8 @@
         "sales-inquiry-adapter": "info",
         "goods-receipt": "info",
         "goods-receipt-adapter": "info",
-        "goods-issue-adapter": "info"
+        "goods-issue-adapter": "info",
+        "tr-to-adapter": "info"
       }
     },
     "s4": {

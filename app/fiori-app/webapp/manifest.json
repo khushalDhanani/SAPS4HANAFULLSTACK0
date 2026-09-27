@@ -81,6 +81,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "trToService": {
+        "uri": "/odata/v4/tr-to/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -173,6 +181,13 @@
       },
       "customerReturn": {
         "dataSource": "customerReturnService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "trTo": {
+        "dataSource": "trToService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -285,6 +300,11 @@
           "name": "createCustomerReturn",
           "pattern": "sd/returns/create",
           "target": "TargetCreateCustomerReturn"
+        },
+        {
+          "name": "wmTrTo",
+          "pattern": "wm/tr-to",
+          "target": "TargetTrTo"
         }
       ],
       "targets": {
@@ -370,6 +390,11 @@
           "id": "createCustomerReturn",
           "name": "CreateCustomerReturn",
           "path": "saps4hana.fiori.modules.sd.customer-return.view"
+        },
+        "TargetTrTo": {
+          "id": "trTo",
+          "name": "TrTo",
+          "path": "saps4hana.fiori.modules.wm.tr-to.view"
         }
       }
     }

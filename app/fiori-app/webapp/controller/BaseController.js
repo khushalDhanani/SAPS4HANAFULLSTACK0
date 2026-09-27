@@ -38,8 +38,22 @@ sap.ui.define([
          */
         getModel: function (sName) {
             return (this.getView() && this.getView().getModel(sName)) ||
-                   (this.getOwnerComponent() && this.getOwnerComponent().getModel(sName)) ||
+                   (this.getOwnerComponent() && typeof this.getOwnerComponent().getModel === "function" && this.getOwnerComponent().getModel(sName)) ||
                    null;
+        },
+
+        /**
+         * Convenience method for setting a model on the view.
+         * @param {sap.ui.model.Model} oModel the model instance
+         * @param {string} [sName] the model name
+         * @returns {sap.ui.core.mvc.Controller} this controller instance for chaining
+         */
+        setModel: function (oModel, sName) {
+            var oView = this.getView();
+            if (oView) {
+                oView.setModel(oModel, sName);
+            }
+            return this;
         },
 
         /**

@@ -594,6 +594,11 @@
                                             <NumericContent icon="sap-icon://shipping-status" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tileTrTo" header="TO Creation (ZTO)" subheader="Transfer Orders from TR" press=".onNavigateToTrTo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="RF Mobile">
+                                            <NumericContent icon="sap-icon://bar-code" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                 </HBox>
                             </VBox>
                         </IconTabFilter>

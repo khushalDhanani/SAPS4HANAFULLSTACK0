@@ -1,0 +1,317 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.tr-to.controller.TrTo"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page
+        id="trToPage"
+        title="{i18n>trToPageTitle}"
+        showNavButton="false"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center">
+                <ObjectStatus
+                    id="rfStepBadge"
+                    text="{trToView>/stepBadgeText}"
+                    state="{trToView>/stepBadgeState}"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnToggleAudio"
+                    icon="{= ${trToView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
+                    tooltip="{i18n>trToTooltipToggleAudio}"
+                    type="Transparent"
+                    press=".onToggleAudio"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnToggleSimulation"
+                    text="{= ${trToView>/isSimulation} ? 'MOCK' : 'LIVE' }"
+                    type="{= ${trToView>/isSimulation} ? 'Attention' : 'Transparent' }"
+                    tooltip="Toggle Backend Live / Mock Simulation"
+                    press=".onToggleSimulation" />
+            </HBox>
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <!-- STATUS MESSAGE BANNER -->
+                <MessageStrip
+                    id="rfMessageStrip"
+                    visible="{trToView>/hasMessage}"
+                    text="{trToView>/messageText}"
+                    type="{trToView>/messageType}"
+                    showIcon="true"
+                    showCloseButton="true"
+                    close=".onCloseMessage"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- PANEL 1: ACTIVE BARCODE SCANNER (TR & SU) -->
+                <Panel
+                    id="panelRfFields"
+                    headerText="{i18n>trToScanPanelTitle}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <!-- FIELD 1: TR (Transfer Requirement / Production Order) -->
+                        <VBox class="sapUiSmallMarginBottom">
+                            <Label
+                                text="{i18n>trToLabelTR}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <HBox width="100%" alignItems="Center">
+                                <Input
+                                    id="inputTR"
+                                    value="{trToView>/trNumber}"
+                                    placeholder="{i18n>trToPlaceholderTR}"
+                                    submit=".onFetchTR"
+                                    liveChange=".onTRLiveChange"
+                                    width="100%"
+                                    class="sapUiTinyMarginEnd">
+                                    <layoutData>
+                                        <FlexItemData growFactor="1" />
+                                    </layoutData>
+                                </Input>
+                                <Button
+                                    id="btnFetchTR"
+                                    text="{i18n>trToBtnFind}"
+                                    icon="sap-icon://search"
+                                    type="Emphasized"
+                                    press=".onFetchTR" />
+                            </HBox>
+                        </VBox>
+
+                        <!-- FIELD 2: SU (Storage Unit Scan) -->
+                        <VBox class="sapUiSmallMarginBottom">
+                            <Label
+                                text="{i18n>trToLabelSU}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <HBox width="100%" alignItems="Center">
+                                <Input
+                                    id="inputSU"
+                                    value="{trToView>/storageUnit}"
+                                    placeholder="{i18n>trToPlaceholderSU}"
+                                    submit=".onScanSU"
+                                    enabled="{= !!${trToView>/hasActiveTR} }"
+                                    width="100%"
+                                    class="sapUiTinyMarginEnd">
+                                    <layoutData>
+                                        <FlexItemData growFactor="1" />
+                                    </layoutData>
+                                </Input>
+                                <Button
+                                    id="btnCameraScanSU"
+                                    icon="sap-icon://camera"
+                                    tooltip="{i18n>trToTooltipCamera}"
+                                    enabled="{= !!${trToView>/hasActiveTR} }"
+                                    press=".onCameraScanSU"
+                                    class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnCheckSU"
+                                    text="{i18n>trToBtnCheck}"
+                                    icon="sap-icon://accept"
+                                    type="Accept"
+                                    enabled="{= !!${trToView>/hasActiveTR} }"
+                                    press=".onScanSU" />
+                            </HBox>
+                        </VBox>
+                    </VBox>
+                </Panel>
+
+                <!-- PANEL 2: MATERIAL & STOCK DETAILS (LEGACY 9001 FIELDS) -->
+                <Panel
+                    id="panelMaterialDetails"
+                    headerText="{i18n>trToMaterialDetailsTitle}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+
+                    <form:SimpleForm
+                        id="formRfFields"
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="3"
+                        labelSpanL="3"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="0"
+                        emptySpanL="0"
+                        emptySpanM="0"
+                        emptySpanS="0"
+                        columnsXL="2"
+                        columnsL="2"
+                        columnsM="1"
+                        singleContainerFullSize="false"
+                        class="sapUiSmallMargin">
+                        <form:content>
+
+                            <!-- COLUMN 1: MATERIAL & BATCH SPECIFICATION -->
+                            <core:Title text="Material Specification" />
+
+                            <!-- FIELD: Mate (Material Number) -->
+                            <Label text="{i18n>trToLabelMate}" />
+                            <Input
+                                id="inputMate"
+                                value="{trToView>/material}"
+                                editable="false" />
+
+                            <!-- FIELD: Desc (Material Description) -->
+                            <Label text="{i18n>trToLabelDesc}" />
+                            <Input
+                                id="inputDesc"
+                                value="{trToView>/materialDesc}"
+                                editable="false" />
+
+                            <!-- FIELD: Batc (Batch Number) -->
+                            <Label text="{i18n>trToLabelBatc}" />
+                            <Input
+                                id="inputBatc"
+                                value="{trToView>/batch}"
+                                editable="false" />
+
+                            <!-- COLUMN 2: QUANTITY & DESTINATION -->
+                            <core:Title text="Stock &amp; Destination" />
+
+                            <!-- FIELD: OQty (Open Quantity) -->
+                            <Label text="{i18n>trToLabelOQty}" />
+                            <HBox alignItems="Center">
+                                <Input
+                                    id="inputOQty"
+                                    value="{trToView>/openQty}"
+                                    editable="false"
+                                    width="140px"
+                                    class="sapUiTinyMarginEnd" />
+                                <Text text="{trToView>/unit}" />
+                            </HBox>
+
+                            <!-- FIELD: SQty (Scanned SU Quantity / Available Stock) -->
+                            <Label text="{i18n>trToLabelSQty}" design="Bold" />
+                            <HBox alignItems="Center">
+                                <Input
+                                    id="inputSQty"
+                                    value="{trToView>/scanQty}"
+                                    type="Number"
+                                    width="140px"
+                                    change=".onQtyChange"
+                                    class="sapUiTinyMarginEnd" />
+                                <Text text="{trToView>/unit}" class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnFillOpenQty"
+                                    text="{i18n>trToBtnFillOpen}"
+                                    type="Transparent"
+                                    press=".onFillOpenQty" />
+                            </HBox>
+
+                            <!-- FIELD: Bin (Destination Storage Bin & Storage Type) -->
+                            <Label text="{i18n>trToLabelBin}" />
+                            <HBox alignItems="Center">
+                                <Input
+                                    id="inputDestBin"
+                                    value="{trToView>/destBin}"
+                                    editable="false"
+                                    width="140px"
+                                    class="sapUiTinyMarginEnd" />
+                                <Text text="Type: " class="sapUiTinyMarginEnd" />
+                                <Text text="{trToView>/destType}" />
+                            </HBox>
+
+                            <!-- 1-Step Pick & Transfer Confirmation Toggle -->
+                            <Label text="{i18n>trToLabelConfirmImmediate}" />
+                            <HBox alignItems="Center">
+                                <Switch
+                                    id="switchConfirmImmediate"
+                                    state="{trToView>/confirmImmediate}"
+                                    customTextOn="Yes"
+                                    customTextOff="No"
+                                    class="sapUiSmallMarginEnd" />
+                                <Text text="{i18n>trToConfirmImmediateHelp}" />
+                            </HBox>
+
+                        </form:content>
+                    </form:SimpleForm>
+                </Panel>
+
+                <!-- OPEN TR ITEMS TABLE (FOR MULTI-ITEM TR SELECTION) -->
+                <Panel
+                    id="panelTrItems"
+                    headerText="{i18n>trToItemsPanelHeader} ({= ${trToView>/items}.length })"
+                    expandable="true"
+                    expanded="false"
+                    visible="{= ${trToView>/items}.length > 1 }"
+                    class="sapUiSmallMarginBottom">
+                    <Table
+                        id="tableTrItems"
+                        items="{trToView>/items}"
+                        mode="SingleSelectMaster"
+                        selectionChange=".onItemSelectionChange">
+                        <columns>
+                            <Column width="60px"><Text text="Item" /></Column>
+                            <Column><Text text="Material / Description" /></Column>
+                            <Column width="100px" hAlign="End"><Text text="Open Qty" /></Column>
+                            <Column width="60px"><Text text="UoM" /></Column>
+                            <Column width="110px"><Text text="Dest Bin" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{trToView>Tbpos}" />
+                                    <VBox>
+                                        <Text text="{trToView>Material}" />
+                                        <Text text="{trToView>MaterialDesc}" />
+                                    </VBox>
+                                    <Text text="{trToView>OpenQty}" />
+                                    <Text text="{trToView>Unit}" />
+                                    <Text text="{trToView>DestStorageBin}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+            </VBox>
+        </content>
+
+        <!-- STICKY BOTTOM TOOLBAR: PHYSICAL F-KEY ACCELERATORS (ZEBRA MC220 KEYPAD) -->
+        <footer>
+            <Toolbar id="rfFooterToolbar">
+                <!-- F3: Back -->
+                <Button
+                    id="btnF3Back"
+                    text="F3 Back"
+                    icon="sap-icon://nav-back"
+                    press=".onNavBack" />
+
+                <ToolbarSpacer />
+
+                <!-- F1: Clear All -->
+                <Button
+                    id="btnF1Clear"
+                    text="F1 Clear"
+                    icon="sap-icon://clear-all"
+                    type="Reject"
+                    press=".onClearAll"
+                    class="sapUiSmallMarginEnd" />
+
+                <!-- F2: Create Transfer Order -->
+                <Button
+                    id="btnF2Create"
+                    text="F2 Create TO"
+                    icon="sap-icon://accept"
+                    type="Emphasized"
+                    enabled="{= !!${trToView>/canCreateTO} }"
+                    press=".onCreateTO" />
+            </Toolbar>
+        </footer>
+
+    </Page>
+</mvc:View>

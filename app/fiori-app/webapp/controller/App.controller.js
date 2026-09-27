@@ -55,6 +55,8 @@ sap.ui.define([
                 this._updateShell("salesInquiries");
             } else if (sHash.indexOf("wm/goods-issue") === 0) {
                 this._updateShell("wmGoodsIssue");
+            } else if (sHash.indexOf("wm/tr-to") === 0) {
+                this._updateShell("wmTrTo");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
@@ -144,6 +146,10 @@ sap.ui.define([
                     break;
                 case "wmGoodsReceipt":
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
+                    bShowNav = true;
+                    break;
+                case "wmTrTo":
+                    sTitle = oBundle ? oBundle.getText("trToTitle") : "TO Creation (ZTO)";
                     bShowNav = true;
                     break;
                 case "ordersDueForDelivery":
