@@ -451,6 +451,22 @@ class GoodsIssueHandler {
     });
 
     // ──────────────────────────────────────────────────────────
+    // FUNCTION: getStockUnitsForItem — only the SUs valid for one reservation line
+    // ──────────────────────────────────────────────────────────
+    srv.on('getStockUnitsForItem', async (req) => {
+      const reservationNo = req.data?.reservationNo || '';
+      const reservationItem = req.data?.reservationItem || '';
+      if (!reservationNo || !reservationItem) {
+        return req.error(400, 'reservationNo and reservationItem parameters are required');
+      }
+      try {
+        return await GoodsIssueAdapter.listStockUnitsForReservationItem(reservationNo, reservationItem);
+      } catch (err) {
+        return req.error(err.status || err.statusCode || 500, err.message || 'Failed to list Storage Units from S/4HANA');
+      }
+    });
+
+    // ──────────────────────────────────────────────────────────
     // FUNCTION: revalidateStock — Pre-posting SAP stock check
     // ──────────────────────────────────────────────────────────
     srv.on('revalidateStock', async (req) => {

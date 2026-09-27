@@ -1,6 +1,13 @@
 const LOG = require('../../logger')('goods-issue-reservations');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 
+// Only the fields the reservation list needs: the full entity is ~60 fields per item, which made
+// the 2,000-item scan slow. Newest reservations first, so a truncated list keeps the recent ones.
+const OPEN_RESV_SELECT = [
+  'Reservation', 'ReservationItem', 'OrderID', 'Plant', 'GoodsMovementType', 'GoodsMovementTypeName',
+  'Product', 'ProductName', 'ResvnItmRequiredQtyInBaseUnit', 'ResvnItmWithdrawnQtyInBaseUnit'
+].join(',');
+
 /**
  * Domain client for SAP S/4HANA Goods Issue Reservations and Open Items.
  * Queries UI_RESERVATION_ITM_MNG_V2 (ReservationDocumentItem).
@@ -51,7 +58,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
    * @param {string} [options.reservationNo] - Server-side filter by Reservation
    * @param {string} [options.orderNo] - Server-side filter by OrderID
    * @param {number} [options.maxItems=2000] - Maximum raw items to scan (0 = unconstrained)
-   * @param {number} [options.pageSize=100] - OData page size
+   * @param {number} [options.pageSize=1000] - OData page size
    * @returns {Promise<Array>}
    */
   async getOpenReservations(movementType = '261', plant = '', options = {}) {
@@ -59,14 +66,16 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     const opts = typeof options === 'string' ? { reservationNo: options } : (options || {});
     const sResv = opts.reservationNo ? String(opts.reservationNo).trim() : '';
     const sOrder = opts.orderNo ? String(opts.orderNo).trim() : '';
-    const pageSize = typeof opts.pageSize === 'number' && opts.pageSize > 0 ? opts.pageSize : 100;
+    const pageSize = typeof opts.pageSize === 'number' && opts.pageSize > 0 ? opts.pageSize : 1000;
     // If targeted reservation or order is specified, default to high/unconstrained ceiling
     const defaultMax = (sResv || sOrder) ? 10000 : 2000;
     const maxItems = typeof opts.maxItems === 'number' ? opts.maxItems : defaultMax;
 
     let filter = `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
     if (movementType) {
-      filter += ` and (GoodsMovementType eq '${encodeURIComponent(movementType)}' or GoodsMovementType eq '261' or GoodsMovementType eq '201' or GoodsMovementType eq '531')`;
+      // Only the movement type this screen posts. 201 (cost center) and 531 (by-product RECEIPT) were listed
+      // too, but posting always uses 261, which SAP rejects against a reservation of another movement type.
+      filter += ` and GoodsMovementType eq '${encodeURIComponent(movementType)}'`;
     }
     if (sPlant) {
       filter += ` and Plant eq '${encodeURIComponent(sPlant)}'`;
@@ -91,7 +100,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
       while (true) {
         const page = await this._get(
           '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
-          `$filter=${encodeURIComponent(filter)}&$top=${pageSize}&$skip=${skip}&$format=json`
+          `$select=${OPEN_RESV_SELECT}&$orderby=${encodeURIComponent('Reservation desc')}&$filter=${encodeURIComponent(filter)}&$top=${pageSize}&$skip=${skip}&$format=json`
         );
         const items = Array.isArray(page) ? page : [];
         allResults.push(...items);

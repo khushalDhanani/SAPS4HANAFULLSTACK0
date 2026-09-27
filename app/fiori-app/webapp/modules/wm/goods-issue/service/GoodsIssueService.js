@@ -339,6 +339,23 @@ sap.ui.define([
         },
 
         /**
+         * Storage Units valid for exactly one reservation line
+         * (same material / plant / storage location / batch, issuable stock only).
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @returns {Promise<Object>} StockUnitList
+         */
+        getStockUnitsForItem: function (sReservationNo, sReservationItem) {
+            if (!sReservationNo || !sReservationItem) {
+                return Promise.reject(new Error("Reservation number and item are required to list Storage Units"));
+            }
+            return ODataClient.get(BASE_PATH + "/getStockUnitsForItem(" +
+                "reservationNo='" + encodeURIComponent(String(sReservationNo).trim()) + "'," +
+                "reservationItem='" + encodeURIComponent(String(sReservationItem).trim()) + "'" +
+                ")");
+        },
+
+        /**
          * Revalidate SAP stock immediately before Goods Issue posting.
          * Prevents posting with stale data.
          *

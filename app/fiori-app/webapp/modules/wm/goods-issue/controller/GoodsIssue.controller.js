@@ -26,6 +26,8 @@ sap.ui.define([
                 resolved: null,      // GoodsIssueResolution object from SAP
                 activeItem: null,    // Selected component for issue
                 availableStock: 0,
+                stockLoading: false,
+                lineBatchManaged: false,
                 issueQty: 0,
                 issueQtyState: "None",
                 issueQtyStateText: "",
@@ -48,7 +50,12 @@ sap.ui.define([
                 suWarningMessage: "",
                 batchLockedBySu: false,
                 suBatchLockText: "",
-                lastScannedSu: ""
+                lastScannedSu: "",
+                // Storage Units valid for the selected line only
+                stockUnits: [],
+                stockUnitsLoading: false,
+                stockUnitsMessage: "",
+                stockUnitsForItem: ""
             });
             this.getView().setModel(oViewModel, "giView");
 
@@ -72,9 +79,12 @@ sap.ui.define([
                 }
             }
 
-            // Load open reservations directly from live SAP S/4HANA & refresh Dispatch Queue
-            this.loadOpenReservations();
-            this._refreshQueueCount();
+            // Reservations + queue are loaded in _onPatternMatched (fires right after init on every visit).
+            // Loading here too ran the full SAP scan twice in parallel on each page open.
+            if (!oRouter) {
+                this.loadOpenReservations();
+                this._refreshQueueCount();
+            }
         },
 
         onExit: function () {
@@ -125,6 +135,10 @@ sap.ui.define([
             oModel.setProperty("/canProceedNext", false);
             oModel.setProperty("/resolved", null);
             oModel.setProperty("/activeItem", null);
+            oModel.setProperty("/stockUnits", []);
+            oModel.setProperty("/stockUnitsMessage", "");
+            oModel.setProperty("/stockUnitsForItem", "");
+            oModel.setProperty("/stockUnitsLoading", false);
             oModel.setProperty("/availableStock", 0);
             oModel.setProperty("/issueQty", 0);
             oModel.setProperty("/issueQtyState", "None");
@@ -194,6 +208,20 @@ sap.ui.define([
         // =============================================================
 
         loadOpenReservations: function (sPlant) {
+            // Reuse a load that is already running for the same plant instead of starting another SAP scan.
+            var sKey = sPlant || "";
+            if (this._oResvLoad && this._oResvLoad.key === sKey) {
+                return this._oResvLoad.promise;
+            }
+            var that = this;
+            var oPromise = this._loadOpenReservations(sPlant).finally(function () {
+                if (that._oResvLoad && that._oResvLoad.promise === oPromise) that._oResvLoad = null;
+            });
+            this._oResvLoad = { key: sKey, promise: oPromise };
+            return oPromise;
+        },
+
+        _loadOpenReservations: function (sPlant) {
             var oAuthModel = this.getModel("auth");
             if (!oAuthModel && this.getOwnerComponent()) {
                 oAuthModel = this.getOwnerComponent().getModel("auth");
@@ -350,6 +378,10 @@ sap.ui.define([
 
             oModel.setProperty("/selectedReservation", sReservationNo);
             oModel.setProperty("/activeItem", null);
+            oModel.setProperty("/stockUnits", []);
+            oModel.setProperty("/stockUnitsMessage", "");
+            oModel.setProperty("/stockUnitsForItem", "");
+            oModel.setProperty("/stockUnitsLoading", false);
             oModel.setProperty("/canProceedNext", false);
 
             var oWizard = this.byId("giWizard");
@@ -364,7 +396,16 @@ sap.ui.define([
             var sOrderNo = (oResv && oResv.OrderNo) ? oResv.OrderNo : "";
             var oDataModel = this.getModel("goodsIssue");
             return GoodsIssueService.fetchOpenItems(oDataModel, sOrderNo, sReservationNo)
-                .then(function (aItems) {
+                .then(function (aAll) {
+                    // This screen posts movement type 261 only. A typed/scanned reservation of another type
+                    // (live: 519366 = 301 transfer) must not be offered for a 261 posting.
+                    var aItems = (aAll || []).filter(function (i) { return !i.MovementType || i.MovementType === "261"; });
+                    if ((aAll || []).length && !aItems.length) {
+                        var oFirst = aAll[0];
+                        throw new Error("Reservation " + sReservationNo + " is for movement type " + oFirst.MovementType +
+                            (oFirst.MovementTypeName ? " (" + oFirst.MovementTypeName + ")" : "") +
+                            ", not 261 Goods Issue for Order. Post it with the matching transaction.");
+                    }
                     that._playBeep(true);
                     var oResolved = {
                         ReservationNo: sReservationNo,
@@ -436,23 +477,16 @@ sap.ui.define([
             var oModel = this.getView().getModel("giView");
             var oResolved = oModel.getProperty("/resolved");
 
+            // A new line never inherits the previous line's SU / batch lock
+            this._resetSuState();
+
             // Set active item
             oModel.setProperty("/activeItem", Object.assign({}, oItem));
+            this._loadStockUnitsForLine(oResolved && oResolved.ReservationNo, oItem.ReservationItem);
 
-            // Determine available stock
-            var nStock = 0;
-            var aBatches = (oResolved && oResolved.AvailableBatches) || [];
-            if (oItem.Batch && aBatches.length > 0) {
-                var oMatchedBatch = aBatches.find(function (b) { return b.Batch === oItem.Batch; });
-                if (oMatchedBatch && oMatchedBatch.AvailableStock !== null && oMatchedBatch.AvailableStock !== undefined) {
-                    nStock = Number(oMatchedBatch.AvailableStock);
-                }
-            } else if (oResolved && oResolved.AvailableStock !== null && oResolved.AvailableStock !== undefined) {
-                nStock = Number(oResolved.AvailableStock);
-            } else {
-                nStock = Number(oItem.OpenQty) || 0;
-            }
-            oModel.setProperty("/availableStock", nStock);
+            // Real SAP stock for this line (plant / storage location, or the reservation's batch).
+            // Previously this fell back to the line's OpenQty, so "Confirmed SAP Stock" just echoed the requirement.
+            this._loadLineStock(oItem);
 
             // Reset validation fields
             oModel.setProperty("/issueQty", Number(oItem.OpenQty) || 0);
@@ -481,6 +515,106 @@ sap.ui.define([
          * Handler for SU barcode input submit (scanner fires Enter key)
          */
         onSuBarcodeSubmit: function () {
+            this._resolveSuBarcode();
+        },
+
+        /**
+         * Read current SAP stock for the active line and re-validate. A late answer for another line is ignored.
+         */
+        _loadLineStock: function (oItem) {
+            var oModel = this.getView().getModel("giView");
+            var that = this;
+            oModel.setProperty("/availableStock", 0);
+            oModel.setProperty("/stockLoading", true);
+            oModel.setProperty("/lineBatchManaged", false);
+            var oDataModel = this.getModel("goodsIssue");
+            var fnCurrent = function () {
+                var oActive = oModel.getProperty("/activeItem");
+                return oActive && oActive.ReservationItem === oItem.ReservationItem && oActive.Material === oItem.Material;
+            };
+            // Batches in SAP for the material => batch-managed => a 261 without a batch is rejected by SAP.
+            Promise.resolve()
+                .then(function () { return GoodsIssueService.fetchMaterialBatches(oDataModel, oItem.Material, oItem.Plant, oItem.StorageLocation); })
+                .then(function (aBatches) {
+                    if (!fnCurrent()) return;
+                    oModel.setProperty("/lineBatchManaged", Array.isArray(aBatches) && aBatches.length > 0);
+                    that._validateInputs();
+                })
+                .catch(function () { /* unknown: keep batch optional, SAP still validates on posting */ });
+            return GoodsIssueService.revalidateStock(oItem.Material, oItem.Plant, oItem.StorageLocation, oItem.Batch || "", 0)
+                .then(function (oRes) {
+                    if (!fnCurrent()) return;
+                    // An SU or batch picked meanwhile already set a more specific stock figure.
+                    if (oModel.getProperty("/batchLockedBySu")) return;
+                    var bRead = oRes && oRes.StockReadSuccess !== false && oRes.CurrentStock !== null && oRes.CurrentStock !== undefined;
+                    oModel.setProperty("/availableStock", bRead ? Number(oRes.CurrentStock) : 0);
+                })
+                .catch(function () {
+                    if (fnCurrent()) oModel.setProperty("/availableStock", 0);
+                })
+                .finally(function () {
+                    if (!fnCurrent()) return;
+                    oModel.setProperty("/stockLoading", false);
+                    that._validateInputs();
+                });
+        },
+
+        /**
+         * Clear all SU fields (no toast, no batch revert). Used when the active line changes.
+         */
+        _resetSuState: function () {
+            var oModel = this.getView().getModel("giView");
+            ["/suBarcode", "/suErrorMessage", "/suSuccessMessage", "/suWarningMessage", "/suBatchLockText", "/lastScannedSu"]
+                .forEach(function (p) { oModel.setProperty(p, ""); });
+            ["/suLoading", "/suError", "/suSuccess", "/suWarning", "/batchLockedBySu"]
+                .forEach(function (p) { oModel.setProperty(p, false); });
+            oModel.setProperty("/suResolution", null);
+        },
+
+        /**
+         * Load ONLY the Storage Units valid for the selected reservation line.
+         * The list is emptied first and a late response for a previously selected line is discarded.
+         */
+        _loadStockUnitsForLine: function (sReservationNo, sReservationItem) {
+            var oModel = this.getView().getModel("giView");
+            var sKey = (sReservationNo || "") + "/" + (sReservationItem || "");
+            oModel.setProperty("/stockUnits", []);
+            oModel.setProperty("/stockUnitsMessage", "");
+            oModel.setProperty("/stockUnitsForItem", sKey);
+            if (!sReservationNo || !sReservationItem) return Promise.resolve();
+
+            oModel.setProperty("/stockUnitsLoading", true);
+            var fnCurrent = function () { return oModel.getProperty("/stockUnitsForItem") === sKey; };
+            return GoodsIssueService.getStockUnitsForItem(sReservationNo, sReservationItem)
+                .then(function (oResult) {
+                    if (!fnCurrent()) return;
+                    var aList = (oResult && oResult.StockUnits) || [];
+                    oModel.setProperty("/stockUnits", aList);
+                    var sMsg = aList.length ? "" : ((oResult && oResult.Message) || "No issuable Storage Unit found for this line.");
+                    if (oResult && oResult.ExcludedCount > 0) {
+                        sMsg = (sMsg ? sMsg + " " : "") + oResult.ExcludedCount + " other SU(s) of this material were hidden (blocked, not unrestricted, expired or different batch).";
+                    }
+                    oModel.setProperty("/stockUnitsMessage", sMsg);
+                })
+                .catch(function (err) {
+                    if (!fnCurrent()) return;
+                    oModel.setProperty("/stockUnitsMessage", "Could not load Storage Units from SAP: " + ((err && err.message) || err));
+                })
+                .finally(function () {
+                    if (fnCurrent()) oModel.setProperty("/stockUnitsLoading", false);
+                });
+        },
+
+        /**
+         * Pick an SU from the line's list -> resolved through the same backend validation as a scan.
+         */
+        onSelectStockUnit: function (oEvent) {
+            var oCtx = oEvent.getSource().getBindingContext("giView");
+            var oSu = oCtx && oCtx.getObject();
+            if (!oSu || !oSu.StorageUnit) return;
+            var oModel = this.getView().getModel("giView");
+            if (oModel.getProperty("/batchLockedBySu")) this._resetSuState();
+            oModel.setProperty("/suBarcode", oSu.StorageUnit);
             this._resolveSuBarcode();
         },
 
@@ -752,9 +886,10 @@ sap.ui.define([
             if (!bQtyWithinOpen) bAllPassed = false;
 
             // Check 5: Issue Qty <= Available Stock
-            var bQtyWithinStock = nIssueQty <= nStock;
+            var bStockLoading = !!oModel.getProperty("/stockLoading");
+            var bQtyWithinStock = !bStockLoading && nIssueQty <= nStock;
             aChecks.push({
-                label: nStock > 0
+                label: bStockLoading ? "Reading current SAP stock..." : nStock > 0
                     ? "Issue quantity does not exceed confirmed SAP stock (" + nIssueQty + " \u2264 " + nStock + ")"
                     : "Zero available stock in SAP (0 " + (oActive.Unit || "") + " available)",
                 passed: bQtyWithinStock
@@ -781,6 +916,9 @@ sap.ui.define([
                 }
                 aChecks.push({ label: sBatchLabel, passed: bBatchValid });
                 if (!bBatchValid) bAllPassed = false;
+            } else if (oModel.getProperty("/lineBatchManaged")) {
+                aChecks.push({ label: "Batch required: material " + oActive.Material + " is batch-managed \u2014 select a batch or scan a Storage Unit", passed: false });
+                bAllPassed = false;
             } else {
                 aChecks.push({ label: "Batch selection (optional \u2014 no batch assigned)", passed: true });
             }
@@ -806,6 +944,9 @@ sap.ui.define([
             } else if (nIssueQty > nOpenQty) {
                 sQtyState = "Error";
                 sQtyStateText = "Issue quantity (" + nIssueQty + ") exceeds open requirement (" + nOpenQty + " " + (oActive.Unit || "") + ")";
+            } else if (bStockLoading) {
+                sQtyState = "None";
+                sQtyStateText = "";
             } else if (nIssueQty > nStock) {
                 sQtyState = "Warning";
                 sQtyStateText = nStock > 0

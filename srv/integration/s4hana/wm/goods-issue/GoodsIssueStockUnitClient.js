@@ -1,5 +1,28 @@
 const LOG = require('../../logger')('goods-issue-stock-unit');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
+const { RfcClient } = require('../../RfcClient');
+
+// Classic WM (LE-WM) Storage Units live in LEIN/LQUA, not in EWM Handling Units.
+// Values below go into RFC_READ_TABLE WHERE clauses, so only [A-Z0-9] is accepted.
+const WM_KEY_RE = /^[A-Z0-9]{1,40}$/;
+const wmKey = (v) => {
+  const s = String(v ?? '').trim().toUpperCase();
+  return WM_KEY_RE.test(s) ? s : '';
+};
+const WM_QUANT_FIELDS = ['LGNUM', 'LENUM', 'LQNUM', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BESTQ', 'SOBKZ',
+  'VERME', 'MEINS', 'LGTYP', 'LGPLA', 'SKZUA', 'SKZSA', 'SKZSI', 'WDATU'];
+const wmAlphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+const wmSapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
+/** RFC_READ_TABLE quantity -> number (last separator is the decimal point). */
+function wmNum(v) {
+  let t = String(v ?? '').trim();
+  if (!t) return 0;
+  const neg = t.includes('-');
+  t = t.replace(/[-\s]/g, '');
+  const i = Math.max(t.lastIndexOf('.'), t.lastIndexOf(','));
+  const n = i < 0 ? Number(t) : Number(`${t.slice(0, i).replace(/[.,]/g, '')}.${t.slice(i + 1)}`);
+  return neg ? -n : n;
+}
 
 // ──────────────────────────────────────────────────────────
 // Stock Unit (SU) / Handling Unit (HU) resolution configuration
@@ -35,6 +58,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
     this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
     this._huModelCache = null;
+    this.rfc = options.rfc || new RfcClient();
   }
 
   /**
@@ -585,6 +609,229 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     return { items: mapped, primary: mapped.find((m) => m.material) || mapped[0] || {} };
   }
 
+
+  /**
+   * Read one open reservation item (UI_RESERVATION_ITM_MNG_V2) and compute its open quantity
+   * net of quantities already queued for dispatch.
+   */
+  async _readOpenReservationItem(reservationNo, reservationItem) {
+    const sResv = String(reservationNo).trim();
+    const sItem = String(reservationItem).trim().padStart(4, '0');
+    let resvItem = null;
+    try {
+      const resvPadded = sResv.padStart(10, '0');
+      const resvClean = sResv.replace(/^0+/, '');
+      const filter = `(Reservation eq '${resvClean}' or Reservation eq '${resvPadded}') and ReservationItem eq '${sItem}' and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
+      const res = await this._get(
+        '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
+        `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
+      );
+      if (Array.isArray(res) && res.length > 0) resvItem = res[0];
+    } catch (err) {
+      const connErr = new Error(`SAP connection failure while reading reservation ${sResv} item ${sItem}: ${err.message}`);
+      connErr.status = err.status || 502;
+      throw connErr;
+    }
+    if (!resvItem) {
+      const err = new Error(`Reservation ${sResv} item ${sItem} not found or already completed in SAP.`);
+      err.status = 404;
+      throw err;
+    }
+    return { sResv, sItem, resvItem };
+  }
+
+  /**
+   * All WM quants of material/plant/sloc in ANY warehouse. The warehouse is taken from the stock itself:
+   * T320 is not reliable here (live: 1120/HS01 -> W01 in T320, but its quants sit in W13).
+   */
+  async _wmQuants(material, plant, sloc) {
+    const m = wmKey(material);
+    const w = wmKey(plant);
+    if (!m || !w) return [];
+    const matnr = /^\d+$/.test(m) ? m.padStart(18, '0') : m;
+    const where = [`MATNR = '${matnr}'`, `AND WERKS = '${w}'`];
+    if (wmKey(sloc)) where.push(`AND LGORT = '${wmKey(sloc)}'`);
+    const rows = await this.rfc.readTable('LQUA', WM_QUANT_FIELDS, where);
+    return rows.map((q) => ({ ...q, VERME: wmNum(q.VERME) }));
+  }
+
+  /**
+   * Why a quant cannot be issued for this reservation line ('' = issuable).
+   * Rules: positive available stock, unrestricted (BESTQ blank), no special stock, no removal/inventory
+   * block, reservation batch (if fixed) must match, and the batch must be usable (unexpired, unrestricted).
+   */
+  _wmQuantRejection(q, resvBatch, usableBatchMap) {
+    if (!(q.VERME > 0)) return 'no available stock';
+    if (/^9/.test(q.LGTYP || '')) return `interim storage type ${q.LGTYP}`;
+    if (q.BESTQ) return `stock category ${q.BESTQ} (not unrestricted)`;
+    if (q.SOBKZ) return `special stock ${q.SOBKZ}`;
+    if (q.SKZUA || q.SKZSA) return 'blocked for stock removal';
+    if (q.SKZSI) return 'blocked for inventory';
+    if (resvBatch && q.CHARG !== resvBatch) return `batch ${q.CHARG || '(none)'} differs from reservation batch ${resvBatch}`;
+    if (q.CHARG && usableBatchMap) {
+      const b = usableBatchMap.get(q.CHARG.toUpperCase());
+      if (!b) return `batch ${q.CHARG} is not usable (expired, restricted or no unrestricted stock)`;
+      if (b.StatusState === 'Error') return `batch ${q.CHARG} is expired`;
+    }
+    return '';
+  }
+
+  /** Group issuable quants per Storage Unit (FEFO, then oldest GR date). */
+  _wmGroupStockUnits(quants, usableBatchMap) {
+    const bySu = new Map();
+    for (const q of quants) {
+      const key = `${q.LGNUM}|${q.LENUM}`;
+      const b = q.CHARG && usableBatchMap ? usableBatchMap.get(q.CHARG.toUpperCase()) : null;
+      const su = bySu.get(key) || {
+        StorageUnit: wmAlphaOut(q.LENUM),
+        Warehouse: q.LGNUM,
+        Material: wmAlphaOut(q.MATNR),
+        Plant: q.WERKS,
+        StorageLocation: q.LGORT,
+        StorageType: q.LGTYP,
+        StorageBin: q.LGPLA,
+        Batch: q.CHARG || '',
+        ExpiryDate: b ? b.ExpiryDate || null : null,
+        StatusState: b ? b.StatusState || 'None' : 'None',
+        StatusText: b ? b.StatusText || '' : (q.CHARG ? '' : 'NOT BATCH MANAGED'),
+        DaysToExpiry: b && b.DaysToExpiry !== undefined ? b.DaysToExpiry : null,
+        GrDate: wmSapDate(q.WDATU),
+        AvailableStock: 0,
+        Unit: q.MEINS,
+        QuantCount: 0,
+        _batches: new Set()
+      };
+      su.AvailableStock = Math.round((su.AvailableStock + q.VERME) * 1000) / 1000;
+      su.QuantCount += 1;
+      su._batches.add(q.CHARG || '');
+      bySu.set(key, su);
+    }
+    const list = [...bySu.values()].map(({ _batches, ...su }) => ({
+      ...su,
+      Batch: _batches.size > 1 ? '' : su.Batch,
+      MultipleBatches: _batches.size > 1
+    }));
+    const far = '9999-12-31';
+    return list.sort((a, b) =>
+      (a.ExpiryDate || far).localeCompare(b.ExpiryDate || far) ||
+      (a.GrDate || far).localeCompare(b.GrDate || far) ||
+      a.StorageUnit.localeCompare(b.StorageUnit));
+  }
+
+  async _usableBatchMap(material, plant, sloc) {
+    const getFn = (this.adapter && typeof this.adapter.getMaterialBatches === 'function')
+      ? (m, p, l) => this.adapter.getMaterialBatches(m, p, l)
+      : (this.batchesClient && typeof this.batchesClient.getMaterialBatches === 'function')
+        ? (m, p, l) => this.batchesClient.getMaterialBatches(m, p, l)
+        : null;
+    const list = getFn ? (await getFn(material, plant, sloc)) || [] : [];
+    return new Map(list.filter((b) => b && b.Batch).map((b) => [String(b.Batch).toUpperCase(), b]));
+  }
+
+  /**
+   * Storage Units that are valid for ONE reservation line: same material, plant, storage location
+   * (and batch, when the reservation fixes one) in the WM warehouse assigned to that storage location,
+   * with unrestricted, unblocked, unexpired available stock. Nothing else is returned.
+   */
+  async listStockUnitsForReservationItem(reservationNo, reservationItem) {
+    if (!reservationNo || !reservationItem) {
+      const err = new Error('Reservation number and item are required to list Storage Units.');
+      err.status = 400;
+      throw err;
+    }
+    const { sResv, sItem, resvItem } = await this._readOpenReservationItem(reservationNo, reservationItem);
+    const material = resvItem.Product || '';
+    const plant = resvItem.Plant || '';
+    const sloc = resvItem.StorageLocation || '';
+    const resvBatch = String(resvItem.Batch || '').trim().toUpperCase();
+    const base = { ReservationNo: sResv, ReservationItem: sItem, Material: material, Plant: plant, StorageLocation: sloc, Batch: resvBatch };
+
+    if (!sloc) {
+      return { ...base, Warehouse: '', StockUnits: [], ExcludedCount: 0, Message: `Reservation item has no storage location; Storage Units cannot be determined.` };
+    }
+
+    const [quants, usableMap] = await Promise.all([
+      this._wmQuants(material, plant, sloc).catch((err) => {
+        const e = new Error(`Could not read WM stock (LQUA) for material ${material}: ${err.message}`);
+        e.status = err.status || 502;
+        throw e;
+      }),
+      this._usableBatchMap(material, plant, sloc)
+    ]);
+
+    const suQuants = quants.filter((q) => q.LENUM);
+    const issuable = suQuants.filter((q) => !this._wmQuantRejection(q, resvBatch, usableMap));
+    const stockUnits = this._wmGroupStockUnits(issuable, usableMap);
+    const shown = new Set(issuable.map((q) => q.LENUM));
+    const excludedCount = new Set(suQuants.filter((q) => !shown.has(q.LENUM)).map((q) => q.LENUM)).size;
+    const warehouses = [...new Set(quants.map((q) => q.LGNUM).filter(Boolean))];
+
+    let message = '';
+    if (!stockUnits.length) {
+      // Issuable stock that is NOT on a Storage Unit (bin stock) — say so instead of a bare "nothing found".
+      const loose = quants.filter((q) => !q.LENUM && !this._wmQuantRejection(q, resvBatch, usableMap));
+      const where = `material ${material} in plant ${plant} / storage location ${sloc}` + (resvBatch ? ` / batch ${resvBatch}` : '');
+      if (!quants.length) {
+        message = `No WM stock for ${where}.`;
+      } else if (loose.length) {
+        const total = Math.round(loose.reduce((n, q) => n + q.VERME, 0) * 1000) / 1000;
+        const bins = [...new Set(loose.map((q) => `${q.LGNUM} ${q.LGTYP}/${q.LGPLA}`))].slice(0, 3).join(', ');
+        message = `No Storage Unit for ${where}: its stock (${total} ${loose[0].MEINS} in ${bins}) is not SU-managed. Issue without SU scan.`;
+      } else {
+        message = `No issuable Storage Unit for ${where} (warehouse ${warehouses.join(',')}).`;
+      }
+    }
+
+    return {
+      ...base,
+      Warehouse: warehouses.join(','),
+      StockUnits: stockUnits,
+      ExcludedCount: excludedCount,
+      Message: message
+    };
+  }
+
+  /**
+   * Resolve a scanned/selected classic-WM Storage Unit (LENUM) against one reservation line.
+   * Returns null when the SU does not exist in the WM warehouse (caller falls back to EWM HU lookup).
+   * Throws 409 when the SU exists but is not valid for this line.
+   */
+  async _resolveWmStockUnit(sSu, ctx) {
+    const lenum = wmKey(sSu);
+    if (!lenum || lenum.length > 20) return null;
+    const lenumIn = /^\d+$/.test(lenum) ? lenum.padStart(20, '0') : lenum;
+    let quants = [];
+    try {
+      const rows = await this.rfc.readTable('LQUA', WM_QUANT_FIELDS, [`LENUM = '${lenumIn}'`]);
+      quants = rows.map((q) => ({ ...q, VERME: wmNum(q.VERME) }));
+    } catch (err) {
+      LOG.warn(`WM SU lookup skipped (LQUA read failed): ${err.message}`);
+      return null;
+    }
+    if (!quants.length) return null;
+
+    const usableMap = new Map((ctx.usableBatches || []).filter((b) => b && b.Batch).map((b) => [String(b.Batch).toUpperCase(), b]));
+    const sameLine = quants.filter((q) => wmAlphaOut(q.MATNR) === wmAlphaOut(ctx.material) && q.WERKS === ctx.plant && (!ctx.sloc || q.LGORT === ctx.sloc));
+    const suLabel = wmAlphaOut(lenumIn);
+    if (!sameLine.length) {
+      const q = quants[0];
+      const err = new Error(
+        `Storage Unit ${suLabel} holds material ${wmAlphaOut(q.MATNR)} in plant ${q.WERKS} / storage location ${q.LGORT}, ` +
+        `but reservation ${ctx.sResv} item ${ctx.sItem} needs material ${ctx.material} in ${ctx.plant} / ${ctx.sloc}. Goods Issue is blocked.`
+      );
+      err.status = 409;
+      throw err;
+    }
+    const issuable = sameLine.filter((q) => !this._wmQuantRejection(q, ctx.resvBatch, usableMap));
+    if (!issuable.length) {
+      const err = new Error(`Storage Unit ${suLabel} cannot be issued: ${this._wmQuantRejection(sameLine[0], ctx.resvBatch, usableMap)}.`);
+      err.status = 409;
+      throw err;
+    }
+    const [su] = this._wmGroupStockUnits(issuable, usableMap);
+    return { su, lenumIn };
+  }
+
   /**
    * Authoritative SU -> Stock -> Batch resolution for Goods Issue.
    */
@@ -601,35 +848,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     }
 
     const sSu = suBarcode.trim();
-    const sResv = String(reservationNo).trim();
-    const sItem = String(reservationItem).trim().padStart(4, '0');
 
-    // ──────────────────────────────────────────────────────────
     // STEP 1: Load reservation item to get expected values (Reservation-First)
-    // ──────────────────────────────────────────────────────────
-    let resvItem = null;
-    try {
-      const resvPadded = sResv.padStart(10, '0');
-      const resvClean = sResv.replace(/^0+/, '');
-      const filter = `(Reservation eq '${resvClean}' or Reservation eq '${resvPadded}') and ReservationItem eq '${sItem}' and ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
-      const res = await this._get(
-        '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
-        `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
-      );
-      if (Array.isArray(res) && res.length > 0) {
-        resvItem = res[0];
-      }
-    } catch (err) {
-      const connErr = new Error(`SAP connection failure while reading reservation ${sResv} item ${sItem}: ${err.message}`);
-      connErr.status = err.status || 502;
-      throw connErr;
-    }
-
-    if (!resvItem) {
-      const err = new Error(`Reservation ${sResv} item ${sItem} not found or already completed in SAP.`);
-      err.status = 404;
-      throw err;
-    }
+    const { sResv, sItem, resvItem } = await this._readOpenReservationItem(reservationNo, reservationItem);
 
     const sResClean = sResv.replace(/^0+/, '');
     const sItemClean = sItem.replace(/^0+/, '');
@@ -848,6 +1069,56 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     } catch (checkErr) {
       if (checkErr.status === 422) throw checkErr;
       LOG.warn(`Batch check before HU lookup encountered error: ${checkErr.message}`);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 3C: Classic WM Storage Unit (LQUA.LENUM) — the SU type used in warehouse W01.
+    // ──────────────────────────────────────────────────────────
+    const wm = await this._resolveWmStockUnit(sSu, {
+      sResv, sItem, material: resvMaterial, plant: resvPlant, sloc: resvSLoc,
+      resvBatch: String(resvItem.Batch || '').trim().toUpperCase(), usableBatches
+    });
+    if (wm) {
+      const { su } = wm;
+      const suStock = su.AvailableStock;
+      const stock = currentStock !== null && currentStock !== undefined ? Math.min(currentStock, suStock) : suStock;
+      return {
+        SuBarcode: sSu,
+        SuExists: true,
+        SuNotFoundReason: '',
+        ResolvedType: 'WM_STORAGE_UNIT',
+        HuService: `LQUA/${su.Warehouse}`,
+        HuInternalNumber: wm.lenumIn,
+        HuExternalId: su.StorageUnit,
+        DeliveryDocument: '',
+        DeliveryDocumentItem: '',
+        Material: resvMaterial,
+        MaterialDesc: resvItem.ProductName || '',
+        Plant: resvPlant,
+        StorageLocation: resvSLoc,
+        CurrentStock: stock,
+        SuStockQty: suStock,
+        BaseUnit: baseUnit,
+        Batches: usableBatches,
+        DeterminedBatch: su.Batch,
+        DeterminedBatchExpiry: su.ExpiryDate,
+        DeterminedBatchStatusState: su.StatusState,
+        DeterminedBatchStatusText: su.StatusText || (su.Batch ? '' : 'SU BATCH NOT STATED'),
+        DeterminedBatchDaysToExpiry: su.DaysToExpiry,
+        MultipleBatches: su.MultipleBatches,
+        NoBatchAvailable: !su.Batch && !su.MultipleBatches,
+        ReservationNo: sResv,
+        ReservationItem: sItem,
+        OrderNo: resvItem.OrderID || '',
+        MaterialMatch: true,
+        PlantMatch: true,
+        SLocMatch: true,
+        ReservationRemainingQty: openQty,
+        ReservationRequiredQty: reqQty,
+        ReservationWithdrawnQty: wdnQty,
+        MaxIssueQty: Math.min(stock, openQty),
+        Unit: baseUnit
+      };
     }
 
     // ──────────────────────────────────────────────────────────

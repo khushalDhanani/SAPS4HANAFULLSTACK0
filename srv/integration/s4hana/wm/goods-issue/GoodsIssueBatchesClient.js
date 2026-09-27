@@ -92,6 +92,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
 
     // 3. Fetch authentic batch-grain stock via MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates
     const batchStockMap = new Map();
+    let stockReadOk = false;
     try {
       let stockFilter = `Material eq '${encodeURIComponent(sMat)}'`;
       if (sPlant) {
@@ -105,6 +106,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
         `$filter=${encodeURIComponent(stockFilter)}&$format=json`
       );
       if (Array.isArray(stockRes)) {
+        stockReadOk = true;
         for (const row of stockRes) {
           const bId = row.Batch ? String(row.Batch).trim() : '';
           if (bId) {
@@ -155,6 +157,11 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
       } else if (b.AvailableStock !== undefined && b.AvailableStock !== null) {
         nStock = Number(b.AvailableStock);
       }
+
+      // The storage-location stock read returned rows for this material but none for this batch -> the batch
+      // holds no stock there. (Live: 518021 / 1000001002 / 1130-CS02 listed 3 empty batches as selectable.)
+      // An entirely empty answer stays "unknown" (null): the service may simply not cover the material.
+      if (nStock === null && stockReadOk && sSLoc && batchStockMap.size > 0) nStock = 0;
 
       // Selectable if stock is positive or unknown (null); blocked only if confirmed 0 or expired
       const isSelectable = (nStock === null || nStock > 0) && status.StatusState !== 'Error' && status.StatusText !== 'EXPIRED';

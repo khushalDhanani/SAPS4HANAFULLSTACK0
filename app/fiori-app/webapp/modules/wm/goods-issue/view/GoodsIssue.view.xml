@@ -420,6 +420,47 @@
                             </form:content>
                         </form:SimpleForm>
 
+                        <!-- Storage Units valid for the selected line ONLY (material / plant / sloc / batch, issuable stock) -->
+                        <Table
+                            id="tblLineStockUnits"
+                            headerText="{i18n>giSuListTitle} ({= ${giView>/stockUnits}.length })"
+                            items="{giView>/stockUnits}"
+                            busy="{giView>/stockUnitsLoading}"
+                            busyIndicatorDelay="0"
+                            noDataText="{= ${giView>/stockUnitsLoading} ? ${i18n>giSuListLoading} : (${giView>/stockUnitsMessage} || ${i18n>giSuListEmpty}) }"
+                            visible="{= !!${giView>/activeItem} }"
+                            class="sapUiSmallMarginBottom">
+                            <columns>
+                                <Column><Text text="{i18n>giSuListColSu}" /></Column>
+                                <Column><Text text="{i18n>giColBatch}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giColExpiryDate}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giSuListColBin}" /></Column>
+                                <Column hAlign="End"><Text text="{i18n>giColAvailableStock}" /></Column>
+                                <Column hAlign="Center" width="7rem"><Text text="{i18n>giColAction}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem type="Active" press=".onSelectStockUnit">
+                                    <cells>
+                                        <ObjectIdentifier title="{giView>StorageUnit}" text="{giView>Warehouse}" />
+                                        <Text text="{= ${giView>MultipleBatches} ? '(multiple)' : (${giView>Batch} || '-') }" />
+                                        <ObjectStatus text="{= ${giView>ExpiryDate} || '-' }" state="{giView>StatusState}" />
+                                        <Text text="{giView>StorageType} / {giView>StorageBin}" />
+                                        <ObjectNumber number="{giView>AvailableStock}" unit="{giView>Unit}" />
+                                        <Button
+                                            text="{= ${giView>/lastScannedSu} === ${giView>StorageUnit} &amp;&amp; ${giView>/batchLockedBySu} ? ${i18n>giSuListSelected} : ${i18n>btnSelect} }"
+                                            type="{= ${giView>/lastScannedSu} === ${giView>StorageUnit} &amp;&amp; ${giView>/batchLockedBySu} ? 'Emphasized' : 'Default' }"
+                                            press=".onSelectStockUnit" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                        <MessageStrip
+                            text="{giView>/stockUnitsMessage}"
+                            type="Information"
+                            showIcon="true"
+                            visible="{= !!${giView>/stockUnitsMessage} &amp;&amp; ${giView>/stockUnits}.length > 0 }"
+                            class="sapUiSmallMarginBottom" />
+
                         <!-- Validation Checklist Panel -->
                         <Panel
                             id="panelValidationChecklist"

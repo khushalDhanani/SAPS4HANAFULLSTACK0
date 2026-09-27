@@ -156,13 +156,14 @@ cds.on('bootstrap', (app) => {
     const express = require('express');
     app.post('/ai/chat/stream', express.json({ limit: '4mb' }), ...cds.middlewares.before, require('./srv/ai/service').streamHandler);
 
-    // Serve Component-preload.js from dist if available, or return empty JS comment with HTTP 200 in development
+    // Serve Component-preload.js from dist in production, or return empty JS comment with HTTP 200 in development
     // to eliminate 404 net::ERR_ABORTED and module system loading failure warnings
     app.get(/Component-preload\.js$/, (req, res) => {
         const fs = require('fs');
         const path = require('path');
         const preloadDist = path.resolve(__dirname, 'app/fiori-app/dist/Component-preload.js');
-        if (fs.existsSync(preloadDist)) {
+        // Development serves webapp/ sources: a stale dist bundle here silently overrode every source change.
+        if (process.env.NODE_ENV === 'production' && fs.existsSync(preloadDist)) {
             return res.sendFile(preloadDist);
         }
         res.type('application/javascript').send('// Component-preload.js not available in development');

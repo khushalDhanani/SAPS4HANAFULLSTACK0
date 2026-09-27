@@ -160,7 +160,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       };
 
       const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
-      const result = await reservationsClient.getOpenReservations('261', '1120');
+      const result = await reservationsClient.getOpenReservations('261', '1120', { pageSize: 100 });
 
       expect(mockAdapter._get).toHaveBeenCalledTimes(2);
       expect(mockAdapter._get).toHaveBeenNthCalledWith(
@@ -183,6 +183,18 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const otherResv = result.find(r => r.ReservationNo === '20002');
       expect(otherResv).toBeDefined();
       expect(otherResv.ItemCount).toBe(99);
+    });
+
+    it('reads only the list fields, newest first, 1000 items per page by default', async () => {
+      const mockAdapter = { _get: jest.fn().mockResolvedValue([]) };
+      await new GoodsIssueReservationsClient({ adapter: mockAdapter }).getOpenReservations('261', '1120');
+      const q = mockAdapter._get.mock.calls[0][1];
+      expect(q).toContain(encodeURIComponent("GoodsMovementType eq '261'"));
+      expect(q).not.toContain(encodeURIComponent("'201'"));
+      expect(q).not.toContain(encodeURIComponent("'531'"));
+      expect(q).toContain('$select=Reservation,ReservationItem,OrderID,Plant,GoodsMovementType,GoodsMovementTypeName,Product,ProductName,ResvnItmRequiredQtyInBaseUnit,ResvnItmWithdrawnQtyInBaseUnit');
+      expect(q).toContain(`$orderby=${encodeURIComponent('Reservation desc')}`);
+      expect(q).toContain('$top=1000&$skip=0');
     });
 
     it('should push reservationNo and orderNo server-side into SAP OData $filter', async () => {
@@ -744,6 +756,27 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(batches[0].AvailableStock).toBeNull();
       // An unexpired batch with unknown stock must remain selectable, not blocked
       expect(batches[0].IsSelectable).toBe(true);
+    });
+
+    it('treats a batch with no stock row as 0 when the sloc stock read returned rows for other batches', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('MaterialMultiStockByDates')) {
+            return Promise.resolve([{ Batch: 'IN26091921', CurrentStock: '900', BaseUnit: 'KG', StorageLocation: 'CS02' }]);
+          }
+          if (path.includes('I_Batch')) {
+            return Promise.resolve([{ Batch: 'IN26091921', Plant: '1130' }, { Batch: 'IN26091901', Plant: '1130' }]);
+          }
+          return Promise.resolve([]);
+        }),
+        _enrichBatchStatus: (d) => GoodsIssueAdapter._enrichBatchStatus(d),
+        _formatDate: (d) => GoodsIssueAdapter._formatDate(d)
+      };
+      const batches = await new GoodsIssueBatchesClient({ adapter: mockAdapter }).getMaterialBatches('1000001002', '1130', 'CS02');
+      const empty = batches.find((b) => b.Batch === 'IN26091901');
+      expect(empty.AvailableStock).toBe(0);
+      expect(empty.IsSelectable).toBe(false);
+      expect(batches.find((b) => b.Batch === 'IN26091921')).toMatchObject({ AvailableStock: 900, IsSelectable: true });
     });
 
     it('should mark confirmed zero-stock batches as IsSelectable: false in getMaterialBatches', async () => {

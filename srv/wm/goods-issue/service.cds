@@ -350,6 +350,46 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         reservationItem : String(4)
     ) returns StockUnitResolution;
 
+    type StockUnitListItem {
+        StorageUnit     : String(20);
+        Warehouse       : String(3);
+        Material        : String(40);
+        Plant           : String(4);
+        StorageLocation : String(4);
+        StorageType     : String(3);
+        StorageBin      : String(10);
+        Batch           : String(10);
+        MultipleBatches : Boolean;
+        ExpiryDate      : Date;
+        StatusState     : String(10);
+        StatusText      : String(20);
+        DaysToExpiry    : Integer;
+        GrDate          : Date;
+        AvailableStock  : Decimal(13, 3);
+        Unit            : String(3);
+        QuantCount      : Integer;
+    };
+
+    type StockUnitList {
+        ReservationNo   : String(10);
+        ReservationItem : String(4);
+        Material        : String(40);
+        Plant           : String(4);
+        StorageLocation : String(4);
+        Batch           : String(10);
+        Warehouse       : String(20);
+        StockUnits      : array of StockUnitListItem;
+        ExcludedCount   : Integer;
+        Message         : String(500);
+    };
+
+    // Storage Units valid for exactly one reservation line (material/plant/sloc/batch, issuable stock only).
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getStockUnitsForItem(
+        reservationNo   : String(10),
+        reservationItem : String(4)
+    ) returns StockUnitList;
+
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function revalidateStock(
         material        : String(40),

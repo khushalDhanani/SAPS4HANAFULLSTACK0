@@ -3,6 +3,82 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-27 12:03 IST
+- **Agent**: Claude (Cowork)
+- **Request**: `/wm/goods-issue` "so many data is not coming or showing properly" -> check and fix all.
+- **Live debug** (user's browser via Claude built-in browser, logged in, DS4 data, reservation 518021 / material 1000001002 / 1130-CS02, and 519366):
+  1. **"Confirmed SAP Stock" was fake**: `onSelectComponentForValidation` fell back to the line's `OpenQty` (showed 100 KG; SAP has 900 KG), so the stock check always passed.
+  2. **Empty batches offered as selectable**: `getMaterialBatches` gave `AvailableStock: null` (unknown, selectable) to batches with no stock row although the sloc stock read succeeded (IN26091901, IN26092201, INW2109001).
+  3. **Wrong reservations in the list**: filter always OR-ed 261 with 201 (cost center) and 531 (by-product receipt); posting always uses 261. 222 listed, 80 not postable here (52 without order).
+  4. **Non-261 reservation could be opened by number**: 519366 is movement type 301 (plant-to-plant transfer) but loaded into the 261 wizard.
+  5. **Batch optional for batch-managed material**: 1000001002 has batches, checklist said "Batch selection (optional)"; SAP rejects 261 without batch.
+  6. **Source changes not visible in dev**: `server.js` served `app/fiori-app/dist/Component-preload.js` whenever it existed, overriding `webapp/` sources until `npm run build` (browser ran the old controller).
+- **Change**:
+  1. `GoodsIssue.controller.js`: `_loadLineStock` reads real stock via `revalidateStock` (plant/sloc or reservation batch) and whether the material has batches (`fetchMaterialBatches`); ignores late answers for another line; `stockLoading` state shows "Reading current SAP stock..." and blocks Next until read. New check "Batch required: material X is batch-managed" when `lineBatchManaged` and no batch. `_loadReservationDetails` rejects reservations whose items are not movement type 261 with a clear message.
+  2. `GoodsIssueBatchesClient.js`: batch with no stock row -> `AvailableStock 0` / not selectable when the sloc stock read returned rows for other batches of the material; a completely empty answer stays unknown (null).
+  3. `GoodsIssueReservationsClient.js`: movement type filter = requested type only (261).
+  4. `server.js`: dist `Component-preload.js` served only when `NODE_ENV=production`; `app/fiori-app/dist` rebuilt.
+  5. Tests: batches (sloc row missing -> 0), reservations filter (261 only), controller (real stock, movement-type guard, batch required / optional, async stock read in existing tests).
+- **Executed**: `npx jest test/unit`: 85 suites, 1452 passed. `npx eslint` (changed files): clean. `npm --prefix app/fiori-app run lint`: 0 findings. `npm --prefix app/fiori-app run build`: succeeded. `git diff --check`: clean.
+- **Live verification (DS4, browser)**: reservation list 142 (all 261, all with order), ~0.3 s; 518021/0001 Confirmed SAP Stock 900 KG; empty batches `0 sel=false`, IN26091921 900; batch-required check blocks Next; SU 2000018944 resolves via WM (`ResolvedType WM_STORAGE_UNIT`) -> batch IN26091921, stock 100 KG, all checks OK; 519366 -> "movement type 301 ... not 261" message.
+- **Open question**: SUs listed for 518021 all sit in storage type `OH1` / bin `ONHOLD`. Not excluded (no SAP flag marks them unavailable). Needs business decision whether OH1 stock may be issued.
+- **Next recommended action**: restart `cds watch` once (server.js change); decide on OH1/ONHOLD; post one test GI for 518021 with SU 2000018944.
+
+## 2026-09-27 11:58 IST (approx., corrected)
+- **Agent**: Claude (Cowork)
+- **Request**: `/wm/goods-issue` Reference Reservation list takes too long to load.
+- **Root cause**:
+  1. Every page open ran the full SAP scan **twice in parallel**: `onInit` called `loadOpenReservations()` and `_onPatternMatched` (fires right after init) called it again.
+  2. `GoodsIssueReservationsClient.getOpenReservations` fetched the **full** `ReservationDocumentItem` entity (no `$select`) at **100 items per page, sequentially**, up to 2,000 items = up to 20 serial SAP round-trips per load (40 with the double load).
+  3. No `$orderby`, so when the 2,000-item cap truncated the list it kept arbitrary (not the newest) reservations.
+- **Change**:
+  1. `GoodsIssueReservationsClient.js`: `$select` of the 10 fields the list uses, `$orderby=Reservation desc`, default page size 1000 (max 2 calls for the 2,000-item cap). Filter, queue deduction, truncation logic unchanged.
+  2. `GoodsIssue.controller.js`: `onInit` no longer loads (only when no router, i.e. standalone); `loadOpenReservations` reuses an in-flight load for the same plant (`_oResvLoad`); body moved to `_loadOpenReservations`.
+  3. Tests: `goodsIssueClients.test.js` pagination test passes `pageSize: 100` explicitly; new test for `$select`/`$orderby`/`$top=1000`. `goodsIssueController.test.js`: init test replaced by "loads once per route match" + in-flight reuse test.
+  4. New `tools/time-gi-reservations.js [plant]`: times old query shape vs new one live.
+- **Executed**: `npx jest test/unit`: 85 suites, 1448 passed. `npx eslint` (changed files): clean. `npm --prefix app/fiori-app run lint`: 0 findings. `npm --prefix app/fiori-app run build`: succeeded. `git diff --check`: clean.
+- **Not verified live (Blocked from agent VM)**: SAP unreachable from the Cowork VM. `$select`/`$orderby` on `UI_RESERVATION_ITM_MNG_V2` are standard SADL options but not yet proven on DS4; real timings unknown.
+- **Status**: In Progress — live timing pending.
+- **Next recommended action**: `node tools/time-gi-reservations.js` (and with `1120`), compare OLD vs NEW ms; restart `cds watch` and reopen `/wm/goods-issue`. If the NEW line fails with 400, `$orderby`/`$select` is rejected by the service -> report the error.
+
+## 2026-09-27 11:55 IST
+- **Agent**: Claude (Cowork)
+- **Live diag (user-run, DS4)**: `node tools/test-gi-su-list.js 519366` -> item 0001 material 8000001648, 1120/HS01. T320 maps 1120/HS01 -> W01, but LQUA holds the stock in **W13** (EN1/0-L0002-02 55.000, interim 902/0300001771 -2.000) and in W12 for plant 1130; all quants have `LENUM` blank (not SU-managed), no batch. MATNR in LQUA is 18-char zero-padded (confirmed). Conclusion: this line correctly has no SU; the T320-based warehouse determination was wrong.
+- **Change** (`GoodsIssueStockUnitClient.js`):
+  1. Removed T320 lookup (`_wmWarehousesFor`). `_wmQuants` now reads LQUA by `MATNR`/`WERKS`/`LGORT` in any warehouse; warehouse comes from the quants. `_resolveWmStockUnit` reads LQUA by `LENUM` only.
+  2. `_wmQuantRejection`: interim storage types (`LGTYP` 9xx) are excluded.
+  3. When no SU is issuable, `Message` states why: no WM stock at all / stock exists but is not SU-managed (quantity + warehouse + bins, "Issue without SU scan") / no issuable SU (warehouses listed). Shown in the table's no-data text.
+  4. Tests (`goodsIssueStockUnitList.test.js`): T320 tests replaced; added live-data case 519366/0001 (W13 bin stock, no SU), interim-type exclusion, no-WM-stock message (now 11 tests).
+- **Executed**: `npx jest test/unit`: 85 suites, 1446 tests passed. `npx eslint` (changed files): clean. `git diff --check`: clean.
+- **Status**: Done for code; live UI check pending.
+- **Next recommended action**: `node tools/test-gi-su-list.js 519366` (expect item 0001: 0 SUs, message "not SU-managed ... W13 EN1/0-L0002-02"); test a line whose material is SU-managed in W01 (e.g. a reservation for 1000000867) to see a populated list; then restart `cds watch` and check `/wm/goods-issue`.
+
+## 2026-09-27 11:45 IST
+- **Agent**: Claude (Cowork)
+- **Live result (user-run)**: `node tools/test-gi-su-list.js 519366` -> item 0001, material 8000001648, plant 1120 / sloc HS01, T320 -> W01, LQUA returned 0 rows (0 SUs, 0 hidden). Filter or material-number format mismatch suspected; not yet confirmed.
+- **Change**: `tools/test-gi-su-list.js`: added `--diag` (runs automatically when a line has 0 SUs): T320 rows for the plant, LQUA by MATNR 18-padded / unpadded / 40-padded and `MATNR LIKE '%<mat>'` with no warehouse/plant/sloc/SU filter, printing the raw keys.
+- **Executed**: `npx eslint tools/test-gi-su-list.js`: clean. No app code changed.
+- **Status**: In Progress — waiting for the diag output to fix the LQUA filter.
+- **Next recommended action**: user runs `node tools/test-gi-su-list.js 519366` and shares the `[diag]` lines.
+
+## 2026-09-27 11:39 IST
+- **Agent**: Claude (Cowork)
+- **Request**: `/wm/goods-issue`, Reservation 519366 — when a line is selected, show only the Storage Units (SU) valid for that line, nothing else.
+- **Root cause (debug)**:
+  1. The Goods Issue screen had no SU list at all — only a free-text SU barcode field.
+  2. `GoodsIssueStockUnitClient.resolveStockUnitForGoodsIssue` looked SUs up only in EWM Handling Unit OData services (`/SCWM/...`). Warehouse W01 is classic LE-WM (SUs in `LEIN`/`LQUA`, 0 EWM HUs — see 2026-09-21 and 2026-09-26 entries), so a real SU number (e.g. `1000041635`) could never resolve in Goods Issue.
+  3. `onSelectComponentForValidation` did not clear SU state, so an SU/batch lock from line 1 carried over to line 2.
+- **Change**:
+  1. `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`: new `listStockUnitsForReservationItem(resv, item)` — reservation item (OData) -> WM warehouse of plant/sloc (`T320`) -> `LQUA` quants with `LENUM <> ' '` for that material/plant/sloc via `RFC_READ_TABLE`. Kept only: `VERME > 0`, `BESTQ` blank (unrestricted), no `SOBKZ`, no `SKZUA`/`SKZSA`/`SKZSI` block, reservation batch if fixed, batch present in usable (unexpired) batch list. Quants grouped per SU, sorted FEFO then GR date; returns count of hidden SUs. New `_resolveWmStockUnit` step (3C) in `resolveStockUnitForGoodsIssue`: WM SU found -> validated against the line (409 on material/plant/sloc/batch/block mismatch) -> `ResolvedType 'WM_STORAGE_UNIT'`, batch auto-determined, stock capped by SU quantity; SU not in WM or RFC unavailable -> existing EWM path unchanged. Reservation read extracted to `_readOpenReservationItem` (same query).
+  2. `GoodsIssueAdapter.js`: `listStockUnitsForReservationItem` delegate. `service.cds`: types `StockUnitListItem`, `StockUnitList`, function `getStockUnitsForItem(reservationNo, reservationItem)`. `goodsIssue.handler.js`: handler.
+  3. UI: `GoodsIssueService.getStockUnitsForItem`; controller `_loadStockUnitsForLine` (list emptied on every line change, late responses for a previous line discarded), `_resetSuState` on line change, `onSelectStockUnit` (fills SU and runs the normal `resolveStockUnit` validation); list cleared on reset / reservation change. `GoodsIssue.view.xml`: table "Storage Units for this line" in step 2 (SU, batch, SLED, type/bin, stock, Select). i18n keys `giSuList*`.
+  4. Tests: new `test/unit/wm/goodsIssueStockUnitList.test.js` (9); `goodsIssueController.test.js` +4 (line-scoped load, stale response discarded, no SU lock carry-over, select -> resolve). Tool `tools/test-gi-su-list.js` for live check.
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: 85 suites, 1444 tests passed. `npx jest test/unit/wm test/integration/wm`: 13 suites, 314 passed.
+  - `npx eslint` (changed srv/test/tools files): clean. `npm --prefix app/fiori-app run lint`: 0 findings. `npm --prefix app/fiori-app run build`: succeeded. `npx cds compile srv/wm/goods-issue/service.cds`: ok. `git diff --check`: clean.
+- **Not verified live (Blocked from agent VM)**: SAP host 172.27.100.32 is not reachable from the Cowork VM (proxy `blocked-by-allowlist`), so reservation 519366 was not read live. Unverified assumptions: numeric `MATNR` in `LQUA` is 18-char zero-padded (same as `tools/test-rfc-trto.js --sus`), and `T320` maps the reservation sloc to W01.
+- **Next recommended action**: on the Mac run `node tools/test-gi-su-list.js 519366` (lists every open line with its SUs), then `node tools/test-gi-su-list.js 519366 <item> <SU>`; restart `cds watch`, open `/wm/goods-issue`, select Reservation 519366, select each line and confirm only that line's SUs appear.
+
 ## 2026-09-27 11:32 IST
 - **Agent**: Antigravity
 - **Change**: Added option to Select TR in UI (Value Help Dialog + Dedicated Button) for WM Transfer Order Creation (`modules/wm/tr-to`):

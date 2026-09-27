@@ -473,6 +473,11 @@ class GoodsIssueAdapter {
     return this.stockUnits.resolveStockUnitForGoodsIssue(suBarcode, reservationNo, reservationItem);
   }
 
+  /** Storage Units valid for one reservation line (classic WM LQUA). */
+  async listStockUnitsForReservationItem(reservationNo, reservationItem) {
+    return this.stockUnits.listStockUnitsForReservationItem(reservationNo, reservationItem);
+  }
+
   /**
    * Post goods issue for a single reservation component line (Bound Action)
    */

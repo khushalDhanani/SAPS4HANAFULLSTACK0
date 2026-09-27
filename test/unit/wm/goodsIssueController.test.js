@@ -67,6 +67,8 @@ const mockGoodsIssueService = {
     submitGoodsIssueRequest: jest.fn(),
     resolveIdentifier: jest.fn(),
     resolveStockUnit: jest.fn(),
+    revalidateStock: jest.fn().mockResolvedValue({ StockReadSuccess: true, CurrentStock: 100000 }),
+    getStockUnitsForItem: jest.fn().mockResolvedValue({ StockUnits: [], ExcludedCount: 0, Message: '' }),
     getQueueSummary: jest.fn().mockResolvedValue({ QueuedCount: 0, Items: [] }),
     retryQueuedGoodsIssue: jest.fn().mockResolvedValue({ Success: true, MaterialDocument: '4900000001', MaterialDocYear: '2026' }),
     clearQueuedGoodsIssue: jest.fn().mockResolvedValue(true),
@@ -248,8 +250,23 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(oModel.getProperty('/postResult')).toBeNull();
         });
 
-        it('should load open reservations on init', () => {
-            expect(mockGoodsIssueService.fetchOpenReservations).toHaveBeenCalled();
+        it('loads open reservations once per page open (route match), not also in onInit', () => {
+            expect(mockGoodsIssueService.fetchOpenReservations).not.toHaveBeenCalled();
+            controller._onPatternMatched();
+            expect(mockGoodsIssueService.fetchOpenReservations).toHaveBeenCalledTimes(1);
+        });
+
+        it('reuses an in-flight reservation load instead of starting a second SAP scan', async () => {
+            let release;
+            mockGoodsIssueService.fetchOpenReservations.mockImplementationOnce(() => new Promise((r) => { release = r; }));
+            const p1 = controller.loadOpenReservations();
+            const p2 = controller.loadOpenReservations();
+            expect(p2).toBe(p1);
+            expect(mockGoodsIssueService.fetchOpenReservations).toHaveBeenCalledTimes(1);
+            release([{ ReservationNo: '519366' }]);
+            await p1;
+            controller.loadOpenReservations();
+            expect(mockGoodsIssueService.fetchOpenReservations).toHaveBeenCalledTimes(2);
         });
 
         it('should toggle audio cues', () => {
@@ -389,7 +406,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(mockBinding.filter).toHaveBeenCalledWith([]);
         });
 
-        it('should select component for validation, validate step 1, and advance to step 2', () => {
+        it('should select component for validation, validate step 1, and advance to step 2', async () => {
             const oModel = controller.getView().getModel('giView');
             oModel.setProperty('/resolved', mockResolution);
 
@@ -402,6 +419,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             };
 
             controller.onSelectComponentForValidation(mockEvent);
+            await new Promise((r) => setTimeout(r, 0)); // SAP stock read
 
             expect(oModel.getProperty('/currentStep')).toBe(2);
             expect(oModel.getProperty('/activeItem/Material')).toBe('3000000200');
@@ -425,7 +443,8 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('already completed'));
         });
 
-        it('should preserve available stock as 0 when resolved stock is 0 and fail stock validation', () => {
+        it('uses real SAP stock, not the open quantity: 0 in SAP fails stock validation', async () => {
+            mockGoodsIssueService.revalidateStock.mockResolvedValueOnce({ StockReadSuccess: true, CurrentStock: 0 });
             const oModel = controller.getView().getModel('giView');
             oModel.setProperty('/resolved', {
                 ReservationNo: '375047',
@@ -448,9 +467,103 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             };
 
             controller.onSelectComponentForValidation(mockEvent);
+            await new Promise((r) => setTimeout(r, 0));
+            expect(mockGoodsIssueService.revalidateStock).toHaveBeenCalledWith('3000000297', undefined, undefined, '', 0);
             expect(oModel.getProperty('/availableStock')).toBe(0);
             expect(oModel.getProperty('/issueQtyState')).toBe('Warning');
             expect(oModel.getProperty('/isValid')).toBe(false);
+        });
+    });
+
+    describe('Batch requirement for batch-managed materials', () => {
+        const sel = (item) => ({ getSource: () => ({ getBindingContext: () => ({ getObject: () => item }) }) });
+        beforeEach(() => controller.getView().getModel('giView').setProperty('/resolved', { ReservationNo: '518021', Items: [] }));
+
+        it('blocks Next without a batch when SAP has batches for the material', async () => {
+            mockGoodsIssueService.fetchMaterialBatches.mockResolvedValueOnce([{ Batch: 'IN26091921', AvailableStock: 900 }]);
+            controller.onSelectComponentForValidation(sel({ ReservationItem: '0001', Material: '1000001002', Plant: '1130', StorageLocation: 'CS02', OpenQty: 100, Batch: '' }));
+            await new Promise((r) => setTimeout(r, 0));
+            const oModel = controller.getView().getModel('giView');
+            expect(oModel.getProperty('/validationChecks').some((c) => /Batch required/.test(c.label) && !c.passed)).toBe(true);
+            expect(oModel.getProperty('/isValid')).toBe(false);
+        });
+
+        it('keeps batch optional for a material without batches', async () => {
+            mockGoodsIssueService.fetchMaterialBatches.mockResolvedValueOnce([]);
+            controller.onSelectComponentForValidation(sel({ ReservationItem: '0001', Material: '8000001648', Plant: '1120', StorageLocation: 'HS01', OpenQty: 21, Batch: '' }));
+            await new Promise((r) => setTimeout(r, 0));
+            const oModel = controller.getView().getModel('giView');
+            expect(oModel.getProperty('/validationChecks').some((c) => /optional/.test(c.label) && c.passed)).toBe(true);
+        });
+    });
+
+    describe('Reservation movement type guard', () => {
+        it('rejects a reservation that is not movement type 261 (e.g. 301 transfer)', async () => {
+            mockGoodsIssueService.fetchOpenItems.mockResolvedValueOnce([
+                { ReservationNo: '519366', ReservationItem: '0001', Material: '8000001648', MovementType: '301', MovementTypeName: 'TF trfr plnt to plnt', OpenQty: 21 }
+            ]);
+            await controller._loadReservationDetails('519366');
+            const oModel = controller.getView().getModel('giView');
+            expect(oModel.getProperty('/itemsUnavailable')).toBe(true);
+            expect(oModel.getProperty('/itemsUnavailableMsg')).toMatch(/movement type 301/);
+            expect(oModel.getProperty('/resolved/Items')).toEqual([]);
+        });
+    });
+
+    // =================================================================
+    // STORAGE UNITS FOR THE SELECTED LINE ONLY
+    // =================================================================
+    describe('Storage Units for selected line', () => {
+        const lineEvent = (item) => ({ getSource: () => ({ getBindingContext: () => ({ getObject: () => item }) }) });
+        const L1 = { ReservationItem: '0001', Material: '1000000867', OpenQty: 100, Batch: '' };
+        const L2 = { ReservationItem: '0002', Material: '1000000869', OpenQty: 50, Batch: '' };
+
+        beforeEach(() => {
+            controller.getView().getModel('giView').setProperty('/resolved', { ReservationNo: '519366', Items: [L1, L2] });
+        });
+
+        it('loads SUs for exactly the selected reservation line', async () => {
+            mockGoodsIssueService.getStockUnitsForItem.mockResolvedValueOnce({
+                StockUnits: [{ StorageUnit: '1000041635', Material: '1000000867', Batch: 'IN25031691', AvailableStock: 1620 }],
+                ExcludedCount: 0, Message: ''
+            });
+            controller.onSelectComponentForValidation(lineEvent(L1));
+            await new Promise((r) => setTimeout(r, 0));
+            const oModel = controller.getView().getModel('giView');
+            expect(mockGoodsIssueService.getStockUnitsForItem).toHaveBeenCalledWith('519366', '0001');
+            expect(oModel.getProperty('/stockUnits').map((s) => s.StorageUnit)).toEqual(['1000041635']);
+        });
+
+        it('discards a late SU response of the previously selected line', async () => {
+            let resolveLine1;
+            mockGoodsIssueService.getStockUnitsForItem
+                .mockImplementationOnce(() => new Promise((r) => { resolveLine1 = r; }))
+                .mockResolvedValueOnce({ StockUnits: [{ StorageUnit: 'SU-LINE2', Material: '1000000869' }], ExcludedCount: 0 });
+            controller.onSelectComponentForValidation(lineEvent(L1));
+            controller.onSelectComponentForValidation(lineEvent(L2));
+            await new Promise((r) => setTimeout(r, 0));
+            resolveLine1({ StockUnits: [{ StorageUnit: 'SU-LINE1', Material: '1000000867' }], ExcludedCount: 0 });
+            await new Promise((r) => setTimeout(r, 0));
+            expect(controller.getView().getModel('giView').getProperty('/stockUnits').map((s) => s.StorageUnit)).toEqual(['SU-LINE2']);
+        });
+
+        it('does not carry an SU lock over to a newly selected line', () => {
+            const oModel = controller.getView().getModel('giView');
+            controller.onSelectComponentForValidation(lineEvent(L1));
+            oModel.setProperty('/suBarcode', '1000041635');
+            oModel.setProperty('/batchLockedBySu', true);
+            oModel.setProperty('/lastScannedSu', '1000041635');
+            controller.onSelectComponentForValidation(lineEvent(L2));
+            expect(oModel.getProperty('/suBarcode')).toBe('');
+            expect(oModel.getProperty('/batchLockedBySu')).toBe(false);
+            expect(oModel.getProperty('/suResolution')).toBe(null);
+        });
+
+        it('selecting an SU from the list resolves it through resolveStockUnit', () => {
+            mockGoodsIssueService.resolveStockUnit.mockReturnValueOnce(new Promise(() => {}));
+            controller.onSelectComponentForValidation(lineEvent(L1));
+            controller.onSelectStockUnit({ getSource: () => ({ getBindingContext: () => ({ getObject: () => ({ StorageUnit: '1000041635' }) }) }) });
+            expect(mockGoodsIssueService.resolveStockUnit).toHaveBeenCalledWith('1000041635', '519366', '0001');
         });
     });
 
@@ -476,6 +589,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
                 })
             };
             controller.onSelectComponentForValidation(mockEvent);
+            await new Promise((r) => setTimeout(r, 0)); // SAP stock read
         });
 
         it('should be on step 2 with validation checks populated', () => {
@@ -658,6 +772,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
                 })
             };
             controller.onSelectComponentForValidation(mockEvent);
+            await new Promise((r) => setTimeout(r, 0)); // SAP stock read
             oModel.setProperty('/issueQty', 500);
             controller._validateInputs();
             controller.onProceedToReview();
@@ -698,6 +813,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
                 })
             };
             controller.onSelectComponentForValidation(mockEvent);
+            await new Promise((r) => setTimeout(r, 0)); // SAP stock read
             oModel.setProperty('/issueQty', 500);
             controller._validateInputs();
         });
@@ -814,6 +930,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
                 })
             };
             controller.onSelectComponentForValidation(mockEvent);
+            await new Promise((r) => setTimeout(r, 0)); // SAP stock read
         });
 
         it('should open batch selection dialog', async () => {
