@@ -197,7 +197,7 @@
                                 text="{i18n>fiBtnExportCsv}"
                                 press=".onExport">
                                 <layoutData>
-                                    <OverflowToolbarLayoutData priority="Medium" />
+                                    <OverflowToolbarLayoutData priority="Low" />
                                 </layoutData>
                             </Button>
                             <Button

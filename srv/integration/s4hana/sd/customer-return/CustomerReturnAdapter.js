@@ -160,6 +160,7 @@ class CustomerReturnAdapter {
     else queryParams.set('$orderby', 'CustomerReturn desc');
 
     if (cleanOpts.filter) queryParams.set('$filter', cleanOpts.filter);
+    queryParams.set('$inlinecount', 'allpages');
 
     const qs = queryParams.toString();
     const endpoint = `${SERVICE_PATH}/${HEADER_ENTITY_SET}${qs ? `?${qs}` : ''}`;

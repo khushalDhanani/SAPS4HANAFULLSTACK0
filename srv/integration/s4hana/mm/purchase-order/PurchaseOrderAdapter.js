@@ -349,7 +349,10 @@ class PurchaseOrderAdapter {
         warehouseCount: () => fetchCount('/sap/opu/odata/sap/API_WAREHOUSE/Warehouse?$inlinecount=allpages&$top=1'),
         openReservationCount: () => fetchCount('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem?$inlinecount=allpages&$top=1&$filter=ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false'),
         inboundDeliveryCount: () => fetchCount('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$inlinecount=allpages&$top=1'),
-        gatewayCatalogCount: () => fetchRawCount('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection/$count')
+        gatewayCatalogCount: () => fetchRawCount('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection/$count'),
+        ordersDueCount: () => fetchCount('/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate?$inlinecount=allpages&$top=1'),
+        customerInvoiceCount: () => fetchCount('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?$inlinecount=allpages&$top=1'),
+        customerReturnCount: () => fetchCount('/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV/C_CustomerReturnOPg?$inlinecount=allpages&$top=1')
       };
 
       const MASTER_DATA_METRIC_KEYS = new Set([

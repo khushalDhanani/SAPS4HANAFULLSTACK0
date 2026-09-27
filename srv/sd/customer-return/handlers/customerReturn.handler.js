@@ -80,7 +80,7 @@ function registerCustomerReturnHandlers(srv) {
   // 3. getReturnMetrics
   srv.on('getReturnMetrics', async (req) => {
     try {
-      const { results } = await customerReturnAdapter.getCustomerReturns({});
+      const { results, count } = await customerReturnAdapter.getCustomerReturns({});
 
       let totalNetValue = 0;
       let poorQualityCount = 0;
@@ -102,7 +102,7 @@ function registerCustomerReturnHandlers(srv) {
       }
 
       return {
-        totalReturns: results.length,
+        totalReturns: count || results.length,
         totalNetValue: Math.round(totalNetValue * 100) / 100,
         poorQualityCount,
         damagedTransitCount,

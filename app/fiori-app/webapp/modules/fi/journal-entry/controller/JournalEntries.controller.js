@@ -73,6 +73,9 @@ sap.ui.define([
                         }
                     }
                     if (oMetrics) {
+                        if (oMetrics.fiDocCount != null) {
+                            oViewModel.setProperty("/totalCount", oMetrics.fiDocCount);
+                        }
                         oViewModel.setProperty("/glAccountCount", oMetrics.glAccountCount != null ? oMetrics.glAccountCount : "-");
                         oViewModel.setProperty("/costCenterCount", oMetrics.costCenterCount != null ? oMetrics.costCenterCount : "-");
                         oViewModel.setProperty("/companyCodeCount", oMetrics.companyCodeCount != null ? oMetrics.companyCodeCount : "-");

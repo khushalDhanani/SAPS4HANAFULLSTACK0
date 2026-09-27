@@ -793,6 +793,9 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
     beforeEach(() => {
       GoodsIssueAdapter._resetHuModelCache();
       delete process.env.EWM_WAREHOUSE_NUMBER;
+      if (GoodsIssueAdapter.stockUnits && GoodsIssueAdapter.stockUnits.rfc) {
+        jest.spyOn(GoodsIssueAdapter.stockUnits.rfc, 'readTable').mockResolvedValue([]);
+      }
     });
 
     afterEach(() => {

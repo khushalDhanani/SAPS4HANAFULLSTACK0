@@ -136,6 +136,9 @@ sap.ui.define([
                     } else {
                         oViewModel.setProperty("/supplierCount", "-");
                     }
+                    if (oMetrics && oMetrics.totalCount != null) {
+                        oViewModel.setProperty("/totalCount", oMetrics.totalCount);
+                    }
                 })
                 .catch(function () {
                     oViewModel.setProperty("/supplierCount", "-");

@@ -296,12 +296,12 @@ describe("CustomerReturns Controller", () => {
             expect(controller.formatDate("/Date(1751846400000)/")).toBe("07 Jul 2025");
         });
 
-        test("formatAmountState returns 'None' for zero/null, 'Good' otherwise", () => {
+        test("formatAmountState returns 'None' for zero/null, 'Success' otherwise", () => {
             expect(controller.formatAmountState(null)).toBe("None");
             expect(controller.formatAmountState(0)).toBe("None");
             expect(controller.formatAmountState("0.00")).toBe("None");
-            expect(controller.formatAmountState(500)).toBe("Good");
-            expect(controller.formatAmountState("1234.5")).toBe("Good");
+            expect(controller.formatAmountState(500)).toBe("Success");
+            expect(controller.formatAmountState("1234.5")).toBe("Success");
         });
     });
 

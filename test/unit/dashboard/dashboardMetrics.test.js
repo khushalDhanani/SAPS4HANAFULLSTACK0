@@ -368,7 +368,10 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         'C_PurchasingGroupValueHelp': '44',
         'API_WAREHOUSE/Warehouse': '1',
         'UI_RESERVATION_ITM_MNG_V2': '54',
-        'MMIM_GR4PO_DL_SRV': '12'
+        'MMIM_GR4PO_DL_SRV': '12',
+        'LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate': '1078',
+        'SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797': '508',
+        'SD_F2651_CRT_CREATE_SRV/C_CustomerReturnOPg': '183'
     };
 
     const liveSap = (overrides = {}) => jest.fn().mockImplementation((dest, config) => {
@@ -408,11 +411,11 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         expect(count).toBeNull();
     });
 
-    test('getDashboardMetrics reads all 26 counts live from SAP and reports none unavailable', async () => {
+    test('getDashboardMetrics reads all 29 counts live from SAP and reports none unavailable', async () => {
         const mockExecute = liveSap();
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
-        expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(mockExecute).toHaveBeenCalledTimes(29);
         expect(typeof metrics.asOf).toBe('string');
         expect(new Date(metrics.asOf).getTime()).not.toBeNaN();
         delete metrics.asOf; // read time, asserted above
@@ -443,6 +446,9 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
             openReservationCount: 54,
             inboundDeliveryCount: 12,
             gatewayCatalogCount: 1345,
+            ordersDueCount: 1078,
+            customerInvoiceCount: 508,
+            customerReturnCount: 183,
             unavailable: []
         });
     });
@@ -501,11 +507,11 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         const metrics1 = await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(mockExecute).toHaveBeenCalledTimes(29);
 
         // Second call should return cached object without invoking executeHttpRequest
         const metrics2 = await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(26); // No new calls
+        expect(mockExecute).toHaveBeenCalledTimes(29); // No new calls
         expect(metrics2).toEqual(metrics1);
     });
 
@@ -515,12 +521,12 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(mockExecute).toHaveBeenCalledTimes(29);
 
         // With forceRefresh: true, executes calls again
         await poAdapter.getDashboardMetrics({ ...opts, forceRefresh: true });
-        // The 7 transactional counts are executed again; master data counts may hit masterDataCountCache
-        expect(mockExecute.mock.calls.length).toBeGreaterThan(26);
+        // The transactional counts are executed again; master data counts may hit masterDataCountCache
+        expect(mockExecute.mock.calls.length).toBeGreaterThan(29);
     });
 
     test('clearMetricsCache invalidates cached metrics', async () => {
@@ -529,14 +535,14 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(26);
+        expect(mockExecute).toHaveBeenCalledTimes(29);
 
         poAdapter.clearMetricsCache();
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(52);
+        expect(mockExecute).toHaveBeenCalledTimes(58);
     });
 
-    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 26 requests', async () => {
+    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 29 requests', async () => {
         poAdapter.clearMetricsCache();
         let resolveExecute;
         const delayedExecution = new Promise((resolve) => { resolveExecute = resolve; });
@@ -554,8 +560,8 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         resolveExecute();
         const [m1, m2, m3] = await Promise.all([p1, p2, p3]);
 
-        // Only 26 calls executed total (1 single pass), not 3 * 26 = 78
-        expect(mockExecute).toHaveBeenCalledTimes(26);
+        // Only 29 calls executed total (1 single pass), not 3 * 29 = 87
+        expect(mockExecute).toHaveBeenCalledTimes(29);
         expect(m1).toEqual(m2);
         expect(m2).toEqual(m3);
         expect(m1.totalCount).toBe(2729);
@@ -567,26 +573,26 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: failMock, useCache: true, negativeTtlMs: 2000 };
 
         const metrics1 = await poAdapter.getDashboardMetrics(opts);
-        expect(failMock).toHaveBeenCalledTimes(26);
-        expect(metrics1.unavailable.length).toBe(26);
+        expect(failMock).toHaveBeenCalledTimes(29);
+        expect(metrics1.unavailable.length).toBe(29);
         expect(metrics1.error).toContain('500 Internal Server Error');
 
-        // Subsequent call within negative TTL should return cached failure without re-executing 26 calls
+        // Subsequent call within negative TTL should return cached failure without re-executing 29 calls
         const metrics2 = await poAdapter.getDashboardMetrics(opts);
-        expect(failMock).toHaveBeenCalledTimes(26); // No new calls!
+        expect(failMock).toHaveBeenCalledTimes(29); // No new calls!
         expect(metrics2).toEqual(metrics1);
     });
 
-    test('fast-fails on 401 Unauthorized probe and halts remaining 25 calls to avoid SU01 lockouts', async () => {
+    test('fast-fails on 401 Unauthorized probe and halts remaining 28 calls to avoid SU01 lockouts', async () => {
         poAdapter.clearMetricsCache();
         const authFailMock = jest.fn().mockRejectedValue(new Error('HTTP 401 Unauthorized: logon rejected'));
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: authFailMock, useCache: true };
 
         const metrics = await poAdapter.getDashboardMetrics(opts);
 
-        // Crucial: Only the 1st probe call executed, avoiding 25 more 401 errors
+        // Crucial: Only the 1st probe call executed, avoiding 28 more 401 errors
         expect(authFailMock).toHaveBeenCalledTimes(1);
-        expect(metrics.unavailable.length).toBe(26);
+        expect(metrics.unavailable.length).toBe(29);
         expect(metrics.error).toContain('HTTP 401 Unauthorized');
         expect(metrics.totalCount).toBeNull();
         expect(metrics.supplierCount).toBeNull();

@@ -86,6 +86,9 @@ sap.ui.define([
                     } else {
                         oViewModel.setProperty("/openCount", "-");
                     }
+                    if (data && data.totalInquiriesCount != null) {
+                        oViewModel.setProperty("/totalCount", data.totalInquiriesCount);
+                    }
                 })
                 .catch(function () {
                     oViewModel.setProperty("/openCount", "-");

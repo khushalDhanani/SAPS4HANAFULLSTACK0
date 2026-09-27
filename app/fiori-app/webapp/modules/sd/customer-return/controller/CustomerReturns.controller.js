@@ -96,7 +96,7 @@ sap.ui.define([
         formatAmountState: function (vAmount) {
             var f = parseFloat(vAmount);
             if (isNaN(f) || f === 0 || vAmount == null || vAmount === "") return "None";
-            return "Good";
+            return "Success";
         },
 
         formatReason: function (sReason, sReasonText) {

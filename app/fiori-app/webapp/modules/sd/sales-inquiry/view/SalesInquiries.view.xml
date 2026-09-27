@@ -137,10 +137,9 @@
                         <ColumnListItem type="Navigation">
                             <cells>
                                 <ObjectIdentifier
-                                    title="{salesInquiry>SalesInquiry}"
-                                    text="{salesInquiry>ExternalDocumentID}" />
+                                    title="{salesInquiry>SalesInquiry}" />
                                 <Text text="{salesInquiry>SalesInquiryType}" />
-                                <Text text="{salesInquiry>SalesInquiryDescription}" />
+                                <Text text="{salesInquiry>PurchaseOrderByCustomer}" />
                                 <ObjectIdentifier
                                     title="{= ${salesInquiry>OrganizationBPName1} || ${salesInquiry>SoldToParty} || '' }"
                                     text="{= ${salesInquiry>OrganizationBPName1} ? ${salesInquiry>SoldToParty} : '' }" />

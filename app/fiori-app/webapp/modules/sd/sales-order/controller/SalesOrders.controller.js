@@ -161,6 +161,9 @@ sap.ui.define([
                     } else {
                         oViewModel.setProperty("/openCount", "-");
                     }
+                    if (data && data.totalOrdersCount != null) {
+                        oViewModel.setProperty("/totalCount", data.totalOrdersCount);
+                    }
                 })
                 .catch(function () {
                     oViewModel.setProperty("/openCount", "-");

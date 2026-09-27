@@ -45,7 +45,10 @@ sap.ui.define([
         "warehouseCount",
         "openReservationCount",
         "inboundDeliveryCount",
-        "gatewayCatalogCount"
+        "gatewayCatalogCount",
+        "ordersDueCount",
+        "customerInvoiceCount",
+        "customerReturnCount"
     ];
 
     function toCount(vValue) {

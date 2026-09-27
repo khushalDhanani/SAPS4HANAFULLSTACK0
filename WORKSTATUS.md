@@ -3,6 +3,59 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-27 15:16 IST
+- **Agent**: Antigravity
+- **Request**: "Scan Project So many kpi's count is not coming and some data not load continue in loop with effect."
+- **Root Cause & Investigation**:
+  1. **Sales Inquiries OData V4 404 Cascade & Loop**: `SalesInquiries.view.xml` bound `{salesInquiry>ExternalDocumentID}` and `{salesInquiry>SalesInquiryDescription}` which do not exist on Gateway entity `C_InquiryWL_F2370`. UI5 OData V4 model (`autoExpandSelect: true`) failed metadata lookup and fell back to issuing individual HTTP GET requests for `/SalesInquiries('<id>')/ExternalDocumentID` for every row, triggering endless 404 loops in console and network panel.
+  2. **Missing Module List Total KPI Counts**:
+     - Sales Inquiries list header showed 0 inquiries because `totalCount` was never set on `localModel` from `data.totalInquiriesCount`.
+     - Sales Orders list header showed 0 orders because `totalCount` was not populated from `data.totalOrdersCount`.
+     - Journal Entries list header omitted total count and threw UI5 warnings for invalid priority attribute (`priority="Medium"` on `OverflowToolbarButton`).
+     - Purchase Orders list header lacked `totalCount` initialization in `PurchaseOrders.controller.js`.
+     - Customer Returns list controller threw UI5 runtime exceptions on every row due to invalid `sap.ui.core.ValueState` return (`"Good"`, which is only valid on `NumericContent.valueColor`, whereas `ObjectNumber.state` requires `Success`, `Warning`, `Error`, etc.). Additionally, `CustomerReturnAdapter.getCustomerReturns` lacked `$inlinecount=allpages` and handler did not expose `totalReturns`.
+  3. **Dashboard KPI Missing Counts & Inactive State**:
+     - `tileOverviewOrdersDueForDelivery`, `tileSDOrdersDueForDelivery`, and `tileEWMOrdersDueForDelivery` were missing backend source queries, bound to non-existent state paths, and stuck at "0".
+     - `tileOverviewCustomerInvoices` and `tileSDCustomerInvoices` had no source endpoint registered in `PurchaseOrderAdapter.js` dashboard sources and were missing value/state bindings.
+     - `tileOverviewCustomerReturns` and `tileSDCustomerReturns` had no source endpoint registered in `PurchaseOrderAdapter.js` dashboard sources and were missing value/state bindings.
+- **Changes Applied**:
+  1. **Sales Inquiries View & Controller** (`SalesInquiries.view.xml`, `SalesInquiries.controller.js`, `i18n.properties`, `i18n_en.properties`):
+     - Removed non-existent `ExternalDocumentID` from `ObjectIdentifier`.
+     - Replaced non-existent `SalesInquiryDescription` with authentic SAP field `{salesInquiry>PurchaseOrderByCustomer}` and relabeled column to "Customer Reference".
+     - Populated `oLocalModel.setProperty("/totalCount", data.totalInquiriesCount)` from live SAP count.
+  2. **Sales Orders Controller** (`SalesOrders.controller.js`):
+     - Added `oLocalModel.setProperty("/totalCount", data.totalOrdersCount)` to display live 902 orders.
+  3. **Journal Entries View & Controller** (`JournalEntries.view.xml`, `JournalEntries.controller.js`):
+     - Populated `oLocalModel.setProperty("/totalCount", oMetrics.fiDocCount)` to display live 173,386 entries.
+     - Fixed `priority="Medium"` to standard `priority="Low"` on `OverflowToolbarButton`.
+  4. **Purchase Orders Controller** (`PurchaseOrders.controller.js`):
+     - Populated `oLocalModel.setProperty("/totalCount", oMetrics.totalCount)` to display live 2,729 purchase orders.
+  5. **Customer Returns Controller, Adapter & Handler** (`CustomerReturns.controller.js`, `CustomerReturnAdapter.js`, `customerReturn.handler.js`):
+     - Corrected `formatAmountState` to return valid enum `sap.ui.core.ValueState.Success` instead of `"Good"`.
+     - Added `$inlinecount=allpages` to `CustomerReturnAdapter.getCustomerReturns`.
+     - Populated `totalReturns: count || results.length` in CAP handler and bound in controller.
+  6. **Dashboard Multi-Module Live Backend Metrics Extension** (`PurchaseOrderAdapter.js`, `Dashboard.controller.js`, `Dashboard.view.xml`):
+     - In `PurchaseOrderAdapter.getDashboardMetrics`: added real S/4HANA live queries:
+       - `ordersDueCount`: `/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV/C_DelivWthRefQuickCreate?$inlinecount=allpages&$top=1` (1,078 live)
+       - `customerInvoiceCount`: `/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?$inlinecount=allpages&$top=1` (508 live)
+       - `customerReturnCount`: `/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV/C_CustomerReturnOPg?$inlinecount=allpages&$top=1` (183 live)
+     - In `Dashboard.controller.js`: registered `ordersDueCount`, `customerInvoiceCount`, `customerReturnCount` in `METRIC_KEYS`.
+     - In `Dashboard.view.xml`: bound `state` and `value` on overview, SD, and EWM tiles.
+  7. **Test Isolation Fix** (`test/unit/wm/goodsIssueService.test.js`):
+     - Mocked RFC `readTable` in EWM HU unit test block to ensure unit tests do not hit live SAP quants via RFC for barcode '1000028860'.
+  8. **Unit Tests & Preload Bundle**:
+     - Updated `test/unit/dashboard/dashboardMetrics.test.js` and `test/unit/sd/customerReturnsController.test.js`.
+     - Rebuilt UI5 bundle (`Component-preload.js`).
+- **Executed Commands & Results**:
+  - `npm run test:unit`: 85 passed, 85 total test suites; 1,460 passed, 1,460 total tests (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 916 ms (`dist/Component-preload.js` refreshed).
+  - `git diff --check`: Clean (0 errors).
+- **Live SAP S/4HANA Verification (Client 220)**:
+  - Verified live queries return authentic counts: Invoices: 508, Returns: 183, Orders Due for Delivery: 1,078, Sales Orders: 902, Open TRs: 361.
+  - Console loops and cascading 404 network requests eradicated.
+- **Next recommended action**: Open `http://localhost:4004/saps4hana-fiori-app/index.html` in browser to visually review live Dashboard, Sales Inquiries, Customer Invoices, and Customer Returns.
+
 ## 2026-09-27 12:24 IST
 - **Agent**: Claude (Cowork)
 - **Request**: `/wm/goods-issue` — show the reservation list type-wise: selecting 261 shows only 261, etc.
@@ -4141,6 +4194,7 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-27 15:16 IST (uncommitted)**: Resolved missing KPI counts, UI infinite loops, and 404 network request cascades across Dashboard, Sales Inquiries, Sales Orders, Customer Returns, Purchase Orders, and Journal Entries. Fixed OData V4 invalid property bindings (`ExternalDocumentID`, `SalesInquiryDescription`) on `C_InquiryWL_F2370` that caused 100+ cascading 404s per page load. Corrected UI5 `ValueState` enum validation errors in `CustomerReturns.controller.js`. Extended live S/4HANA dashboard metrics backend in `PurchaseOrderAdapter.js` to query authentic counts for Orders Due for Delivery (1,078 live), Customer Invoices (508 live), and Customer Returns (183 live), binding them to Overview, SD, and EWM dashboard tiles. All 85 test suites (1,460 tests) 100% green; UI5 lint clean; UI5 build succeeded; `git diff --check` clean.
 - **2026-09-26 17:25 IST (uncommitted)**: Formulated comprehensive Phase 2 Gateway Service `ZWM_RF_TRTO_SRV` technical specification, DDIC models, ABAP DPC_EXT code, and new RFC function module `Z_WM_GET_SU_DETAILS` (`docs/wm_rf_trto_srv_spec.md`). Proved complete 4-stage data contract flow live against real SAP S/4HANA DS4 Client 220 using dedicated test suite (`tools/test-wm-rf-trto-flow.py`): validated `TRHeaderSet` on live production staging TR `0001000663` (Mvt 319, Prod Order `0001002749`), `TRItemSet` navigation with `OpenQty = MENGE - TAMEN` and `MAKT` descriptions for Item 1 (`1000000867` `IPA, Extra Pure`, 17,323.2 KG) and Item 2 (`1000000869` `SOLVESSO 108`, 13,929.6 KG), and `StorageUnitSet` / `SUQuantSet` validation on SU `00000000001000043935` (Quant `0001035375`, Material `1000000867`, 11,210 KG in bin `ONHOLD`, matching TR with `IsValid = 'X'`). Documented full SEGW metadata EDMX and registration steps for DS4 220. All validations 100% green.
 - **2026-09-26 17:15 IST (uncommitted)**: Completed Phase 0 WM Discovery Verification Protocol (Checks 0.1 through 0.4) on live SAP S/4HANA (DS4 Client 220). (0.1) Ran `tools/find-wm-sources-3.py`: verified all 3 TR function modules (`Z_WM_GET_ALL_TR_HEADERS`, `Z_WM_GET_TR_MATERIAL_LIST`, `ZWM_TO_CREATE_FROM_TR`) are RFC-enabled (`processingType="rfc"`). Identified custom RF screen program `SAPMZWM_E_001` (Screen `9001`, Tcode `ZTO` "TO Creation For Staging") along with companion RF module pools (`SAPMZWM_E_002` `ZB2B`, `SAPMZWM_E_003` `ZDTO`, `SAPMZWM_E_004` `ZZGRN`, `SAPMZWM_E_005` `ZHU`, `SAPMZWM_E_006` `ZHU2`). (0.2) Proved Warehouse `W01` is heavily SU-managed: 6,716 active Storage Units in `LEIN` and 6,722 quants with `LENUM` in `LQUA` (e.g. SU `1000041619` in bin `0-L0001-03`); confirmed `SAPMZWM_E_001_F01` explicitly scans and validates `LENUM` with `ALPHA = IN`. (0.3) Analyzed all 618 TRs in `W01`: 448 from Mvt 101 Goods Receipts (`BETYP = 'D'`), 133 from Mvt 301/302, 14 from Mvt 319 Production Order Staging (`BETYP = 'P'`). Identified why 311 test bypassed TRs (standard SAP creates Posting Change Notices in `LUBU`/`LU04`), whereas 319 and 101 create real Transfer Requirements (`LTBK`/`LTBP`). Verified live open TR `0001000663` for Prod Order `0001002749` (Res `0000517858`) with two line items (Materials `1000000867` and `1000000869`). (0.4) Inspected legacy RF code and `ZWM_TO_CREATE_FROM_TR`: both call `L_TO_CREATE_TR` without `I_SQUIT` and without `L_TO_CONFIRM` (legacy `ZTO` was Create Only). Formulated recommendation for modern Fiori UI to provide 1-step Pick + Transfer option (`[x] Confirm Immediately`) to clear interim storage in a single transaction. All discovery queries 100% green.
 - **2026-09-26 15:55 IST (uncommitted)**: Investigated and fixed Sales Order data posting issues in SAP S/4HANA (`/sd/sales-orders` and `/sd/sales-orders/create`). Identified why user-entered fields were omitted: Customer PO Date (`CustomerPurchaseOrderDate` -> `PurchaseOrderDate`), distinct Ship-to Party (`ShipToParty` -> `HeaderPartnerSet` with `SH`), line item description (`SalesOrderItemText` -> `ItemDescr`), and payment terms (`PaymentTerms` -> `PaymentTermCode`) were not transmitted in the OData Deep Insert payload to SAP Gateway (`LORD_ODATA_ORDER_SRV`). Proved live against real S/4HANA DS4 Client 220 that passing these fields successfully persists them into SAP (verified live SOs `5000468`, `5000469`, and `5000470`). Documented that 4 commercial extension fields (`CustomerGroup2`, `PortOfLoading`, `PortOfDischarge`, `ContactPerson`) are not exposed as properties by `LORD_ODATA_ORDER_SRV/HeaderSet` and must be maintained in SAP GUI (VA02); added UI tooltips and `notTransmitted` return handling. All repo gates green: `npm test` 91/91 suites, 1,406/1,406 tests 100% passed; `npm run lint` clean; `ui5 build` OK; `git diff --check` clean.
