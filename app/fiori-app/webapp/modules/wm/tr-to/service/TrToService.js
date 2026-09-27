@@ -29,6 +29,25 @@ sap.ui.define([
         },
 
         /**
+         * Retrieve open Transfer Requirements for the warehouse
+         * @param {string} [sLgnum='W01'] - Warehouse Number
+         * @param {string} [sMvt] - Optional movement type filter (e.g. '319')
+         * @returns {Promise<Array>}
+         */
+        getOpenTRs: function (sLgnum, sMvt) {
+            var sWh = sLgnum || "W01";
+            var sMvtParam = sMvt ? sMvt.trim() : "";
+            if (TrToService.isSimulationActive()) {
+                return Promise.resolve(TrToService.getMockOpenTRs(sWh, sMvtParam));
+            }
+            var sUrl = BASE_PATH + "/getOpenTRs(lgnum='" + encodeURIComponent(sWh.trim()) + "',mvt='" + encodeURIComponent(sMvtParam) + "')";
+            return ODataClient.get(sUrl).then(function (oData) {
+                var aItems = (oData && oData.value) ? oData.value : (Array.isArray(oData) ? oData : []);
+                return aItems;
+            });
+        },
+
+        /**
          * Retrieve Transfer Requirement header and line items
          * @param {string} sTbnum - TR Number or Production Order Number
          * @param {string} [sLgnum='W01'] - Warehouse Number
@@ -207,6 +226,75 @@ sap.ui.define([
                     }
                 ]
             };
+        },
+
+        getMockOpenTRs: function (sLgnum, sMvt) {
+            var aAll = [
+                {
+                    Lgnum: sLgnum || "W01",
+                    Tbnum: "0001000663",
+                    Bwlvs: "319",
+                    Betyp: "P",
+                    Benum: "0001002749",
+                    Rsnum: "0000517858",
+                    Bdatu: "2026-09-23",
+                    Statu: "",
+                    DisplayText: "TR 1000663 (Mvt 319 | Order: 1002749)",
+                    Description: "Date: 2026-09-23 | Type: P | Res: 517858"
+                },
+                {
+                    Lgnum: sLgnum || "W01",
+                    Tbnum: "0001000653",
+                    Bwlvs: "319",
+                    Betyp: "P",
+                    Benum: "0002000611",
+                    Rsnum: "0000517575",
+                    Bdatu: "2026-09-22",
+                    Statu: "",
+                    DisplayText: "TR 1000653 (Mvt 319 | Order: 2000611)",
+                    Description: "Date: 2026-09-22 | Type: P | Res: 517575"
+                },
+                {
+                    Lgnum: sLgnum || "W01",
+                    Tbnum: "0001000637",
+                    Bwlvs: "319",
+                    Betyp: "P",
+                    Benum: "0002000608",
+                    Rsnum: "0000515905",
+                    Bdatu: "2026-09-16",
+                    Statu: "",
+                    DisplayText: "TR 1000637 (Mvt 319 | Order: 2000608)",
+                    Description: "Date: 2026-09-16 | Type: P | Res: 515905"
+                },
+                {
+                    Lgnum: sLgnum || "W01",
+                    Tbnum: "0001000446",
+                    Bwlvs: "301",
+                    Betyp: "",
+                    Benum: "",
+                    Rsnum: "",
+                    Bdatu: "2026-03-03",
+                    Statu: "T",
+                    DisplayText: "TR 1000446 (Mvt 301)",
+                    Description: "Date: 2026-03-03 | Type: Stock Transfer"
+                },
+                {
+                    Lgnum: sLgnum || "W01",
+                    Tbnum: "0001000033",
+                    Bwlvs: "101",
+                    Betyp: "D",
+                    Benum: "",
+                    Rsnum: "",
+                    Bdatu: "2025-09-25",
+                    Statu: "",
+                    DisplayText: "TR 1000033 (Mvt 101)",
+                    Description: "Date: 2025-09-25 | Type: Goods Receipt"
+                }
+            ];
+            if (sMvt) {
+                return aAll.filter(function (t) { return t.Bwlvs === sMvt; });
+            }
+            return aAll;
         },
 
         mockCreateTO: function (oPayload) {

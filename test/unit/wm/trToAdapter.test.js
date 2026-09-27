@@ -69,6 +69,21 @@ describe('TrToAdapter (RFC)', () => {
     expect(su).toMatchObject({ IsValid: false, ErrorCode: 'SU_MATERIAL_MISMATCH' });
   });
 
+  it('checkSU matches the TR item with the same batch when TR items name a batch (TR 1000446 shape)', async () => {
+    const mk = (pos, charg) => ({ ...ITEMS[0], TBPOS: pos, MATNR: '000000001000000156', WERKS: '1600', CHARG: charg, MENGE: '1800.000' });
+    const items = [mk('0001', 'IN25031691'), mk('0002', 'IN25031994'), mk('0003', 'IN25032604')];
+    const q = { ...QUANT, MATNR: '000000001000000156', WERKS: '1600', CHARG: 'IN25032604' };
+    const create = { EV_SUCCESS: 'S', EV_TANUM: '0001036700', EV_MESSAGE: 'ok' };
+    const rfc = fakeRfc({ items, quants: [q], create });
+
+    await new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000446', lenum: '1000043935', qty: 10 });
+    expect(rfc.call.mock.calls.at(-1)[1].IT_ITEMS[0]).toMatchObject({ TBPOS: '0003', CHARG: 'IN25032604' });
+
+    const wrong = fakeRfc({ items, quants: [{ ...q, CHARG: 'IN99999999' }] });
+    await expect(new TrToAdapter({ rfc: wrong }).checkSU('1000043935', '1000446', 'W01'))
+      .resolves.toMatchObject({ IsValid: false, ErrorCode: 'SU_MATERIAL_MISMATCH' });
+  });
+
   it('checkSU flags an empty or unknown SU', async () => {
     const su = await new TrToAdapter({ rfc: fakeRfc({ quants: [] }) }).checkSU('1', '1000663', 'W01');
     expect(su).toMatchObject({ IsValid: false, ErrorCode: 'SU_NO_STOCK' });

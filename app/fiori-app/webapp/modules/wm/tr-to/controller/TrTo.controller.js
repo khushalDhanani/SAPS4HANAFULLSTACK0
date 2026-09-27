@@ -3,6 +3,9 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
+    "sap/ui/core/Fragment",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator",
     "saps4hana/fiori/modules/wm/tr-to/service/TrToService",
     "saps4hana/fiori/service/BarcodeScanService"
 ], function (
@@ -10,6 +13,9 @@ sap.ui.define([
     JSONModel,
     MessageBox,
     MessageToast,
+    Fragment,
+    Filter,
+    FilterOperator,
     TrToService,
     BarcodeScanService
 ) {
@@ -24,6 +30,8 @@ sap.ui.define([
                 storageUnit: "",
                 selectedItem: null,
                 items: [],
+                openTRs: [],
+                isLoadingTRs: false,
                 hasActiveTR: false,
                 hasActiveSU: false,
                 canCreateTO: false,
@@ -75,6 +83,10 @@ sap.ui.define([
             BarcodeScanService.detachHardwareScanner(this._scannerHandler);
             if (typeof window !== "undefined") {
                 window.removeEventListener("keydown", this._keyHandler, true);
+            }
+            if (this._oTrSelectDialog) {
+                this._oTrSelectDialog.destroy();
+                this._oTrSelectDialog = null;
             }
         },
 
@@ -150,6 +162,91 @@ sap.ui.define([
             var oModel = this.getModel("trToView");
             if (oModel.getProperty("/hasActiveTR")) {
                 this.onClearAll();
+            }
+        },
+
+        /**
+         * Open Value Help dialog to select an open Transfer Requirement
+         */
+        onValueHelpTR: function () {
+            var oView = this.getView();
+            var oModel = this.getModel("trToView");
+            var sWh = oModel.getProperty("/warehouse") || "W01";
+            var that = this;
+
+            oModel.setProperty("/isLoadingTRs", true);
+            return this._loadOpenTRs(sWh).then(function () {
+                if (!that._oTrSelectDialog) {
+                    return Fragment.load({
+                        id: oView.getId(),
+                        name: "saps4hana.fiori.modules.wm.tr-to.view.TrSelectDialog",
+                        controller: that
+                    }).then(function (oDialog) {
+                        that._oTrSelectDialog = oDialog;
+                        oView.addDependent(oDialog);
+                        oDialog.open();
+                        return oDialog;
+                    });
+                } else {
+                    that._oTrSelectDialog.open();
+                    return that._oTrSelectDialog;
+                }
+            });
+        },
+
+        _loadOpenTRs: function (sWh) {
+            var oModel = this.getModel("trToView");
+            var that = this;
+            return TrToService.getOpenTRs(sWh).then(function (aTRs) {
+                oModel.setProperty("/openTRs", aTRs || []);
+                oModel.setProperty("/isLoadingTRs", false);
+            }).catch(function (oErr) {
+                oModel.setProperty("/isLoadingTRs", false);
+                that._showMessage(oErr.message || "Failed to load open Transfer Requirements.", "Error");
+            });
+        },
+
+        onSearchTRValueHelp: function (oEvent) {
+            var sQuery = (oEvent.getParameter("value") || "").trim().toLowerCase();
+            var oBinding = oEvent.getSource().getBinding("items");
+            if (!oBinding) return;
+
+            if (!sQuery) {
+                oBinding.filter([]);
+                return;
+            }
+
+            var aFilters = [
+                new Filter("DisplayText", FilterOperator.Contains, sQuery),
+                new Filter("Tbnum", FilterOperator.Contains, sQuery),
+                new Filter("Bwlvs", FilterOperator.Contains, sQuery),
+                new Filter("Benum", FilterOperator.Contains, sQuery),
+                new Filter("Description", FilterOperator.Contains, sQuery)
+            ];
+            oBinding.filter(new Filter({
+                filters: aFilters,
+                and: false
+            }));
+        },
+
+        onConfirmTRValueHelp: function (oEvent) {
+            var oSelectedItem = oEvent.getParameter("selectedItem");
+            if (oSelectedItem) {
+                var oContext = oSelectedItem.getBindingContext("trToView");
+                if (oContext) {
+                    var sTbnum = oContext.getProperty("Tbnum") || "";
+                    var sDisplayTR = sTbnum.replace(/^0+(?=\d)/, "");
+                    var oModel = this.getModel("trToView");
+                    oModel.setProperty("/trNumber", sDisplayTR);
+                    this.onFetchTR();
+                }
+            }
+        },
+
+        onCancelTRValueHelp: function (oEvent) {
+            var oBinding = oEvent.getSource().getBinding("items");
+            if (oBinding) {
+                oBinding.filter([]);
             }
         },
 

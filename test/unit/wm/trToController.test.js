@@ -48,11 +48,36 @@ class MockJSONModel {
 }
 
 const mockTrToService = {
+    getOpenTRs: jest.fn().mockResolvedValue([
+        { Tbnum: '0001000663', Bwlvs: '319', DisplayText: 'TR 1000663' }
+    ]),
     getTR: jest.fn(),
     checkSU: jest.fn(),
     createTO: jest.fn(),
     setSimulationActive: jest.fn()
 };
+
+const mockDialog = {
+    open: jest.fn(),
+    destroy: jest.fn()
+};
+const mockFragment = {
+    load: jest.fn().mockResolvedValue(mockDialog)
+};
+
+class MockFilter {
+    constructor(path, operator, value) {
+        if (typeof path === 'object') {
+            this.filters = path.filters;
+            this.and = path.and;
+        } else {
+            this.path = path;
+            this.operator = operator;
+            this.value = value;
+        }
+    }
+}
+const MockFilterOperator = { Contains: 'Contains' };
 
 let capturedHardwareScannerHandler = null;
 const mockBarcodeScanService = {
@@ -75,7 +100,8 @@ const mockBaseController = {
                 getId: () => 'mockViewId',
                 getModel: (n) => this.models[n],
                 setModel: (m, n) => { this.models[n] = m; },
-                setBusy: jest.fn()
+                setBusy: jest.fn(),
+                addDependent: jest.fn()
             });
             this.getModel = (n) => this.models[n] || (this.getView() && this.getView().getModel(n)) || null;
             this.setModel = (m, n) => { this.models[n] = m; };
@@ -94,6 +120,9 @@ global.sap = {
                 MockJSONModel,
                 mockMessageBox,
                 mockMessageToast,
+                mockFragment,
+                MockFilter,
+                MockFilterOperator,
                 mockTrToService,
                 mockBarcodeScanService
             );
@@ -468,6 +497,70 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
             controller.onToggleSimulation();
             expect(model.getProperty('/isSimulation')).toBe(true);
             expect(mockTrToService.setSimulationActive).toHaveBeenCalledWith(true);
+        });
+    });
+
+    describe('Value Help for TR Selection', () => {
+        it('onValueHelpTR should load open TRs and open the dialog', async () => {
+            await controller.onValueHelpTR();
+            expect(mockTrToService.getOpenTRs).toHaveBeenCalledWith('W01');
+            expect(mockFragment.load).toHaveBeenCalledWith(expect.objectContaining({
+                name: 'saps4hana.fiori.modules.wm.tr-to.view.TrSelectDialog'
+            }));
+            expect(mockDialog.open).toHaveBeenCalled();
+            const model = controller.getModel('trToView');
+            expect(model.getProperty('/openTRs')).toHaveLength(1);
+        });
+
+        it('onSearchTRValueHelp should apply filter when query is present', () => {
+            const mockBinding = { filter: jest.fn() };
+            const mockEvent = {
+                getParameter: jest.fn((p) => p === 'value' ? '1000663' : null),
+                getSource: () => ({ getBinding: () => mockBinding })
+            };
+            controller.onSearchTRValueHelp(mockEvent);
+            expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(MockFilter));
+        });
+
+        it('onSearchTRValueHelp should clear filter when query is empty', () => {
+            const mockBinding = { filter: jest.fn() };
+            const mockEvent = {
+                getParameter: jest.fn(() => ''),
+                getSource: () => ({ getBinding: () => mockBinding })
+            };
+            controller.onSearchTRValueHelp(mockEvent);
+            expect(mockBinding.filter).toHaveBeenCalledWith([]);
+        });
+
+        it('onConfirmTRValueHelp should set TR number and trigger fetch', () => {
+            const fetchSpy = jest.spyOn(controller, 'onFetchTR').mockImplementation(() => {});
+            const mockEvent = {
+                getParameter: jest.fn(() => ({
+                    getBindingContext: () => ({
+                        getProperty: (prop) => prop === 'Tbnum' ? '0001000663' : ''
+                    })
+                }))
+            };
+            controller.onConfirmTRValueHelp(mockEvent);
+            expect(controller.getModel('trToView').getProperty('/trNumber')).toBe('1000663');
+            expect(fetchSpy).toHaveBeenCalled();
+        });
+
+        it('onCancelTRValueHelp should reset items filter', () => {
+            const mockBinding = { filter: jest.fn() };
+            const mockEvent = {
+                getSource: () => ({ getBinding: () => mockBinding })
+            };
+            controller.onCancelTRValueHelp(mockEvent);
+            expect(mockBinding.filter).toHaveBeenCalledWith([]);
+        });
+
+        it('onExit should destroy select dialog if created', async () => {
+            await controller.onValueHelpTR();
+            expect(controller._oTrSelectDialog).toBe(mockDialog);
+            controller.onExit();
+            expect(mockDialog.destroy).toHaveBeenCalled();
+            expect(controller._oTrSelectDialog).toBeNull();
         });
     });
 });

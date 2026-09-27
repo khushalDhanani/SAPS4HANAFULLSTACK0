@@ -41,6 +41,29 @@ describe('TrToService Unit Tests', () => {
         });
     });
 
+    describe('getOpenTRs', () => {
+        it('should fetch open TRs via ODataClient.get', async () => {
+            const mockList = [
+                { Tbnum: '0001000663', Bwlvs: '319', DisplayText: 'TR 1000663' }
+            ];
+            mockODataClient.get.mockResolvedValue({ value: mockList });
+
+            const result = await TrToService.getOpenTRs('W01', '319');
+            expect(mockODataClient.get).toHaveBeenCalledWith(
+                expect.stringContaining("/odata/v4/tr-to/getOpenTRs(lgnum='W01',mvt='319')")
+            );
+            expect(result).toHaveLength(1);
+            expect(result[0].Tbnum).toBe('0001000663');
+        });
+
+        it('should return mock open TRs when simulation is active', async () => {
+            TrToService.setSimulationActive(true);
+            const result = await TrToService.getOpenTRs('W01', '319');
+            expect(result.length).toBeGreaterThan(0);
+            expect(result[0].Bwlvs).toBe('319');
+        });
+    });
+
     describe('getTR', () => {
         it('should reject when TR number is empty', async () => {
             await expect(TrToService.getTR('')).rejects.toThrow('Transfer Requirement number is required');

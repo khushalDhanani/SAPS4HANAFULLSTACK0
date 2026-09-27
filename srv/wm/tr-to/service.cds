@@ -72,6 +72,22 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Confirmed     : Boolean;
     };
 
+    type TRListItem {
+        Lgnum        : String(3);
+        Tbnum        : String(10);
+        Bwlvs        : String(3);
+        Betyp        : String(1);
+        Benum        : String(10);
+        Rsnum        : String(10);
+        Bdatu        : Date;
+        Statu        : String(1);
+        DisplayText  : String(120);
+        Description  : String(120);
+    };
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getOpenTRs(lgnum: String(3), mvt: String(3)) returns array of TRListItem;
+
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getTR(tbnum: String(10), lgnum: String(3)) returns TRHeader;
 

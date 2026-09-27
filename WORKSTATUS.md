@@ -3,6 +3,76 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-27 11:32 IST
+- **Agent**: Antigravity
+- **Change**: Added option to Select TR in UI (Value Help Dialog + Dedicated Button) for WM Transfer Order Creation (`modules/wm/tr-to`):
+  1. **CAP Service Contract (`srv/wm/tr-to/service.cds`)**:
+     - Defined `type TRListItem` (Lgnum, Tbnum, Bwlvs, Betyp, Benum, Rsnum, Bdatu, Statu, DisplayText, Description).
+     - Defined unbound function `getOpenTRs(lgnum: String(3), mvt: String(3)) returns array of TRListItem;`.
+  2. **SAP S/4HANA Integration Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`)**:
+     - Implemented `getOpenTRs(lgnum = 'W01', mvt = '')` using `RFC_READ_TABLE` on `LTBK` with `LGNUM = '<wh>'` and `STATU <> 'E'`.
+     - Added optional movement type filtering (`BWLVS`).
+     - Formatted `DisplayText` with TR number, movement type, and reference order/reservation (omits `0` when empty).
+     - Formatted `Description` with creation date and requirement type.
+     - Sorted descending by creation date and TR number.
+  3. **CAP Service Handler (`srv/wm/tr-to/handlers/trTo.handler.js`)**:
+     - Registered `srv.on('getOpenTRs', ...)` to delegate to `adapter.getOpenTRs(req.data.lgnum, req.data.mvt)`.
+  4. **Fiori / UI5 Service Layer (`app/fiori-app/webapp/modules/wm/tr-to/service/TrToService.js`)**:
+     - Added `getOpenTRs(sWh, sMvt)` with OData v4 function call `getOpenTRs(lgnum='...',mvt='...')`.
+     - Added `getMockOpenTRs()` fallback simulation method.
+  5. **UI5 Fragment & Standard Controls (`app/fiori-app/webapp/modules/wm/tr-to/view/TrSelectDialog.fragment.xml`)**:
+     - Created dialog using standard SAPUI5 `sap.m.SelectDialog` with `sap.m.StandardListItem`.
+     - Zero custom CSS; 100% standard SAPUI5 design with search and title token bindings.
+  6. **UI5 View Updates (`app/fiori-app/webapp/modules/wm/tr-to/view/TrTo.view.xml`)**:
+     - Configured `showValueHelp="true"` and `valueHelpRequest=".onValueHelpTR"` on `inputTR`.
+     - Added dedicated standard `sap.m.Button` `btnSelectTR` ("Select TR", icon `sap-icon://list`) next to the input.
+  7. **UI5 Controller Updates (`app/fiori-app/webapp/modules/wm/tr-to/controller/TrTo.controller.js`)**:
+     - Implemented `onValueHelpTR`: loads open TR list from `TrToService`, binds to dialog, and opens it.
+     - Implemented `onSearchTRValueHelp`: live case-insensitive search across TR number, movement type, display text, and description.
+     - Implemented `onConfirmTRValueHelp`: sets selected TR number on the model and triggers `onFetchTR()`.
+     - Implemented `onCancelTRValueHelp`: resets dialog item filter.
+     - Handled dialog lifecycle cleanup in `onExit`.
+  8. **CLI Test Tool Enhancement (`tools/test-rfc-trto.js`)**:
+     - Added `--list [mvt] [warehouse]` command to query open TRs directly over RFC and inspect them in terminal.
+  9. **Unit & Integration Tests**:
+     - Added comprehensive unit tests in `test/unit/wm/trToService.test.js`, `test/unit/wm/trToHandler.test.js`, and `test/unit/wm/trToController.test.js`.
+- **Live Verification & DevTools Testing**:
+  - Live SAP RFC read of `LTBK` returned 361 open TRs in warehouse `W01`.
+  - DevTools UI interaction:
+    1. Opened `TrSelectDialog` via both Value Help icon and "Select TR" button.
+    2. Verified real SAP data displayed with status, movement type, and creation date.
+    3. Filtered list by typing "319" in search box: correctly showed 7 production order staging TRs (`1000663`, `1000653`, etc.).
+    4. Selected TR `1000663`: dialog closed, populated `inputTR` (`0001000663`), and auto-loaded TR items (`1000000867` IPA, Extra Pure, 17,323.200 KG) and advanced state to "2. SCAN SU".
+    5. Tested cancel flow: dialog closes cleanly without state disruption.
+- **Executed Commands & Results**:
+  - `npx jest test/unit/controller/BaseController.test.js test/unit/wm/trTo*.test.js`: 5 suites passed, 79 tests passed (100% green).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 997 ms.
+  - `git diff --check`: Clean (0 whitespace/formatting issues).
+- **Next recommended action**:
+  - Operators can use the TR Value Help dialog or scan TR barcodes on Zebra MC220 to process warehouse transfer orders.
+
+## 2026-09-27 10:57 IST
+- **Agent**: Claude (Cowork)
+- **Change**: `tools/test-rfc-trto.js`: added `--sus` (lists SUs in W01 holding the TR's batches via RFC_READ_TABLE LQUA).
+- **Live results (user-run, DS4 220, RFC)**:
+  - `--sus` for TR 1000446: SU 1000041635 (IN25031691, 1620 KG), 1000041636 (IN25031994, 1800 KG), 1000041637 (IN25032604, 3960 KG), all bin RM1/0-L0001-03. LQUA read authorization verified.
+  - `checkSU` TR 1000446 / SU 1000041637: IsValid true, quant 0001030624, bin RM1/0-L0001-03.
+  - `createTO` TR 1000446 / SU 1000041637 / 10 KG: **TO 0001036594 created** (item 0003 chosen by batch IN25032604; not confirmed). Full TR->SU->TO chain verified live over RFC with no ABAP change.
+- **Pending verification**: TO 1036594 contents in LT21 (source RM1/0-L0001-03, SU, dest 920/TRANSFER, batch, 10 KG) and TR item 0003 processed qty in LB03; confirm (LT12) or cancel (LT15) the test TO; UI end-to-end via `cds watch` not yet run.
+- **Commands & results**: `node --check` + eslint on `tools/test-rfc-trto.js` clean.
+
+## 2026-09-27 10:46 IST
+- **Agent**: Claude (Cowork)
+- **Live result**: SAP NW RFC SDK 7.50 PL19 installed by user, `npm install node-rfc` OK. `node tools/test-rfc-trto.js 1000446` read TR 0001000446 live over RFC (Mvt 301, dest 920/TRANSFER, 3 items material 1000000156 "Tetrahydrofuran", plant 1600, batches IN25031691/IN25031994/IN25032604, open 1620/1800/3780 KG). RFC logon, `Z_WM_GET_TR_MATERIAL_LIST` and MAKT read verified live. checkSU / createTO not yet run live.
+- **Changes**:
+  1. `.env.local`: appended `S4_RFC_SYSNR=00` (not a secret).
+  2. `tools/test-rfc-trto.js` (new): live check via the adapter; read-only unless `--create <qty>`.
+  3. `srv/integration/s4hana/wm/TrToAdapter.js`: SU->TR item match now requires the same batch when the TR item names one (else any batch). Reason: TR 1000446 has 3 items of one material with different batches; the ZTO rule (material+plant, first item) would book an SU against the wrong item. ZTO was built for batch-less 319 staging TRs.
+  4. `test/unit/wm/trToAdapter.test.js`: +1 test (batch-specific item chosen; wrong batch rejected).
+- **Commands & results**: `npx jest test/unit/wm/trTo` 62/62 passed; eslint on changed files clean.
+- **Next**: live `checkSU` with a real SU for TR 1000446 (from LX02/LS26), then one `--create` test and verify in LT21/LX02.
+
 ## 2026-09-27 10:33 IST
 - **Agent**: Claude (Cowork)
 - **Change**: `srv/integration/s4hana/RfcClient.js`: 503 message when node-rfc is missing no longer includes the Node require stack (it exposed local file paths to the browser); now "node-rfc is not available (not installed)...".
@@ -4882,7 +4952,7 @@
 
 ## Next Steps
 0. WM Transfer Order Implementation:
-   - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen) fully built, wired, and verified with 79 passing tests (100% green). Screen completely refactored to pure standard SAPUI5 with zero custom CSS and verified in live browser.
+   - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.
 1. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
 2. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).

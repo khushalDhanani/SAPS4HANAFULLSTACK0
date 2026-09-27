@@ -72,6 +72,8 @@
                                     id="inputTR"
                                     value="{trToView>/trNumber}"
                                     placeholder="{i18n>trToPlaceholderTR}"
+                                    showValueHelp="true"
+                                    valueHelpRequest=".onValueHelpTR"
                                     submit=".onFetchTR"
                                     liveChange=".onTRLiveChange"
                                     width="100%"
@@ -80,6 +82,12 @@
                                         <FlexItemData growFactor="1" />
                                     </layoutData>
                                 </Input>
+                                <Button
+                                    id="btnSelectTR"
+                                    icon="sap-icon://value-help"
+                                    tooltip="{i18n>trToBtnSelectTR}"
+                                    press=".onValueHelpTR"
+                                    class="sapUiTinyMarginEnd" />
                                 <Button
                                     id="btnFetchTR"
                                     text="{i18n>trToBtnFind}"

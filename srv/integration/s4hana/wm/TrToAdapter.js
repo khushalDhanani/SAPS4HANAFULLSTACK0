@@ -9,7 +9,8 @@ const { RfcClient } = require('../RfcClient');
  *  - RFC_READ_TABLE             (LQUA quants on the SU, MAKT descriptions)
  *  - ZWM_TO_CREATE_FROM_TR      (L_TO_CREATE_TR, RFC-enabled; create only, no confirm)
  * Validation and TO item mapping mirror the production RF transaction ZTO (SAPMZWM_E_001):
- * SU must hold an open TR material in the same plant (batch not compared); qty <= min(SU stock, TR open).
+ * SU must hold an open TR material in the same plant; qty <= min(SU stock, TR open).
+ * Unlike ZTO (built for batch-less 319 staging TRs), a TR item that names a batch only matches that batch.
  */
 
 const RE = { lgnum: /^[A-Z0-9]{1,3}$/, tbnum: /^\d{1,10}$/, lenum: /^[A-Z0-9]{1,20}$/ };
@@ -68,6 +69,47 @@ class TrToAdapter {
     return out;
   }
 
+  async getOpenTRs(lgnum = 'W01', mvt = '') {
+    const wh = required(lgnum, 'Warehouse', RE.lgnum);
+    const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'"];
+    if (mvt) {
+      const sMvt = String(mvt).trim().toUpperCase();
+      if (/^[A-Z0-9]{1,3}$/.test(sMvt)) where.push(`AND BWLVS = '${sMvt}'`);
+    }
+
+    const rows = await this._rfc(
+      () => this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where),
+      `Read open TR list for warehouse ${wh}`
+    );
+
+    rows.sort((a, b) => (b.BDATU || '').localeCompare(a.BDATU || '') || (b.TBNUM || '').localeCompare(a.TBNUM || ''));
+
+    return rows.map((r) => {
+      const tbnum = alphaOut(r.TBNUM);
+      const bwlvs = r.BWLVS || '';
+      const benum = alphaOut(r.BENUM);
+      const rsnum = alphaOut(r.RSNUM);
+      const dateStr = sapDate(r.BDATU) || r.BDATU;
+
+      let docInfo = '';
+      if (benum && benum !== '0') docInfo = ` | Order: ${benum}`;
+      else if (rsnum && rsnum !== '0') docInfo = ` | Res: ${rsnum}`;
+
+      return {
+        Lgnum: r.LGNUM,
+        Tbnum: r.TBNUM,
+        Bwlvs: bwlvs,
+        Betyp: r.BETYP || '',
+        Benum: r.BENUM || '',
+        Rsnum: r.RSNUM || '',
+        Bdatu: sapDate(r.BDATU),
+        Statu: r.STATU || '',
+        DisplayText: `TR ${tbnum} (Mvt ${bwlvs}${docInfo})`,
+        Description: `${dateStr ? `Date: ${dateStr}` : ''}${r.BETYP ? ` | Type: ${r.BETYP}` : ''}`
+      };
+    });
+  }
+
   async getTR(tbnum, lgnum) {
     const wh = required(lgnum, 'Warehouse', RE.lgnum);
     const tr = alphaIn(required(tbnum, 'Transfer Requirement number', RE.tbnum), 10);
@@ -118,13 +160,16 @@ class TrToAdapter {
 
     const open = tr.Items.filter((i) => !i.DeliveryCompleted && i.OpenQty > 0);
     const match = quants
-      .map((q) => ({ quant: q, item: open.find((i) => i.Material === alphaOut(q.MATNR) && i.Plant === q.WERKS) }))
+      .map((q) => ({
+        quant: q,
+        item: open.find((i) => i.Material === alphaOut(q.MATNR) && i.Plant === q.WERKS && (!i.Batch || i.Batch === q.CHARG))
+      }))
       .find((m) => m.item);
 
     let error = null;
     if (!quants.length) error = ['SU_NO_STOCK', `Storage Unit ${alphaOut(su)} not found in warehouse ${wh} or has no available stock`];
     else if (!open.length) error = ['TR_NO_OPEN_ITEMS', `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items`];
-    else if (!match) error = ['SU_MATERIAL_MISMATCH', `Material on Storage Unit ${alphaOut(su)} does not match any open item on TR ${alphaOut(tr.Tbnum)}`];
+    else if (!match) error = ['SU_MATERIAL_MISMATCH', `Material/batch on Storage Unit ${alphaOut(su)} does not match any open item on TR ${alphaOut(tr.Tbnum)}`];
 
     return { wh, su, tr, quants, match, error };
   }
