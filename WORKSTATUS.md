@@ -3,6 +3,67 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-28 17:15 IST
+- **Agent**: Antigravity
+- **Request**: "Debug and fix the Goods Issue screen end to end: app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml (plus its controller, model, service, and any fragments it uses) Problem: some titles/labels are wrong or showing raw text, and some lists or dropdowns are empty. Continue and use Dev MCP Tool"
+- **Inspection & Analysis Findings**:
+  1. **Page Title Expression**: In `GoodsIssue.view.xml`, title evaluated to `Transfer Posting against Reservation (201)` when in mode 201 because the ternary only branched for `261` and defaulted to `Transfer Posting against Reservation` with movement code appended.
+  2. **Missing I18n Keys in `i18n_en.properties`**: 9 keys were present in `i18n.properties` but missing from `i18n_en.properties` (`giTpPageTitle`, `giReceivingPlantLocation`, `giReceivingFromReservation`, `giSuListTitle`, `giSuListLoading`, `giSuListEmpty`, `giSuListColSu`, `giSuListColBin`, `giSuListSelected`), causing raw un-interpolated tokens on English browser locale.
+  3. **Hardcoded Text & Fallback Strings**:
+     - `reservationsUnavailableStrip`: Hardcoded `'Failed to retrieve open reservations from SAP S/4HANA.'`.
+     - `resvItemsUnavailableStrip`: Hardcoded `'Failed to retrieve open component requirements from SAP S/4HANA.'`.
+     - `tblComponentItems`: Hardcoded `'Reservation components currently unavailable (S/4HANA service offline).'`.
+     - Expiry Date: Hardcoded `'No expiration date recorded'`.
+     - Line 258: Hardcoded `' (Mvt '`.
+     - Line 609: Raw `"999"` without descriptive text.
+     - Line 625: Hardcoded `'Material Document: '`, `' | Year: '`, `' | TO: '`.
+     - `ReservationValueHelpDialog.fragment.xml`: Rendered `Order:  | Plant: ...` for non-order movements (201, 301, 311) and raw `' items'`.
+     - `BatchSelectionDialog.fragment.xml`: Hardcoded `'(No SLED)'` and `'No Stock'`.
+  4. **Missing Loading / Busy States & Empty Text**:
+     - `ComboBox id="comboReservation"` lacked `busy="{giView>/reservationsLoading}"`.
+     - `Table id="tblComponentItems"` lacked `busy="{giView>/itemsLoading}"`.
+     - `Table id="tblBatches"` lacked `busy="{giBatchSelection>/busy}"`.
+     - `onSearchBatches` set `noDataReason` to empty string when search matched 0 items, leaving an empty table without explanatory text.
+  5. **Movement Switching & Route Synchronization**:
+     - SegmentedButton `onModeChange` did not read `oEvent.getParameter("item").getKey()` explicitly and did not sync the router URL (`wmGoodsIssueCreateMode`), which could leave the URL hash stale.
+     - Reservation Value Help dialog did not filter by `Plant`.
+- **Targeted Fixes Applied**:
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Added all missing keys with 100% key parity across both files (`giCostCenterPageTitle`, `giMode301Title`, `giMode311Title`, `giReservationsUnavailableFallback`, `giItemsUnavailableFallback`, `giComponentsUnavailableText`, `giNoExpirationRecorded`, `giBatchNoSled`, `giBatchNoStock`, `giItemsPartialBadge`, `giItemsBadge`, `giNoBatchesFound`, `giItemsLoading`, `giMultipleBatchesLabel`, plus the 9 missing transfer posting/SU keys in `i18n_en`).
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`:
+    - Updated title expression to explicitly support 201 (`giCostCenterPageTitle`), 261 (`giPageTitle`), 301 (`giMode301Title`), 311 (`giMode311Title`).
+    - Added `busy="{giView>/reservationsLoading}"` and `busyIndicatorDelay="0"` to ComboBox.
+    - Updated ComboBox item `additionalText` to format with `{i18n>giOrderLabel}` or fallback to MovementTypeName.
+    - Added `busy="{giView>/itemsLoading}"` and `busyIndicatorDelay="0"` to `tblComponentItems`.
+    - Bound `noDataText` and error strips to i18n fallback keys.
+    - Localized expiry date, receiving plant/location, Storage Type 999 (`giStorageType999Desc`), and success illustrated message.
+    - Protected `${giView>/stockUnits}.length` in header text and visibility expressions with safe fallback.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/ReservationValueHelpDialog.fragment.xml`:
+    - Handled missing `OrderNo` conditionally to prevent literal `Order:  | ` from rendering on non-order movement types.
+    - Replaced raw badge strings with `{i18n>giItemsPartialBadge}` and `{i18n>giItemsBadge}`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/BatchSelectionDialog.fragment.xml`:
+    - Bound `busy="{giBatchSelection>/busy}"` with `busyIndicatorDelay="0"`.
+    - Added fallback to `noDataText` (`${giBatchSelection>/noDataReason} || ${i18n>giNoUsableBatchesFound}`).
+    - Replaced raw `'(No SLED)'` with `{i18n>giBatchNoSled}` and `'No Stock'` with `{i18n>giBatchNoStock}`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+    - Initialized `reservationsLoading`, `itemsLoading`, and batch model `busy`.
+    - Managed `reservationsLoading` in `_loadOpenReservations` and `itemsLoading` in `_loadReservationDetails`.
+    - Added route URL sync on `onModeChange` to navigate to `wmGoodsIssueCreateMode`.
+    - Added `Plant` filter to `onSearchReservationValueHelp`.
+    - Added `busy` state management and informative empty-result message in `onSearchBatches`.
+- **Validation & Live Verification**:
+  - `npm --prefix app/fiori-app run lint`: Passed with 0 errors / 0 warnings.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 905 ms (`dist/Component-preload.js` generated).
+  - `npx jest test/unit/wm`: 14 test suites passed, 346 tests passed (100% green).
+  - `git diff --check`: Clean (0 errors).
+  - Live Chrome DevTools MCP validation across 201, 261, 301, and 311:
+    - Mode 201: Title rendered as `"Goods Issue for Cost Center (Movement 201)"`, loaded 53 authentic reservations from S/4HANA.
+    - Mode 261: Title rendered as `"Goods Issue against Order / Reservation (261)"`, loaded 142 authentic reservations.
+    - Mode 301: Title rendered as `"Transfer Posting Plant to Plant (301)"`, loaded 28 authentic reservations.
+    - Mode 311: Title rendered as `"Transfer Posting within Plant (311)"`, loaded 71 authentic reservations.
+    - Component items loaded live: Reservation 519367 loaded 2 items (Material 8000000001, Iphone 16 12GB).
+    - Reservation Value Help Dialog: Displays clean `"Plant: 1120 | 2 items"` without `Order: null` or raw strings.
+    - Batch Selection Dialog: Opened with live FEFO lookup, rendered `"No usable, unexpired batches available in SAP for material 8000000001 (Plant 1120)."`, verified filter search states with zero console errors.
+
 ## 2026-09-28 16:50 IST
 - **Agent**: Antigravity
 - **Request**: "Find 201 Movement And Add."

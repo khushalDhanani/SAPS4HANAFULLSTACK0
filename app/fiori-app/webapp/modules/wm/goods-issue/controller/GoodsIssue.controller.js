@@ -19,11 +19,13 @@ sap.ui.define([
         onInit: function () {
             var oViewModel = new JSONModel({
                 openReservations: [],
+                reservationsLoading: false,
                 selectedReservation: "",
                 currentStep: 1, // 1: Select Resv & Comp, 2: Configure & Validate, 3: Review, 4: Results
                 canProceedNext: false,
                 audioEnabled: true,
                 resolved: null,      // GoodsIssueResolution object from SAP
+                itemsLoading: false,
                 activeItem: null,    // Selected component for issue
                 availableStock: 0,
                 stockLoading: false,
@@ -69,6 +71,7 @@ sap.ui.define([
                 batches: [],
                 rawBatches: [],
                 noDataReason: "",
+                busy: false,
                 selectedBatch: null
             });
             this.getView().setModel(oBatchModel, "giBatchSelection");
@@ -249,6 +252,7 @@ sap.ui.define([
             var oModel = this.getView().getModel("giView");
             var that = this;
             this.setBusy(true);
+            oModel.setProperty("/reservationsLoading", true);
             oModel.setProperty("/reservationsUnavailable", false);
             oModel.setProperty("/reservationsUnavailableMsg", "");
             var oDataModel = this.getModel("goodsIssue");
@@ -279,6 +283,7 @@ sap.ui.define([
                     return [];
                 })
                 .finally(function () {
+                    oModel.setProperty("/reservationsLoading", false);
                     that.setBusy(false);
                 });
         },
@@ -290,8 +295,16 @@ sap.ui.define([
         /**
          * Switch between the Goods Issue (261) and Transfer Posting (301 / 311) blocks: separate reservation lists.
          */
-        onModeChange: function () {
+        onModeChange: function (oEvent) {
             var oModel = this.getView().getModel("giView");
+            var sNewKey = (oEvent && oEvent.getParameter("item")) ? oEvent.getParameter("item").getKey() : oModel.getProperty("/mode");
+            if (sNewKey) {
+                oModel.setProperty("/mode", sNewKey);
+                var oRouter = this.getRouter();
+                if (oRouter) {
+                    oRouter.navTo("wmGoodsIssueCreateMode", { mode: sNewKey }, true);
+                }
+            }
             this.onResetWorkflow(true);
             oModel.setProperty("/openReservations", []);
             return this.loadOpenReservations();
@@ -371,6 +384,7 @@ sap.ui.define([
                     new Filter("DisplayText", FilterOperator.Contains, sQuery),
                     new Filter("ReservationNo", FilterOperator.Contains, sQuery),
                     new Filter("OrderNo", FilterOperator.Contains, sQuery),
+                    new Filter("Plant", FilterOperator.Contains, sQuery),
                     new Filter("SampleMaterial", FilterOperator.Contains, sQuery)
                 ];
                 oBinding.filter(new Filter({
@@ -422,6 +436,7 @@ sap.ui.define([
             }
 
             this.setBusy(true);
+            oModel.setProperty("/itemsLoading", true);
             oModel.setProperty("/itemsUnavailable", false);
             oModel.setProperty("/itemsUnavailableMsg", "");
             var sOrderNo = (oResv && oResv.OrderNo) ? oResv.OrderNo : "";
@@ -464,6 +479,7 @@ sap.ui.define([
                     MessageBox.error("Failed to load components for Reservation " + sReservationNo + ": " + sMsg);
                 })
                 .finally(function () {
+                    oModel.setProperty("/itemsLoading", false);
                     that.setBusy(false);
                 });
         },
@@ -1028,6 +1044,7 @@ sap.ui.define([
             oBatchModel.setProperty("/batches", []);
             oBatchModel.setProperty("/rawBatches", []);
             oBatchModel.setProperty("/noDataReason", "Loading authentic batches from SAP S/4HANA...");
+            oBatchModel.setProperty("/busy", true);
 
             var that = this;
             var oView = this.getView();
@@ -1069,6 +1086,7 @@ sap.ui.define([
                     MessageBox.error("Failed to load batches: " + (err.message || err));
                 })
                 .finally(function () {
+                    oBatchModel.setProperty("/busy", false);
                     that.setBusy(false);
                 });
         },
@@ -1081,6 +1099,7 @@ sap.ui.define([
 
             if (!sQuery) {
                 oBatchModel.setProperty("/batches", aRaw);
+                oBatchModel.setProperty("/noDataReason", aRaw.length === 0 ? "No usable batches found for this material." : "");
                 return;
             }
 
@@ -1098,6 +1117,11 @@ sap.ui.define([
             });
 
             oBatchModel.setProperty("/batches", aFiltered);
+            if (aFiltered.length === 0) {
+                oBatchModel.setProperty("/noDataReason", "No batches match filter \"" + sQuery + "\"");
+            } else {
+                oBatchModel.setProperty("/noDataReason", "");
+            }
         },
 
         onSelectBatch: function (oEvent) {

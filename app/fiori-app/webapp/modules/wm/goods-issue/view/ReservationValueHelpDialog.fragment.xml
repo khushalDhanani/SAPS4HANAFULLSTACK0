@@ -12,8 +12,8 @@
         class="sapUiSizeCompact">
         <StandardListItem
             title="{giView>DisplayText}"
-            description="{= 'Order: ' + ${giView>OrderNo} + ' | Plant: ' + ${giView>Plant} + ' | ' + ${giView>ItemCount} + (${giView>ItemCountPartial} ? '+ items (partial)' : ' items') }"
-            info="{= ${giView>SampleMaterial} ? 'Material: ' + ${giView>SampleMaterial} : '' }"
+            description="{= (${giView>OrderNo} ? (${i18n>giOrderLabel} + ': ' + ${giView>OrderNo} + ' | ') : '') + ${i18n>giPlantLabel} + ': ' + ${giView>Plant} + ' | ' + ${giView>ItemCount} + ' ' + (${giView>ItemCountPartial} ? ${i18n>giItemsPartialBadge} : ${i18n>giItemsBadge}) }"
+            info="{= ${giView>SampleMaterial} ? (${i18n>giColMaterial} + ': ' + ${giView>SampleMaterial}) : '' }"
             icon="sap-icon://document"
             type="Active" />
     </SelectDialog>
