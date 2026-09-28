@@ -5,7 +5,7 @@ const { extractFilterParam, applyPaging } = require('../../../common/filterUtils
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
 const GI_MOVEMENT_TYPE = '261';
-const LIST_MOVEMENT_TYPES = ['261', '301', '311'];
+const LIST_MOVEMENT_TYPES = ['201', '261', '301', '311'];
 
 class GoodsIssueHandler {
   static init(srv) {
@@ -505,6 +505,28 @@ class GoodsIssueHandler {
         return req.error(
           err.status || err.statusCode || 500,
           err.message || 'Failed to revalidate stock in S/4HANA'
+        );
+      }
+    });
+
+    // ──────────────────────────────────────────────────────────
+    // FUNCTION: getDashboardData — Server-side aggregation for Goods Issue Dashboard
+    // ──────────────────────────────────────────────────────────
+    srv.on('getDashboardData', async (req) => {
+      const days = req.data?.days !== undefined ? Number(req.data.days) : 30;
+      const plant = req.data?.plant || _extractFilterParam(req, 'plant') || '';
+      const forceRefresh = Boolean(req.data?.forceRefresh);
+
+      try {
+        return await GoodsIssueAdapter.getDashboardData({
+          days,
+          plant,
+          forceRefresh
+        });
+      } catch (err) {
+        return req.error(
+          err.status || err.statusCode || 500,
+          err.message || 'Failed to retrieve Goods Issue dashboard data from S/4HANA'
         );
       }
     });

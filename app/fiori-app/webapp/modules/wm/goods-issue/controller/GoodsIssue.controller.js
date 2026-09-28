@@ -79,6 +79,14 @@ sap.ui.define([
                 if (oRoute) {
                     oRoute.attachPatternMatched(this._onPatternMatched, this);
                 }
+                var oRouteCreate = oRouter.getRoute("wmGoodsIssueCreate");
+                if (oRouteCreate) {
+                    oRouteCreate.attachPatternMatched(this._onPatternMatched, this);
+                }
+                var oRouteMode = oRouter.getRoute("wmGoodsIssueCreateMode");
+                if (oRouteMode) {
+                    oRouteMode.attachPatternMatched(this._onPatternMatched, this);
+                }
             }
 
             // Reservations + queue are loaded in _onPatternMatched (fires right after init on every visit).
@@ -107,17 +115,24 @@ sap.ui.define([
         onNavBack: function () {
             var oRouter = this.getRouter();
             if (oRouter) {
-                oRouter.navTo("dashboard", {}, true);
+                oRouter.navTo("wmGoodsIssue", {}, true);
             }
         },
 
-        _onPatternMatched: function () {
+        _onPatternMatched: function (oEvent) {
             var oAuthModel = this.getModel("auth");
             if (!oAuthModel && this.getOwnerComponent()) {
                 oAuthModel = this.getOwnerComponent().getModel("auth");
             }
             if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
                 return;
+            }
+            var sMode = oEvent && oEvent.getParameter("arguments") && oEvent.getParameter("arguments").mode;
+            if (sMode && ["201", "261", "301", "311"].indexOf(sMode) !== -1) {
+                var oModel = this.getView().getModel("giView");
+                if (oModel) {
+                    oModel.setProperty("/mode", sMode);
+                }
             }
             this.loadOpenReservations();
             this._refreshQueueCount();
@@ -419,7 +434,7 @@ sap.ui.define([
                     var aItems = (aAll || []).filter(function (i) { return !i.MovementType || aMvts.indexOf(i.MovementType) !== -1; });
                     if ((aAll || []).length && !aItems.length) {
                         var oFirst = aAll[0];
-                        var bKnown = ["261", "301", "311"].indexOf(oFirst.MovementType) !== -1;
+                        var bKnown = ["201", "261", "301", "311"].indexOf(oFirst.MovementType) !== -1;
                         throw new Error("Reservation " + sReservationNo + " is for movement type " + oFirst.MovementType +
                             (oFirst.MovementTypeName ? " (" + oFirst.MovementTypeName + ")" : "") +
                             (bKnown ? ". Select type " + oFirst.MovementType + " above." : ", which this screen does not post."));

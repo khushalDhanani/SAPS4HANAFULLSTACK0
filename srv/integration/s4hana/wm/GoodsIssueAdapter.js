@@ -9,7 +9,8 @@ const {
   GoodsIssueReservationsClient,
   GoodsIssueBatchesClient,
   GoodsIssueStockUnitClient,
-  GoodsIssuePostingClient
+  GoodsIssuePostingClient,
+  GoodsIssueDashboardClient
 } = require('./goods-issue');
 
 /**
@@ -19,6 +20,7 @@ const {
  * - GoodsIssueBatchesClient: Batch master data, FEFO sort, SLED checks, MARM packaging units, stock revalidation
  * - GoodsIssueStockUnitClient: SCWM Handling Unit / Stock Unit discovery, lookup & resolution
  * - GoodsIssuePostingClient: Multi-tier Goods Issue posting & batch submission
+ * - GoodsIssueDashboardClient: Multi-movement dashboard aggregation & caching
  *
  * Strict compliance with AGENTS.md SAP API Discovery Protocol:
  * NO dummy data, NO mock persistence, NO synthetic document generation.
@@ -41,6 +43,7 @@ class GoodsIssueAdapter {
     this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager });
     this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager });
     this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches });
+    this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, queueManager: this.queueManager, rfc: options.rfc });
   }
 
   /**
@@ -496,6 +499,13 @@ class GoodsIssueAdapter {
    */
   async submitGoodsIssueRequest(reservationNo, orderNo, items) {
     return this.posting.submitGoodsIssueRequest(reservationNo, orderNo, items);
+  }
+
+  /**
+   * Aggregate complete Goods Issue Dashboard data (KPIs, distribution, trends, recent documents)
+   */
+  async getDashboardData(options) {
+    return this.dashboard.getDashboardData(options);
   }
 
   /**

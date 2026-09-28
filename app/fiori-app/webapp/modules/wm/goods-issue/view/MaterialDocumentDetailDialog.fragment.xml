@@ -1,0 +1,104 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog
+        id="materialDocumentDetailDialog"
+        title="{i18n>giDocDetailDialogTitle}"
+        icon="sap-icon://document-text"
+        contentWidth="38rem"
+        resizable="true"
+        draggable="true">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <ObjectHeader
+                    id="docDetailHeader"
+                    title="{dashboardView>/selectedDocument/MaterialDocument}"
+                    number="{dashboardView>/selectedDocument/Quantity}"
+                    numberUnit="{dashboardView>/selectedDocument/Unit}"
+                    intro="{dashboardView>/selectedDocument/MovementType} • {dashboardView>/selectedDocument/MovementTypeName}">
+                    <statuses>
+                        <ObjectStatus
+                            title="{i18n>giDocDetailPostingDate}"
+                            text="{dashboardView>/selectedDocument/PostingDate}"
+                            state="None" />
+                        <ObjectStatus
+                            title="{i18n>giDocDetailUser}"
+                            text="{dashboardView>/selectedDocument/User}"
+                            state="Information" />
+                    </statuses>
+                    <attributes>
+                        <ObjectAttribute
+                            title="{i18n>giDocDetailYear}"
+                            text="{dashboardView>/selectedDocument/MaterialDocYear}" />
+                        <ObjectAttribute
+                            title="{i18n>giDocDetailItem}"
+                            text="{dashboardView>/selectedDocument/Item}" />
+                    </attributes>
+                </ObjectHeader>
+
+                <form:SimpleForm
+                    id="formDocDetail"
+                    editable="false"
+                    layout="ResponsiveGridLayout"
+                    labelSpanXL="4"
+                    labelSpanL="4"
+                    labelSpanM="4"
+                    labelSpanS="12"
+                    adjustLabelSpan="false"
+                    emptySpanXL="0"
+                    emptySpanL="0"
+                    emptySpanM="0"
+                    emptySpanS="0"
+                    columnsXL="1"
+                    columnsL="1"
+                    columnsM="1"
+                    singleContainerFullSize="false">
+                    <form:content>
+                        <core:Title text="{i18n>giDocDetailSectionMaterial}" />
+
+                        <Label text="{i18n>giColMaterial}" />
+                        <Text text="{dashboardView>/selectedDocument/Material} ({dashboardView>/selectedDocument/MaterialDesc})" class="fontBold" />
+
+                        <Label text="{i18n>giDocDetailBatch}" />
+                        <Text text="{= ${dashboardView>/selectedDocument/Batch} || '-' }" />
+
+                        <Label text="{i18n>giDocDetailPlant}" />
+                        <Text text="{dashboardView>/selectedDocument/Plant}" />
+
+                        <Label text="{i18n>giDocDetailSLoc}" />
+                        <Text text="{dashboardView>/selectedDocument/StorageLocation}" />
+
+                        <core:Title text="{i18n>giDocDetailSectionReference}" />
+
+                        <Label text="{i18n>giCostCenter}" visible="{= !!${dashboardView>/selectedDocument/CostCenter} }" />
+                        <Text text="{dashboardView>/selectedDocument/CostCenter}" visible="{= !!${dashboardView>/selectedDocument/CostCenter} }" class="fontBold" />
+
+                        <Label text="{i18n>giDocDetailOrder}" />
+                        <Text text="{= ${dashboardView>/selectedDocument/OrderNo} || '-' }" />
+
+                        <Label text="{i18n>giDocDetailReservation}" />
+                        <Text text="{= ${dashboardView>/selectedDocument/ReservationNo} ? ${dashboardView>/selectedDocument/ReservationNo} + ( ${dashboardView>/selectedDocument/ReservationItem} ? ' / Item ' + ${dashboardView>/selectedDocument/ReservationItem} : '' ) : '-' }" />
+
+                        <Label text="{i18n>giDocDetailDebitCredit}" />
+                        <Text text="{= ${dashboardView>/selectedDocument/DebitCredit} === 'H' ? 'Credit / Outflow (H)' : (${dashboardView>/selectedDocument/DebitCredit} === 'S' ? 'Debit / Inflow (S)' : '-') }" />
+                    </form:content>
+                </form:SimpleForm>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnOpenCreateFromDetail"
+                text="{i18n>giDocDetailActionCreate}"
+                icon="sap-icon://add"
+                type="Emphasized"
+                press=".onNavigateToCreateFromDetail" />
+        </beginButton>
+        <endButton>
+            <Button
+                id="btnCloseDocumentDetail"
+                text="{i18n>btnClose}"
+                press=".onCloseDocumentDetailDialog" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

@@ -403,6 +403,76 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         batch           : String(10),
         requiredQty     : Decimal(13, 3)
     ) returns StockRevalidationResult;
+
+    type GIDashboardKpiItem {
+        TotalCount         : Integer;
+        OpenPendingCount   : Integer;
+        TodayPostingsCount : Integer;
+    };
+
+    type GIDashboardKpis {
+        Mvt201  : GIDashboardKpiItem;
+        Mvt261  : GIDashboardKpiItem;
+        Mvt301  : GIDashboardKpiItem;
+        Mvt311  : GIDashboardKpiItem;
+        Overall : GIDashboardKpiItem;
+    };
+
+    type GIDistributionItem {
+        MovementType     : String(4);
+        MovementTypeName : String(40);
+        Count            : Integer;
+        Percentage       : Decimal(5, 2);
+    };
+
+    type GITrendItem {
+        PostingDate : Date;
+        DateLabel   : String(10);
+        Count201    : Integer;
+        Count261    : Integer;
+        Count301    : Integer;
+        Count311    : Integer;
+        Total       : Integer;
+    };
+
+    type GIMaterialDocumentItem {
+        MaterialDocument : String(10);
+        MaterialDocYear  : String(4);
+        Item             : String(4);
+        MovementType     : String(4);
+        MovementTypeName : String(40);
+        Material         : String(40);
+        MaterialDesc     : String(80);
+        Plant            : String(4);
+        StorageLocation  : String(4);
+        Batch            : String(10);
+        Quantity         : Decimal(13, 3);
+        Unit             : String(3);
+        PostingDate      : Date;
+        User             : String(20);
+        CostCenter       : String(10);
+        OrderNo          : String(12);
+        ReservationNo    : String(10);
+        ReservationItem  : String(4);
+        DebitCredit      : String(1);
+    };
+
+    type GIDashboardData {
+        Kpis            : GIDashboardKpis;
+        Distribution    : array of GIDistributionItem;
+        Trend           : array of GITrendItem;
+        RecentDocuments : array of GIMaterialDocumentItem;
+        LastUpdated     : Timestamp;
+        PlantFilter     : String(4);
+        Days            : Integer;
+    };
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getDashboardData(
+        days         : Integer,
+        plant        : String(4),
+        forceRefresh : Boolean
+    ) returns GIDashboardData;
 }
 
 // These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:

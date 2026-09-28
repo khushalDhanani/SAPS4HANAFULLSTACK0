@@ -274,7 +274,17 @@
         {
           "name": "wmGoodsIssue",
           "pattern": "wm/goods-issue",
-          "target": "TargetGoodsIssue"
+          "target": "TargetGoodsIssueDashboard"
+        },
+        {
+          "name": "wmGoodsIssueCreate",
+          "pattern": "wm/goods-issue/create",
+          "target": "TargetGoodsIssueCreate"
+        },
+        {
+          "name": "wmGoodsIssueCreateMode",
+          "pattern": "wm/goods-issue/create/{mode}",
+          "target": "TargetGoodsIssueCreate"
         },
         {
           "name": "wmGoodsReceipt",
@@ -362,7 +372,17 @@
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
         "TargetGoodsIssue": {
-          "id": "goodsIssue",
+          "id": "goodsIssueDashboard",
+          "name": "GoodsIssueDashboard",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssueDashboard": {
+          "id": "goodsIssueDashboard",
+          "name": "GoodsIssueDashboard",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssueCreate": {
+          "id": "goodsIssueCreate",
           "name": "GoodsIssue",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },

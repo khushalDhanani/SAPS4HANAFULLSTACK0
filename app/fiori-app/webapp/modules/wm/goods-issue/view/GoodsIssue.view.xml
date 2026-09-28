@@ -67,6 +67,7 @@
                             selectionChange=".onModeChange"
                             class="sapUiSmallMarginBottom">
                             <items>
+                                <SegmentedButtonItem key="201" text="{i18n>giMode201}" icon="sap-icon://expense-report" />
                                 <SegmentedButtonItem key="261" text="{i18n>giMode261}" icon="sap-icon://product" />
                                 <SegmentedButtonItem key="301" text="{i18n>giMode301}" icon="sap-icon://journey-arrive" />
                                 <SegmentedButtonItem key="311" text="{i18n>giMode311}" icon="sap-icon://move" />

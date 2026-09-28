@@ -385,6 +385,28 @@ sap.ui.define([
                 "batch='" + encodeURIComponent(String(sBatch || '').trim()) + "'," +
                 "requiredQty=" + (Number(nRequiredQty) || 0) +
                 ")");
+        },
+
+        /**
+         * Fetch Goods Issue Dashboard data (server-side aggregation of KPIs, charts, and recent documents)
+         * @param {number} [nDays=30] - Lookback window in days (7 or 30)
+         * @param {string} [sPlant=""] - Optional plant filter
+         * @param {boolean} [bForceRefresh=false] - Force cache bypass
+         * @returns {Promise<Object>} GIDashboardData
+         */
+        getDashboardData: function (nDays, sPlant, bForceRefresh) {
+            var iDays = typeof nDays === "number" && nDays > 0 ? nDays : 30;
+            var sPlantVal = sPlant ? String(sPlant).trim().toUpperCase() : "";
+            var bForce = Boolean(bForceRefresh);
+
+            var sQuery = BASE_PATH + "/getDashboardData(" +
+                "days=" + iDays + "," +
+                "plant='" + encodeURIComponent(sPlantVal) + "'," +
+                "forceRefresh=" + bForce + ")";
+
+            return ODataClient.get(sQuery).then(function (oData) {
+                return oData || null;
+            });
         }
     };
 

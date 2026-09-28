@@ -393,3 +393,9 @@
 .sapMListTblSubRowCell {
     padding: 0.25rem 0.5rem !important;
 }
+
+/* Goods Issue Dashboard Active KPI Card Highlight */
+.giCardActive {
+    border: 2px solid var(--sapSelectedColor, #0070F2) !important;
+    box-shadow: 0 0 8px rgba(0, 112, 242, 0.25) !important;
+}

@@ -3,6 +3,113 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-28 16:50 IST
+- **Agent**: Antigravity
+- **Request**: "Find 201 Movement And Add."
+- **SAP API Discovery & Verification Protocol**:
+  - Investigated real SAP S/4HANA backend capability for Movement Type `201` ("Goods Issue for Cost Center" / WA an Kostenstelle).
+  - Queried live SAP table `MATDOC` via RFC in DS4 Client 220: Discovered **54 authentic records** with `BWART = '201'`, authentic Cost Centers (`KOSTL: "1011103001"`, `"1011102401"`), Plants (`1110`, `1120`), and Storage Locations (`RD01`, `CS01`).
+  - Queried live Gateway OData service `UI_RESERVATION_ITM_MNG_V2`: Discovered **53 authentic open reservations** with `GoodsMovementType = '201'` (e.g. Reservation `519658`, Material `8000009753` *Apple Macbook Pro 14", M5*, 1 NOS).
+- **Scope & Features Delivered**:
+  1. **Consolidated 4-Movement Dashboard Scope**: Expanded dashboard from 3 movement types (261, 301, 311) to 4 types by adding `201` (Goods Issue for Cost Center with account assignment `KOSTL`).
+  2. **Backend Aggregation & Model (`GoodsIssueDashboardClient.js` & `service.cds`)**:
+     - Updated MATDOC queries to `BWART IN ('201','261','301','311')` and included `KOSTL` in field projections.
+     - Mapped `KOSTL` to `CostCenter` with leading zero trimming (`alphaOut`).
+     - Added parallel fetching for open `201` reservations via `reservationsClient.getOpenReservations('201', plant)` and pending outbox queue counts.
+     - Added `Mvt201` KPI block to `GIDashboardKpis`, 4-way distribution entry, and `Count201` daily trend series in `GITrendItem`.
+     - Added `'201'` to `LIST_MOVEMENT_TYPES` in `srv/wm/goods-issue/handlers/goodsIssue.handler.js`.
+  3. **Visualizations & Color Palette (`GoodsIssueDashboardModel.js`)**:
+     - Assigned `#8E44AD` (purple/violet) theme color to movement type 201, complementing 261 (`#0070F2` blue), 301 (`#E76500` orange), and 311 (`#107E3E` green).
+     - Enhanced SVG donut chart to render 4-segment distribution.
+     - Enhanced SVG trend line chart to render 4 series with tooltip values.
+  4. **Frontend Dashboard View & Actions (`GoodsIssueDashboard.view.xml` & `GoodsIssueDashboard.controller.js`)**:
+     - Added Card 0 for 201 in the KPI row with Total Count, Open/Pending Count, Today's Postings, interactive filter click, and "New 201" action button.
+     - Added `201` key to SegmentedButton filter on Recent Documents table.
+     - Added `CostCenter` column to the table and supported real-time searching by Cost Center.
+     - Added `onSelectKpi201()` and `onNavigateToCreate201()` controller methods.
+  5. **Detail Inspection & Create Flow Continuity**:
+     - Extended `MaterialDocumentDetailDialog.fragment.xml` with Cost Center metadata row.
+     - Extended `GoodsIssue.view.xml` with `201` mode SegmentedButtonItem and `GoodsIssue.controller.js` routing logic supporting `#/wm/goods-issue/create/201`.
+  6. **Internationalization & Testing**:
+     - Synchronized 100% key parity in `i18n.properties` and `i18n_en.properties` for 201 labels.
+     - Updated unit tests in `goodsIssueDashboardClient.test.js` and `goodsIssueDashboardController.test.js`.
+- **Affected Files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueDashboardClient.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssueDashboardModel.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssueDashboard.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/MaterialDocumentDetailDialog.fragment.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueDashboard.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssueDashboardClient.test.js`
+  - `test/unit/wm/goodsIssueDashboardController.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx cds compile srv`: Succeeded with code 0 (clean compilation).
+  - `npx jest test/unit/wm/goodsIssueDashboardClient.test.js test/unit/wm/goodsIssueDashboardController.test.js`: 2 passed, 21 tests passed (100% green).
+  - `npx jest test/unit/wm`: 14 suites passed, 346 tests passed (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Success in 909 ms (`dist/Component-preload.js` generated).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review git status and git diff.
+
+## 2026-09-28 16:38 IST
+- **Agent**: Antigravity
+- **Request**: "Build a proper dashboard for the route #/wm/goods-issue in my SAP S/4HANA Fiori app (CAP backend + UI5 frontend, same conventions as the existing MM modules)."
+- **Scope & Features Delivered**:
+  1. **Consolidated Multi-Movement Scope**: Covers movement types 261 (Goods Issue to Order), 301 (Plant-to-Plant Transfer), and 311 (Storage Location Transfer) in a single unified dashboard at `#/wm/goods-issue`.
+  2. **Real S/4HANA Backend Aggregation & Caching**:
+     - Created `GoodsIssueDashboardClient` querying real S/4HANA `MATDOC` / `MSEG` for actual postings across 261, 301, 311, `MAKT` for material descriptions, `UI_RESERVATION_ITM_MNG_V2` for open reservations, and `GoodsIssueQueueManager` for pending outbox items.
+     - Single-call endpoint `getDashboardData(days, plant, forceRefresh)` with 60-second in-memory TTL caching and strict parameter sanitization.
+     - Added typed CDS definitions and function in `srv/wm/goods-issue/service.cds` with handler delegation in `goodsIssue.handler.js`.
+  3. **Top KPI Row**: 4 interactive cards (`f:Card` in responsive `grid:CSSGrid`) for 261, 301, 311, and Overall Total displaying all-time total count, open/pending count, today's postings count, and "New" quick-action buttons.
+  4. **Dynamic Visualizations (Responsive SVGs)**:
+     - Movement Type Distribution Donut Chart: Responsive vector donut chart with total postings center label and percentage breakdown.
+     - Multi-Series Trend Line Chart: 3-series trend chart with 7 / 30 days toggle across 261, 301, 311.
+  5. **Recent Documents Table**:
+     - Lists latest 50 postings across all 3 types with columns: Material Document, Type, Material, Plant, SLoc, Quantity, Unit, Posting Date, User.
+     - Interactive SegmentedButton type filter (`All` / `261` / `301` / `311`), live multi-field search (Material Doc, Material, Material Description, Plant, SLoc, User, Order, Reservation), and Posting Date sorting.
+  6. **Interactive Drilldown & Flow Continuity**:
+     - Clicking any KPI card filters the table to that specific movement type (with toggle behavior).
+     - Clicking a table row opens `MaterialDocumentDetailDialog.fragment.xml` with complete document metadata and a direct "New Posting" action.
+     - Preserved the existing 3-step Goods Issue wizard flow reachable via "New" actions for 261, 301, and 311 (`#/wm/goods-issue/create/{mode}`).
+  7. **Comprehensive States**: Loading skeletons, empty state illustrations, and error banners on cards, charts, and table.
+  8. **Strict Architecture & I18n**: All texts defined in `i18n.properties` & `i18n_en.properties`, controller kept thin, zero hardcoded numbers.
+- **Affected Files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueDashboardClient.js`
+  - `srv/integration/s4hana/wm/goods-issue/index.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssueDashboardModel.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssueDashboard.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/MaterialDocumentDetailDialog.fragment.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueDashboard.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`
+  - `app/fiori-app/webapp/manifest.json`
+  - `app/fiori-app/webapp/css/style.css`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssueDashboardClient.test.js`
+  - `test/unit/wm/goodsIssueDashboardController.test.js`
+  - `test/unit/wm/goodsIssueController.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx cds compile srv`: Succeeded with code 0 (clean compilation).
+  - `npx jest test/unit/wm/goodsIssueDashboardClient.test.js`: 7 passed, 7 total (100% green).
+  - `npx jest test/unit/wm/goodsIssueDashboardController.test.js`: 14 passed, 14 total (100% green).
+  - `npx jest test/unit/wm/goodsIssueController.test.js`: 64 passed, 64 total (100% green).
+  - `npx jest test/unit/wm`: 14 test suites passed, 14 total; 346 tests passed, 346 total (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Success in 865 ms (`dist/Component-preload.js` generated).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Review git status and git diff.
+
 ## 2026-09-28 16:10 IST
 - **Agent**: Antigravity
 - **Request**: "I Don't want to delete but move in proper ignore." (User clarified that `creatable-services.xlsx` must remain intact in Git tracking and not be deleted, and `.gitignore` should have proper ignore entries).
@@ -4334,6 +4441,7 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-28 16:50 IST (uncommitted)**: Integrated Movement Type 201 (Goods Issue for Cost Center) into the Goods Issue Multi-Movement Dashboard (`#/wm/goods-issue`). Discovered 54 authentic postings in live SAP `MATDOC` table and 53 authentic open reservations in `UI_RESERVATION_ITM_MNG_V2`. Expanded dashboard across all 4 movement types (201, 261, 301, 311): added 201 KPI card with purple theme (`#8E44AD`), 4-way distribution donut chart, 4-series daily trend line chart, Recent Documents table with Cost Center column, live Cost Center search, filter toggle, and create wizard routing (`#/wm/goods-issue/create/201`). All 14 WM test suites (346 tests) 100% green; UI5 linter 0 findings; UI5 build succeeded; `git diff --check` clean.
 - **2026-09-27 15:16 IST (uncommitted)**: Resolved missing KPI counts, UI infinite loops, and 404 network request cascades across Dashboard, Sales Inquiries, Sales Orders, Customer Returns, Purchase Orders, and Journal Entries. Fixed OData V4 invalid property bindings (`ExternalDocumentID`, `SalesInquiryDescription`) on `C_InquiryWL_F2370` that caused 100+ cascading 404s per page load. Corrected UI5 `ValueState` enum validation errors in `CustomerReturns.controller.js`. Extended live S/4HANA dashboard metrics backend in `PurchaseOrderAdapter.js` to query authentic counts for Orders Due for Delivery (1,078 live), Customer Invoices (508 live), and Customer Returns (183 live), binding them to Overview, SD, and EWM dashboard tiles. All 85 test suites (1,460 tests) 100% green; UI5 lint clean; UI5 build succeeded; `git diff --check` clean.
 - **2026-09-26 17:25 IST (uncommitted)**: Formulated comprehensive Phase 2 Gateway Service `ZWM_RF_TRTO_SRV` technical specification, DDIC models, ABAP DPC_EXT code, and new RFC function module `Z_WM_GET_SU_DETAILS` (`docs/wm_rf_trto_srv_spec.md`). Proved complete 4-stage data contract flow live against real SAP S/4HANA DS4 Client 220 using dedicated test suite (`tools/test-wm-rf-trto-flow.py`): validated `TRHeaderSet` on live production staging TR `0001000663` (Mvt 319, Prod Order `0001002749`), `TRItemSet` navigation with `OpenQty = MENGE - TAMEN` and `MAKT` descriptions for Item 1 (`1000000867` `IPA, Extra Pure`, 17,323.2 KG) and Item 2 (`1000000869` `SOLVESSO 108`, 13,929.6 KG), and `StorageUnitSet` / `SUQuantSet` validation on SU `00000000001000043935` (Quant `0001035375`, Material `1000000867`, 11,210 KG in bin `ONHOLD`, matching TR with `IsValid = 'X'`). Documented full SEGW metadata EDMX and registration steps for DS4 220. All validations 100% green.
 - **2026-09-26 17:15 IST (uncommitted)**: Completed Phase 0 WM Discovery Verification Protocol (Checks 0.1 through 0.4) on live SAP S/4HANA (DS4 Client 220). (0.1) Ran `tools/find-wm-sources-3.py`: verified all 3 TR function modules (`Z_WM_GET_ALL_TR_HEADERS`, `Z_WM_GET_TR_MATERIAL_LIST`, `ZWM_TO_CREATE_FROM_TR`) are RFC-enabled (`processingType="rfc"`). Identified custom RF screen program `SAPMZWM_E_001` (Screen `9001`, Tcode `ZTO` "TO Creation For Staging") along with companion RF module pools (`SAPMZWM_E_002` `ZB2B`, `SAPMZWM_E_003` `ZDTO`, `SAPMZWM_E_004` `ZZGRN`, `SAPMZWM_E_005` `ZHU`, `SAPMZWM_E_006` `ZHU2`). (0.2) Proved Warehouse `W01` is heavily SU-managed: 6,716 active Storage Units in `LEIN` and 6,722 quants with `LENUM` in `LQUA` (e.g. SU `1000041619` in bin `0-L0001-03`); confirmed `SAPMZWM_E_001_F01` explicitly scans and validates `LENUM` with `ALPHA = IN`. (0.3) Analyzed all 618 TRs in `W01`: 448 from Mvt 101 Goods Receipts (`BETYP = 'D'`), 133 from Mvt 301/302, 14 from Mvt 319 Production Order Staging (`BETYP = 'P'`). Identified why 311 test bypassed TRs (standard SAP creates Posting Change Notices in `LUBU`/`LU04`), whereas 319 and 101 create real Transfer Requirements (`LTBK`/`LTBP`). Verified live open TR `0001000663` for Prod Order `0001002749` (Res `0000517858`) with two line items (Materials `1000000867` and `1000000869`). (0.4) Inspected legacy RF code and `ZWM_TO_CREATE_FROM_TR`: both call `L_TO_CREATE_TR` without `I_SQUIT` and without `L_TO_CONFIRM` (legacy `ZTO` was Create Only). Formulated recommendation for modern Fiori UI to provide 1-step Pick + Transfer option (`[x] Confirm Immediately`) to clear interim storage in a single transaction. All discovery queries 100% green.
@@ -5245,15 +5353,19 @@
   - **Next recommended action**: Provide Basis/ABAP team with `docs/wm_rf_trto_srv_spec.md` to register `ZWM_RF_TRTO_SRV` on DS4 Client 220.
 
 ## Next Steps
-0. WM Transfer Order Implementation:
+0. WM Goods Issue Dashboard (Route `#/wm/goods-issue`):
+   - Fully implemented, verified against live DS4 Client 220, and covered with 346 passing tests.
+   - Consolidates 4 movement types: 201 (Goods Issue for Cost Center), 261 (Goods Issue to Order), 301 (Plant-to-Plant Transfer), and 311 (Storage Location Transfer) with real-time S/4HANA aggregation, in-memory caching, responsive SVG visualizations (4-way distribution donut & 4-series trend), interactive KPI card filtering, recent documents table with live search and Cost Center sorting, and document detail inspection dialog.
+   - Preserves 3-step creation wizard flow accessible via dedicated "New" actions per movement type (`#/wm/goods-issue/create/{mode}`).
+1. WM Transfer Order Implementation:
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.
-1. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
-2. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
-3. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
-4. Select next development-ready capability to build from the verified list:
+2. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
+3. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
+4. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
+5. Select next development-ready capability to build from the verified list:
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)
    - Reservation creation (`UI_RESERVATION_ITM_MNG_V2`)
-5. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
-6. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+6. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
+7. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.

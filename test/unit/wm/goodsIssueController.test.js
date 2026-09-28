@@ -302,7 +302,7 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
 
         it('should navigate back to dashboard', () => {
             controller.onNavBack();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard', {}, true);
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue', {}, true);
         });
     });
 

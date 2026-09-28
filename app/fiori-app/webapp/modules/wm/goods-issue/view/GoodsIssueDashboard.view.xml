@@ -1,0 +1,528 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssueDashboard"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.f"
+    xmlns:layout="sap.ui.layout"
+    xmlns:grid="sap.ui.layout.cssgrid"
+    displayBlock="true">
+
+    <Page
+        id="goodsIssueDashboardPage"
+        showHeader="true"
+        title="{i18n>giDashboardPageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBackToOverview"
+        showFooter="false"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center">
+                <Button
+                    id="btnQuickNew261"
+                    text="{i18n>giActionNew261}"
+                    icon="sap-icon://product"
+                    type="Emphasized"
+                    press=".onNavigateToCreate261"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnQuickNew301"
+                    text="{i18n>giActionNew301}"
+                    icon="sap-icon://journey-arrive"
+                    type="Default"
+                    press=".onNavigateToCreate301"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnQuickNew311"
+                    text="{i18n>giActionNew311}"
+                    icon="sap-icon://move"
+                    type="Default"
+                    press=".onNavigateToCreate311"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnDashboardQueueTray"
+                    text="{i18n>wmGIQueueTrayBtn}"
+                    icon="sap-icon://inbox"
+                    type="Transparent"
+                    press=".onOpenQueueTray"
+                    class="sapUiTinyMarginEnd" />
+                <Button
+                    id="btnRefreshDashboard"
+                    icon="sap-icon://refresh"
+                    tooltip="{i18n>btnRefresh}"
+                    type="Transparent"
+                    press=".onRefresh" />
+            </HBox>
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin" busy="{dashboardView>/loading}">
+
+                <!-- Error State Banner -->
+                <MessageStrip
+                    id="dashboardErrorStrip"
+                    visible="{= !!${dashboardView>/error} }"
+                    text="{dashboardView>/error}"
+                    type="Error"
+                    showIcon="true"
+                    showCloseButton="true"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link text="{i18n>giRetryConnection}" press=".onRefresh" />
+                    </link>
+                </MessageStrip>
+
+                <!-- SECTION 1: TOP KPI ROW (Cards for 261, 301, 311, and Overall) -->
+                <Panel
+                    id="panelKpis"
+                    headerText="{i18n>giKpiSectionTitle}"
+                    class="sapUiSmallMarginBottom"
+                    expandable="false">
+                    <grid:CSSGrid
+                        id="kpiGrid"
+                        gridTemplateColumns="repeat(auto-fit, minmax(16rem, 1fr))"
+                        gridGap="1rem">
+
+                        <!-- Card 0: 201 Goods Issue for Cost Center -->
+                        <f:Card
+                            id="cardMvt201"
+                            class="{= ${dashboardView>/activeKpiCard} === '201' ? 'giCardActive sapUiTinyMarginBottom' : 'sapUiTinyMarginBottom' }">
+                            <f:header>
+                                <card:Header
+                                    xmlns:card="sap.f.cards"
+                                    title="{i18n>giKpi201Title}"
+                                    subtitle="{i18n>giKpi201Subtitle}"
+                                    iconSrc="sap-icon://expense-report"
+                                    press=".onSelectKpi201" />
+                            </f:header>
+                            <f:content>
+                                <VBox class="sapUiSmallMargin">
+                                    <HBox justifyContent="SpaceBetween" alignItems="Baseline" class="sapUiTinyMarginBottom">
+                                        <Text text="{i18n>giKpiTotalPostings}" class="textMuted" />
+                                        <ObjectNumber
+                                            number="{dashboardView>/kpis/mvt201/totalCount}"
+                                            state="Information"
+                                            class="fontSizeLarge fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://pending" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiOpenPending}" class="textMuted" />
+                                        </HBox>
+                                        <ObjectStatus
+                                            text="{dashboardView>/kpis/mvt201/openPendingCount}"
+                                            state="{= ${dashboardView>/kpis/mvt201/openPendingCount} > 0 ? 'Warning' : 'Success' }" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://history" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiTodayPostings}" class="textMuted" />
+                                        </HBox>
+                                        <Text text="{dashboardView>/kpis/mvt201/todayPostingsCount}" class="fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                        <Button
+                                            text="{= ${dashboardView>/typeFilter} === '201' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }"
+                                            icon="sap-icon://filter"
+                                            type="{= ${dashboardView>/typeFilter} === '201' ? 'Emphasized' : 'Transparent' }"
+                                            press=".onSelectKpi201" />
+                                        <Button
+                                            text="{i18n>giBtnNew}"
+                                            icon="sap-icon://add"
+                                            type="Default"
+                                            press=".onNavigateToCreate201" />
+                                    </HBox>
+                                </VBox>
+                            </f:content>
+                        </f:Card>
+
+                        <!-- Card 1: 261 Goods Issue to Order -->
+                        <f:Card
+                            id="cardMvt261"
+                            class="{= ${dashboardView>/activeKpiCard} === '261' ? 'giCardActive sapUiTinyMarginBottom' : 'sapUiTinyMarginBottom' }">
+                            <f:header>
+                                <card:Header
+                                    xmlns:card="sap.f.cards"
+                                    title="{i18n>giKpi261Title}"
+                                    subtitle="{i18n>giKpi261Subtitle}"
+                                    iconSrc="sap-icon://product"
+                                    press=".onSelectKpi261" />
+                            </f:header>
+                            <f:content>
+                                <VBox class="sapUiSmallMargin">
+                                    <HBox justifyContent="SpaceBetween" alignItems="Baseline" class="sapUiTinyMarginBottom">
+                                        <Text text="{i18n>giKpiTotalPostings}" class="textMuted" />
+                                        <ObjectNumber
+                                            number="{dashboardView>/kpis/mvt261/totalCount}"
+                                            state="Information"
+                                            class="fontSizeLarge fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://pending" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiOpenPending}" class="textMuted" />
+                                        </HBox>
+                                        <ObjectStatus
+                                            text="{dashboardView>/kpis/mvt261/openPendingCount}"
+                                            state="{= ${dashboardView>/kpis/mvt261/openPendingCount} > 0 ? 'Warning' : 'Success' }" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://history" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiTodayPostings}" class="textMuted" />
+                                        </HBox>
+                                        <Text text="{dashboardView>/kpis/mvt261/todayPostingsCount}" class="fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                        <Button
+                                            text="{= ${dashboardView>/typeFilter} === '261' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }"
+                                            icon="sap-icon://filter"
+                                            type="{= ${dashboardView>/typeFilter} === '261' ? 'Emphasized' : 'Transparent' }"
+                                            press=".onSelectKpi261" />
+                                        <Button
+                                            text="{i18n>giBtnNew}"
+                                            icon="sap-icon://add"
+                                            type="Default"
+                                            press=".onNavigateToCreate261" />
+                                    </HBox>
+                                </VBox>
+                            </f:content>
+                        </f:Card>
+
+                        <!-- Card 2: 301 Plant-to-Plant Transfer -->
+                        <f:Card
+                            id="cardMvt301"
+                            class="{= ${dashboardView>/activeKpiCard} === '301' ? 'giCardActive sapUiTinyMarginBottom' : 'sapUiTinyMarginBottom' }">
+                            <f:header>
+                                <card:Header
+                                    xmlns:card="sap.f.cards"
+                                    title="{i18n>giKpi301Title}"
+                                    subtitle="{i18n>giKpi301Subtitle}"
+                                    iconSrc="sap-icon://journey-arrive"
+                                    press=".onSelectKpi301" />
+                            </f:header>
+                            <f:content>
+                                <VBox class="sapUiSmallMargin">
+                                    <HBox justifyContent="SpaceBetween" alignItems="Baseline" class="sapUiTinyMarginBottom">
+                                        <Text text="{i18n>giKpiTotalPostings}" class="textMuted" />
+                                        <ObjectNumber
+                                            number="{dashboardView>/kpis/mvt301/totalCount}"
+                                            state="Information"
+                                            class="fontSizeLarge fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://pending" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiOpenPending}" class="textMuted" />
+                                        </HBox>
+                                        <ObjectStatus
+                                            text="{dashboardView>/kpis/mvt301/openPendingCount}"
+                                            state="{= ${dashboardView>/kpis/mvt301/openPendingCount} > 0 ? 'Warning' : 'Success' }" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://history" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiTodayPostings}" class="textMuted" />
+                                        </HBox>
+                                        <Text text="{dashboardView>/kpis/mvt301/todayPostingsCount}" class="fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                        <Button
+                                            text="{= ${dashboardView>/typeFilter} === '301' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }"
+                                            icon="sap-icon://filter"
+                                            type="{= ${dashboardView>/typeFilter} === '301' ? 'Emphasized' : 'Transparent' }"
+                                            press=".onSelectKpi301" />
+                                        <Button
+                                            text="{i18n>giBtnNew}"
+                                            icon="sap-icon://add"
+                                            type="Default"
+                                            press=".onNavigateToCreate301" />
+                                    </HBox>
+                                </VBox>
+                            </f:content>
+                        </f:Card>
+
+                        <!-- Card 3: 311 Storage Location Transfer -->
+                        <f:Card
+                            id="cardMvt311"
+                            class="{= ${dashboardView>/activeKpiCard} === '311' ? 'giCardActive sapUiTinyMarginBottom' : 'sapUiTinyMarginBottom' }">
+                            <f:header>
+                                <card:Header
+                                    xmlns:card="sap.f.cards"
+                                    title="{i18n>giKpi311Title}"
+                                    subtitle="{i18n>giKpi311Subtitle}"
+                                    iconSrc="sap-icon://move"
+                                    press=".onSelectKpi311" />
+                            </f:header>
+                            <f:content>
+                                <VBox class="sapUiSmallMargin">
+                                    <HBox justifyContent="SpaceBetween" alignItems="Baseline" class="sapUiTinyMarginBottom">
+                                        <Text text="{i18n>giKpiTotalPostings}" class="textMuted" />
+                                        <ObjectNumber
+                                            number="{dashboardView>/kpis/mvt311/totalCount}"
+                                            state="Information"
+                                            class="fontSizeLarge fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://pending" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiOpenPending}" class="textMuted" />
+                                        </HBox>
+                                        <ObjectStatus
+                                            text="{dashboardView>/kpis/mvt311/openPendingCount}"
+                                            state="{= ${dashboardView>/kpis/mvt311/openPendingCount} > 0 ? 'Warning' : 'Success' }" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://history" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiTodayPostings}" class="textMuted" />
+                                        </HBox>
+                                        <Text text="{dashboardView>/kpis/mvt311/todayPostingsCount}" class="fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                        <Button
+                                            text="{= ${dashboardView>/typeFilter} === '311' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }"
+                                            icon="sap-icon://filter"
+                                            type="{= ${dashboardView>/typeFilter} === '311' ? 'Emphasized' : 'Transparent' }"
+                                            press=".onSelectKpi311" />
+                                        <Button
+                                            text="{i18n>giBtnNew}"
+                                            icon="sap-icon://add"
+                                            type="Default"
+                                            press=".onNavigateToCreate311" />
+                                    </HBox>
+                                </VBox>
+                            </f:content>
+                        </f:Card>
+
+                        <!-- Card 4: Overall Consolidated -->
+                        <f:Card
+                            id="cardMvtOverall"
+                            class="{= ${dashboardView>/activeKpiCard} === 'ALL' ? 'giCardActive sapUiTinyMarginBottom' : 'sapUiTinyMarginBottom' }">
+                            <f:header>
+                                <card:Header
+                                    xmlns:card="sap.f.cards"
+                                    title="{i18n>giKpiOverallTitle}"
+                                    subtitle="{i18n>giKpiOverallSubtitle}"
+                                    iconSrc="sap-icon://sum"
+                                    press=".onSelectKpiOverall" />
+                            </f:header>
+                            <f:content>
+                                <VBox class="sapUiSmallMargin">
+                                    <HBox justifyContent="SpaceBetween" alignItems="Baseline" class="sapUiTinyMarginBottom">
+                                        <Text text="{i18n>giKpiTotalPostings}" class="textMuted" />
+                                        <ObjectNumber
+                                            number="{dashboardView>/kpis/overall/totalCount}"
+                                            state="Success"
+                                            class="fontSizeLarge fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://pending" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiOpenPending}" class="textMuted" />
+                                        </HBox>
+                                        <ObjectStatus
+                                            text="{dashboardView>/kpis/overall/openPendingCount}"
+                                            state="{= ${dashboardView>/kpis/overall/openPendingCount} > 0 ? 'Warning' : 'Success' }" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://history" size="0.875rem" class="sapUiTinyMarginEnd textMuted" />
+                                            <Text text="{i18n>giKpiTodayPostings}" class="textMuted" />
+                                        </HBox>
+                                        <Text text="{dashboardView>/kpis/overall/todayPostingsCount}" class="fontBold" />
+                                    </HBox>
+                                    <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                        <Button
+                                            text="{= ${dashboardView>/typeFilter} === 'ALL' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }"
+                                            icon="sap-icon://filter"
+                                            type="{= ${dashboardView>/typeFilter} === 'ALL' ? 'Emphasized' : 'Transparent' }"
+                                            press=".onSelectKpiOverall" />
+                                        <ObjectStatus
+                                            text="{i18n>giConsolidatedScope}"
+                                            state="Information" />
+                                    </HBox>
+                                </VBox>
+                            </f:content>
+                        </f:Card>
+
+                    </grid:CSSGrid>
+                </Panel>
+
+                <!-- SECTION 2: CHARTS ROW (Distribution & Trend) -->
+                <layout:Grid
+                    id="gridCharts"
+                    defaultSpan="XL6 L6 M12 S12"
+                    class="sapUiSmallMarginBottom">
+
+                    <!-- Chart 1: Movement Type Distribution -->
+                    <Panel
+                        id="panelDistribution"
+                        headerText="{i18n>giChartDistributionTitle}"
+                        class="sapUiTinyMarginBottom">
+                        <VBox class="sapUiSmallMargin">
+                            <Text text="{i18n>giChartDistributionSubtitle}" class="textMuted sapUiTinyMarginBottom" />
+                            <core:HTML
+                                id="htmlDistributionChart"
+                                content="{dashboardView>/distributionSvg}"
+                                preferDOM="true" />
+                            <!-- Legend -->
+                            <HBox justifyContent="Center" wrap="Wrap" class="sapUiSmallMarginTop">
+                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#8E44AD" class="sapUiTinyMarginEnd" />
+                                    <Text text="{i18n>giMode201} (201)" />
+                                </HBox>
+                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#0070F2" class="sapUiTinyMarginEnd" />
+                                    <Text text="{i18n>giMode261} (261)" />
+                                </HBox>
+                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#E76500" class="sapUiTinyMarginEnd" />
+                                    <Text text="{i18n>giMode301} (301)" />
+                                </HBox>
+                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#107E3E" class="sapUiTinyMarginEnd" />
+                                    <Text text="{i18n>giMode311} (311)" />
+                                </HBox>
+                            </HBox>
+                        </VBox>
+                    </Panel>
+
+                    <!-- Chart 2: Movement Trend (Last 7 / 30 Days) -->
+                    <Panel
+                        id="panelTrend"
+                        headerText="{i18n>giChartTrendTitle}"
+                        class="sapUiTinyMarginBottom">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="{i18n>giChartTrendTitle}" level="H4" />
+                                <ToolbarSpacer />
+                                <SegmentedButton
+                                    id="segTrendPeriod"
+                                    selectedKey="{dashboardView>/trendPeriod}"
+                                    selectionChange=".onTrendPeriodChange">
+                                    <items>
+                                        <SegmentedButtonItem key="7" text="{i18n>giTrend7Days}" />
+                                        <SegmentedButtonItem key="30" text="{i18n>giTrend30Days}" />
+                                    </items>
+                                </SegmentedButton>
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <VBox class="sapUiSmallMargin">
+                            <Text text="{i18n>giChartTrendSubtitle}" class="textMuted sapUiTinyMarginBottom" />
+                            <core:HTML
+                                id="htmlTrendChart"
+                                content="{dashboardView>/trendSvg}"
+                                preferDOM="true" />
+                            <!-- Legend -->
+                            <HBox justifyContent="Center" wrap="Wrap" class="sapUiSmallMarginTop">
+                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#8E44AD" class="sapUiTinyMarginEnd" />
+                                    <Text text="201 Cost Center" />
+                                </HBox>
+                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#0070F2" class="sapUiTinyMarginEnd" />
+                                    <Text text="261 GI" />
+                                </HBox>
+                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#E76500" class="sapUiTinyMarginEnd" />
+                                    <Text text="301 Transfer" />
+                                </HBox>
+                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#107E3E" class="sapUiTinyMarginEnd" />
+                                    <Text text="311 Transfer" />
+                                </HBox>
+                            </HBox>
+                        </VBox>
+                    </Panel>
+                </layout:Grid>
+
+                <!-- SECTION 3: RECENT DOCUMENTS TABLE -->
+                <Panel
+                    id="panelRecentDocuments"
+                    headerText="{i18n>giRecentDocsSectionTitle}"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+                    <Table
+                        id="tblRecentDocuments"
+                        items="{path: 'dashboardView>/documents'}"
+                        noDataText="{i18n>giNoDocumentsFound}"
+                        growing="true"
+                        growingThreshold="25"
+                        growingScrollToLoad="false"
+                        class="sapUiSizeCompact">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="{= ${i18n>giRecentDocsTableTitle} + ' (' + ${dashboardView>/totalDocumentsCount} + ')' }" level="H4" />
+                                <ToolbarSpacer />
+                                <SegmentedButton
+                                    id="segDocTypeFilter"
+                                    selectedKey="{dashboardView>/typeFilter}"
+                                    selectionChange=".onTypeFilterChange"
+                                    class="sapUiTinyMarginEnd">
+                                    <items>
+                                        <SegmentedButtonItem key="ALL" text="{i18n>giFilterAll}" />
+                                        <SegmentedButtonItem key="201" text="201" />
+                                        <SegmentedButtonItem key="261" text="261" />
+                                        <SegmentedButtonItem key="301" text="301" />
+                                        <SegmentedButtonItem key="311" text="311" />
+                                    </items>
+                                </SegmentedButton>
+                                <SearchField
+                                    id="searchDocs"
+                                    width="16rem"
+                                    placeholder="{i18n>giSearchDocumentsPlaceholder}"
+                                    value="{dashboardView>/searchQuery}"
+                                    liveChange=".onSearchDocuments"
+                                    class="sapUiTinyMarginEnd" />
+                                <OverflowToolbarButton
+                                    id="btnSortDate"
+                                    icon="sap-icon://sort"
+                                    tooltip="{i18n>giSortTooltip}"
+                                    press=".onToggleSort" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column width="8rem"><Text text="{i18n>giColMatDoc}" /></Column>
+                            <Column width="5.5rem"><Text text="{i18n>giColType}" /></Column>
+                            <Column><Text text="{i18n>giColMaterial}" /></Column>
+                            <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giPlantLabel}" /></Column>
+                            <Column width="5.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSLocLabel}" /></Column>
+                            <Column width="6.5rem" hAlign="End"><Text text="{i18n>giColQty}" /></Column>
+                            <Column width="4rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUnit}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPostingDate}" /></Column>
+                            <Column width="7rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUser}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem
+                                type="Navigation"
+                                press=".onDocumentPress">
+                                <cells>
+                                    <ObjectIdentifier
+                                        title="{dashboardView>MaterialDocument}"
+                                        text="{= ${dashboardView>MaterialDocYear} ? 'FY ' + ${dashboardView>MaterialDocYear} : '' }" />
+                                    <ObjectStatus
+                                        text="{dashboardView>MovementType}"
+                                        state="{= ${dashboardView>MovementType} === '201' ? 'Indication05' : (${dashboardView>MovementType} === '261' ? 'Information' : (${dashboardView>MovementType} === '301' ? 'Warning' : 'Success')) }" />
+                                    <ObjectIdentifier
+                                        title="{dashboardView>Material}"
+                                        text="{= ${dashboardView>CostCenter} ? (${dashboardView>MaterialDesc} + ' • CC: ' + ${dashboardView>CostCenter}) : ${dashboardView>MaterialDesc} }" />
+                                    <Text text="{dashboardView>Plant}" />
+                                    <Text text="{dashboardView>StorageLocation}" />
+                                    <ObjectNumber
+                                        number="{dashboardView>Quantity}"
+                                        unit="{dashboardView>Unit}" />
+                                    <Text text="{dashboardView>Unit}" />
+                                    <Text text="{dashboardView>PostingDate}" />
+                                    <Text text="{dashboardView>User}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>
