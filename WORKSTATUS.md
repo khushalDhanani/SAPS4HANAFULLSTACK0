@@ -3,6 +3,47 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-28 10:05 IST
+- **Agent**: Antigravity
+- **Request**: "In table responsive is not a proper." (User confirmed: all tables across application; columns overflow horizontally or get squeezed on mobile/smaller screens instead of popping in cleanly).
+- **Root Cause & Investigation**:
+  Across multiple views, dialogs, and modules:
+  1. `TrTo.view.xml`: 5 fixed-width pixel columns (Item, Material, Open Qty, UoM, Dest Bin) with zero `demandPopin`, squishing or overflowing on mobile and Zebra MC220 industrial scanners (480px width).
+  2. `GoodsIssue.view.xml`:
+     - `tblComponentItems`: Material column had `demandPopin="true"`, while 5 other columns (Item, RequiredQty, WithdrawnQty, OpenQty, Action) lacked `demandPopin`, meaning on mobile the Material popped in while all other columns remained in the row (32rem width), overflowing mobile viewports.
+     - `tblLineStockUnits`: 4 columns without popin squeezing into mobile viewports.
+  3. Dialog fragments (`BatchSelectionDialog.fragment.xml`, `QueueTrayDialog.fragment.xml`, `CreateReturnDialog.fragment.xml`, `ReturnItemsDialog.fragment.xml`, `CreateDeliveryNoRefDialog.fragment.xml`): Up to 7-8 columns without `demandPopin` forcing modal dialogs to overflow screen bounds on tablet/mobile.
+  4. List report tables (`SalesOrders.view.xml`, `SalesInquiries.view.xml`, `CustomerInvoices.view.xml`, `CustomerReturns.view.xml`, `OrdersDueForDelivery.view.xml`, `JournalEntries.view.xml`): Columns without `demandPopin` summed to 36-60rem, preventing clean single/two-column row rendering with pop-ins on mobile devices.
+  5. Create/Detail item tables (`CreateSalesOrder.view.xml`, `CreateSalesInquiry.view.xml`, `CreatePurchaseOrder.view.xml`, `CreateCustomerReturn.view.xml`, `PurchaseOrderDetail.view.xml`, `SalesInquiryDetail.view.xml`): Multiple input/text columns (up to 12 columns in PO creation) without `demandPopin` causing extreme horizontal page stretch (up to 1,272px).
+- **Changes Applied**:
+  Applied standard SAPUI5 responsive table architecture across all 21 tables:
+  1. **WM Module** (`TrTo.view.xml`, `GoodsIssue.view.xml`, `BatchSelectionDialog.fragment.xml`, `QueueTrayDialog.fragment.xml`):
+     - Added `minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"` to UoM, Dest Bin, Batch, SLED, Bin, and Action columns.
+     - Anchored primary document and material columns to ensure clean mobile fit on Zebra MC220.
+  2. **SD Module** (`SalesOrders.view.xml`, `CreateSalesOrder.view.xml`, `SalesInquiries.view.xml`, `SalesInquiryDetail.view.xml`, `CreateSalesInquiry.view.xml`, `CustomerInvoices.view.xml`, `CustomerReturns.view.xml`, `CreateCustomerReturn.view.xml`, `CreateReturnDialog.fragment.xml`, `ReturnItemsDialog.fragment.xml`):
+     - Configured `demandPopin="true"` with `popinDisplay="Inline"` for secondary attributes (Type, Status, Customer, Plant, Unit, Reason, RefDoc, NetPrice, NetAmount, Action).
+     - Primary document number and key amount/status remain visible on phone rows.
+  3. **MM Module** (`PurchaseOrders.view.xml`, `PurchaseOrderDetail.view.xml`, `CreatePurchaseOrder.view.xml`):
+     - Added `minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"` to Status, Item Category, Account Assignment, Plant, SLoc, Unit, Tax Code, Net Price, and Net Amount.
+     - Reduced fixed column widths to fit mobile viewports cleanly.
+  4. **LE Module** (`OrdersDueForDelivery.view.xml`, `CreateDeliveryNoRefDialog.fragment.xml`):
+     - Configured `demandPopin="true"` on Item Sched Line, Ship-to Party, Shipping Point, Delivery Block, Approval Status, Action, and UoM.
+  5. **FI Module** (`JournalEntries.view.xml`):
+     - Configured `demandPopin="true"` with `popinDisplay="Inline"` on Company Code, GL Account, Item Text, Debit/Credit, and Cost Center.
+  6. **Responsive Table Styles** (`style.css`):
+     - Added responsive table polish ensuring 100% full-width stretch and comfortable pop-in sub-row padding.
+  7. **Preload Bundle**:
+     - Recompiled UI5 production bundle via `ui5 build --all` (`dist/Component-preload.js`).
+- **Executed Commands & Results**:
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 924 ms (`dist/Component-preload.js` refreshed cleanly).
+  - `git diff --check`: Clean (0 errors).
+  - `npx jest test/unit`: 85 passed, 85 total suites; 1,460 passed, 1,460 total tests (100% green).
+  - `npx jest test/integration`: 10 passed, 10 total suites; 45 passed, 45 total tests (100% green).
+  - Baseline `npm test`: 96 passed, 96 total suites; 1,512 passed, 1,512 total tests (100% green).
+- **Next recommended action**: Test responsiveness in browser across desktop, tablet, and mobile device emulators (e.g. Zebra MC220 - 480px, iPhone - 375px/390px, iPad - 768px/1024px).
+
+
 ## 2026-09-27 15:16 IST
 - **Agent**: Antigravity
 - **Request**: "Scan Project So many kpi's count is not coming and some data not load continue in loop with effect."

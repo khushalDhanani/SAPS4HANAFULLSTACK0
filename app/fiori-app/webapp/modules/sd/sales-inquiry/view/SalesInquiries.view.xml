@@ -125,13 +125,13 @@
                     </headerToolbar>
                     <columns>
                         <Column width="8rem"><Text text="{i18n>salesInquiriesColInquiryNumber}" /></Column>
-                        <Column width="5rem"><Text text="{i18n>salesInquiriesColType}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesInquiriesColDescription}" /></Column>
-                        <Column width="13rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesInquiriesColCustomer}" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesInquiriesColSalesArea}" /></Column>
-                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesInquiriesColDocDate}" /></Column>
+                        <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColType}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColDescription}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColCustomer}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColSalesArea}" /></Column>
+                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColDocDate}" /></Column>
                         <Column width="8rem" hAlign="End"><Text text="{i18n>salesInquiriesColNetAmount}" /></Column>
-                        <Column width="6rem" hAlign="Center"><Text text="{i18n>salesInquiriesColStatus}" /></Column>
+                        <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesInquiriesColStatus}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation">

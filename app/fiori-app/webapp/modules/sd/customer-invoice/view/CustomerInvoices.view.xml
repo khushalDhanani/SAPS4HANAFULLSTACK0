@@ -179,31 +179,31 @@
                         <Column id="colBillingDocument" width="8rem">
                             <Text text="{i18n>colBillingDocument}" />
                         </Column>
-                        <Column id="colType" width="6rem">
+                        <Column id="colType" width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>colBillingType}" />
                         </Column>
-                        <Column id="colCustomer" minScreenWidth="Tablet" demandPopin="true">
+                        <Column id="colCustomer" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>colCustomer}" />
                         </Column>
-                        <Column id="colDate" minScreenWidth="Desktop" demandPopin="true" width="7rem">
+                        <Column id="colDate" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" width="7rem">
                             <Text text="{i18n>colBillingDate}" />
                         </Column>
-                        <Column id="colNetAmount" minScreenWidth="Tablet" demandPopin="true" hAlign="End" width="8rem">
+                        <Column id="colNetAmount" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" hAlign="End" width="8rem">
                             <Text text="{i18n>colNetAmount}" />
                         </Column>
-                        <Column id="colTaxAmount" minScreenWidth="Desktop" demandPopin="true" hAlign="End" width="7rem">
+                        <Column id="colTaxAmount" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" hAlign="End" width="7rem">
                             <Text text="{i18n>colTaxAmount}" />
                         </Column>
                         <Column id="colGrossAmount" hAlign="End" width="8rem">
                             <Text text="{i18n>colGrossAmount}" />
                         </Column>
-                        <Column id="colAccountingStatus" width="10rem">
+                        <Column id="colAccountingStatus" width="10rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>colAccountingStatus}" />
                         </Column>
-                        <Column id="colAccountingDocument" minScreenWidth="Desktop" demandPopin="true" width="9rem">
+                        <Column id="colAccountingDocument" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" width="9rem">
                             <Text text="{i18n>colAccountingDocument}" />
                         </Column>
-                        <Column id="colActions" width="6rem" hAlign="Center">
+                        <Column id="colActions" width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>colActions}" />
                         </Column>
                     </columns>

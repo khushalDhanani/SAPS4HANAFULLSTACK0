@@ -188,12 +188,12 @@
                                     </OverflowToolbar>
                                 </headerToolbar>
                                 <columns>
-                                    <Column width="4rem"><Text text="{i18n>giColItem}" /></Column>
-                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giColMaterial}" /></Column>
-                                    <Column hAlign="End" width="6rem"><Text text="{i18n>giColRequiredQty}" /></Column>
-                                    <Column hAlign="End" width="6rem"><Text text="{i18n>giColWithdrawnQty}" /></Column>
-                                    <Column hAlign="End" width="6rem"><Text text="{i18n>giColOpenQty}" /></Column>
-                                    <Column width="10rem" hAlign="Center"><Text text="{i18n>giColAction}" /></Column>
+                                    <Column width="3.5rem"><Text text="{i18n>giColItem}" /></Column>
+                                    <Column><Text text="{i18n>giColMaterial}" /></Column>
+                                    <Column width="6rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColRequiredQty}" /></Column>
+                                    <Column width="6rem" hAlign="End" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColWithdrawnQty}" /></Column>
+                                    <Column width="6rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColOpenQty}" /></Column>
+                                    <Column width="8rem" hAlign="End"><Text text="{i18n>giColAction}" /></Column>
                                 </columns>
                                 <items>
                                     <ColumnListItem type="Active" press=".onSelectComponentForValidation">
@@ -449,11 +449,11 @@
                             class="sapUiSmallMarginBottom">
                             <columns>
                                 <Column><Text text="{i18n>giSuListColSu}" /></Column>
-                                <Column><Text text="{i18n>giColBatch}" /></Column>
-                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giColExpiryDate}" /></Column>
-                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>giSuListColBin}" /></Column>
-                                <Column hAlign="End"><Text text="{i18n>giColAvailableStock}" /></Column>
-                                <Column hAlign="Center" width="7rem"><Text text="{i18n>giColAction}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColBatch}" /></Column>
+                                <Column minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColExpiryDate}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSuListColBin}" /></Column>
+                                <Column hAlign="End" width="6.5rem"><Text text="{i18n>giColAvailableStock}" /></Column>
+                                <Column hAlign="End" width="6.5rem"><Text text="{i18n>giColAction}" /></Column>
                             </columns>
                             <items>
                                 <ColumnListItem type="Active" press=".onSelectStockUnit">

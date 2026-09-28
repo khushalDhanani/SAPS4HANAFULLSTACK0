@@ -124,15 +124,15 @@
                     </headerToolbar>
                     <columns>
                         <Column width="8rem"><Text text="{i18n>salesOrdersColOrderNumber}" /></Column>
-                        <Column width="5rem"><Text text="{i18n>salesOrdersColType}" /></Column>
-                        <Column width="14rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesOrdersColCustomer}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesOrdersColPORef}" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesOrdersColSalesArea}" /></Column>
-                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>salesOrdersColDocDate}" /></Column>
+                        <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColType}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColCustomer}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColPORef}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColSalesArea}" /></Column>
+                        <Column width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColDocDate}" /></Column>
                         <Column width="8rem" hAlign="End"><Text text="{i18n>salesOrdersColNetAmount}" /></Column>
-                        <Column width="7rem" hAlign="Center"><Text text="{i18n>salesOrdersColStatus}" /></Column>
-                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>salesOrdersColApprovalStatus}" /></Column>
-                        <Column width="8rem" hAlign="Center"><Text text="{i18n>salesOrdersColAction}" /></Column>
+                        <Column width="7rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColStatus}" /></Column>
+                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColApprovalStatus}" /></Column>
+                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>salesOrdersColAction}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Inactive">

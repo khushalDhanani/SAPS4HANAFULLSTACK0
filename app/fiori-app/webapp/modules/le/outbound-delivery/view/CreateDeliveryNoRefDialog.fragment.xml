@@ -127,10 +127,10 @@
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
-                        <Column width="4rem"><Text text="{i18n>dlgColItemNo}" /></Column>
-                        <Column width="14rem"><Text text="{i18n>dlgColMaterial}" /></Column>
-                        <Column width="7rem"><Text text="{i18n>dlgColQuantity}" /></Column>
-                        <Column width="5rem"><Text text="{i18n>dlgColUoM}" /></Column>
+                        <Column width="3.5rem"><Text text="{i18n>dlgColItemNo}" /></Column>
+                        <Column><Text text="{i18n>dlgColMaterial}" /></Column>
+                        <Column width="6rem"><Text text="{i18n>dlgColQuantity}" /></Column>
+                        <Column width="4.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>dlgColUoM}" /></Column>
                         <Column width="3rem" hAlign="Center"><Text text="" /></Column>
                     </columns>
                     <items>

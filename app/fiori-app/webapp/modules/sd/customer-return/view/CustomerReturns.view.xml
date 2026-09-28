@@ -171,22 +171,22 @@
                                 <Column id="colReturnNum" width="8rem">
                                     <Text text="{i18n>colReturnNumber}" />
                                 </Column>
-                                <Column id="colCust" width="14rem" minScreenWidth="Tablet" demandPopin="true">
+                                <Column id="colCust" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                                     <Text text="{i18n>colReturnCustomer}" />
                                 </Column>
-                                <Column id="colDate" width="8rem" minScreenWidth="Desktop" demandPopin="true">
+                                <Column id="colDate" width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
                                     <Text text="{i18n>colReturnDate}" />
                                 </Column>
-                                <Column id="colRef" width="10rem" minScreenWidth="Tablet" demandPopin="true">
+                                <Column id="colRef" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
                                     <Text text="{i18n>colReturnRefDoc}" />
                                 </Column>
-                                <Column id="colReason" width="14rem">
+                                <Column id="colReason" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                                     <Text text="{i18n>colReturnReason}" />
                                 </Column>
-                                <Column id="colAmount" width="9rem" hAlign="End">
+                                <Column id="colAmount" width="8rem" hAlign="End">
                                     <Text text="{i18n>colReturnNetValue}" />
                                 </Column>
-                                <Column id="colAction" width="7rem" hAlign="Center">
+                                <Column id="colAction" width="7rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                                     <Text text="{i18n>colReturnItemsAction}" />
                                 </Column>
                             </columns>

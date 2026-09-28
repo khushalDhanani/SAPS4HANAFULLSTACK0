@@ -213,13 +213,13 @@
                     </headerToolbar>
 
                     <columns>
-                        <Column width="11rem"><Text text="{i18n>fiColDocument}" /></Column>
-                        <Column width="8rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>fiColCompanyCode}" /></Column>
-                        <Column width="14rem"><Text text="{i18n>fiColGLAccount}" /></Column>
-                        <Column width="12rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>fiColItemText}" /></Column>
-                        <Column width="7rem" hAlign="Center"><Text text="{i18n>fiColDebitCredit}" /></Column>
-                        <Column width="11rem" hAlign="End"><Text text="{i18n>fiColAmount}" /></Column>
-                        <Column width="10rem" minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>fiColCostCenter}" /></Column>
+                        <Column width="9rem"><Text text="{i18n>fiColDocument}" /></Column>
+                        <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>fiColCompanyCode}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>fiColGLAccount}" /></Column>
+                        <Column width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>fiColItemText}" /></Column>
+                        <Column width="6rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>fiColDebitCredit}" /></Column>
+                        <Column width="9rem" hAlign="End"><Text text="{i18n>fiColAmount}" /></Column>
+                        <Column width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>fiColCostCenter}" /></Column>
                     </columns>
 
                     <items>

@@ -252,11 +252,11 @@
                         mode="SingleSelectMaster"
                         selectionChange=".onItemSelectionChange">
                         <columns>
-                            <Column width="60px"><Text text="Item" /></Column>
+                            <Column width="3.5rem"><Text text="Item" /></Column>
                             <Column><Text text="Material / Description" /></Column>
-                            <Column width="100px" hAlign="End"><Text text="Open Qty" /></Column>
-                            <Column width="60px"><Text text="UoM" /></Column>
-                            <Column width="110px"><Text text="Dest Bin" /></Column>
+                            <Column width="6rem" hAlign="End"><Text text="Open Qty" /></Column>
+                            <Column width="4.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="UoM" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="Dest Bin" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>

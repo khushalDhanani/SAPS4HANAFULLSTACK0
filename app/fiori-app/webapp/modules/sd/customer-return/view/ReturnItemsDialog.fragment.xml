@@ -22,28 +22,28 @@
                     </OverflowToolbar>
                 </headerToolbar>
                 <columns>
-                    <Column id="colItemNo" width="4rem">
+                    <Column id="colItemNo" width="3.5rem">
                         <Text text="{i18n>colReturnItemNo}" />
                     </Column>
-                    <Column id="colItemMaterial" minScreenWidth="Tablet" demandPopin="true" width="12rem">
+                    <Column id="colItemMaterial">
                         <Text text="{i18n>colReturnMaterial}" />
                     </Column>
-                    <Column id="colItemQty" hAlign="End" width="8rem">
+                    <Column id="colItemQty" hAlign="End" width="6rem">
                         <Text text="{i18n>colReturnQuantity}" />
                     </Column>
-                    <Column id="colItemAmount" hAlign="End" minScreenWidth="Tablet" demandPopin="true" width="8rem">
+                    <Column id="colItemAmount" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" width="7rem">
                         <Text text="{i18n>colReturnNetAmount}" />
                     </Column>
-                    <Column id="colItemPlant" minScreenWidth="Desktop" demandPopin="true" width="8rem">
+                    <Column id="colItemPlant" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" width="7rem">
                         <Text text="{i18n>colReturnPlant}" />
                     </Column>
-                    <Column id="colItemStorage" minScreenWidth="Desktop" demandPopin="true" width="7rem">
+                    <Column id="colItemStorage" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" width="7rem">
                         <Text text="{i18n>colReturnStorageLocation}" />
                     </Column>
-                    <Column id="colItemReason" minScreenWidth="Tablet" demandPopin="true" width="9rem">
+                    <Column id="colItemReason" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                         <Text text="{i18n>colReturnReason}" />
                     </Column>
-                    <Column id="colItemRefDoc" minScreenWidth="Desktop" demandPopin="true" width="8rem">
+                    <Column id="colItemRefDoc" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" width="7rem">
                         <Text text="{i18n>colReturnRefDoc}" />
                     </Column>
                 </columns>

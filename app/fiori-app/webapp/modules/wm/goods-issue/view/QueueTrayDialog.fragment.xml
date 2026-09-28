@@ -36,25 +36,25 @@
                     items="{giQueue>/items}"
                     noDataText="{i18n>wmGIQueueEmptyText}">
                     <columns>
-                        <Column width="180px">
+                        <Column>
                             <Text text="{i18n>wmGIQueueColRef}" />
                         </Column>
-                        <Column width="110px">
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>wmGIQueueColResv}" />
                         </Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>wmGIQueueColMaterial}" />
                         </Column>
-                        <Column width="100px" hAlign="End">
+                        <Column width="6rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>wmGIQueueColQty}" />
                         </Column>
-                        <Column width="100px" minScreenWidth="Desktop" demandPopin="true">
+                        <Column width="6rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
                             <Text text="{i18n>wmGIQueueColBatch}" />
                         </Column>
-                        <Column width="110px" hAlign="Center">
+                        <Column width="6.5rem" hAlign="Center">
                             <Text text="{i18n>wmGIQueueColStatus}" />
                         </Column>
-                        <Column width="120px" hAlign="Center">
+                        <Column width="7.5rem" hAlign="Center">
                             <Text text="{i18n>wmGIQueueColActions}" />
                         </Column>
                     </columns>

@@ -42,12 +42,12 @@
                     noDataText="{giBatchSelection>/noDataReason}"
                     class="sapUiSizeCompact">
                     <columns>
-                        <Column width="8rem"><Text text="{i18n>giColBatch}" /></Column>
-                        <Column width="9rem"><Text text="{i18n>giColExpiryDate}" /></Column>
-                        <Column width="8rem"><Text text="{i18n>giColSledStatus}" /></Column>
-                        <Column width="5rem"><Text text="{i18n>giColPlant}" /></Column>
-                        <Column width="5rem"><Text text="{i18n>giColStorageLocation}" /></Column>
-                        <Column hAlign="End" width="8rem"><Text text="{i18n>giColAvailableStock}" /></Column>
+                        <Column><Text text="{i18n>giColBatch}" /></Column>
+                        <Column width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColExpiryDate}" /></Column>
+                        <Column width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColSledStatus}" /></Column>
+                        <Column width="5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPlant}" /></Column>
+                        <Column width="5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColStorageLocation}" /></Column>
+                        <Column hAlign="End" width="7rem"><Text text="{i18n>giColAvailableStock}" /></Column>
                         <Column width="6rem" hAlign="Center"><Text text="{i18n>giColAction}" /></Column>
                     </columns>
                     <items>

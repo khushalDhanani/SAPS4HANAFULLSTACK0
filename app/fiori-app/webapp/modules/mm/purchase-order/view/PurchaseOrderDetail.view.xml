@@ -391,7 +391,7 @@
                                     </Column>
 
                                     <!-- 7. Total Net Amount -->
-                                    <Column id="colItemNetAmount" width="8rem" hAlign="End" importance="High">
+                                    <Column id="colItemNetAmount" width="8rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium">
                                         <Text text="{i18n>colNetAmount}" />
                                     </Column>
 

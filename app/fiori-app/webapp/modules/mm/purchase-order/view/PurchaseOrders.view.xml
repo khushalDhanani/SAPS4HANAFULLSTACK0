@@ -230,7 +230,7 @@
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
-                        <Column id="colPO" width="11rem" sortIndicator="None">
+                        <Column id="colPO" width="9rem" sortIndicator="None">
                             <header>
                                 <Link id="linkColPO" text="{i18n>colPurchaseOrder}" press=".onSortColumn">
                                     <customData>
@@ -239,7 +239,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colSup" width="15rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colSup" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColSup" text="{i18n>colSupplier}" press=".onSortColumn">
                                     <customData>
@@ -248,7 +248,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colCo" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colCo" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColCo" text="{i18n>colCompany}" press=".onSortColumn">
                                     <customData>
@@ -257,7 +257,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colOrg" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colOrg" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColOrg" text="{i18n>colPurchasingOrg}" press=".onSortColumn">
                                     <customData>
@@ -266,7 +266,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colDate" width="10rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="Descending">
+                        <Column id="colDate" width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" sortIndicator="Descending">
                             <header>
                                 <Link id="linkColDate" text="{i18n>colCreationDate}" press=".onSortColumn">
                                     <customData>
@@ -275,7 +275,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colCreatedBy" width="12rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
+                        <Column id="colCreatedBy" width="10rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" sortIndicator="None">
                             <header>
                                 <Link id="linkColCreatedBy" text="{i18n>colCreatedBy}" press=".onSortColumn">
                                     <customData>
@@ -284,7 +284,7 @@
                                 </Link>
                             </header>
                         </Column>
-                        <Column id="colStat" width="10rem" hAlign="Center" sortIndicator="None">
+                        <Column id="colStat" width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="Center" sortIndicator="None">
                             <header>
                                 <Link id="linkColStat" text="{i18n>colStatus}" press=".onSortColumn">
                                     <customData>

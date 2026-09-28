@@ -169,14 +169,14 @@
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
-                        <Column width="9rem"><Text text="{i18n>ordersDueColSalesOrder}" /></Column>
-                        <Column width="6rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>ordersDueColItemSchedLine}" /></Column>
-                        <Column width="14rem"><Text text="{i18n>ordersDueColShipTo}" /></Column>
-                        <Column width="8rem"><Text text="{i18n>ordersDueColShippingPoint}" /></Column>
-                        <Column width="10rem"><Text text="{i18n>ordersDueColGoodsIssueDate}" /></Column>
-                        <Column width="8rem" hAlign="Center"><Text text="{i18n>ordersDueColDeliveryBlock}" /></Column>
-                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>ordersDueColApprovalStatus}" /></Column>
-                        <Column width="9rem" hAlign="Center"><Text text="{i18n>ordersDueColAction}" /></Column>
+                        <Column width="8rem"><Text text="{i18n>ordersDueColSalesOrder}" /></Column>
+                        <Column width="5.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColItemSchedLine}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColShipTo}" /></Column>
+                        <Column width="7.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColShippingPoint}" /></Column>
+                        <Column width="8rem" hAlign="End"><Text text="{i18n>ordersDueColGoodsIssueDate}" /></Column>
+                        <Column width="7.5rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColDeliveryBlock}" /></Column>
+                        <Column width="7.5rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColApprovalStatus}" /></Column>
+                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColAction}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Inactive">

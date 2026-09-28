@@ -223,13 +223,13 @@
                         autoPopinMode="true"
                         popinLayout="GridSmall">
                         <columns>
-                            <Column width="4rem" importance="High"><Text text="{i18n>salesOrderColItem}" /></Column>
+                            <Column width="3.5rem" importance="High"><Text text="{i18n>salesOrderColItem}" /></Column>
                             <Column importance="High"><Text text="{i18n>salesOrderColMaterialProduct}" /></Column>
-                            <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="{i18n>salesOrderColDescription}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColDescription}" /></Column>
                             <Column width="6rem" hAlign="End" importance="High"><Text text="{i18n>salesOrderColQuantity}" /></Column>
-                            <Column width="5rem" importance="High"><Text text="{i18n>salesOrderColUnit}" /></Column>
-                            <Column width="5.5rem" importance="High"><Label text="{i18n>salesOrderColPlant}" required="true" /></Column>
-                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Medium"><Text text="{i18n>salesOrderColNetPrice}" /></Column>
+                            <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColUnit}" /></Column>
+                            <Column width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Label text="{i18n>salesOrderColPlant}" required="true" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColNetPrice}" /></Column>
                             <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColNetAmount}" /></Column>
                         </columns>
                         <items>

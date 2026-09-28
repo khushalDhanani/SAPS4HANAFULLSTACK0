@@ -111,22 +111,22 @@
                             </OverflowToolbar>
                         </headerToolbar>
                         <columns>
-                            <Column id="colNewItemNo" width="4rem">
+                            <Column id="colNewItemNo" width="3rem">
                                 <Text text="#" />
                             </Column>
-                            <Column id="colNewItemMaterial" width="11rem">
+                            <Column id="colNewItemMaterial">
                                 <Text text="{i18n>colReturnMaterial}" />
                             </Column>
-                            <Column id="colNewItemQty" width="8rem">
+                            <Column id="colNewItemQty" width="6rem">
                                 <Text text="{i18n>colReturnQuantity}" />
                             </Column>
-                            <Column id="colNewItemUnit" width="6rem">
+                            <Column id="colNewItemUnit" width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                                 <Text text="{i18n>colUnit}" />
                             </Column>
-                            <Column id="colNewItemPlant" width="7rem">
+                            <Column id="colNewItemPlant" width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                                 <Text text="{i18n>colReturnPlant}" />
                             </Column>
-                            <Column id="colNewItemStorage" width="7rem">
+                            <Column id="colNewItemStorage" width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                                 <Text text="{i18n>colReturnStorageLocation}" />
                             </Column>
                         </columns>
