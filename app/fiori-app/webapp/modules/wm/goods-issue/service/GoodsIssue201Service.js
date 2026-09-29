@@ -49,7 +49,6 @@ sap.ui.define([
                 Batch: oPayload.Batch ? String(oPayload.Batch).trim().toUpperCase() : "",
                 PostingDate: oPayload.PostingDate || null,
                 DocumentDate: oPayload.DocumentDate || null,
-                MaterialDocumentHeaderText: oPayload.HeaderText || ("GI CC " + sCC),
                 SerialNumbers: aSerials,
                 GLAccount: oPayload.GLAccount ? String(oPayload.GLAccount).trim() : "",
                 ReservationNo: "",

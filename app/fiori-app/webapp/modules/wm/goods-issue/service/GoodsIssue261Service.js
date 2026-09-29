@@ -55,7 +55,6 @@ sap.ui.define([
                 Batch: oPayload.Batch ? String(oPayload.Batch).trim().toUpperCase() : "",
                 PostingDate: oPayload.PostingDate || null,
                 DocumentDate: oPayload.DocumentDate || null,
-                MaterialDocumentHeaderText: oPayload.HeaderText || ("GI Resv " + sResv),
                 SerialNumbers: aSerials,
                 DifferenceQty: 0,
                 DifferenceReason: "",

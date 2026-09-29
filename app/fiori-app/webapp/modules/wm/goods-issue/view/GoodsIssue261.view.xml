@@ -189,8 +189,7 @@
                             <!-- Conditional: Batch Management -->
                             <core:Title
                                 id="titleBatchManagement261"
-                                text="{i18n>gi261TitleBatchManagement}"
-                                visible="{gi261>/isBatchManaged}" />
+                                text="{i18n>gi261TitleBatchManagement}" />
 
                             <Label
                                 id="lblBatch261"

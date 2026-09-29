@@ -389,6 +389,19 @@ sap.ui.define([
             GoodsIssue201Service.postGoodsIssue(oPayload)
                 .then(function (res) {
                     that._oModel.setProperty("/busy", false);
+
+                    // Honest outcome: a QUEUED result (no SAP material document) means SAP has NOT
+                    // persisted the document - it was only recorded in the dispatch queue while the
+                    // S/4HANA Gateway service is inactive. Never claim a successful SAP posting or
+                    // offer reversal for a document that does not exist in SAP.
+                    if (res && (res.Queued === true || !res.MaterialDocument)) {
+                        that._oModel.setProperty("/hasPosted", false);
+                        MessageBox.warning(res.Message || that.getText("giPostQueuedMsg"), {
+                            title: that.getText("giPostQueuedTitle")
+                        });
+                        return;
+                    }
+
                     that._oModel.setProperty("/hasPosted", true);
                     that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
                     that._oModel.setProperty("/postedYear", res.MaterialDocYear || new Date().getFullYear().toString());
