@@ -1,0 +1,303 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue261"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="pageGoodsIssue261"
+        title="{i18n>gi261PageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        busy="{gi261>/busy}"
+        busyIndicatorDelay="0"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <ObjectStatus
+                id="statMvtBadge261"
+                text="{i18n>gi261MovementTypeBadge}"
+                state="Information"
+                icon="sap-icon://expense-report"
+                class="sapUiTinyMarginEnd" />
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+
+                <!-- 1. Posted Document Success Banner (with Reversal Trigger) -->
+                <MessageStrip
+                    id="stripPostSuccess261"
+                    text="{parts: [{path: 'gi261>/postedDocument'}, {path: 'gi261>/postedYear'}], formatter: '.formatSuccessBanner'}"
+                    type="Success"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{gi261>/hasPosted}"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link
+                            id="lnkReverse261"
+                            text="{i18n>gi261ActionReverseNow}"
+                            press=".onReverseGoodsIssue"
+                            enabled="{= !${gi261>/reversalBusy} }" />
+                    </link>
+                </MessageStrip>
+
+                <!-- 2. Reversal Success Banner -->
+                <MessageStrip
+                    id="stripReversalSuccess261"
+                    text="{parts: [{path: 'gi261>/reversalDocument'}, {path: 'gi261>/reversalYear'}], formatter: '.formatReversalBanner'}"
+                    type="Information"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{gi261>/hasReversed}"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- 3. Form Container -->
+                <Panel
+                    id="pnlGeneralData261"
+                    headerText="{i18n>gi261SectionGeneralData}"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+
+                    <f:SimpleForm
+                        id="formGoodsIssue261"
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="3"
+                        labelSpanL="3"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="2"
+                        emptySpanL="2"
+                        emptySpanM="1"
+                        emptySpanS="0"
+                        columnsXL="1"
+                        columnsL="1"
+                        columnsM="1"
+                        singleContainerFullSize="false">
+                        <f:content>
+
+                            <!-- Reservation Assignment (Mandatory - no unplanned posting path exists) -->
+                            <core:Title id="titleReservationAssignment261" text="{i18n>gi261TitleReservationAssignment}" />
+
+                            <Label id="lblReservationNo261" text="{i18n>gi261ReservationNo}" required="true" />
+                            <Input
+                                id="inReservationNo261"
+                                value="{gi261>/reservationNo}"
+                                placeholder="{i18n>gi261ReservationNoPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReservationValueHelp"
+                                editable="false"
+                                valueState="{= ${gi261>/errors/reservationNo} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/reservationNo}"
+                                maxLength="10" />
+
+                            <Label id="lblReservationItem261" text="{i18n>gi261ReservationItem}" required="true" />
+                            <Input
+                                id="inReservationItem261"
+                                value="{gi261>/reservationItem}"
+                                placeholder="{i18n>gi261ReservationItemPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReservationValueHelp"
+                                change=".onReservationItemChange"
+                                valueState="{= ${gi261>/errors/reservationItem} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/reservationItem}"
+                                maxLength="4" />
+
+                            <Label id="lblOrderNo261" text="{i18n>gi261OrderNo}" visible="{= !!${gi261>/orderNo} }" />
+                            <Text
+                                id="txtOrderNo261"
+                                text="{gi261>/orderNo}"
+                                class="sapUiTinyMarginTop fontBold"
+                                visible="{= !!${gi261>/orderNo} }" />
+
+                            <!-- Material & Location - read-only, derived from the resolved reservation item -->
+                            <core:Title id="titleMaterialLocation261" text="{i18n>gi261TitleMaterialLocation}" />
+
+                            <Label id="lblMaterial261" text="{i18n>gi261Material}" />
+                            <Text id="txtMaterial261" text="{gi261>/material}" />
+
+                            <Label id="lblMaterialDesc261" text="{i18n>gi261MaterialDesc}" visible="{= !!${gi261>/materialName} }" />
+                            <Text
+                                id="txtMaterialDesc261"
+                                text="{gi261>/materialName}"
+                                class="sapUiTinyMarginTop fontBold"
+                                visible="{= !!${gi261>/materialName} }" />
+
+                            <Label id="lblPlant261" text="{i18n>gi261Plant}" />
+                            <Text id="txtPlant261" text="{gi261>/plant}" />
+
+                            <Label id="lblStorageLocation261" text="{i18n>gi261StorageLocation}" />
+                            <Text id="txtStorageLocation261" text="{gi261>/storageLocation}" />
+
+                            <!-- Quantity & Posting Dates -->
+                            <core:Title id="titleQuantityDates261" text="{i18n>gi261TitleQuantityDates}" />
+
+                            <Label id="lblQuantity261" text="{i18n>gi261Quantity}" required="true" />
+                            <HBox id="boxQuantityUnit261" alignItems="Center">
+                                <Input
+                                    id="inQuantity261"
+                                    value="{gi261>/quantity}"
+                                    type="Number"
+                                    liveChange=".onQuantityLiveChange"
+                                    valueState="{= ${gi261>/errors/quantity} ? 'Error' : 'None' }"
+                                    valueStateText="{gi261>/errors/quantity}"
+                                    width="10rem"
+                                    class="sapUiTinyMarginEnd" />
+                                <Input
+                                    id="inUnit261"
+                                    value="{gi261>/unit}"
+                                    editable="{gi261>/isUnitEditable}"
+                                    liveChange=".onFieldLiveChange"
+                                    valueState="{= ${gi261>/errors/unit} ? 'Error' : 'None' }"
+                                    valueStateText="{gi261>/errors/unit}"
+                                    width="6rem"
+                                    maxLength="3" />
+                            </HBox>
+
+                            <Label id="lblPostingDate261" text="{i18n>gi261PostingDate}" required="true" />
+                            <DatePicker
+                                id="dpPostingDate261"
+                                value="{gi261>/postingDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="medium"
+                                change=".onFieldLiveChange"
+                                valueState="{= ${gi261>/errors/postingDate} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/postingDate}" />
+
+                            <Label id="lblDocumentDate261" text="{i18n>gi261DocumentDate}" required="true" />
+                            <DatePicker
+                                id="dpDocumentDate261"
+                                value="{gi261>/documentDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="medium"
+                                change=".onFieldLiveChange"
+                                valueState="{= ${gi261>/errors/documentDate} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/documentDate}" />
+
+                            <Label id="lblHeaderText261" text="{i18n>gi261HeaderText}" />
+                            <Input
+                                id="inHeaderText261"
+                                value="{gi261>/headerText}"
+                                placeholder="{i18n>gi261HeaderTextPlaceholder}"
+                                maxLength="25" />
+
+                            <!-- Conditional: Batch Management -->
+                            <core:Title
+                                id="titleBatchManagement261"
+                                text="{i18n>gi261TitleBatchManagement}"
+                                visible="{gi261>/isBatchManaged}" />
+
+                            <Label
+                                id="lblBatch261"
+                                text="{i18n>gi261Batch}"
+                                required="{gi261>/isBatchManaged}"
+                                visible="{gi261>/isBatchManaged}" />
+                            <Input
+                                id="inBatch261"
+                                value="{gi261>/batch}"
+                                placeholder="{i18n>gi261BatchPlaceholder}"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi261>/errors/batch} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/batch}"
+                                visible="{gi261>/isBatchManaged}"
+                                maxLength="10" />
+
+                        </f:content>
+                    </f:SimpleForm>
+                </Panel>
+
+                <!-- 4. Conditional: Serial Numbers Management -->
+                <Panel
+                    id="pnlSerialManagement261"
+                    headerText="{i18n>gi261TitleSerialManagement}"
+                    expandable="false"
+                    visible="{gi261>/isSerialManaged}"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Input
+                                id="inSerialScan261"
+                                value="{gi261>/serialInput}"
+                                placeholder="{i18n>gi261SerialScanPlaceholder}"
+                                submit=".onSerialInputSubmit"
+                                width="18rem"
+                                maxLength="18"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnAddSerial261"
+                                text="{i18n>gi261BtnAddSerial}"
+                                icon="sap-icon://bar-code"
+                                press=".onAddSerialPress"
+                                class="sapUiTinyMarginEnd" />
+                            <ObjectStatus
+                                id="statSerialCount261"
+                                text="{= ${gi261>/serialNumbers}.length + ' / ' + ${gi261>/quantity} + ' ' + ${i18n>gi261SerialsScanned} }"
+                                state="{= ${gi261>/serialNumbers}.length === ${gi261>/quantity} ? 'Success' : 'Warning' }" />
+                        </HBox>
+
+                        <Text
+                            id="txtSerialError261"
+                            text="{gi261>/errors/serials}"
+                            class="sapUiTinyMarginBottom"
+                            visible="{= !!${gi261>/errors/serials} }" />
+
+                        <Table
+                            id="tblSerialNumbers261"
+                            items="{gi261>/serialNumbers}"
+                            noDataText="{i18n>gi261NoSerialsScanned}"
+                            width="100%">
+                            <columns>
+                                <Column id="colSerialIndex261" width="4rem"><Text text="#" /></Column>
+                                <Column id="colSerialNumber261"><Text text="{i18n>gi261ColSerialNumber}" /></Column>
+                                <Column id="colSerialStatus261" width="10rem"><Text text="{i18n>gi261ColSerialStatus}" /></Column>
+                                <Column id="colSerialAction261" width="4rem" hAlign="End"><Text text="" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{= ${path: ''} ? '' : '' }" />
+                                        <Text text="{gi261>}" class="fontBold" />
+                                        <ObjectStatus text="{i18n>gi261SerialPendingStockVerify}" state="Information" />
+                                        <Button
+                                            icon="sap-icon://delete"
+                                            type="Transparent"
+                                            tooltip="{i18n>gi261BtnDeleteSerial}"
+                                            press=".onDeleteSerial" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
+            </VBox>
+        </content>
+
+        <!-- Footer Actions -->
+        <footer>
+            <Toolbar id="tbGoodsIssue261">
+                <Button
+                    id="btnResetForm261"
+                    text="{i18n>gi261BtnReset}"
+                    icon="sap-icon://refresh"
+                    type="Transparent"
+                    press=".onResetForm" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnPostGoodsIssue261"
+                    text="{i18n>gi261BtnPost}"
+                    icon="sap-icon://save"
+                    type="Emphasized"
+                    enabled="{gi261>/isValid}"
+                    press=".onPostGoodsIssue" />
+            </Toolbar>
+        </footer>
+
+    </Page>
+</mvc:View>

@@ -1,0 +1,328 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue301"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="pageGoodsIssue301"
+        title="{i18n>gi301PageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        busy="{gi301>/busy}"
+        busyIndicatorDelay="0"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <ObjectStatus
+                id="statMvtBadge301"
+                text="{i18n>gi301MovementTypeBadge}"
+                state="Information"
+                icon="sap-icon://expense-report"
+                class="sapUiTinyMarginEnd" />
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+
+                <!-- 1. Posted Document Success Banner (with Reversal Trigger) -->
+                <MessageStrip
+                    id="stripPostSuccess301"
+                    text="{parts: [{path: 'gi301>/postedDocument'}, {path: 'gi301>/postedYear'}], formatter: '.formatSuccessBanner'}"
+                    type="Success"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{gi301>/hasPosted}"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link
+                            id="lnkReverse301"
+                            text="{i18n>gi301ActionReverseNow}"
+                            press=".onReverseGoodsIssue"
+                            enabled="{= !${gi301>/reversalBusy} }" />
+                    </link>
+                </MessageStrip>
+
+                <!-- 2. Reversal Success Banner -->
+                <MessageStrip
+                    id="stripReversalSuccess301"
+                    text="{parts: [{path: 'gi301>/reversalDocument'}, {path: 'gi301>/reversalYear'}], formatter: '.formatReversalBanner'}"
+                    type="Information"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{gi301>/hasReversed}"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- 3. Form Container -->
+                <Panel
+                    id="pnlGeneralData301"
+                    headerText="{i18n>gi301SectionGeneralData}"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+
+                    <f:SimpleForm
+                        id="formGoodsIssue301"
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="3"
+                        labelSpanL="3"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="2"
+                        emptySpanL="2"
+                        emptySpanM="1"
+                        emptySpanS="0"
+                        columnsXL="1"
+                        columnsL="1"
+                        columnsM="1"
+                        singleContainerFullSize="false">
+                        <f:content>
+
+                            <!-- Reservation Assignment (Mandatory - no unplanned posting path exists) -->
+                            <core:Title id="titleReservationAssignment301" text="{i18n>gi301TitleReservationAssignment}" />
+
+                            <Label id="lblReservationNo301" text="{i18n>gi301ReservationNo}" required="true" />
+                            <Input
+                                id="inReservationNo301"
+                                value="{gi301>/reservationNo}"
+                                placeholder="{i18n>gi301ReservationNoPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReservationValueHelp"
+                                editable="false"
+                                valueState="{= ${gi301>/errors/reservationNo} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/reservationNo}"
+                                maxLength="10" />
+
+                            <Label id="lblReservationItem301" text="{i18n>gi301ReservationItem}" required="true" />
+                            <Input
+                                id="inReservationItem301"
+                                value="{gi301>/reservationItem}"
+                                placeholder="{i18n>gi301ReservationItemPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReservationValueHelp"
+                                change=".onReservationItemChange"
+                                valueState="{= ${gi301>/errors/reservationItem} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/reservationItem}"
+                                maxLength="4" />
+
+                            <Label id="lblOrderNo301" text="{i18n>gi301OrderNo}" visible="{= !!${gi301>/orderNo} }" />
+                            <Text
+                                id="txtOrderNo301"
+                                text="{gi301>/orderNo}"
+                                class="sapUiTinyMarginTop fontBold"
+                                visible="{= !!${gi301>/orderNo} }" />
+
+                            <!-- Material & Location - read-only, derived from the resolved reservation item -->
+                            <core:Title id="titleMaterialLocation301" text="{i18n>gi301TitleMaterialLocation}" />
+
+                            <Label id="lblMaterial301" text="{i18n>gi301Material}" />
+                            <Text id="txtMaterial301" text="{gi301>/material}" />
+
+                            <Label id="lblMaterialDesc301" text="{i18n>gi301MaterialDesc}" visible="{= !!${gi301>/materialName} }" />
+                            <Text
+                                id="txtMaterialDesc301"
+                                text="{gi301>/materialName}"
+                                class="sapUiTinyMarginTop fontBold"
+                                visible="{= !!${gi301>/materialName} }" />
+
+                            <Label id="lblPlant301" text="{i18n>gi301Plant}" />
+                            <Text id="txtPlant301" text="{gi301>/plant}" />
+
+                            <Label id="lblStorageLocation301" text="{i18n>gi301StorageLocation}" />
+                            <Text id="txtStorageLocation301" text="{gi301>/storageLocation}" />
+
+                            <!-- Receiving Plant / Storage Location (OPTIONAL - Transfer Posting) -->
+                            <core:Title id="titleReceivingLocation301" text="{i18n>gi301TitleReceivingLocation}" />
+
+                            <Label id="lblReceivingPlant301" text="{i18n>gi301ReceivingPlant}" />
+                            <Input
+                                id="inReceivingPlant301"
+                                value="{gi301>/receivingPlant}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReceivingPlantValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi301>/errors/receivingPlant} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/receivingPlant}"
+                                maxLength="4" />
+
+                            <Label id="lblReceivingStorageLocation301" text="{i18n>gi301ReceivingStorageLocation}" />
+                            <Input
+                                id="inReceivingStorageLocation301"
+                                value="{gi301>/receivingStorageLocation}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onReceivingStorageLocationValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi301>/errors/receivingStorageLocation} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/receivingStorageLocation}"
+                                maxLength="4" />
+
+                            <!-- Quantity & Posting Dates -->
+                            <core:Title id="titleQuantityDates301" text="{i18n>gi301TitleQuantityDates}" />
+
+                            <Label id="lblQuantity301" text="{i18n>gi301Quantity}" required="true" />
+                            <HBox id="boxQuantityUnit301" alignItems="Center">
+                                <Input
+                                    id="inQuantity301"
+                                    value="{gi301>/quantity}"
+                                    type="Number"
+                                    liveChange=".onQuantityLiveChange"
+                                    valueState="{= ${gi301>/errors/quantity} ? 'Error' : 'None' }"
+                                    valueStateText="{gi301>/errors/quantity}"
+                                    width="10rem"
+                                    class="sapUiTinyMarginEnd" />
+                                <Input
+                                    id="inUnit301"
+                                    value="{gi301>/unit}"
+                                    editable="{gi301>/isUnitEditable}"
+                                    liveChange=".onFieldLiveChange"
+                                    valueState="{= ${gi301>/errors/unit} ? 'Error' : 'None' }"
+                                    valueStateText="{gi301>/errors/unit}"
+                                    width="6rem"
+                                    maxLength="3" />
+                            </HBox>
+
+                            <Label id="lblPostingDate301" text="{i18n>gi301PostingDate}" required="true" />
+                            <DatePicker
+                                id="dpPostingDate301"
+                                value="{gi301>/postingDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="medium"
+                                change=".onFieldLiveChange"
+                                valueState="{= ${gi301>/errors/postingDate} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/postingDate}" />
+
+                            <Label id="lblDocumentDate301" text="{i18n>gi301DocumentDate}" required="true" />
+                            <DatePicker
+                                id="dpDocumentDate301"
+                                value="{gi301>/documentDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="medium"
+                                change=".onFieldLiveChange"
+                                valueState="{= ${gi301>/errors/documentDate} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/documentDate}" />
+
+                            <Label id="lblHeaderText301" text="{i18n>gi301HeaderText}" />
+                            <Input
+                                id="inHeaderText301"
+                                value="{gi301>/headerText}"
+                                placeholder="{i18n>gi301HeaderTextPlaceholder}"
+                                maxLength="25" />
+
+                            <!-- Conditional: Batch Management -->
+                            <core:Title
+                                id="titleBatchManagement301"
+                                text="{i18n>gi301TitleBatchManagement}"
+                                visible="{gi301>/isBatchManaged}" />
+
+                            <Label
+                                id="lblBatch301"
+                                text="{i18n>gi301Batch}"
+                                required="{gi301>/isBatchManaged}"
+                                visible="{gi301>/isBatchManaged}" />
+                            <Input
+                                id="inBatch301"
+                                value="{gi301>/batch}"
+                                placeholder="{i18n>gi301BatchPlaceholder}"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi301>/errors/batch} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/batch}"
+                                visible="{gi301>/isBatchManaged}"
+                                maxLength="10" />
+
+                        </f:content>
+                    </f:SimpleForm>
+                </Panel>
+
+                <!-- 4. Conditional: Serial Numbers Management -->
+                <Panel
+                    id="pnlSerialManagement301"
+                    headerText="{i18n>gi301TitleSerialManagement}"
+                    expandable="false"
+                    visible="{gi301>/isSerialManaged}"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Input
+                                id="inSerialScan301"
+                                value="{gi301>/serialInput}"
+                                placeholder="{i18n>gi301SerialScanPlaceholder}"
+                                submit=".onSerialInputSubmit"
+                                width="18rem"
+                                maxLength="18"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnAddSerial301"
+                                text="{i18n>gi301BtnAddSerial}"
+                                icon="sap-icon://bar-code"
+                                press=".onAddSerialPress"
+                                class="sapUiTinyMarginEnd" />
+                            <ObjectStatus
+                                id="statSerialCount301"
+                                text="{= ${gi301>/serialNumbers}.length + ' / ' + ${gi301>/quantity} + ' ' + ${i18n>gi301SerialsScanned} }"
+                                state="{= ${gi301>/serialNumbers}.length === ${gi301>/quantity} ? 'Success' : 'Warning' }" />
+                        </HBox>
+
+                        <Text
+                            id="txtSerialError301"
+                            text="{gi301>/errors/serials}"
+                            class="sapUiTinyMarginBottom"
+                            visible="{= !!${gi301>/errors/serials} }" />
+
+                        <Table
+                            id="tblSerialNumbers301"
+                            items="{gi301>/serialNumbers}"
+                            noDataText="{i18n>gi301NoSerialsScanned}"
+                            width="100%">
+                            <columns>
+                                <Column id="colSerialIndex301" width="4rem"><Text text="#" /></Column>
+                                <Column id="colSerialNumber301"><Text text="{i18n>gi301ColSerialNumber}" /></Column>
+                                <Column id="colSerialStatus301" width="10rem"><Text text="{i18n>gi301ColSerialStatus}" /></Column>
+                                <Column id="colSerialAction301" width="4rem" hAlign="End"><Text text="" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{= ${path: ''} ? '' : '' }" />
+                                        <Text text="{gi301>}" class="fontBold" />
+                                        <ObjectStatus text="{i18n>gi301SerialPendingStockVerify}" state="Information" />
+                                        <Button
+                                            icon="sap-icon://delete"
+                                            type="Transparent"
+                                            tooltip="{i18n>gi301BtnDeleteSerial}"
+                                            press=".onDeleteSerial" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
+            </VBox>
+        </content>
+
+        <!-- Footer Actions -->
+        <footer>
+            <Toolbar id="tbGoodsIssue301">
+                <Button
+                    id="btnResetForm301"
+                    text="{i18n>gi301BtnReset}"
+                    icon="sap-icon://refresh"
+                    type="Transparent"
+                    press=".onResetForm" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnPostGoodsIssue301"
+                    text="{i18n>gi301BtnPost}"
+                    icon="sap-icon://save"
+                    type="Emphasized"
+                    enabled="{gi301>/isValid}"
+                    press=".onPostGoodsIssue" />
+            </Toolbar>
+        </footer>
+
+    </Page>
+</mvc:View>

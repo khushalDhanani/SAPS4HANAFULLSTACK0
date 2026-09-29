@@ -292,6 +292,21 @@
           "target": "TargetGoodsIssue201"
         },
         {
+          "name": "wmGoodsIssue261",
+          "pattern": "wm/goods-issue/order-based-261",
+          "target": "TargetGoodsIssue261"
+        },
+        {
+          "name": "wmGoodsIssue301",
+          "pattern": "wm/goods-issue/plant-transfer-301",
+          "target": "TargetGoodsIssue301"
+        },
+        {
+          "name": "wmGoodsIssue311",
+          "pattern": "wm/goods-issue/sloc-transfer-311",
+          "target": "TargetGoodsIssue311"
+        },
+        {
           "name": "wmGoodsReceipt",
           "pattern": "wm/goods-receipt",
           "target": "TargetGoodsReceipt"
@@ -394,6 +409,21 @@
         "TargetGoodsIssue201": {
           "id": "goodsIssue201",
           "name": "GoodsIssue201",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue261": {
+          "id": "goodsIssue261",
+          "name": "GoodsIssue261",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue301": {
+          "id": "goodsIssue301",
+          "name": "GoodsIssue301",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue311": {
+          "id": "goodsIssue311",
+          "name": "GoodsIssue311",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsReceipt": {
