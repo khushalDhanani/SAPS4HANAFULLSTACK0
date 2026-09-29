@@ -98,10 +98,10 @@
                             tooltip="{i18n>giKpi201Subtitle}"
                             press=".onSelectKpi201"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
-                            class="{= ${dashboardView>/typeFilter} === '201' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                             <TileContent
                                 unit="{i18n>giKpiTotalPostings}"
-                                footer="{= ${dashboardView>/typeFilter} === '201' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }">
+                                footer="{i18n>giKpiViewPostings}">
                                 <NumericContent
                                     id="kpiTile201Val"
                                     value="{dashboardView>/kpis/mvt201/totalCount}"
@@ -119,10 +119,10 @@
                             tooltip="{i18n>giKpi261Subtitle}"
                             press=".onSelectKpi261"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
-                            class="{= ${dashboardView>/typeFilter} === '261' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                             <TileContent
                                 unit="{i18n>giKpiTotalPostings}"
-                                footer="{= ${dashboardView>/typeFilter} === '261' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }">
+                                footer="{i18n>giKpiViewPostings}">
                                 <NumericContent
                                     id="kpiTile261Val"
                                     value="{dashboardView>/kpis/mvt261/totalCount}"
@@ -140,10 +140,10 @@
                             tooltip="{i18n>giKpi301Subtitle}"
                             press=".onSelectKpi301"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
-                            class="{= ${dashboardView>/typeFilter} === '301' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                             <TileContent
                                 unit="{i18n>giKpiTotalPostings}"
-                                footer="{= ${dashboardView>/typeFilter} === '301' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }">
+                                footer="{i18n>giKpiViewPostings}">
                                 <NumericContent
                                     id="kpiTile301Val"
                                     value="{dashboardView>/kpis/mvt301/totalCount}"
@@ -161,10 +161,10 @@
                             tooltip="{i18n>giKpi311Subtitle}"
                             press=".onSelectKpi311"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
-                            class="{= ${dashboardView>/typeFilter} === '311' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                             <TileContent
                                 unit="{i18n>giKpiTotalPostings}"
-                                footer="{= ${dashboardView>/typeFilter} === '311' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }">
+                                footer="{i18n>giKpiViewPostings}">
                                 <NumericContent
                                     id="kpiTile311Val"
                                     value="{dashboardView>/kpis/mvt311/totalCount}"
@@ -182,10 +182,10 @@
                             tooltip="{i18n>giKpiOverallSubtitle}"
                             press=".onSelectKpiOverall"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
-                            class="{= ${dashboardView>/typeFilter} === 'ALL' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
+                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                             <TileContent
                                 unit="{i18n>giKpiTotalPostings}"
-                                footer="{= ${dashboardView>/typeFilter} === 'ALL' ? ${i18n>giFilteredActive} : ${i18n>giFilterTable} }">
+                                footer="{i18n>giKpiViewPostings}">
                                 <NumericContent
                                     id="kpiTileOverallVal"
                                     value="{dashboardView>/kpis/overall/totalCount}"

@@ -5945,6 +5945,46 @@
 - **Result**: Phase 2 gap list fully closed. Every "Shared = Y" posting layer is now isolated per type; the only remaining shared code is genuine type-agnostic infrastructure (transport, normalize primitives, queue, dashboard read service, reversal) with zero movement-type branching.
 - **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation for real SAP persistence.
 
+## 2026-09-29 18:00 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: "Implement PHASE 3 — Dashboard Wiring (target: direct navigation, no filter toggles)."
+- **State of each Phase 3 tile mapping**:
+  - Main Dashboard **EWM-tab** movement tiles (201/261/301/311) → **already wired to dedicated routes** `wmGoodsIssue{201,261,301,311}` (done in Stage 2); re-verified live (201 tile → `#/wm/goods-issue/cost-center-201`).
+  - GI-dashboard **"New X"** buttons → **already** dedicated routes (verified earlier).
+  - GI-dashboard **KPI tiles (201/261/301/311/Overall)** → **implemented this session**: removed the misleading filter toggle and switched to direct navigation.
+- **Change (GI-dashboard KPI tiles — the open Phase 3 item)**:
+  - The tiles previously toggled a `typeFilter` that drove a "Filter Table"/"Filtered (Active)" footer + an "active" highlight, **but nothing was actually filtered** (the 4 recent-postings tables are permanent/independent). That misleading filter-toggle UI is exactly Phase 3's target.
+  - **Controller** (`GoodsIssueDashboard.controller.js`): `_selectKpi(sType)` now simply `_scrollToSection(sType)` (no `setTypeFilter`); `onSelectKpiOverall` scrolls to the all-types distribution overview (`panelDistribution`, added to `SECTION_ID_BY_TYPE` as `ALL`). Pressing a movement-type tile jumps straight to that type's own recent-postings section; the Overall tile jumps to the distribution.
+  - **View** (`GoodsIssueDashboard.view.xml`): all 5 tiles now use a static footer `{i18n>giKpiViewPostings}` ("View postings") and a static CSS class — removed every `typeFilter` binding (0 remaining) and the toggle highlight.
+  - **i18n**: replaced the misleading `giFilterTable`/`giFilteredActive` with `giKpiViewPostings` in both bundles (parity).
+  - **Model** (`GoodsIssueDashboardModel.js`): removed the now-dead `typeFilter`/`activeKpiCard` state and the `setTypeFilter` method.
+  - **Tests** (`goodsIssueDashboardController.test.js`): dropped the `typeFilter`/`setTypeFilter` assertions; new test asserts pressing 201 scrolls `panelRecent201` and Overall scrolls `panelDistribution`, and that no `typeFilter` state exists.
+- **Executed commands & results**:
+  - `npx jest test/unit test/integration --no-coverage`: **110 suites, 1614/1614 passed**.
+  - `npm --prefix app/fiori-app run lint` (ui5lint): clean. `run build`: succeeded. `npx eslint srv`: 0 errors. `git diff --check`: clean. i18n `giKpiViewPostings` parity 1/1; no dangling `giFilterTable`/`giFilteredActive` refs.
+- **Live verification (running CAP, live S/4HANA, no console errors)**:
+  - GI-dashboard tiles now show honest footer "Total Postings, View postings" (was "Filter Table"); pressing the 301 tile scrolled directly to "Recent 301 Postings - Plant-to-Plant Transfer (50)" — direct navigation, no filter toggle, no "Filtered (Active)" text.
+  - Main-dashboard EWM-tab "201 • Cost Center" tile navigated directly to `#/wm/goods-issue/cost-center-201`.
+- **Result**: Phase 3 complete — every dashboard movement-type tile uses direct navigation (EWM-tab tiles → dedicated pages; GI-dashboard KPI tiles → their own postings section / distribution), with no filter toggles anywhere.
+- **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation for real SAP persistence.
+
+## 2026-09-29 18:30 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: "PHASE 4 — Sequencing (nothing breaks mid-way)" — the ordered rollout plan (steps 1–6).
+- **Confirmation the sequencing was followed (the suite stayed green at every step — the "nothing breaks mid-way" invariant held)**:
+  - **Step 1 (backend additively, per type)**: 4 `postGoodsIssueNNN` actions + 4 handlers + 4 validation + 4 normalize + 4 S/4 mappers + 4 client methods were added alongside the shared stack, each unit-tested in isolation, before anything was removed. ✔
+  - **Step 2 (switch frontend one type at a time)**: each `GoodsIssueNNNService.js` was repointed to `/postGoodsIssueNNN`; verified per type (Jest + live queue response for 261). ✔
+  - **Step 3 (repoint EWM-tab tiles)**: done independently. ✔
+  - **Step 4 (remove shared backend)**: shared `postGoodsIssue` action + branched handler/validation/mapper/normalize removed, client method reduced to a no-logic shim — only after all 4 types ran on dedicated paths and passed. ✔
+  - **Step 5 (delete legacy page)**: removed after confirming zero references (and corrected the one over-deletion — `GoodsIssueService` restored for the dashboard). ✔
+  - **Step 6 (re-run full validation + live re-verify)**: executed now (below). ✔
+- **Step 6 — final validation pass (this session)**:
+  - `npx cds compile srv`: OK. `npx eslint srv`: 0 errors (2 pre-existing warnings in untouched `reverseGoodsIssue`). `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. `git diff --check`: clean.
+  - `npx jest test/unit test/integration --no-coverage`: **110 suites, 1614/1614 passed** (`test/e2e` contains only purchase-order specs, unrelated to goods issue).
+  - **Live re-verify (running CAP, live S/4HANA, no console errors)**: all four "New X" buttons open their own dedicated isolated pages — 201→`#/wm/goods-issue/cost-center-201`, 261→`order-based-261`, 301→`plant-transfer-301`, 311→`sloc-transfer-311`. (Earlier this session: live 261 `POST /postGoodsIssue261 → 200` QUEUED; GI-dashboard KPI tile scroll; EWM-tab tile → dedicated page — all confirmed.)
+- **Result**: Phase 4 sequencing confirmed and its final validation pass is green. The full isolated per-type architecture (Phases 1–3) is in place, tested, and live-verified, with the shared stack removed and the legacy page deleted — and the suite was green at every intermediate step.
+- **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation to validate real SAP-persisted postings end to end (still queue-only until then).
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

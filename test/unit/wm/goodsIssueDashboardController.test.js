@@ -209,7 +209,6 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
         it('initializes default model with correct initial properties, including 4 independent recent-postings buckets', () => {
             const model = GoodsIssueDashboardModel.createModel();
             expect(model.getProperty('/loading')).toBe(true);
-            expect(model.getProperty('/typeFilter')).toBe('ALL');
             expect(model.getProperty('/trendPeriod')).toBe('30');
             expect(model.getProperty('/kpis/mvt201/totalCount')).toBe('-');
             expect(model.getProperty('/kpis/mvt261/totalCount')).toBe('-');
@@ -282,12 +281,6 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(model.getProperty('/recent/201/items').length).toBe(1);
         });
 
-        it('setTypeFilter only drives the KPI tile highlight - it no longer filters any table', () => {
-            const model = GoodsIssueDashboardModel.createModel();
-            GoodsIssueDashboardModel.setTypeFilter(model, '261');
-            expect(model.getProperty('/typeFilter')).toBe('261');
-            expect(model.getProperty('/activeKpiCard')).toBe('261');
-        });
     });
 
     describe('GoodsIssueDashboardController Lifecycle & User Actions', () => {
@@ -370,22 +363,22 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(model.getProperty('/recent/311/error')).toBe('');
         });
 
-        it('highlights the clicked KPI tile and scrolls to that type\'s own section (no more table filtering)', async () => {
-            mockRoutedService();
+        it('Phase 3: pressing a KPI tile scrolls directly to its section, with no filter toggle', () => {
             controller.onInit();
-            await controller.onRefresh();
-
-            controller.byIdRegistry.panelRecent201 = { getDomRef: () => null };
+            const scroll201 = jest.fn();
+            const scrollAll = jest.fn();
+            controller.byIdRegistry.panelRecent201 = { getDomRef: () => ({ scrollIntoView: scroll201 }) };
+            controller.byIdRegistry.panelDistribution = { getDomRef: () => ({ scrollIntoView: scrollAll }) };
 
             controller.onSelectKpi201();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('201');
+            expect(scroll201).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
 
-            // Click again toggles back to ALL
-            controller.onSelectKpi201();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
-
+            // The Overall tile jumps to the all-types distribution overview.
             controller.onSelectKpiOverall();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
+            expect(scrollAll).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+
+            // No filter state exists anymore.
+            expect(controller._getModel().getProperty('/typeFilter')).toBeUndefined();
         });
 
         it('scrolls to the matching section\'s DOM element when a KPI tile is clicked', () => {

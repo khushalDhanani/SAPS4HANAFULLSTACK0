@@ -14,7 +14,8 @@ sap.ui.define([
         "201": "panelRecent201",
         "261": "panelRecent261",
         "301": "panelRecent301",
-        "311": "panelRecent311"
+        "311": "panelRecent311",
+        "ALL": "panelDistribution"
     };
     // Each movement type has its own dedicated create page/route; the "New X" actions must open
     // that page, not the shared generic GoodsIssue page (route wmGoodsIssueCreateMode).
@@ -142,19 +143,14 @@ sap.ui.define([
         },
 
         // =============================================================
-        // KPI CARD SELECTION (highlight + scroll to that type's own section -
-        // there is no more combined/filterable table for these to filter)
+        // KPI CARD SELECTION (Phase 3: direct navigation, no filter toggle).
+        // Pressing a movement-type KPI tile jumps straight to that type's own
+        // recent-postings section; the Overall tile jumps to the all-types
+        // distribution overview. Nothing is filtered/toggled.
         // =============================================================
 
         _selectKpi: function (sType) {
-            var oModel = this._getModel();
-            var sCurrent = oModel.getProperty("/typeFilter");
-            var sNew = sCurrent === sType ? "ALL" : sType;
-            GoodsIssueDashboardModel.setTypeFilter(oModel, sNew);
-
-            if (sNew !== "ALL") {
-                this._scrollToSection(sNew);
-            }
+            this._scrollToSection(sType);
         },
 
         _scrollToSection: function (sType) {
@@ -184,7 +180,7 @@ sap.ui.define([
         },
 
         onSelectKpiOverall: function () {
-            GoodsIssueDashboardModel.setTypeFilter(this._getModel(), "ALL");
+            this._scrollToSection("ALL");
         },
 
         // =============================================================

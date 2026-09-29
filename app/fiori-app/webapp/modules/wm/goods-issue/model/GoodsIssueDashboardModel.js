@@ -117,8 +117,6 @@ sap.ui.define([
                     mvt311: { totalCount: "-", openPendingCount: "-", todayPostingsCount: "-" },
                     overall: { totalCount: "-", openPendingCount: "-", todayPostingsCount: "-" }
                 },
-                activeKpiCard: "ALL", // "ALL", "201", "261", "301", "311" - used only for tile highlight + scroll-to-section
-                typeFilter: "ALL",
 
                 // Movement Type Distribution - one independent mini-donut per type, all derived from
                 // the same server-computed Distribution array (see setServerData)
@@ -283,20 +281,6 @@ sap.ui.define([
         setRecentPostingsError: function (oModel, sType, sMessage) {
             oModel.setProperty("/recent/" + sType + "/loading", false);
             oModel.setProperty("/recent/" + sType + "/error", sMessage || "");
-        },
-
-        /**
-         * Update the active KPI tile highlight. The combined Recent Documents table (and its
-         * All/toggle filter) has been removed - each movement type now has its own permanent,
-         * independent table - so this no longer filters anything; it only drives the tile's
-         * "active" highlight class and the controller's scroll-to-section behavior.
-         * @param {sap.ui.model.json.JSONModel} oModel
-         * @param {string} sType - "ALL", "201", "261", "301", "311"
-         */
-        setTypeFilter: function (oModel, sType) {
-            var sClean = (sType || "ALL").toUpperCase();
-            oModel.setProperty("/typeFilter", sClean);
-            oModel.setProperty("/activeKpiCard", sClean);
         }
     };
 
