@@ -278,7 +278,7 @@
         },
         {
           "name": "wmGoodsIssue201Pending",
-          "pattern": "wm/goods-issue/201/pending:?query:",
+          "pattern": "wm/goods-issue/201/open-reservations:?query:",
           "target": "TargetGoodsIssue201Pending"
         },
         {

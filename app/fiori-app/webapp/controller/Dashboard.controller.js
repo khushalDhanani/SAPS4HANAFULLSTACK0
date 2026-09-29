@@ -408,8 +408,8 @@ sap.ui.define([
          */
         _navigateToGiFiltered: function (sMvtType) {
             // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201 opens its pending-reservations list (a pending-to-complete workflow); the others
-            // open their dedicated create pages directly.
+            // 201 opens its Open Reservations (201) list (a reservation-to-complete workflow); the
+            // others open their dedicated create pages directly.
             var mRoutes = {
                 "201": "wmGoodsIssue201Pending",
                 "261": "wmGoodsIssue261",

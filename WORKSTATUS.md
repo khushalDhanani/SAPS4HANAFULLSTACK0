@@ -6064,6 +6064,18 @@
 - **Result**: Step 4 done and live-verified — the full 201 pending-to-complete workflow now closes the loop: **EWM 201 tile → pending list → open + pre-fill → scan/confirm (auto-detect SU/serial/qty) → Complete/post (existing `postGoodsIssue201`) → return to pending with the item cleared and the document/queue outcome shown**. 201-only and isolated; real SAP-persisted document numbers await DS4 Gateway activation.
 - **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation so Complete returns a real Material Document number end to end.
 
+## 2026-09-29 22:35 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Relabel the 201 "Pending" page as "Open Reservations (201)" so scope is unambiguous (planned, reservation-based 201 items awaiting issue — not "all pending 201 work"); update i18n keys with no leftover generic "pending" wording. (Plus a separate design-only proposal for an unplanned-201 draft worklist — delivered in chat, not implemented.)
+- **Backend fact this rests on** (verified from code): the list's source is SAP `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` filtered `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false and GoodsMovementType eq '201'` — genuine **open reservations** (planned 201). Unplanned 201 has no such source by nature (no reservation exists), so a pending worklist for it would be a new app-side concept, not a reuse.
+- **Relabel (frontend only, 201-isolated)**:
+  - i18n keys `gi201Pending*` → `gi201OpenResv*` in both bundles (12 keys), with values reworded: page title **"Open Reservations (201) - Goods Issue to Cost Center"**, list title **"Open Reservations"**, no-data **"No open 201 reservations awaiting goods issue"**, load-error **"Failed to load open 201 reservations"**, and the completed-outcome messages now say "Cleared from the open reservations list" / "awaiting SAP S/4HANA Gateway activation". No generic "pending" wording remains (the unrelated `gi201SerialPendingStockVerify` = a per-serial stock-verification status, left as-is).
+  - View + controller updated to the renamed keys. Route pattern `wm/goods-issue/201/pending` → **`wm/goods-issue/201/open-reservations`** (route name unchanged, so `navTo`-by-name is unaffected). Dashboard code comment reworded.
+- **Executed commands & results**: `npx jest test/unit/wm/ test/unit/dashboard/`: 29 suites, **492/492 passed**. `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. manifest valid JSON. `git diff --check`: clean. No leftover generic "pending" in the 201 page i18n values.
+- **Live verification (no console errors)**: `#/wm/goods-issue/201/open-reservations` renders header **"Open Reservations (201) - Goods Issue to Cost Center"** and list **"Open Reservations (50)"** with the real reservations; no "Pending" wording visible.
+- **Result**: the page now unambiguously reads as planned/reservation-based **Open Reservations (201)**.
+- **Next recommended action**: Decide on the unplanned-201 draft worklist proposal (design delivered in chat), then commit/push to `origin/feature/CL01`.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).
