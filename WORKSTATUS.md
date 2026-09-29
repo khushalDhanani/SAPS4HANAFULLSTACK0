@@ -5849,6 +5849,31 @@
 - **Files changed (14)**: `GoodsIssue{201,261,301,311}.view.xml`, `GoodsIssue{201,261,301,311}.controller.js`, `GoodsIssue{201,261,301,311}Service.js`, `i18n.properties`, `i18n_en.properties`.
 - **Next recommended action**: Stage, commit, and push to `origin/feature/CL01`. Separately, hand Basis the DS4 Gateway-activation ticket so a real SAP-persisted goods issue (with a document number read back from SAP) can be validated end-to-end; decide whether to wire the "Header Text" field to SAP or remove the input.
 
+## 2026-09-29 14:20 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Approved plan — begin PHASE 1 (Target Architecture: one fully isolated per-type path 201/261/301/311 across every layer, zero shared/mixed movement-type logic). Build additively, test each step, keep the app working.
+- **Defaults taken (flagged for change)**: reverse stays one type-agnostic action (reversal = doc+year, no per-type logic); GI-dashboard KPI tiles keep filter+scroll (count tile belongs to the overview).
+- **Stage 1 complete — isolated PURE backend layers (validation + S/4 mapper) for all 4 types. Additive only; the existing shared stack is untouched and still serves the running app.**
+  - **Validation (new files under `srv/wm/goods-issue/validation/`)**:
+    - `common.js` — pure, type-agnostic field primitives (regexes, `isValidCalendarDate`, `checkQuantity/Material/Plant/StorageLocation/Unit/OptionalFourChar/Dates/SerialNumbers/Batch/ReservationRequired`, `buildResult`). Infrastructure only; no MovementType branching.
+    - `goodsIssue201.validation.js` → `validateGoodsIssue201Payload` (Cost Center mandatory, G/L rejected, reservation optional, no receiving).
+    - `goodsIssue261.validation.js` → `validateGoodsIssue261Payload` (Reservation No/Item mandatory, no Cost Center, optional G/L).
+    - `goodsIssue301.validation.js` / `goodsIssue311.validation.js` → `validateGoodsIssue{301,311}Payload` (Reservation mandatory, receiving plant/sloc optional, no Cost Center/G/L).
+    - Each file contains ONLY its own type's rules; the shared reservation rule lives in `common.js` (called by 261/301/311) so no type file imports another type file.
+  - **S/4 mappers (new files under `srv/integration/s4hana/wm/goods-issue/`)**:
+    - `s4common.js` — pure OData V2 helpers (`formatDateToODataV2`, `buildBaseItem`, `buildHeaderEnvelope`). No MovementType branching.
+    - `GoodsIssue201Mapper.js` (gmCode `03`, CostCenter, never GLAccount, no receiving), `GoodsIssue261Mapper.js` (gmCode `03`, reservation, optional GLAccount, no CostCenter), `GoodsIssue301Mapper.js` / `GoodsIssue311Mapper.js` (gmCode `04`, receiving plant/sloc, no CostCenter/GLAccount). Each emits only its own type's `A_MaterialDocumentHeader` payload.
+  - **New tests**:
+    - `test/unit/wm/goodsIssuePerTypeValidation.test.js` — 17 tests (per-type rules + isolation, e.g. 201 validator has no reservation rule; 261/301/311 have no Cost Center rule).
+    - `test/unit/wm/goodsIssuePerTypeMapper.test.js` — 6 tests (per-type S/4 payload, no cross-type field leakage).
+- **Executed commands & results**:
+  - `npx jest test/unit/wm/goodsIssuePerTypeValidation.test.js`: 17/17 passed.
+  - `npx jest test/unit/wm/goodsIssuePerTypeMapper.test.js`: 6/6 passed.
+  - `npx jest test/unit/wm/ test/integration/wm/ test/unit/dashboard/`: 27 suites, **542/542 passed** (519 prior + 23 new; zero regressions — shared stack unaffected).
+  - `npx eslint` on all new `srv` files: clean.
+- **Not yet done (Stage 2 — invasive, tightly coupled, changes the live OData contract + posting path)**: per-type S/4 posting-client entry methods; 4 CAP actions `postGoodsIssue{201,261,301,311}` + 4 handlers; rewire the 4 frontend services one type at a time; repoint EWM-tab tiles to dedicated routes; remove the shared `postGoodsIssue` action/handler/validation/mapper branches; delete the orphaned legacy `GoodsIssue.*` (`mode`-branched, 1,755-line) create page + its `wmGoodsIssueCreate`/`Mode` routes; add import-graph isolation tests. This stage changes the running OData surface and live-SAP posting code (cannot be fully live-verified while the DS4 Gateway service is inactive), so it is being checkpointed before proceeding.
+- **Next recommended action**: On confirmation, proceed with Stage 2 additively (new per-type actions/handlers/client methods alongside the shared stack → switch frontend per type with regression + live queue-response re-verify → remove shared stack + legacy page last).
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).
