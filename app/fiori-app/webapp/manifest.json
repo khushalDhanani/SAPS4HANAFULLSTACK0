@@ -287,6 +287,11 @@
           "target": "TargetGoodsIssueCreate"
         },
         {
+          "name": "wmGoodsIssue201",
+          "pattern": "wm/goods-issue/cost-center-201",
+          "target": "TargetGoodsIssue201"
+        },
+        {
           "name": "wmGoodsReceipt",
           "pattern": "wm/goods-receipt",
           "target": "TargetGoodsReceipt"
@@ -384,6 +389,11 @@
         "TargetGoodsIssueCreate": {
           "id": "goodsIssueCreate",
           "name": "GoodsIssue",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue201": {
+          "id": "goodsIssue201",
+          "name": "GoodsIssue201",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsReceipt": {

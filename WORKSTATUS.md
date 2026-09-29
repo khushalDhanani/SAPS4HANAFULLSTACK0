@@ -4627,6 +4627,7 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-29 10:55 IST (uncommitted)**: Created and validated dedicated UI page for Movement Type 201 (Goods Issue to Cost Center) at route `#/wm/goods-issue/cost-center-201` without touching any existing goods-issue view/controller/model. Delivered `GoodsIssue201.view.xml`, `GoodsIssue201.controller.js`, `GoodsIssue201Model.js`, `GoodsIssue201Service.js`, registered route/target in `manifest.json`, added 35+ scoped `gi201*` i18n keys with 100% key parity, and added unit tests (`goodsIssue201Page.test.js`). Verified: UI5 linter 0 findings, UI5 build clean, 20/20 WM test suites passing (413/413 tests, 100% green), and `git diff --check` clean.
 - **2026-09-29 10:40 IST (uncommitted)**: Implemented and validated complete SAP S/4HANA backend for Movement 201 (Goods Issue to Cost Center) and 202 Reversal (`CancelHeader`) adhering strictly to AGENTS.md layering architecture. Added pure validation layer (`goodsIssue.validation.js`), CAP domain normalization mapper (`goodsIssue.mapper.js`), technical S/4 OData V2 mapper (`GoodsIssueMapper.js`), serial status pre-check (`validateSerialStatus` verifying `ESTO` / unrestricted in stock in `GoodsIssueStockUnitClient.js` before post), posting and `CancelHeader` reversal in `GoodsIssuePostingClient.js` & `GoodsIssueAdapter.js`, queue outbox schema support (`GLAccount`, `PostingDate`, `DocumentDate`), and handler integration. Verified 100% green across all 19 WM test suites (402/402 tests passing, including 37 new tests for 201 validation, mapping, posting, serial pre-check, and reversal). `cds compile srv` clean; `git diff --check` clean.
 - **2026-09-28 16:50 IST (uncommitted)**: Integrated Movement Type 201 (Goods Issue for Cost Center) into the Goods Issue Multi-Movement Dashboard (`#/wm/goods-issue`). Discovered 54 authentic postings in live SAP `MATDOC` table and 53 authentic open reservations in `UI_RESERVATION_ITM_MNG_V2`. Expanded dashboard across all 4 movement types (201, 261, 301, 311): added 201 KPI card with purple theme (`#8E44AD`), 4-way distribution donut chart, 4-series daily trend line chart, Recent Documents table with Cost Center column, live Cost Center search, filter toggle, and create wizard routing (`#/wm/goods-issue/create/201`). All 14 WM test suites (346 tests) 100% green; UI5 linter 0 findings; UI5 build succeeded; `git diff --check` clean.
 - **2026-09-27 15:16 IST (uncommitted)**: Resolved missing KPI counts, UI infinite loops, and 404 network request cascades across Dashboard, Sales Inquiries, Sales Orders, Customer Returns, Purchase Orders, and Journal Entries. Fixed OData V4 invalid property bindings (`ExternalDocumentID`, `SalesInquiryDescription`) on `C_InquiryWL_F2370` that caused 100+ cascading 404s per page load. Corrected UI5 `ValueState` enum validation errors in `CustomerReturns.controller.js`. Extended live S/4HANA dashboard metrics backend in `PurchaseOrderAdapter.js` to query authentic counts for Orders Due for Delivery (1,078 live), Customer Invoices (508 live), and Customer Returns (183 live), binding them to Overview, SD, and EWM dashboard tiles. All 85 test suites (1,460 tests) 100% green; UI5 lint clean; UI5 build succeeded; `git diff --check` clean.
@@ -5712,16 +5713,64 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Stage, commit, and push the verified changes to `origin/feature/CL01`.
 
+## 2026-09-29 10:55 IST
+- **Agent**: Antigravity
+- **Request**: "Create a separate, dedicated UI page for Movement Type 201 (Goods Issue to Cost Center) — do not reuse or modify the generic goods-issue page or other movement types (261/301/311). Follow AGENTS.md. New route: #/wm/goods-issue/cost-center-201. New files only: view/GoodsIssue201.view.xml, controller/GoodsIssue201.controller.js, model/GoodsIssue201Model.js, service/GoodsIssue201Service.js, i18n keys scoped to this page only."
+- **Scope & Implementation Details**:
+  - **Zero Regression on Existing Views**: Left existing `GoodsIssue.view.xml`, `GoodsIssue.controller.js`, `GoodsIssueDashboard.view.xml`, and `GoodsIssueDashboard.controller.js` completely untouched.
+  - **Dedicated UI View (`app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`)**:
+    - Created dedicated Fiori page bound to route `#/wm/goods-issue/cost-center-201`.
+    - Shows exclusively Movement 201 relevant fields:
+      - Material (with Value Help & suggestions)
+      - Plant and Storage Location (with Value Help)
+      - Cost Center (mandatory asterisk, Value Help, uppercase)
+      - Quantity (>0, max 3 decimals) and Unit of Measure (derived/read-only)
+      - Posting Date and Document Date (defaulted to current date)
+      - Header Text (optional document note)
+      - Batch Management (conditionally rendered only if material is batch-managed)
+      - Serial Numbers scan/input table with count indicator (conditionally rendered only if material is serial-managed)
+      - G/L Account: read-only display field showing "Auto-determined by SAP (OBYC / GBB-VBR)", preventing manual tampering
+    - Absolute zero Reservation, Order, Network, or receiving Plant/SLoc fields.
+    - Integrated success banner with inline action button "Reverse (202)".
+  - **Dedicated Controller (`app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`)**:
+    - Extends `BaseController`.
+    - Handles real-time client-side validation across all fields.
+    - Wires Value Help dialogs for Cost Center, Material, Plant, and Storage Location.
+    - Automatically enriches material metadata (base unit, batch management, serial management, available stock).
+    - Serial scanning: enforces duplicate prevention, format checking, and exact count match.
+    - Submits Goods Issue via `GoodsIssue201Service.postGoodsIssue`, displaying SAP-returned Material Document number or exact backend failure error (e.g. locked cost center, stock deficit, period closed, serial already issued).
+    - Reversal flow: prompts confirmation and invokes `GoodsIssue201Service.reverseGoodsIssue` via `CancelHeader`.
+  - **Dedicated Model (`app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue201Model.js`)**:
+    - Provides initial state factory, pure validation function, serial number add/remove helpers, and clean backend payload builder.
+    - Dual UMD runtime support (UI5 AMD in browser, CommonJS in Jest).
+  - **Dedicated Service (`app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue201Service.js`)**:
+    - Wraps `ODataClient` to execute `/odata/v4/goods-issue/postGoodsIssue` and `/odata/v4/goods-issue/reverseGoodsIssue`.
+    - Helper queries for `MaterialVH`, `MaterialBatches`, `CostCenterVH`, `PlantVH`, and `StorageLocationVH`.
+  - **Manifest & Routing (`app/fiori-app/webapp/manifest.json`)**:
+    - Added route `wmGoodsIssue201` (`pattern: "wm/goods-issue/cost-center-201"`) and target `TargetGoodsIssue201`.
+  - **i18n Localization (`i18n.properties` & `i18n_en.properties`)**:
+    - Added 35+ scoped keys (`gi201*`) with 100% key parity across bundles.
+  - **Unit Testing (`test/unit/wm/goodsIssue201Page.test.js`)**:
+    - Added 11 unit tests covering model validation, serial limit handling, duplicate detection, payload formatting, service posting, and reversal.
+- **Executed Commands & Results**:
+  - `npm --prefix app/fiori-app run lint`: Success! 0 findings detected.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.69 s (`Component-preload.js` generated).
+  - `npx jest test/unit/wm/goodsIssue201Page.test.js --no-coverage`: 11/11 passed (100%).
+  - `npx jest test/unit/wm/ test/integration/wm/ --no-coverage`: 20/20 test suites passed, 413/413 tests passed (100% green).
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Stage, commit, and push the verified changes to `origin/feature/CL01`.
+
 ## Next Steps
-0. Movement 201 Backend & Reversal (Route `#/wm/goods-issue`):
-   - Pure validation, domain normalization, S/4 OData V2 mapping, serial ESTO pre-check, CancelHeader reversal, queue manager persistence, and CAP handler fully implemented and verified with 402 passing WM tests.
-   - Next: Connect UI Create 201 Wizard steps (Cost Center selection, item entry, optional G/L, serial scan) to the new backend endpoints.
+0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
+   - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).
+   - Shows exclusively 201 fields (Material, Plant, SLoc, Cost Center, Qty, Unit, Dates, Batch, Serials, Read-only G/L Account).
+   - Zero reservation/order fields. Supports direct SAP posting and CancelHeader 202 reversal.
 1. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue` and `#/dashboard` EWM tab):
    - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.
    - Shows type label, total count, today's count, and click-to-filter toggle linking to the recent documents table.
    - Verified with real backend S/4HANA aggregated data (54 for 201, 9671 for 261, 3020 for 301, 1052 for 311, 13797 overall) and 360 passing unit tests (100% green).
 2. WM Goods Issue Serial Number Scanning (Route `#/wm/goods-issue`):
-   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (402 total WM tests).
+   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (413 total WM tests).
    - Handles single/multi-serial scanning, duplicate prevention, count matching validation, barcode scanner suffix stripping, ESTO status pre-check, and S/4HANA `API_MATERIAL_DOCUMENT_SRV` `to_SerialNumbers` deep insert.
 3. WM Transfer Order Implementation:
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
@@ -5735,3 +5784,4 @@
    - Reservation creation (`UI_RESERVATION_ITM_MNG_V2`)
 8. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
 9. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+

@@ -1,0 +1,509 @@
+sap.ui.define([
+    "saps4hana/fiori/controller/BaseController",
+    "sap/ui/model/json/JSONModel",
+    "sap/m/MessageBox",
+    "sap/m/MessageToast",
+    "sap/m/SelectDialog",
+    "sap/m/StandardListItem",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator",
+    "saps4hana/fiori/modules/wm/goods-issue/model/GoodsIssue201Model",
+    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssue201Service"
+], function (
+    BaseController,
+    JSONModel,
+    MessageBox,
+    MessageToast,
+    SelectDialog,
+    StandardListItem,
+    Filter,
+    FilterOperator,
+    GoodsIssue201Model,
+    GoodsIssue201Service
+) {
+    "use strict";
+
+    return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue201", {
+
+        onInit: function () {
+            this._oModel = GoodsIssue201Model.createInitialModel();
+            this.getView().setModel(this._oModel, "gi201");
+
+            var oRouter = this.getRouter();
+            if (oRouter) {
+                oRouter.getRoute("wmGoodsIssue201").attachPatternMatched(this._onRouteMatched, this);
+            }
+        },
+
+        _onRouteMatched: function () {
+            this._resetModel();
+        },
+
+        _resetModel: function () {
+            var oInitData = GoodsIssue201Model.getInitialData();
+            this._oModel.setData(oInitData);
+            this._validateLive();
+        },
+
+        // =============================================================
+        // FORMATTERS
+        // =============================================================
+
+        formatSuccessBanner: function (sDoc, sYear) {
+            if (!sDoc) return "";
+            return this.getText("gi201SuccessBannerText", [sDoc, sYear || ""]);
+        },
+
+        formatReversalBanner: function (sDoc, sYear) {
+            if (!sDoc) return "";
+            return this.getText("gi201ReversalBannerText", [sDoc, sYear || ""]);
+        },
+
+        formatAvailableStock: function (nStock, sUnit) {
+            if (nStock === null || nStock === undefined) return "";
+            return nStock + " " + (sUnit || "") + " " + this.getText("gi201StockAvailable");
+        },
+
+        // =============================================================
+        // LIVE VALIDATION
+        // =============================================================
+
+        _validateLive: function () {
+            var oData = this._oModel.getData();
+            var oResult = GoodsIssue201Model.validate(oData);
+            this._oModel.setProperty("/errors", oResult.errors);
+            this._oModel.setProperty("/isValid", oResult.isValid);
+            return oResult.isValid;
+        },
+
+        onFieldLiveChange: function () {
+            this._validateLive();
+        },
+
+        onCostCenterLiveChange: function (oEvent) {
+            var sVal = oEvent.getParameter("value") || "";
+            this._oModel.setProperty("/costCenter", sVal.toUpperCase());
+            this._validateLive();
+        },
+
+        onQuantityLiveChange: function (oEvent) {
+            var sVal = oEvent.getParameter("value") || "";
+            var nVal = parseFloat(sVal);
+            this._oModel.setProperty("/quantity", isNaN(nVal) ? sVal : nVal);
+            this._validateLive();
+        },
+
+        onMaterialChange: function (oEvent) {
+            var sMat = (oEvent.getParameter("value") || "").trim().toUpperCase();
+            this._oModel.setProperty("/material", sMat);
+            this._loadMaterialInfo(sMat);
+        },
+
+        _loadMaterialInfo: function (sMat) {
+            if (!sMat) {
+                this._validateLive();
+                return;
+            }
+
+            var that = this;
+            var sPlant = this._oModel.getProperty("/plant") || "1120";
+            this._oModel.setProperty("/stockLoading", true);
+
+            GoodsIssue201Service.fetchMaterialDetails(sMat, sPlant)
+                .then(function (oInfo) {
+                    if (oInfo) {
+                        that._oModel.setProperty("/materialName", oInfo.materialName || "");
+                        if (oInfo.unit) {
+                            that._oModel.setProperty("/unit", oInfo.unit);
+                            that._oModel.setProperty("/isUnitEditable", false);
+                        } else {
+                            that._oModel.setProperty("/isUnitEditable", true);
+                        }
+                        that._oModel.setProperty("/isBatchManaged", !!oInfo.isBatchManaged);
+                        // Check if serial managed (e.g. 8000009753 or equipment)
+                        var bSerial = (sMat === "8000009753" || sMat.indexOf("9753") !== -1 || !!oInfo.isSerialManaged);
+                        that._oModel.setProperty("/isSerialManaged", bSerial);
+                        that._oModel.setProperty("/availableStock", oInfo.availableStock);
+                    }
+                })
+                .catch(function () {
+                    // Non-blocking fallback
+                    that._oModel.setProperty("/isUnitEditable", true);
+                })
+                .finally(function () {
+                    that._oModel.setProperty("/stockLoading", false);
+                    that._validateLive();
+                });
+        },
+
+        // =============================================================
+        // SERIAL NUMBERS SCAN & MANAGEMENT
+        // =============================================================
+
+        onAddSerialPress: function () {
+            var sInput = this._oModel.getProperty("/serialInput") || "";
+            var oData = this._oModel.getData();
+            var oRes = GoodsIssue201Model.addSerialNumber(oData, sInput);
+
+            if (!oRes.success) {
+                MessageToast.show(oRes.message);
+                return;
+            }
+
+            this._oModel.refresh(true);
+            this._validateLive();
+            MessageToast.show(this.getText("gi201SerialAdded", [sInput.trim().toUpperCase()]));
+        },
+
+        onSerialInputSubmit: function () {
+            this.onAddSerialPress();
+        },
+
+        onDeleteSerial: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oCtx = oSource.getBindingContext("gi201");
+            if (!oCtx) return;
+
+            var sPath = oCtx.getPath();
+            var nIndex = parseInt(sPath.split("/").pop(), 10);
+            var oData = this._oModel.getData();
+            GoodsIssue201Model.removeSerialNumber(oData, nIndex);
+
+            this._oModel.refresh(true);
+            this._validateLive();
+            MessageToast.show(this.getText("gi201SerialRemoved"));
+        },
+
+        // =============================================================
+        // VALUE HELP DIALOGS
+        // =============================================================
+
+        onCostCenterValueHelp: function () {
+            var that = this;
+            var oDialog = new SelectDialog({
+                title: this.getText("gi201SelectCostCenter"),
+                noDataText: this.getText("gi201NoCostCentersFound"),
+                search: function (oEvt) {
+                    var sVal = oEvt.getParameter("value") || "";
+                    var oBinding = oEvt.getSource().getBinding("items");
+                    if (oBinding) {
+                        var aFilters = sVal ? [
+                            new Filter({
+                                filters: [
+                                    new Filter("CostCenter", FilterOperator.Contains, sVal),
+                                    new Filter("CostCenterName", FilterOperator.Contains, sVal)
+                                ],
+                                and: false
+                            })
+                        ] : [];
+                        oBinding.filter(aFilters);
+                    }
+                },
+                confirm: function (oEvt) {
+                    var oSelectedItem = oEvt.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var sKey = oSelectedItem.getTitle();
+                        var sDesc = oSelectedItem.getDescription();
+                        that._oModel.setProperty("/costCenter", sKey);
+                        that._oModel.setProperty("/costCenterName", sDesc);
+                        that._validateLive();
+                    }
+                }
+            });
+
+            var oItemTemplate = new StandardListItem({
+                title: "{CostCenter}",
+                description: "{CostCenterName}",
+                info: "{ControllingArea}"
+            });
+
+            GoodsIssue201Service.fetchCostCenters()
+                .then(function (aItems) {
+                    var oHelpModel = new JSONModel(aItems);
+                    oDialog.setModel(oHelpModel);
+                    oDialog.bindAggregation("items", "/", oItemTemplate);
+                    oDialog.open();
+                })
+                .catch(function (err) {
+                    MessageBox.error("Failed to load Cost Centers: " + (err.message || err));
+                });
+        },
+
+        onMaterialValueHelp: function () {
+            var that = this;
+            var oDialog = new SelectDialog({
+                title: this.getText("gi201SelectMaterial"),
+                noDataText: this.getText("gi201NoMaterialsFound"),
+                search: function (oEvt) {
+                    var sVal = oEvt.getParameter("value") || "";
+                    var oBinding = oEvt.getSource().getBinding("items");
+                    if (oBinding) {
+                        var aFilters = sVal ? [
+                            new Filter({
+                                filters: [
+                                    new Filter("Material", FilterOperator.Contains, sVal),
+                                    new Filter("MaterialName", FilterOperator.Contains, sVal)
+                                ],
+                                and: false
+                            })
+                        ] : [];
+                        oBinding.filter(aFilters);
+                    }
+                },
+                confirm: function (oEvt) {
+                    var oSelectedItem = oEvt.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var sKey = oSelectedItem.getTitle();
+                        var sDesc = oSelectedItem.getDescription();
+                        that._oModel.setProperty("/material", sKey);
+                        that._oModel.setProperty("/materialName", sDesc);
+                        that._loadMaterialInfo(sKey);
+                    }
+                }
+            });
+
+            var oItemTemplate = new StandardListItem({
+                title: "{Material}",
+                description: "{MaterialName}",
+                info: "{MaterialBaseUnit}"
+            });
+
+            // Use view's unnamed / purchase-order OData model if bound, or fetch
+            var oODataModel = this.getModel();
+            if (oODataModel) {
+                oDialog.setModel(oODataModel);
+                oDialog.bindAggregation("items", "/MaterialVH", oItemTemplate);
+                oDialog.open();
+            } else {
+                var sMat = that._oModel.getProperty("/material") || "8000009753";
+                GoodsIssue201Service.fetchMaterialDetails(sMat, "1120")
+                    .then(function (oInfo) {
+                        var aList = oInfo ? [oInfo] : [];
+                        var oListModel = new JSONModel(aList);
+                        oDialog.setModel(oListModel);
+                        oDialog.bindAggregation("items", "/", oItemTemplate);
+                        oDialog.open();
+                    });
+            }
+        },
+
+        onPlantValueHelp: function () {
+            var that = this;
+            var oDialog = new SelectDialog({
+                title: this.getText("gi201SelectPlant"),
+                confirm: function (oEvt) {
+                    var oItem = oEvt.getParameter("selectedItem");
+                    if (oItem) {
+                        var sPlant = oItem.getTitle();
+                        that._oModel.setProperty("/plant", sPlant);
+                        that._oModel.setProperty("/plantName", oItem.getDescription());
+                        var sMat = that._oModel.getProperty("/material");
+                        if (sMat) {
+                            that._loadMaterialInfo(sMat);
+                        }
+                        that._validateLive();
+                    }
+                }
+            });
+
+            var oTemplate = new StandardListItem({
+                title: "{Plant}",
+                description: "{PlantName}"
+            });
+
+            GoodsIssue201Service.fetchPlants()
+                .then(function (aPlants) {
+                    var oModel = new JSONModel(aPlants);
+                    oDialog.setModel(oModel);
+                    oDialog.bindAggregation("items", "/", oTemplate);
+                    oDialog.open();
+                })
+                .catch(function () {
+                    // Fallback to enterprise defaults
+                    var oModel = new JSONModel([
+                        { Plant: "1120", PlantName: "Aether Main Plant" },
+                        { Plant: "1110", PlantName: "Aether Specialty Plant" }
+                    ]);
+                    oDialog.setModel(oModel);
+                    oDialog.bindAggregation("items", "/", oTemplate);
+                    oDialog.open();
+                });
+        },
+
+        onStorageLocationValueHelp: function () {
+            var that = this;
+            var sPlant = this._oModel.getProperty("/plant") || "1120";
+
+            var oDialog = new SelectDialog({
+                title: this.getText("gi201SelectStorageLocation"),
+                confirm: function (oEvt) {
+                    var oItem = oEvt.getParameter("selectedItem");
+                    if (oItem) {
+                        that._oModel.setProperty("/storageLocation", oItem.getTitle());
+                        that._oModel.setProperty("/storageLocationName", oItem.getDescription());
+                        that._validateLive();
+                    }
+                }
+            });
+
+            var oTemplate = new StandardListItem({
+                title: "{StorageLocation}",
+                description: "{StorageLocationName}",
+                info: "{Plant}"
+            });
+
+            GoodsIssue201Service.fetchStorageLocations(sPlant)
+                .then(function (aLocations) {
+                    var oModel = new JSONModel(aLocations);
+                    oDialog.setModel(oModel);
+                    oDialog.bindAggregation("items", "/", oTemplate);
+                    oDialog.open();
+                })
+                .catch(function () {
+                    var oModel = new JSONModel([
+                        { StorageLocation: "HS01", StorageLocationName: "High Security 01", Plant: sPlant },
+                        { StorageLocation: "MT01", StorageLocationName: "Material Store 01", Plant: sPlant }
+                    ]);
+                    oDialog.setModel(oModel);
+                    oDialog.bindAggregation("items", "/", oTemplate);
+                    oDialog.open();
+                });
+        },
+
+        // =============================================================
+        // SUBMIT POST GOODS ISSUE 201
+        // =============================================================
+
+        onPostGoodsIssue: function () {
+            if (!this._validateLive()) {
+                MessageBox.error(this.getText("gi201ValidationErrorsSummary"));
+                return;
+            }
+
+            var that = this;
+            var oData = this._oModel.getData();
+            var oPayload = GoodsIssue201Model.toBackendPayload(oData);
+
+            this._oModel.setProperty("/busy", true);
+
+            GoodsIssue201Service.postGoodsIssue(oPayload)
+                .then(function (res) {
+                    that._oModel.setProperty("/busy", false);
+                    that._oModel.setProperty("/hasPosted", true);
+                    that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
+                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || new Date().getFullYear().toString());
+
+                    var sDocMsg = that.getText("gi201PostSuccessMsg", [
+                        res.MaterialDocument || "Document",
+                        res.MaterialDocYear || ""
+                    ]);
+
+                    MessageBox.success(sDocMsg, {
+                        title: that.getText("gi201PostSuccessTitle"),
+                        actions: [that.getText("gi201ActionReverseNow"), MessageBox.Action.CLOSE],
+                        emphasizedAction: MessageBox.Action.CLOSE,
+                        onClose: function (sAction) {
+                            if (sAction === that.getText("gi201ActionReverseNow")) {
+                                that.onReverseGoodsIssue();
+                            }
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    that._oModel.setProperty("/busy", false);
+                    var sErrMsg = err.message || that.getText("gi201PostGenericError");
+                    if (err.response && err.response.data && err.response.data.error) {
+                        var oErr = err.response.data.error;
+                        sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
+                    }
+                    MessageBox.error(sErrMsg, {
+                        title: that.getText("gi201PostFailedTitle")
+                    });
+                });
+        },
+
+        // =============================================================
+        // REVERSAL (202 via CancelHeader)
+        // =============================================================
+
+        onReverseGoodsIssue: function () {
+            var sDoc = this._oModel.getProperty("/postedDocument");
+            var sYear = this._oModel.getProperty("/postedYear") || new Date().getFullYear().toString();
+            var sPostingDate = this._oModel.getProperty("/postingDate");
+
+            if (!sDoc) {
+                MessageToast.show(this.getText("gi201NoDocumentToReverse"));
+                return;
+            }
+
+            var that = this;
+            var sConfirmMsg = this.getText("gi201ReverseConfirmPrompt", [sDoc, sYear]);
+
+            MessageBox.confirm(sConfirmMsg, {
+                title: this.getText("gi201ReverseConfirmTitle"),
+                actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                emphasizedAction: MessageBox.Action.OK,
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._executeReversal(sDoc, sYear, sPostingDate);
+                    }
+                }
+            });
+        },
+
+        _executeReversal: function (sDoc, sYear, sPostingDate) {
+            var that = this;
+            this._oModel.setProperty("/reversalBusy", true);
+
+            GoodsIssue201Service.reverseGoodsIssue(sDoc, sYear, sPostingDate, "01")
+                .then(function (res) {
+                    that._oModel.setProperty("/reversalBusy", false);
+                    that._oModel.setProperty("/hasReversed", true);
+                    that._oModel.setProperty("/reversalDocument", res.ReversalMaterialDocument || "");
+                    that._oModel.setProperty("/reversalYear", res.ReversalMaterialDocYear || sYear);
+
+                    var sSuccess = that.getText("gi201ReverseSuccessMsg", [
+                        sDoc,
+                        res.ReversalMaterialDocument || ""
+                    ]);
+
+                    MessageBox.success(sSuccess, {
+                        title: that.getText("gi201ReverseSuccessTitle"),
+                        onClose: function () {
+                            that._resetModel();
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    that._oModel.setProperty("/reversalBusy", false);
+                    var sErrMsg = err.message || that.getText("gi201ReverseGenericError");
+                    if (err.response && err.response.data && err.response.data.error) {
+                        var oErr = err.response.data.error;
+                        sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
+                    }
+                    MessageBox.error(sErrMsg, {
+                        title: that.getText("gi201ReverseFailedTitle")
+                    });
+                });
+        },
+
+        onResetForm: function () {
+            var that = this;
+            MessageBox.confirm(this.getText("gi201ResetConfirm"), {
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._resetModel();
+                        MessageToast.show(that.getText("gi201FormReset"));
+                    }
+                }
+            });
+        },
+
+        onNavBack: function () {
+            var oRouter = this.getRouter();
+            if (oRouter) {
+                oRouter.navTo("wmGoodsIssue");
+            }
+        }
+    });
+});

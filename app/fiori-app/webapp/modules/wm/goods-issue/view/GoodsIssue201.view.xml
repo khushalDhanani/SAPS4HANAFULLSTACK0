@@ -1,0 +1,330 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue201"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="pageGoodsIssue201"
+        title="{i18n>gi201PageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        busy="{gi201>/busy}"
+        busyIndicatorDelay="0"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <ObjectStatus
+                id="statMvtBadge"
+                text="{i18n>gi201MovementTypeBadge}"
+                state="Information"
+                icon="sap-icon://expense-report"
+                class="sapUiTinyMarginEnd" />
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+
+                <!-- 1. Posted Document Success Banner (with 202 Reversal Trigger) -->
+                <MessageStrip
+                    id="stripPostSuccess"
+                    text="{parts: [{path: 'gi201>/postedDocument'}, {path: 'gi201>/postedYear'}], formatter: '.formatSuccessBanner'}"
+                    type="Success"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{gi201>/hasPosted}"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link
+                            id="lnkReverse202"
+                            text="{i18n>gi201ActionReverseNow}"
+                            press=".onReverseGoodsIssue"
+                            enabled="{= !${gi201>/reversalBusy} }" />
+                    </link>
+                </MessageStrip>
+
+                <!-- 2. Reversal Success Banner -->
+                <MessageStrip
+                    id="stripReversalSuccess"
+                    text="{parts: [{path: 'gi201>/reversalDocument'}, {path: 'gi201>/reversalYear'}], formatter: '.formatReversalBanner'}"
+                    type="Information"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{gi201>/hasReversed}"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- 3. Form Container: SimpleForm for 201 Goods Issue -->
+                <Panel
+                    id="pnlGeneralData"
+                    headerText="{i18n>gi201SectionGeneralData}"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+
+                    <f:SimpleForm
+                        id="formGoodsIssue201"
+                        editable="true"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="3"
+                        labelSpanL="3"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="2"
+                        emptySpanL="2"
+                        emptySpanM="1"
+                        emptySpanS="0"
+                        columnsXL="1"
+                        columnsL="1"
+                        columnsM="1"
+                        singleContainerFullSize="false">
+                        <f:content>
+
+                            <!-- Cost Center Assignment (Mandatory) -->
+                            <core:Title id="titleCostAssignment" text="{i18n>gi201TitleCostAssignment}" />
+
+                            <Label id="lblCostCenter" text="{i18n>gi201CostCenter}" required="true" />
+                            <Input
+                                id="inCostCenter"
+                                value="{gi201>/costCenter}"
+                                placeholder="{i18n>gi201CostCenterPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onCostCenterValueHelp"
+                                liveChange=".onCostCenterLiveChange"
+                                valueState="{= ${gi201>/errors/costCenter} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/costCenter}"
+                                maxLength="10" />
+
+                            <Label id="lblCostCenterName" text="{i18n>gi201CostCenterName}" visible="{= !!${gi201>/costCenterName} }" />
+                            <Text
+                                id="txtCostCenterName"
+                                text="{gi201>/costCenterName}"
+                                class="sapUiTinyMarginTop fontBold"
+                                visible="{= !!${gi201>/costCenterName} }" />
+
+                            <Label id="lblGlAccount" text="{i18n>gi201GlAccountLabel}" />
+                            <Input
+                                id="inGlAccount"
+                                value="{= ${gi201>/glAccount} ? ${gi201>/glAccount} : ${i18n>gi201GlAccountAutoDerived} }"
+                                editable="false"
+                                tooltip="{i18n>gi201GlAccountTooltip}" />
+
+                            <!-- Material & Location -->
+                            <core:Title id="titleMaterialLocation" text="{i18n>gi201TitleMaterialLocation}" />
+
+                            <Label id="lblMaterial" text="{i18n>gi201Material}" required="true" />
+                            <Input
+                                id="inMaterial"
+                                value="{gi201>/material}"
+                                placeholder="{i18n>gi201MaterialPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onMaterialValueHelp"
+                                change=".onMaterialChange"
+                                valueState="{= ${gi201>/errors/material} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/material}" />
+
+                            <Label id="lblMaterialDesc" text="{i18n>gi201MaterialDesc}" visible="{= !!${gi201>/materialName} }" />
+                            <Text
+                                id="txtMaterialDesc"
+                                text="{gi201>/materialName}"
+                                class="sapUiTinyMarginTop fontBold"
+                                visible="{= !!${gi201>/materialName} }" />
+
+                            <Label id="lblPlant" text="{i18n>gi201Plant}" required="true" />
+                            <Input
+                                id="inPlant"
+                                value="{gi201>/plant}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onPlantValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi201>/errors/plant} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/plant}"
+                                maxLength="4" />
+
+                            <Label id="lblStorageLocation" text="{i18n>gi201StorageLocation}" required="true" />
+                            <Input
+                                id="inStorageLocation"
+                                value="{gi201>/storageLocation}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onStorageLocationValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi201>/errors/storageLocation} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/storageLocation}"
+                                maxLength="4" />
+
+                            <Label id="lblStockStatus" text="{i18n>gi201StockStatus}" visible="{= ${gi201>/availableStock} !== null }" />
+                            <ObjectStatus
+                                id="statAvailableStock"
+                                text="{parts: [{path: 'gi201>/availableStock'}, {path: 'gi201>/unit'}], formatter: '.formatAvailableStock'}"
+                                state="{= ${gi201>/availableStock} > 0 ? 'Success' : 'Warning' }"
+                                icon="{= ${gi201>/availableStock} > 0 ? 'sap-icon://sys-enter-2' : 'sap-icon://alert' }"
+                                visible="{= ${gi201>/availableStock} !== null }" />
+
+                            <!-- Quantity & Posting Dates -->
+                            <core:Title id="titleQuantityDates" text="{i18n>gi201TitleQuantityDates}" />
+
+                            <Label id="lblQuantity" text="{i18n>gi201Quantity}" required="true" />
+                            <HBox id="boxQuantityUnit" alignItems="Center">
+                                <Input
+                                    id="inQuantity"
+                                    value="{gi201>/quantity}"
+                                    type="Number"
+                                    liveChange=".onQuantityLiveChange"
+                                    valueState="{= ${gi201>/errors/quantity} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/quantity}"
+                                    width="10rem"
+                                    class="sapUiTinyMarginEnd" />
+                                <Input
+                                    id="inUnit"
+                                    value="{gi201>/unit}"
+                                    editable="{gi201>/isUnitEditable}"
+                                    liveChange=".onFieldLiveChange"
+                                    valueState="{= ${gi201>/errors/unit} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/unit}"
+                                    width="6rem"
+                                    maxLength="3" />
+                            </HBox>
+
+                            <Label id="lblPostingDate" text="{i18n>gi201PostingDate}" required="true" />
+                            <DatePicker
+                                id="dpPostingDate"
+                                value="{gi201>/postingDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="medium"
+                                change=".onFieldLiveChange"
+                                valueState="{= ${gi201>/errors/postingDate} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/postingDate}" />
+
+                            <Label id="lblDocumentDate" text="{i18n>gi201DocumentDate}" required="true" />
+                            <DatePicker
+                                id="dpDocumentDate"
+                                value="{gi201>/documentDate}"
+                                valueFormat="yyyy-MM-dd"
+                                displayFormat="medium"
+                                change=".onFieldLiveChange"
+                                valueState="{= ${gi201>/errors/documentDate} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/documentDate}" />
+
+                            <Label id="lblHeaderText" text="{i18n>gi201HeaderText}" />
+                            <Input
+                                id="inHeaderText"
+                                value="{gi201>/headerText}"
+                                placeholder="{i18n>gi201HeaderTextPlaceholder}"
+                                maxLength="25" />
+
+                            <!-- Conditional: Batch Management (Visible only if batch-managed) -->
+                            <core:Title
+                                id="titleBatchManagement"
+                                text="{i18n>gi201TitleBatchManagement}"
+                                visible="{gi201>/isBatchManaged}" />
+
+                            <Label
+                                id="lblBatch"
+                                text="{i18n>gi201Batch}"
+                                required="{gi201>/isBatchManaged}"
+                                visible="{gi201>/isBatchManaged}" />
+                            <Input
+                                id="inBatch"
+                                value="{gi201>/batch}"
+                                placeholder="{i18n>gi201BatchPlaceholder}"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi201>/errors/batch} ? 'Error' : 'None' }"
+                                valueStateText="{gi201>/errors/batch}"
+                                visible="{gi201>/isBatchManaged}"
+                                maxLength="10" />
+
+                        </f:content>
+                    </f:SimpleForm>
+                </Panel>
+
+                <!-- 4. Conditional: Serial Numbers Management (Visible only if serial-managed) -->
+                <Panel
+                    id="pnlSerialManagement"
+                    headerText="{i18n>gi201TitleSerialManagement}"
+                    expandable="false"
+                    visible="{gi201>/isSerialManaged}"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Input
+                                id="inSerialScan"
+                                value="{gi201>/serialInput}"
+                                placeholder="{i18n>gi201SerialScanPlaceholder}"
+                                submit=".onSerialInputSubmit"
+                                width="18rem"
+                                maxLength="18"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnAddSerial"
+                                text="{i18n>gi201BtnAddSerial}"
+                                icon="sap-icon://bar-code"
+                                press=".onAddSerialPress"
+                                class="sapUiTinyMarginEnd" />
+                            <ObjectStatus
+                                id="statSerialCount"
+                                text="{= ${gi201>/serialNumbers}.length + ' / ' + ${gi201>/quantity} + ' ' + ${i18n>gi201SerialsScanned} }"
+                                state="{= ${gi201>/serialNumbers}.length === ${gi201>/quantity} ? 'Success' : 'Warning' }" />
+                        </HBox>
+
+                        <Text
+                            id="txtSerialError"
+                            text="{gi201>/errors/serials}"
+                            class="sapUiTinyMarginBottom"
+                            visible="{= !!${gi201>/errors/serials} }" />
+
+                        <Table
+                            id="tblSerialNumbers"
+                            items="{gi201>/serialNumbers}"
+                            noDataText="{i18n>gi201NoSerialsScanned}"
+                            width="100%">
+                            <columns>
+                                <Column id="colSerialIndex" width="4rem"><Text text="#" /></Column>
+                                <Column id="colSerialNumber"><Text text="{i18n>gi201ColSerialNumber}" /></Column>
+                                <Column id="colSerialStatus" width="10rem"><Text text="{i18n>gi201ColSerialStatus}" /></Column>
+                                <Column id="colSerialAction" width="4rem" hAlign="End"><Text text="" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{= ${path: ''} ? '' : '' }" />
+                                        <Text text="{gi201>}" class="fontBold" />
+                                        <ObjectStatus text="{i18n>gi201SerialPendingStockVerify}" state="Information" />
+                                        <Button
+                                            icon="sap-icon://delete"
+                                            type="Transparent"
+                                            tooltip="{i18n>gi201BtnDeleteSerial}"
+                                            press=".onDeleteSerial" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
+            </VBox>
+        </content>
+
+        <!-- Footer Actions -->
+        <footer>
+            <Toolbar id="tbGoodsIssue201">
+                <Button
+                    id="btnResetForm"
+                    text="{i18n>gi201BtnReset}"
+                    icon="sap-icon://refresh"
+                    type="Transparent"
+                    press=".onResetForm" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnPostGoodsIssue201"
+                    text="{i18n>gi201BtnPost}"
+                    icon="sap-icon://save"
+                    type="Emphasized"
+                    enabled="{gi201>/isValid}"
+                    press=".onPostGoodsIssue" />
+            </Toolbar>
+        </footer>
+
+    </Page>
+</mvc:View>
