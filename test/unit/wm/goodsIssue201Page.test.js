@@ -195,10 +195,29 @@ describe('Movement 201 Dedicated Page: Model & Service Tests', () => {
                 PostingDate: data.postingDate,
                 DocumentDate: data.documentDate,
                 HeaderText: 'GI CC 1011102401',
-                SerialNumbers: ['MACBOOK-004']
+                SerialNumbers: ['MACBOOK-004'],
+                // Empty for an unplanned 201; populated only when completing a planned reservation.
+                ReservationNo: '',
+                ReservationItem: ''
             });
             // GLAccount must never be sent for 201: system-determined via OBYC/GBB-VBR, read-only.
             expect(payload.GLAccount).toBeUndefined();
+        });
+
+        it('toBackendPayload carries the reservation link when completing a planned 201 from the Pending list', () => {
+            const data = GoodsIssue201Model.getInitialData();
+            data.costCenter = '1011101301';
+            data.material = '8000009753';
+            data.quantity = 1;
+            data.unit = 'NOS';
+            data.reservationNo = '519658';
+            data.reservationItem = '0001';
+            data.fromReservation = true;
+
+            const payload = GoodsIssue201Model.toBackendPayload(data);
+            expect(payload.ReservationNo).toBe('519658');
+            expect(payload.ReservationItem).toBe('0001');
+            expect(payload.CostCenter).toBe('1011101301');
         });
     });
 

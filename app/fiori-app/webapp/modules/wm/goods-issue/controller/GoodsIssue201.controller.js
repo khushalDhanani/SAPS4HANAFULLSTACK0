@@ -35,8 +35,58 @@ sap.ui.define([
             }
         },
 
-        _onRouteMatched: function () {
+        _onRouteMatched: function (oEvent) {
             this._resetModel();
+            var oArgs = oEvent && oEvent.getParameter("arguments");
+            var oQuery = oArgs && oArgs["?query"];
+            var sResv = oQuery && oQuery.resv;
+            if (sResv) {
+                this._prefillFromReservation(sResv);
+            }
+        },
+
+        /**
+         * Pre-fill the 201 form from an open cost-center reservation (opened from the 201 Pending list),
+         * so the user can review and complete/post it. Material, plant, storage location, unit, open
+         * quantity and cost center all come from the reservation item; the reservation link is carried
+         * on the post so SAP marks the reservation withdrawn.
+         */
+        _prefillFromReservation: function (sResv) {
+            var that = this;
+            var oModel = this._oModel;
+            oModel.setProperty("/busy", true);
+            GoodsIssue201Service.fetchReservationItems(sResv)
+                .then(function (aItems) {
+                    var oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
+                    if (!oItem) {
+                        MessageToast.show(that.getText("gi201PrefillNoOpenItem", [sResv]));
+                        return;
+                    }
+                    oModel.setProperty("/fromReservation", true);
+                    oModel.setProperty("/reservationNo", oItem.ReservationNo || sResv);
+                    oModel.setProperty("/reservationItem", oItem.ReservationItem || "");
+                    oModel.setProperty("/costCenter", oItem.CostCenter || "");
+                    oModel.setProperty("/material", oItem.Material || "");
+                    oModel.setProperty("/materialName", oItem.MaterialDesc || "");
+                    oModel.setProperty("/plant", oItem.Plant || oModel.getProperty("/plant"));
+                    oModel.setProperty("/storageLocation", oItem.StorageLocation || oModel.getProperty("/storageLocation"));
+                    var nOpen = Number(oItem.OpenQty);
+                    if (!isNaN(nOpen) && nOpen > 0) {
+                        oModel.setProperty("/quantity", nOpen);
+                    }
+                    if (oItem.Unit) {
+                        oModel.setProperty("/unit", oItem.Unit);
+                    }
+                    // Enrich the material (batch/serial flags, available stock) and re-validate.
+                    that._loadMaterialInfo(oItem.Material || "");
+                    that._validateLive();
+                })
+                .catch(function (err) {
+                    MessageBox.error((err && err.message) || that.getText("gi201PrefillError"));
+                })
+                .finally(function () {
+                    oModel.setProperty("/busy", false);
+                });
         },
 
         _resetModel: function () {

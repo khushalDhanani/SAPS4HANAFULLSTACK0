@@ -38,7 +38,9 @@ sap.ui.define([
 
             var aSerials = Array.isArray(oPayload.SerialNumbers) ? oPayload.SerialNumbers : [];
 
-            // Isolated 201 action: send only Movement 201 fields (no MovementType / G/L / reservation / difference).
+            // Isolated 201 action: send only Movement 201 fields (no MovementType / G/L / difference).
+            // ReservationNo/Item are optional: empty for an unplanned 201, populated when completing a
+            // planned cost-center reservation from the 201 Pending list.
             var oBody = {
                 CostCenter: sCC,
                 Material: sMat,
@@ -49,7 +51,9 @@ sap.ui.define([
                 Batch: oPayload.Batch ? String(oPayload.Batch).trim().toUpperCase() : "",
                 PostingDate: oPayload.PostingDate || null,
                 DocumentDate: oPayload.DocumentDate || null,
-                SerialNumbers: aSerials
+                SerialNumbers: aSerials,
+                ReservationNo: oPayload.ReservationNo ? String(oPayload.ReservationNo).trim() : "",
+                ReservationItem: oPayload.ReservationItem ? String(oPayload.ReservationItem).trim() : ""
             };
 
             return ODataClient.post(BASE_PATH_GI + "/postGoodsIssue201", oBody);
@@ -186,6 +190,39 @@ sap.ui.define([
             if (sPlant) {
                 sUrl += "&$filter=Plant eq '" + encodeURIComponent(String(sPlant).trim()) + "'";
             }
+            return ODataClient.get(sUrl)
+                .then(function (oData) {
+                    return (oData && oData.value) || (Array.isArray(oData) ? oData : []);
+                });
+        },
+
+        /**
+         * Fetch OPEN reservations for Movement 201 (Goods Issue to Cost Center) awaiting posting -
+         * the "201 pending" source. These are real planned cost-center-consumption reservations in SAP.
+         * @param {string} [sPlant]
+         * @returns {Promise<Array>}
+         */
+        fetchPendingReservations: function (sPlant) {
+            var sUrl = BASE_PATH_GI + "/OpenReservations?$filter=MovementType eq '201'";
+            if (sPlant) {
+                sUrl += " and Plant eq '" + encodeURIComponent(String(sPlant).trim()) + "'";
+            }
+            sUrl += "&$top=200";
+            return ODataClient.get(sUrl)
+                .then(function (oData) {
+                    return (oData && oData.value) || (Array.isArray(oData) ? oData : []);
+                });
+        },
+
+        /**
+         * Fetch the item detail of a 201 reservation (material, plant, storage location, unit,
+         * open quantity, cost center) used to pre-fill the create page from the pending list.
+         * @param {string} sReservationNo
+         * @returns {Promise<Array>}
+         */
+        fetchReservationItems: function (sReservationNo) {
+            var sResv = encodeURIComponent(String(sReservationNo || "").trim());
+            var sUrl = BASE_PATH_GI + "/GIItems?$filter=ReservationNo eq '" + sResv + "'";
             return ODataClient.get(sUrl)
                 .then(function (oData) {
                     return (oData && oData.value) || (Array.isArray(oData) ? oData : []);

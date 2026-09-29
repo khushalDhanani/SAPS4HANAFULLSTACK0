@@ -5999,6 +5999,25 @@
 - **Result**: Phase 5 complete — total per-type isolation is proven structurally (import graph over backend + frontend), behaviourally (handler routing rejects cross-type payloads), by contract (frontend posts only to its own action), and at the S/4 boundary (correct target + no field leakage), with regression + live re-verify green.
 - **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation for real SAP persistence.
 
+## 2026-09-29 20:15 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Redefine the 201 tile flow into a pending-to-complete workflow — click "201 • Cost Center" tile → dedicated 201 Pending page (`#/wm/goods-issue/201/pending`) showing only 201 items awaiting goods issue; **confirm the real pending source first, don't assume**.
+- **Discovery (confirmed LIVE against S/4HANA, not assumed)**: the real "201 pending" source is **open reservations for movement type 201** — `OpenReservations?$filter=MovementType eq '201'` (SAP `UI_RESERVATION_ITM_MNG_V2` behind the existing CAP entity). Live query returned **53 real open 201 reservations** (519658 Apple Macbook, 514439 Safety Shoes, 493670 iPad, …), all `MovementTypeName="GI for cost center"`, Plant 1120. Each reservation item (`GIItems`) carries Material, Plant, StorageLocation, Unit, OpenQty **and CostCenter** (e.g. 519658 → CostCenter 1011101301) — a complete pre-fill. So 201 has a genuine planned-reservation pending queue; **no new backend service needed** (the entity already supports a MovementType filter).
+- **Decisions taken (asked)**: the **main-dashboard EWM-tab** "201 • Cost Center" tile is the one redefined; a Pending row **opens the 201 create page pre-filled** to complete/post.
+- **Implementation (frontend only)**:
+  - **New Pending page**: `view/GoodsIssue201Pending.view.xml` + `controller/GoodsIssue201Pending.controller.js` — lists open 201 reservations (Reservation / Material+desc / Plant / Items), busy+error+noData states, refresh; row press navigates to the 201 create page with the reservation as a query param.
+  - **New route/target** (`manifest.json`): `wmGoodsIssue201Pending` → `wm/goods-issue/201/pending`; the `wmGoodsIssue201` route now takes an optional `:?query:` so it can be opened blank (unplanned) or pre-filled (`?resv=<no>`).
+  - **201 service** (`GoodsIssue201Service.js`): `fetchPendingReservations()` (OpenReservations MvT 201) + `fetchReservationItems(resv)` (GIItems); the post payload now also carries optional `ReservationNo`/`ReservationItem`.
+  - **201 create page** (`GoodsIssue201.controller.js` + `GoodsIssue201Model.js`): on route-match with `?resv=`, pre-fills Cost Center, Material, Plant, Storage Location, Unit, open Quantity from the reservation item, stores the reservation link (so the post marks it withdrawn), enriches the material (batch/serial/stock), and re-validates. New model fields `reservationNo`/`reservationItem`/`fromReservation`.
+  - **EWM-tab tile** (`Dashboard.controller.js`): the 201 route map now points to `wmGoodsIssue201Pending` (261/301/311 unchanged).
+  - **i18n**: 12 new `gi201Pending*`/`gi201Prefill*` keys in both bundles (parity).
+- **Executed commands & results**:
+  - `npx jest test/unit test/integration --no-coverage`: **111 suites, 1635/1635 passed** (updated the 201 payload test for the new optional reservation keys + added a planned-reservation payload test).
+  - `npm --prefix app/fiori-app run lint` (ui5lint): clean. `run build`: succeeded. `npx eslint srv`: 0 errors. manifest valid JSON. `git diff --check`: clean. i18n parity 12/12.
+- **Live verification (running CAP, live S/4HANA, no console errors)**: main dashboard → Warehouse (EWM) → "201 • Cost Center" tile → `#/wm/goods-issue/201/pending` rendered **"Open 201 Reservations (53)"** with the real reservations; clicking row 519658 opened `#/wm/goods-issue/cost-center-201?resv=519658` **pre-filled** — Cost Center 1011101301, Material 8000009753 (Apple Macbook Pro 14"), Plant 1120, SLoc HS01, Qty 1 NOS, reservation link 519658/0001 stored on the model. (Form correctly requires a serial scan for this serial-managed item before posting.)
+- **Result**: Step 1 of the 201 pending-to-complete workflow is done and live-verified — the EWM 201 tile now opens a real pending-reservations list, and selecting one opens the 201 page pre-filled to complete the goods issue.
+- **Next recommended action**: Confirm the follow-on steps of the workflow (e.g. mark-complete/refresh-after-post behaviour), then commit/push to `origin/feature/CL01`; DS4 Gateway activation still required for real SAP persistence.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

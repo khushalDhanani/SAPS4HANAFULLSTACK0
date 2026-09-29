@@ -277,8 +277,13 @@
           "target": "TargetGoodsIssueDashboard"
         },
         {
+          "name": "wmGoodsIssue201Pending",
+          "pattern": "wm/goods-issue/201/pending",
+          "target": "TargetGoodsIssue201Pending"
+        },
+        {
           "name": "wmGoodsIssue201",
-          "pattern": "wm/goods-issue/cost-center-201",
+          "pattern": "wm/goods-issue/cost-center-201:?query:",
           "target": "TargetGoodsIssue201"
         },
         {
@@ -394,6 +399,11 @@
         "TargetGoodsIssue201": {
           "id": "goodsIssue201",
           "name": "GoodsIssue201",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue201Pending": {
+          "id": "goodsIssue201Pending",
+          "name": "GoodsIssue201Pending",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue261": {

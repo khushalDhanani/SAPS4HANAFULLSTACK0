@@ -62,6 +62,11 @@
                 documentDate: sToday,
                 headerText: "",
 
+                // Planned-reservation linkage (populated only when completing a 201 from the Pending list)
+                reservationNo: "",
+                reservationItem: "",
+                fromReservation: false,
+
                 // Cost Assignment
                 costCenter: "",
                 costCenterName: "",
@@ -343,7 +348,11 @@
                 PostingDate: oData.postingDate,
                 DocumentDate: oData.documentDate,
                 HeaderText: oData.headerText ? String(oData.headerText).trim() : ("GI CC " + sCC),
-                SerialNumbers: aSerials
+                SerialNumbers: aSerials,
+                // Reservation linkage: empty for an unplanned 201, populated when completing a
+                // planned cost-center reservation opened from the 201 Pending list.
+                ReservationNo: oData.reservationNo ? String(oData.reservationNo).trim() : "",
+                ReservationItem: oData.reservationItem ? String(oData.reservationItem).trim() : ""
                 // GLAccount intentionally omitted: system-determined via OBYC/GBB-VBR for
                 // Movement 201 and read-only in this UI (see glAccount in getInitialData above);
                 // the backend also rejects a caller-supplied GLAccount for 201 independently.
