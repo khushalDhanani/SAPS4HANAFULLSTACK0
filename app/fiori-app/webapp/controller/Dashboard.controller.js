@@ -407,10 +407,18 @@ sap.ui.define([
          * @private
          */
         _navigateToGiFiltered: function (sMvtType) {
-            this.getOwnerComponent().getRouter().navTo("wmGoodsIssue", {}, undefined);
+            // Direct navigation to each movement type's own dedicated page (no filter toggle).
+            var mRoutes = {
+                "201": "wmGoodsIssue201",
+                "261": "wmGoodsIssue261",
+                "301": "wmGoodsIssue301",
+                "311": "wmGoodsIssue311"
+            };
+            var sRoute = mRoutes[sMvtType] || "wmGoodsIssue";
+            this.getOwnerComponent().getRouter().navTo(sRoute);
             MessageToast.show(this._text(
                 "dashboardMvtOpenPostings",
-                "Opening movement {0} postings",
+                "Opening movement {0} page",
                 [sMvtType]
             ));
         },

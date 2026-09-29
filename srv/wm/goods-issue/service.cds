@@ -286,6 +286,80 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         SerialNumber          : String(18)
     ) returns GIPostResult;
 
+    // ── Isolated per-movement-type posting actions (Phase 1). Each accepts only its type's fields. ──
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsIssue201(
+        CostCenter      : String(10),
+        Material        : String(40),
+        IssueQty        : Decimal(13, 3),
+        Unit            : String(10),
+        Batch           : String(20),
+        Plant           : String(4),
+        StorageLocation : String(4),
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        PostingDate     : Date,
+        DocumentDate    : Date,
+        SerialNumbers   : array of String(18),
+        SerialNumber    : String(18)
+    ) returns GIPostResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsIssue261(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        Material        : String(40),
+        MaterialDesc    : String(80),
+        OrderNo         : String(12),
+        IssueQty        : Decimal(13, 3),
+        Unit            : String(10),
+        Batch           : String(20),
+        Plant           : String(4),
+        StorageLocation : String(4),
+        GLAccount       : String(10),
+        PostingDate     : Date,
+        DocumentDate    : Date,
+        SerialNumbers   : array of String(18),
+        SerialNumber    : String(18)
+    ) returns GIPostResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsIssue301(
+        ReservationNo            : String(10),
+        ReservationItem          : String(4),
+        Material                 : String(40),
+        IssueQty                 : Decimal(13, 3),
+        Unit                     : String(10),
+        Batch                    : String(20),
+        Plant                    : String(4),
+        StorageLocation          : String(4),
+        ReceivingPlant           : String(4),
+        ReceivingStorageLocation : String(4),
+        PostingDate              : Date,
+        DocumentDate             : Date,
+        SerialNumbers            : array of String(18),
+        SerialNumber             : String(18)
+    ) returns GIPostResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsIssue311(
+        ReservationNo            : String(10),
+        ReservationItem          : String(4),
+        Material                 : String(40),
+        IssueQty                 : Decimal(13, 3),
+        Unit                     : String(10),
+        Batch                    : String(20),
+        Plant                    : String(4),
+        StorageLocation          : String(4),
+        ReceivingPlant           : String(4),
+        ReceivingStorageLocation : String(4),
+        PostingDate              : Date,
+        DocumentDate             : Date,
+        SerialNumbers            : array of String(18),
+        SerialNumber             : String(18)
+    ) returns GIPostResult;
+
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action reverseGoodsIssue(
         MaterialDocument : String(10),

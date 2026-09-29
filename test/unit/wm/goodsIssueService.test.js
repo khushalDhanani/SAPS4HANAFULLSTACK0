@@ -703,7 +703,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       });
 
       const mockAdapter = {
-        postGoodsIssue: jest.fn().mockResolvedValue({
+        postGoodsIssueByType: jest.fn().mockResolvedValue({
           MaterialDocument: '4900009999',
           MaterialDocYear: '2026',
           Success: true

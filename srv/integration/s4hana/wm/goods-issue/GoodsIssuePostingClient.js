@@ -3,6 +3,10 @@ const s4Config = require('../../s4Config');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
+const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
+const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
+const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
+const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
 
 /**
  * Domain client for SAP S/4HANA Goods Issue Posting and Batch Submission.
@@ -200,6 +204,190 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         throw new Error(`SAP S/4HANA did not return a material document for movement ${sMvt} posting, and no sap-message error was present in the response.`);
       } catch (v2Err) {
         throw this._reclassifyPostingError(v4Err, v2Err, `single-item movement ${sMvt}`);
+      }
+    }
+  }
+
+  // ==========================================================================
+  // ISOLATED per-movement-type posting (Phase 1). Each public method owns its
+  // own tier choice + type mapper and touches no other type's logic. The private
+  // helpers below (_assertPostable / _preflightPosting / _submitMaterialDocument)
+  // are pure TRANSPORT infrastructure (HTTP, batch SLED, destination) shared by
+  // all types - they contain no movement-type branching.
+  // ==========================================================================
+
+  /** @private Minimal defence-in-depth guards common to every posting. */
+  _assertPostable(data) {
+    const nQty = Number(data.IssueQty);
+    if (isNaN(nQty) || nQty <= 0) {
+      const err = new Error('IssueQty must be a positive decimal number');
+      err.status = 400;
+      throw err;
+    }
+    if (!String(data.Unit || '').trim()) {
+      const err = new Error('Unit of measure (EntryUnit) is required for Goods Issue');
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  /** @private Batch SLED hard-stop + destination resolution. Transport only. */
+  async _preflightPosting(data) {
+    const effectiveBatch = data.Batch ? String(data.Batch).trim() : '';
+    if (effectiveBatch) {
+      let valResult = { valid: true };
+      if (this.adapter && typeof this.adapter.validateBatch === 'function') {
+        valResult = await this.adapter.validateBatch(data.Material, effectiveBatch);
+      } else if (this.batchesClient && typeof this.batchesClient.validateBatch === 'function') {
+        valResult = await this.batchesClient.validateBatch(data.Material, effectiveBatch);
+      }
+      if (valResult && !valResult.valid) {
+        const err = new Error(valResult.reason || `Batch ${effectiveBatch} is invalid or expired.`);
+        err.status = 400;
+        throw err;
+      }
+    }
+    const dest = await this._getDestination();
+    if (!dest) {
+      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
+      err.status = 502;
+      throw err;
+    }
+  }
+
+  /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
+  async _submitMaterialDocument(v2Payload, meta) {
+    const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
+    const v2Res = await this._post(v2Path, v2Payload);
+    GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
+    const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
+    const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
+    if (!matDoc) {
+      throw new Error(`SAP S/4HANA did not return a material document for movement ${meta.mvt} posting, and no sap-message error was present in the response.`);
+    }
+    return {
+      ReservationNo: String(meta.reservationNo || ''),
+      ReservationItem: String(meta.reservationItem || ''),
+      MaterialDocument: matDoc,
+      MaterialDocYear: matYear,
+      TransferOrder: '',
+      DifferenceCleared: false,
+      DifferenceQty: 0,
+      Success: true,
+      Message: `${meta.label} ${meta.mvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
+    };
+  }
+
+  /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
+  async post201(data) {
+    this._assertPostable(data);
+    await this._preflightPosting(data);
+    const payload = GoodsIssue201Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '201', label: 'Goods Issue to Cost Center',
+        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
+      });
+    } catch (v2Err) {
+      throw this._reclassifyPostingError(new Error('movement 201 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 201');
+    }
+  }
+
+  /** Movement 261 (Goods Issue for Order/Reservation) - RAP first, standard API fallback. */
+  async post261(data) {
+    this._assertPostable(data);
+    const sReserv = String(data.ReservationNo || '').trim();
+    const sItem = data.ReservationItem != null ? String(data.ReservationItem).trim().padStart(4, '0') : '';
+    if (!sReserv || !sItem) {
+      const err = new Error('ReservationNo and ReservationItem are required for Goods Issue');
+      err.status = 400;
+      throw err;
+    }
+    await this._preflightPosting(data);
+    // Tier 1: custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4 (posts 261 only).
+    try {
+      const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
+      const response = await this._post(path, {
+        IssueQty: Number(data.IssueQty),
+        Batch: data.Batch ? String(data.Batch).trim() : '',
+        DifferenceQty: 0,
+        DifferenceReason: '',
+        DifferenceStorageType: '',
+        FinalIssue: false
+      });
+      if (response && (response.MaterialDocument || response.MatDoc)) {
+        return {
+          ReservationNo: sReserv,
+          ReservationItem: sItem,
+          MaterialDocument: response.MaterialDocument || response.MatDoc,
+          MaterialDocYear: response.MaterialDocYear || String(new Date().getFullYear()),
+          TransferOrder: response.TransferOrder || response.ToNumber || '',
+          DifferenceCleared: false,
+          DifferenceQty: 0,
+          Success: true,
+          Message: 'Goods Issue 261 posted successfully in S/4HANA.'
+        };
+      }
+      throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
+    } catch (v4Err) {
+      // Tier 2: standard API_MATERIAL_DOCUMENT_SRV.
+      try {
+        const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
+        return await this._submitMaterialDocument(payload, {
+          mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem
+        });
+      } catch (v2Err) {
+        throw this._reclassifyPostingError(v4Err, v2Err, 'single-item movement 261');
+      }
+    }
+  }
+
+  /** Movement 301 (Plant-to-Plant Transfer) - standard API only. */
+  async post301(data) {
+    this._assertPostable(data);
+    await this._preflightPosting(data);
+    const payload = GoodsIssue301Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '301', label: 'Transfer posting',
+        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
+      });
+    } catch (v2Err) {
+      throw this._reclassifyPostingError(new Error('movement 301 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 301');
+    }
+  }
+
+  /** Movement 311 (Storage Location Transfer) - standard API only. */
+  async post311(data) {
+    this._assertPostable(data);
+    await this._preflightPosting(data);
+    const payload = GoodsIssue311Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '311', label: 'Transfer posting',
+        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
+      });
+    } catch (v2Err) {
+      throw this._reclassifyPostingError(new Error('movement 311 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 311');
+    }
+  }
+
+  /**
+   * Router used only by the internal queue-replay path (retry/drain), which reads a stored
+   * MovementType off a queued record and dispatches it to the matching isolated method above.
+   * This is routing, not movement-type business logic.
+   */
+  async postByMovementType(data) {
+    const mvt = String(data.MovementType || '261').trim();
+    switch (mvt) {
+      case '201': return this.post201(data);
+      case '261': return this.post261(data);
+      case '301': return this.post301(data);
+      case '311': return this.post311(data);
+      default: {
+        const err = new Error(`Movement type ${mvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
+        err.status = 400;
+        throw err;
       }
     }
   }

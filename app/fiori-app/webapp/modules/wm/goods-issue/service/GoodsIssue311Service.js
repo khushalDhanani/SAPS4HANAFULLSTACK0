@@ -43,8 +43,8 @@ sap.ui.define([
 
             var aSerials = Array.isArray(oPayload.SerialNumbers) ? oPayload.SerialNumbers : [];
 
+            // Isolated 311 action: send only Movement 311 fields (no MovementType / difference / cost center).
             var oBody = {
-                MovementType: "311",
                 ReservationNo: sResv,
                 ReservationItem: sItem,
                 Material: sMat,
@@ -56,16 +56,11 @@ sap.ui.define([
                 PostingDate: oPayload.PostingDate || null,
                 DocumentDate: oPayload.DocumentDate || null,
                 SerialNumbers: aSerials,
-                DifferenceQty: 0,
-                DifferenceReason: "",
-                DifferenceStorageType: "",
-                FinalIssue: false,
                 ReceivingPlant: oPayload.ReceivingPlant ? String(oPayload.ReceivingPlant).trim().toUpperCase() : "",
                 ReceivingStorageLocation: oPayload.ReceivingStorageLocation ? String(oPayload.ReceivingStorageLocation).trim().toUpperCase() : ""
-                // GLAccount / CostCenter intentionally never sent for this movement type.
             };
 
-            return ODataClient.post(BASE_PATH_GI + "/postGoodsIssue", oBody);
+            return ODataClient.post(BASE_PATH_GI + "/postGoodsIssue311", oBody);
         },
 
         /**

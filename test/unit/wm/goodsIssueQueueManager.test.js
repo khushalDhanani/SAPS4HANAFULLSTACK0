@@ -215,12 +215,12 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       const queued = await manager.enqueue({ ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG' });
       const handlers = fakeService();
 
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValueOnce(sapPostingUnavailable());
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockRejectedValueOnce(sapPostingUnavailable());
       const failed = await handlers['retryQueuedGoodsIssue']({ data: { QueueReference: queued.QueueReference }, error: jest.fn() });
       expect(failed).toMatchObject({ Success: false, Queued: true, SyncStatus: 'FAILED', QueueReference: queued.QueueReference });
       expect(await manager.get(queued.ID)).toMatchObject({ SyncAttempts: 2, LastSyncError: expect.stringContaining('Posting Capability Unavailable') });
 
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockResolvedValueOnce({ MaterialDocument: '4900001234', MaterialDocYear: '2026', Success: true });
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValueOnce({ MaterialDocument: '4900001234', MaterialDocYear: '2026', Success: true });
       const posted = await handlers['retryQueuedGoodsIssue']({ data: { QueueReference: queued.QueueReference }, error: jest.fn() });
       expect(posted).toMatchObject({ Success: true, Queued: false, SyncStatus: 'POSTED_IN_SAP', MaterialDocument: '4900001234' });
       expect(await manager.get(queued.ID)).toMatchObject({ SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '4900001234', SapMaterialDocYear: '2026' });

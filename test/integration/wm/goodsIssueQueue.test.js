@@ -62,8 +62,8 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
     });
 
     it('retries a queued item and clears it through the actions', async () => {
-        const record = await queue.enqueue({ ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG' });
-        jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockResolvedValue({ MaterialDocument: '4900001234', MaterialDocYear: '2026', Success: true });
+        const record = await queue.enqueue({ ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG', MovementType: '261' });
+        jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({ MaterialDocument: '4900001234', MaterialDocYear: '2026', Success: true });
 
         const retry = await POST(`${BASE}/retryQueuedGoodsIssue`, { QueueReference: record.QueueReference });
         expect(retry.status).toBe(200);

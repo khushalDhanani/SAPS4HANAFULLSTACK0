@@ -494,6 +494,16 @@ class GoodsIssueAdapter {
     return this.posting.postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue);
   }
 
+  // Isolated per-movement-type posting passthroughs (Phase 1). Each takes the normalized
+  // domain payload and delegates to the matching isolated posting-client method.
+  async postGoodsIssue201(data) { return this.posting.post201(data); }
+  async postGoodsIssue261(data) { return this.posting.post261(data); }
+  async postGoodsIssue301(data) { return this.posting.post301(data); }
+  async postGoodsIssue311(data) { return this.posting.post311(data); }
+
+  /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
+  async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
+
   /**
    * Pre-check serial number stock status (must be ESTO / unrestricted stock, not already issued).
    */

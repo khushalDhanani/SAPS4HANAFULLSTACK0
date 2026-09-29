@@ -379,21 +379,8 @@ class GoodsIssueHandler {
       }
 
       try {
-        const result = await GoodsIssueAdapter.postGoodsIssue(
-          item.ReservationNo,
-          item.ReservationItem,
-          item.Material,
-          item.IssueQty,
-          item.Unit,
-          item.Batch,
-          item.DifferenceQty,
-          item.DifferenceReason,
-          item.DifferenceStorageType,
-          item.FinalIssue,
-          item.Plant,
-          item.StorageLocation,
-          GoodsIssueQueueManager.postOptions(item)
-        );
+        // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
+        const result = await GoodsIssueAdapter.postGoodsIssueByType(item);
 
         // Update queue item
         await GoodsIssueQueueManager.update(QueueReference, {

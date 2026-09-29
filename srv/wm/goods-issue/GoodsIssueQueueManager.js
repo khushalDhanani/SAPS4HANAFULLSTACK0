@@ -304,7 +304,7 @@ class GoodsIssueQueueManager {
       };
     }
 
-    if (!adapter || typeof adapter.postGoodsIssue !== 'function') {
+    if (!adapter || typeof adapter.postGoodsIssueByType !== 'function') {
       throw new Error('Valid GoodsIssueAdapter is required to drain the queue.');
     }
 
@@ -328,21 +328,8 @@ class GoodsIssueQueueManager {
 
     for (const item of pendingItems) {
       try {
-        const result = await adapter.postGoodsIssue(
-          item.ReservationNo,
-          item.ReservationItem,
-          item.Material,
-          item.IssueQty,
-          item.Unit,
-          item.Batch,
-          item.DifferenceQty,
-          item.DifferenceReason,
-          item.DifferenceStorageType,
-          item.FinalIssue,
-          item.Plant,
-          item.StorageLocation,
-          this.postOptions(item)
-        );
+        // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
+        const result = await adapter.postGoodsIssueByType(item);
 
         if (result && result.MaterialDocument) {
           await this.update(item.QueueReference, {
