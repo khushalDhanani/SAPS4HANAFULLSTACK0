@@ -529,6 +529,25 @@ sap.ui.define([
                 .then(function (res) {
                     that._oModel.setProperty("/busy", false);
 
+                    // Pending-to-complete workflow: after completing a planned reservation, return to
+                    // the 201 Pending list carrying the outcome (SAP material document, or the queue
+                    // reference while the Gateway is inactive) so it can show the result and clear the
+                    // completed item from the list.
+                    if (that._oModel.getProperty("/fromReservation")) {
+                        var oOutcome = {
+                            resv: that._oModel.getProperty("/reservationNo"),
+                            item: that._oModel.getProperty("/reservationItem")
+                        };
+                        if (res && res.MaterialDocument) {
+                            oOutcome.doc = res.MaterialDocument;
+                            oOutcome.year = res.MaterialDocYear || new Date().getFullYear().toString();
+                        } else {
+                            oOutcome.queued = (res && res.QueueReference) || "1";
+                        }
+                        that.getRouter().navTo("wmGoodsIssue201Pending", { "?query": oOutcome });
+                        return;
+                    }
+
                     // Honest outcome: a QUEUED result (no SAP material document) means SAP has NOT
                     // persisted the document - it was only recorded in the dispatch queue while the
                     // S/4HANA Gateway service is inactive. Never claim a successful SAP posting or

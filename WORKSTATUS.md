@@ -6049,6 +6049,21 @@
 - **Result**: Step 3 done and live-verified — "Complete" triggers the real 201 `postGoodsIssue201` via the existing posting logic (no new backend), gated on scan/fill completion, carrying the reservation link. The three-step 201 pending-to-complete workflow (list pending → open+pre-fill → scan/confirm → Complete/post) is now end-to-end, awaiting only DS4 Gateway activation for real SAP persistence.
 - **Next recommended action**: Optionally add post-success return-and-refresh of the Pending list; commit/push to `origin/feature/CL01`.
 
+## 2026-09-29 22:10 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Step 4 of the 201 workflow — after a successful post, remove/mark that item as cleared from the pending list, show the Material Document number, and return to the pending list. Rules: 201-only, isolated in its own view/controller/model (per-type separation, no shared logic with 261/301/311); reuse the existing 201 service/backend as-is for posting + serial validation (no duplication).
+- **Implementation (frontend only, 201-isolated)**:
+  - **Pending route** (`manifest.json`): `wmGoodsIssue201Pending` now accepts an optional `:?query:` to carry the completion outcome back.
+  - **201 create page** (`GoodsIssue201.controller.js`): after a successful Complete, when `fromReservation`, it navigates to the 201 Pending list carrying the outcome — the SAP `MaterialDocument`/year when posted, or the `QueueReference` while the Gateway is inactive — instead of showing the standalone dialog. (Unplanned 201 posting behaviour unchanged.)
+  - **201 Pending** (`GoodsIssue201Pending.controller.js` + view): on return with an outcome, it reloads the open reservations, **removes the just-completed reservation from the list** (a posted one drops off SAP on its own; a queued one is still open in SAP but cleared locally), and shows a dismissible result MessageStrip — Success with the **Material Document number** when posted, or an honest Warning with the queue reference while queued. New model fields `resultState`/`resultText`; `onCloseResult` handler.
+  - **i18n**: `gi201PendingCompletedPosted` / `gi201PendingCompletedQueued` in both bundles (parity).
+  - No backend/service posting or serial-validation logic duplicated — reuses `postGoodsIssue201` (posting) and `resolveStockUnit` (scan/serial validation) unchanged. No 261/301/311 file touched (verified from the diff).
+- **Executed commands & results**:
+  - `npx jest test/unit test/integration --no-coverage`: **112 suites, 1641/1641 passed**. `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. `npx eslint srv`: 0 errors. manifest valid JSON. `git diff --check`: clean. i18n parity 2/2.
+- **Live verification (running CAP, live S/4HANA, no console errors)**: opened pending reservation 514439 (plain-qty) → Complete → `POST /postGoodsIssue201 → 200` → navigated back to `#/wm/goods-issue/201/pending?...&queued=GI-QUEUE-514439-0001-8610`; the Pending list re-rendered with **514439 removed** (count dropped, no longer listed) and a ⚠ result strip: "Reservation 514439 completed and queued (GI-QUEUE-514439-0001-8610), pending SAP S/4HANA Gateway activation. Cleared from the pending list." (When the Gateway is active and SAP returns a document, the same strip shows the Material Document number instead.)
+- **Result**: Step 4 done and live-verified — the full 201 pending-to-complete workflow now closes the loop: **EWM 201 tile → pending list → open + pre-fill → scan/confirm (auto-detect SU/serial/qty) → Complete/post (existing `postGoodsIssue201`) → return to pending with the item cleared and the document/queue outcome shown**. 201-only and isolated; real SAP-persisted document numbers await DS4 Gateway activation.
+- **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation so Complete returns a real Material Document number end to end.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

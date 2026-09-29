@@ -8,7 +8,7 @@ sap.ui.define([
     return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue201Pending", {
 
         onInit: function () {
-            this._oModel = new JSONModel({ items: [], busy: false, error: "" });
+            this._oModel = new JSONModel({ items: [], busy: false, error: "", resultState: "None", resultText: "" });
             this.getView().setModel(this._oModel, "gi201p");
 
             var oRouter = this.getRouter();
@@ -17,7 +17,10 @@ sap.ui.define([
             }
         },
 
-        _onRouteMatched: function () {
+        _onRouteMatched: function (oEvent) {
+            var oArgs = oEvent && oEvent.getParameter("arguments");
+            // Outcome of a just-completed reservation (set by the 201 create page's Complete action).
+            this._completedOutcome = (oArgs && oArgs["?query"]) || null;
             this._loadPending();
         },
 
@@ -27,15 +30,43 @@ sap.ui.define([
             this._oModel.setProperty("/error", "");
             GoodsIssue201Service.fetchPendingReservations()
                 .then(function (aItems) {
-                    that._oModel.setProperty("/items", Array.isArray(aItems) ? aItems : []);
+                    var aList = Array.isArray(aItems) ? aItems : [];
+                    var oDone = that._completedOutcome;
+                    if (oDone && oDone.resv) {
+                        // Clear the just-completed reservation from the list (a posted one drops off
+                        // SAP on its own; a queued one is still open in SAP but locally cleared here).
+                        aList = aList.filter(function (r) { return String(r.ReservationNo) !== String(oDone.resv); });
+                        that._showCompletionResult(oDone);
+                        that._completedOutcome = null; // one-shot
+                    }
+                    that._oModel.setProperty("/items", aList);
                 })
                 .catch(function (err) {
                     that._oModel.setProperty("/items", []);
-                    that._oModel.setProperty("/error", (err && err.message) || that.getText("gi201PendingLoadError"));
+                    that._oModel.setProperty("/error", (err && err.message) || that.getText("gi201OpenResvLoadError"));
                 })
                 .finally(function () {
                     that._oModel.setProperty("/busy", false);
                 });
+        },
+
+        /**
+         * Show the outcome of a completed reservation: the SAP Material Document number when posted,
+         * or the honest queue reference while the S/4HANA Gateway service is inactive.
+         */
+        _showCompletionResult: function (oDone) {
+            if (oDone.doc) {
+                this._oModel.setProperty("/resultState", "Success");
+                this._oModel.setProperty("/resultText", this.getText("gi201OpenResvCompletedPosted", [oDone.resv, oDone.doc, oDone.year || ""]));
+            } else {
+                this._oModel.setProperty("/resultState", "Warning");
+                this._oModel.setProperty("/resultText", this.getText("gi201OpenResvCompletedQueued", [oDone.resv, oDone.queued || ""]));
+            }
+        },
+
+        onCloseResult: function () {
+            this._oModel.setProperty("/resultState", "None");
+            this._oModel.setProperty("/resultText", "");
         },
 
         onRefresh: function () {

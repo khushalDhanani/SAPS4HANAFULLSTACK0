@@ -7,10 +7,20 @@
 
     <Page
         id="pageGi201Pending"
-        title="{i18n>gi201PendingTitle}"
+        title="{i18n>gi201OpenResvTitle}"
         showNavButton="true"
         navButtonPress=".onNavBack">
         <content>
+            <MessageStrip
+                id="msPending201Result"
+                text="{gi201p>/resultText}"
+                type="{= ${gi201p>/resultState} === 'None' ? 'Information' : ${gi201p>/resultState} }"
+                showIcon="true"
+                showCloseButton="true"
+                close=".onCloseResult"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi201p>/resultText} }" />
+
             <MessageStrip
                 id="msPending201Error"
                 text="{gi201p>/error}"
@@ -26,22 +36,22 @@
                 busy="{gi201p>/busy}"
                 growing="true"
                 growingThreshold="50"
-                noDataText="{i18n>gi201PendingNoData}"
+                noDataText="{i18n>gi201OpenResvNoData}"
                 itemPress=".onOpenReservation"
                 class="sapUiResponsiveMargin"
                 width="auto">
                 <headerToolbar>
                     <OverflowToolbar>
-                        <Title id="ttlPending201" text="{= ${i18n>gi201PendingListTitle} + ' (' + (${gi201p>/items}.length || 0) + ')' }" level="H2" />
+                        <Title id="ttlPending201" text="{= ${i18n>gi201OpenResvListTitle} + ' (' + (${gi201p>/items}.length || 0) + ')' }" level="H2" />
                         <ToolbarSpacer />
-                        <Button id="btnPending201Refresh" icon="sap-icon://refresh" tooltip="{i18n>gi201PendingRefresh}" press=".onRefresh" />
+                        <Button id="btnPending201Refresh" icon="sap-icon://refresh" tooltip="{i18n>gi201OpenResvRefresh}" press=".onRefresh" />
                     </OverflowToolbar>
                 </headerToolbar>
                 <columns>
-                    <Column id="colPendingResv"><Text text="{i18n>gi201PendingColReservation}" /></Column>
-                    <Column id="colPendingMaterial"><Text text="{i18n>gi201PendingColMaterial}" /></Column>
-                    <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi201PendingColPlant}" /></Column>
-                    <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi201PendingColItems}" /></Column>
+                    <Column id="colPendingResv"><Text text="{i18n>gi201OpenResvColReservation}" /></Column>
+                    <Column id="colPendingMaterial"><Text text="{i18n>gi201OpenResvColMaterial}" /></Column>
+                    <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi201OpenResvColPlant}" /></Column>
+                    <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi201OpenResvColItems}" /></Column>
                 </columns>
                 <items>
                     <ColumnListItem type="Navigation" press=".onOpenReservation">
@@ -52,7 +62,7 @@
                                 <Text text="{gi201p>SampleMaterialDesc}" class="sapUiTinyMarginTop" />
                             </VBox>
                             <Text text="{gi201p>Plant}" />
-                            <ObjectNumber number="{gi201p>ItemCount}" unit="{i18n>gi201PendingItemsUnit}" />
+                            <ObjectNumber number="{gi201p>ItemCount}" unit="{i18n>gi201OpenResvItemsUnit}" />
                         </cells>
                     </ColumnListItem>
                 </items>

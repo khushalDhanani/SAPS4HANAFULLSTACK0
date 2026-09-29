@@ -278,7 +278,7 @@
         },
         {
           "name": "wmGoodsIssue201Pending",
-          "pattern": "wm/goods-issue/201/pending",
+          "pattern": "wm/goods-issue/201/pending:?query:",
           "target": "TargetGoodsIssue201Pending"
         },
         {
