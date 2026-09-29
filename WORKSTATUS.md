@@ -5985,6 +5985,20 @@
 - **Result**: Phase 4 sequencing confirmed and its final validation pass is green. The full isolated per-type architecture (Phases 1–3) is in place, tested, and live-verified, with the shared stack removed and the legacy page deleted — and the suite was green at every intermediate step.
 - **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation to validate real SAP-persisted postings end to end (still queue-only until then).
 
+## 2026-09-29 19:15 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: "PHASE 5 — Test Plan (prove total isolation)" — per-type + cross-cutting isolation proofs (#1–#6).
+- **Coverage of each Phase 5 item**:
+  - **#1 Unit (per type)** — covered: `goodsIssuePerTypeValidation.test.js` (17) + `goodsIssuePerTypeMapper.test.js` (6) assert only each type's rules/payload (301 mapper emits receiving + gmCode `04`; 201 validator rejects any GLAccount; 261/301/311 require reservation; transfers carry no CostCenter). (Kept as combined per-type files rather than 8 separate `goodsIssueNNN.*.test.js` — same coverage.)
+  - **#2 Isolation by import graph** — EXTENDED this session: `goodsIssueIsolation.test.js` now scans BOTH backend (validation/normalize/mapper) AND frontend (`GoodsIssue{NNN}.controller/Model/Service`) per-type files, parsing CommonJS `require()` and UI5 `sap.ui.define([...])` deps, asserting no per-type file references another type's number. Backend files additionally proven to depend only on shared infrastructure. (25 tests.)
+  - **#3 Handler routing** — NEW (`goodsIssuePhase5Routing.test.js`): `postGoodsIssue261` given a 201-shaped payload (CostCenter, no reservation) is rejected by 261's own validation ("ReservationNo…"); `postGoodsIssue201` given a 261-shaped payload (reservation, no CostCenter) is rejected by 201's ("Cost Center…"); 301 rejects a no-reservation payload; and the shared `postGoodsIssue` action is confirmed unregistered. Proves no cross-type fall-through.
+  - **#4 Contract** — NEW (same file): each `GoodsIssue{NNN}Service.js` source is asserted to post to `/postGoodsIssue{NNN}` and never to the removed shared `/postGoodsIssue` endpoint. (8 tests for #3+#4.)
+  - **#5 Integration (per type, mocked S/4)** — covered + STRENGTHENED: `goodsIssuePerTypePostingClient.test.js` asserts the correct S/4 target (201→`A_MaterialDocumentHeader` with CostCenter; 261→RAP `ZUI_GI_ORDER_RSV_O4` first, standard fallback; 301/311→`A_MaterialDocumentHeader` code `04` + receiving) and now, fed each other type's exclusive fields, asserts NO leakage (201 emits no GLAccount/receiving; transfers emit no CostCenter/GLAccount).
+  - **#6 Regression + live re-verify** — green: full suite **111 suites, 1634/1634**; eslint 0 errors; `git diff --check` clean. Live: all four "New X" buttons open their dedicated pages (Phase 4), and a fresh live 261 post returned the honest ⚠ "Queued — Not Yet Posted to SAP" (GI-QUEUE-518023-0001-6536), no console errors.
+- **Files added**: `test/unit/wm/goodsIssuePhase5Routing.test.js`. **Modified**: `test/unit/wm/goodsIssueIsolation.test.js` (frontend coverage + UI5 dep parsing), `test/unit/wm/goodsIssuePerTypePostingClient.test.js` (no-leakage assertions). All Phase 5 work is test-only — no source/behavior change.
+- **Result**: Phase 5 complete — total per-type isolation is proven structurally (import graph over backend + frontend), behaviourally (handler routing rejects cross-type payloads), by contract (frontend posts only to its own action), and at the S/4 boundary (correct target + no field leakage), with regression + live re-verify green.
+- **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation for real SAP persistence.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

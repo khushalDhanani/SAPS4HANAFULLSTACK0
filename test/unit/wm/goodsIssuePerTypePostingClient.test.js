@@ -21,13 +21,18 @@ const base = { IssueQty: 1, Unit: 'KG', Plant: '1130', StorageLocation: 'CS02', 
 
 test('post201 → standard API with CostCenter, movement 201', async () => {
   const { client, calls } = makeClient();
-  const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
+  // Feed other types' exclusive fields too, to prove they never leak into a 201 payload.
+  const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980', GLAccount: '400000', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02' });
   expect(res.Success).toBe(true);
   expect(res.MaterialDocument).toBe('4900099999');
   expect(calls[0].path).toContain('API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
   const item = calls[0].body.to_MaterialDocumentItem.results[0];
   expect(item.GoodsMovementType).toBe('201');
   expect(item.CostCenter).toBe('1011202902');
+  // No cross-type leakage: 201 never forwards GLAccount or receiving plant/sloc.
+  expect(item.GLAccount).toBeUndefined();
+  expect(item.IssuingOrReceivingPlant).toBeUndefined();
+  expect(item.IssuingOrReceivingStorageLoc).toBeUndefined();
 });
 
 test('post261 → tries RAP ZUI_GI_ORDER_RSV_O4 first', async () => {
@@ -54,13 +59,17 @@ test('post261 → falls back to standard API when RAP yields no document', async
 
 test.each([['301', '04'], ['311', '04']])('post%s → standard API with receiving, movement %s', async (type, gm) => {
   const { client, calls } = makeClient();
-  const res = await client[`post${type}`]({ ...base, MovementType: type, Material: 'M1', ReservationNo: '519944', ReservationItem: '0001', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02' });
+  // Feed 201/261 exclusive fields too, to prove they never leak into a transfer payload.
+  const res = await client[`post${type}`]({ ...base, MovementType: type, Material: 'M1', ReservationNo: '519944', ReservationItem: '0001', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02', CostCenter: 'CC1', GLAccount: '400000' });
   expect(res.Success).toBe(true);
   expect(calls[0].path).toContain('A_MaterialDocumentHeader');
   const item = calls[0].body.to_MaterialDocumentItem.results[0];
   expect(calls[0].body.GoodsMovementCode).toBe(gm);
   expect(item.GoodsMovementType).toBe(type);
   expect(item.IssuingOrReceivingPlant).toBe('1600');
+  // No cross-type leakage: transfers never forward CostCenter or GLAccount.
+  expect(item.CostCenter).toBeUndefined();
+  expect(item.GLAccount).toBeUndefined();
 });
 
 test('postByMovementType routes to the isolated method', async () => {
