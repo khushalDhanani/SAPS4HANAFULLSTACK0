@@ -79,6 +79,8 @@ sap.ui.define([
                     }
                     // Enrich the material (batch/serial flags, available stock) and re-validate.
                     that._loadMaterialInfo(oItem.Material || "");
+                    // Detect whether this line is unit-managed (scan-to-complete) or plain quantity.
+                    that._detectScanMode(oItem.ReservationNo || sResv, oItem.ReservationItem || "", Number(oItem.OpenQty) || 0);
                     that._validateLive();
                 })
                 .catch(function (err) {
@@ -170,9 +172,10 @@ sap.ui.define([
                             that._oModel.setProperty("/isUnitEditable", true);
                         }
                         that._oModel.setProperty("/isBatchManaged", !!oInfo.isBatchManaged);
-                        // Check if serial managed (e.g. 8000009753 or equipment)
-                        var bSerial = (sMat === "8000009753" || sMat.indexOf("9753") !== -1 || !!oInfo.isSerialManaged);
-                        that._oModel.setProperty("/isSerialManaged", bSerial);
+                        // Serial management comes from SAP master data only (no hardcoded material list).
+                        // For reservation-completion, unit scanning is driven by the scan-to-complete
+                        // section (scanEnabled) which auto-detects serial vs storage unit per scan.
+                        that._oModel.setProperty("/isSerialManaged", !!oInfo.isSerialManaged);
                         that._oModel.setProperty("/availableStock", oInfo.availableStock);
                     }
                 })
@@ -187,7 +190,93 @@ sap.ui.define([
         },
 
         // =============================================================
-        // SERIAL NUMBERS SCAN & MANAGEMENT
+        // SCAN-TO-COMPLETE (unit-managed reservations: serial or storage unit)
+        // =============================================================
+
+        /**
+         * Decide whether the opened reservation line is unit-managed (scannable) or plain quantity.
+         * Unit-managed lines expose scannable stock units via getStockUnitsForItem; plain-quantity
+         * lines have none and skip straight to quantity/cost-center confirmation.
+         */
+        _detectScanMode: function (sResv, sItem, nOpenQty) {
+            var that = this;
+            var oModel = this._oModel;
+            oModel.setProperty("/scanEnabled", false);
+            oModel.setProperty("/scannedUnits", []);
+            oModel.setProperty("/lastScanState", "None");
+            oModel.setProperty("/lastScanText", "");
+            if (!sResv || !sItem) {
+                return;
+            }
+            GoodsIssue201Service.fetchStockUnitsForItem(sResv, sItem)
+                .then(function (oData) {
+                    var aUnits = (oData && oData.StockUnits) || [];
+                    if (aUnits.length > 0) {
+                        oModel.setProperty("/scanEnabled", true);
+                        oModel.setProperty("/requiredScanCount", Math.max(1, Math.floor(nOpenQty || 1)));
+                        // The scan section takes over from the plain serial-entry section.
+                        oModel.setProperty("/isSerialManaged", false);
+                    }
+                })
+                .catch(function () { /* no scannable units -> plain quantity confirmation */ })
+                .finally(function () { that._validateLive(); });
+        },
+
+        _setScanFeedback: function (sState, sText) {
+            this._oModel.setProperty("/lastScanState", sState);
+            this._oModel.setProperty("/lastScanText", sText);
+        },
+
+        /**
+         * Handle one scanned unit barcode: auto-fetch + auto-match against S/4 via resolveStockUnit,
+         * show clear pass/fail feedback, and on a match auto-fill the line. Never a silent fill.
+         */
+        onScanUnit: function () {
+            var that = this;
+            var oModel = this._oModel;
+            var sBarcode = String(oModel.getProperty("/scanInput") || "").trim();
+            if (!sBarcode) {
+                return;
+            }
+            var sResv = oModel.getProperty("/reservationNo");
+            var sItem = oModel.getProperty("/reservationItem");
+            oModel.setProperty("/scanInput", "");
+            GoodsIssue201Service.resolveScanUnit(sBarcode, sResv, sItem)
+                .then(function (oRes) {
+                    var oData = oModel.getData();
+                    var oFb = GoodsIssue201Model.applyScanResolution(oData, oRes, sBarcode);
+                    oModel.setProperty("/scannedUnits", oData.scannedUnits);
+                    that._setScanFeedback(oFb.state, oFb.text);
+                })
+                .catch(function (err) {
+                    // Hard SAP condition (no open qty, wrong plant, etc.) - surface the real message.
+                    that._setScanFeedback("Error", (err && err.message) || "Scan could not be validated in S/4HANA.");
+                })
+                .finally(function () { that._validateLive(); });
+        },
+
+        onScanInputSubmit: function () {
+            this.onScanUnit();
+        },
+
+        onDeleteScannedUnit: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oCtx = oItem && oItem.getBindingContext("gi201");
+            if (!oCtx) {
+                return;
+            }
+            var iIdx = parseInt(oCtx.getPath().split("/").pop(), 10);
+            var aUnits = this._oModel.getProperty("/scannedUnits") || [];
+            if (iIdx >= 0 && iIdx < aUnits.length) {
+                aUnits.splice(iIdx, 1);
+                this._oModel.setProperty("/scannedUnits", aUnits);
+                this._setScanFeedback("None", "");
+                this._validateLive();
+            }
+        },
+
+        // =============================================================
+        // SERIAL NUMBERS SCAN & MANAGEMENT (unplanned serial entry)
         // =============================================================
 
         onAddSerialPress: function () {

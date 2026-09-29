@@ -94,6 +94,15 @@
                 serialInput: "",
                 serialNumbers: [],
 
+                // Scan-to-complete (unit-managed reservations: serial or storage-unit)
+                scanEnabled: false,
+                scanUnitKind: "",           // "SERIAL" | "SU" (derived per scan) - label only
+                scanInput: "",
+                scannedUnits: [],           // [{ barcode, material, serial, isSerial }]
+                requiredScanCount: 0,
+                lastScanState: "None",      // MessageStrip state: Success | Error | Warning | None
+                lastScanText: "",
+
                 // Active Stock Information
                 availableStock: null,
                 stockLoading: false,
@@ -272,6 +281,16 @@
                 }
             }
 
+            // 10. Scan-to-complete (unit-managed reservations): every required unit must be scanned.
+            if (oData.scanEnabled) {
+                var nScanned = Array.isArray(oData.scannedUnits) ? oData.scannedUnits.length : 0;
+                var nReq = Number(oData.requiredScanCount) || 0;
+                if (nScanned !== nReq) {
+                    errors.scan = "Scan " + nReq + " unit(s) to complete this reservation (" + nScanned + " scanned).";
+                    bValid = false;
+                }
+            }
+
             return {
                 isValid: bValid,
                 errors: errors
@@ -327,6 +346,42 @@
          * @param {Object} oData
          * @returns {Object}
          */
+        /**
+         * Apply a resolveStockUnit result for ONE scan against the current line. Auto-detects serial
+         * vs storage unit, gives clear pass/fail feedback (matched / wrong material / already issued /
+         * duplicate / quantity exceeded) and, on a match, appends to scannedUnits. Never a silent fill.
+         * @param {Object} oData model data
+         * @param {Object} oRes StockUnitResolution from resolveStockUnit
+         * @param {string} sBarcode the raw scanned barcode
+         * @returns {{ ok: boolean, state: string, text: string }}
+         */
+        applyScanResolution: function (oData, oRes, sBarcode) {
+            var sExpectedMat = String(oData.material || "").trim().toUpperCase();
+            var nRequired = Number(oData.requiredScanCount) || 0;
+            var aScanned = Array.isArray(oData.scannedUnits) ? oData.scannedUnits : [];
+            var sScan = String(sBarcode || "").trim();
+
+            if (!oRes || oRes.SuExists === false) {
+                return { ok: false, state: "Error", text: (oRes && oRes.SuNotFoundReason) || ("Unit '" + sScan + "' not found in unrestricted stock for this reservation.") };
+            }
+            var sResMat = String(oRes.Material || "").trim().toUpperCase();
+            if (sExpectedMat && sResMat && sResMat !== sExpectedMat) {
+                return { ok: false, state: "Error", text: "Wrong material: scanned unit belongs to " + sResMat + ", expected " + sExpectedMat + "." };
+            }
+            var sSerial = String(oRes.DeterminedSerial || oRes.SerialNumber || "").trim();
+            var sKey = sSerial || sScan;
+            if (aScanned.some(function (u) { return u.key === sKey; })) {
+                return { ok: false, state: "Warning", text: "Unit " + sKey + " was already scanned." };
+            }
+            if (aScanned.length >= nRequired) {
+                return { ok: false, state: "Warning", text: "Quantity exceeded: " + nRequired + " unit(s) already scanned for this line." };
+            }
+            aScanned.push({ key: sKey, barcode: sScan, material: sResMat, serial: sSerial, isSerial: !!oRes.IsSerialManaged });
+            oData.scannedUnits = aScanned;
+            var sLabel = sSerial ? ("serial " + sSerial) : ("unit " + sKey);
+            return { ok: true, state: "Success", text: "Matched " + sLabel + " (" + aScanned.length + " of " + nRequired + ")." };
+        },
+
         toBackendPayload: function (oData) {
             var sCC = String(oData.costCenter || "").trim().toUpperCase();
             var sPlant = String(oData.plant || "").trim().toUpperCase();
@@ -335,6 +390,16 @@
             var sUnit = String(oData.unit || "").trim().toUpperCase();
             var sBatch = oData.isBatchManaged ? String(oData.batch || "").trim().toUpperCase() : "";
             var aSerials = oData.isSerialManaged ? (oData.serialNumbers || []).map(_cleanBarcode) : [];
+            // Scan-to-complete: carry any serials captured from scanned units (storage-unit scans that
+            // are not serial-managed contribute no serials - the goods issue is by quantity).
+            if (oData.scanEnabled && Array.isArray(oData.scannedUnits)) {
+                var aScanSerials = oData.scannedUnits
+                    .filter(function (u) { return u.isSerial && u.serial; })
+                    .map(function (u) { return _cleanBarcode(u.serial); });
+                if (aScanSerials.length > 0) {
+                    aSerials = aScanSerials;
+                }
+            }
 
             return {
                 MovementType: "201",

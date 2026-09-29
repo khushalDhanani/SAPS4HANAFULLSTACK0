@@ -227,6 +227,40 @@ sap.ui.define([
                 .then(function (oData) {
                     return (oData && oData.value) || (Array.isArray(oData) ? oData : []);
                 });
+        },
+
+        /**
+         * List the scannable stock units valid for a reservation line (correct material/plant/sloc,
+         * in stock). Used to decide whether the item is unit-managed (scan-to-complete) or plain
+         * quantity (skip straight to qty/cost-center confirmation).
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @returns {Promise<Object>} StockUnitList (StockUnits[], Material, Plant, StorageLocation)
+         */
+        fetchStockUnitsForItem: function (sReservationNo, sReservationItem) {
+            var sUrl = BASE_PATH_GI + "/getStockUnitsForItem(reservationNo='" +
+                encodeURIComponent(String(sReservationNo || "").trim()) + "',reservationItem='" +
+                encodeURIComponent(String(sReservationItem || "").trim()) + "')";
+            return ODataClient.get(sUrl);
+        },
+
+        /**
+         * Resolve ONE scanned unit barcode against a reservation line. Auto-detects serial vs storage
+         * unit and validates it against S/4 (correct material, in unrestricted stock, not already
+         * issued): returns a StockUnitResolution with SuExists / SuNotFoundReason / Material /
+         * IsSerialManaged / DeterminedSerial / CurrentStock. Rejects (throws) for hard SAP conditions
+         * such as no remaining open quantity.
+         * @param {string} sBarcode
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @returns {Promise<Object>}
+         */
+        resolveScanUnit: function (sBarcode, sReservationNo, sReservationItem) {
+            var sUrl = BASE_PATH_GI + "/resolveStockUnit(suBarcode='" +
+                encodeURIComponent(String(sBarcode || "").trim()) + "',reservationNo='" +
+                encodeURIComponent(String(sReservationNo || "").trim()) + "',reservationItem='" +
+                encodeURIComponent(String(sReservationItem || "").trim()) + "')";
+            return ODataClient.get(sUrl);
         }
     };
 

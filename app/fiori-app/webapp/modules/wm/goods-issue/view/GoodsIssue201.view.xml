@@ -237,6 +237,70 @@
                     </f:SimpleForm>
                 </Panel>
 
+                <!-- 3b. Scan-to-complete: unit-managed reservations (serial or storage unit). Scanning
+                     validates each unit against S/4 (right material, in stock, not already issued). -->
+                <Panel
+                    id="pnlScanToComplete"
+                    headerText="{i18n>gi201ScanSectionTitle}"
+                    expandable="false"
+                    visible="{gi201>/scanEnabled}"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="End" class="sapUiTinyMarginBottom" wrap="Wrap">
+                            <Input
+                                id="inScanUnit"
+                                value="{gi201>/scanInput}"
+                                placeholder="{i18n>gi201ScanPlaceholder}"
+                                submit=".onScanInputSubmit"
+                                width="22rem"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnScanUnit"
+                                text="{i18n>gi201ScanBtn}"
+                                type="Emphasized"
+                                icon="sap-icon://bar-code"
+                                press=".onScanUnit"
+                                class="sapUiTinyMarginEnd" />
+                            <ToolbarSpacer />
+                            <ObjectStatus
+                                id="osScanProgress"
+                                title="{i18n>gi201ScanProgress}"
+                                text="{= ${gi201>/scannedUnits}.length + ' / ' + ${gi201>/requiredScanCount} }"
+                                state="{= ${gi201>/scannedUnits}.length === ${gi201>/requiredScanCount} ? 'Success' : 'Warning' }" />
+                        </HBox>
+                        <MessageStrip
+                            id="msScanFeedback"
+                            text="{gi201>/lastScanText}"
+                            type="{= ${gi201>/lastScanState} === 'None' ? 'Information' : ${gi201>/lastScanState} }"
+                            showIcon="true"
+                            visible="{= ${gi201>/lastScanState} !== 'None' }"
+                            class="sapUiTinyMarginBottom" />
+                        <Table
+                            id="tblScannedUnits"
+                            items="{gi201>/scannedUnits}"
+                            noDataText="{i18n>gi201ScanNoData}"
+                            mode="Delete"
+                            delete=".onDeleteScannedUnit">
+                            <columns>
+                                <Column id="colScanUnit"><Text text="{i18n>gi201ScanColUnit}" /></Column>
+                                <Column id="colScanMaterial"><Text text="{i18n>gi201ScanColMaterial}" /></Column>
+                                <Column id="colScanKind" hAlign="End"><Text text="{i18n>gi201ScanColKind}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{= ${gi201>serial} ? ${gi201>serial} : ${gi201>barcode} }" />
+                                        <Text text="{gi201>material}" />
+                                        <ObjectStatus
+                                            text="{= ${gi201>isSerial} ? ${i18n>gi201ScanKindSerial} : ${i18n>gi201ScanKindSU} }"
+                                            state="Information" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
                 <!-- 4. Conditional: Serial Numbers Management (Visible only if serial-managed) -->
                 <Panel
                     id="pnlSerialManagement"

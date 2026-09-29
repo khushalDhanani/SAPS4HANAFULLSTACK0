@@ -6018,6 +6018,26 @@
 - **Result**: Step 1 of the 201 pending-to-complete workflow is done and live-verified — the EWM 201 tile now opens a real pending-reservations list, and selecting one opens the 201 page pre-filled to complete the goods issue.
 - **Next recommended action**: Confirm the follow-on steps of the workflow (e.g. mark-complete/refresh-after-post behaviour), then commit/push to `origin/feature/CL01`; DS4 Gateway activation still required for real SAP persistence.
 
+## 2026-09-29 21:30 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Step 2 of the 201 workflow — each opened pending item is actionable: serial-managed → barcode scan that auto-fetches the serial from S/4 (reuse the ESTO check), auto-matches material/quantity, auto-fills (no typing); not serial-managed → skip to quantity/cost-center confirmation; clear pass/fail feedback per scan (matched / wrong material / already issued / quantity exceeded), never a silent fill. **Confirm the backend capability first, don't assume.**
+- **Discovery (confirmed LIVE, contradicted the requirement's premise)**: the 201 pending materials are **Storage-Unit (WM/EWM) managed, not serial-number managed**. `resolveStockUnit(su, resv, item)` returns a structured `StockUnitResolution` (`SuExists`, `SuNotFoundReason`, `Material`, `IsSerialManaged`, `DeterminedSerial`, `CurrentStock`) — 200 for not-found, throws for hard conditions (e.g. "no open quantity remaining"). `getStockUnitsForItem(resv, item)` lists the valid scannable units for a line. The classic serial ESTO check (`validateSerialStatus` → `C_MaterialSerialNumber`) exists but no serials exist for these materials. The 201 controller was **hardcoding** `8000009753` as serial-managed (removed).
+- **Decision taken (asked)**: **auto-detect per material, support both** — genuine serial → serial path; SU-managed → SU-barcode path; plain-qty → skip to confirm. Implemented as a single unified scanner: `resolveStockUnit` auto-detects serial vs SU per scan; `getStockUnitsForItem` decides whether the line is scannable at all.
+- **Implementation (frontend only; backend `resolveStockUnit`/`getStockUnitsForItem` reused as-is)**:
+  - **201 service**: added `fetchStockUnitsForItem(resv,item)` (detect scannability) and `resolveScanUnit(barcode,resv,item)` (per-scan resolve).
+  - **201 model**: scan state (`scanEnabled`/`scannedUnits`/`requiredScanCount`/`lastScanState`/`lastScanText`), `applyScanResolution(data,res,barcode)` → matched / wrong-material / duplicate / quantity-exceeded / not-found-in-stock feedback (never silent); scan-completion gate in `validate()`; scanned serials collected into the post payload. Removed the hardcoded serial-managed material list (`isSerialManaged` now comes from SAP only).
+  - **201 controller**: on reservation pre-fill, `_detectScanMode` calls `getStockUnitsForItem` → if units exist, enable the scan section (else plain-qty confirm); `onScanUnit` resolves each scan, surfaces pass/fail feedback, auto-fills on match; `onDeleteScannedUnit`.
+  - **201 view**: new "Scan Units to Complete" panel (visible only when `scanEnabled`) — scan input + Scan button, "Scanned X / Y" progress, a feedback MessageStrip, and a scanned-units table (Unit/Serial · Material · Type).
+  - **i18n**: 10 new `gi201Scan*` keys in both bundles (parity).
+- **Executed commands & results**:
+  - `npx jest test/unit test/integration --no-coverage`: **112 suites, 1641/1641 passed** (new `goodsIssue201Scan.test.js` — 6 tests over the matching logic: matched/wrong-material/duplicate/quantity-exceeded/not-found).
+  - `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. `npx eslint srv`: 0 errors. `git diff --check`: clean. i18n parity 10/10.
+- **Live verification (running CAP, live S/4HANA, no console errors)**:
+  - **Auto-detect / plain-qty branch**: reservation 514439 (Safety Shoes, 0 stock units) opened with `scanEnabled=false`, `isValid=true` — no scan section, ready to post (skip-to-confirm).
+  - **SU-scan branch**: reservation 493669 (iPad 8000009790, 6 stock units) opened with the "Scan Units to Complete" section (Scanned 0/1, Post disabled). Scanning real SU `1000054693` → green **"Matched unit 1000054693 (1 of 1)"**, row added (Material 8000009790, Storage Unit), progress 1/1, **Post enabled**. Bogus barcode → **Error** with the real SAP EWM message, not added. Re-scan same SU → **Warning "already scanned"**, not added.
+- **Result**: Step 2 done and live-verified — the opened pending item is actionable with a real per-scan S/4 validation + auto-fill + honest pass/fail feedback, auto-detecting SU vs serial vs plain-qty per material. (Wrong-material and quantity-exceeded feedback are unit-tested; the live pending data is SU-managed/plain-qty, so those two paths weren't reproducible against SAP in this session.)
+- **Next recommended action**: Confirm any further workflow steps (e.g. post-and-refresh the pending list), then commit/push to `origin/feature/CL01`.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).
