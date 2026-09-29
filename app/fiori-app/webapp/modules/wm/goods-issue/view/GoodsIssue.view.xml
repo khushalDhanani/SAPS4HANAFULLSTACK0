@@ -146,8 +146,11 @@
                                 <Label text="{i18n>giReservationLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
                                 <Text text="{giView>/resolved/ReservationNo}" class="fontBold" visible="{= !!${giView>/resolved/ReservationNo} }" />
 
-                                <Label text="{i18n>giOrderLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
-                                <Text text="{= ${giView>/resolved/OrderNo} || '-' }" class="fontBold" visible="{= !!${giView>/resolved/ReservationNo} }" />
+                                <Label text="{i18n>giOrderLabel}" visible="{= !!${giView>/resolved/ReservationNo} &amp;&amp; ${giView>/mode} !== '201' }" />
+                                <Text text="{= ${giView>/resolved/OrderNo} || '-' }" class="fontBold" visible="{= !!${giView>/resolved/ReservationNo} &amp;&amp; ${giView>/mode} !== '201' }" />
+
+                                <Label text="{i18n>giCostCenter}" visible="{= !!${giView>/resolved/ReservationNo} &amp;&amp; ${giView>/mode} === '201' }" />
+                                <Text text="{= ${giView>/resolved/CostCenter} || ${giView>/activeItem/CostCenter} || '-' }" class="fontBold" visible="{= !!${giView>/resolved/ReservationNo} &amp;&amp; ${giView>/mode} === '201' }" />
 
                                 <Label text="{i18n>giMovementTypeLabel}" visible="{= !!${giView>/resolved/ReservationNo} }" />
                                 <Text text="{giView>/resolved/MovementType} ({giView>/resolved/MovementTypeName})" visible="{= !!${giView>/resolved/ReservationNo} }" />
@@ -247,7 +250,7 @@
                                 <core:Title text="{i18n>giStep3ActiveComponentTitle}" />
 
                                 <Label text="{i18n>giReservationLabel}" />
-                                <Text text="{giView>/resolved/ReservationNo} (Item {giView>/activeItem/ReservationItem} • Order {= ${giView>/resolved/OrderNo} || '-' })" class="fontBold" />
+                                <Text text="{giView>/resolved/ReservationNo} (Item {giView>/activeItem/ReservationItem}{= ${giView>/mode} === '201' ? (' \u2022 CC ' + (${giView>/activeItem/CostCenter} || '-')) : (' \u2022 Order ' + (${giView>/resolved/OrderNo} || '-')) })" class="fontBold" />
 
                                 <Label text="{i18n>giColMaterial}" />
                                 <ObjectIdentifier
@@ -257,10 +260,13 @@
                                 <Label text="{i18n>giLabelPlantLocation}" />
                                 <Text text="{giView>/activeItem/Plant} / {giView>/activeItem/StorageLocation}" />
 
-                                <Label text="{i18n>giReceivingPlantLocation}" visible="{= ${giView>/mode} !== '261' }" />
+                                <Label text="{i18n>giReceivingPlantLocation}" visible="{= ${giView>/mode} === '301' || ${giView>/mode} === '311' }" />
                                 <Text
                                     text="{= (${giView>/activeItem/ReceivingPlant} ? ${giView>/activeItem/ReceivingPlant} + ' / ' + (${giView>/activeItem/ReceivingStorageLocation} || '-') : ${i18n>giReceivingFromReservation}) + (${giView>/activeItem/MovementType} ? ' (' + ${i18n>giMovementTypeLabel} + ' ' + ${giView>/activeItem/MovementType} + ')' : '') }"
-                                    visible="{= ${giView>/mode} !== '261' }" />
+                                    visible="{= ${giView>/mode} === '301' || ${giView>/mode} === '311' }" />
+
+                                <Label text="{i18n>giCostCenter}" visible="{= ${giView>/mode} === '201' }" />
+                                <Text text="{= ${giView>/activeItem/CostCenter} || '-' }" class="fontBold" visible="{= ${giView>/mode} === '201' }" />
 
                                 <Label text="{i18n>giConfirmedStockLabel}" />
                                 <ObjectNumber
@@ -409,6 +415,17 @@
                                     visible="{= ${giView>/activeItem/BatchStatusState} === 'Error' }"
                                     class="sapUiTinyMarginTop" />
 
+                                <!-- Serial Number Display -->
+                                <Label text="{i18n>giSerialNumberLabel}" visible="{= !!${giView>/activeItem/SerialNumber} || !!${giView>/activeItem/IsSerialManaged} }" />
+                                <HBox alignItems="Center" wrap="Wrap" visible="{= !!${giView>/activeItem/SerialNumber} || !!${giView>/activeItem/IsSerialManaged} }">
+                                    <ObjectStatus
+                                        id="statusActiveSerial"
+                                        text="{= ${giView>/activeItem/SerialNumber} || '(Scan Serial Number)' }"
+                                        state="{= ${giView>/activeItem/SerialNumber} ? 'Success' : 'Warning' }"
+                                        icon="{= ${giView>/activeItem/SerialNumber} ? 'sap-icon://accept' : 'sap-icon://alert' }"
+                                        class="sapUiTinyMarginEnd fontBold" />
+                                </HBox>
+
                                 <!-- Group 4: Difference / Short Pick -->
                                 <core:Title text="{i18n>giStep3DifferenceTitle}" />
 
@@ -538,8 +555,11 @@
                                 <Label text="{i18n>giReservationLabel}" />
                                 <Text text="{giView>/resolved/ReservationNo} (Item {giView>/activeItem/ReservationItem})" class="fontBold" />
 
-                                <Label text="{i18n>giOrderLabel}" />
-                                <Text text="{giView>/resolved/OrderNo}" class="fontBold" />
+                                <Label text="{i18n>giOrderLabel}" visible="{= ${giView>/mode} !== '201' }" />
+                                <Text text="{giView>/resolved/OrderNo}" class="fontBold" visible="{= ${giView>/mode} !== '201' }" />
+
+                                <Label text="{i18n>giCostCenter}" visible="{= ${giView>/mode} === '201' }" />
+                                <Text text="{= ${giView>/activeItem/CostCenter} || '-' }" class="fontBold" visible="{= ${giView>/mode} === '201' }" />
 
                                 <Label text="{i18n>giMovementTypeLabel}" />
                                 <Text text="{giView>/resolved/MovementType} ({giView>/resolved/MovementTypeName})" />
@@ -569,6 +589,9 @@
 
                                 <Label text="{i18n>giExpirationDateLabel}" />
                                 <Text text="{= ${giView>/activeItem/ExpiryDate} || '-' }" />
+
+                                <Label text="{i18n>giSerialNumberLabel}" visible="{= !!${giView>/activeItem/SerialNumber} || !!${giView>/activeItem/IsSerialManaged} }" />
+                                <Text text="{= ${giView>/activeItem/SerialNumber} || '-' }" class="fontBold" visible="{= !!${giView>/activeItem/SerialNumber} || !!${giView>/activeItem/IsSerialManaged} }" />
 
                                 <!-- Section 3: Quantities -->
                                 <core:Title text="{i18n>giReviewQuantitiesTitle}" />

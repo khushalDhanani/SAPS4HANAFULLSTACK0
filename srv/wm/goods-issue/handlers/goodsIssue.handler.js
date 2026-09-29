@@ -116,7 +116,18 @@ class GoodsIssueHandler {
         ReceivingPlant,
         ReceivingStorageLocation
       } = req.data;
-      const postOptions = { movementType: MovementType || GI_MOVEMENT_TYPE, receivingPlant: ReceivingPlant, receivingStorageLocation: ReceivingStorageLocation };
+      // CostCenter is passed separately for 201 (not a standard destructured field in 261)
+      const CostCenter = req.data.CostCenter || '';
+      const SerialNumbers = req.data.SerialNumbers || (req.data.SerialNumber ? [req.data.SerialNumber] : []);
+      const SerialNumber = req.data.SerialNumber || (SerialNumbers[0] || '');
+      const postOptions = {
+        movementType: MovementType || GI_MOVEMENT_TYPE,
+        receivingPlant: ReceivingPlant,
+        receivingStorageLocation: ReceivingStorageLocation,
+        costCenter: CostCenter,
+        serialNumbers: SerialNumbers,
+        serialNumber: SerialNumber
+      };
 
       if (!ReservationNo || !ReservationItem) {
         return req.error(400, 'ReservationNo and ReservationItem are required');
@@ -177,6 +188,8 @@ class GoodsIssueHandler {
               MovementType: postOptions.movementType,
               ReceivingPlant,
               ReceivingStorageLocation,
+              CostCenter,
+              SerialNumber,
               LastSyncError: err.message
             });
           } catch (queueErr) {
@@ -194,6 +207,8 @@ class GoodsIssueHandler {
             TransferOrder: '',
             DifferenceCleared: false,
             DifferenceQty: Number(DifferenceQty) || 0,
+            SerialNumber,
+            SerialNumbers,
             Success: true,
             Queued: true,
             QueueReference: queueRecord.QueueReference,

@@ -847,7 +847,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       throw err;
     }
 
-    const sSu = suBarcode.trim();
+    const sSu = String(suBarcode || '').replace(/[\r\n\t]/g, '').trim();
 
     // STEP 1: Load reservation item to get expected values (Reservation-First)
     const { sResv, sItem, resvItem } = await this._readOpenReservationItem(reservationNo, reservationItem);
@@ -1000,9 +1000,11 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     // ──────────────────────────────────────────────────────────
     // STEP 3B: If not in usable batches, check if barcode is an authentic SAP Batch
     // in LO_BM_BATCH_SRV that is expired, restricted, or deleted.
+    // In S/4HANA, standard batch CHARG is max 10 chars; avoid facet errors on longer values.
     // ──────────────────────────────────────────────────────────
-    try {
-      const batchQuery = `Material eq '${encodeURIComponent(resvMaterial)}' and Batch eq '${encodeURIComponent(rawBatchCandidate)}'`;
+    if (rawBatchCandidate && rawBatchCandidate.length <= 10) {
+      try {
+        const batchQuery = `Material eq '${encodeURIComponent(resvMaterial)}' and Batch eq '${encodeURIComponent(rawBatchCandidate)}'`;
       const rawBatches = await this._get(
         '/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch',
         `$filter=${batchQuery}&$top=1&$format=json`
@@ -1066,9 +1068,10 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
           throw expErr;
         }
       }
-    } catch (checkErr) {
-      if (checkErr.status === 422) throw checkErr;
-      LOG.warn(`Batch check before HU lookup encountered error: ${checkErr.message}`);
+      } catch (checkErr) {
+        if (checkErr.status === 422) throw checkErr;
+        LOG.warn(`Batch check before HU lookup encountered error: ${checkErr.message}`);
+      }
     }
 
     // ──────────────────────────────────────────────────────────
@@ -1119,6 +1122,27 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         MaxIssueQty: Math.min(stock, openQty),
         Unit: baseUnit
       };
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // STEP 3D: Check if scanned barcode is an authentic SAP Serial Number
+    // ──────────────────────────────────────────────────────────
+    const serialRes = await this._resolveSerialNumber(sSu, {
+      sResv,
+      sItem,
+      resvMaterial,
+      resvPlant,
+      resvSLoc,
+      openQty,
+      reqQty,
+      wdnQty,
+      currentStock,
+      baseUnit,
+      usableBatches,
+      resvItem
+    });
+    if (serialRes) {
+      return serialRes;
     }
 
     // ──────────────────────────────────────────────────────────
@@ -1385,6 +1409,219 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       MaterialMatch: materialMatch,
       PlantMatch: plantMatch,
       SLocMatch: slocMatch,
+      ReservationRemainingQty: openQty,
+      ReservationRequiredQty: reqQty,
+      ReservationWithdrawnQty: wdnQty,
+      MaxIssueQty: maxIssueQty,
+      Unit: baseUnit
+    };
+  }
+
+  /**
+   * Resolve scanned barcode as an authentic SAP Serial Number.
+   * Checks /sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber
+   * with fallback to RFC EQUI and JEST (status I0184 = ESTO).
+   * Validates material, plant, storage location, and unrestricted-use stock.
+   */
+  async _resolveSerialNumber(sBarcode, ctx) {
+    if (!sBarcode || typeof sBarcode !== 'string') return null;
+    const sSerial = sBarcode.replace(/[\r\n\t]/g, '').trim().toUpperCase();
+    if (!sSerial) return null;
+
+    const resvMat = ctx.resvMaterial || '';
+    const resvMatClean = resvMat.replace(/^0+/, '');
+    const resvMatPadded = resvMat.padStart(18, '0');
+    const resvPlant = ctx.resvPlant || '';
+    const resvSLoc = ctx.resvSLoc || '';
+    const openQty = ctx.openQty || 0;
+    const reqQty = ctx.reqQty || 0;
+    const wdnQty = ctx.wdnQty || 0;
+    const currentStock = ctx.currentStock;
+    const baseUnit = ctx.baseUnit || 'EA';
+    const usableBatches = ctx.usableBatches || [];
+    const resvItem = ctx.resvItem || {};
+
+    let serialRecord = null;
+
+    // Attempt 1: UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber
+    try {
+      const serialFilter = `SerialNumber eq '${encodeURIComponent(sSerial)}' and Material eq '${encodeURIComponent(resvMatClean)}'`;
+      const rows = await this._get(
+        '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber',
+        `$filter=${encodeURIComponent(serialFilter)}&$format=json`
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        serialRecord = rows[0];
+      }
+    } catch (odataErr) {
+      LOG.warn(`UI_MATERIALSERIALNUMBER query failed for serial ${sSerial} / material ${resvMatClean}: ${odataErr.message}`);
+    }
+
+    // Attempt 2: If not found with exact material filter, check if serial belongs to ANOTHER material in SAP
+    if (!serialRecord) {
+      try {
+        const anySerialFilter = `SerialNumber eq '${encodeURIComponent(sSerial)}'`;
+        const anyRows = await this._get(
+          '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber',
+          `$filter=${encodeURIComponent(anySerialFilter)}&$top=1&$format=json`
+        );
+        if (Array.isArray(anyRows) && anyRows.length > 0) {
+          const other = anyRows[0];
+          const otherMatClean = (other.Material || '').replace(/^0+/, '');
+          if (otherMatClean && otherMatClean !== resvMatClean) {
+            const err = new Error(
+              `Serial Number "${sSerial}" belongs to Material ${other.Material} (${other.Material_Text || ''}), ` +
+              `but reservation ${ctx.sResv} item ${ctx.sItem} requires Material ${resvMatClean}. Goods Issue is blocked.`
+            );
+            err.status = 409;
+            throw err;
+          }
+          serialRecord = other;
+        }
+      } catch (err) {
+        if (err.status === 409) throw err;
+      }
+    }
+
+    // Attempt 3: RFC Fallback via EQUI and JEST if OData was unavailable
+    if (!serialRecord && this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const equiRows = await this.rfc.readTable('EQUI', ['EQUNR', 'SERNR', 'MATNR', 'WERK', 'LAGER'], [
+          `SERNR = '${sSerial}'`,
+          `AND ( MATNR = '${resvMatClean}' OR MATNR = '${resvMatPadded}' )`
+        ]);
+        if (Array.isArray(equiRows) && equiRows.length > 0) {
+          const equi = equiRows[0];
+          // Check JEST for status I0184 (ESTO - In warehouse)
+          let isEsto = false;
+          try {
+            const objnr = `IE${equi.EQUNR}`;
+            const jestRows = await this.rfc.readTable('JEST', ['OBJNR', 'STAT', 'INACT'], [
+              `OBJNR = '${objnr}'`,
+              `AND STAT = 'I0184'`,
+              `AND INACT = ''`
+            ]);
+            isEsto = Array.isArray(jestRows) && jestRows.length > 0;
+          } catch (jestErr) {
+            LOG.warn(`JEST status check failed for EQUNR ${equi.EQUNR}: ${jestErr.message}`);
+            isEsto = true;
+          }
+
+          serialRecord = {
+            Material: equi.MATNR,
+            SerialNumber: equi.SERNR,
+            Plant: equi.WERK || resvPlant,
+            StorageLocation: equi.LAGER || resvSLoc,
+            InventoryStockType: isEsto ? '01' : '02',
+            InventoryStockType_Text: isEsto ? 'Unrestricted-Use Stock' : 'Not in Stock (ESTO)',
+            InventorySpecialStockType: ''
+          };
+        }
+      } catch (rfcErr) {
+        LOG.warn(`RFC EQUI/JEST fallback query failed for serial ${sSerial}: ${rfcErr.message}`);
+      }
+    }
+
+    if (!serialRecord) {
+      return null;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Validations on resolved Serial Number
+    // ──────────────────────────────────────────────────────────
+    const serPlant = (serialRecord.Plant || '').trim();
+    const serSLoc = (serialRecord.StorageLocation || '').trim();
+    const serStockType = (serialRecord.InventoryStockType || '').trim();
+    const serSpecialStock = (serialRecord.InventorySpecialStockType || '').trim();
+
+    // 1. Plant Match Check
+    if (serPlant && resvPlant && serPlant !== resvPlant) {
+      const err = new Error(
+        `Serial Number "${sSerial}" is located in Plant ${serPlant} (${serialRecord.PlantName || ''}), ` +
+        `but reservation ${ctx.sResv} item ${ctx.sItem} requires Plant ${resvPlant}. Goods Issue is blocked.`
+      );
+      err.status = 409;
+      throw err;
+    }
+
+    // 2. Storage Location Match Check
+    if (serSLoc && resvSLoc && serSLoc !== resvSLoc) {
+      const err = new Error(
+        `Serial Number "${sSerial}" is in Storage Location ${serSLoc} (${serialRecord.StorageLocationName || ''}), ` +
+        `but reservation ${ctx.sResv} item ${ctx.sItem} requires Storage Location ${resvSLoc}. Goods Issue is blocked.`
+      );
+      err.status = 409;
+      throw err;
+    }
+
+    // 3. Unrestricted-Use Stock Status (ESTO) Check
+    if (serStockType && serStockType !== '01') {
+      const statusText = serialRecord.InventoryStockType_Text || serStockType;
+      const err = new Error(
+        `Serial Number "${sSerial}" is not in unrestricted stock (Status: ${statusText}). ` +
+        `Serial numbers for Goods Issue must have status In-Stock (ESTO). Goods Issue is blocked.`
+      );
+      err.status = 422;
+      throw err;
+    }
+
+    // 4. Special Stock Check
+    if (serSpecialStock) {
+      const specialText = serialRecord.InventorySpecialStockType_Text || serSpecialStock;
+      const err = new Error(
+        `Serial Number "${sSerial}" is assigned to special stock (${specialText}). ` +
+        `Goods Issue cannot be posted against unrestricted reservation.`
+      );
+      err.status = 422;
+      throw err;
+    }
+
+    // 5. Quantity constraint: 1 serial number = exactly 1 unit of issue
+    const maxIssueQty = Math.min(1, openQty);
+
+    this._suDiag('Scanned barcode matched SAP Serial Number', {
+      inputBarcode: sBarcode,
+      serialNumber: sSerial,
+      material: resvMatClean,
+      plant: serPlant || resvPlant,
+      storageLocation: serSLoc || resvSLoc,
+      stockType: serStockType
+    });
+
+    return {
+      SuBarcode: sBarcode.trim(),
+      SuExists: true,
+      SuNotFoundReason: '',
+      ResolvedType: 'SERIAL_NUMBER',
+      HuService: '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber',
+      HuInternalNumber: sSerial,
+      HuExternalId: sSerial,
+      SerialNumber: sSerial,
+      DeterminedSerial: sSerial,
+      IsSerialManaged: true,
+      DeliveryDocument: '',
+      DeliveryDocumentItem: '',
+      Material: resvMatClean,
+      MaterialDesc: resvItem.ProductName || serialRecord.Material_Text || '',
+      Plant: serPlant || resvPlant,
+      StorageLocation: serSLoc || resvSLoc,
+      CurrentStock: currentStock !== null && currentStock !== undefined ? currentStock : 1,
+      SuStockQty: 1,
+      BaseUnit: baseUnit,
+      Batches: usableBatches,
+      DeterminedBatch: serialRecord.Batch || '',
+      DeterminedBatchExpiry: null,
+      DeterminedBatchStatusState: 'None',
+      DeterminedBatchStatusText: '',
+      DeterminedBatchDaysToExpiry: null,
+      MultipleBatches: false,
+      NoBatchAvailable: !serialRecord.Batch,
+      ReservationNo: ctx.sResv,
+      ReservationItem: ctx.sItem,
+      OrderNo: resvItem.OrderID || '',
+      MaterialMatch: true,
+      PlantMatch: true,
+      SLocMatch: true,
       ReservationRemainingQty: openQty,
       ReservationRequiredQty: reqQty,
       ReservationWithdrawnQty: wdnQty,

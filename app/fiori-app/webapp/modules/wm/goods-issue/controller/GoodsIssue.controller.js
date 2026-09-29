@@ -461,6 +461,7 @@ sap.ui.define([
                         Plant: (oResv && oResv.Plant) ? oResv.Plant : (aItems && aItems[0] ? aItems[0].Plant : ""),
                         MovementType: (oResv && oResv.MovementType) ? oResv.MovementType : (aItems[0] ? aItems[0].MovementType : ""),
                         MovementTypeName: (oResv && oResv.MovementTypeName) ? oResv.MovementTypeName : (aItems[0] ? aItems[0].MovementTypeName : ""),
+                        CostCenter: (oResv && oResv.CostCenter) ? oResv.CostCenter : (aItems[0] ? aItems[0].CostCenter : ""),
                         Items: aItems || []
                     };
                     oModel.setProperty("/resolved", oResolved);
@@ -692,14 +693,19 @@ sap.ui.define([
             oModel.setProperty("/suBatchLockText", "");
             oModel.setProperty("/lastScannedSu", "");
 
-            // Revert batch to reservation default (if any)
+            oModel.setProperty("/serialNumber", "");
+            oModel.setProperty("/serialNumbers", []);
+
+            // Revert batch and serial to reservation default (if any)
             var oActive = oModel.getProperty("/activeItem");
-            if (oActive && oActive._originalBatch !== undefined) {
+            if (oActive) {
                 var oUpdated = Object.assign({}, oActive, {
-                    Batch: oActive._originalBatch || "",
-                    ExpiryDate: oActive._originalExpiryDate || "",
-                    BatchStatusState: oActive._originalBatchStatusState || "None",
-                    BatchStatusText: oActive._originalBatchStatusText || ""
+                    Batch: oActive._originalBatch !== undefined ? oActive._originalBatch : (oActive.Batch || ""),
+                    ExpiryDate: oActive._originalExpiryDate !== undefined ? oActive._originalExpiryDate : (oActive.ExpiryDate || ""),
+                    BatchStatusState: oActive._originalBatchStatusState !== undefined ? oActive._originalBatchStatusState : (oActive.BatchStatusState || "None"),
+                    BatchStatusText: oActive._originalBatchStatusText !== undefined ? oActive._originalBatchStatusText : (oActive.BatchStatusText || ""),
+                    SerialNumber: "",
+                    SerialNumbers: []
                 });
                 oModel.setProperty("/activeItem", oUpdated);
             }
@@ -715,18 +721,18 @@ sap.ui.define([
          */
         _resolveSuBarcode: function () {
             var oModel = this.getView().getModel("giView");
-            var sSuBarcode = (oModel.getProperty("/suBarcode") || "").trim();
+            var sSuBarcode = String(oModel.getProperty("/suBarcode") || "").replace(/[\r\n\t]/g, "").trim();
             var oActive = oModel.getProperty("/activeItem");
             var oResolved = oModel.getProperty("/resolved");
             var that = this;
 
             if (!sSuBarcode) {
-                MessageToast.show("Please scan or enter a Stock Unit barcode.");
+                MessageToast.show("Please scan or enter a Stock Unit or Serial Number barcode.");
                 return;
             }
 
             if (!oActive || !oResolved || !oResolved.ReservationNo) {
-                MessageBox.error("Please select a reservation and component before scanning an SU barcode.");
+                MessageBox.error("Please select a reservation and component before scanning an SU or Serial Number barcode.");
                 return;
             }
 
@@ -734,7 +740,13 @@ sap.ui.define([
             var sLastSu = oModel.getProperty("/lastScannedSu");
             if (sLastSu && sLastSu === sSuBarcode && oModel.getProperty("/batchLockedBySu")) {
                 this._playBeep(false);
-                MessageToast.show("SU " + sSuBarcode + " was already scanned. Clear the current SU first to re-scan.");
+                MessageToast.show("SU or Serial " + sSuBarcode + " was already scanned. Clear the current entry first to re-scan.");
+                return;
+            }
+            var aCurrentSerials = (oActive && oActive.SerialNumbers) || [];
+            if (aCurrentSerials.includes(sSuBarcode.toUpperCase())) {
+                this._playBeep(false);
+                MessageToast.show("Serial Number " + sSuBarcode + " was already scanned. Duplicate serial numbers are not permitted.");
                 return;
             }
 
@@ -793,8 +805,33 @@ sap.ui.define([
                         oModel.setProperty("/issueQty", Number(oResult.MaxIssueQty));
                     }
 
-                    // Handle batch determination
-                    if (oResult.DeterminedBatch) {
+                    // Handle Serial Number auto-determination
+                    if (oResult.ResolvedType === "SERIAL_NUMBER" || oResult.DeterminedSerial || oResult.SerialNumber) {
+                        var sSerial = oResult.DeterminedSerial || oResult.SerialNumber || sSuBarcode.toUpperCase();
+                        var oActiveNow = oModel.getProperty("/activeItem");
+                        var aSerials = Array.isArray(oActiveNow.SerialNumbers) ? oActiveNow.SerialNumbers.slice() : [];
+                        if (!aSerials.includes(sSerial)) {
+                            aSerials.push(sSerial);
+                        }
+                        var oUpdated = Object.assign({}, oActiveNow, {
+                            SerialNumber: sSerial,
+                            SerialNumbers: aSerials,
+                            IsSerialManaged: true
+                        });
+                        oModel.setProperty("/activeItem", oUpdated);
+                        oModel.setProperty("/serialNumber", sSerial);
+                        oModel.setProperty("/serialNumbers", aSerials);
+                        oModel.setProperty("/batchLockedBySu", true);
+                        oModel.setProperty("/suBatchLockText", "🔒 Auto-detected Serial: " + sSerial);
+
+                        oModel.setProperty("/suSuccess", true);
+                        oModel.setProperty("/suSuccessMessage",
+                            "Serial Number " + sSerial + " verified in SAP (Material " + oResult.Material +
+                            ", Plant " + oResult.Plant + " / SLoc " + oResult.StorageLocation +
+                            ", Unrestricted Stock ESTO).");
+
+                        that._playBeep(true);
+                    } else if (oResult.DeterminedBatch) {
                         // Single batch auto-determined — lock it
                         var oActiveNow = oModel.getProperty("/activeItem");
                         var oUpdated = Object.assign({}, oActiveNow, {
@@ -917,10 +954,13 @@ sap.ui.define([
             aChecks.push({ label: "Document verified in SAP S/4HANA", passed: bDocVerified });
             if (!bDocVerified) bAllPassed = false;
 
-            // Check 2: SU resolved and validated (if SU was scanned)
+            // Check 2: SU or Serial resolved and validated (if SU was scanned)
             if (oSuResolution) {
-                var bSuValid = !!(oSuResolution.SuExists && oSuResolution.MaterialMatch);
-                aChecks.push({ label: "SU Stock Unit resolved and validated against reservation", passed: bSuValid });
+                var bSuValid = !!(oSuResolution.SuExists && (oSuResolution.MaterialMatch || oSuResolution.Material === oActive.Material));
+                var sSuLabel = oSuResolution.ResolvedType === "SERIAL_NUMBER"
+                    ? "Serial Number verified in SAP and validated against reservation"
+                    : "SU Stock Unit resolved and validated against reservation";
+                aChecks.push({ label: sSuLabel, passed: bSuValid });
                 if (!bSuValid) bAllPassed = false;
             }
 
@@ -974,8 +1014,29 @@ sap.ui.define([
 
             // Check 8: Required fields populated
             var bFieldsOk = !!(oActive.Material && oActive.Plant);
-            aChecks.push({ label: "Required fields populated (Material, Plant)", passed: bFieldsOk });
+            aChecks.push({ label: this.getText("giCheckRequiredFields", [], "Required fields populated (Material, Plant)"), passed: bFieldsOk });
             if (!bFieldsOk) bAllPassed = false;
+
+            // Check 8b: CostCenter required for movement type 201
+            var sMode = oModel.getProperty("/mode") || "261";
+            if (sMode === "201") {
+                var sCostCenter = oActive.CostCenter || "";
+                var bCostCenterOk = sCostCenter.length > 0;
+                aChecks.push({ label: this.getText("giCheckCostCenter", [], "Cost Center is assigned for movement 201"), passed: bCostCenterOk });
+                if (!bCostCenterOk) bAllPassed = false;
+            }
+
+            // Check 8c: Serial Number validation (if material is serial-managed or serial is scanned)
+            var bIsSerialManaged = !!(oActive.IsSerialManaged || oModel.getProperty("/lineSerialManaged") || oModel.getProperty("/serialNumber") || (oActive.SerialNumbers && oActive.SerialNumbers.length > 0));
+            if (bIsSerialManaged) {
+                var aSerials = oActive.SerialNumbers || (oActive.SerialNumber ? [oActive.SerialNumber] : (oModel.getProperty("/serialNumbers") || (oModel.getProperty("/serialNumber") ? [oModel.getProperty("/serialNumber")] : [])));
+                var bSerialCountOk = aSerials.length === nIssueQty;
+                var sSerialLabel = bSerialCountOk
+                    ? this.getText("giCheckSerialCountMatch", [aSerials.length, nIssueQty], "Serial count matches issue quantity (" + aSerials.length + " of " + nIssueQty + " scanned: " + aSerials.join(", ") + ")")
+                    : this.getText("giCheckSerialCountMismatch", [aSerials.length, nIssueQty], "Serial count must match issue quantity (" + aSerials.length + " scanned, " + nIssueQty + " required)");
+                aChecks.push({ label: sSerialLabel, passed: bSerialCountOk });
+                if (!bSerialCountOk) bAllPassed = false;
+            }
 
             // Check 9: Difference validation (if difference > 0, issue + diff should equal open)
             if (nDiffQty > 0) {
@@ -1351,7 +1412,10 @@ sap.ui.define([
                 StorageLocation: oActive.StorageLocation || "",
                 MovementType: oActive.MovementType || oResolved.MovementType || "261",
                 ReceivingPlant: oActive.ReceivingPlant || "",
-                ReceivingStorageLocation: oActive.ReceivingStorageLocation || ""
+                ReceivingStorageLocation: oActive.ReceivingStorageLocation || "",
+                CostCenter: oActive.CostCenter || "",
+                SerialNumbers: oActive.SerialNumbers || (oActive.SerialNumber ? [oActive.SerialNumber] : (oModel.getProperty("/serialNumbers") || (oModel.getProperty("/serialNumber") ? [oModel.getProperty("/serialNumber")] : []))),
+                SerialNumber: oActive.SerialNumber || oModel.getProperty("/serialNumber") || ""
             };
 
             // ── Pre-posting SAP stock revalidation ──
@@ -1449,7 +1513,7 @@ sap.ui.define([
                             TransferOrder: oResult.TransferOrder || "",
                             DifferenceCleared: oResult.DifferenceCleared || false,
                             DifferenceQty: oResult.DifferenceQty || 0,
-                            Message: oResult.Message || "Goods Issue 261 posted successfully in S/4HANA."
+                            Message: oResult.Message || "Goods Issue posted successfully in S/4HANA."
                         });
                     } else {
                         that._playBeep(false);

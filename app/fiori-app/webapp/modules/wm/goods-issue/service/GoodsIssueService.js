@@ -199,7 +199,10 @@ sap.ui.define([
                 StorageLocation: oPayload.StorageLocation ? String(oPayload.StorageLocation).trim() : "",
                 MovementType: oPayload.MovementType ? String(oPayload.MovementType).trim() : "261",
                 ReceivingPlant: oPayload.ReceivingPlant ? String(oPayload.ReceivingPlant).trim() : "",
-                ReceivingStorageLocation: oPayload.ReceivingStorageLocation ? String(oPayload.ReceivingStorageLocation).trim() : ""
+                ReceivingStorageLocation: oPayload.ReceivingStorageLocation ? String(oPayload.ReceivingStorageLocation).trim() : "",
+                CostCenter: oPayload.CostCenter ? String(oPayload.CostCenter).trim() : "",
+                SerialNumbers: Array.isArray(oPayload.SerialNumbers) ? oPayload.SerialNumbers : (oPayload.SerialNumber ? [oPayload.SerialNumber] : []),
+                SerialNumber: oPayload.SerialNumber ? String(oPayload.SerialNumber).trim() : ""
             };
 
             return ODataClient.post(BASE_PATH + "/postGoodsIssue", oBody);

@@ -240,6 +240,24 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     if (Array.isArray(results) && results.length > 0) {
       const pendingQueueMap = await this._getPendingQueueMap(rawReserv);
 
+      // In SAP S/4HANA, CostCenter is stored at the reservation header level (UI_RESERVATION_HDR_MNG_V2)
+      let sHeaderCostCenter = '';
+      const has201 = results.some(r => r.GoodsMovementType === '201');
+      if (has201 && rawReserv) {
+        try {
+          const sResClean = String(rawReserv).trim().replace(/^0+/, '');
+          const hdr = await this._get(
+            `/sap/opu/odata/sap/UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839(Reservation='${sResClean}',IsActiveEntity=true)`,
+            '$select=CostCenter'
+          );
+          if (hdr && hdr.CostCenter) {
+            sHeaderCostCenter = String(hdr.CostCenter).trim().replace(/^0+/, '');
+          }
+        } catch (hdrErr) {
+          LOG.warn(`Could not fetch CostCenter from UI_RESERVATION_HDR_MNG_V2 for reservation ${rawReserv}: ${hdrErr.message}`);
+        }
+      }
+
       const getPackagingUnitsFn = (mat) => {
         if (this.adapter && typeof this.adapter.getMaterialPackagingUnits === 'function') {
           return this.adapter.getMaterialPackagingUnits(mat);
@@ -340,6 +358,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           OpenQty: openQty,
           MovementType: r.GoodsMovementType || '',
           MovementTypeName: r.GoodsMovementTypeName || '',
+          CostCenter: r.CostCenter || (r.GoodsMovementType === '201' ? sHeaderCostCenter : ''),
           PackagingUnits: packagingUnits
         };
       }));

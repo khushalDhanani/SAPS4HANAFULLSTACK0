@@ -78,7 +78,10 @@ class GoodsIssueQueueManager {
     return {
       movementType: item.MovementType || '261',
       receivingPlant: item.ReceivingPlant || '',
-      receivingStorageLocation: item.ReceivingStorageLocation || ''
+      receivingStorageLocation: item.ReceivingStorageLocation || '',
+      costCenter: item.CostCenter || '',
+      serialNumber: item.SerialNumber || '',
+      serialNumbers: item.SerialNumber ? [item.SerialNumber] : []
     };
   }
 
@@ -108,6 +111,8 @@ class GoodsIssueQueueManager {
       MovementType: String(data.MovementType || '261').trim(),
       ReceivingPlant: String(data.ReceivingPlant || '').trim(),
       ReceivingStorageLocation: String(data.ReceivingStorageLocation || '').trim(),
+      CostCenter: String(data.CostCenter || '').trim(),
+      SerialNumber: String(data.SerialNumber || (Array.isArray(data.SerialNumbers) ? data.SerialNumbers[0] : '') || '').trim(),
       SyncStatus: 'QUEUED',
       SyncAttempts: 1,
       LastSyncError: String(data.LastSyncError || 'SAP Gateway posting service unavailable').slice(0, 500),

@@ -7,7 +7,7 @@ const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
  * Enforces AGENTS.md rules: no mock persistence, transparent failure when SAP posting service is unavailable.
  */
 // Movement types this screen may post against a reservation (trust boundary for the posting action).
-const POSTABLE_MOVEMENT_TYPES = ['261', '301', '311'];
+const POSTABLE_MOVEMENT_TYPES = ['201', '261', '301', '311'];
 
 class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
@@ -19,6 +19,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * Post goods issue for a single reservation component line (Bound Action)
    */
   async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
+    const sCostCenter = String(options.costCenter || '').trim();
     const sMvt = String(options.movementType || '261').trim();
     if (!POSTABLE_MOVEMENT_TYPES.includes(sMvt)) {
       const err = new Error(`Movement type ${sMvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
@@ -93,7 +94,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
     // Tier 1: Attempt Custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4
     try {
-      // The RAP action only posts 261; a transfer (301/311) goes straight to the standard API.
+      // The RAP action only posts 261; a transfer (301/311) or cost-center GI (201) goes straight to the standard API.
       if (sMvt !== '261') throw new Error(`ZUI_GI_ORDER_RSV_O4 posts movement type 261 only; ${sMvt} uses API_MATERIAL_DOCUMENT_SRV`);
       const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
       const response = await this._post(path, {
@@ -136,16 +137,29 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         };
         if (plant) v2Item.Plant = plant;
         if (storageLocation) v2Item.StorageLocation = storageLocation;
+        // CostCenter is mandatory for movement type 201 (Goods Issue to Cost Center)
+        if (sMvt === '201' && sCostCenter) v2Item.CostCenter = sCostCenter;
         // Transfer target; when empty SAP takes it from the reservation.
         if (sRecvPlant) v2Item.IssuingOrReceivingPlant = sRecvPlant;
         if (sRecvSLoc) v2Item.IssuingOrReceivingStorageLoc = sRecvSLoc;
 
+        const aSerials = Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
+          ? options.serialNumbers
+          : options.serialNumber
+            ? [options.serialNumber]
+            : [];
+        if (aSerials.length > 0) {
+          v2Item.to_SerialNumbers = {
+            results: aSerials.map((sn) => ({ SerialNumber: String(sn).trim() }))
+          };
+        }
+
         const v2Payload = {
-          // 03 = goods issue, 04 = transfer posting
-          GoodsMovementCode: sMvt === '261' ? '03' : '04',
+          // 03 = goods issue (201 cost center, 261 order), 04 = transfer posting (301, 311)
+          GoodsMovementCode: (sMvt === '201' || sMvt === '261') ? '03' : '04',
           PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
           DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
-          MaterialDocumentHeaderText: `${sMvt === '261' ? 'GI' : `TP ${sMvt}`} Resv ${sReserv}`,
+          MaterialDocumentHeaderText: `${sMvt === '201' ? 'GI CC' : sMvt === '261' ? 'GI' : `TP ${sMvt}`} Resv ${sReserv}`,
           to_MaterialDocumentItem: {
             results: [v2Item]
           }
@@ -163,7 +177,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             DifferenceCleared: nDiffQty > 0,
             DifferenceQty: nDiffQty,
             Success: true,
-            Message: `${sMvt === '261' ? 'Goods Issue' : 'Transfer posting'} ${sMvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
+            Message: `${sMvt === '201' ? 'Goods Issue to Cost Center' : sMvt === '261' ? 'Goods Issue' : 'Transfer posting'} ${sMvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
           };
         }
       } catch (v2Err) {
@@ -271,6 +285,17 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           };
           if (item.Plant) itemPayload.Plant = item.Plant;
           if (item.StorageLocation) itemPayload.StorageLocation = item.StorageLocation;
+
+          const itemSerials = Array.isArray(item.SerialNumbers) && item.SerialNumbers.length > 0
+            ? item.SerialNumbers
+            : item.SerialNumber
+              ? [item.SerialNumber]
+              : [];
+          if (itemSerials.length > 0) {
+            itemPayload.to_SerialNumbers = {
+              results: itemSerials.map((sn) => ({ SerialNumber: String(sn).trim() }))
+            };
+          }
           return itemPayload;
         });
 

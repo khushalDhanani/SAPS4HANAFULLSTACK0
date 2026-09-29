@@ -41,6 +41,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             OpenQty         : Decimal(13, 3);
             MovementType    : String(3);
             MovementTypeName: String(20);
+            CostCenter      : String(10);
+            IsSerialManaged : Boolean;
+            SerialNumber    : String(18);
+            SerialNumbers   : array of String(18);
             ReceivingPlant  : String(4);
             ReceivingStorageLocation : String(4);
             PackagingUnits  : array of PackagingUnit;
@@ -89,6 +93,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DifferenceReason      : String(4);
         DifferenceStorageType : String(3);
         FinalIssue            : Boolean;
+        SerialNumber          : String(18);
+        SerialNumbers         : array of String(18);
     };
 
     type GISubmitLineResult {
@@ -118,6 +124,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         TransferOrder     : String(10);
         DifferenceCleared : Boolean;
         DifferenceQty     : Decimal(13, 3);
+        SerialNumber      : String(18);
+        SerialNumbers     : array of String(18);
         Success           : Boolean;
         Message           : String(500);
         Queued            : Boolean;
@@ -144,6 +152,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         OpenQty         : Decimal(13, 3);
         MovementType    : String(3);
         MovementTypeName: String(20);
+        CostCenter      : String(10);
+        IsSerialManaged : Boolean;
+        SerialNumber    : String(18);
+        SerialNumbers   : array of String(18);
         PackagingUnits  : array of PackagingUnit;
     };
 
@@ -199,6 +211,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DifferenceReason      : String(4);
         DifferenceStorageType : String(3);
         FinalIssue            : Boolean;
+        CostCenter            : String(10);
+        SerialNumber          : String(18);
         SyncStatus            : String(30);
         SyncAttempts          : Integer;
         LastSyncError         : String(500);
@@ -250,7 +264,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         StorageLocation       : String(4),
         MovementType          : String(3),
         ReceivingPlant        : String(4),
-        ReceivingStorageLocation : String(4)
+        ReceivingStorageLocation : String(4),
+        CostCenter            : String(10),
+        SerialNumbers         : array of String(18),
+        SerialNumber          : String(18)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -306,6 +323,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         MaterialDesc                : String(80);
         Plant                       : String(4);
         StorageLocation             : String(4);
+        SerialNumber                : String(18);
+        DeterminedSerial            : String(18);
+        IsSerialManaged             : Boolean;
         CurrentStock                : Decimal(13, 3);
         SuStockQty                  : Decimal(13, 3);
         BaseUnit                    : String(3);

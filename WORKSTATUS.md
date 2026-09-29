@@ -3,6 +3,81 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-28 17:48 IST
+- **Agent**: Antigravity
+- **Request**: "Debug and fix movement type 201 (Goods Issue to Cost Center) in #/wm/goods-issue. It doesn't follow SAP standard."
+- **SAP API Discovery & Deviation Analysis**:
+  - Analyzed SAP standard for 201: Goods Movement Code `03`, Reversal via `202`, mandatory Cost Center (`KOSTL`), automatic G/L derivation by SAP, hiding receiving plant/SLoc (301/311) and order (261), deep insert payload via `API_MATERIAL_DOCUMENT_SRV`.
+  - Identified 16 deviations (D1–D16) cataloged in `201_deviation_analysis.md`:
+    1. D1: `201` missing from `POSTABLE_MOVEMENT_TYPES` in `GoodsIssuePostingClient.js`.
+    2. D2: Wrong `GoodsMovementCode` (fell into `else` branch `'04'` transfer instead of `'03'` goods issue).
+    3. D3: Missing `CostCenter` property on `v2Item` in `API_MATERIAL_DOCUMENT_SRV` item payload.
+    4. D4: Missing `CostCenter` parameter in `service.cds` action `postGoodsIssue`, controller payload, and frontend service body.
+    5. D5: Missing `CostCenter` in `GIItems` CDS entity and reservation mapping.
+    6. D6: Step 1 header and Review rendered `Order` instead of `Cost Center` for 201.
+    7. D7: Step 2 form displayed `Receiving Plant / Location` for 201 (only valid for 301/311 transfers).
+    8. D8: `MaterialDocumentHeaderText` used `GI` or `TP` without 201 distinction (`GI CC Resv ...`).
+    9. D9: Hardcoded success toast referenced `Goods Issue 261`.
+    10. D10: Outbox dispatch queue schema (`goods-issue-queue.cds`) lacked `CostCenter`.
+    11. D11: Queue manager and handler did not persist or replay `CostCenter` for queued 201 items.
+    12. D12: Validation checklist lacked Cost Center assignment check for mode 201.
+    13. D13: Step 2 component form lacked Cost Center display row.
+    14. D14: Step 3 Review confirmation summary lacked Cost Center display row.
+    15. D15: Missing i18n keys for Cost Center validation and neutral review confirmation strip.
+    16. D16: S/4HANA OData service discovery: `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` rejects `$select=CostCenter` (property does not exist on item entity); Cost Center must be retrieved from reservation header entity `UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839`.
+- **Targeted Fixes Applied**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`:
+    - Added `'201'` to `POSTABLE_MOVEMENT_TYPES`.
+    - Corrected `GoodsMovementCode` to `'03'` for both 201 and 261.
+    - Mapped `CostCenter` into `v2Item` for movement 201.
+    - Updated `MaterialDocumentHeaderText` to `'GI CC Resv ...'`.
+    - Updated success message to dynamically identify Goods Issue to Cost Center 201.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`:
+    - Removed `CostCenter` from `OPEN_RESV_SELECT` for `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`.
+    - Added live header query to `UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839` to retrieve authentic `CostCenter` for 201 reservations.
+    - Mapped `CostCenter` into returned `GIItems`.
+  - `srv/wm/goods-issue/service.cds`:
+    - Added `CostCenter : String(10)` to `GIItems` entity.
+    - Added `CostCenter : String(10)` parameter to `postGoodsIssue` bound action.
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+    - Extracted `CostCenter` from request data and passed it into `postOptions` and queue enqueue.
+  - `db/wm/goods-issue-queue.cds`:
+    - Added `CostCenter : String(10)` to `GoodsIssueQueue` persistence model.
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+    - Persisted `CostCenter` in `buildRecord` and passed `costCenter` in `postOptions`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js`:
+    - Included `CostCenter` in `postGoodsIssue` request body.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+    - Added `CostCenter` to `oResolved` in `_loadReservationDetails`.
+    - Added Check 8b: `Cost Center is assigned for movement 201` in `_validateInputs`.
+    - Added `CostCenter` to posting payload for 201.
+    - Replaced hardcoded text with `this.getText(...)` lookups.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`:
+    - Rendered `Cost Center` instead of `Order` in Step 1 header and Step 3 review when `mode === '201'`.
+    - Added `Cost Center` display row in Step 2 component form.
+    - Restricted `Receiving Plant / Location` visibility to `${giView>/mode} === '301' || ${giView>/mode} === '311'`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`:
+    - Added `giCheckRequiredFields`, `giCheckCostCenter`, `giCostCenterRequired`.
+    - Neutralized `giReviewConfirmMsg` across all movement types (`Please review all details carefully before posting. This action will execute a real SAP goods movement transaction.`).
+  - `test/unit/wm/goodsIssueClients.test.js`:
+    - Added unit test for 201 posting via `API_MATERIAL_DOCUMENT_SRV` with `CostCenter` and code `03`.
+    - Updated movement type rejection test to allow 201, 261, 301, 311.
+  - `test/unit/wm/goodsIssueController.test.js`:
+    - Added test verifying `Cost Center` requirement in Step 2 validation when `mode === '201'`.
+    - Added test verifying `CostCenter` is passed in `postGoodsIssue` payload.
+- **Validation & Results**:
+  - `npx cds compile srv`: Succeeded with code 0 (clean compilation).
+  - `npm --prefix app/fiori-app run lint`: Succeeded with 0 errors / 0 warnings.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.96 s (`dist/Component-preload.js` generated).
+  - `npx jest test/unit/wm`: 14 test suites passed, 349 tests passed (100% green).
+  - `git diff --check`: Clean (0 errors).
+  - Live Chrome DevTools MCP validation on `#/wm/goods-issue/create/201`:
+    - Loaded 53 authentic open 201 reservations directly from SAP Gateway without errors.
+    - Selected Reservation `519658`: resolved Material `8000009753` (*Apple Macbook Pro 14", M5*), Plant `1120`, and Cost Center `1011101301`.
+    - Advanced to Step 2: "Receiving Plant/Location" hidden, "Cost Center: 1011101301" rendered, 7/7 validation checklist checks passed.
+    - Advanced to Step 3: Confirmation Summary rendered "Cost Center: 1011101301" with zero raw tokens or order labels.
+- **Next recommended action**: Review git status and git diff.
+
 ## 2026-09-28 17:15 IST
 - **Agent**: Antigravity
 - **Request**: "Debug and fix the Goods Issue screen end to end: app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml (plus its controller, model, service, and any fragments it uses) Problem: some titles/labels are wrong or showing raw text, and some lists or dropdowns are empty. Continue and use Dev MCP Tool"
@@ -5413,11 +5488,67 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Provide Basis/ABAP team with `docs/wm_rf_trto_srv_spec.md` to register `ZWM_RF_TRTO_SRV` on DS4 Client 220.
 
+## 2026-09-28 18:15 IST
+- **Agent**: Antigravity
+- **Change**: Root Cause Analysis, Resolution, and End-to-End Fix for Movement 201 Serial Number Scan (`#/wm/goods-issue`):
+  - **Context & Bug Root Cause**:
+    - Scanning serial number `MACBOOK-004` for Material `8000009753` threw the error: `Stock Unit / Barcode "MACBOOK-004" was NOT found in SAP`.
+    - Root cause analysis identified 4 critical failure points across the stack:
+      1. **Missing Serial Scanning Pipeline**: `GoodsIssueStockUnitClient.js` only evaluated batch candidates (`usableBatches` / `LO_BM_BATCH_SRV`), classic WM Storage Units (`LQUA`), and EWM Handling Units (`/SCWM/` services). There was no serial number lookup pipeline whatsoever.
+      2. **SAP Gateway Facet Validation Error**: When `MACBOOK-004` (length 11) was scanned, it passed into Step 3B which queried `LO_BM_BATCH_SRV/I_Batch` with `Batch eq 'MACBOOK-004'`. Because SAP batch numbers (`CHARG`) have `maxlength=10`, SAP Gateway rejected the query with a facet error.
+      3. **404 Fallback Cascade**: Following the batch query failure, the client attempted EWM Handling Unit lookups which returned 404 since `MACBOOK-004` is an equipment/serial number, collapsing into a generic 404 message.
+      4. **Missing Serialization Support in Controller and Posting Client**: `GoodsIssue.controller.js`, `service.cds`, `GoodsIssueQueueManager.js`, and `GoodsIssuePostingClient.js` had no mechanism to capture, validate, or map serial numbers to `API_MATERIAL_DOCUMENT_SRV` `to_SerialNumbers`.
+  - **Fixes Applied**:
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+      - Barcode sanitization: Added regex cleaning `replace(/[\r\n\t]/g, '').trim()` to remove scanner suffixes (Enter, Tab, CR, LF) and whitespace.
+      - Batch length guard: Added `rawBatchCandidate.length <= 10` before querying `LO_BM_BATCH_SRV/I_Batch` to prevent Gateway facet validation errors.
+      - Step 3D Serial Number Resolution: Added `_resolveSerialNumber(sSu, ctx)` querying `/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber` with RFC fallback to `EQUI` and `JEST` (verifying status `I0184` / `ESTO`).
+      - Strict SAP business validations: Material match (409), Plant match (409), Storage Location match (409), unrestricted-use stock `InventoryStockType === '01'` (422), and special stock rejection (422).
+      - Returns `ResolvedType: 'SERIAL_NUMBER'`, `SerialNumber: sSerial`, `DeterminedSerial: sSerial`, `IsSerialManaged: true`, `CurrentStock: 4`, `MaxIssueQty: 1`.
+    - `srv/wm/goods-issue/service.cds`:
+      - Added `SerialNumber: String(18)`, `DeterminedSerial: String(18)`, `IsSerialManaged: Boolean` to `StockUnitResolution`.
+      - Added `SerialNumbers: array of String(18)`, `SerialNumber: String(18)` to `action postGoodsIssue`, `type GISubmitItem`, `type GIPostResult`, `type QueueItem`, `type GIComponentItem`, and `entity GIItems`.
+    - `db/wm/goods-issue-queue.cds`:
+      - Added `SerialNumber: String(18);` to `GoodsIssueQueue`.
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+      - Added `serialNumber` and `serialNumbers` to `_toPostOptions()` and `buildRecord()`.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+      - Extracted `SerialNumbers` and `SerialNumber` from `req.data` in `postGoodsIssue` and passed in `postOptions` to `GoodsIssueAdapter.postGoodsIssue` and `GoodsIssueQueueManager.enqueue`.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`:
+      - Mapped `options.serialNumbers` / `options.serialNumber` into `v2Item.to_SerialNumbers = { results: serials.map(...) }` for `API_MATERIAL_DOCUMENT_SRV` in `postGoodsIssue()` and `submitGoodsIssueRequest()`.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js`:
+      - Passed `SerialNumbers` and `SerialNumber` in `postGoodsIssue`.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue.controller.js`:
+      - Added scanner suffix sanitization (`replace(/[\r\n\t]/g, '').trim()`).
+      - Added duplicate serial scan prevention.
+      - Handled `oResult.ResolvedType === "SERIAL_NUMBER"`: sets `activeItem.SerialNumber`, `activeItem.SerialNumbers`, sets lock text `🔒 Auto-detected Serial: MACBOOK-004`, sets success message.
+      - Updated `_validateInputs()`: Check 2 recognizes `SERIAL_NUMBER`, and Check 8c validates that serial count matches issue quantity.
+      - Cleared serial state on `onClearSuBarcode()`.
+      - Passed `SerialNumbers` and `SerialNumber` in `onPostGoodsIssue()`.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue.view.xml`:
+      - Rendered Serial Number `ObjectStatus` badge in Step 2 and in Step 3 Review summary.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+      - Added internationalization text keys (`giSerialNumberLabel`, `giSerialResolvedSuccess`, `giSerialDuplicateScan`, `giSerialCountMismatch`, etc.).
+  - **Automated Tests & S/4HANA Verification**:
+    - `test/unit/wm/goodsIssueClients.test.js`: Added 5 unit tests covering serial resolution success, scanner suffix sanitization, plant mismatch rejection (409), blocked stock rejection (422), and `to_SerialNumbers` payload mapping in `GoodsIssuePostingClient`.
+    - `test/unit/wm/goodsIssueController.test.js`: Added 4 unit tests covering serial resolution in controller, duplicate scan prevention, serial count matching validation, and payload propagation on posting.
+    - Live SAP S/4HANA DS4 Client 220 test:
+      - Resolved `MACBOOK-004` for Material `8000009753` reservation `519658` item `0001` directly against S/4HANA Gateway: verified `Material: '8000009753'`, `Plant: '1120'`, `StorageLocation: 'HS01'`, `SerialNumber: 'MACBOOK-004'`, `CurrentStock: 4`.
+      - Verified dirty scanner input `'  macbook-004\r\n\t '` successfully sanitized and resolved.
+      - Verified mismatched serial `56` (material `8000000057`) correctly rejected with HTTP 409 error.
+  - **Executed Commands & Results**:
+    - `npm test -- test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueController.test.js`: 2 passed, 132/132 tests green.
+    - `npm test -- test/unit/wm/`: 14 passed, 358/358 tests green (100% pass).
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors).
+    - `npm --prefix app/fiori-app run build`: Succeeded.
+    - `npx cds compile srv`: Succeeded with code 0.
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Test Movement 201 serial scan with `MACBOOK-004` in the browser UI, stage and commit changes.
+
 ## Next Steps
-0. WM Goods Issue Dashboard (Route `#/wm/goods-issue`):
-   - Fully implemented, verified against live DS4 Client 220, and covered with 346 passing tests.
-   - Consolidates 4 movement types: 201 (Goods Issue for Cost Center), 261 (Goods Issue to Order), 301 (Plant-to-Plant Transfer), and 311 (Storage Location Transfer) with real-time S/4HANA aggregation, in-memory caching, responsive SVG visualizations (4-way distribution donut & 4-series trend), interactive KPI card filtering, recent documents table with live search and Cost Center sorting, and document detail inspection dialog.
-   - Preserves 3-step creation wizard flow accessible via dedicated "New" actions per movement type (`#/wm/goods-issue/create/{mode}`).
+0. WM Goods Issue Serial Number Scanning (Route `#/wm/goods-issue`):
+   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (358 total WM tests).
+   - Handles single/multi-serial scanning, duplicate prevention, count matching validation, barcode scanner suffix stripping, and S/4HANA `API_MATERIAL_DOCUMENT_SRV` `to_SerialNumbers` deep insert.
 1. WM Transfer Order Implementation:
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.

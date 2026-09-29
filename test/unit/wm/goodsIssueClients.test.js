@@ -915,9 +915,57 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.Message).toMatch(/Transfer posting 311/);
     });
 
-    it('rejects movement types other than 261 / 301 / 311', async () => {
+    it('posts a 201 goods issue to cost center via API_MATERIAL_DOCUMENT_SRV (code 03, CostCenter), skipping the 261-only RAP action', async () => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012346', MaterialDocumentYear: '2026' })
+      };
+      const res = await new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+        '519658', '1', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'RD01',
+        { movementType: '201', costCenter: '1011103001' }
+      );
+      expect(mockAdapter._post).toHaveBeenCalledTimes(1);
+      const [path, body] = mockAdapter._post.mock.calls[0];
+      expect(path).toContain('API_MATERIAL_DOCUMENT_SRV');
+      expect(body.GoodsMovementCode).toBe('03');
+      expect(body.MaterialDocumentHeaderText).toContain('GI CC');
+      expect(body.to_MaterialDocumentItem.results[0]).toMatchObject({
+        GoodsMovementType: '201', Reservation: '519658', ReservationItem: '0001',
+        Plant: '1120', StorageLocation: 'RD01', CostCenter: '1011103001'
+      });
+      expect(res).toMatchObject({ Success: true, MaterialDocument: '4900012346' });
+      expect(res.Message).toMatch(/Goods Issue to Cost Center 201/);
+    });
+
+    it('rejects movement types other than 201 / 261 / 301 / 311', async () => {
       await expect(new GoodsIssuePostingClient().postGoodsIssue('1', '1', 'M', 1, 'KG', '', 0, '', '', false, '', '', { movementType: '551' }))
         .rejects.toMatchObject({ status: 400 });
+    });
+
+    it('posts goods issue with serial numbers mapped to to_SerialNumbers in API_MATERIAL_DOCUMENT_SRV', async () => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012350', MaterialDocumentYear: '2026' })
+      };
+      const res = await new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+        '519658', '1', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+        { movementType: '201', costCenter: '1011101301', serialNumbers: ['MACBOOK-004'] }
+      );
+      expect(mockAdapter._post).toHaveBeenCalledTimes(1);
+      const [path, body] = mockAdapter._post.mock.calls[0];
+      expect(path).toContain('API_MATERIAL_DOCUMENT_SRV');
+      expect(body.GoodsMovementCode).toBe('03');
+      const item = body.to_MaterialDocumentItem.results[0];
+      expect(item).toMatchObject({
+        GoodsMovementType: '201',
+        CostCenter: '1011101301',
+        Reservation: '519658',
+        ReservationItem: '0001'
+      });
+      expect(item.to_SerialNumbers).toBeDefined();
+      expect(item.to_SerialNumbers.results).toEqual([{ SerialNumber: 'MACBOOK-004' }]);
+      expect(res.Success).toBe(true);
+      expect(res.MaterialDocument).toBe('4900012350');
     });
 
     it('should validate items in submitGoodsIssueRequest', async () => {
@@ -1463,6 +1511,182 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         .rejects.toMatchObject({
           status: 400,
           message: expect.stringContaining('has no open quantity remaining (already fully issued or queued in dispatch)')
+        });
+    });
+
+    it('resolves authentic SAP Serial Number (MACBOOK-004) successfully with unrestricted stock status', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '519658',
+                ReservationItem: '0001',
+                OrderID: '',
+                Product: '8000009753',
+                ProductName: 'Apple Macbook Pro 14", M5',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                BaseUnit: 'NOS',
+                ResvnItmRequiredQtyInBaseUnit: '1',
+                ResvnItmWithdrawnQtyInBaseUnit: '0'
+              }
+            ]);
+          }
+          if (path.includes('UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber')) {
+            return Promise.resolve([
+              {
+                Material: '8000009753',
+                Material_Text: 'Apple Macbook Pro 14", M5',
+                SerialNumber: 'MACBOOK-004',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                InventoryStockType: '01',
+                InventoryStockType_Text: 'Unrestricted-Use Stock',
+                InventorySpecialStockType: ''
+              }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      const res = await stockUnitClient.resolveStockUnitForGoodsIssue('MACBOOK-004', '519658', '0001');
+
+      expect(res.SuExists).toBe(true);
+      expect(res.ResolvedType).toBe('SERIAL_NUMBER');
+      expect(res.SerialNumber).toBe('MACBOOK-004');
+      expect(res.DeterminedSerial).toBe('MACBOOK-004');
+      expect(res.IsSerialManaged).toBe(true);
+      expect(res.Material).toBe('8000009753');
+      expect(res.Plant).toBe('1120');
+      expect(res.StorageLocation).toBe('HS01');
+      expect(res.MaxIssueQty).toBe(1);
+    });
+
+    it('sanitizes barcode scanner suffixes (\\r\\n\\t, whitespace) when resolving serial numbers', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '519658',
+                ReservationItem: '0001',
+                Product: '8000009753',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                BaseUnit: 'NOS',
+                ResvnItmRequiredQtyInBaseUnit: '1',
+                ResvnItmWithdrawnQtyInBaseUnit: '0'
+              }
+            ]);
+          }
+          if (path.includes('UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber')) {
+            return Promise.resolve([
+              {
+                Material: '8000009753',
+                SerialNumber: 'MACBOOK-004',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                InventoryStockType: '01'
+              }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      const res = await stockUnitClient.resolveStockUnitForGoodsIssue('  macbook-004\r\n\t  ', '519658', '0001');
+
+      expect(res.SuExists).toBe(true);
+      expect(res.ResolvedType).toBe('SERIAL_NUMBER');
+      expect(res.SerialNumber).toBe('MACBOOK-004');
+    });
+
+    it('rejects serial number when located in a different plant (409)', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '519658',
+                ReservationItem: '0001',
+                Product: '8000009753',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                BaseUnit: 'NOS',
+                ResvnItmRequiredQtyInBaseUnit: '1',
+                ResvnItmWithdrawnQtyInBaseUnit: '0'
+              }
+            ]);
+          }
+          if (path.includes('UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber')) {
+            return Promise.resolve([
+              {
+                Material: '8000009753',
+                SerialNumber: 'MACBOOK-004',
+                Plant: '1100',
+                StorageLocation: 'HS01',
+                InventoryStockType: '01'
+              }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      await expect(stockUnitClient.resolveStockUnitForGoodsIssue('MACBOOK-004', '519658', '0001'))
+        .rejects.toMatchObject({
+          status: 409,
+          message: expect.stringContaining('is located in Plant 1100')
+        });
+    });
+
+    it('rejects serial number when not in unrestricted-use stock ESTO (422)', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockImplementation((path) => {
+          if (path.includes('ReservationDocumentItem')) {
+            return Promise.resolve([
+              {
+                Reservation: '519658',
+                ReservationItem: '0001',
+                Product: '8000009753',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                BaseUnit: 'NOS',
+                ResvnItmRequiredQtyInBaseUnit: '1',
+                ResvnItmWithdrawnQtyInBaseUnit: '0'
+              }
+            ]);
+          }
+          if (path.includes('UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber')) {
+            return Promise.resolve([
+              {
+                Material: '8000009753',
+                SerialNumber: 'MACBOOK-004',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                InventoryStockType: '02',
+                InventoryStockType_Text: 'Blocked Stock'
+              }
+            ]);
+          }
+          return Promise.resolve([]);
+        }),
+        getMaterialBatches: jest.fn().mockResolvedValue([])
+      };
+
+      const stockUnitClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      await expect(stockUnitClient.resolveStockUnitForGoodsIssue('MACBOOK-004', '519658', '0001'))
+        .rejects.toMatchObject({
+          status: 422,
+          message: expect.stringContaining('not in unrestricted stock')
         });
     });
 

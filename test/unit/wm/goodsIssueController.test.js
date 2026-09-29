@@ -737,6 +737,28 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(oModel.getProperty('/currentStep')).toBe(3);
         });
 
+        it('should require CostCenter when mode is 201', () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/mode', '201');
+            const oActive = oModel.getProperty('/activeItem');
+            oActive.CostCenter = '';
+            controller._validateInputs();
+
+            expect(oModel.getProperty('/isValid')).toBe(false);
+            const aChecks = oModel.getProperty('/validationChecks');
+            const ccCheck = aChecks.find(c => c.label.includes('Cost Center') || c.label.includes('giCheckCostCenter'));
+            expect(ccCheck).toBeDefined();
+            expect(ccCheck.passed).toBe(false);
+
+            // Now provide CostCenter
+            oActive.CostCenter = '1011103001';
+            controller._validateInputs();
+            const aChecks2 = oModel.getProperty('/validationChecks');
+            const ccCheck2 = aChecks2.find(c => c.label.includes('Cost Center') || c.label.includes('giCheckCostCenter'));
+            expect(ccCheck2.passed).toBe(true);
+            expect(oModel.getProperty('/isValid')).toBe(true);
+        });
+
         it('should default auto-determined batch status to unknown and None when missing', async () => {
             const oModel = controller.getView().getModel('giView');
             oModel.setProperty('/activeItem', Object.assign({}, mockResolution.ActiveItem));
@@ -784,6 +806,83 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
 
             expect(oModel.getProperty('/suBatchLockText')).toBe('🔒 Auto-detected from Batch IN25000133');
             expect(oModel.getProperty('/suSuccessMessage')).toContain('Batch IN25000133 resolved');
+        });
+
+        it('should resolve serial number scan, lock serial badge, and validate against quantity', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/activeItem', Object.assign({}, mockResolution.ActiveItem, {
+                Material: '8000009753',
+                OpenQty: 1,
+                Unit: 'NOS',
+                IsSerialManaged: true
+            }));
+            oModel.setProperty('/resolved', mockResolution);
+            oModel.setProperty('/suBarcode', 'MACBOOK-004');
+            oModel.setProperty('/issueQty', 1);
+
+            mockGoodsIssueService.resolveStockUnit.mockResolvedValueOnce({
+                SuExists: true,
+                ResolvedType: 'SERIAL_NUMBER',
+                SerialNumber: 'MACBOOK-004',
+                DeterminedSerial: 'MACBOOK-004',
+                Material: '8000009753',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                CurrentStock: 4,
+                BaseUnit: 'NOS',
+                MaxIssueQty: 1
+            });
+
+            await controller._resolveSuBarcode();
+
+            expect(oModel.getProperty('/suBatchLockText')).toBe('🔒 Auto-detected Serial: MACBOOK-004');
+            expect(oModel.getProperty('/serialNumber')).toBe('MACBOOK-004');
+            expect(oModel.getProperty('/activeItem/SerialNumber')).toBe('MACBOOK-004');
+            expect(oModel.getProperty('/activeItem/SerialNumbers')).toEqual(['MACBOOK-004']);
+            expect(oModel.getProperty('/suSuccessMessage')).toContain('MACBOOK-004');
+            expect(oModel.getProperty('/isValid')).toBe(true);
+        });
+
+        it('should prevent duplicate serial scan', async () => {
+            const oModel = controller.getView().getModel('giView');
+            const oActive = Object.assign({}, mockResolution.ActiveItem, {
+                Material: '8000009753',
+                SerialNumbers: ['MACBOOK-004']
+            });
+            oModel.setProperty('/activeItem', oActive);
+            oModel.setProperty('/resolved', mockResolution);
+            oModel.setProperty('/suBarcode', 'MACBOOK-004');
+
+            await controller._resolveSuBarcode();
+
+            expect(mockGoodsIssueService.resolveStockUnit).not.toHaveBeenCalled();
+        });
+
+        it('should require serial count to match issue quantity for serial-managed materials', () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/activeItem', Object.assign({}, mockResolution.ActiveItem, {
+                Material: '8000009753',
+                OpenQty: 2,
+                IsSerialManaged: true,
+                SerialNumbers: ['MACBOOK-004']
+            }));
+            oModel.setProperty('/issueQty', 2);
+            oModel.setProperty('/availableStock', 5);
+
+            controller._validateInputs();
+
+            expect(oModel.getProperty('/isValid')).toBe(false);
+            const aChecks = oModel.getProperty('/validationChecks');
+            const serialCheck = aChecks.find(c => c.label.includes('Serial count') || c.label.includes('giCheckSerialCount'));
+            expect(serialCheck).toBeDefined();
+            expect(serialCheck.passed).toBe(false);
+
+            // Now provide second serial
+            oModel.setProperty('/activeItem/SerialNumbers', ['MACBOOK-004', 'MACBOOK-005']);
+            controller._validateInputs();
+            const aChecks2 = oModel.getProperty('/validationChecks');
+            const serialCheck2 = aChecks2.find(c => c.label.includes('Serial count') || c.label.includes('Serial number') || c.label.includes('giCheckSerialCount'));
+            expect(serialCheck2.passed).toBe(true);
         });
     });
 
@@ -868,6 +967,58 @@ describe('GoodsIssue Controller Unit Tests (3-Step Fiori Workflow)', () => {
             expect(oModel.getProperty('/postResult/Success')).toBe(true);
             expect(oModel.getProperty('/postResult/MaterialDocument')).toBe('5000012345');
             expect(oModel.getProperty('/postResult/MaterialDocYear')).toBe('2026');
+        });
+
+        it('should include CostCenter in payload when posting 201 goods issue', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/mode', '201');
+            const oActive = oModel.getProperty('/activeItem');
+            oActive.CostCenter = '1011103001';
+            oActive.MovementType = '201';
+
+            mockGoodsIssueService.postGoodsIssue.mockResolvedValueOnce({
+                MaterialDocument: '5000012399',
+                MaterialDocYear: '2026',
+                Success: true,
+                Message: 'Goods Issue 201 posted'
+            });
+
+            await controller.onPostGoodsIssue();
+            expect(mockGoodsIssueService.postGoodsIssue).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    MovementType: '201',
+                    CostCenter: '1011103001'
+                })
+            );
+            expect(oModel.getProperty('/postResult/MaterialDocument')).toBe('5000012399');
+        });
+
+        it('should include SerialNumbers in payload when posting Goods Issue', async () => {
+            const oModel = controller.getView().getModel('giView');
+            oModel.setProperty('/mode', '201');
+            const oActive = oModel.getProperty('/activeItem');
+            oActive.CostCenter = '1011103001';
+            oActive.MovementType = '201';
+            oActive.SerialNumber = 'MACBOOK-004';
+            oActive.SerialNumbers = ['MACBOOK-004'];
+
+            mockGoodsIssueService.postGoodsIssue.mockResolvedValueOnce({
+                MaterialDocument: '5000012400',
+                MaterialDocYear: '2026',
+                Success: true,
+                Message: 'Goods Issue 201 posted'
+            });
+
+            await controller.onPostGoodsIssue();
+            expect(mockGoodsIssueService.postGoodsIssue).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    MovementType: '201',
+                    CostCenter: '1011103001',
+                    SerialNumber: 'MACBOOK-004',
+                    SerialNumbers: ['MACBOOK-004']
+                })
+            );
+            expect(oModel.getProperty('/postResult/MaterialDocument')).toBe('5000012400');
         });
 
         it('should show error when posting fails', async () => {
