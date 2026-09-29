@@ -4,6 +4,28 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-29 18:18 IST
+- **Agent**: Antigravity
+- **Request**: "Check noe"
+- **Live Activation Confirmed — API_MATERIAL_DOCUMENT_SRV Operational**:
+  1. Live Verification against SAP DS4 Client 220:
+     - **`$metadata` Schema**: **HTTP 200 OK** (38,620 bytes XML EDMX schema returned).
+     - **Service Document**: **HTTP 200 OK** (EntitySets: `A_MaterialDocumentHeader`, `A_MaterialDocumentItem`, `A_SerialNumberMaterialDocument`).
+     - **Header Read**: **HTTP 200 OK** on `A_MaterialDocumentHeader` (successfully read existing documents `4900000000`, `4900000001`).
+     - **CSRF Token & Session Cookies**: **HTTP 200 OK** (received active 24-character CSRF token and 2 session cookies).
+  2. Resolution Summary:
+     - Error `/IWFND/MED/170` ("No service found"): Resolved by Basis registering service.
+     - Error `/IWFND/CM_COS/064` ("No System Alias found"): Resolved by Basis assigning System Alias (`LOCAL` / `DS4_220`) with Default flag.
+  3. Status:
+     - Gateway blocker completely eliminated.
+     - Ready to execute consolidated live posting pass (201 cost-center, 261 planned reservation 518660, 261 unplanned Order 2000611).
+- **Executed Commands & Results**:
+  - GET `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata`: HTTP 200 OK (38,620 bytes).
+  - GET `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$top=2`: HTTP 200 OK.
+  - CSRF probe on `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$top=1`: HTTP 200 OK (token received).
+- **Next recommended action**: Execute the single consolidated live posting pass across 201, 261 planned, and 261 unplanned in one sitting, capturing authentic SAP Material Document numbers.
+
+
 ## 2026-09-29 18:05 IST
 - **Agent**: Antigravity
 - **Request**: "Check Added in live cataloug : ZAPI_MATERIAL_DOCUMNET_SRV"
