@@ -83,8 +83,10 @@ function mapToMaterialDocumentPayload(data) {
     itemPayload.CostCenter = String(data.CostCenter).trim().toUpperCase();
   }
 
-  // Optional G/L Account override
-  if (data.GLAccount && String(data.GLAccount).trim() !== '') {
+  // Optional G/L Account override - NEVER forwarded for movement 201: the account is
+  // system-determined from Cost Center via OBYC/GBB-VBR and must stay read-only for cost-center
+  // consumption postings, even if a caller-supplied value slipped past validation.
+  if (sMvt !== '201' && data.GLAccount && String(data.GLAccount).trim() !== '') {
     itemPayload.GLAccount = String(data.GLAccount).trim();
   }
 
@@ -150,7 +152,10 @@ function mapToCancelHeaderUrl(materialDocument, materialDocYear, postingDate) {
 
   let url = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/CancelHeader?MaterialDocument=${odataString(doc)}&MaterialDocumentYear=${odataString(year)}`;
   if (postingDate) {
-    const formatted = formatDateToODataV2(postingDate);
+    // OData V2 FunctionImport parameters of type Edm.DateTime use the literal `datetime'...'`
+    // form directly in the URL (unlike the JSON body's `/Date(epoch)/` form produced by
+    // formatDateToODataV2 above, which does not apply to URL literals) - postingDate is already
+    // validated as YYYY-MM-DD upstream by isValidCalendarDate before reaching this function.
     url += `&PostingDate=datetime'${postingDate}T00:00:00'`;
   }
   return url;

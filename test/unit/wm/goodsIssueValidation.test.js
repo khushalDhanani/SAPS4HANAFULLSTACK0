@@ -68,11 +68,24 @@ describe('goodsIssue.validation: Movement 201 and Goods Issue Rules', () => {
       expect(res2.errors.some(e => e.field === 'CostCenter')).toBe(true);
     });
 
-    it('validates optional GLAccount format', () => {
-      const resPass = validateGoodsIssuePayload({ ...valid201Base, GLAccount: '400000' });
-      expect(resPass.isValid).toBe(true);
+    it('rejects any caller-supplied GLAccount for Movement 201, even a syntactically valid one', () => {
+      // G/L account is system-determined via OBYC/GBB-VBR for cost-center consumption; a client
+      // must never be able to override it for 201, regardless of format validity.
+      const resValidFormat = validateGoodsIssuePayload({ ...valid201Base, GLAccount: '400000' });
+      expect(resValidFormat.isValid).toBe(false);
+      expect(resValidFormat.errors.some(e => e.field === 'GLAccount')).toBe(true);
 
-      const resFail = validateGoodsIssuePayload({ ...valid201Base, GLAccount: 'GL#4000000000' });
+      const resInvalidFormat = validateGoodsIssuePayload({ ...valid201Base, GLAccount: 'GL#4000000000' });
+      expect(resInvalidFormat.isValid).toBe(false);
+      expect(resInvalidFormat.errors.some(e => e.field === 'GLAccount')).toBe(true);
+    });
+
+    it('validates optional GLAccount format for movement types other than 201 (e.g. 261)', () => {
+      const base261 = { ...valid201Base, MovementType: '261', ReservationNo: '519658', ReservationItem: '0001', CostCenter: undefined };
+      const resPass = validateGoodsIssuePayload({ ...base261, GLAccount: '400000' });
+      expect(resPass.errors.some(e => e.field === 'GLAccount')).toBe(false);
+
+      const resFail = validateGoodsIssuePayload({ ...base261, GLAccount: 'GL#4000000000' });
       expect(resFail.isValid).toBe(false);
       expect(resFail.errors.some(e => e.field === 'GLAccount')).toBe(true);
     });

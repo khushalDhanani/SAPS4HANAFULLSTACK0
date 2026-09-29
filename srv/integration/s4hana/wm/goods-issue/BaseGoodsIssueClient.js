@@ -89,21 +89,54 @@ class BaseGoodsIssueClient {
   }
 
   /**
+   * Derives a CSRF probe path scoped to the SAME service the caller is about to POST to
+   * (service root + `/$metadata`), instead of a hardcoded, unrelated service. Fetching the CSRF
+   * token from a different service than the transactional POST target has caused cross-service
+   * CSRF token rejection on this SAP system before (see GoodsReceiptAdapter's own CSRF fetch
+   * path being "harmonized" with its POST target for the same reason). `$metadata` is a safe,
+   * side-effect-free GET that any user authorized for that service can call.
+   *
+   * @private
+   */
+  static _deriveCsrfPath(servicePath, fallback) {
+    try {
+      const withoutQuery = String(servicePath || '').split('?')[0];
+      const parenIdx = withoutQuery.indexOf('(');
+      const basePart = parenIdx === -1 ? withoutQuery : withoutQuery.slice(0, parenIdx);
+      const segments = basePart.split('/').filter(Boolean);
+      if (segments.length < 2) return fallback;
+      segments.pop(); // drop the entity set / function import / action segment, keep the service root
+      return '/' + segments.join('/') + '/$metadata';
+    } catch (_e) {
+      return fallback;
+    }
+  }
+
+  /**
    * HTTP POST against an S/4HANA OData service.
    * Delegates to adapter if present so that Jest spies on adapter._post intercept.
+   * Attaches the raw HTTP response headers to the returned result as `_headers` (mirroring
+   * GoodsReceiptAdapter._post) so callers can inspect the SAP Gateway `sap-message` header:
+   * SAP Gateway can answer a POST with HTTP 2xx even when the backend BAPI rejected the posting
+   * for a business reason, communicating the real outcome only via that header.
    */
   async _post(servicePath, payload = {}, customHeaders = {}) {
     if (this.adapter && typeof this.adapter._post === 'function') {
       return this.adapter._post(servicePath, payload, customHeaders);
     }
-    const csrfPath = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1';
-    const { data } = await this.client.post(servicePath, {
+    const fallbackCsrfPath = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1';
+    const csrfPath = BaseGoodsIssueClient._deriveCsrfPath(servicePath, fallbackCsrfPath);
+    const { data, headers } = await this.client.post(servicePath, {
       data: payload,
       headers: customHeaders,
       csrfPath
     });
     if (data && typeof data === 'object') {
-      return data.d || data;
+      const res = data.d || data;
+      if (res && typeof res === 'object' && headers) {
+        res._headers = headers;
+      }
+      return res;
     }
     return true;
   }

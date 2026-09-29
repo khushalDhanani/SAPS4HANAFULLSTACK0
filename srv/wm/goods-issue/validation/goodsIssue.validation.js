@@ -156,10 +156,15 @@ function validateGoodsIssuePayload(data) {
     addError('Unit', `Unit of measure '${sUnit}' exceeds maximum length of 3 characters`);
   }
 
-  // Optional G/L Account validation
+  // G/L Account: for Movement 201 the account is always system-determined from Cost Center via
+  // OBYC/GBB-VBR account determination and must never be caller-supplied, regardless of format
+  // validity - a syntactically valid GLAccount is still rejected for 201 so a client cannot
+  // override account determination for cost-center consumption postings.
   if (data.GLAccount !== undefined && data.GLAccount !== null && String(data.GLAccount).trim() !== '') {
     const sGL = String(data.GLAccount).trim();
-    if (!GL_ACCOUNT_REGEX.test(sGL)) {
+    if (sMvt === '201') {
+      addError('GLAccount', 'GLAccount cannot be supplied for Movement Type 201: the G/L account is system-determined from Cost Center via OBYC/GBB-VBR and is read-only');
+    } else if (!GL_ACCOUNT_REGEX.test(sGL)) {
       addError('GLAccount', `GLAccount '${sGL}' must be 1 to 10 alphanumeric characters`);
     }
   }

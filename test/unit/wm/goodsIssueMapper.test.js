@@ -79,11 +79,11 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
       expect(date.getUTCMinutes()).toBe(0);
     });
 
-    it('maps Movement 201 to A_MaterialDocumentHeader with GoodsMovementCode 03 and CostCenter', () => {
+    it('maps Movement 201 to A_MaterialDocumentHeader with GoodsMovementCode 03 and CostCenter, never forwarding GLAccount', () => {
       const data = {
         MovementType: '201',
         CostCenter: '1011101301',
-        GLAccount: '0000400000',
+        GLAccount: '0000400000', // must be ignored for 201 - system-determined via OBYC/GBB-VBR
         Material: '8000009753',
         Plant: '1120',
         StorageLocation: 'HS01',
@@ -107,13 +107,29 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
         StorageLocation: 'HS01',
         QuantityInEntryUnit: '1',
         EntryUnit: 'EA',
-        CostCenter: '1011101301',
-        GLAccount: '0000400000'
+        CostCenter: '1011101301'
       });
+      expect(items[0].GLAccount).toBeUndefined();
 
       expect(items[0].to_SerialNumbers.results).toEqual([
         { SerialNumber: 'MACBOOK-004' }
       ]);
+    });
+
+    it('forwards a caller-supplied GLAccount for non-201 movement types (e.g. 261)', () => {
+      const data = {
+        MovementType: '261',
+        GLAccount: '0000400000',
+        Material: '8000009753',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        IssueQty: 1,
+        Unit: 'EA',
+        ReservationNo: '519658',
+        ReservationItem: '0001'
+      };
+      const payload = mapToMaterialDocumentPayload(data);
+      expect(payload.to_MaterialDocumentItem.results[0].GLAccount).toBe('0000400000');
     });
 
     it('maps planned 201 with reservation references', () => {

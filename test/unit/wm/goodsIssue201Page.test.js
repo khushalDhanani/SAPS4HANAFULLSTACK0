@@ -195,9 +195,10 @@ describe('Movement 201 Dedicated Page: Model & Service Tests', () => {
                 PostingDate: data.postingDate,
                 DocumentDate: data.documentDate,
                 HeaderText: 'GI CC 1011102401',
-                SerialNumbers: ['MACBOOK-004'],
-                GLAccount: ''
+                SerialNumbers: ['MACBOOK-004']
             });
+            // GLAccount must never be sent for 201: system-determined via OBYC/GBB-VBR, read-only.
+            expect(payload.GLAccount).toBeUndefined();
         });
     });
 

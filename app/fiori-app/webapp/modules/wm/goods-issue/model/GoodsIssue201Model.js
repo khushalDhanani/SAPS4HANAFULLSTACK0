@@ -343,8 +343,10 @@
                 PostingDate: oData.postingDate,
                 DocumentDate: oData.documentDate,
                 HeaderText: oData.headerText ? String(oData.headerText).trim() : ("GI CC " + sCC),
-                SerialNumbers: aSerials,
-                GLAccount: oData.glAccount ? String(oData.glAccount).trim() : ""
+                SerialNumbers: aSerials
+                // GLAccount intentionally omitted: system-determined via OBYC/GBB-VBR for
+                // Movement 201 and read-only in this UI (see glAccount in getInitialData above);
+                // the backend also rejects a caller-supplied GLAccount for 201 independently.
             };
         }
     };

@@ -43,7 +43,9 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       const item = payload.to_MaterialDocumentItem.results[0];
       expect(item.GoodsMovementType).toBe('201');
       expect(item.CostCenter).toBe('1011101301');
-      expect(item.GLAccount).toBe('0000400000');
+      // GLAccount is system-determined via OBYC/GBB-VBR for 201 and must never be forwarded to
+      // SAP, even if a caller (or a caller bypassing validation) supplied one.
+      expect(item.GLAccount).toBeUndefined();
       expect(item.Reservation).toBeUndefined();
       expect(item.to_SerialNumbers.results).toEqual([{ SerialNumber: 'MACBOOK-004' }]);
 
@@ -55,7 +57,91 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       expect(res.Message).toContain('Goods Issue to Cost Center 201 posted successfully');
     });
 
-    it('successfully reverses a Material Document via CancelHeader FunctionImport', async () => {
+    it('throws the real SAP business error when sap-message reports severity error despite an HTTP success response', async () => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        // SAP Gateway can answer HTTP 2xx while the backend BAPI rejected the posting; the real
+        // outcome is only in the sap-message header, and no MaterialDocument is present.
+        _post: jest.fn().mockResolvedValue({
+          _headers: {
+            'sap-message': JSON.stringify({
+              severity: 'error',
+              message: 'Cost center 4110 is blocked for actual postings',
+              code: 'KI234'
+            })
+          }
+        })
+      };
+
+      const client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      await expect(
+        client.postGoodsIssue(
+          '', '', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+          { movementType: '201', costCenter: '4110' }
+        )
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('Cost center 4110 is blocked for actual postings')
+      });
+    });
+
+    it('rejects instead of silently resolving when SAP returns no material document and no sap-message error', async () => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockResolvedValue({}) // no MaterialDocument, no sap-message
+      };
+
+      const client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      await expect(
+        client.postGoodsIssue(
+          '', '', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+          { movementType: '201', costCenter: '4110' }
+        )
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('did not return a material document')
+      });
+    });
+
+    it('propagates a genuine SAP business rejection (e.g. locked cost center, 422) instead of masking it as capability-unavailable', async () => {
+      const businessErr = new Error('Cost center 4110 is blocked for actual postings (message no. KI234)');
+      businessErr.status = 422;
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockRejectedValue(businessErr)
+      };
+
+      const client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      await expect(
+        client.postGoodsIssue(
+          '', '', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+          { movementType: '201', costCenter: '4110' }
+        )
+      ).rejects.toMatchObject({
+        status: 422,
+        message: expect.stringContaining('Cost center 4110 is blocked for actual postings')
+      });
+    });
+
+    it('still wraps a real capability-unavailable failure (HTTP 403/404) as "Backend Posting Capability Unavailable" for the dispatch queue', async () => {
+      const unavailableErr = new Error('HTTP 403 Forbidden');
+      unavailableErr.status = 403;
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockRejectedValue(unavailableErr)
+      };
+
+      const client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      await expect(
+        client.postGoodsIssue(
+          '', '', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+          { movementType: '201', costCenter: '4110' }
+        )
+      ).rejects.toMatchObject({
+        status: 501,
+        message: expect.stringContaining('Backend Posting Capability Unavailable')
+      });
+    });
+
+        it('successfully reverses a Material Document via CancelHeader FunctionImport', async () => {
       const mockAdapter = {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockResolvedValue({

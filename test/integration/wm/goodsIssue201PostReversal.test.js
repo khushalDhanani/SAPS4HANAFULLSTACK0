@@ -48,10 +48,12 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     });
 
     // 3. Execute POST /odata/v4/goods-issue/postGoodsIssue for Movement 201
+    // GLAccount is intentionally omitted here: for Movement 201 it is system-determined via
+    // OBYC/GBB-VBR and the server now rejects any caller-supplied value (see goodsIssueValidation
+    // and goodsIssueMapper tests for the rejection/stripping behavior itself).
     const postRes = await POST(`${BASE}/postGoodsIssue`, {
       MovementType: '201',
       CostCenter: '1011101301',
-      GLAccount: '0000400000',
       Material: '8000009753',
       Plant: '1120',
       StorageLocation: 'HS01',
@@ -86,7 +88,6 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       expect.objectContaining({
         movementType: '201',
         costCenter: '1011101301',
-        glAccount: '0000400000',
         serialNumbers: ['MACBOOK-004']
       })
     );
@@ -108,6 +109,54 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       Success: true
     });
     expect(reverseRes.data.Message).toContain('reversed successfully in S/4HANA via CancelHeader');
+  });
+
+  it('rejects postGoodsIssue with 400 when a caller supplies GLAccount for Movement 201', async () => {
+    // G/L account is system-determined via OBYC/GBB-VBR for cost-center consumption and must
+    // never be caller-overridable for 201, even with a syntactically valid value.
+    const res = await axios.post(
+      `${BASE}/postGoodsIssue`,
+      {
+        MovementType: '201',
+        CostCenter: '1011101301',
+        GLAccount: '0000400000',
+        Material: '8000009753',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        IssueQty: 1,
+        Unit: 'EA'
+      },
+      { validateStatus: () => true }
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.data.error.message).toContain('GLAccount');
+  });
+
+  it('fails closed (blocks posting) instead of posting unchecked when the stock pre-check itself errors unexpectedly', async () => {
+    const unexpectedErr = new Error('S/4HANA Gateway timeout while revalidating stock');
+    unexpectedErr.status = 504;
+    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockRejectedValue(unexpectedErr);
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue');
+
+    const res = await axios.post(
+      `${BASE}/postGoodsIssue`,
+      {
+        MovementType: '201',
+        CostCenter: '1011101301',
+        Material: '8000009753',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        IssueQty: 1,
+        Unit: 'EA'
+      },
+      { validateStatus: () => true }
+    );
+
+    expect(res.status).toBe(504);
+    expect(res.data.error.message).toContain('Stock pre-check could not be completed');
+    // The whole point of failing closed: posting must never be attempted when the pre-check itself failed.
+    expect(postSpy).not.toHaveBeenCalled();
   });
 
   it('rejects postGoodsIssue with 422 when serial number is not ESTO (already issued)', async () => {

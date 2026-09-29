@@ -3,6 +3,37 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-29 11:25 IST
+- **Agent**: Antigravity
+- **Request**: "Resolve git index.lock during staging, verify Movement 201 backend/UI hardenings (fail-closed stock pre-check, sap-message error unwrapping, strict GLAccount rejection for 201), validate test suites and build."
+- **Scope & Implementation Details**:
+  - Investigated git status and confirmed `.git/index.lock` cleared; all 11 modified files staged cleanly:
+    - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue201Model.js`: Enforced client-side omission of `GLAccount` for 201 postings.
+    - `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`: Added response header capture for `sap-message` inspection on OData V2 calls.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssueMapper.js`: Defense-in-depth stripping of `GLAccount` on Movement 201 payload so SAP auto-determines via OBYC/GBB-VBR, while preserving `GLAccount` for 261/other movement types.
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`:
+      - Added `_throwIfSapBusinessError` inspecting `sap-message` header for severity `'error'`/`'E'` (BAPI errors returned within 200 responses).
+      - Added `_reclassifyPostingError` so genuine business rejections (400, 422, locked cost center, posting period closed) propagate directly to caller with their actual status instead of masking as 501 capability-unavailable, while genuine service outages (403, 404, 502, 503) route to the dispatch queue.
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+      - Fail-closed stock pre-check: if `revalidateStockBeforePosting` throws an unexpected error (network timeout / Gateway outage), posting is blocked with 502/504 instead of proceeding unchecked.
+      - Serial ESTO pre-check: verifies serial status is `ESTO` before calling SAP post, returning 422 immediately if already issued.
+    - `srv/wm/goods-issue/validation/goodsIssue.validation.js`: Strictly rejects client-supplied `GLAccount` for Movement 201 with HTTP 400.
+    - Automated Test Suites:
+      - `test/unit/wm/goodsIssueValidation.test.js`: Verified strict rejection of caller-supplied GLAccount for 201 and acceptance for 261.
+      - `test/unit/wm/goodsIssueMapper.test.js`: Verified GLAccount stripping for 201 and preservation for 261.
+      - `test/unit/wm/goodsIssue201Posting.test.js`: Verified `sap-message` business error extraction, rejection on missing MaterialDocument, propagation of 422 business rejection, and 501 reclassification for 403/404.
+      - `test/integration/wm/goodsIssue201PostReversal.test.js`: Verified full post and CancelHeader reversal cycle, 400 rejection for supplied GLAccount, fail-closed stock pre-check on timeout (504), and 422 rejection on non-ESTO serial.
+      - `test/unit/wm/goodsIssue201Page.test.js`: Verified UI view model initialization, validation, and payload formatting.
+- **Executed Commands & Results**:
+  - `git status`: All 11 files staged cleanly, 0 unstaged changes.
+  - `npx jest test/unit/wm/goodsIssue201Posting.test.js test/integration/wm/goodsIssue201PostReversal.test.js test/unit/wm/goodsIssue201Page.test.js test/unit/wm/goodsIssueMapper.test.js test/unit/wm/goodsIssueValidation.test.js`: 5/5 test suites passed, 56/56 tests passed.
+  - `npx jest test/unit/wm/ test/integration/wm/ --no-coverage`: 20/20 test suites passed, 421/421 tests passed (100% green).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected.
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 993 ms.
+  - `npx cds compile srv`: Succeeded with code 0.
+  - `git diff --check && git diff --cached --check`: Clean (0 errors).
+- **Next recommended action**: Commit the staged changes to `feature/CL01` and push to remote.
+
 ## 2026-09-29 10:10 IST
 - **Agent**: Antigravity
 - **Request**: "Add separate KPI tiles on the WM dashboard for movement types 201, 261, 301, and 311 (one tile per type, plus keep the overall total). Each tile: type label, total count, today's count, click-to-filter the document list to that type. Use real aggregated data from the backend (no hardcoded numbers), server-side aggregation with short-TTL caching, i18n for all labels, loading/empty/error states, and keep the existing folder structure and conventions. Scan the dashboard module first, then implement."

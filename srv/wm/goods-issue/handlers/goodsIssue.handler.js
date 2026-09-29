@@ -3,6 +3,7 @@ const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
 const { extractFilterParam, applyPaging } = require('../../../common/filterUtils');
 const { validateGoodsIssuePayload, validateReversalPayload } = require('../validation/goodsIssue.validation');
 const { normalizeGoodsIssuePayload, normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
+const LOG = require('../../../common/logger')('goods-issue-handler');
 
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
@@ -125,6 +126,14 @@ class GoodsIssueHandler {
           if (stockErr.status === 422) {
             return req.error(422, stockErr.message);
           }
+          // Fail CLOSED: an unclassified error means the stock pre-check could not run at all
+          // (network/timeout/unexpected SAP response) — silently proceeding to post without a
+          // valid check would defeat the purpose of the pre-check entirely.
+          LOG.error('Stock pre-check for Goods Issue failed unexpectedly; blocking posting instead of proceeding unchecked:', stockErr.message || stockErr);
+          return req.error(
+            stockErr.status || 502,
+            `Stock pre-check could not be completed before posting: ${stockErr.message || 'unexpected error'}. Goods Issue was NOT posted.`
+          );
         }
       }
 
@@ -141,6 +150,13 @@ class GoodsIssueHandler {
           if (serErr.status === 422 || serErr.status === 409) {
             return req.error(serErr.status, serErr.message);
           }
+          // Fail CLOSED, same rationale as the stock pre-check above: an unclassified error means
+          // serial status could not be verified, so never post unverified serials.
+          LOG.error('Serial status pre-check for Goods Issue failed unexpectedly; blocking posting instead of proceeding unchecked:', serErr.message || serErr);
+          return req.error(
+            serErr.status || 502,
+            `Serial status pre-check could not be completed before posting: ${serErr.message || 'unexpected error'}. Goods Issue was NOT posted.`
+          );
         }
       }
 

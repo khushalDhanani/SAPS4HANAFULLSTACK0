@@ -18,6 +18,32 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * SAP Gateway can answer an OData V2 POST with HTTP 2xx even when the backend BAPI rejected the
+   * posting for a business reason (locked cost center, closed period, stock deficit, etc.),
+   * communicating the real outcome only via the `sap-message` response header. Throws a real error
+   * carrying the SAP message text/code when that header reports severity 'error'/'E'; otherwise a
+   * no-op. Mirrors GoodsReceiptAdapter's handling of the same SAP Gateway behavior.
+   *
+   * @private
+   */
+  static _throwIfSapBusinessError(result) {
+    const rawSapMsg = result?._headers?.['sap-message'];
+    if (!rawSapMsg) return;
+    let sapMsgObj = null;
+    try {
+      sapMsgObj = JSON.parse(rawSapMsg);
+    } catch (_e) {
+      return;
+    }
+    const severity = String(sapMsgObj?.severity || '').toUpperCase();
+    if (severity === 'ERROR' || severity === 'E') {
+      const err = new Error(sapMsgObj.message || 'SAP S/4HANA rejected the Goods Issue posting');
+      err.code = sapMsgObj.code || 'SAP_BUSINESS_ERROR';
+      throw err;
+    }
+  }
+
+  /**
    * Post goods issue for a single reservation component line (Bound Action)
    */
   async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
@@ -152,6 +178,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           DocumentDate: options.documentDate || options.DocumentDate
         });
         const v2Res = await this._post(v2Path, v2Payload);
+        GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
         const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
         const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
         if (matDoc) {
@@ -167,8 +194,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             Message: `${sMvt === '201' ? 'Goods Issue to Cost Center' : sMvt === '261' ? 'Goods Issue' : 'Transfer posting'} ${sMvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
           };
         }
+        // A 2xx/no-exception response without a genuine material document and without a
+        // sap-message error is NOT a success either; never let the function resolve `undefined`
+        // (which upstream callers would otherwise treat as a fabricated success).
+        throw new Error(`SAP S/4HANA did not return a material document for movement ${sMvt} posting, and no sap-message error was present in the response.`);
       } catch (v2Err) {
-        throw this._buildPostingUnavailableError(v4Err, v2Err, `single-item movement ${sMvt}`);
+        throw this._reclassifyPostingError(v4Err, v2Err, `single-item movement ${sMvt}`);
       }
     }
   }
@@ -297,6 +328,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         };
 
         const v2Res = await this._post(v2Path, v2Payload);
+        GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
         const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
         const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
 
@@ -323,8 +355,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             Messages: [`Batch Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (Material Document: ${matDoc}/${matYear}).`]
           };
         }
+        // Same rule as single-item posting: never resolve without either a genuine material
+        // document or a thrown error.
+        throw new Error('SAP S/4HANA did not return a material document for the batch Goods Issue submission, and no sap-message error was present in the response.');
       } catch (v2Err) {
-        throw this._buildPostingUnavailableError(v4Err, v2Err, 'batch Goods Issue submission');
+        throw this._reclassifyPostingError(v4Err, v2Err, 'batch Goods Issue submission');
       }
     }
   }
@@ -346,6 +381,47 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     if (typeof err.response?.status === 'number') return err.response.status;
     const m = String(err.message || '').match(/\b(40[1-4]|50[0-4])\b/);
     return m ? Number(m[0]) : null;
+  }
+
+  /**
+   * Decides whether a Tier 2 (API_MATERIAL_DOCUMENT_SRV) failure is a genuine business/validation
+   * rejection (locked cost center, closed posting period, stock deficit, duplicate serial, our own
+   * pre-flight validation, ...) that must be surfaced to the caller as-is, or an actual backend
+   * capability problem (service not registered/activated, not authorized, Gateway unreachable) that
+   * should be wrapped into the diagnostic "capability unavailable" error and routed to the dispatch
+   * queue. Only HTTP 403/404/502/503 are treated as "capability unavailable" - everything else
+   * (400/401/409/422/...) is a real, surfaceable error and must never be silently queued for retry.
+   *
+   * @private
+   */
+  _reclassifyPostingError(v4Err, v2Err, operationName) {
+    const UNAVAILABLE_STATUSES = [403, 404, 502, 503];
+
+    // An error that already carries an explicit, non-"unavailable" HTTP status was already
+    // correctly classified by the code that raised it (our own pre-flight validation, or a real
+    // SAP HTTP error surfaced by S4HttpClient with its true status) - never re-wrap it.
+    const explicitStatus = this._extractStatus(v2Err);
+    if (explicitStatus !== null && !UNAVAILABLE_STATUSES.includes(explicitStatus)) {
+      return v2Err;
+    }
+
+    // Otherwise - an explicit 403/404/502/503, or no status at all (raw network/socket error, or
+    // our own sap-message-derived error which carries no HTTP status) - defer to S4ErrorMapper's
+    // keyword-based business-error detection (locked/blocked, posting period, lock/enqueue, ...).
+    // Only a positively-identified business status escapes the "capability unavailable" wrap; an
+    // unclassifiable error (mapped to the mapper's 500 default, e.g. a bare "socket hang up" with
+    // no business content) is still treated as an availability problem, not invented as a 500
+    // business error.
+    const mapped = S4ErrorMapper.mapS4Error(v2Err);
+    if (!UNAVAILABLE_STATUSES.includes(mapped.status) && mapped.status !== 500) {
+      const businessErr = new Error(mapped.message);
+      businessErr.status = mapped.status;
+      businessErr.code = mapped.code;
+      businessErr.details = mapped.details;
+      return businessErr;
+    }
+
+    return this._buildPostingUnavailableError(v4Err, v2Err, operationName);
   }
 
   /**
