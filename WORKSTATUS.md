@@ -5636,6 +5636,21 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Navigate to `#/dashboard`, switch to the EWM/WM tab, and verify the 4 movement-type KPI cards load real counts. Click any card to navigate to `#/wm/goods-issue`.
 
+## 2026-09-29 10:18 IST
+- **Agent**: Antigravity
+- **Change**: Removed 2 duplicate tiles from Dashboard EWM tab:
+  - **Root Cause**: The EWM tab (`tabEWM`) contained 8 tiles after the KPI cards were added, with 2 functional duplicates:
+    1. **`tileGoodsIssue`** ("Goods Issue (261)", `openReservationCount`) — duplicated by the new `tileMvt261` ("261 • Production Order", `mvt261Total` + `mvt261Today`). Both represent movement type 261 goods issue and navigate to `#/wm/goods-issue`. The new KPI card is superior (real aggregated total + today's count from MATDOC/MSEG vs. a simple reservation item count).
+    2. **`tileEWMOrdersDueForDelivery`** ("Orders Due for Delivery", `ordersDueCount`) — exact copy of `tileSDOrdersDueForDelivery` already present in the SD tab (line 552) and `tileOverviewOrdersDueForDelivery` in the Overview tab (line 222). Orders Due for Delivery is an SD/LE concept, not a WM function. All three showed identical data from the same `ordersDueCount` model property.
+  - **Fix**: Removed both duplicate `GenericTile` elements from `Dashboard.view.xml` (former lines 667-681). The EWM tab now has 6 tiles: 4 KPI cards (201/261/301/311), `tileGoodsReceipt` (101, unique — not covered by the outbound KPI cards), and `tileTrTo` (unique TO creation).
+  - **Backend/Data Layer**: No duplicate in the data query — `GoodsIssueDashboardClient` queries `BWART IN ('201','261','301','311')` once and aggregates by type. The duplication was purely in the view XML rendering.
+  - **Files Modified**: `app/fiori-app/webapp/view/Dashboard.view.xml`
+  - **Executed Commands & Results**:
+    - `npm --prefix app/fiori-app run lint`: Success! No findings (0 errors).
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 969 ms.
+    - `npx jest test/unit/dashboard/`: 2 passed, 49/49 tests green (0 regressions).
+  - **How to verify no duplicates remain**: `grep -c 'GenericTile' app/fiori-app/webapp/view/Dashboard.view.xml` in the EWM section shows 6 tiles; `sed -n '/WAREHOUSE (EWM/,/<\/IconTabFilter>/p' Dashboard.view.xml | grep -o 'id="[^"]*"' | sort | uniq -d` returns empty (no duplicate IDs).
+
 ## Next Steps
 0. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue`):
    - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.

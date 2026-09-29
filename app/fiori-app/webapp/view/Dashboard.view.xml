@@ -664,19 +664,9 @@
                                 </Panel>
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile id="tileGoodsIssue" header="Goods Issue (261)" subheader="Open Reservation Items" press=".onNavigateToGoodsIssue" state="{path: 'dashboardView>/openReservationCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Reservation Items">
-                                            <NumericContent value="{path: 'dashboardView>/openReservationCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
                                     <GenericTile id="tileGoodsReceipt" header="Goods Receipt (101)" subheader="Inbound Deliveries" press=".onNavigateToGoodsReceipt" state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="Deliveries">
                                             <NumericContent value="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatMetricValue'}" icon="sap-icon://inbox" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                    <GenericTile id="tileEWMOrdersDueForDelivery" header="{i18n>tileOrdersDueForDeliveryTitle}" subheader="{i18n>tileOrdersDueForDeliverySub}" press=".onNavigateToOrdersDueForDelivery" state="{path: 'dashboardView>/ordersDueCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="{i18n>tileOrdersDueForDeliveryUnit}">
-                                            <NumericContent value="{path: 'dashboardView>/ordersDueCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
                                     <GenericTile id="tileTrTo" header="TO Creation (ZTO)" subheader="Transfer Orders from TR" press=".onNavigateToTrTo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
