@@ -210,6 +210,70 @@
                     </f:SimpleForm>
                 </Panel>
 
+                <!-- 3b. Scan-to-complete: unit-managed reservations (serial or storage unit). Scanning
+                     validates each unit against S/4 (right material, in stock, not already issued). -->
+                <Panel
+                    id="pnlScanToComplete261"
+                    headerText="{i18n>gi261ScanSectionTitle}"
+                    expandable="false"
+                    visible="{gi261>/scanEnabled}"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="End" class="sapUiTinyMarginBottom" wrap="Wrap">
+                            <Input
+                                id="inScanUnit261"
+                                value="{gi261>/scanInput}"
+                                placeholder="{i18n>gi261ScanPlaceholder}"
+                                submit=".onScanInputSubmit"
+                                width="22rem"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnScanUnit261"
+                                text="{i18n>gi261ScanBtn}"
+                                type="Emphasized"
+                                icon="sap-icon://bar-code"
+                                press=".onScanUnit"
+                                class="sapUiTinyMarginEnd" />
+                            <ToolbarSpacer />
+                            <ObjectStatus
+                                id="osScanProgress261"
+                                title="{i18n>gi261ScanProgress}"
+                                text="{= ${gi261>/scannedUnits}.length + ' / ' + ${gi261>/requiredScanCount} }"
+                                state="{= ${gi261>/scannedUnits}.length === ${gi261>/requiredScanCount} ? 'Success' : 'Warning' }" />
+                        </HBox>
+                        <MessageStrip
+                            id="msScanFeedback261"
+                            text="{gi261>/lastScanText}"
+                            type="{= ${gi261>/lastScanState} === 'None' ? 'Information' : ${gi261>/lastScanState} }"
+                            showIcon="true"
+                            visible="{= ${gi261>/lastScanState} !== 'None' }"
+                            class="sapUiTinyMarginBottom" />
+                        <Table
+                            id="tblScannedUnits261"
+                            items="{gi261>/scannedUnits}"
+                            noDataText="{i18n>gi261ScanNoData}"
+                            mode="Delete"
+                            delete=".onDeleteScannedUnit">
+                            <columns>
+                                <Column id="colScanUnit261"><Text text="{i18n>gi261ScanColUnit}" /></Column>
+                                <Column id="colScanMaterial261"><Text text="{i18n>gi261ScanColMaterial}" /></Column>
+                                <Column id="colScanKind261" hAlign="End"><Text text="{i18n>gi261ScanColKind}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{= ${gi261>serial} ? ${gi261>serial} : ${gi261>barcode} }" />
+                                        <Text text="{gi261>material}" />
+                                        <ObjectStatus
+                                            text="{= ${gi261>isSerial} ? ${i18n>gi261ScanKindSerial} : ${i18n>gi261ScanKindSU} }"
+                                            state="Information" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
                 <!-- 4. Conditional: Serial Numbers Management -->
                 <Panel
                     id="pnlSerialManagement261"
@@ -290,8 +354,8 @@
                 <ToolbarSpacer />
                 <Button
                     id="btnPostGoodsIssue261"
-                    text="{i18n>gi261BtnPost}"
-                    icon="sap-icon://save"
+                    text="{= ${gi261>/fromReservation} ? ${i18n>gi261BtnComplete} : ${i18n>gi261BtnPost} }"
+                    icon="{= ${gi261>/fromReservation} ? 'sap-icon://accept' : 'sap-icon://save' }"
                     type="Emphasized"
                     enabled="{gi261>/isValid}"
                     press=".onPostGoodsIssue" />

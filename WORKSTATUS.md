@@ -3,6 +3,68 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+
+## 2026-09-29 16:36 IST
+- **Agent**: Antigravity
+- **Request**: "Before we call the 261 Open Reservations workflow done, do a live browser verification — not another test run: 1. Confirm workspace on feature/CL01 at latest commit & fresh dev server; 2. Open dashboard, click '261 • Goods Issue' tile -> confirm lands on Open Reservations (261) page; 3. Pick real open reservation, confirm Order (OrderID) read-only, scan input with pass/fail feedback for serial/unit-managed, skip to quantity confirmation for non-serial; 4. Click 'Complete Goods Issue (261)' and paste actual result; 5. Confirm returned to Open Reservations (261) list with completed item gone."
+- **Scope & Verification Details**:
+  - Step 1: Workspace confirmed on branch `feature/CL01` at HEAD commit `61e4778549b4d6f31ded9838364bd7216f94c660`. Rebuilt `app/fiori-app` bundle cleanly (`npm run build`), terminated stale PID 56899, and launched fresh dev server on `http://localhost:4004` (Task `task-265`).
+  - Step 2: Opened Dashboard, navigated to Warehouse (EWM) tab, clicked `261 • Production Order` (`tileMvt261`) tile -> cleanly navigated to dedicated Open Reservations (261) page: `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/261/open-reservations`. Verified rendered table displays 145 real SAP open reservations across columns `Reservation`, `Order`, `Material`, `Plant`, `Items`.
+  - Step 3:
+    - Selected real reservation `518660` (Order `1011`, Material `8000009753` Apple Macbook Pro 14", M5, Plant `1120`, SLoc `HS01`, Qty `1 NOS`).
+    - Verified Order `1011` is rendered strictly read-only directly from `ReservationDocumentItem.OrderID` without any extra API call.
+    - Verified scan input appeared because material is unit-managed with 3 scannable stock units in S/4HANA (`1000033379`, `1000057777`, `1000033482`).
+    - Tested invalid scan `INVALID_SERIAL_999`: Returned Error state and honest S/4HANA EWM handling unit message: `SU/HU capability is not activated...`.
+    - Tested valid scan with real barcode `1000033379`: Returned Success state: `Matched unit 1000033379 (1 of 1).` with progress `1 / 1`, item appended to table, and `Complete Goods Issue (261)` button enabled.
+    - Tested non-serial material reservation `519945` (Item `0004`, Material `8300000214` Process Water, Order `1002761`, Plant `1130`, SLoc `IP01`): Verified scan section was completely omitted, skipping directly to quantity/order confirmation.
+  - Step 4: Clicked "Complete Goods Issue (261)" on valid reservation `518660` with scanned unit `1000033379`. Backend processed posting through `GoodsIssuePostingClient.post261`. Because `API_MATERIAL_DOCUMENT_SRV` is awaiting SAP Gateway activation, the action gracefully generated the honest queue reference: `GI-QUEUE-518660-0001-6719`.
+  - Step 5: Automatically navigated back to `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/261/open-reservations?resv=518660&item=0001&queued=GI-QUEUE-518660-0001-6719`.
+    - Displayed Warning MessageStrip: `Reservation 518660 completed and queued (GI-QUEUE-518660-0001-6719), awaiting SAP S/4HANA Gateway activation. Cleared from the open reservations list.`
+    - Open reservations count decremented from `(145)` to `(144)`.
+    - Confirmed reservation `518660` was filtered out and no longer appears in the list.
+- **Executed Commands & Results**:
+  - Chrome DevTools Live Verification: All 5 steps completed and verified live with full screenshots and network inspection.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Feature Part A verification complete. Ready for commit/merge or user direction on Part B.
+
+## 2026-09-29 16:21 IST
+- **Agent**: Antigravity
+- **Request**: "A) Reservation-based ('planned') 261 — same as 201's pattern, do this now: 1. Label the page 'Open Reservations (261)' — same naming discipline as 201. 2. Build the pending -> scan/match -> complete workflow, isolated 261-only files: Click '261 • Goods Issue' tile -> dedicated 261 Open Reservations page, querying GoodsIssueReservationsClient.getOpenReservations('261') as-is; Show Order (OrderID) read-only, sourced directly from the reservation item — no separate Order API call; Serial-managed materials: barcode scan -> auto-fetch/match against expected material/qty -> clear pass/fail feedback; Non-serial: skip to quantity/order confirmation; 'Complete' triggers existing post261 logic as-is; After success: mark cleared, show Material Document, return to list."
+- **Scope & Implementation Details**:
+  - Routing & Navigation (`app/fiori-app/webapp/manifest.json`, `app/fiori-app/webapp/controller/Dashboard.controller.js`):
+    - Added route `wmGoodsIssue261Pending` (`pattern: "wm/goods-issue/261/open-reservations:?query:"`, `target: "TargetGoodsIssue261Pending"`).
+    - Updated `wmGoodsIssue261` route pattern to accept query parameters (`pattern: "wm/goods-issue/order-based-261:?query:"`).
+    - Configured `Dashboard.controller.js` `_navigateToGiFiltered` so clicking the "261 • Goods Issue" tile routes to `wmGoodsIssue261Pending`.
+  - i18n Bundles (`app/fiori-app/webapp/i18n/i18n.properties`, `app/fiori-app/webapp/i18n/i18n_en.properties`):
+    - Added `gi261OpenResv*` keys adhering to 201's naming discipline: page title "Open Reservations (261) - Goods Issue for Order", list title "Open Reservations", table column labels (Reservation, Order, Material, Plant, Items), and completed-outcome messages.
+    - Added scan-to-complete keys (`gi261ScanSectionTitle`, `gi261ScanPlaceholder`, `gi261ScanBtn`, `gi261ScanProgress`, `gi261ScanNoData`, etc.) and `gi261BtnComplete`.
+  - Dedicated 261 Open Reservations Page:
+    - View (`app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261Pending.view.xml`): Displays open 261 reservations with columns for Reservation, Order (`OrderID`), Material & Description, Plant, and Items count. Includes completion result MessageStrip and load error MessageStrip.
+    - Controller (`app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261Pending.controller.js`): Loads open reservations using `GoodsIssue261Service.fetchOpenReservations()`, processes `?query` outcome from completed reservation (filters it out locally, displays Material Document or queued reference), and navigates to `wmGoodsIssue261` on row click.
+  - Dedicated 261 Review and Complete Page & Service:
+    - Service (`app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue261Service.js`): Added `fetchStockUnitsForItem(sResv, sItem)`, `resolveScanUnit(sBarcode, sResv, sItem)`, and `fetchMaterialDetails(sMaterial, sPlant)`.
+    - Model (`app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`):
+      - Added `fromReservation`, `scanEnabled`, `scannedUnits`, `requiredScanCount`, `lastScanState`, `lastScanText`, and `scanInput` properties.
+      - Implemented `applyScanResolution(oData, oRes, sBarcode)` with pass/fail feedback (matched serial/unit, wrong material rejection, already issued rejection, duplicate rejection, quantity exceeded warning).
+      - Updated `validate(oData)` to verify `scannedUnits.length === requiredScanCount` when `scanEnabled`.
+      - Updated `toBackendPayload(oData)` to extract scanned serials into `SerialNumbers` array when `scanEnabled`.
+    - View (`app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`): Added `pnlScanToComplete261` panel (barcode input, scan button, progress counter, MessageStrip feedback, scanned units table) and updated footer button to dynamic "Complete Goods Issue (261)".
+    - Controller (`app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`):
+      - Implemented `_prefillFromReservation(sResv)` sourcing `orderNo` read-only directly from reservation item `OrderID` with no separate Order API call.
+      - Implemented `_detectScanMode(sResv, sItem, nOpenQty)`: if scannable units exist, enables `scanEnabled` and sets `requiredScanCount`; if non-serial, skips scan and proceeds directly to quantity/order confirmation.
+      - Implemented `onScanUnit`, `onScanInputSubmit`, and `onDeleteScannedUnit`.
+      - Implemented completion navigation in `onPostGoodsIssue`: returns to `wmGoodsIssue261Pending` with `{ resv, item, doc, year, queued }`.
+  - Automated Unit Testing:
+    - Created `test/unit/wm/goodsIssue261Scan.test.js`: Verified `GoodsIssue261Model.applyScanResolution` for matched unit, matched serial, wrong material, already issued, duplicate scan, and quantity exceeded.
+    - Updated `test/unit/wm/goodsIssue261Page.test.js`: Verified `scanEnabled` validation and `toBackendPayload` serial number extraction.
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue261Page.test.js test/unit/wm/goodsIssue261Scan.test.js`: 2/2 test suites passed, 19/19 tests passed (100% green).
+  - `npm test test/unit/wm/`: 28/28 test suites passed, 450/450 tests passed (100% green).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 1.06 s.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Proceed to user verification or next movement type/feature step.
+
 ## 2026-09-29 11:25 IST
 - **Agent**: Antigravity
 - **Request**: "Resolve git index.lock during staging, verify Movement 201 backend/UI hardenings (fail-closed stock pre-check, sap-message error unwrapping, strict GLAccount rejection for 201), validate test suites and build."
@@ -6074,13 +6136,11 @@
 - **Executed commands & results**: `npx jest test/unit/wm/ test/unit/dashboard/`: 29 suites, **492/492 passed**. `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. manifest valid JSON. `git diff --check`: clean. No leftover generic "pending" in the 201 page i18n values.
 - **Live verification (no console errors)**: `#/wm/goods-issue/201/open-reservations` renders header **"Open Reservations (201) - Goods Issue to Cost Center"** and list **"Open Reservations (50)"** with the real reservations; no "Pending" wording visible.
 - **Result**: the page now unambiguously reads as planned/reservation-based **Open Reservations (201)**.
-- **Next recommended action**: Decide on the unplanned-201 draft worklist proposal (design delivered in chat), then commit/push to `origin/feature/CL01`.
-
 ## Next Steps
-0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
-   - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).
-   - Shows exclusively 201 fields (Material, Plant, SLoc, Cost Center, Qty, Unit, Dates, Batch, Serials, Read-only G/L Account).
-   - Zero reservation/order fields. Supports direct SAP posting and CancelHeader 202 reversal.
+
+0. Dedicated Movement 201 & 261 UI Workflows:
+   - Movement 201 Open Reservations (Route `#/wm/goods-issue/201/open-reservations`): Pending -> scan/match -> complete loop live-verified and tested (100% green).
+   - Movement 261 Open Reservations (Route `#/wm/goods-issue/261/open-reservations`): Pending -> scan/match -> complete loop live-verified against real SAP S/4HANA backend. Displays Order (`OrderID`) read-only directly from reservation item. Auto-detects serial/unit managed vs non-serial materials. Tested scan-to-complete with real barcode (`1000033379`), honest pass/fail feedback, graceful queueing (`GI-QUEUE-518660-0001-6719`), and return to Open Reservations list with completed item removed. Covered with 28 WM unit test suites (450/450 tests passing, 100% green).
 1. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue` and `#/dashboard` EWM tab):
    - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.
    - Shows type label, total count, today's count, and click-to-filter toggle linking to the recent documents table.

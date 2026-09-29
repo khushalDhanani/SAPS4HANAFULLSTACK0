@@ -287,8 +287,13 @@
           "target": "TargetGoodsIssue201"
         },
         {
+          "name": "wmGoodsIssue261Pending",
+          "pattern": "wm/goods-issue/261/open-reservations:?query:",
+          "target": "TargetGoodsIssue261Pending"
+        },
+        {
           "name": "wmGoodsIssue261",
-          "pattern": "wm/goods-issue/order-based-261",
+          "pattern": "wm/goods-issue/order-based-261:?query:",
           "target": "TargetGoodsIssue261"
         },
         {
@@ -404,6 +409,11 @@
         "TargetGoodsIssue201Pending": {
           "id": "goodsIssue201Pending",
           "name": "GoodsIssue201Pending",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue261Pending": {
+          "id": "goodsIssue261Pending",
+          "name": "GoodsIssue261Pending",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue261": {

@@ -112,6 +112,104 @@ sap.ui.define([
                 .then(function (oData) {
                     return (oData && oData.value) || (Array.isArray(oData) ? oData : []);
                 });
+        },
+
+        /**
+         * List the scannable stock units valid for a reservation line (correct material/plant/sloc,
+         * in stock). Used to decide whether the item is unit-managed (scan-to-complete) or plain
+         * quantity (skip straight to quantity/order confirmation).
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @returns {Promise<Object>} StockUnitList (StockUnits[], Material, Plant, StorageLocation)
+         */
+        fetchStockUnitsForItem: function (sReservationNo, sReservationItem) {
+            var sUrl = BASE_PATH_GI + "/getStockUnitsForItem(reservationNo='" +
+                encodeURIComponent(String(sReservationNo || "").trim()) + "',reservationItem='" +
+                encodeURIComponent(String(sReservationItem || "").trim()) + "')";
+            return ODataClient.get(sUrl);
+        },
+
+        /**
+         * Resolve ONE scanned unit barcode against a reservation line. Auto-detects serial vs storage
+         * unit and validates it against S/4 (correct material, in unrestricted stock, not already
+         * issued): returns a StockUnitResolution with SuExists / SuNotFoundReason / Material /
+         * IsSerialManaged / DeterminedSerial / CurrentStock.
+         * @param {string} sBarcode
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @returns {Promise<Object>}
+         */
+        resolveScanUnit: function (sBarcode, sReservationNo, sReservationItem) {
+            var sUrl = BASE_PATH_GI + "/resolveStockUnit(suBarcode='" +
+                encodeURIComponent(String(sBarcode || "").trim()) + "',reservationNo='" +
+                encodeURIComponent(String(sReservationNo || "").trim()) + "',reservationItem='" +
+                encodeURIComponent(String(sReservationItem || "").trim()) + "')";
+            return ODataClient.get(sUrl);
+        },
+
+        /**
+         * Fetch material metadata (Base Unit, Description, Batch/Serial flags, Stock)
+         * @param {string} sMaterial
+         * @param {string} [sPlant]
+         * @returns {Promise<Object>}
+         */
+        fetchMaterialDetails: function (sMaterial, sPlant) {
+            if (!sMaterial) {
+                return Promise.resolve(null);
+            }
+            var sMatClean = encodeURIComponent(String(sMaterial).trim());
+            var sUrl = BASE_PATH_MM + "/MaterialVH?$filter=Material eq '" + sMatClean + "'";
+            if (sPlant) {
+                sUrl += " and Plant eq '" + encodeURIComponent(String(sPlant).trim()) + "'";
+            }
+            sUrl += "&$top=1";
+
+            return ODataClient.get(sUrl)
+                .then(function (oData) {
+                    var aItems = (oData && oData.value) || (Array.isArray(oData) ? oData : []);
+                    var oMat = aItems[0] || null;
+
+                    if (sPlant) {
+                        var sBatchUrl = BASE_PATH_GI + "/MaterialBatches?$filter=Material eq '" + sMatClean + "' and Plant eq '" + encodeURIComponent(sPlant) + "'";
+                        return ODataClient.get(sBatchUrl)
+                            .then(function (oBatchData) {
+                                var aBatches = (oBatchData && oBatchData.value) || (Array.isArray(oBatchData) ? oBatchData : []);
+                                var nTotalStock = 0;
+                                var bBatchManaged = aBatches.length > 0;
+                                aBatches.forEach(function (b) {
+                                    nTotalStock += Number(b.AvailableStock) || 0;
+                                });
+
+                                return {
+                                    material: sMaterial,
+                                    materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                    unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                    isBatchManaged: bBatchManaged,
+                                    availableStock: bBatchManaged ? nTotalStock : null,
+                                    batches: aBatches
+                                };
+                            })
+                            .catch(function () {
+                                return {
+                                    material: sMaterial,
+                                    materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                    unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                    isBatchManaged: false,
+                                    availableStock: null,
+                                    batches: []
+                                };
+                            });
+                    }
+
+                    return {
+                        material: sMaterial,
+                        materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                        unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                        isBatchManaged: false,
+                        availableStock: null,
+                        batches: []
+                    };
+                });
         }
     };
 

@@ -89,10 +89,22 @@
                 isBatchManaged: false,
                 batch: "",
 
+                // Planned-reservation linkage (populated when completing from Open Reservations list)
+                fromReservation: false,
+
                 // Serial Management
                 isSerialManaged: false,
                 serialInput: "",
                 serialNumbers: [],
+
+                // Scan-to-complete (unit-managed reservations: serial or storage-unit)
+                scanEnabled: false,
+                scanUnitKind: "",           // "SERIAL" | "SU" (derived per scan) - label only
+                scanInput: "",
+                scannedUnits: [],           // [{ barcode, material, serial, isSerial }]
+                requiredScanCount: 0,
+                lastScanState: "None",      // MessageStrip state: Success | Error | Warning | None
+                lastScanText: "",
 
                 // Reservation Item lookup state
                 itemLoading: false,
@@ -120,6 +132,7 @@
                     documentDate: "",
                     batch: "",
                     serials: "",
+                    scannedUnits: ""
                 },
                 isValid: false
             };
@@ -155,6 +168,7 @@
                 documentDate: "",
                 batch: "",
                 serials: "",
+                scannedUnits: ""
             };
             var bValid = true;
 
@@ -279,6 +293,16 @@
                 }
             }
 
+            // Scan-to-complete (Required if unit-managed reservation line)
+            if (oData.scanEnabled) {
+                var aScanned = Array.isArray(oData.scannedUnits) ? oData.scannedUnits : [];
+                var nRequiredUnits = Number(oData.requiredScanCount) || 0;
+                if (aScanned.length !== nRequiredUnits) {
+                    errors.scannedUnits = "Required " + nRequiredUnits + " units scanned, currently " + aScanned.length;
+                    bValid = false;
+                }
+            }
+
             return {
                 isValid: bValid,
                 errors: errors
@@ -353,6 +377,42 @@
         },
 
         /**
+         * Apply a resolveStockUnit result for ONE scan against the current line. Auto-detects serial
+         * vs storage unit, gives clear pass/fail feedback (matched / wrong material / already issued /
+         * duplicate / quantity exceeded) and, on a match, appends to scannedUnits. Never a silent fill.
+         * @param {Object} oData model data
+         * @param {Object} oRes StockUnitResolution from resolveStockUnit
+         * @param {string} sBarcode the raw scanned barcode
+         * @returns {{ ok: boolean, state: string, text: string }}
+         */
+        applyScanResolution: function (oData, oRes, sBarcode) {
+            var sExpectedMat = String(oData.material || "").trim().toUpperCase();
+            var nRequired = Number(oData.requiredScanCount) || 0;
+            var aScanned = Array.isArray(oData.scannedUnits) ? oData.scannedUnits : [];
+            var sScan = String(sBarcode || "").trim();
+
+            if (!oRes || oRes.SuExists === false) {
+                return { ok: false, state: "Error", text: (oRes && oRes.SuNotFoundReason) || ("Unit '" + sScan + "' not found in unrestricted stock for this reservation.") };
+            }
+            var sResMat = String(oRes.Material || "").trim().toUpperCase();
+            if (sExpectedMat && sResMat && sResMat !== sExpectedMat) {
+                return { ok: false, state: "Error", text: "Wrong material: scanned unit belongs to " + sResMat + ", expected " + sExpectedMat + "." };
+            }
+            var sSerial = String(oRes.DeterminedSerial || oRes.SerialNumber || "").trim();
+            var sKey = sSerial || sScan;
+            if (aScanned.some(function (u) { return u.key === sKey; })) {
+                return { ok: false, state: "Warning", text: "Unit " + sKey + " was already scanned." };
+            }
+            if (aScanned.length >= nRequired) {
+                return { ok: false, state: "Warning", text: "Quantity exceeded: " + nRequired + " unit(s) already scanned for this line." };
+            }
+            aScanned.push({ key: sKey, barcode: sScan, material: sResMat, serial: sSerial, isSerial: !!oRes.IsSerialManaged });
+            oData.scannedUnits = aScanned;
+            var sLabel = sSerial ? ("serial " + sSerial) : ("unit " + sKey);
+            return { ok: true, state: "Success", text: "Matched " + sLabel + " (" + aScanned.length + " of " + nRequired + ")." };
+        },
+
+        /**
          * Build clean backend payload for postGoodsIssue
          * @param {Object} oData
          * @returns {Object}
@@ -367,6 +427,16 @@
             var sUnit = String(oData.unit || "").trim().toUpperCase();
             var sBatch = oData.isBatchManaged ? String(oData.batch || "").trim().toUpperCase() : "";
             var aSerials = oData.isSerialManaged ? (oData.serialNumbers || []).map(_cleanBarcode) : [];
+            // Scan-to-complete: carry any serials captured from scanned units (storage-unit scans that
+            // are not serial-managed contribute no serials - the goods issue is by quantity).
+            if (oData.scanEnabled && Array.isArray(oData.scannedUnits)) {
+                var aScanSerials = oData.scannedUnits
+                    .filter(function (u) { return u.isSerial && u.serial; })
+                    .map(function (u) { return _cleanBarcode(u.serial); });
+                if (aScanSerials.length > 0) {
+                    aSerials = aScanSerials;
+                }
+            }
 
             return {
                 MovementType: "261",

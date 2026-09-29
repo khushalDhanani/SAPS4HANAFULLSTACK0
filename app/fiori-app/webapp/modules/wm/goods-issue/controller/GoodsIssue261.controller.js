@@ -35,8 +35,14 @@ sap.ui.define([
             }
         },
 
-        _onRouteMatched: function () {
+        _onRouteMatched: function (oEvent) {
             this._resetModel();
+            var oArgs = oEvent && oEvent.getParameter("arguments");
+            var oQuery = oArgs && oArgs["?query"];
+            var sResv = oQuery && oQuery.resv;
+            if (sResv) {
+                this._prefillFromReservation(sResv);
+            }
         },
 
         _resetModel: function () {
@@ -44,6 +50,153 @@ sap.ui.define([
             this._oModel.setData(oInitData);
             this._aResolvedItems = [];
             this._validateLive();
+        },
+
+        /**
+         * Pre-fill the 261 review and complete form from an open reservation item.
+         * Material, plant, storage location, unit, open quantity, and Order (OrderID)
+         * are sourced directly from the reservation item — with no separate Order API call.
+         */
+        _prefillFromReservation: function (sResv) {
+            var that = this;
+            var oModel = this._oModel;
+            oModel.setProperty("/busy", true);
+            GoodsIssue261Service.fetchReservationItems(sResv)
+                .then(function (aItems) {
+                    var oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
+                    if (!oItem) {
+                        MessageToast.show(that.getText("gi261PrefillNoOpenItem", [sResv]));
+                        return;
+                    }
+                    oModel.setProperty("/fromReservation", true);
+                    oModel.setProperty("/reservationNo", oItem.ReservationNo || sResv);
+                    oModel.setProperty("/reservationItem", oItem.ReservationItem || "");
+                    oModel.setProperty("/orderNo", oItem.OrderNo || "");
+                    oModel.setProperty("/material", oItem.Material || "");
+                    oModel.setProperty("/materialName", oItem.MaterialDesc || "");
+                    oModel.setProperty("/plant", oItem.Plant || "");
+                    oModel.setProperty("/storageLocation", oItem.StorageLocation || "");
+                    var nOpen = Number(oItem.OpenQty);
+                    if (!isNaN(nOpen) && nOpen > 0) {
+                        oModel.setProperty("/quantity", nOpen);
+                        oModel.setProperty("/openQty", nOpen);
+                    }
+                    if (oItem.Unit) {
+                        oModel.setProperty("/unit", oItem.Unit);
+                    }
+                    that._loadMaterialInfo(oItem.Material || "", oItem.Plant || "");
+                    // Detect unit/serial vs non-serial workflow
+                    that._detectScanMode(oItem.ReservationNo || sResv, oItem.ReservationItem || "", nOpen || 0);
+                    that._validateLive();
+                })
+                .catch(function (err) {
+                    MessageBox.error((err && err.message) || that.getText("gi261PrefillError"));
+                })
+                .finally(function () {
+                    oModel.setProperty("/busy", false);
+                });
+        },
+
+        _loadMaterialInfo: function (sMaterial, sPlant) {
+            var that = this;
+            if (!sMaterial) return;
+            GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlant)
+                .then(function (oInfo) {
+                    if (!oInfo) return;
+                    if (oInfo.materialName && !that._oModel.getProperty("/materialName")) {
+                        that._oModel.setProperty("/materialName", oInfo.materialName);
+                    }
+                    if (oInfo.unit && !that._oModel.getProperty("/unit")) {
+                        that._oModel.setProperty("/unit", oInfo.unit);
+                    }
+                    if (oInfo.isBatchManaged !== undefined) {
+                        that._oModel.setProperty("/isBatchManaged", oInfo.isBatchManaged);
+                    }
+                    that._validateLive();
+                })
+                .catch(function () { /* non-fatal enrichment */ });
+        },
+
+        /**
+         * Detect whether the reservation component is unit-managed (serial or storage unit).
+         * If scannable units exist in S/4, enables scan-to-complete mode with pass/fail feedback.
+         * If non-serial: skips scan, proceeding directly to quantity/order confirmation.
+         */
+        _detectScanMode: function (sResv, sItem, nOpenQty) {
+            var that = this;
+            var oModel = this._oModel;
+            oModel.setProperty("/scanEnabled", false);
+            oModel.setProperty("/scannedUnits", []);
+            oModel.setProperty("/lastScanState", "None");
+            oModel.setProperty("/lastScanText", "");
+            if (!sResv || !sItem) {
+                return;
+            }
+            GoodsIssue261Service.fetchStockUnitsForItem(sResv, sItem)
+                .then(function (oData) {
+                    var aUnits = (oData && oData.StockUnits) || [];
+                    if (aUnits.length > 0) {
+                        oModel.setProperty("/scanEnabled", true);
+                        oModel.setProperty("/requiredScanCount", Math.max(1, Math.floor(nOpenQty || 1)));
+                        // The scan section takes over from the manual serial entry table
+                        oModel.setProperty("/isSerialManaged", false);
+                    }
+                })
+                .catch(function () { /* no scannable units -> non-serial plain quantity confirmation */ })
+                .finally(function () { that._validateLive(); });
+        },
+
+        _setScanFeedback: function (sState, sText) {
+            this._oModel.setProperty("/lastScanState", sState);
+            this._oModel.setProperty("/lastScanText", sText);
+        },
+
+        /**
+         * Handle one scanned unit barcode: auto-fetch + auto-match against S/4 via resolveStockUnit,
+         * show clear pass/fail feedback, and on a match append to scannedUnits. Never a silent fill.
+         */
+        onScanUnit: function () {
+            var that = this;
+            var oModel = this._oModel;
+            var sBarcode = String(oModel.getProperty("/scanInput") || "").trim();
+            if (!sBarcode) {
+                return;
+            }
+            var sResv = oModel.getProperty("/reservationNo");
+            var sItem = oModel.getProperty("/reservationItem");
+            oModel.setProperty("/scanInput", "");
+            GoodsIssue261Service.resolveScanUnit(sBarcode, sResv, sItem)
+                .then(function (oRes) {
+                    var oData = oModel.getData();
+                    var oFb = GoodsIssue261Model.applyScanResolution(oData, oRes, sBarcode);
+                    oModel.setProperty("/scannedUnits", oData.scannedUnits);
+                    that._setScanFeedback(oFb.state, oFb.text);
+                })
+                .catch(function (err) {
+                    // Hard SAP condition (no open qty, wrong plant, etc.) - surface the real message
+                    that._setScanFeedback("Error", (err && err.message) || "Scan could not be validated in S/4HANA.");
+                })
+                .finally(function () { that._validateLive(); });
+        },
+
+        onScanInputSubmit: function () {
+            this.onScanUnit();
+        },
+
+        onDeleteScannedUnit: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oCtx = oItem && oItem.getBindingContext("gi261");
+            if (!oCtx) {
+                return;
+            }
+            var iIdx = parseInt(oCtx.getPath().split("/").pop(), 10);
+            var aUnits = this._oModel.getProperty("/scannedUnits") || [];
+            if (iIdx >= 0 && iIdx < aUnits.length) {
+                aUnits.splice(iIdx, 1);
+                this._oModel.setProperty("/scannedUnits", aUnits);
+                this._setScanFeedback("None", "");
+                this._validateLive();
+            }
         },
 
         // =============================================================
@@ -91,10 +244,6 @@ sap.ui.define([
         // =============================================================
         // RESERVATION VALUE HELP & ITEM RESOLUTION
         // =============================================================
-        // This movement type has no unplanned/manual posting path on the backend
-        // (GoodsIssuePostingClient.postGoodsIssue requires ReservationNo + ReservationItem for
-        // every movement type other than 201), so Material/Plant/Storage Location/Unit/Order are
-        // always DERIVED from the resolved reservation item, never freely entered.
 
         onReservationValueHelp: function () {
             var that = this;
@@ -150,11 +299,6 @@ sap.ui.define([
                 });
         },
 
-        /**
-         * Load and cache the open items of a Reservation. Auto-applies the item when exactly one
-         * is open; otherwise lets the user pick one via a second Value Help (or via typing the
-         * Reservation Item number directly and triggering onReservationItemChange).
-         */
         _loadReservationItems: function (sReservationNo) {
             var that = this;
             this._oModel.setProperty("/itemLoading", true);
@@ -210,11 +354,6 @@ sap.ui.define([
             oDialog.open();
         },
 
-        /**
-         * Manual entry path: the user typed a Reservation Item number directly (already knows the
-         * combination) instead of using the picker. Matches it against the cached items for the
-         * current Reservation, fetching them first if the cache is empty.
-         */
         onReservationItemChange: function (oEvent) {
             var that = this;
             var sTyped = (oEvent.getParameter("value") || "").trim();
@@ -248,7 +387,7 @@ sap.ui.define([
         },
 
         // =============================================================
-        // SERIAL NUMBERS SCAN & MANAGEMENT
+        // SERIAL NUMBERS SCAN & MANAGEMENT (manual/unplanned serials)
         // =============================================================
 
         onAddSerialPress: function () {
@@ -305,10 +444,22 @@ sap.ui.define([
                 .then(function (res) {
                     that._oModel.setProperty("/busy", false);
 
-                    // Honest outcome: a QUEUED result (no SAP material document) means SAP has NOT
-                    // persisted the document - it was only recorded in the dispatch queue while the
-                    // S/4HANA Gateway service is inactive. Never claim a successful SAP posting or
-                    // offer reversal for a document that does not exist in SAP.
+                    // Workflow outcome: return to Open Reservations list carrying completion result
+                    if (that._oModel.getProperty("/fromReservation")) {
+                        var oOutcome = {
+                            resv: that._oModel.getProperty("/reservationNo"),
+                            item: that._oModel.getProperty("/reservationItem")
+                        };
+                        if (res && res.MaterialDocument) {
+                            oOutcome.doc = res.MaterialDocument;
+                            oOutcome.year = res.MaterialDocYear || new Date().getFullYear().toString();
+                        } else {
+                            oOutcome.queued = (res && res.QueueReference) || "1";
+                        }
+                        that.getRouter().navTo("wmGoodsIssue261Pending", { "?query": oOutcome });
+                        return;
+                    }
+
                     if (res && (res.Queued === true || !res.MaterialDocument)) {
                         that._oModel.setProperty("/hasPosted", false);
                         MessageBox.warning(res.Message || that.getText("giPostQueuedMsg"), {
@@ -339,8 +490,6 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     that._oModel.setProperty("/busy", false);
-                    // Backend surfaces the real SAP business error (sap-message severity, or a
-                    // reclassified 400/409/422) as err.message - see GoodsIssuePostingClient.
                     var sErrMsg = err.message || that.getText("gi261PostGenericError");
                     if (err.response && err.response.data && err.response.data.error) {
                         var oErr = err.response.data.error;
@@ -432,7 +581,11 @@ sap.ui.define([
         onNavBack: function () {
             var oRouter = this.getRouter();
             if (oRouter) {
-                oRouter.navTo("wmGoodsIssue");
+                if (this._oModel && this._oModel.getProperty("/fromReservation")) {
+                    oRouter.navTo("wmGoodsIssue261Pending");
+                } else {
+                    oRouter.navTo("wmGoodsIssue");
+                }
             }
         }
     });

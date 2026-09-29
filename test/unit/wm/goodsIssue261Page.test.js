@@ -157,15 +157,43 @@ describe('Movement 261 Dedicated Page: Model & Service Tests', () => {
             expect(res.errors.serials).toBe('');
         });
 
-        it('toBackendPayload generates a clean payload with no CostCenter/GLAccount', () => {
+        it('enforces scanned units count when scanEnabled is active', () => {
+            const data = GoodsIssue261Model.getInitialData();
+            data.reservationNo = 'RES001';
+            data.reservationItem = '0010';
+            data.material = 'MAT1';
+            data.plant = '1120';
+            data.storageLocation = 'HS01';
+            data.quantity = 2;
+            data.unit = 'EA';
+            data.scanEnabled = true;
+            data.requiredScanCount = 2;
+            data.scannedUnits = [{ barcode: 'SN01', serial: 'SN01', isSerial: true }];
+
+            let res = GoodsIssue261Model.validate(data);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.scannedUnits).toContain('Required 2 units scanned');
+
+            data.scannedUnits.push({ barcode: 'SN02', serial: 'SN02', isSerial: true });
+            res = GoodsIssue261Model.validate(data);
+            expect(res.isValid).toBe(true);
+            expect(res.errors.scannedUnits).toBe('');
+        });
+
+        it('toBackendPayload generates a clean payload with no CostCenter/GLAccount and includes scanned serials', () => {
             const data = GoodsIssue261Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '10';
             data.material = 'MAT1';
             data.plant = '1120';
             data.storageLocation = 'HS01';
-            data.quantity = 1;
+            data.quantity = 2;
             data.unit = 'EA';
+            data.scanEnabled = true;
+            data.scannedUnits = [
+                { barcode: 'SN-001', serial: 'SN-001', isSerial: true },
+                { barcode: 'SN-002', serial: 'SN-002', isSerial: true }
+            ];
 
             const payload = GoodsIssue261Model.toBackendPayload(data);
             expect(payload.MovementType).toBe('261');
@@ -173,6 +201,7 @@ describe('Movement 261 Dedicated Page: Model & Service Tests', () => {
             expect(payload.ReservationItem).toBe('0010');
             expect(payload.CostCenter).toBeUndefined();
             expect(payload.GLAccount).toBeUndefined();
+            expect(payload.SerialNumbers).toEqual(['SN-001', 'SN-002']);
         });
     });
 
