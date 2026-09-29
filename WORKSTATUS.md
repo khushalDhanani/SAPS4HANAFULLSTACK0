@@ -5595,6 +5595,47 @@
     - `git diff --check`: Clean (0 errors).
   - **Next recommended action**: Test Movement 201 serial scan with `MACBOOK-004` in the browser UI, stage and commit changes.
 
+## 2026-09-29 10:13 IST
+- **Agent**: Antigravity
+- **Change**: Added 4 Movement-Type KPI Cards (201, 261, 301, 311) to Dashboard (`#/dashboard`) EWM/WM Tab:
+  - **Context & Architecture Compliance**:
+    - User requested movement-type KPI cards on the main dashboard only (`/index.html#/dashboard`), not on any other route/view.
+    - No new backend code required: reused the existing `GoodsIssueService.getDashboardData()` endpoint at `/odata/v4/goods-issue/getDashboardData(days=30,plant='',forceRefresh=false)` which returns `Kpis.Mvt201/261/301/311` with `TotalCount`, `OpenPendingCount`, and `TodayPostingsCount` — served from `GoodsIssueDashboardClient.js` with 60-second server-side cache TTL.
+    - All text is i18n-sourced (no hardcoded strings in view or controller).
+    - All numbers are real aggregated backend data from SAP S/4HANA MATDOC/MSEG tables. Zero hardcoded values.
+  - **Implementation Details**:
+    - **View (`Dashboard.view.xml`)**: Added `panelMvtTypeKpis` Panel inside the EWM tab containing 4 `sap.m.GenericTile` cards (`tileMvt201`, `tileMvt261`, `tileMvt301`, `tileMvt311`). Each card displays:
+      - Header: Movement type label from i18n (e.g. "201 • Cost Center")
+      - Subheader: Description from i18n (e.g. "Goods Issue for Cost Center")
+      - NumericContent value: Total posting count from real backend
+      - TileContent unit: "Today: {n}" formatted via `formatMvtTodayUnit`
+      - State: Loading → Loaded/Failed using existing `formatTileState` pattern
+      - Icons: factory (201), shipping-status (261), journey-change (301), inventory (311)
+    - Added `dashboardGiKpiError` MessageStrip for error state display.
+    - **Controller (`Dashboard.controller.js`)**: Added:
+      - `GI_KPI_KEYS` array for model property tracking
+      - `_loadGiKpis(bForceRefresh)`: Calls ODataClient.get → maps `Kpis.Mvt{N}` to model properties `mvt{N}Total` / `mvt{N}Today`; handles loading/error/empty states
+      - `formatMvtTodayUnit(vToday)`: Formats today's count into tile unit text
+      - `_navigateToGiFiltered(sMvtType)`: Navigates to `#/wm/goods-issue` with toast message
+      - 4 tile press handlers: `onMvt201TilePress`, `onMvt261TilePress`, `onMvt301TilePress`, `onMvt311TilePress`
+      - Called from `_onDashboardMatched` and `onRefresh`
+    - **i18n** (`i18n.properties` & `i18n_en.properties`): Added 12 keys (`dashboardMvt201Header`, `dashboardMvt201Subheader`, ..., `dashboardMvtTotalUnit`, `dashboardMvtTodayUnit`, `dashboardMvtLoadError`, `dashboardMvtNoData`, `dashboardMvtFilterActive`, `dashboardMvtFilterCleared`)
+  - **Files Modified/Created**:
+    - `app/fiori-app/webapp/view/Dashboard.view.xml` (modified)
+    - `app/fiori-app/webapp/controller/Dashboard.controller.js` (modified)
+    - `app/fiori-app/webapp/i18n/i18n.properties` (modified)
+    - `app/fiori-app/webapp/i18n/i18n_en.properties` (modified)
+    - `test/unit/dashboard/dashboardMvtKpi.test.js` (new — 14 tests)
+    - `test/unit/dashboard/dashboardMetrics.test.js` (modified — updated allowlist for new model keys)
+    - `WORKSTATUS.md` (modified)
+  - **Executed Commands & Results**:
+    - `npx jest test/unit/dashboard/dashboardMvtKpi.test.js`: 1 passed, 14/14 tests green.
+    - `npx jest test/unit/dashboard/`: 2 passed, 49/49 tests green (0 regressions).
+    - `npm --prefix app/fiori-app run lint`: Success! No findings detected (0 errors, 0 warnings).
+    - `npm --prefix app/fiori-app run build`: Build succeeded in 968 ms (Component-preload.js updated).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Navigate to `#/dashboard`, switch to the EWM/WM tab, and verify the 4 movement-type KPI cards load real counts. Click any card to navigate to `#/wm/goods-issue`.
+
 ## Next Steps
 0. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue`):
    - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.

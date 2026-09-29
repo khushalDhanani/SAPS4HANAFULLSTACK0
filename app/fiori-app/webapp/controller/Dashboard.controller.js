@@ -51,6 +51,14 @@ sap.ui.define([
         "customerReturnCount"
     ];
 
+    // Movement-type KPI model property keys (loaded from GoodsIssueService.getDashboardData)
+    var GI_KPI_KEYS = [
+        "mvt201Total", "mvt201Today",
+        "mvt261Total", "mvt261Today",
+        "mvt301Total", "mvt301Today",
+        "mvt311Total", "mvt311Today"
+    ];
+
     function toCount(vValue) {
         if (vValue === null || vValue === undefined || String(vValue).trim() === "") {
             return null;
@@ -110,6 +118,7 @@ sap.ui.define([
                 return;
             }
             this._loadMetrics();
+            this._loadGiKpis();
         },
 
         /**
@@ -229,6 +238,7 @@ sap.ui.define([
 
         onRefresh: function () {
             var that = this;
+            this._loadGiKpis(true);
             this._loadMetrics().then(function () {
                 MessageToast.show(that._text("dashboardActionRefreshDesc", "Fetch latest changes from SAP Gateway"));
             });
@@ -303,6 +313,120 @@ sap.ui.define([
         onSelectTabMM: function () { this.switchToTab("mm"); },
         onSelectTabSD: function () { this.switchToTab("sd"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
-        onSelectTabMasterData: function () { this.switchToTab("masterData"); }
+        onSelectTabMasterData: function () { this.switchToTab("masterData"); },
+
+        // ─── Movement-Type KPI Cards (EWM Tab) ───────────────────────────
+
+        /**
+         * Loads Goods Issue KPI data (movement types 201/261/301/311) from
+         * GoodsIssueService.getDashboardData. The server uses a 60 s cache.
+         *
+         * Model properties set:
+         *   /mvt{201|261|301|311}Total  — all-time posting count (number|null|undefined)
+         *   /mvt{201|261|301|311}Today  — today's posting count (number|null|undefined)
+         *   /giKpiError                 — error string (empty when OK)
+         *
+         * @param {boolean} [bForceRefresh] - bypass server cache
+         * @returns {Promise<void>}
+         */
+        _loadGiKpis: function (bForceRefresh) {
+            var oViewModel = this.getView().getModel("dashboardView");
+            if (!oViewModel) {
+                return Promise.resolve();
+            }
+
+            var that = this;
+
+            // Set loading (undefined = Loading tile state)
+            GI_KPI_KEYS.forEach(function (sKey) {
+                oViewModel.setProperty("/" + sKey, undefined);
+            });
+            oViewModel.setProperty("/giKpiError", "");
+
+            var sUrl = "/odata/v4/goods-issue/getDashboardData(" +
+                "days=30,plant='',forceRefresh=" + Boolean(bForceRefresh) + ")";
+
+            return ODataClient.get(sUrl)
+                .then(function (oData) {
+                    if (!oData || !oData.Kpis) {
+                        throw new Error(that._text("dashboardMvtNoData", "No movement data"));
+                    }
+                    var oKpis = oData.Kpis;
+
+                    var mMapping = {
+                        "Mvt201": { total: "mvt201Total", today: "mvt201Today" },
+                        "Mvt261": { total: "mvt261Total", today: "mvt261Today" },
+                        "Mvt301": { total: "mvt301Total", today: "mvt301Today" },
+                        "Mvt311": { total: "mvt311Total", today: "mvt311Today" }
+                    };
+
+                    Object.keys(mMapping).forEach(function (sKpiKey) {
+                        var oItem = oKpis[sKpiKey];
+                        var mTarget = mMapping[sKpiKey];
+                        if (oItem && typeof oItem.TotalCount === "number") {
+                            oViewModel.setProperty("/" + mTarget.total, oItem.TotalCount);
+                        } else {
+                            oViewModel.setProperty("/" + mTarget.total, null);
+                        }
+                        if (oItem && typeof oItem.TodayPostingsCount === "number") {
+                            oViewModel.setProperty("/" + mTarget.today, oItem.TodayPostingsCount);
+                        } else {
+                            oViewModel.setProperty("/" + mTarget.today, null);
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    GI_KPI_KEYS.forEach(function (sKey) {
+                        oViewModel.setProperty("/" + sKey, null);
+                    });
+                    oViewModel.setProperty("/giKpiError", that._text(
+                        "dashboardMvtLoadError",
+                        "Movement type KPIs could not be loaded from SAP S/4HANA: {0}",
+                        [(err && err.message) || String(err || "")]
+                    ));
+                });
+        },
+
+        /**
+         * Formats today's count into the tile unit text, e.g. "Today: 5".
+         * @param {*} vToday
+         * @returns {string}
+         */
+        formatMvtTodayUnit: function (vToday) {
+            if (typeof vToday === "number") {
+                return this._text("dashboardMvtTodayUnit", "Today: {0}", [String(vToday)]);
+            }
+            return this._text("dashboardMvtTotalUnit", "Total Postings");
+        },
+
+        /**
+         * Navigates to the Goods Issue dashboard and applies a movement-type filter.
+         * @param {string} sMvtType - "201", "261", "301", or "311"
+         * @private
+         */
+        _navigateToGiFiltered: function (sMvtType) {
+            this.getOwnerComponent().getRouter().navTo("wmGoodsIssue", {}, undefined);
+            MessageToast.show(this._text(
+                "dashboardMvtFilterActive",
+                "Filtered: Movement {0}",
+                [sMvtType]
+            ));
+        },
+
+        onMvt201TilePress: function () {
+            this._navigateToGiFiltered("201");
+        },
+
+        onMvt261TilePress: function () {
+            this._navigateToGiFiltered("261");
+        },
+
+        onMvt301TilePress: function () {
+            this._navigateToGiFiltered("301");
+        },
+
+        onMvt311TilePress: function () {
+            this._navigateToGiFiltered("311");
+        }
     });
 });

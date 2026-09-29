@@ -313,10 +313,18 @@ describe('Unit: Dashboard view binds only live figures', () => {
     const viewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/Dashboard.view.xml'), 'utf8');
     const controllerSource = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/Dashboard.controller.js'), 'utf8');
     const metricKeys = [...controllerSource.match(/var METRIC_KEYS = \[([\s\S]*?)\];/)[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]);
-    const nonMetricModelKeys = ['selectedTab', 'connectionText', 'connectionState', 'metricsError'];
+    const nonMetricModelKeys = [
+        'selectedTab', 'connectionText', 'connectionState', 'metricsError',
+        // Movement-type KPI card model keys (loaded from GoodsIssueService.getDashboardData)
+        'giKpiError',
+        'mvt201Total', 'mvt201Today',
+        'mvt261Total', 'mvt261Today',
+        'mvt301Total', 'mvt301Today',
+        'mvt311Total', 'mvt311Today'
+    ];
 
     test('every dashboardView binding is a live SAP metric or a status field', () => {
-        const bound = [...new Set([...viewXml.matchAll(/dashboardView>\/([A-Za-z]+)/g)].map((m) => m[1]))];
+        const bound = [...new Set([...viewXml.matchAll(/dashboardView>\/([A-Za-z0-9]+)/g)].map((m) => m[1]))];
         const unknown = bound.filter((key) => !metricKeys.includes(key) && !nonMetricModelKeys.includes(key));
         expect(unknown).toEqual([]);
     });
