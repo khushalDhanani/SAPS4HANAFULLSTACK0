@@ -3,6 +3,56 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-09-29 10:10 IST
+- **Agent**: Antigravity
+- **Request**: "Add separate KPI tiles on the WM dashboard for movement types 201, 261, 301, and 311 (one tile per type, plus keep the overall total). Each tile: type label, total count, today's count, click-to-filter the document list to that type. Use real aggregated data from the backend (no hardcoded numbers), server-side aggregation with short-TTL caching, i18n for all labels, loading/empty/error states, and keep the existing folder structure and conventions. Scan the dashboard module first, then implement."
+- **Scope & Implementation Details**:
+  - Scanned existing WM Goods Issue Dashboard module (`GoodsIssueDashboard.view.xml`, `GoodsIssueDashboard.controller.js`, `GoodsIssueDashboardModel.js`, `GoodsIssueDashboardClient.js`, `GoodsIssueService.js`, `service.cds`, `goodsIssue.handler.js`, and `style.css`).
+  - Frontend View (`app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssueDashboard.view.xml`):
+    - Replaced legacy non-standard `f:Card` elements with standard SAPUI5 `sap.m.GenericTile` controls within `<HBox id="kpiContainer" class="wmKpiTileContainer dashboardTileContainer">`.
+    - Created 5 distinct interactive KPI tiles:
+      - `kpiTile201`: Movement 201 (Goods Issue to Cost Center), icon `sap-icon://paid-leave`
+      - `kpiTile261`: Movement 261 (Goods Issue to Order), icon `sap-icon://product`
+      - `kpiTile301`: Movement 301 (Plant-to-Plant Transfer), icon `sap-icon://forward`
+      - `kpiTile311`: Movement 311 (Storage Location Transfer), icon `sap-icon://arrow-right`
+      - `kpiTileOverall`: Overall Total Movements, icon `sap-icon://sum`
+    - Bound `header` to i18n labels (`giKpiTile201Title`, `giKpiTile261Title`, `giKpiTile301Title`, `giKpiTile311Title`, `giKpiOverallTitle`).
+    - Bound `subheader` to today's postings count (`{parts: [{path: 'i18n>giKpiTodayPostings'}, {path: 'dashboardView>/kpis/mvt.../todayPostingsCount'}], formatter: 'jQuery.sap.formatMessage'}`).
+    - Configured `truncateValueTo="10"` on `sap.m.NumericContent` controls so multi-digit figures (e.g., 13,797) display fully without truncation.
+    - Bound `state` dynamically using custom controller formatter `formatTileState` (`"Loading"`, `"Failed"`, `"Loaded"`).
+    - Bound `press` to dedicated handlers: `.onSelectKpi201`, `.onSelectKpi261`, `.onSelectKpi301`, `.onSelectKpi311`, `.onSelectKpiOverall`.
+    - Bound `footer` to dynamic active filter status (`Total Postings, Filtered (Active)` vs `Total Postings, Filter Table`).
+    - Added `btnQuickNew201` ("New Goods Issue (201)") in the header actions alongside 261, 301, 311.
+    - Cleaned up obsolete `xmlns:f` and `xmlns:grid` namespace imports.
+  - Frontend Controller (`app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueDashboard.controller.js`):
+    - Added `formatTileState(vCount, bLoading, sError)` supporting `"Loading"`, `"Failed"`, and `"Loaded"` states.
+    - Preserved and enhanced click-to-filter handlers (`onSelectKpi201`, `onSelectKpi261`, `onSelectKpi301`, `onSelectKpi311`, `onSelectKpiOverall`) which toggle `/typeFilter` and `/activeKpiCard` on `dashboardView` JSONModel and trigger `GoodsIssueDashboardModel.filterAndSort` on the recent documents table.
+  - CSS / Styles (`app/fiori-app/webapp/css/style.css`):
+    - Added responsive CSS Grid `.wmKpiTileContainer` (`grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr))`) ensuring all 5 tiles sit cleanly on a single row on desktop and wrap gracefully on tablet/mobile.
+    - Added `.giTileActive` styling (`border: 2px solid var(--sapSelectedColor, #0070F2)` with subtle focus glow and soft background tint).
+  - Backend Real Aggregated Data & Server-side Caching:
+    - Backend already implements live S/4HANA OData queries (`GoodsIssueDashboardClient.js` querying `API_MATERIAL_DOCUMENT_SRV` / `MATDOC` / `MSEG` for 201, 261, 301, 311) with in-memory 60s short-TTL cache, calculating total count and today's postings count (`BUDAT === todayYMD`).
+  - Automated Unit Tests (`test/unit/wm/goodsIssueDashboardController.test.js`):
+    - Added test suite for `formatTileState`: returns `"Loading"` when `bLoading=true`, `"Failed"` when `sError` is present, `"Loaded"` when count is 0 (empty state), and `"Loaded"` when count is numeric.
+    - Added test suite for click-to-filter toggle behavior across all 5 tiles (201, 261, 301, 311, Overall).
+    - Added test suite asserting authentic KPI counts (total and today) for all 5 movement categories.
+- **Executed Commands & Results**:
+  - `npm --prefix app/fiori-app run lint`: Succeeded with 0 findings detected.
+  - `npm --prefix app/fiori-app run build`: Succeeded in 896 ms (`Component-preload.js` generated).
+  - `npx cds compile srv`: Succeeded with code 0.
+  - `npx jest test/unit/wm`: 14/14 test suites passed, 360/360 tests passed (100% green).
+  - `git diff --check`: Clean (0 errors).
+  - Live Chrome DevTools verification on `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue`:
+    - Loaded all 5 KPI tiles displaying real S/4HANA backend numbers:
+      - 201 • Cost Center: `54` total, `0` today
+      - 261 • Goods Issue: `9671` total, `0` today
+      - 301 • Plant Transfer: `3020` total, `0` today
+      - 311 • SLoc Transfer: `1052` total, `0` today
+      - All Goods Movements: `13797` total, `0` today
+    - Verified click-to-filter on each tile toggles filtering of the recent documents table (`/typeFilter` switches between type and `ALL`).
+    - Verified `truncateValueTo="10"` properly displays the full 5-digit number `13797` without truncation.
+- **Next recommended action**: Stage, commit, and push the verified changes to `origin/feature/CL01`.
+
 ## 2026-09-28 17:48 IST
 - **Agent**: Antigravity
 - **Request**: "Debug and fix movement type 201 (Goods Issue to Cost Center) in #/wm/goods-issue. It doesn't follow SAP standard."
@@ -5546,18 +5596,22 @@
   - **Next recommended action**: Test Movement 201 serial scan with `MACBOOK-004` in the browser UI, stage and commit changes.
 
 ## Next Steps
-0. WM Goods Issue Serial Number Scanning (Route `#/wm/goods-issue`):
-   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (358 total WM tests).
+0. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue`):
+   - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.
+   - Shows type label, total count, today's count, and click-to-filter toggle linking to the recent documents table.
+   - Verified with real backend S/4HANA aggregated data (54 for 201, 9671 for 261, 3020 for 301, 1052 for 311, 13797 overall) and 360 passing unit tests (100% green).
+1. WM Goods Issue Serial Number Scanning (Route `#/wm/goods-issue`):
+   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (360 total WM tests).
    - Handles single/multi-serial scanning, duplicate prevention, count matching validation, barcode scanner suffix stripping, and S/4HANA `API_MATERIAL_DOCUMENT_SRV` `to_SerialNumbers` deep insert.
-1. WM Transfer Order Implementation:
+2. WM Transfer Order Implementation:
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.
-2. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
-3. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
-4. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
-5. Select next development-ready capability to build from the verified list:
+3. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
+4. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
+5. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
+6. Select next development-ready capability to build from the verified list:
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)
    - Reservation creation (`UI_RESERVATION_ITM_MNG_V2`)
-6. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
-7. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+7. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
+8. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.

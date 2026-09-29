@@ -394,8 +394,51 @@
     padding: 0.25rem 0.5rem !important;
 }
 
-/* Goods Issue Dashboard Active KPI Card Highlight */
+/* Goods Issue Dashboard Active KPI Tile / Card Highlight */
+.giTileActive,
 .giCardActive {
     border: 2px solid var(--sapSelectedColor, #0070F2) !important;
-    box-shadow: 0 0 8px rgba(0, 112, 242, 0.25) !important;
+    box-shadow: 0 0 10px rgba(0, 112, 242, 0.3) !important;
+    background-color: var(--sapList_SelectionBackgroundColor, #e5f0ff) !important;
+}
+
+.wmKpiTileContainer {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)) !important;
+    gap: 0.875rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+}
+
+.wmKpiTileContainer > .sapMFlexItem {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+}
+
+.wmKpiTileContainer .sapMGT {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    height: 11.25rem !important;
+    min-height: 11.25rem !important;
+    box-sizing: border-box !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    position: relative !important;
+    cursor: pointer !important;
+}
+
+.wmKpiTileContainer .sapMGT:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+.wmKpiTileContainer .sapMGTHdrTxt {
+    max-width: 100% !important;
+    width: 100% !important;
 }

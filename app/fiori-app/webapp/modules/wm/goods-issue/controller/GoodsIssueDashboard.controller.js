@@ -65,6 +65,26 @@ sap.ui.define([
             return this._loadDashboardData(true);
         },
 
+        /**
+         * Tile state formatter: Loading until count arrives, Failed on error or null, Loaded otherwise.
+         * @param {*} vCount
+         * @param {boolean} [bLoading]
+         * @param {string} [sError]
+         * @returns {string} "Loading" | "Failed" | "Loaded"
+         */
+        formatTileState: function (vCount, bLoading, sError) {
+            if (bLoading) {
+                return "Loading";
+            }
+            if (sError) {
+                return "Failed";
+            }
+            if (vCount === undefined || vCount === "-") {
+                return "Loading";
+            }
+            return vCount === null ? "Failed" : "Loaded";
+        },
+
         // =============================================================
         // KPI CARD SELECTION (Filters Recent Documents Table)
         // =============================================================

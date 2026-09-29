@@ -368,36 +368,93 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(model.getProperty('/error')).toContain('S/4HANA Gateway unavailable');
         });
 
-        it('filters table when clicking KPI cards (201, 261, 301, 311, Overall)', async () => {
+        it('filters table when clicking KPI tiles (201, 261, 301, 311, Overall)', async () => {
             mockGoodsIssueService.getDashboardData.mockResolvedValueOnce(sampleDashboardData);
             controller.onInit();
             await controller.onRefresh();
 
-            // Click 201 card
+            // Click 201 tile
             controller.onSelectKpi201();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('201');
             expect(controller._getModel().getProperty('/documents').length).toBe(1);
 
-            // Click 201 card again to toggle back to ALL
+            // Click 201 tile again to toggle back to ALL
             controller.onSelectKpi201();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
 
-            // Click 261 card
+            // Click 261 tile
             controller.onSelectKpi261();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('261');
             expect(controller._getModel().getProperty('/documents').length).toBe(1);
 
-            // Click 261 card again to toggle back to ALL
+            // Click 261 tile again to toggle back to ALL
             controller.onSelectKpi261();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
 
-            // Click 301 card
+            // Click 301 tile
             controller.onSelectKpi301();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('301');
+            expect(controller._getModel().getProperty('/documents').length).toBe(1);
 
-            // Click Overall card to reset
+            // Click 311 tile
+            controller.onSelectKpi311();
+            expect(controller._getModel().getProperty('/typeFilter')).toBe('311');
+            expect(controller._getModel().getProperty('/documents').length).toBe(1);
+
+            // Click 311 tile again to toggle back to ALL
+            controller.onSelectKpi311();
+            expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
+
+            // Click 301 tile then Overall tile to reset
+            controller.onSelectKpi301();
+            expect(controller._getModel().getProperty('/typeFilter')).toBe('301');
             controller.onSelectKpiOverall();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
+            expect(controller._getModel().getProperty('/documents').length).toBe(4);
+        });
+
+        it('formats tile state accurately across loading, error, empty and loaded states', () => {
+            controller.onInit();
+
+            // Loading state
+            expect(controller.formatTileState(10, true, '')).toBe('Loading');
+            expect(controller.formatTileState('-', false, '')).toBe('Loading');
+            expect(controller.formatTileState(undefined, false, '')).toBe('Loading');
+
+            // Error / Failed state
+            expect(controller.formatTileState(10, false, 'Connection lost')).toBe('Failed');
+            expect(controller.formatTileState(null, false, '')).toBe('Failed');
+
+            // Loaded state (even when count is 0)
+            expect(controller.formatTileState(0, false, '')).toBe('Loaded');
+            expect(controller.formatTileState(42, false, '')).toBe('Loaded');
+        });
+
+        it('exposes authentic total and today counts across all 5 movement categories', async () => {
+            mockGoodsIssueService.getDashboardData.mockResolvedValueOnce(sampleDashboardData);
+            controller.onInit();
+            await controller.onRefresh();
+
+            const model = controller._getModel();
+            // Movement 201
+            expect(model.getProperty('/kpis/mvt201/totalCount')).toBe(40);
+            expect(model.getProperty('/kpis/mvt201/todayPostingsCount')).toBe(1);
+
+            // Movement 261
+            expect(model.getProperty('/kpis/mvt261/totalCount')).toBe(100);
+            expect(model.getProperty('/kpis/mvt261/todayPostingsCount')).toBe(3);
+
+            // Movement 301
+            expect(model.getProperty('/kpis/mvt301/totalCount')).toBe(50);
+            expect(model.getProperty('/kpis/mvt301/todayPostingsCount')).toBe(1);
+
+            // Movement 311
+            expect(model.getProperty('/kpis/mvt311/totalCount')).toBe(75);
+            expect(model.getProperty('/kpis/mvt311/todayPostingsCount')).toBe(2);
+
+            // Overall Total
+            expect(model.getProperty('/kpis/overall/totalCount')).toBe(265);
+            expect(model.getProperty('/kpis/overall/todayPostingsCount')).toBe(7);
         });
 
         it('navigates to create flow with selected movement type for 201, 261, 301, 311', () => {
