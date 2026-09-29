@@ -51,6 +51,44 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * Fetch reservation header information (UserID) via UI_RESERVATION_ITM_MNG_V2/ReservationDocument
+   * @param {string} [movementType]
+   * @param {string} [sResv]
+   * @returns {Promise<Map<string, string>>}
+   */
+  async _fetchReservationHeaderUsers(movementType, sResv) {
+    let filter = '';
+    if (sResv) {
+      const sResClean = sResv.replace(/^0+/, '');
+      const sResPadded = sResv.padStart(10, '0');
+      filter = `(Reservation eq '${encodeURIComponent(sResClean)}' or Reservation eq '${encodeURIComponent(sResPadded)}')`;
+    } else if (movementType) {
+      const mvts = String(movementType).split(',').map((m) => m.trim()).filter(Boolean);
+      filter = `(${mvts.map((m) => `GoodsMovementType eq '${encodeURIComponent(m)}'`).join(' or ')})`;
+    }
+
+    let queryParams = `$select=Reservation,UserID&$orderby=${encodeURIComponent('Reservation desc')}&$top=500&$format=json`;
+    if (filter) {
+      queryParams += `&$filter=${encodeURIComponent(filter)}`;
+    }
+
+    const headers = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocument', queryParams);
+    const userMap = new Map();
+    if (Array.isArray(headers)) {
+      for (const h of headers) {
+        const resNo = h.Reservation || '';
+        const userId = h.UserID || '';
+        if (resNo && userId) {
+          userMap.set(resNo, userId);
+          userMap.set(resNo.replace(/^0+/, ''), userId);
+          userMap.set(resNo.padStart(10, '0'), userId);
+        }
+      }
+    }
+    return userMap;
+  }
+
+  /**
    * Fetch distinct open reservations for Goods Issue directly from UI_RESERVATION_ITM_MNG_V2
    * @param {string} [movementType='261']
    * @param {string} [plant]
@@ -150,6 +188,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               Plant: r.Plant || '',
               MovementType: r.GoodsMovementType || '',
               MovementTypeName: r.GoodsMovementTypeName || '',
+              CreatedByUser: r.CreatedByUser || r.UserID || '',
               ItemCount: 1,
               ItemCountPartial: false,
               SampleMaterial: r.Product || '',
@@ -159,6 +198,26 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
             const entry = resvMap.get(sRes);
             entry.ItemCount++;
             if (!entry.OrderNo && r.OrderID) entry.OrderNo = r.OrderID;
+            if (!entry.CreatedByUser && (r.CreatedByUser || r.UserID)) entry.CreatedByUser = r.CreatedByUser || r.UserID;
+          }
+        }
+
+        // Enrich reservation header creator username from ReservationDocument if missing
+        const needsUserEnrichment = Array.from(resvMap.values()).some(v => !v.CreatedByUser);
+        if (needsUserEnrichment && opts.fetchUserDetails !== false) {
+          try {
+            const userMap = await this._fetchReservationHeaderUsers(movementType, sResv);
+            if (userMap && userMap.size > 0) {
+              for (const [sRes, entry] of resvMap.entries()) {
+                if (!entry.CreatedByUser) {
+                  const sResClean = sRes.replace(/^0+/, '');
+                  const sResPadded = sRes.padStart(10, '0');
+                  entry.CreatedByUser = userMap.get(sRes) || userMap.get(sResClean) || userMap.get(sResPadded) || '';
+                }
+              }
+            }
+          } catch (uErr) {
+            LOG.warn(`Could not enrich reservation user headers: ${uErr.message}`);
           }
         }
 

@@ -52,6 +52,7 @@
                     <Column id="colPendingOrder"><Text text="{i18n>gi261OpenResvColOrder}" /></Column>
                     <Column id="colPendingMaterial"><Text text="{i18n>gi261OpenResvColMaterial}" /></Column>
                     <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi261OpenResvColPlant}" /></Column>
+                    <Column id="colPendingCreatedBy" hAlign="Begin"><Text text="{i18n>gi261OpenResvColCreatedBy}" /></Column>
                     <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi261OpenResvColItems}" /></Column>
                 </columns>
                 <items>
@@ -64,6 +65,7 @@
                                 <Text text="{gi261p>SampleMaterialDesc}" class="sapUiTinyMarginTop" />
                             </VBox>
                             <Text text="{gi261p>Plant}" />
+                            <Text text="{= ${gi261p>CreatedByUser} ? ${gi261p>CreatedByUser} : '-' }" />
                             <ObjectNumber number="{gi261p>ItemCount}" unit="{i18n>gi261OpenResvItemsUnit}" />
                         </cells>
                     </ColumnListItem>

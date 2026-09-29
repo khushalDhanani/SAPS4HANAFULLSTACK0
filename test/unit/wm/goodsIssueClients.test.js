@@ -157,12 +157,13 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         _get: jest.fn()
           .mockResolvedValueOnce(page1)
           .mockResolvedValueOnce(page2)
+          .mockResolvedValueOnce([])
       };
 
       const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
       const result = await reservationsClient.getOpenReservations('261', '1120', { pageSize: 100 });
 
-      expect(mockAdapter._get).toHaveBeenCalledTimes(2);
+      expect(mockAdapter._get).toHaveBeenCalledTimes(3);
       expect(mockAdapter._get).toHaveBeenNthCalledWith(
         1,
         '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
@@ -172,6 +173,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         2,
         '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
         expect.stringContaining('$top=100&$skip=100')
+      );
+      expect(mockAdapter._get).toHaveBeenNthCalledWith(
+        3,
+        '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocument',
+        expect.stringContaining('$select=Reservation,UserID')
       );
 
       // Verify reservation spanning page boundary comes back whole
@@ -224,7 +230,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         orderNo: '1000040'
       });
 
-      expect(mockAdapter._get).toHaveBeenCalledTimes(1);
+      expect(mockAdapter._get).toHaveBeenCalledTimes(2);
       const urlFilter = mockAdapter._get.mock.calls[0][1];
       expect(urlFilter).toContain(encodeURIComponent("Reservation eq '18025' or Reservation eq '0000018025'"));
       expect(urlFilter).toContain(encodeURIComponent("OrderID eq '1000040' or OrderID eq '000001000040'"));
@@ -268,6 +274,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         _get: jest.fn()
           .mockResolvedValueOnce(page1)
           .mockResolvedValueOnce(page2)
+          .mockResolvedValueOnce([])
       };
 
       const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
@@ -276,7 +283,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         pageSize: 10
       });
 
-      expect(mockAdapter._get).toHaveBeenCalledTimes(2);
+      expect(mockAdapter._get).toHaveBeenCalledTimes(3);
       expect(result.isTruncated).toBe(true);
       expect(result.totalScannedItems).toBe(20);
 
@@ -291,6 +298,38 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(nonBoundary.IsTruncated).toBe(true);
       expect(nonBoundary.ItemCountPartial).toBe(false);
       expect(nonBoundary.DisplayText).toContain('1 item');
+    });
+
+    it('should enrich CreatedByUser from ReservationDocument header', async () => {
+      const mockAdapter = {
+        _get: jest.fn()
+          .mockResolvedValueOnce([
+            {
+              Reservation: '518660',
+              OrderID: '1011',
+              Plant: '1120',
+              GoodsMovementType: '261',
+              GoodsMovementTypeName: 'GI for order',
+              Product: 'MAT01',
+              ProductName: 'Material 1',
+              ResvnItmRequiredQtyInBaseUnit: '1',
+              ResvnItmWithdrawnQtyInBaseUnit: '0'
+            }
+          ])
+          .mockResolvedValueOnce([
+            {
+              Reservation: '518660',
+              UserID: 'NARESH'
+            }
+          ])
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].ReservationNo).toBe('518660');
+      expect(result[0].CreatedByUser).toBe('NARESH');
     });
 
     it('should exclude items with OpenQty <= 0 from ItemCount (single source of truth)', async () => {

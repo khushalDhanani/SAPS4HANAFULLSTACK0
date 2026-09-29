@@ -75,6 +75,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             Plant              : String(4);
             MovementType       : String(4);
             MovementTypeName   : String(40);
+            CreatedByUser      : String(12);
             ItemCount          : Integer;
             SampleMaterial     : String(40);
             SampleMaterialDesc : String(80);

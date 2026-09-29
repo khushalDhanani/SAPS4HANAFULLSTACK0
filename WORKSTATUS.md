@@ -4,6 +4,64 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-29 18:05 IST
+- **Agent**: Antigravity
+- **Request**: "Check Added in live cataloug : ZAPI_MATERIAL_DOCUMNET_SRV"
+- **Live SAP S/4HANA Catalog Audit Results**:
+  1. Live Catalog Confirmation:
+     - Queried `/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection` against SAP DS4 Client 220.
+     - **Confirmed**: Service is present in the live Gateway Catalog under ID:
+       `ZAPI_MATERIAL_DOCUMENT_SRV_0001` (Note: standard spelling `DOCUMENT`, not `DOCUMNET`).
+     - Technical Service Name: `API_MATERIAL_DOCUMENT_SRV` (Version 1).
+     - Author: `DIPAK` (Basis team), Registered Today.
+     - Service URL: `http://172.27.100.32:8000/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV`.
+     - Metadata URL: `http://172.27.100.32:8000/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata`.
+  2. Live Error State & Root Cause Analysis:
+     - The previous `/IWFND/MED/170` ("No service found") error is resolved — Gateway recognizes the service.
+     - Calling `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata` currently returns HTTP 500 with SAP Error Code `/IWFND/CM_COS/064`:
+       `"No System Alias found for Service 'ZAPI_MATERIAL_DOCUMENT_SRV_0001' and user 'KHUSHAL'"` (SAP Note 1797736).
+     - Root Cause: In `/IWFND/MAINT_SERVICE`, service `ZAPI_MATERIAL_DOCUMENT_SRV_0001` has been activated, but **no SAP System Alias** (e.g. `LOCAL` or `DS4_220`) has been assigned to it in the "System Aliases" table.
+  3. Action Required for Basis (1-step fix):
+     - Open transaction `/IWFND/MAINT_SERVICE`.
+     - Filter and select `ZAPI_MATERIAL_DOCUMENT_SRV_0001`.
+     - In the bottom "System Aliases" pane, click "Add System Alias".
+     - Assign System Alias: `LOCAL` (or `DS4_220` for Client 220) with "Default System" checked (`X`).
+     - Save.
+- **Executed Commands & Results**:
+  - Live query `/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection('ZAPI_MATERIAL_DOCUMENT_SRV_0001')`: Success (HTTP 200).
+  - Live probe `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata`: HTTP 500 (`/IWFND/CM_COS/064`).
+- **Next recommended action**: Inform Basis to add the System Alias assignment in `/IWFND/MAINT_SERVICE`. As soon as assigned, execute consolidated live verification pass across 201, 261 planned, and 261 unplanned.
+
+
+## 2026-09-29 17:50 IST
+- **Agent**: Antigravity
+- **Request**: "wm/goods-issue/261/open-reservations - Add Create by user name"
+- **Scope & Implementation Details**:
+  1. CDS Service Model (`srv/wm/goods-issue/service.cds`):
+     - Added `CreatedByUser : String(12);` to `entity OpenReservations`.
+  2. SAP S/4HANA Integration Client (`srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`):
+     - Implemented `_fetchReservationHeaderUsers(movementType, sResv)` querying `/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocument` with `$select=Reservation,UserID&$orderby=Reservation desc&$top=500&$format=json` and optional movement/reservation filter.
+     - In `getOpenReservations()`, mapped `CreatedByUser: r.CreatedByUser || r.UserID || ''` and enriched from `userMap` indexed by `Reservation` (clean, raw, and 10-digit zero-padded keys).
+     - Safeguarded with non-fatal try/catch to ensure listing availability is never impacted if header user enrichment fails.
+  3. Fiori UI (`app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261Pending.view.xml`):
+     - Added column `colPendingCreatedBy` (`{i18n>gi261OpenResvColCreatedBy}`) to table `tblPending261`.
+     - Added cell `<Text text="{= ${gi261p>CreatedByUser} ? ${gi261p>CreatedByUser} : '-' }" />` aligned with header columns.
+  4. i18n (`app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`):
+     - Added `gi261OpenResvColCreatedBy=Created By` across both files with 100% key parity.
+  5. Unit Tests (`test/unit/wm/goodsIssueClients.test.js`):
+     - Added unit test `should enrich CreatedByUser from ReservationDocument header` verifying header resolution.
+     - Updated mock expectations in existing tests to account for the header fetch call.
+  6. Verification:
+     - CDS & Dev Server: Verified `/odata/v4/goods-issue/OpenReservations?$top=3` returns `CreatedByUser: 'KISHANSHIYAL'`, `'MSHUSSAIN'`, and reservation 518660 returns `CreatedByUser: 'NARESH'`.
+     - Browser UI: Verified via DevTools accessibility tree snapshot on `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/261/open-reservations` that the table rendered the "Created By" column with authentic SAP usernames.
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: 63/63 passed (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success, no findings detected (0 errors).
+  - `npm --prefix app/fiori-app run build`: Succeeded in 2.41 s.
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Await Basis confirmation on `docs/ticket-basis-activate-api-material-document.md` to run consolidated live posting verification across 201, 261 planned, and 261 unplanned.
+
+
 ## 2026-09-29 17:25 IST
 - **Agent**: Antigravity
 - **Request**: "1. Check docs/ticket-gateway-remediation-ds4.md — confirm whether a Basis ticket has actually been opened/tracked for activating API_MATERIAL_DOCUMENT_SRV in /IWFND/MAINT_SERVICE for the DS4_220 system alias. If not, create one now with: service name, client, the specific error (/IWFND/MED/170), and a list of every feature currently blocked by it (201 planned, 261 planned, 261 unplanned, and by extension 301/311 whenever those are built). This is the one dependency unblocking all live verification going forward. 2. Once Basis confirms activation, do NOT re-run these live tests one movement type at a time. Instead run one consolidated pass: re-post the exact same three payloads already captured in this session (201 cost-center test, 261 planned/reservation 518660, 261 unplanned/Order 2000611) in a single sitting, paste all three real success responses (Material Document numbers) side by side, and confirm each one appears correctly in SAP (MB03 or MATDOC)."
