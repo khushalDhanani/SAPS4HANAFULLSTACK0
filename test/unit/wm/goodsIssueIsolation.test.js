@@ -13,6 +13,7 @@ const TYPES = ['201', '261', '301', '311'];
 const FILES = [];
 for (const t of TYPES) {
   FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/wm/goods-issue/validation/goodsIssue${t}.validation.js`) });
+  FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/wm/goods-issue/mapping/goodsIssue${t}.normalize.js`) });
   FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue${t}Mapper.js`) });
 }
 
@@ -42,9 +43,10 @@ describe('per-type Goods Issue module isolation', () => {
     for (const { file } of FILES) {
       const src = fs.readFileSync(file, 'utf8');
       const deps = requiredPaths(src);
-      // Allowed shared deps: validation common, s4 common. No cross-type deps (checked above).
+      // Allowed shared deps: validation common, s4 common, and the type-agnostic normalize base
+      // (goodsIssue.mapper). No cross-type deps (checked above).
       for (const dep of deps) {
-        expect(/common|s4common/.test(dep)).toBe(true);
+        expect(/common|s4common|goodsIssue\.mapper/.test(dep)).toBe(true);
       }
     }
   });

@@ -8,7 +8,10 @@
 
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
-const { normalizeGoodsIssuePayload } = require('../mapping/goodsIssue.mapper');
+const { normalizeGoodsIssue201Payload } = require('../mapping/goodsIssue201.normalize');
+const { normalizeGoodsIssue261Payload } = require('../mapping/goodsIssue261.normalize');
+const { normalizeGoodsIssue301Payload } = require('../mapping/goodsIssue301.normalize');
+const { normalizeGoodsIssue311Payload } = require('../mapping/goodsIssue311.normalize');
 const { validateGoodsIssue201Payload } = require('../validation/goodsIssue201.validation');
 const { validateGoodsIssue261Payload } = require('../validation/goodsIssue261.validation');
 const { validateGoodsIssue301Payload } = require('../validation/goodsIssue301.validation');
@@ -124,7 +127,7 @@ const PerTypeGoodsIssueHandler = {
     srv.on('postGoodsIssue201', async (req) => {
       const v = validateGoodsIssue201Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
-      const normalized = normalizeGoodsIssuePayload({ ...req.data, MovementType: '201' }, { user: req.user?.id });
+      const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
       if (!(await stockPreCheck201(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d));
@@ -133,7 +136,7 @@ const PerTypeGoodsIssueHandler = {
     srv.on('postGoodsIssue261', async (req) => {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
-      const normalized = normalizeGoodsIssuePayload({ ...req.data, MovementType: '261' }, { user: req.user?.id });
+      const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
     });
@@ -141,7 +144,7 @@ const PerTypeGoodsIssueHandler = {
     srv.on('postGoodsIssue301', async (req) => {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
-      const normalized = normalizeGoodsIssuePayload({ ...req.data, MovementType: '301' }, { user: req.user?.id });
+      const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
     });
@@ -149,7 +152,7 @@ const PerTypeGoodsIssueHandler = {
     srv.on('postGoodsIssue311', async (req) => {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
-      const normalized = normalizeGoodsIssuePayload({ ...req.data, MovementType: '311' }, { user: req.user?.id });
+      const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
     });

@@ -1,5 +1,4 @@
 const {
-  normalizeGoodsIssuePayload,
   normalizeReversalPayload,
   sanitizeScannerString,
   toIsoDateString
@@ -23,37 +22,6 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
       expect(toIsoDateString(new Date('2026-09-29T00:00:00Z'))).toBe('2026-09-29');
       const today = new Date().toISOString().split('T')[0];
       expect(toIsoDateString(null)).toBe(today);
-    });
-
-    it('normalizes 201 Goods Issue payload (uppercasing, trimming, zero-padding item)', () => {
-      const input = {
-        MovementType: '201',
-        CostCenter: ' cc10111013 ',
-        GLAccount: ' 400000 ',
-        Material: ' 8000009753 ',
-        Plant: ' 1120 ',
-        StorageLocation: ' hs01 ',
-        IssueQty: ' 2 ',
-        Unit: ' ea ',
-        ReservationNo: ' 519658 ',
-        ReservationItem: ' 1 ',
-        SerialNumbers: ['  sn001\r\n ', 'sn002', 'sn001'] // includes duplicate & dirty scanner suffix
-      };
-
-      const normalized = normalizeGoodsIssuePayload(input, { user: 'TEST_USER' });
-      expect(normalized.MovementType).toBe('201');
-      expect(normalized.CostCenter).toBe('CC10111013');
-      expect(normalized.GLAccount).toBe('400000');
-      expect(normalized.Material).toBe('8000009753');
-      expect(normalized.Plant).toBe('1120');
-      expect(normalized.StorageLocation).toBe('HS01');
-      expect(normalized.IssueQty).toBe(2);
-      expect(normalized.Unit).toBe('EA');
-      expect(normalized.ReservationNo).toBe('519658');
-      expect(normalized.ReservationItem).toBe('0001');
-      expect(normalized.SerialNumbers).toEqual(['sn001', 'sn002']); // deduplicated and cleaned
-      expect(normalized.User).toBe('TEST_USER');
-      expect(normalized.PostingDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
     it('normalizes Reversal payload', () => {

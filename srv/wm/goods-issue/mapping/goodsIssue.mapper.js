@@ -1,12 +1,14 @@
 /**
  * goodsIssue.mapper.js
- * Handles CAP domain-level normalization and business mapping for Goods Issue and Reversals.
+ * Pure CAP-domain normalization PRIMITIVES + reversal normalization.
+ *
+ * NOTE: Per-movement-type posting normalization now lives in the isolated
+ * goodsIssue201/261/301/311.normalize.js modules (Phase 2). This file holds only the
+ * type-agnostic helpers they share and the (type-agnostic) reversal normalizer.
  */
 
 /**
- * Formats a Date object or date string into YYYY-MM-DD.
- * Defaults to current UTC date if omitted.
- *
+ * Formats a Date object or date string into YYYY-MM-DD. Defaults to current UTC date if omitted.
  * @param {string|Date} [dateInput]
  * @returns {string}
  */
@@ -31,7 +33,6 @@ function toIsoDateString(dateInput) {
 
 /**
  * Cleans dirty barcode scanner input (removes CR, LF, tabs, and trims).
- *
  * @param {string} input
  * @returns {string}
  */
@@ -41,78 +42,75 @@ function sanitizeScannerString(input) {
 }
 
 /**
- * Normalizes and sanitizes incoming Goods Issue request payload at the CAP domain level.
- *
+ * Normalizes serial numbers from a payload: accepts an array or single string, cleans scanner
+ * noise, and deduplicates (case-insensitive). Type-agnostic.
  * @param {Object} data
- * @param {Object} [context]
- * @returns {Object}
+ * @returns {string[]}
  */
-function normalizeGoodsIssuePayload(data, context = {}) {
-  if (!data || typeof data !== 'object') return data;
-
-  const movementType = String(data.MovementType || '261').trim();
-  const rawResv = String(data.ReservationNo || '').trim();
-  const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
-  const reservationItem = rawItem ? rawItem.padStart(4, '0') : '';
-
-  const costCenter = data.CostCenter ? String(data.CostCenter).trim().toUpperCase() : '';
-  const glAccount = data.GLAccount ? String(data.GLAccount).trim() : '';
-
-  const issueQty = Number(data.IssueQty);
-  const diffQty = Number(data.DifferenceQty) || 0;
-
-  // Normalize serial numbers: handle array or single string, clean scanner noise, deduplicate
+function cleanSerials(data) {
   const rawSerials = Array.isArray(data.SerialNumbers) && data.SerialNumbers.length > 0
     ? data.SerialNumbers
     : data.SerialNumber
       ? [data.SerialNumber]
       : [];
-
-  const cleanedSerials = [];
-  const seenSerials = new Set();
+  const cleaned = [];
+  const seen = new Set();
   for (const sn of rawSerials) {
     const clean = sanitizeScannerString(sn);
-    if (clean && !seenSerials.has(clean.toUpperCase())) {
-      seenSerials.add(clean.toUpperCase());
-      cleanedSerials.push(clean);
+    if (clean && !seen.has(clean.toUpperCase())) {
+      seen.add(clean.toUpperCase());
+      cleaned.push(clean);
     }
   }
+  return cleaned;
+}
 
-  const postingDate = toIsoDateString(data.PostingDate);
-  const documentDate = toIsoDateString(data.DocumentDate || data.PostingDate);
-
+/**
+ * Builds the type-agnostic common normalized fields shared by every movement type
+ * (master data, quantity, unit, batch, dates, serials, reservation link). Type-EXCLUSIVE fields
+ * (CostCenter / GLAccount / OrderNo / ReceivingPlant / ReceivingStorageLocation) default empty and
+ * are filled only by the per-type normalizers, so no type reads another type's exclusive field.
+ * @param {Object} data
+ * @param {Object} context
+ * @param {string} movementType
+ * @returns {Object}
+ */
+function baseNormalized(data, context, movementType) {
+  const serials = cleanSerials(data);
+  const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
   return {
     MovementType: movementType,
-    ReservationNo: rawResv,
-    ReservationItem: reservationItem,
-    OrderNo: data.OrderNo ? String(data.OrderNo).trim() : '',
+    ReservationNo: String(data.ReservationNo || '').trim(),
+    ReservationItem: rawItem ? rawItem.padStart(4, '0') : '',
     Material: String(data.Material || '').trim(),
     MaterialDesc: data.MaterialDesc ? String(data.MaterialDesc).trim() : '',
     Plant: String(data.Plant || '').trim().toUpperCase(),
     StorageLocation: String(data.StorageLocation || '').trim().toUpperCase(),
-    IssueQty: issueQty,
+    IssueQty: Number(data.IssueQty),
     Unit: String(data.Unit || '').trim().toUpperCase(),
     Batch: data.Batch ? String(data.Batch).trim().toUpperCase() : '',
-    DifferenceQty: diffQty,
-    DifferenceReason: data.DifferenceReason ? String(data.DifferenceReason).trim() : '',
-    DifferenceStorageType: data.DifferenceStorageType ? String(data.DifferenceStorageType).trim() : '',
-    FinalIssue: Boolean(data.FinalIssue),
-    CostCenter: costCenter,
-    GLAccount: glAccount,
-    PostingDate: postingDate,
-    DocumentDate: documentDate,
-    SerialNumbers: cleanedSerials,
-    SerialNumber: cleanedSerials[0] || '',
-    IsSerialManaged: Boolean(data.IsSerialManaged || cleanedSerials.length > 0),
-    ReceivingPlant: data.ReceivingPlant ? String(data.ReceivingPlant).trim().toUpperCase() : '',
-    ReceivingStorageLocation: data.ReceivingStorageLocation ? String(data.ReceivingStorageLocation).trim().toUpperCase() : '',
+    PostingDate: toIsoDateString(data.PostingDate),
+    DocumentDate: toIsoDateString(data.DocumentDate || data.PostingDate),
+    SerialNumbers: serials,
+    SerialNumber: serials[0] || '',
+    IsSerialManaged: Boolean(data.IsSerialManaged || serials.length > 0),
+    // Type-exclusive fields default empty; per-type normalizers fill only what applies to them.
+    OrderNo: '',
+    CostCenter: '',
+    GLAccount: '',
+    ReceivingPlant: '',
+    ReceivingStorageLocation: '',
+    DifferenceQty: 0,
+    DifferenceReason: '',
+    DifferenceStorageType: '',
+    FinalIssue: false,
     User: context.user || 'SYSTEM'
   };
 }
 
 /**
- * Normalizes and sanitizes incoming Material Document Reversal request payload.
- *
+ * Normalizes and sanitizes incoming Material Document Reversal request payload (type-agnostic:
+ * a reversal targets a material document + year, independent of the movement type that created it).
  * @param {Object} data
  * @param {Object} [context]
  * @returns {Object}
@@ -140,6 +138,7 @@ function normalizeReversalPayload(data, context = {}) {
 module.exports = {
   toIsoDateString,
   sanitizeScannerString,
-  normalizeGoodsIssuePayload,
+  cleanSerials,
+  baseNormalized,
   normalizeReversalPayload
 };

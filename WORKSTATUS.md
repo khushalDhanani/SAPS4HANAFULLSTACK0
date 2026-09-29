@@ -5923,6 +5923,28 @@
 - **Result**: PHASE 1 complete. Each movement type (201/261/301/311) now has one fully isolated path — dedicated route → view → controller → model → service → per-type CAP action → per-type handler → per-type validation → per-type S/4 mapper → per-type posting-client method → S/4 entity. Shared code that remains is pure infrastructure (date/regex/HTTP transport, normalize, queue) or a thin dispatcher/shim with no movement-type business logic. Import-graph test enforces no per-type file imports another type's file.
 - **Next recommended action**: Commit/push to `origin/feature/CL01`. Pursue DS4 Gateway activation to validate real SAP-persisted postings end to end (still queue-only until then).
 
+## 2026-09-29 17:15 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: "Implement PHASE 2 — Gap List (every Phase 0 'Shared = Y')."
+- **Audit of every Phase 0 "Shared = Y" row vs current state**:
+  - CAP action → **CLOSED** (4 per-type actions; shared action deleted).
+  - Backend handler fn → **CLOSED** (4 per-type handlers; shared handler deleted).
+  - Backend validation → **CLOSED** (`goodsIssue{201,261,301,311}.validation.js`; shared branched validator deleted).
+  - S/4 mapper → **CLOSED** (`GoodsIssue{201,261,301,311}Mapper.js`; shared branched mapper deleted).
+  - S/4 posting client → **CLOSED** (per-type `post201/261/301/311`; shared branched method reduced to a no-logic positional shim → dispatcher).
+  - Legacy `GoodsIssue.controller.js` (mode-branched) → **CLOSED** (deleted).
+  - **Normalize mapper → CLOSED THIS SESSION** (was the last remaining shared posting step). Split `normalizeGoodsIssuePayload` into isolated `goodsIssue{201,261,301,311}.normalize.js`, each reading only its type's exclusive fields (201→CostCenter; 261→OrderNo+GLAccount; 301/311→ReceivingPlant/StorageLocation) and dropping the others'. Pure type-agnostic helpers (`toIsoDateString`, `sanitizeScannerString`, `cleanSerials`, `baseNormalized`) stay in `goodsIssue.mapper.js`; the shared branched `normalizeGoodsIssuePayload` was removed. The 4 per-type handlers now call their own normalizer.
+  - Shared list route / dashboard → **kept shared by design** (a dashboard is inherently multi-type; `GoodsIssueService.getDashboardData` serves all four — confirmed still working live). Reverse action → **kept shared by design** (a reversal targets a material document + year, independent of the creating movement type — no per-type logic to isolate). Both are genuine type-agnostic shared infrastructure, not mixed type logic.
+- **Files added**: `srv/wm/goods-issue/mapping/goodsIssue{201,261,301,311}.normalize.js`; `test/unit/wm/goodsIssuePerTypeNormalize.test.js`. **Modified**: `goodsIssue.mapper.js` (helpers + `baseNormalized`, removed shared normalizer), `handlers/goodsIssuePerType.handler.js` (per-type normalize wiring), `test/unit/wm/goodsIssueMapper.test.js` (moved the 201-normalize assertions out), `test/unit/wm/goodsIssueIsolation.test.js` (now also covers the 4 normalize modules).
+- **Executed commands & results**:
+  - `npx cds compile srv`: OK.
+  - `npx jest test/unit test/integration --no-coverage`: **110 suites, 1615/1615 passed**.
+  - `npx eslint srv`: 0 errors (2 pre-existing warnings, untouched `reverseGoodsIssue`).
+  - Import-graph isolation test now asserts no per-type validation/normalize/mapper file imports another type's file.
+- **Live verification (restarted CAP, live S/4HANA)**: 261 post through the new per-type normalizer — `POST /postGoodsIssue261 → 200`, `Queued:true`, honest QUEUED message (`GI-QUEUE-518023-0001-4296`), **no console errors**.
+- **Result**: Phase 2 gap list fully closed. Every "Shared = Y" posting layer is now isolated per type; the only remaining shared code is genuine type-agnostic infrastructure (transport, normalize primitives, queue, dashboard read service, reversal) with zero movement-type branching.
+- **Next recommended action**: Commit/push to `origin/feature/CL01`; pursue DS4 Gateway activation for real SAP persistence.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).
