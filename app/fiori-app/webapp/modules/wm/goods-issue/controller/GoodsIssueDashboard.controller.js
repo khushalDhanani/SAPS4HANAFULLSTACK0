@@ -9,6 +9,14 @@ sap.ui.define([
 ], function (BaseController, JSONModel, Fragment, MessageBox, MessageToast, GoodsIssueDashboardModel, GoodsIssueService) {
     "use strict";
 
+    var TYPES = ["201", "261", "301", "311"];
+    var SECTION_ID_BY_TYPE = {
+        "201": "panelRecent201",
+        "261": "panelRecent261",
+        "301": "panelRecent301",
+        "311": "panelRecent311"
+    };
+
     return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssueDashboard", {
         onInit: function () {
             var oModel = GoodsIssueDashboardModel.createModel();
@@ -22,7 +30,7 @@ sap.ui.define([
                     oRoute.attachPatternMatched(this._onRouteMatched, this);
                 }
             } else {
-                this._loadDashboardData(false);
+                this._loadAll(false);
             }
         },
 
@@ -31,9 +39,21 @@ sap.ui.define([
         },
 
         _onRouteMatched: function () {
-            this._loadDashboardData(false);
+            this._loadAll(false);
         },
 
+        _loadAll: function (bForceRefresh) {
+            var aPromises = [this._loadDashboardData(bForceRefresh)];
+            TYPES.forEach(function (sType) {
+                aPromises.push(this._loadRecentPostings(sType, bForceRefresh));
+            }, this);
+            return Promise.all(aPromises);
+        },
+
+        /**
+         * Loads the combined (unfiltered) getDashboardData call that feeds the KPI tiles (unchanged)
+         * and the Distribution / Trend mini-widgets. Independent of the 4 Recent Postings loads below.
+         */
         _loadDashboardData: function (bForceRefresh) {
             var oModel = this._getModel();
             if (!oModel) return;
@@ -61,8 +81,36 @@ sap.ui.define([
                 });
         },
 
+        /**
+         * Loads one movement type's independent Recent Postings table via its own server-side
+         * MovementType-filtered getDashboardData call. Each of the 4 types has its own loading/
+         * error/items state in /recent/{type}, set independently of the other 3.
+         * @param {string} sType - "201" | "261" | "301" | "311"
+         * @param {boolean} [bForceRefresh]
+         */
+        _loadRecentPostings: function (sType, bForceRefresh) {
+            var oModel = this._getModel();
+            if (!oModel) return;
+
+            GoodsIssueDashboardModel.setRecentPostingsLoading(oModel, sType);
+
+            var iDays = parseInt(oModel.getProperty("/trendPeriod") || "30", 10);
+            var sPlant = oModel.getProperty("/plantFilter") || "";
+            var that = this;
+
+            return GoodsIssueService.getDashboardData(iDays, sPlant, bForceRefresh, sType)
+                .then(function (oData) {
+                    GoodsIssueDashboardModel.setRecentPostings(oModel, sType, oData);
+                })
+                .catch(function (err) {
+                    var sMsg = (err && err.message) || String(err || "");
+                    GoodsIssueDashboardModel.setRecentPostingsError(oModel, sType,
+                        sMsg || that.getText("giRecentPostingsLoadError", null, "Failed to load recent postings."));
+                });
+        },
+
         onRefresh: function () {
-            return this._loadDashboardData(true);
+            return this._loadAll(true);
         },
 
         /**
@@ -86,35 +134,45 @@ sap.ui.define([
         },
 
         // =============================================================
-        // KPI CARD SELECTION (Filters Recent Documents Table)
+        // KPI CARD SELECTION (highlight + scroll to that type's own section -
+        // there is no more combined/filterable table for these to filter)
         // =============================================================
 
-        onSelectKpi201: function () {
+        _selectKpi: function (sType) {
             var oModel = this._getModel();
             var sCurrent = oModel.getProperty("/typeFilter");
-            var sNew = sCurrent === "201" ? "ALL" : "201";
+            var sNew = sCurrent === sType ? "ALL" : sType;
             GoodsIssueDashboardModel.setTypeFilter(oModel, sNew);
+
+            if (sNew !== "ALL") {
+                this._scrollToSection(sNew);
+            }
+        },
+
+        _scrollToSection: function (sType) {
+            var sId = SECTION_ID_BY_TYPE[sType];
+            if (!sId) return;
+            var oControl = this.byId(sId);
+            var oDomRef = oControl && oControl.getDomRef();
+            if (oDomRef && typeof oDomRef.scrollIntoView === "function") {
+                oDomRef.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        },
+
+        onSelectKpi201: function () {
+            this._selectKpi("201");
         },
 
         onSelectKpi261: function () {
-            var oModel = this._getModel();
-            var sCurrent = oModel.getProperty("/typeFilter");
-            var sNew = sCurrent === "261" ? "ALL" : "261";
-            GoodsIssueDashboardModel.setTypeFilter(oModel, sNew);
+            this._selectKpi("261");
         },
 
         onSelectKpi301: function () {
-            var oModel = this._getModel();
-            var sCurrent = oModel.getProperty("/typeFilter");
-            var sNew = sCurrent === "301" ? "ALL" : "301";
-            GoodsIssueDashboardModel.setTypeFilter(oModel, sNew);
+            this._selectKpi("301");
         },
 
         onSelectKpi311: function () {
-            var oModel = this._getModel();
-            var sCurrent = oModel.getProperty("/typeFilter");
-            var sNew = sCurrent === "311" ? "ALL" : "311";
-            GoodsIssueDashboardModel.setTypeFilter(oModel, sNew);
+            this._selectKpi("311");
         },
 
         onSelectKpiOverall: function () {
@@ -122,36 +180,19 @@ sap.ui.define([
         },
 
         // =============================================================
-        // TABLE FILTERING, SEARCHING & SORTING
-        // =============================================================
-
-        onTypeFilterChange: function (oEvent) {
-            var oItem = oEvent.getParameter("item");
-            var sKey = oItem ? oItem.getKey() : "ALL";
-            GoodsIssueDashboardModel.setTypeFilter(this._getModel(), sKey);
-        },
-
-        onSearchDocuments: function (oEvent) {
-            var sQuery = oEvent.getParameter("newValue");
-            GoodsIssueDashboardModel.setSearchQuery(this._getModel(), sQuery);
-        },
-
-        onToggleSort: function () {
-            GoodsIssueDashboardModel.setSorting(this._getModel(), "PostingDate");
-        },
-
-        // =============================================================
-        // TREND PERIOD (7 / 30 Days)
+        // TREND PERIOD (7 / 30 Days) - reloads the combined call and all 4
+        // independent Recent Postings tables for the new window
         // =============================================================
 
         onTrendPeriodChange: function (oEvent) {
             var oItem = oEvent.getParameter("item");
             var sKey = oItem ? oItem.getKey() : "30";
             GoodsIssueDashboardModel.setTrendPeriod(this._getModel(), sKey);
+            this._loadAll(true);
         },
 
         // =============================================================
-        // DOCUMENT DETAIL DIALOG
+        // DOCUMENT DETAIL DIALOG (shared by all 4 Recent Postings tables)
         // =============================================================
 
         onDocumentPress: function (oEvent) {

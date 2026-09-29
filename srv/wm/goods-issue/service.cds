@@ -500,6 +500,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         ReservationNo    : String(10);
         ReservationItem  : String(4);
         DebitCredit      : String(1);
+        ReceivingPlant           : String(4);
+        ReceivingStorageLocation : String(4);
     };
 
     type GIDashboardData {
@@ -516,7 +518,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     function getDashboardData(
         days         : Integer,
         plant        : String(4),
-        forceRefresh : Boolean
+        forceRefresh : Boolean,
+        movementType : String(4)
     ) returns GIDashboardData;
 }
 

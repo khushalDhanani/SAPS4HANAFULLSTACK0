@@ -78,7 +78,8 @@
                     </link>
                 </MessageStrip>
 
-                <!-- SECTION 1: TOP KPI ROW (Tiles for 201, 261, 301, 311, and Overall) -->
+                <!-- SECTION 1: TOP KPI ROW (Tiles for 201, 261, 301, 311, and Overall) - UNCHANGED
+                     except the tooltip fix in fix #3 below (see each GenericTile's tooltip attribute) -->
                 <Panel
                     id="panelKpis"
                     headerText="{i18n>giKpiSectionTitle}"
@@ -94,7 +95,7 @@
                             id="kpiTile201"
                             header="{i18n>giKpi201Title}"
                             subheader="{= ${i18n>giKpiTodayPostings} + ': ' + (${dashboardView>/kpis/mvt201/todayPostingsCount} !== undefined ? ${dashboardView>/kpis/mvt201/todayPostingsCount} : '0') }"
-                            tooltip="{i18n>giKpi201Subtitle} - {i18n>giFilterTable}"
+                            tooltip="{i18n>giKpi201Subtitle}"
                             press=".onSelectKpi201"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
                             class="{= ${dashboardView>/typeFilter} === '201' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
@@ -115,7 +116,7 @@
                             id="kpiTile261"
                             header="{i18n>giKpi261Title}"
                             subheader="{= ${i18n>giKpiTodayPostings} + ': ' + (${dashboardView>/kpis/mvt261/todayPostingsCount} !== undefined ? ${dashboardView>/kpis/mvt261/todayPostingsCount} : '0') }"
-                            tooltip="{i18n>giKpi261Subtitle} - {i18n>giFilterTable}"
+                            tooltip="{i18n>giKpi261Subtitle}"
                             press=".onSelectKpi261"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
                             class="{= ${dashboardView>/typeFilter} === '261' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
@@ -136,7 +137,7 @@
                             id="kpiTile301"
                             header="{i18n>giKpi301Title}"
                             subheader="{= ${i18n>giKpiTodayPostings} + ': ' + (${dashboardView>/kpis/mvt301/todayPostingsCount} !== undefined ? ${dashboardView>/kpis/mvt301/todayPostingsCount} : '0') }"
-                            tooltip="{i18n>giKpi301Subtitle} - {i18n>giFilterTable}"
+                            tooltip="{i18n>giKpi301Subtitle}"
                             press=".onSelectKpi301"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
                             class="{= ${dashboardView>/typeFilter} === '301' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
@@ -157,7 +158,7 @@
                             id="kpiTile311"
                             header="{i18n>giKpi311Title}"
                             subheader="{= ${i18n>giKpiTodayPostings} + ': ' + (${dashboardView>/kpis/mvt311/todayPostingsCount} !== undefined ? ${dashboardView>/kpis/mvt311/todayPostingsCount} : '0') }"
-                            tooltip="{i18n>giKpi311Subtitle} - {i18n>giFilterTable}"
+                            tooltip="{i18n>giKpi311Subtitle}"
                             press=".onSelectKpi311"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
                             class="{= ${dashboardView>/typeFilter} === '311' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
@@ -178,7 +179,7 @@
                             id="kpiTileOverall"
                             header="{i18n>giKpiOverallTitle}"
                             subheader="{= ${i18n>giKpiTodayPostings} + ': ' + (${dashboardView>/kpis/overall/todayPostingsCount} !== undefined ? ${dashboardView>/kpis/overall/todayPostingsCount} : '0') }"
-                            tooltip="{i18n>giKpiOverallSubtitle} - {i18n>giFilterTable}"
+                            tooltip="{i18n>giKpiOverallSubtitle}"
                             press=".onSelectKpiOverall"
                             state="{= ${dashboardView>/loading} ? 'Loading' : (${dashboardView>/error} ? 'Failed' : 'Loaded') }"
                             class="{= ${dashboardView>/typeFilter} === 'ALL' ? 'giTileActive sapUiTinyMarginEnd sapUiTinyMarginBottom' : 'sapUiTinyMarginEnd sapUiTinyMarginBottom' }">
@@ -197,172 +198,331 @@
                     </HBox>
                 </Panel>
 
-                <!-- SECTION 2: CHARTS ROW (Distribution & Trend) -->
-                <layout:Grid
-                    id="gridCharts"
-                    defaultSpan="XL6 L6 M12 S12"
-                    class="sapUiSmallMarginBottom">
-
-                    <!-- Chart 1: Movement Type Distribution -->
-                    <Panel
-                        id="panelDistribution"
-                        headerText="{i18n>giChartDistributionTitle}"
-                        class="sapUiTinyMarginBottom">
-                        <VBox class="sapUiSmallMargin">
-                            <Text text="{i18n>giChartDistributionSubtitle}" class="textMuted sapUiTinyMarginBottom" />
-                            <core:HTML
-                                id="htmlDistributionChart"
-                                content="{dashboardView>/distributionSvg}"
-                                preferDOM="true" />
-                            <!-- Legend -->
-                            <HBox justifyContent="Center" wrap="Wrap" class="sapUiSmallMarginTop">
-                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#8E44AD" class="sapUiTinyMarginEnd" />
-                                    <Text text="{i18n>giMode201} (201)" />
-                                </HBox>
-                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#0070F2" class="sapUiTinyMarginEnd" />
-                                    <Text text="{i18n>giMode261} (261)" />
-                                </HBox>
-                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#E76500" class="sapUiTinyMarginEnd" />
-                                    <Text text="{i18n>giMode301} (301)" />
-                                </HBox>
-                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://circle-task-2" size="0.875rem" color="#107E3E" class="sapUiTinyMarginEnd" />
-                                    <Text text="{i18n>giMode311} (311)" />
-                                </HBox>
-                            </HBox>
-                        </VBox>
-                    </Panel>
-
-                    <!-- Chart 2: Movement Trend (Last 7 / 30 Days) -->
-                    <Panel
-                        id="panelTrend"
-                        headerText="{i18n>giChartTrendTitle}"
-                        class="sapUiTinyMarginBottom">
-                        <headerToolbar>
-                            <OverflowToolbar>
-                                <Title text="{i18n>giChartTrendTitle}" level="H4" />
-                                <ToolbarSpacer />
-                                <SegmentedButton
-                                    id="segTrendPeriod"
-                                    selectedKey="{dashboardView>/trendPeriod}"
-                                    selectionChange=".onTrendPeriodChange">
-                                    <items>
-                                        <SegmentedButtonItem key="7" text="{i18n>giTrend7Days}" />
-                                        <SegmentedButtonItem key="30" text="{i18n>giTrend30Days}" />
-                                    </items>
-                                </SegmentedButton>
-                            </OverflowToolbar>
-                        </headerToolbar>
-                        <VBox class="sapUiSmallMargin">
-                            <Text text="{i18n>giChartTrendSubtitle}" class="textMuted sapUiTinyMarginBottom" />
-                            <core:HTML
-                                id="htmlTrendChart"
-                                content="{dashboardView>/trendSvg}"
-                                preferDOM="true" />
-                            <!-- Legend -->
-                            <HBox justifyContent="Center" wrap="Wrap" class="sapUiSmallMarginTop">
-                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#8E44AD" class="sapUiTinyMarginEnd" />
-                                    <Text text="201 Cost Center" />
-                                </HBox>
-                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#0070F2" class="sapUiTinyMarginEnd" />
-                                    <Text text="261 GI" />
-                                </HBox>
-                                <HBox alignItems="Center" class="sapUiSmallMarginEnd sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#E76500" class="sapUiTinyMarginEnd" />
-                                    <Text text="301 Transfer" />
-                                </HBox>
-                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
-                                    <core:Icon src="sap-icon://line-chart" size="0.875rem" color="#107E3E" class="sapUiTinyMarginEnd" />
-                                    <Text text="311 Transfer" />
-                                </HBox>
-                            </HBox>
-                        </VBox>
-                    </Panel>
-                </layout:Grid>
-
-                <!-- SECTION 3: RECENT DOCUMENTS TABLE -->
+                <!-- SECTION 2: MOVEMENT TYPE DISTRIBUTION - 4 independent single-type mini-donuts,
+                     one per movement type, each its own widget with its own count/percentage.
+                     All 4 numbers come from the same server-computed Distribution array (grouped by
+                     BWART in one RFC read - see GoodsIssueDashboardClient), so there is one shared
+                     loading/error state (the combined /loading, /error above) exactly like the KPI
+                     tiles already share one - this is not a client-side filter of a shared list. -->
                 <Panel
-                    id="panelRecentDocuments"
-                    headerText="{i18n>giRecentDocsSectionTitle}"
+                    id="panelDistribution"
+                    headerText="{i18n>giChartDistributionTitle}"
+                    class="sapUiSmallMarginBottom"
+                    expandable="false">
+                    <VBox class="sapUiSmallMargin">
+                        <Text text="{i18n>giChartDistributionSubtitle}" class="textMuted sapUiTinyMarginBottom" />
+                        <HBox id="miniDistributionContainer" wrap="Wrap" justifyContent="SpaceAround" class="dashboardTileContainer">
+                            <VBox class="sapUiTinyMargin" alignItems="Center">
+                                <core:HTML id="htmlMiniDist201" content="{dashboardView>/miniDistribution/201/svg}" preferDOM="true" />
+                                <Text text="{i18n>giMode201} (201)" class="sapUiTinyMarginTop" />
+                            </VBox>
+                            <VBox class="sapUiTinyMargin" alignItems="Center">
+                                <core:HTML id="htmlMiniDist261" content="{dashboardView>/miniDistribution/261/svg}" preferDOM="true" />
+                                <Text text="{i18n>giMode261} (261)" class="sapUiTinyMarginTop" />
+                            </VBox>
+                            <VBox class="sapUiTinyMargin" alignItems="Center">
+                                <core:HTML id="htmlMiniDist301" content="{dashboardView>/miniDistribution/301/svg}" preferDOM="true" />
+                                <Text text="{i18n>giMode301} (301)" class="sapUiTinyMarginTop" />
+                            </VBox>
+                            <VBox class="sapUiTinyMargin" alignItems="Center">
+                                <core:HTML id="htmlMiniDist311" content="{dashboardView>/miniDistribution/311/svg}" preferDOM="true" />
+                                <Text text="{i18n>giMode311} (311)" class="sapUiTinyMarginTop" />
+                            </VBox>
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION 3: MOVEMENT TREND ANALYSIS - 4 independent single-series mini-sparklines,
+                     one per movement type. Same data-sharing note as Distribution above: the per-day
+                     Count201/Count261/Count301/Count311 columns are already aggregated server-side per
+                     type in one RFC read, this only splits the VISUAL rendering into 4 widgets. -->
+                <Panel
+                    id="panelTrend"
+                    headerText="{i18n>giChartTrendTitle}"
+                    class="sapUiSmallMarginBottom"
+                    expandable="false">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title text="{i18n>giChartTrendTitle}" level="H4" />
+                            <ToolbarSpacer />
+                            <SegmentedButton
+                                id="segTrendPeriod"
+                                selectedKey="{dashboardView>/trendPeriod}"
+                                selectionChange=".onTrendPeriodChange">
+                                <items>
+                                    <SegmentedButtonItem key="7" text="{i18n>giTrend7Days}" />
+                                    <SegmentedButtonItem key="30" text="{i18n>giTrend30Days}" />
+                                </items>
+                            </SegmentedButton>
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <VBox class="sapUiSmallMargin">
+                        <Text text="{i18n>giChartTrendSubtitle}" class="textMuted sapUiTinyMarginBottom" />
+                        <layout:Grid id="miniTrendGrid" defaultSpan="XL3 L3 M6 S12" class="sapUiTinyMarginBottom">
+                            <VBox class="sapUiTinyMargin">
+                                <Text text="{i18n>giMode201} (201)" class="sapUiTinyMarginBottom fontBold" />
+                                <core:HTML id="htmlMiniTrend201" content="{dashboardView>/miniTrend/201/svg}" preferDOM="true" />
+                            </VBox>
+                            <VBox class="sapUiTinyMargin">
+                                <Text text="{i18n>giMode261} (261)" class="sapUiTinyMarginBottom fontBold" />
+                                <core:HTML id="htmlMiniTrend261" content="{dashboardView>/miniTrend/261/svg}" preferDOM="true" />
+                            </VBox>
+                            <VBox class="sapUiTinyMargin">
+                                <Text text="{i18n>giMode301} (301)" class="sapUiTinyMarginBottom fontBold" />
+                                <core:HTML id="htmlMiniTrend301" content="{dashboardView>/miniTrend/301/svg}" preferDOM="true" />
+                            </VBox>
+                            <VBox class="sapUiTinyMargin">
+                                <Text text="{i18n>giMode311} (311)" class="sapUiTinyMarginBottom fontBold" />
+                                <core:HTML id="htmlMiniTrend311" content="{dashboardView>/miniTrend/311/svg}" preferDOM="true" />
+                            </VBox>
+                        </layout:Grid>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION 4: RECENT POSTINGS - 4 fully separate tables, one per movement type, each
+                     with its own heading, its own type-relevant columns, its own independent growing/
+                     paging state, and its own independent loading/empty/error state (backed by its own
+                     server-side MovementType-filtered getDashboardData call - see the controller). The
+                     old combined table's All/201/261/301/311 toggle filter has been removed entirely. -->
+
+                <!-- 4a. Recent 201 Postings - Cost Center Issues -->
+                <Panel
+                    id="panelRecent201"
                     expandable="false"
                     class="sapUiSmallMarginBottom">
+                    <MessageStrip
+                        visible="{= !!${dashboardView>/recent/201/error} }"
+                        text="{dashboardView>/recent/201/error}"
+                        type="Error"
+                        showIcon="true"
+                        class="sapUiSmallMarginBottom">
+                        <link>
+                            <Link text="{i18n>giRetryConnection}" press=".onRefresh" />
+                        </link>
+                    </MessageStrip>
                     <Table
-                        id="tblRecentDocuments"
-                        items="{path: 'dashboardView>/documents'}"
-                        noDataText="{i18n>giNoDocumentsFound}"
+                        id="tblRecent201"
+                        busy="{dashboardView>/recent/201/loading}"
+                        busyIndicatorDelay="0"
+                        items="{dashboardView>/recent/201/items}"
+                        noDataText="{i18n>giNoRecentPostingsFound}"
                         growing="true"
                         growingThreshold="25"
                         growingScrollToLoad="false"
                         class="sapUiSizeCompact">
                         <headerToolbar>
                             <OverflowToolbar>
-                                <Title text="{= ${i18n>giRecentDocsTableTitle} + ' (' + ${dashboardView>/totalDocumentsCount} + ')' }" level="H4" />
-                                <ToolbarSpacer />
-                                <SegmentedButton
-                                    id="segDocTypeFilter"
-                                    selectedKey="{dashboardView>/typeFilter}"
-                                    selectionChange=".onTypeFilterChange"
-                                    class="sapUiTinyMarginEnd">
-                                    <items>
-                                        <SegmentedButtonItem key="ALL" text="{i18n>giFilterAll}" />
-                                        <SegmentedButtonItem key="201" text="201" />
-                                        <SegmentedButtonItem key="261" text="261" />
-                                        <SegmentedButtonItem key="301" text="301" />
-                                        <SegmentedButtonItem key="311" text="311" />
-                                    </items>
-                                </SegmentedButton>
-                                <SearchField
-                                    id="searchDocs"
-                                    width="16rem"
-                                    placeholder="{i18n>giSearchDocumentsPlaceholder}"
-                                    value="{dashboardView>/searchQuery}"
-                                    liveChange=".onSearchDocuments"
-                                    class="sapUiTinyMarginEnd" />
-                                <OverflowToolbarButton
-                                    id="btnSortDate"
-                                    icon="sap-icon://sort"
-                                    tooltip="{i18n>giSortTooltip}"
-                                    press=".onToggleSort" />
+                                <Title text="{= ${i18n>giRecent201SectionTitle} + ' (' + ${dashboardView>/recent/201/total} + ')' }" level="H4" />
                             </OverflowToolbar>
                         </headerToolbar>
                         <columns>
                             <Column width="8rem"><Text text="{i18n>giColMatDoc}" /></Column>
-                            <Column width="5.5rem"><Text text="{i18n>giColType}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPostingDate}" /></Column>
                             <Column><Text text="{i18n>giColMaterial}" /></Column>
+                            <Column width="7rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColCostCenter}" /></Column>
                             <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giPlantLabel}" /></Column>
-                            <Column width="5.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSLocLabel}" /></Column>
+                            <Column width="5.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSLocLabel}" /></Column>
                             <Column width="6.5rem" hAlign="End"><Text text="{i18n>giColQty}" /></Column>
                             <Column width="4rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUnit}" /></Column>
-                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPostingDate}" /></Column>
                             <Column width="7rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUser}" /></Column>
                         </columns>
                         <items>
-                            <ColumnListItem
-                                type="Navigation"
-                                press=".onDocumentPress">
+                            <ColumnListItem type="Navigation" press=".onDocumentPress">
                                 <cells>
                                     <ObjectIdentifier
                                         title="{dashboardView>MaterialDocument}"
                                         text="{= ${dashboardView>MaterialDocYear} ? 'FY ' + ${dashboardView>MaterialDocYear} : '' }" />
-                                    <ObjectStatus
-                                        text="{dashboardView>MovementType}"
-                                        state="{= ${dashboardView>MovementType} === '201' ? 'Indication05' : (${dashboardView>MovementType} === '261' ? 'Information' : (${dashboardView>MovementType} === '301' ? 'Warning' : 'Success')) }" />
-                                    <ObjectIdentifier
-                                        title="{dashboardView>Material}"
-                                        text="{= ${dashboardView>CostCenter} ? (${dashboardView>MaterialDesc} + ' • CC: ' + ${dashboardView>CostCenter}) : ${dashboardView>MaterialDesc} }" />
+                                    <Text text="{dashboardView>PostingDate}" />
+                                    <ObjectIdentifier title="{dashboardView>Material}" text="{dashboardView>MaterialDesc}" />
+                                    <Text text="{dashboardView>CostCenter}" />
                                     <Text text="{dashboardView>Plant}" />
                                     <Text text="{dashboardView>StorageLocation}" />
-                                    <ObjectNumber
-                                        number="{dashboardView>Quantity}"
-                                        unit="{dashboardView>Unit}" />
+                                    <ObjectNumber number="{dashboardView>Quantity}" unit="{dashboardView>Unit}" />
                                     <Text text="{dashboardView>Unit}" />
-                                    <Text text="{dashboardView>PostingDate}" />
                                     <Text text="{dashboardView>User}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <!-- 4b. Recent 261 Postings - Goods Issue to Order -->
+                <Panel
+                    id="panelRecent261"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+                    <MessageStrip
+                        visible="{= !!${dashboardView>/recent/261/error} }"
+                        text="{dashboardView>/recent/261/error}"
+                        type="Error"
+                        showIcon="true"
+                        class="sapUiSmallMarginBottom">
+                        <link>
+                            <Link text="{i18n>giRetryConnection}" press=".onRefresh" />
+                        </link>
+                    </MessageStrip>
+                    <Table
+                        id="tblRecent261"
+                        busy="{dashboardView>/recent/261/loading}"
+                        busyIndicatorDelay="0"
+                        items="{dashboardView>/recent/261/items}"
+                        noDataText="{i18n>giNoRecentPostingsFound}"
+                        growing="true"
+                        growingThreshold="25"
+                        growingScrollToLoad="false"
+                        class="sapUiSizeCompact">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="{= ${i18n>giRecent261SectionTitle} + ' (' + ${dashboardView>/recent/261/total} + ')' }" level="H4" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column width="8rem"><Text text="{i18n>giColMatDoc}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPostingDate}" /></Column>
+                            <Column><Text text="{i18n>giColMaterial}" /></Column>
+                            <Column width="7rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColOrder}" /></Column>
+                            <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giPlantLabel}" /></Column>
+                            <Column width="5.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSLocLabel}" /></Column>
+                            <Column width="6.5rem" hAlign="End"><Text text="{i18n>giColQty}" /></Column>
+                            <Column width="4rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUnit}" /></Column>
+                            <Column width="7rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUser}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem type="Navigation" press=".onDocumentPress">
+                                <cells>
+                                    <ObjectIdentifier
+                                        title="{dashboardView>MaterialDocument}"
+                                        text="{= ${dashboardView>MaterialDocYear} ? 'FY ' + ${dashboardView>MaterialDocYear} : '' }" />
+                                    <Text text="{dashboardView>PostingDate}" />
+                                    <ObjectIdentifier title="{dashboardView>Material}" text="{dashboardView>MaterialDesc}" />
+                                    <Text text="{dashboardView>OrderNo}" />
+                                    <Text text="{dashboardView>Plant}" />
+                                    <Text text="{dashboardView>StorageLocation}" />
+                                    <ObjectNumber number="{dashboardView>Quantity}" unit="{dashboardView>Unit}" />
+                                    <Text text="{dashboardView>Unit}" />
+                                    <Text text="{dashboardView>User}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <!-- 4c. Recent 301 Postings - Plant-to-Plant Transfer -->
+                <Panel
+                    id="panelRecent301"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+                    <MessageStrip
+                        visible="{= !!${dashboardView>/recent/301/error} }"
+                        text="{dashboardView>/recent/301/error}"
+                        type="Error"
+                        showIcon="true"
+                        class="sapUiSmallMarginBottom">
+                        <link>
+                            <Link text="{i18n>giRetryConnection}" press=".onRefresh" />
+                        </link>
+                    </MessageStrip>
+                    <Table
+                        id="tblRecent301"
+                        busy="{dashboardView>/recent/301/loading}"
+                        busyIndicatorDelay="0"
+                        items="{dashboardView>/recent/301/items}"
+                        noDataText="{i18n>giNoRecentPostingsFound}"
+                        growing="true"
+                        growingThreshold="25"
+                        growingScrollToLoad="false"
+                        class="sapUiSizeCompact">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="{= ${i18n>giRecent301SectionTitle} + ' (' + ${dashboardView>/recent/301/total} + ')' }" level="H4" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column width="8rem"><Text text="{i18n>giColMatDoc}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPostingDate}" /></Column>
+                            <Column><Text text="{i18n>giColMaterial}" /></Column>
+                            <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giPlantLabel}" /></Column>
+                            <Column width="5.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSLocLabel}" /></Column>
+                            <Column width="6.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColReceivingPlant}" /></Column>
+                            <Column width="6.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColReceivingStorageLocation}" /></Column>
+                            <Column width="6.5rem" hAlign="End"><Text text="{i18n>giColQty}" /></Column>
+                            <Column width="4rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUnit}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem type="Navigation" press=".onDocumentPress">
+                                <cells>
+                                    <ObjectIdentifier
+                                        title="{dashboardView>MaterialDocument}"
+                                        text="{= ${dashboardView>MaterialDocYear} ? 'FY ' + ${dashboardView>MaterialDocYear} : '' }" />
+                                    <Text text="{dashboardView>PostingDate}" />
+                                    <ObjectIdentifier title="{dashboardView>Material}" text="{dashboardView>MaterialDesc}" />
+                                    <Text text="{dashboardView>Plant}" />
+                                    <Text text="{dashboardView>StorageLocation}" />
+                                    <Text text="{dashboardView>ReceivingPlant}" />
+                                    <Text text="{dashboardView>ReceivingStorageLocation}" />
+                                    <ObjectNumber number="{dashboardView>Quantity}" unit="{dashboardView>Unit}" />
+                                    <Text text="{dashboardView>Unit}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <!-- 4d. Recent 311 Postings - Storage Location Transfer -->
+                <Panel
+                    id="panelRecent311"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+                    <MessageStrip
+                        visible="{= !!${dashboardView>/recent/311/error} }"
+                        text="{dashboardView>/recent/311/error}"
+                        type="Error"
+                        showIcon="true"
+                        class="sapUiSmallMarginBottom">
+                        <link>
+                            <Link text="{i18n>giRetryConnection}" press=".onRefresh" />
+                        </link>
+                    </MessageStrip>
+                    <Table
+                        id="tblRecent311"
+                        busy="{dashboardView>/recent/311/loading}"
+                        busyIndicatorDelay="0"
+                        items="{dashboardView>/recent/311/items}"
+                        noDataText="{i18n>giNoRecentPostingsFound}"
+                        growing="true"
+                        growingThreshold="25"
+                        growingScrollToLoad="false"
+                        class="sapUiSizeCompact">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <Title text="{= ${i18n>giRecent311SectionTitle} + ' (' + ${dashboardView>/recent/311/total} + ')' }" level="H4" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column width="8rem"><Text text="{i18n>giColMatDoc}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColPostingDate}" /></Column>
+                            <Column><Text text="{i18n>giColMaterial}" /></Column>
+                            <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giPlantLabel}" /></Column>
+                            <Column width="5.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giSLocLabel}" /></Column>
+                            <Column width="6.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColReceivingPlant}" /></Column>
+                            <Column width="6.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColReceivingStorageLocation}" /></Column>
+                            <Column width="6.5rem" hAlign="End"><Text text="{i18n>giColQty}" /></Column>
+                            <Column width="4rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>giColUnit}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem type="Navigation" press=".onDocumentPress">
+                                <cells>
+                                    <ObjectIdentifier
+                                        title="{dashboardView>MaterialDocument}"
+                                        text="{= ${dashboardView>MaterialDocYear} ? 'FY ' + ${dashboardView>MaterialDocYear} : '' }" />
+                                    <Text text="{dashboardView>PostingDate}" />
+                                    <ObjectIdentifier title="{dashboardView>Material}" text="{dashboardView>MaterialDesc}" />
+                                    <Text text="{dashboardView>Plant}" />
+                                    <Text text="{dashboardView>StorageLocation}" />
+                                    <Text text="{dashboardView>ReceivingPlant}" />
+                                    <Text text="{dashboardView>ReceivingStorageLocation}" />
+                                    <ObjectNumber number="{dashboardView>Quantity}" unit="{dashboardView>Unit}" />
+                                    <Text text="{dashboardView>Unit}" />
                                 </cells>
                             </ColumnListItem>
                         </items>

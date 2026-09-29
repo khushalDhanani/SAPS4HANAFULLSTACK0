@@ -591,12 +591,14 @@ class GoodsIssueHandler {
       const days = req.data?.days !== undefined ? Number(req.data.days) : 30;
       const plant = req.data?.plant || _extractFilterParam(req, 'plant') || '';
       const forceRefresh = Boolean(req.data?.forceRefresh);
+      const movementType = req.data?.movementType || '';
 
       try {
         return await GoodsIssueAdapter.getDashboardData({
           days,
           plant,
-          forceRefresh
+          forceRefresh,
+          movementType
         });
       } catch (err) {
         return req.error(

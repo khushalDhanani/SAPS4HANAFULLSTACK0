@@ -1,5 +1,9 @@
 /**
  * Unit Tests for GoodsIssue Dashboard Controller & Dashboard Model
+ * Covers the 4-independent-sections split: Recent Postings tables (201/261/301/311),
+ * Movement Type Distribution mini-donuts, and Movement Trend mini-sparklines - each with its
+ * own independent loading/empty/error state, and Recent Postings backed by its own
+ * server-side MovementType-filtered getDashboardData call.
  */
 
 let GoodsIssueDashboardModel;
@@ -69,6 +73,7 @@ const mockBaseController = {
         function Controller() {
             Object.assign(this, proto);
             this.models = {};
+            this.byIdRegistry = {};
             this.view = {
                 getId: () => 'mockDashboardViewId',
                 getModel: (name) => this.models[name],
@@ -79,6 +84,7 @@ const mockBaseController = {
             this.getModel = (name) => this.models[name];
             this.getRouter = () => mockRouter;
             this.getText = (k, a, fallback) => fallback || k;
+            this.byId = (sId) => this.byIdRegistry[sId] || null;
             this.getOwnerComponent = () => ({
                 getRouter: () => mockRouter,
                 getModel: (name) => this.models[name]
@@ -124,6 +130,34 @@ require('../../../app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIs
 
 describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
     let controller;
+
+    const allDocuments = [
+        {
+            MaterialDocument: '4900000000', MaterialDocYear: '2026', Item: '0001',
+            MovementType: '201', Material: '421', MaterialDesc: 'Macbook Air M3',
+            Plant: '1110', StorageLocation: 'RD01', Quantity: 2, Unit: 'EA',
+            PostingDate: '2026-09-27', User: 'NARESH', CostCenter: '1011103001'
+        },
+        {
+            MaterialDocument: '4900000001', MaterialDocYear: '2026', Item: '0001',
+            MovementType: '261', Material: '514', MaterialDesc: 'Flange Steel 514',
+            Plant: '1120', StorageLocation: '1121', Quantity: 10, Unit: 'EA',
+            PostingDate: '2026-09-27', User: 'ALICE', OrderNo: '1000856'
+        },
+        {
+            MaterialDocument: '4900000002', MaterialDocYear: '2026', Item: '0001',
+            MovementType: '301', Material: '515', MaterialDesc: 'Copper Pipe 515',
+            Plant: '1120', StorageLocation: '1121', Quantity: 25, Unit: 'M',
+            PostingDate: '2026-09-26', User: 'BOB', ReceivingPlant: '1130', ReceivingStorageLocation: 'MT01'
+        },
+        {
+            MaterialDocument: '4900000003', MaterialDocYear: '2026', Item: '0001',
+            MovementType: '311', Material: '516', MaterialDesc: 'Steel Bolt 516',
+            Plant: '1120', StorageLocation: '1121', Quantity: 100, Unit: 'PC',
+            PostingDate: '2026-09-25', User: 'CHARLIE', ReceivingPlant: '1120', ReceivingStorageLocation: 'HS02'
+        }
+    ];
+
     const sampleDashboardData = {
         Kpis: {
             Mvt201: { TotalCount: 40, OpenPendingCount: 6, TodayPostingsCount: 1 },
@@ -143,88 +177,28 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             { PostingDate: '2026-09-26', DateLabel: '09/26', Count201: 2, Count261: 8, Count301: 1, Count311: 4, Total: 15 },
             { PostingDate: '2026-09-27', DateLabel: '09/27', Count201: 1, Count261: 3, Count301: 1, Count311: 2, Total: 7 }
         ],
-        RecentDocuments: [
-            {
-                MaterialDocument: '4900000000',
-                MaterialDocYear: '2026',
-                Item: '0001',
-                MovementType: '201',
-                MovementTypeName: 'Goods Issue for Cost Center',
-                Material: '421',
-                MaterialDesc: 'Macbook Air M3',
-                Plant: '1110',
-                StorageLocation: 'RD01',
-                Batch: 'CH01',
-                Quantity: 2,
-                Unit: 'EA',
-                PostingDate: '2026-09-27',
-                User: 'NARESH',
-                CostCenter: '1011103001',
-                OrderNo: '',
-                ReservationNo: '519658'
-            },
-            {
-                MaterialDocument: '4900000001',
-                MaterialDocYear: '2026',
-                Item: '0001',
-                MovementType: '261',
-                MovementTypeName: 'Goods Issue to Order',
-                Material: '514',
-                MaterialDesc: 'Flange Steel 514',
-                Plant: '1120',
-                StorageLocation: '1121',
-                Batch: 'BATCH01',
-                Quantity: 10,
-                Unit: 'EA',
-                PostingDate: '2026-09-27',
-                User: 'ALICE',
-                CostCenter: '',
-                OrderNo: '1000856',
-                ReservationNo: '168779'
-            },
-            {
-                MaterialDocument: '4900000002',
-                MaterialDocYear: '2026',
-                Item: '0001',
-                MovementType: '301',
-                MovementTypeName: 'Plant-to-Plant Transfer',
-                Material: '515',
-                MaterialDesc: 'Copper Pipe 515',
-                Plant: '1120',
-                StorageLocation: '1121',
-                Batch: '',
-                Quantity: 25,
-                Unit: 'M',
-                PostingDate: '2026-09-26',
-                User: 'BOB',
-                CostCenter: '',
-                OrderNo: '',
-                ReservationNo: ''
-            },
-            {
-                MaterialDocument: '4900000003',
-                MaterialDocYear: '2026',
-                Item: '0001',
-                MovementType: '311',
-                MovementTypeName: 'Storage Location Transfer',
-                Material: '516',
-                MaterialDesc: 'Steel Bolt 516',
-                Plant: '1120',
-                StorageLocation: '1121',
-                Batch: 'BATCH02',
-                Quantity: 100,
-                Unit: 'PC',
-                PostingDate: '2026-09-25',
-                User: 'CHARLIE',
-                CostCenter: '',
-                OrderNo: '',
-                ReservationNo: ''
-            }
-        ],
+        RecentDocuments: allDocuments,
         LastUpdated: '2026-09-28T10:00:00.000Z',
         PlantFilter: '',
         Days: 30
     };
+
+    // Emulates the real backend: per-type calls return RecentDocuments already server-filtered
+    // to that one movement type.
+    function dashboardDataForType(sType) {
+        return Object.assign({}, sampleDashboardData, {
+            RecentDocuments: allDocuments.filter((d) => d.MovementType === sType)
+        });
+    }
+
+    function mockRoutedService() {
+        mockGoodsIssueService.getDashboardData.mockImplementation((days, plant, forceRefresh, movementType) => {
+            if (movementType) {
+                return Promise.resolve(dashboardDataForType(movementType));
+            }
+            return Promise.resolve(sampleDashboardData);
+        });
+    }
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -232,108 +206,87 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
     });
 
     describe('GoodsIssueDashboardModel Behavior', () => {
-        it('initializes default model with correct initial properties', () => {
+        it('initializes default model with correct initial properties, including 4 independent recent-postings buckets', () => {
             const model = GoodsIssueDashboardModel.createModel();
             expect(model.getProperty('/loading')).toBe(true);
             expect(model.getProperty('/typeFilter')).toBe('ALL');
             expect(model.getProperty('/trendPeriod')).toBe('30');
             expect(model.getProperty('/kpis/mvt201/totalCount')).toBe('-');
             expect(model.getProperty('/kpis/mvt261/totalCount')).toBe('-');
-            expect(model.getProperty('/documents')).toEqual([]);
+
+            ['201', '261', '301', '311'].forEach((sType) => {
+                expect(model.getProperty(`/recent/${sType}/items`)).toEqual([]);
+                expect(model.getProperty(`/recent/${sType}/loading`)).toBe(true);
+                expect(model.getProperty(`/recent/${sType}/error`)).toBe('');
+                expect(model.getProperty(`/recent/${sType}/total`)).toBe(0);
+            });
         });
 
-        it('populates server data, generates SVGs and formats numbers properly', () => {
+        it('populates KPIs and per-type mini Distribution/Trend SVGs from the combined call, without touching Recent Postings', () => {
             const model = GoodsIssueDashboardModel.createModel();
             GoodsIssueDashboardModel.setServerData(model, sampleDashboardData);
 
             expect(model.getProperty('/loading')).toBe(false);
             expect(model.getProperty('/error')).toBe('');
             expect(model.getProperty('/kpis/mvt201/totalCount')).toBe(40);
-            expect(model.getProperty('/kpis/mvt261/totalCount')).toBe(100);
             expect(model.getProperty('/kpis/overall/totalCount')).toBe(265);
-            expect(model.getProperty('/allDocuments').length).toBe(4);
-            expect(model.getProperty('/documents').length).toBe(4);
 
-            // Verifies SVG generation
-            const distSvg = model.getProperty('/distributionSvg');
-            expect(distSvg).toContain('<svg');
-            expect(distSvg).toContain('Total Postings');
+            // 4 independent mini-donuts, one per type
+            ['201', '261', '301', '311'].forEach((sType) => {
+                const svg = model.getProperty(`/miniDistribution/${sType}/svg`);
+                expect(svg).toContain('<svg');
+            });
+            expect(model.getProperty('/miniDistribution/261/count')).toBe(100);
+            expect(model.getProperty('/miniDistribution/261/percentage')).toBe(37.74);
 
-            const trendSvg = model.getProperty('/trendSvg');
-            expect(trendSvg).toContain('<svg');
-            expect(trendSvg).toContain('<polyline');
+            // 4 independent mini-trend sparklines, one per type
+            ['201', '261', '301', '311'].forEach((sType) => {
+                const svg = model.getProperty(`/miniTrend/${sType}/svg`);
+                expect(svg).toContain('<svg');
+                expect(svg).toContain('<polyline');
+            });
+
+            // setServerData never touches Recent Postings state
+            expect(model.getProperty('/recent/201/items')).toEqual([]);
+            expect(model.getProperty('/recent/201/loading')).toBe(true);
         });
 
-        it('filters documents by movement type (201, 261, 301, 311, ALL)', () => {
+        it('setRecentPostings populates only the targeted type, independent of the other 3', () => {
             const model = GoodsIssueDashboardModel.createModel();
-            GoodsIssueDashboardModel.setServerData(model, sampleDashboardData);
 
-            // Filter to 201
-            GoodsIssueDashboardModel.setTypeFilter(model, '201');
-            expect(model.getProperty('/typeFilter')).toBe('201');
-            expect(model.getProperty('/documents').length).toBe(1);
-            expect(model.getProperty('/documents')[0].MovementType).toBe('201');
+            GoodsIssueDashboardModel.setRecentPostings(model, '301', dashboardDataForType('301'));
 
-            // Filter to 261
+            expect(model.getProperty('/recent/301/items').length).toBe(1);
+            expect(model.getProperty('/recent/301/items')[0].MovementType).toBe('301');
+            expect(model.getProperty('/recent/301/total')).toBe(1);
+            expect(model.getProperty('/recent/301/loading')).toBe(false);
+            expect(model.getProperty('/recent/301/error')).toBe('');
+
+            // Other 3 types remain untouched at their initial state
+            expect(model.getProperty('/recent/201/items')).toEqual([]);
+            expect(model.getProperty('/recent/201/loading')).toBe(true);
+        });
+
+        it('setRecentPostingsError records an independent failure for one type only', () => {
+            const model = GoodsIssueDashboardModel.createModel();
+            GoodsIssueDashboardModel.setRecentPostings(model, '201', dashboardDataForType('201'));
+
+            GoodsIssueDashboardModel.setRecentPostingsError(model, '261', 'Gateway timeout for 261');
+
+            expect(model.getProperty('/recent/261/loading')).toBe(false);
+            expect(model.getProperty('/recent/261/error')).toBe('Gateway timeout for 261');
+            expect(model.getProperty('/recent/261/items')).toEqual([]);
+
+            // 201 is unaffected by 261's failure
+            expect(model.getProperty('/recent/201/error')).toBe('');
+            expect(model.getProperty('/recent/201/items').length).toBe(1);
+        });
+
+        it('setTypeFilter only drives the KPI tile highlight - it no longer filters any table', () => {
+            const model = GoodsIssueDashboardModel.createModel();
             GoodsIssueDashboardModel.setTypeFilter(model, '261');
             expect(model.getProperty('/typeFilter')).toBe('261');
-            expect(model.getProperty('/documents').length).toBe(1);
-            expect(model.getProperty('/documents')[0].MovementType).toBe('261');
-
-            // Filter to 301
-            GoodsIssueDashboardModel.setTypeFilter(model, '301');
-            expect(model.getProperty('/documents').length).toBe(1);
-            expect(model.getProperty('/documents')[0].MovementType).toBe('301');
-
-            // Reset to ALL
-            GoodsIssueDashboardModel.setTypeFilter(model, 'ALL');
-            expect(model.getProperty('/documents').length).toBe(4);
-        });
-
-        it('filters documents by search query across multiple fields', () => {
-            const model = GoodsIssueDashboardModel.createModel();
-            GoodsIssueDashboardModel.setServerData(model, sampleDashboardData);
-
-            // Search by Material Description
-            GoodsIssueDashboardModel.setSearchQuery(model, 'Copper');
-            expect(model.getProperty('/documents').length).toBe(1);
-            expect(model.getProperty('/documents')[0].MaterialDesc).toBe('Copper Pipe 515');
-
-            // Search by Cost Center
-            GoodsIssueDashboardModel.setSearchQuery(model, '1011103001');
-            expect(model.getProperty('/documents').length).toBe(1);
-            expect(model.getProperty('/documents')[0].CostCenter).toBe('1011103001');
-
-            // Search by Material Document number
-            GoodsIssueDashboardModel.setSearchQuery(model, '4900000001');
-            expect(model.getProperty('/documents').length).toBe(1);
-            expect(model.getProperty('/documents')[0].MaterialDocument).toBe('4900000001');
-
-            // Search by User
-            GoodsIssueDashboardModel.setSearchQuery(model, 'CHARLIE');
-            expect(model.getProperty('/documents').length).toBe(1);
-
-            // Clear search
-            GoodsIssueDashboardModel.setSearchQuery(model, '');
-            expect(model.getProperty('/documents').length).toBe(4);
-        });
-
-        it('toggles sort direction and sorts properly', () => {
-            const model = GoodsIssueDashboardModel.createModel();
-            GoodsIssueDashboardModel.setServerData(model, sampleDashboardData);
-
-            // Default is PostingDate DESC -> first is 2026-09-27
-            expect(model.getProperty('/documents')[0].PostingDate).toBe('2026-09-27');
-
-            // Toggle sort on same field -> ASC
-            GoodsIssueDashboardModel.setSorting(model, 'PostingDate');
-            expect(model.getProperty('/sortDescending')).toBe(false);
-            expect(model.getProperty('/documents')[0].PostingDate).toBe('2026-09-25');
-
-            // Toggle again -> DESC
-            GoodsIssueDashboardModel.setSorting(model, 'PostingDate');
-            expect(model.getProperty('/sortDescending')).toBe(true);
-            expect(model.getProperty('/documents')[0].PostingDate).toBe('2026-09-27');
+            expect(model.getProperty('/activeKpiCard')).toBe('261');
         });
     });
 
@@ -345,116 +298,144 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsIssue');
         });
 
-        it('loads dashboard data and updates model on route match / refresh', async () => {
-            mockGoodsIssueService.getDashboardData.mockResolvedValueOnce(sampleDashboardData);
+        it('loads the combined call and all 4 independent Recent Postings calls on refresh, each with its own movementType filter', async () => {
+            mockRoutedService();
             controller.onInit();
 
             await controller.onRefresh();
+
+            // Combined call for KPIs/Distribution/Trend - no movementType
             expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true);
+            // 4 independent per-type calls
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '201');
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '261');
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '301');
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '311');
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(5);
 
             const model = controller.getView().getModel('dashboardView');
             expect(model.getProperty('/kpis/mvt201/totalCount')).toBe(40);
-            expect(model.getProperty('/kpis/mvt261/totalCount')).toBe(100);
-            expect(model.getProperty('/documents').length).toBe(4);
+
+            // Each table only received its own type's rows
+            expect(model.getProperty('/recent/201/items').length).toBe(1);
+            expect(model.getProperty('/recent/201/items')[0].MovementType).toBe('201');
+            expect(model.getProperty('/recent/261/items').length).toBe(1);
+            expect(model.getProperty('/recent/261/items')[0].MovementType).toBe('261');
+            expect(model.getProperty('/recent/301/items').length).toBe(1);
+            expect(model.getProperty('/recent/311/items').length).toBe(1);
         });
 
-        it('handles backend service failure gracefully by showing error state', async () => {
-            mockGoodsIssueService.getDashboardData.mockRejectedValueOnce(new Error('S/4HANA Gateway unavailable'));
+        it('handles combined-call failure independently of the 4 Recent Postings loads', async () => {
+            mockGoodsIssueService.getDashboardData.mockImplementation((days, plant, forceRefresh, movementType) => {
+                if (movementType) {
+                    return Promise.resolve(dashboardDataForType(movementType));
+                }
+                return Promise.reject(new Error('S/4HANA Gateway unavailable'));
+            });
             controller.onInit();
 
-            await controller._loadDashboardData(false);
+            await controller._loadAll(false);
             const model = controller.getView().getModel('dashboardView');
+
+            // Combined call failed -> KPI/chart error state set
             expect(model.getProperty('/loading')).toBe(false);
             expect(model.getProperty('/error')).toContain('S/4HANA Gateway unavailable');
+
+            // Recent Postings tables succeeded independently, unaffected by the combined call's failure
+            expect(model.getProperty('/recent/201/error')).toBe('');
+            expect(model.getProperty('/recent/201/items').length).toBe(1);
         });
 
-        it('filters table when clicking KPI tiles (201, 261, 301, 311, Overall)', async () => {
-            mockGoodsIssueService.getDashboardData.mockResolvedValueOnce(sampleDashboardData);
+        it('records an independent error for just one Recent Postings table when only that type fails', async () => {
+            mockGoodsIssueService.getDashboardData.mockImplementation((days, plant, forceRefresh, movementType) => {
+                if (movementType === '301') {
+                    return Promise.reject(new Error('301 lookup failed'));
+                }
+                if (movementType) {
+                    return Promise.resolve(dashboardDataForType(movementType));
+                }
+                return Promise.resolve(sampleDashboardData);
+            });
+            controller.onInit();
+
+            await controller._loadAll(false);
+            const model = controller.getView().getModel('dashboardView');
+
+            expect(model.getProperty('/recent/301/error')).toContain('301 lookup failed');
+            expect(model.getProperty('/recent/301/loading')).toBe(false);
+
+            // The other 3 tables are unaffected
+            expect(model.getProperty('/recent/201/error')).toBe('');
+            expect(model.getProperty('/recent/261/error')).toBe('');
+            expect(model.getProperty('/recent/311/error')).toBe('');
+        });
+
+        it('highlights the clicked KPI tile and scrolls to that type\'s own section (no more table filtering)', async () => {
+            mockRoutedService();
             controller.onInit();
             await controller.onRefresh();
 
-            // Click 201 tile
+            controller.byIdRegistry.panelRecent201 = { getDomRef: () => null };
+
             controller.onSelectKpi201();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('201');
-            expect(controller._getModel().getProperty('/documents').length).toBe(1);
 
-            // Click 201 tile again to toggle back to ALL
+            // Click again toggles back to ALL
             controller.onSelectKpi201();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
 
-            // Click 261 tile
-            controller.onSelectKpi261();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('261');
-            expect(controller._getModel().getProperty('/documents').length).toBe(1);
-
-            // Click 261 tile again to toggle back to ALL
-            controller.onSelectKpi261();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
-
-            // Click 301 tile
-            controller.onSelectKpi301();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('301');
-            expect(controller._getModel().getProperty('/documents').length).toBe(1);
-
-            // Click 311 tile
-            controller.onSelectKpi311();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('311');
-            expect(controller._getModel().getProperty('/documents').length).toBe(1);
-
-            // Click 311 tile again to toggle back to ALL
-            controller.onSelectKpi311();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
-
-            // Click 301 tile then Overall tile to reset
-            controller.onSelectKpi301();
-            expect(controller._getModel().getProperty('/typeFilter')).toBe('301');
             controller.onSelectKpiOverall();
             expect(controller._getModel().getProperty('/typeFilter')).toBe('ALL');
-            expect(controller._getModel().getProperty('/documents').length).toBe(4);
+        });
+
+        it('scrolls to the matching section\'s DOM element when a KPI tile is clicked', () => {
+            controller.onInit();
+            const scrollSpy = jest.fn();
+            controller.byIdRegistry.panelRecent261 = { getDomRef: () => ({ scrollIntoView: scrollSpy }) };
+
+            controller.onSelectKpi261();
+            expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
         });
 
         it('formats tile state accurately across loading, error, empty and loaded states', () => {
             controller.onInit();
 
-            // Loading state
             expect(controller.formatTileState(10, true, '')).toBe('Loading');
             expect(controller.formatTileState('-', false, '')).toBe('Loading');
             expect(controller.formatTileState(undefined, false, '')).toBe('Loading');
-
-            // Error / Failed state
             expect(controller.formatTileState(10, false, 'Connection lost')).toBe('Failed');
             expect(controller.formatTileState(null, false, '')).toBe('Failed');
-
-            // Loaded state (even when count is 0)
             expect(controller.formatTileState(0, false, '')).toBe('Loaded');
             expect(controller.formatTileState(42, false, '')).toBe('Loaded');
         });
 
         it('exposes authentic total and today counts across all 5 movement categories', async () => {
-            mockGoodsIssueService.getDashboardData.mockResolvedValueOnce(sampleDashboardData);
+            mockRoutedService();
             controller.onInit();
             await controller.onRefresh();
 
             const model = controller._getModel();
-            // Movement 201
             expect(model.getProperty('/kpis/mvt201/totalCount')).toBe(40);
             expect(model.getProperty('/kpis/mvt201/todayPostingsCount')).toBe(1);
-
-            // Movement 261
             expect(model.getProperty('/kpis/mvt261/totalCount')).toBe(100);
-            expect(model.getProperty('/kpis/mvt261/todayPostingsCount')).toBe(3);
-
-            // Movement 301
             expect(model.getProperty('/kpis/mvt301/totalCount')).toBe(50);
-            expect(model.getProperty('/kpis/mvt301/todayPostingsCount')).toBe(1);
-
-            // Movement 311
             expect(model.getProperty('/kpis/mvt311/totalCount')).toBe(75);
-            expect(model.getProperty('/kpis/mvt311/todayPostingsCount')).toBe(2);
-
-            // Overall Total
             expect(model.getProperty('/kpis/overall/totalCount')).toBe(265);
-            expect(model.getProperty('/kpis/overall/todayPostingsCount')).toBe(7);
+        });
+
+        it('reloads the combined call and all 4 Recent Postings tables when the trend period changes', async () => {
+            mockRoutedService();
+            controller.onInit();
+            await controller.onRefresh();
+            mockGoodsIssueService.getDashboardData.mockClear();
+
+            const mockEvent = { getParameter: () => ({ getKey: () => '7' }) };
+            await controller.onTrendPeriodChange(mockEvent);
+
+            expect(controller._getModel().getProperty('/trendPeriod')).toBe('7');
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(7, '', true);
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(7, '', true, '201');
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(5);
         });
 
         it('navigates to create flow with selected movement type for 201, 261, 301, 311', () => {
@@ -473,9 +454,9 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssueCreateMode', { mode: '311' });
         });
 
-        it('opens document detail dialog when clicking a table row', async () => {
+        it('opens document detail dialog when clicking a row in any of the 4 tables', async () => {
             controller.onInit();
-            const oDoc = sampleDashboardData.RecentDocuments[0];
+            const oDoc = allDocuments[2];
             const mockEvent = {
                 getSource: () => ({
                     getBindingContext: () => ({

@@ -395,17 +395,23 @@ sap.ui.define([
          * @param {number} [nDays=30] - Lookback window in days (7 or 30)
          * @param {string} [sPlant=""] - Optional plant filter
          * @param {boolean} [bForceRefresh=false] - Force cache bypass
+         * @param {string} [sMovementType=""] - Optional movement type (201/261/301/311) to filter
+         *   RecentDocuments server-side to a single type. Used to load each of the 4 independent
+         *   Recent Postings tables without one type's high volume crowding out another's top-N slice.
          * @returns {Promise<Object>} GIDashboardData
          */
-        getDashboardData: function (nDays, sPlant, bForceRefresh) {
+        getDashboardData: function (nDays, sPlant, bForceRefresh, sMovementType) {
             var iDays = typeof nDays === "number" && nDays > 0 ? nDays : 30;
             var sPlantVal = sPlant ? String(sPlant).trim().toUpperCase() : "";
             var bForce = Boolean(bForceRefresh);
+            var sMvt = sMovementType ? String(sMovementType).trim().toUpperCase() : "";
 
             var sQuery = BASE_PATH + "/getDashboardData(" +
                 "days=" + iDays + "," +
                 "plant='" + encodeURIComponent(sPlantVal) + "'," +
-                "forceRefresh=" + bForce + ")";
+                "forceRefresh=" + bForce + "," +
+                "movementType='" + encodeURIComponent(sMvt) + "'" +
+                ")";
 
             return ODataClient.get(sQuery).then(function (oData) {
                 return oData || null;

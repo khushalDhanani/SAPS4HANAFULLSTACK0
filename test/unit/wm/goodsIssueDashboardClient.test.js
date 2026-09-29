@@ -261,4 +261,62 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       expect(data.RecentDocuments[0].MaterialDocument).toBe('2001');
     });
   });
+
+  describe('MovementType Server-Side Filtering (per-type Recent Postings)', () => {
+    it('rejects an invalid movement type', async () => {
+      mockReservationsClient.getOpenReservations.mockResolvedValue([]);
+      await expect(client.getDashboardData({ movementType: '999' }))
+        .rejects.toThrow("Invalid movement type '999'");
+    });
+
+    it('queries BWART = <type> (not the combined IN clause) when movementType is given', async () => {
+      mockReservationsClient.getOpenReservations.mockResolvedValue([]);
+      mockRfc.readTable.mockResolvedValue([]);
+
+      await client.getDashboardData({ days: 30, plant: '1120', movementType: '301' });
+
+      const totalWhere = mockRfc.readTable.mock.calls[0][2];
+      expect(totalWhere[0]).toBe("BWART = '301'");
+      expect(totalWhere.join(' ')).not.toContain("IN ('201','261','301','311')");
+
+      const windowWhere = mockRfc.readTable.mock.calls[1][2];
+      expect(windowWhere[0]).toBe("BWART = '301'");
+    });
+
+    it('returns RecentDocuments containing only the requested type, with ReceivingPlant/ReceivingStorageLocation mapped from UMWRK/UMLGO', async () => {
+      mockReservationsClient.getOpenReservations.mockResolvedValue([]);
+
+      const windowRows = [
+        {
+          MBLNR: '3001', MJAHR: '2026', ZEILE: '0001', BWART: '301', MATNR: '000000000000000515',
+          WERKS: '1120', LGORT: '1121', CHARG: '', MENGE: '25', MEINS: 'M', BUDAT: '20260926',
+          USNAM: 'BOB', KOSTL: '', AUFNR: '', RSNUM: '', RSPOS: '', SHKZG: 'S',
+          UMWRK: '1130', UMLGO: 'MT01'
+        }
+      ];
+
+      mockRfc.readTable
+        .mockResolvedValueOnce([{ MBLNR: '3001', BWART: '301' }]) // all-time totals
+        .mockResolvedValueOnce(windowRows) // window rows
+        .mockResolvedValueOnce([{ MATNR: '000000000000000515', MAKTX: 'Copper Pipe 515' }]); // MAKT
+
+      const data = await client.getDashboardData({ days: 30, plant: '1120', movementType: '301' });
+
+      expect(data.RecentDocuments.length).toBe(1);
+      expect(data.RecentDocuments[0].MovementType).toBe('301');
+      expect(data.RecentDocuments[0].ReceivingPlant).toBe('1130');
+      expect(data.RecentDocuments[0].ReceivingStorageLocation).toBe('MT01');
+    });
+
+    it('caches per movementType independently - a 201 call does not serve a 261 call\'s cache', async () => {
+      mockReservationsClient.getOpenReservations.mockResolvedValue([]);
+      mockRfc.readTable.mockResolvedValue([]);
+
+      await client.getDashboardData({ days: 30, plant: '1120', movementType: '201' });
+      const callsAfterFirst = mockRfc.readTable.mock.calls.length;
+
+      await client.getDashboardData({ days: 30, plant: '1120', movementType: '261' });
+      expect(mockRfc.readTable.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    });
+  });
 });

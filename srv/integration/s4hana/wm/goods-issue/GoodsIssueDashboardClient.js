@@ -106,7 +106,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
    * @param {boolean} [options.forceRefresh=false] - Bypass cache
    * @returns {Promise<Object>} Dashboard payload
    */
-  async getDashboardData({ days = 30, plant = '', forceRefresh = false } = {}) {
+  async getDashboardData({ days = 30, plant = '', forceRefresh = false, movementType = '' } = {}) {
     let nDays = Number(days);
     if (isNaN(nDays) || nDays <= 0 || nDays > 90) {
       nDays = 30;
@@ -118,7 +118,14 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
       throw err;
     }
 
-    const cacheKey = `${nDays}_${sPlant}`;
+    const sMovementType = String(movementType || '').trim();
+    if (sMovementType && !['201', '261', '301', '311'].includes(sMovementType)) {
+      const err = new Error(`Invalid movement type '${sMovementType}'`);
+      err.status = 400;
+      throw err;
+    }
+
+    const cacheKey = `${nDays}_${sPlant}_${sMovementType}`;
     const now = Date.now();
     if (!forceRefresh && this._cache.has(cacheKey)) {
       const entry = this._cache.get(cacheKey);
@@ -167,7 +174,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     const openPendingOverall = openPending201 + openPending261 + openPending301 + openPending311;
 
     // 3. Query all-time total counts from MATDOC/MSEG
-    const totalWhere = ["BWART IN ('201','261','301','311')"];
+    const totalWhere = [sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','261','301','311')"];
     if (sPlant) {
       totalWhere.push(`AND WERKS = '${sPlant}'`);
     }
@@ -211,7 +218,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     const startYMD = formatDateToYMD(startDateObj);
 
     const windowWhere = [
-      "BWART IN ('201','261','301','311')",
+      sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','261','301','311')",
       `AND BUDAT >= '${startYMD}'`
     ];
     if (sPlant) {
@@ -220,7 +227,8 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
 
     const windowFields = [
       'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT',
-      'CHARG', 'MENGE', 'MEINS', 'BUDAT', 'USNAM', 'KOSTL', 'AUFNR', 'RSNUM', 'RSPOS', 'SHKZG'
+      'CHARG', 'MENGE', 'MEINS', 'BUDAT', 'USNAM', 'KOSTL', 'AUFNR', 'RSNUM', 'RSPOS', 'SHKZG',
+      'UMWRK', 'UMLGO'
     ];
 
     let windowRows = [];
@@ -229,7 +237,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     } catch (matdocErr) {
       LOG.warn(`MATDOC window query failed: ${matdocErr.message}. Attempting MSEG/MKPF read.`);
       try {
-        windowRows = await this.rfc.readTable('MSEG', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'KOSTL', 'AUFNR', 'RSNUM', 'RSPOS', 'SHKZG'], windowWhere);
+        windowRows = await this.rfc.readTable('MSEG', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'KOSTL', 'AUFNR', 'RSNUM', 'RSPOS', 'SHKZG', 'UMWRK', 'UMLGO'], windowWhere);
       } catch (msegErr) {
         LOG.error(`Window postings query failed: ${msegErr.message}`);
       }
@@ -326,7 +334,9 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
         OrderNo: alphaOut(r.AUFNR),
         ReservationNo: alphaOut(r.RSNUM),
         ReservationItem: alphaOut(r.RSPOS),
-        DebitCredit: r.SHKZG || ''
+        DebitCredit: r.SHKZG || '',
+        ReceivingPlant: r.UMWRK || '',
+        ReceivingStorageLocation: r.UMLGO || ''
       };
     });
 
