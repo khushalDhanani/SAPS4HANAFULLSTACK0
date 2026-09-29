@@ -23,7 +23,10 @@ entity GoodsIssueQueue : cuid, managed {
     ReceivingPlant        : String(4);
     ReceivingStorageLocation : String(4);
     CostCenter            : String(10);
+    GLAccount             : String(10);
     SerialNumber          : String(18);
+    PostingDate           : Date;
+    DocumentDate          : Date;
     SyncStatus            : String(30);   // 'QUEUED', 'SYNCING', 'POSTED_IN_SAP', 'FAILED'
     SyncAttempts          : Integer default 0;
     LastSyncError         : String(500);

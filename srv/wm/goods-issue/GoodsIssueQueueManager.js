@@ -80,6 +80,9 @@ class GoodsIssueQueueManager {
       receivingPlant: item.ReceivingPlant || '',
       receivingStorageLocation: item.ReceivingStorageLocation || '',
       costCenter: item.CostCenter || '',
+      glAccount: item.GLAccount || '',
+      postingDate: item.PostingDate || '',
+      documentDate: item.DocumentDate || '',
       serialNumber: item.SerialNumber || '',
       serialNumbers: item.SerialNumber ? [item.SerialNumber] : []
     };
@@ -92,7 +95,7 @@ class GoodsIssueQueueManager {
 
     return {
       ID: crypto.randomUUID(),
-      QueueReference: `GI-QUEUE-${sReserv}-${sItem}-${randSuffix}`,
+      QueueReference: `GI-QUEUE-${sReserv || 'UNPLANNED'}-${sItem || '0000'}-${randSuffix}`,
       ReservationNo: sReserv,
       ReservationItem: sItem,
       OrderNo: String(data.OrderNo || '').trim(),
@@ -112,7 +115,10 @@ class GoodsIssueQueueManager {
       ReceivingPlant: String(data.ReceivingPlant || '').trim(),
       ReceivingStorageLocation: String(data.ReceivingStorageLocation || '').trim(),
       CostCenter: String(data.CostCenter || '').trim(),
+      GLAccount: String(data.GLAccount || '').trim(),
       SerialNumber: String(data.SerialNumber || (Array.isArray(data.SerialNumbers) ? data.SerialNumbers[0] : '') || '').trim(),
+      PostingDate: data.PostingDate || null,
+      DocumentDate: data.DocumentDate || null,
       SyncStatus: 'QUEUED',
       SyncAttempts: 1,
       LastSyncError: String(data.LastSyncError || 'SAP Gateway posting service unavailable').slice(0, 500),

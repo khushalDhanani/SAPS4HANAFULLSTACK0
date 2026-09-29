@@ -495,6 +495,20 @@ class GoodsIssueAdapter {
   }
 
   /**
+   * Pre-check serial number stock status (must be ESTO / unrestricted stock, not already issued).
+   */
+  async validateSerialStatus(material, plant, storageLocation, serialNumbers) {
+    return this.stockUnits.validateSerialStatus(material, plant, storageLocation, serialNumbers);
+  }
+
+  /**
+   * Reverse an existing Material Document in SAP S/4HANA via CancelHeader FunctionImport.
+   */
+  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
+    return this.posting.reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason);
+  }
+
+  /**
    * Submit Goods Issue batch in a single LUW
    */
   async submitGoodsIssueRequest(reservationNo, orderNo, items) {

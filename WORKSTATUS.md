@@ -4627,6 +4627,7 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+- **2026-09-29 10:40 IST (uncommitted)**: Implemented and validated complete SAP S/4HANA backend for Movement 201 (Goods Issue to Cost Center) and 202 Reversal (`CancelHeader`) adhering strictly to AGENTS.md layering architecture. Added pure validation layer (`goodsIssue.validation.js`), CAP domain normalization mapper (`goodsIssue.mapper.js`), technical S/4 OData V2 mapper (`GoodsIssueMapper.js`), serial status pre-check (`validateSerialStatus` verifying `ESTO` / unrestricted in stock in `GoodsIssueStockUnitClient.js` before post), posting and `CancelHeader` reversal in `GoodsIssuePostingClient.js` & `GoodsIssueAdapter.js`, queue outbox schema support (`GLAccount`, `PostingDate`, `DocumentDate`), and handler integration. Verified 100% green across all 19 WM test suites (402/402 tests passing, including 37 new tests for 201 validation, mapping, posting, serial pre-check, and reversal). `cds compile srv` clean; `git diff --check` clean.
 - **2026-09-28 16:50 IST (uncommitted)**: Integrated Movement Type 201 (Goods Issue for Cost Center) into the Goods Issue Multi-Movement Dashboard (`#/wm/goods-issue`). Discovered 54 authentic postings in live SAP `MATDOC` table and 53 authentic open reservations in `UI_RESERVATION_ITM_MNG_V2`. Expanded dashboard across all 4 movement types (201, 261, 301, 311): added 201 KPI card with purple theme (`#8E44AD`), 4-way distribution donut chart, 4-series daily trend line chart, Recent Documents table with Cost Center column, live Cost Center search, filter toggle, and create wizard routing (`#/wm/goods-issue/create/201`). All 14 WM test suites (346 tests) 100% green; UI5 linter 0 findings; UI5 build succeeded; `git diff --check` clean.
 - **2026-09-27 15:16 IST (uncommitted)**: Resolved missing KPI counts, UI infinite loops, and 404 network request cascades across Dashboard, Sales Inquiries, Sales Orders, Customer Returns, Purchase Orders, and Journal Entries. Fixed OData V4 invalid property bindings (`ExternalDocumentID`, `SalesInquiryDescription`) on `C_InquiryWL_F2370` that caused 100+ cascading 404s per page load. Corrected UI5 `ValueState` enum validation errors in `CustomerReturns.controller.js`. Extended live S/4HANA dashboard metrics backend in `PurchaseOrderAdapter.js` to query authentic counts for Orders Due for Delivery (1,078 live), Customer Invoices (508 live), and Customer Returns (183 live), binding them to Overview, SD, and EWM dashboard tiles. All 85 test suites (1,460 tests) 100% green; UI5 lint clean; UI5 build succeeded; `git diff --check` clean.
 - **2026-09-26 17:25 IST (uncommitted)**: Formulated comprehensive Phase 2 Gateway Service `ZWM_RF_TRTO_SRV` technical specification, DDIC models, ABAP DPC_EXT code, and new RFC function module `Z_WM_GET_SU_DETAILS` (`docs/wm_rf_trto_srv_spec.md`). Proved complete 4-stage data contract flow live against real SAP S/4HANA DS4 Client 220 using dedicated test suite (`tools/test-wm-rf-trto-flow.py`): validated `TRHeaderSet` on live production staging TR `0001000663` (Mvt 319, Prod Order `0001002749`), `TRItemSet` navigation with `OpenQty = MENGE - TAMEN` and `MAKT` descriptions for Item 1 (`1000000867` `IPA, Extra Pure`, 17,323.2 KG) and Item 2 (`1000000869` `SOLVESSO 108`, 13,929.6 KG), and `StorageUnitSet` / `SUQuantSet` validation on SU `00000000001000043935` (Quant `0001035375`, Material `1000000867`, 11,210 KG in bin `ONHOLD`, matching TR with `IsValid = 'X'`). Documented full SEGW metadata EDMX and registration steps for DS4 220. All validations 100% green.
@@ -5651,23 +5652,86 @@
     - `npx jest test/unit/dashboard/`: 2 passed, 49/49 tests green (0 regressions).
   - **How to verify no duplicates remain**: `grep -c 'GenericTile' app/fiori-app/webapp/view/Dashboard.view.xml` in the EWM section shows 6 tiles; `sed -n '/WAREHOUSE (EWM/,/<\/IconTabFilter>/p' Dashboard.view.xml | grep -o 'id="[^"]*"' | sort | uniq -d` returns empty (no duplicate IDs).
 
+## 2026-09-29 10:40 IST
+- **Agent**: Antigravity
+- **Request**: "Implement Movement 201 (Goods Issue to Cost Center) backend adhering to AGENTS.md conventions (layering, validation, mapper, adapter, error handling, tests). Directives: Reversal mechanism via CancelHeader FunctionImport on API_MATERIAL_DOCUMENT_SRV, ReservationNo/ReservationItem optional for 201 (planned & unplanned), G/L Account optional pass-through (omitted when not provided so OBYC/GBB-VBR auto-determines), and include serial-status pre-check (must be ESTO — in stock, not already issued) in the handler stock pre-check step alongside revalidateStock."
+- **Scope & Implementation Details**:
+  - **CDS Persistence & Service Model**:
+    - `db/wm/goods-issue-queue.cds`: Added `GLAccount : String(10)`, `PostingDate : Date`, `DocumentDate : Date` to `GoodsIssueQueue` outbox entity.
+    - `srv/wm/goods-issue/service.cds`: Added `type GIReversalResult { MaterialDocument : String(10); MaterialDocumentYear : String(4); Status : String(20); Message : String(255); }`. Added `GLAccount`, `PostingDate`, `DocumentDate` to `QueueItem` entity and `postGoodsIssue` action. Added action `reverseGoodsIssue(MaterialDocument : String(10), MaterialDocumentYear : String(4), PostingDate : Date) returns GIReversalResult`.
+  - **Pure Validation Layer (`srv/wm/goods-issue/validation/goodsIssue.validation.js`)**:
+    - Implemented `validateGoodsIssuePayload(payload)`:
+      - CostCenter: required for 201, max 10 chars, uppercase alphanumeric (`^[A-Z0-9_-]+$`).
+      - Reservation: optional for 201; required for non-201.
+      - GLAccount: optional; if supplied, 1-10 digits.
+      - Quantity: required, positive number, max 3 decimal places.
+      - Plant & StorageLocation: required for unplanned 201 (optional for planned 261/201 when reservation provides them), 4 chars uppercase.
+      - Unit: required, max 3 chars.
+      - Serial Numbers: if material is serial-managed, validates exact count matches quantity, checks for duplicates, validates each serial <= 18 chars.
+      - Dates: validates YYYY-MM-DD calendar dates.
+    - Implemented `validateReversalPayload(payload)`:
+      - MaterialDocument: required 10-char numeric.
+      - MaterialDocYear: required 4-char numeric.
+      - PostingDate: optional YYYY-MM-DD.
+  - **CAP Domain Normalization Mapper (`srv/wm/goods-issue/mapping/goodsIssue.mapper.js`)**:
+    - Implemented `normalizeGoodsIssuePayload(input)`: cleans strings, forces uppercase for CostCenter/Plant/StorageLocation/Unit/Batch/GLAccount, cleans scanner control characters from serial numbers, defaults PostingDate/DocumentDate to current UTC date.
+    - Implemented `normalizeReversalPayload(input)`: pads MaterialDocument to 10 digits, formats year, defaults PostingDate.
+  - **S/4HANA OData V2 Technical Mapper (`srv/integration/s4hana/wm/goods-issue/GoodsIssueMapper.js`)**:
+    - Implemented `mapToMaterialDocumentPayload(item)`: maps CAP domain attributes to SAP OData V2 structure for `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`:
+      - `GoodsMovementCode: '03'` (Goods Issue) for 201/261 (`'04'` for transfers).
+      - Converts dates to `/Date(epoch)/` format.
+      - Deep inserts `to_MaterialDocumentItem` with `CostCenter`, `GLAccount` (only if present), `GoodsMovementType: '201'`, `Plant`, `StorageLocation`, `QuantityInEntryUnit`, `EntryUnit`, and nested `to_SerialNumbers` with `SerialNumber`.
+    - Implemented `buildCancelHeaderUrl(materialDocument, materialDocYear)`: builds `/CancelHeader?MaterialDocument='${doc}'&MaterialDocumentYear='${year}'`.
+  - **Stock Unit Client & Serial ESTO Pre-Check (`srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`)**:
+    - Implemented `validateSerialStatus(material, plant, storageLocation, serialNumbers)`: queries SAP serial master data (`UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber` with fallback to RFC/tables `EQUI`/`JEST`) to confirm serial status is `ESTO` (InventoryStockType `'01'` unrestricted in stock at specified Plant/SLoc). Returns structured results identifying any serials that are not in stock or already issued.
+  - **S/4HANA Posting Client & Adapter (`srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js` & `GoodsIssueAdapter.js`)**:
+    - Refactored `postGoodsIssue` to delegate mapping to `GoodsIssueMapper.mapToMaterialDocumentPayload`.
+    - Implemented `reverseGoodsIssue(materialDocument, materialDocYear, postingDate)` executing `CancelHeader` FunctionImport against S/4HANA `API_MATERIAL_DOCUMENT_SRV`.
+    - Exposed `validateSerialStatus` and `reverseGoodsIssue` through `GoodsIssueAdapter`.
+  - **Queue Manager & CAP Handler (`srv/wm/goods-issue/GoodsIssueQueueManager.js` & `srv/wm/goods-issue/handlers/goodsIssue.handler.js`)**:
+    - Updated `GoodsIssueQueueManager` to persist and replay `GLAccount`, `PostingDate`, and `DocumentDate`.
+    - Updated `goodsIssue.handler.js`:
+      - Integrated pure validation and normalization.
+      - Pre-checks stock and blocks with 422 if verified deficit exists.
+      - Pre-checks serial numbers for `ESTO` status before calling S/4 posting, rejecting with explicit 422 ("serial already issued / not in stock") if any serial is invalid.
+      - Handled mapped SAP errors (M7021, KI260, M7053, M7175 -> 422).
+      - Bound `reverseGoodsIssue` action with validation and execution.
+  - **Automated Tests Created/Updated**:
+    - `test/unit/wm/goodsIssueValidation.test.js`: 21 tests covering pure validation for 201, GLAccount, cost center, dates, serials, and reversals.
+    - `test/unit/wm/goodsIssueMapper.test.js`: 8 tests covering domain normalization and S/4 OData V2 mapping.
+    - `test/unit/wm/goodsIssue201Posting.test.js`: 6 tests covering posting client, adapter, cancel reversal, and serial ESTO pre-check.
+    - `test/integration/wm/goodsIssue201PostReversal.test.js`: 2 integration tests covering complete 201 post and 202 CancelHeader reversal flow.
+    - `test/unit/wm/goodsIssueService.test.js`: 46 tests (regression validated).
+  - **Executed Commands & Results**:
+    - `npx cds compile srv`: Succeeded (clean CSN generation, code 0).
+    - `npx jest test/unit/wm/goodsIssueValidation.test.js --no-coverage`: 21/21 passed.
+    - `npx jest test/unit/wm/goodsIssueMapper.test.js --no-coverage`: 8/8 passed.
+    - `npx jest test/unit/wm/goodsIssue201Posting.test.js --no-coverage`: 6/6 passed.
+    - `npx jest test/integration/wm/goodsIssue201PostReversal.test.js --no-coverage`: 2/2 passed.
+    - `npx jest test/unit/wm/ test/integration/wm/ --no-coverage`: 19/19 test suites passed, 402/402 tests passed (100% green).
+    - `git diff --check`: Clean (0 errors).
+  - **Next recommended action**: Stage, commit, and push the verified changes to `origin/feature/CL01`.
+
 ## Next Steps
-0. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue`):
+0. Movement 201 Backend & Reversal (Route `#/wm/goods-issue`):
+   - Pure validation, domain normalization, S/4 OData V2 mapping, serial ESTO pre-check, CancelHeader reversal, queue manager persistence, and CAP handler fully implemented and verified with 402 passing WM tests.
+   - Next: Connect UI Create 201 Wizard steps (Cost Center selection, item entry, optional G/L, serial scan) to the new backend endpoints.
+1. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue` and `#/dashboard` EWM tab):
    - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.
    - Shows type label, total count, today's count, and click-to-filter toggle linking to the recent documents table.
    - Verified with real backend S/4HANA aggregated data (54 for 201, 9671 for 261, 3020 for 301, 1052 for 311, 13797 overall) and 360 passing unit tests (100% green).
-1. WM Goods Issue Serial Number Scanning (Route `#/wm/goods-issue`):
-   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (360 total WM tests).
-   - Handles single/multi-serial scanning, duplicate prevention, count matching validation, barcode scanner suffix stripping, and S/4HANA `API_MATERIAL_DOCUMENT_SRV` `to_SerialNumbers` deep insert.
-2. WM Transfer Order Implementation:
+2. WM Goods Issue Serial Number Scanning (Route `#/wm/goods-issue`):
+   - Fully implemented, verified against live DS4 Client 220, and covered with 132 passing Goods Issue tests (402 total WM tests).
+   - Handles single/multi-serial scanning, duplicate prevention, count matching validation, barcode scanner suffix stripping, ESTO status pre-check, and S/4HANA `API_MATERIAL_DOCUMENT_SRV` `to_SerialNumbers` deep insert.
+3. WM Transfer Order Implementation:
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.
-3. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
-4. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
-5. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
-6. Select next development-ready capability to build from the verified list:
+4. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
+5. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
+6. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
+7. Select next development-ready capability to build from the verified list:
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)
    - Reservation creation (`UI_RESERVATION_ITM_MNG_V2`)
-7. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
-8. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
+8. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
+9. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.

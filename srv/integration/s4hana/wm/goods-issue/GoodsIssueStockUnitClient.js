@@ -1629,6 +1629,114 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       Unit: baseUnit
     };
   }
+
+  /**
+   * Pre-check serial number stock status (must be ESTO / unrestricted stock, not already issued).
+   *
+   * @param {string} material
+   * @param {string} plant
+   * @param {string} storageLocation
+   * @param {Array<string>} serialNumbers
+   * @returns {Promise<{ valid: boolean }>}
+   */
+  async validateSerialStatus(material, plant, storageLocation, serialNumbers) {
+    if (!Array.isArray(serialNumbers) || serialNumbers.length === 0) {
+      return { valid: true };
+    }
+
+    const matClean = String(material || '').replace(/^0+/, '').trim();
+    const matPadded = String(material || '').trim().padStart(18, '0');
+    const targetPlant = String(plant || '').trim().toUpperCase();
+    const targetSLoc = String(storageLocation || '').trim().toUpperCase();
+
+    for (const rawSerial of serialNumbers) {
+      const sSerial = String(rawSerial || '').trim();
+      if (!sSerial) continue;
+
+      let serialRecord = null;
+      try {
+        const serialFilter = `SerialNumber eq '${encodeURIComponent(sSerial)}' and Material eq '${encodeURIComponent(matClean)}'`;
+        const rows = await this._get(
+          '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber',
+          `$filter=${encodeURIComponent(serialFilter)}&$format=json`
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          serialRecord = rows[0];
+        }
+      } catch (odataErr) {
+        LOG.warn(`UI_MATERIALSERIALNUMBER query failed for serial ${sSerial}: ${odataErr.message}`);
+      }
+
+      // Check RFC fallback if OData did not return
+      if (!serialRecord && this.rfc && typeof this.rfc.readTable === 'function') {
+        try {
+          const equiRows = await this.rfc.readTable('EQUI', ['EQUNR', 'SERNR', 'MATNR', 'WERK', 'LAGER'], [
+            `SERNR = '${sSerial}'`,
+            `AND ( MATNR = '${matClean}' OR MATNR = '${matPadded}' )`
+          ]);
+          if (Array.isArray(equiRows) && equiRows.length > 0) {
+            const equi = equiRows[0];
+            let isEsto = false;
+            try {
+              const objnr = `IE${equi.EQUNR}`;
+              const jestRows = await this.rfc.readTable('JEST', ['OBJNR', 'STAT', 'INACT'], [
+                `OBJNR = '${objnr}'`,
+                `AND STAT = 'I0184'`,
+                `AND INACT = ''`
+              ]);
+              isEsto = Array.isArray(jestRows) && jestRows.length > 0;
+            } catch (_jestErr) {
+              isEsto = true;
+            }
+            serialRecord = {
+              Material: equi.MATNR,
+              SerialNumber: equi.SERNR,
+              Plant: equi.WERK || targetPlant,
+              StorageLocation: equi.LAGER || targetSLoc,
+              InventoryStockType: isEsto ? '01' : '02',
+              InventoryStockType_Text: isEsto ? 'Unrestricted-Use Stock' : 'Not in Stock (ESTO)'
+            };
+          }
+        } catch (_rfcErr) {
+          // RFC fallback failed
+        }
+      }
+
+      if (serialRecord) {
+        const serPlant = (serialRecord.Plant || '').trim().toUpperCase();
+        const serSLoc = (serialRecord.StorageLocation || '').trim().toUpperCase();
+        const serStockType = (serialRecord.InventoryStockType || '').trim();
+
+        if (targetPlant && serPlant && serPlant !== targetPlant) {
+          const err = new Error(
+            `Serial Number "${sSerial}" is located in Plant ${serPlant}, but Goods Issue requires Plant ${targetPlant}. Goods Issue is blocked.`
+          );
+          err.status = 409;
+          throw err;
+        }
+
+        if (targetSLoc && serSLoc && serSLoc !== targetSLoc) {
+          const err = new Error(
+            `Serial Number "${sSerial}" is located in Storage Location ${serSLoc}, but Goods Issue requires Storage Location ${targetSLoc}. Goods Issue is blocked.`
+          );
+          err.status = 409;
+          throw err;
+        }
+
+        // Unrestricted-Use Stock Status (ESTO) Check
+        if (serStockType && serStockType !== '01') {
+          const statusText = serialRecord.InventoryStockType_Text || serStockType;
+          const err = new Error(
+            `Serial Number "${sSerial}" is already issued or not in unrestricted stock (Status: ${statusText}). Serial numbers for Goods Issue must have status In-Stock (ESTO). Goods Issue is blocked.`
+          );
+          err.status = 422;
+          throw err;
+        }
+      }
+    }
+
+    return { valid: true };
+  }
 }
 
 module.exports = GoodsIssueStockUnitClient;

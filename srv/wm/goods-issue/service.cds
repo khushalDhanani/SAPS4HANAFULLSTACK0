@@ -133,6 +133,16 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         SyncStatus        : String(30);
     };
 
+    type GIReversalResult {
+        OriginalMaterialDocument : String(10);
+        OriginalMaterialDocYear  : String(4);
+        ReversalMaterialDocument : String(10);
+        ReversalMaterialDocYear  : String(4);
+        PostingDate              : Date;
+        Success                  : Boolean;
+        Message                  : String(500);
+    };
+
     type GIComponentItem {
         ReservationNo   : String(10);
         ReservationItem : String(4);
@@ -212,7 +222,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DifferenceStorageType : String(3);
         FinalIssue            : Boolean;
         CostCenter            : String(10);
+        GLAccount             : String(10);
         SerialNumber          : String(18);
+        PostingDate           : Date;
+        DocumentDate          : Date;
         SyncStatus            : String(30);
         SyncAttempts          : Integer;
         LastSyncError         : String(500);
@@ -266,9 +279,21 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         ReceivingPlant        : String(4),
         ReceivingStorageLocation : String(4),
         CostCenter            : String(10),
+        GLAccount             : String(10),
+        PostingDate           : Date,
+        DocumentDate          : Date,
         SerialNumbers         : array of String(18),
         SerialNumber          : String(18)
     ) returns GIPostResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action reverseGoodsIssue(
+        MaterialDocument : String(10),
+        MaterialDocYear  : String(4),
+        PostingDate      : Date,
+        DocumentDate     : Date,
+        ReversalReason   : String(4)
+    ) returns GIReversalResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action submitGoodsIssueRequest(

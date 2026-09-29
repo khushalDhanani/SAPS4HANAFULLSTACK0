@@ -1,6 +1,8 @@
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
 const { extractFilterParam, applyPaging } = require('../../../common/filterUtils');
+const { validateGoodsIssuePayload, validateReversalPayload } = require('../validation/goodsIssue.validation');
+const { normalizeGoodsIssuePayload, normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
@@ -97,61 +99,77 @@ class GoodsIssueHandler {
 
     // ACTION: postGoodsIssue (Single-line posting with automated Dispatch Queue fallback)
     srv.on('postGoodsIssue', async (req) => {
-      const {
-        ReservationNo,
-        ReservationItem,
-        Material,
-        IssueQty,
-        Unit,
-        Batch,
-        DifferenceQty,
-        DifferenceReason,
-        DifferenceStorageType,
-        FinalIssue,
-        OrderNo,
-        MaterialDesc,
-        Plant,
-        StorageLocation,
-        MovementType,
-        ReceivingPlant,
-        ReceivingStorageLocation
-      } = req.data;
-      // CostCenter is passed separately for 201 (not a standard destructured field in 261)
-      const CostCenter = req.data.CostCenter || '';
-      const SerialNumbers = req.data.SerialNumbers || (req.data.SerialNumber ? [req.data.SerialNumber] : []);
-      const SerialNumber = req.data.SerialNumber || (SerialNumbers[0] || '');
+      // 1. Business validation via validation layer
+      const valResult = validateGoodsIssuePayload(req.data);
+      if (!valResult.isValid) {
+        return req.error(400, valResult.message);
+      }
+
+      // 2. Normalization via domain mapper
+      const normalized = normalizeGoodsIssuePayload(req.data, { user: req.user?.id });
+
+      // 3. Server-side Stock Pre-Check (block when SAP verified stock is insufficient)
+      if (typeof GoodsIssueAdapter.revalidateStockBeforePosting === 'function' && normalized.MovementType === '201') {
+        try {
+          const stockCheck = await GoodsIssueAdapter.revalidateStockBeforePosting(
+            normalized.Material,
+            normalized.Plant,
+            normalized.StorageLocation,
+            normalized.Batch,
+            normalized.IssueQty
+          );
+          if (stockCheck && stockCheck.StockReadSuccess === true && stockCheck.StockSufficient === false) {
+            return req.error(422, stockCheck.Message || `Insufficient stock for material ${normalized.Material} in plant ${normalized.Plant} storage location ${normalized.StorageLocation}`);
+          }
+        } catch (stockErr) {
+          if (stockErr.status === 422) {
+            return req.error(422, stockErr.message);
+          }
+        }
+      }
+
+      // 4. Server-side Serial Status Pre-Check (must be ESTO — in stock, not already issued)
+      if (normalized.SerialNumbers && normalized.SerialNumbers.length > 0 && typeof GoodsIssueAdapter.validateSerialStatus === 'function') {
+        try {
+          await GoodsIssueAdapter.validateSerialStatus(
+            normalized.Material,
+            normalized.Plant,
+            normalized.StorageLocation,
+            normalized.SerialNumbers
+          );
+        } catch (serErr) {
+          if (serErr.status === 422 || serErr.status === 409) {
+            return req.error(serErr.status, serErr.message);
+          }
+        }
+      }
+
       const postOptions = {
-        movementType: MovementType || GI_MOVEMENT_TYPE,
-        receivingPlant: ReceivingPlant,
-        receivingStorageLocation: ReceivingStorageLocation,
-        costCenter: CostCenter,
-        serialNumbers: SerialNumbers,
-        serialNumber: SerialNumber
+        movementType: normalized.MovementType,
+        receivingPlant: normalized.ReceivingPlant,
+        receivingStorageLocation: normalized.ReceivingStorageLocation,
+        costCenter: normalized.CostCenter,
+        glAccount: normalized.GLAccount,
+        postingDate: normalized.PostingDate,
+        documentDate: normalized.DocumentDate,
+        serialNumbers: normalized.SerialNumbers,
+        serialNumber: normalized.SerialNumber
       };
-
-      if (!ReservationNo || !ReservationItem) {
-        return req.error(400, 'ReservationNo and ReservationItem are required');
-      }
-
-      const nQty = Number(IssueQty);
-      if (isNaN(nQty) || nQty <= 0) {
-        return req.error(400, 'IssueQty must be a positive decimal number');
-      }
 
       try {
         const result = await GoodsIssueAdapter.postGoodsIssue(
-          ReservationNo,
-          ReservationItem,
-          Material,
-          nQty,
-          Unit,
-          Batch,
-          DifferenceQty,
-          DifferenceReason,
-          DifferenceStorageType,
-          FinalIssue,
-          Plant,
-          StorageLocation,
+          normalized.ReservationNo,
+          normalized.ReservationItem,
+          normalized.Material,
+          normalized.IssueQty,
+          normalized.Unit,
+          normalized.Batch,
+          normalized.DifferenceQty,
+          normalized.DifferenceReason,
+          normalized.DifferenceStorageType,
+          normalized.FinalIssue,
+          normalized.Plant,
+          normalized.StorageLocation,
           postOptions
         );
         return Object.assign({
@@ -160,9 +178,9 @@ class GoodsIssueHandler {
           SyncStatus: 'POSTED_IN_SAP'
         }, result);
       } catch (err) {
-        // If client validation error (400) or SLED block, fail immediately
-        if (err.status === 400) {
-          return req.error(400, err.message || 'Validation failed for Goods Issue');
+        // If client validation error (400) or business error (422), fail immediately
+        if (err.status === 400 || err.status === 422) {
+          return req.error(err.status, err.message || 'Validation failed for Goods Issue');
         }
 
         // If backend posting capability is unavailable (501 / 403 / 404), route to the Dispatch Queue.
@@ -171,25 +189,28 @@ class GoodsIssueHandler {
           let queueRecord;
           try {
             queueRecord = await GoodsIssueQueueManager.enqueue({
-              ReservationNo,
-              ReservationItem,
-              OrderNo,
-              Material,
-              MaterialDesc,
-              Plant,
-              StorageLocation,
-              IssueQty: nQty,
-              Unit,
-              Batch,
-              DifferenceQty,
-              DifferenceReason,
-              DifferenceStorageType,
-              FinalIssue,
+              ReservationNo: normalized.ReservationNo,
+              ReservationItem: normalized.ReservationItem,
+              OrderNo: normalized.OrderNo,
+              Material: normalized.Material,
+              MaterialDesc: normalized.MaterialDesc,
+              Plant: normalized.Plant,
+              StorageLocation: normalized.StorageLocation,
+              IssueQty: normalized.IssueQty,
+              Unit: normalized.Unit,
+              Batch: normalized.Batch,
+              DifferenceQty: normalized.DifferenceQty,
+              DifferenceReason: normalized.DifferenceReason,
+              DifferenceStorageType: normalized.DifferenceStorageType,
+              FinalIssue: normalized.FinalIssue,
               MovementType: postOptions.movementType,
-              ReceivingPlant,
-              ReceivingStorageLocation,
-              CostCenter,
-              SerialNumber,
+              ReceivingPlant: normalized.ReceivingPlant,
+              ReceivingStorageLocation: normalized.ReceivingStorageLocation,
+              CostCenter: normalized.CostCenter,
+              GLAccount: normalized.GLAccount,
+              PostingDate: normalized.PostingDate,
+              DocumentDate: normalized.DocumentDate,
+              SerialNumber: normalized.SerialNumber,
               LastSyncError: err.message
             });
           } catch (queueErr) {
@@ -200,15 +221,15 @@ class GoodsIssueHandler {
           }
 
           return {
-            ReservationNo: String(ReservationNo),
-            ReservationItem: String(ReservationItem).padStart(4, '0'),
+            ReservationNo: String(normalized.ReservationNo || ''),
+            ReservationItem: String(normalized.ReservationItem || ''),
             MaterialDocument: '',
             MaterialDocYear: '',
             TransferOrder: '',
             DifferenceCleared: false,
-            DifferenceQty: Number(DifferenceQty) || 0,
-            SerialNumber,
-            SerialNumbers,
+            DifferenceQty: Number(normalized.DifferenceQty) || 0,
+            SerialNumber: normalized.SerialNumber,
+            SerialNumbers: normalized.SerialNumbers,
             Success: true,
             Queued: true,
             QueueReference: queueRecord.QueueReference,
@@ -218,6 +239,29 @@ class GoodsIssueHandler {
         }
 
         return req.error(err.status || 400, err.message || 'Failed to post Goods Issue in S/4HANA');
+      }
+    });
+
+    // ACTION: reverseGoodsIssue (Material Document Reversal via CancelHeader FunctionImport)
+    srv.on('reverseGoodsIssue', async (req) => {
+      const valResult = validateReversalPayload(req.data);
+      if (!valResult.isValid) {
+        return req.error(400, valResult.message);
+      }
+
+      const normalized = normalizeReversalPayload(req.data, { user: req.user?.id });
+
+      try {
+        const result = await GoodsIssueAdapter.reverseGoodsIssue(
+          normalized.MaterialDocument,
+          normalized.MaterialDocYear,
+          normalized.PostingDate,
+          normalized.DocumentDate,
+          normalized.ReversalReason
+        );
+        return result;
+      } catch (err) {
+        return req.error(err.status || 500, err.message || 'Failed to reverse Material Document in S/4HANA');
       }
     });
 

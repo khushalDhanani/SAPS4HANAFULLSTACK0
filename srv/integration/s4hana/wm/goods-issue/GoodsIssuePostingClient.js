@@ -1,6 +1,8 @@
 const LOG = require('../../logger')('goods-issue-posting');
 const s4Config = require('../../s4Config');
+const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
+const GoodsIssueMapper = require('./GoodsIssueMapper');
 
 /**
  * Domain client for SAP S/4HANA Goods Issue Posting and Batch Submission.
@@ -45,7 +47,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       }
     }
 
-    if (!sReserv || !sItem) {
+    if (sMvt !== '201' && (!sReserv || !sItem)) {
       const err = new Error('ReservationNo and ReservationItem are required for Goods Issue');
       err.status = 400;
       throw err;
@@ -126,44 +128,29 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV
       try {
         const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
-        const v2Item = {
-          Material: material || '',
-          GoodsMovementType: sMvt,
-          EntryUnit: effectiveUnit,
-          QuantityInEntryUnit: String(nQty),
-          Reservation: sReserv,
-          ReservationItem: sItem,
-          Batch: effectiveBatch || ''
-        };
-        if (plant) v2Item.Plant = plant;
-        if (storageLocation) v2Item.StorageLocation = storageLocation;
-        // CostCenter is mandatory for movement type 201 (Goods Issue to Cost Center)
-        if (sMvt === '201' && sCostCenter) v2Item.CostCenter = sCostCenter;
-        // Transfer target; when empty SAP takes it from the reservation.
-        if (sRecvPlant) v2Item.IssuingOrReceivingPlant = sRecvPlant;
-        if (sRecvSLoc) v2Item.IssuingOrReceivingStorageLoc = sRecvSLoc;
-
         const aSerials = Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
           ? options.serialNumbers
           : options.serialNumber
             ? [options.serialNumber]
             : [];
-        if (aSerials.length > 0) {
-          v2Item.to_SerialNumbers = {
-            results: aSerials.map((sn) => ({ SerialNumber: String(sn).trim() }))
-          };
-        }
-
-        const v2Payload = {
-          // 03 = goods issue (201 cost center, 261 order), 04 = transfer posting (301, 311)
-          GoodsMovementCode: (sMvt === '201' || sMvt === '261') ? '03' : '04',
-          PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
-          DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
-          MaterialDocumentHeaderText: `${sMvt === '201' ? 'GI CC' : sMvt === '261' ? 'GI' : `TP ${sMvt}`} Resv ${sReserv}`,
-          to_MaterialDocumentItem: {
-            results: [v2Item]
-          }
-        };
+        const v2Payload = GoodsIssueMapper.mapToMaterialDocumentPayload({
+          MovementType: sMvt,
+          Material: material || '',
+          Plant: plant || '',
+          StorageLocation: storageLocation || '',
+          IssueQty: nQty,
+          Unit: effectiveUnit,
+          CostCenter: sCostCenter,
+          GLAccount: options.glAccount || options.GLAccount || '',
+          ReservationNo: sReserv,
+          ReservationItem: sItem,
+          Batch: effectiveBatch || '',
+          ReceivingPlant: sRecvPlant,
+          ReceivingStorageLocation: sRecvSLoc,
+          SerialNumbers: aSerials,
+          PostingDate: options.postingDate || options.PostingDate,
+          DocumentDate: options.documentDate || options.DocumentDate
+        });
         const v2Res = await this._post(v2Path, v2Payload);
         const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
         const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
@@ -411,6 +398,52 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const postingError = new Error(message);
     postingError.status = 501;
     return postingError;
+  }
+
+  /**
+   * Reverse an existing Material Document in SAP S/4HANA via CancelHeader FunctionImport.
+   *
+   * @param {string} materialDocument - 10-digit SAP material document
+   * @param {string} materialDocYear - 4-digit fiscal year
+   * @param {string} [postingDate] - Optional posting date (YYYY-MM-DD)
+   * @param {string} [documentDate] - Optional document date (YYYY-MM-DD)
+   * @param {string} [reversalReason] - Optional reason code
+   * @returns {Promise<{ OriginalMaterialDocument: string, OriginalMaterialDocYear: string, ReversalMaterialDocument: string, ReversalMaterialDocYear: string, PostingDate: string, Success: boolean, Message: string }>}
+   */
+  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
+    const sDoc = String(materialDocument || '').trim();
+    const sYear = String(materialDocYear || '').trim();
+    if (!sDoc || !sYear) {
+      const err = new Error('MaterialDocument and MaterialDocYear are required for reversal');
+      err.status = 400;
+      throw err;
+    }
+
+    const dest = await this._getDestination();
+    if (!dest) {
+      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
+      err.status = 502;
+      throw err;
+    }
+
+    const cancelUrl = GoodsIssueMapper.mapToCancelHeaderUrl(sDoc, sYear, postingDate);
+    try {
+      const response = await this._post(cancelUrl, {});
+      const revMatDoc = response.MaterialDocument || response.d?.MaterialDocument || response.CancelHeader?.MaterialDocument;
+      const revMatYear = response.MaterialDocumentYear || response.d?.MaterialDocumentYear || sYear;
+
+      return {
+        OriginalMaterialDocument: sDoc,
+        OriginalMaterialDocYear: sYear,
+        ReversalMaterialDocument: revMatDoc || sDoc,
+        ReversalMaterialDocYear: revMatYear,
+        PostingDate: postingDate || new Date().toISOString().split('T')[0],
+        Success: true,
+        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via CancelHeader.${revMatDoc ? ` Reversal Document: ${revMatDoc}/${revMatYear}.` : ''}`
+      };
+    } catch (err) {
+      throw S4ErrorMapper.mapS4Error(err, 'reverseGoodsIssue');
+    }
   }
 }
 
