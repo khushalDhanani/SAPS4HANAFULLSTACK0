@@ -438,20 +438,20 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(5);
         });
 
-        it('navigates to create flow with selected movement type for 201, 261, 301, 311', () => {
+        it('navigates each "New X" action to its dedicated per-type create page (not the generic one)', () => {
             controller.onInit();
 
             controller.onNavigateToCreate201();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssueCreateMode', { mode: '201' });
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201');
 
             controller.onNavigateToCreate261();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssueCreateMode', { mode: '261' });
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261');
 
             controller.onNavigateToCreate301();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssueCreateMode', { mode: '301' });
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301');
 
             controller.onNavigateToCreate311();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssueCreateMode', { mode: '311' });
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311');
         });
 
         it('opens document detail dialog when clicking a row in any of the 4 tables', async () => {
@@ -476,7 +476,7 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             controller._getModel().setProperty('/selectedDocument', { MovementType: '301' });
 
             controller.onNavigateToCreateFromDetail();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssueCreateMode', { mode: '301' });
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301');
         });
 
         it('navigates back to main overview', () => {

@@ -5791,6 +5791,42 @@
   - `git diff --check`: Clean (0 errors).
 - **Next recommended action**: Stage, commit, and push the verified changes to `origin/feature/CL01`.
 
+## 2026-09-29 12:40 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Audit the EWM dashboard tab per movement type (201/261/301/311) across data, pages, and UI — KPI tile counts, recent-postings filtering, chart mapping, navigation, i18n, and empty/loading/error states. Report findings first (Issue | Type | Root Cause | Fix table), then fix. Do not touch non-EWM tabs or the 201/261/301/311 posting pages themselves — only how the dashboard reads/displays their data.
+- **Audit result (6 dimensions traced view → controller → model → CAP service → RFC client)**:
+  - **#1 KPI tiles** — CORRECT. Both the Dashboard EWM tab tiles and the GI dashboard tiles map `Kpis.Mvt{201,261,301,311}` to the matching tile; counts come from the live `BWART IN ('201','261','301','311')` MATDOC read. No wrong/0/cross-type value.
+  - **#2 Recent postings** — CORRECT. Each of the 4 tables loads via its own server-side `MovementType`-filtered `getDashboardData(...,sType)` call (`BWART = sMovementType`), with correct per-type columns (201→Cost Center, 261→Order, 301/311→Receiving Plant/SLoc). No cross-type leakage.
+  - **#3 Charts** — CORRECT. Distribution donuts / trend sparklines keyed by `MovementType` / `Count{type}`, fixed per-type colors, correct legends. No mislabel or double-count beyond the consistent line-item basis.
+  - **#4 Navigation** — TWO DEFECTS FOUND (see fixes F1, F2 below).
+  - **#5 i18n** — CORRECT for the 4 movement types (all keys resolve in both bundles, labels correctly mapped). Non-defect note: non-movement `Goods Receipt (101)` / `TO Creation (ZTO)` tiles use hardcoded English (renders correctly, just not translatable) — left as-is (out of 201/261/301/311 scope).
+  - **#6 States** — CORRECT. Each recent table has independent busy/error/noData state; a failure in one type does not blank the others. Distribution/trend share the combined call's `/error`, surfaced by the top error strip (not silent).
+- **Changes (fixes implemented)**:
+  - **F1 (primary defect, all 4 types)**: The GI dashboard's "New 201/261/301/311" buttons all routed to the shared generic create page (`wmGoodsIssueCreateMode` → `GoodsIssue` view); the dedicated per-type pages (`GoodsIssue201/261/301/311`, routes `wmGoodsIssue201`…`311`) were fully built but orphaned (nothing navigated to them). Root cause: `_navigateToCreate` hardcoded `wmGoodsIssueCreateMode` for every mode. Fix: added `CREATE_ROUTE_BY_TYPE` map and route each type to its dedicated page. File: `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueDashboard.controller.js` (added map at ~L19; `_navigateToCreate` ~L269). This also fixes the doc-detail "create" path (`onNavigateToCreateFromDetail`).
+  - **F2 (minor defect, Dashboard EWM tab, all 4 types)**: Pressing an EWM KPI tile showed toast "Filtered: Movement {0}" but applied no filter (the GI dashboard's toggle filter was removed in favor of 4 permanent tables). Root cause: `_navigateToGiFiltered` in `app/fiori-app/webapp/controller/Dashboard.controller.js` (~L407). Fix: honest toast via new key `dashboardMvtOpenPostings` ("Opening movement {0} postings"); navigation target unchanged (GI dashboard is the correct destination for a count tile).
+  - **i18n**: added key `dashboardMvtOpenPostings` to both `i18n.properties` and `i18n_en.properties` (key parity maintained).
+  - **Tests**: updated `test/unit/wm/goodsIssueDashboardController.test.js` — the existing test asserted the buggy behavior (`wmGoodsIssueCreateMode {mode:'X'}`); corrected to assert dedicated routes (`wmGoodsIssue201`…`311`) and the doc-detail create route (`wmGoodsIssue301`).
+- **Files changed**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueDashboard.controller.js`
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssueDashboardController.test.js`
+  - (Did NOT touch the 201/261/301/311 posting pages, non-EWM tabs, or backend service.)
+- **Executed commands & results**:
+  - `npx jest test/unit/wm/goodsIssueDashboardController.test.js test/unit/dashboard/dashboardMvtKpi.test.js test/unit/wm/goodsIssueDashboardClient.test.js --no-coverage`: 44/44 passed.
+  - `npx jest test/unit/wm/ test/unit/dashboard/ test/integration/wm/ --no-coverage`: 25/25 suites, 519/519 tests passed (100% green).
+  - `npm --prefix app/fiori-app run lint`: Success — no findings.
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 1.04 s.
+  - `git diff --check`: Clean (0 errors).
+- **Live run validation (per AGENTS.md "Run"): booted CAP server + drove the Fiori app in a browser against live S/4HANA (user KHUSHAL, S4HANA connected)**:
+  - Dashboard → **Warehouse (EWM)** tab: 4 movement-type KPI tiles render live per-type figures — 201=54, 261=9671, 301=3024, 311=1052, correct headers/subheaders, no cross-type value. (#1 confirmed live.)
+  - **F2 verified**: pressing the 201 KPI tile navigates to `#/wm/goods-issue` (no false "Filtered" claim; honest toast wired).
+  - **F1 verified live**: "New Goods Issue (201)" opened `#/wm/goods-issue/cost-center-201` and rendered the dedicated "Goods Issue to Cost Center (Movement 201)" page; "New Transfer (301)" opened `#/wm/goods-issue/plant-transfer-301`. Before the fix these went to the shared generic page. The previously-orphaned dedicated pages are now reachable.
+  - GI dashboard: 5 KPI tiles, 8 chart SVGs (4 distribution donuts + 4 trend sparklines), and 4 populated per-type recent-postings tables (correct per-type columns incl. Receiving Plant/SLoc for 301/311); no error strip.
+- **Runtime issue found and resolved during the run (not caused by these changes)**: the dev server already running on :4004 was started at 09:38 IST, ~3h before the `movementType` parameter was added to `getDashboardData` (commit 9d28d1c, 12:22 IST). The stale in-memory model rejected the GI dashboard's `getDashboardData(...,movementType='...')` calls with `Property "movementType" does not exist in saps4hana.wm.GoodsIssueService.getDashboardData`, blanking the GI-dashboard tiles/charts/tables. On-disk `service.cds:522` defines the param correctly. Restarting the server on current sources cleared the error and all GI-dashboard data loaded from SAP. Root cause = stale running process, not a code defect; `cds-serve` does not hot-reload model changes.
+- **Next recommended action**: Stage, commit, and push the verified changes to `origin/feature/CL01`. (Operational note: restart any long-lived `cds-serve` dev instance after model/`.cds` changes — it will not hot-reload.)
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

@@ -16,6 +16,14 @@ sap.ui.define([
         "301": "panelRecent301",
         "311": "panelRecent311"
     };
+    // Each movement type has its own dedicated create page/route; the "New X" actions must open
+    // that page, not the shared generic GoodsIssue page (route wmGoodsIssueCreateMode).
+    var CREATE_ROUTE_BY_TYPE = {
+        "201": "wmGoodsIssue201",
+        "261": "wmGoodsIssue261",
+        "301": "wmGoodsIssue301",
+        "311": "wmGoodsIssue311"
+    };
 
     return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssueDashboard", {
         onInit: function () {
@@ -261,7 +269,8 @@ sap.ui.define([
 
         _navigateToCreate: function (sMode) {
             var oRouter = this.getOwnerComponent().getRouter();
-            oRouter.navTo("wmGoodsIssueCreateMode", { mode: sMode || "261" });
+            var sRoute = CREATE_ROUTE_BY_TYPE[sMode] || CREATE_ROUTE_BY_TYPE["261"];
+            oRouter.navTo(sRoute);
         },
 
         onNavBackToOverview: function () {

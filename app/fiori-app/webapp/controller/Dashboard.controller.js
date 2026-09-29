@@ -400,15 +400,17 @@ sap.ui.define([
         },
 
         /**
-         * Navigates to the Goods Issue dashboard and applies a movement-type filter.
+         * Opens the Goods Issue dashboard, which shows a dedicated recent-postings section per
+         * movement type. No client filter is applied (the dashboard has none); the toast only
+         * confirms which movement type the user opened.
          * @param {string} sMvtType - "201", "261", "301", or "311"
          * @private
          */
         _navigateToGiFiltered: function (sMvtType) {
             this.getOwnerComponent().getRouter().navTo("wmGoodsIssue", {}, undefined);
             MessageToast.show(this._text(
-                "dashboardMvtFilterActive",
-                "Filtered: Movement {0}",
+                "dashboardMvtOpenPostings",
+                "Opening movement {0} postings",
                 [sMvtType]
             ));
         },
