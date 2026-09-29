@@ -277,16 +277,6 @@
           "target": "TargetGoodsIssueDashboard"
         },
         {
-          "name": "wmGoodsIssueCreate",
-          "pattern": "wm/goods-issue/create",
-          "target": "TargetGoodsIssueCreate"
-        },
-        {
-          "name": "wmGoodsIssueCreateMode",
-          "pattern": "wm/goods-issue/create/{mode}",
-          "target": "TargetGoodsIssueCreate"
-        },
-        {
           "name": "wmGoodsIssue201",
           "pattern": "wm/goods-issue/cost-center-201",
           "target": "TargetGoodsIssue201"
@@ -399,11 +389,6 @@
         "TargetGoodsIssueDashboard": {
           "id": "goodsIssueDashboard",
           "name": "GoodsIssueDashboard",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssueCreate": {
-          "id": "goodsIssueCreate",
-          "name": "GoodsIssue",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue201": {

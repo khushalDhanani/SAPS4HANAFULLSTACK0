@@ -5898,6 +5898,31 @@
   - These are a well-scoped follow-up cleanup requiring careful test migration; the isolation objective is already met on every live path.
 - **Next recommended action**: Decide whether to do the shared-stack + legacy-page deletion cleanup now (needs the test migration above) or leave the dead code in place. Independently: commit/push, and pursue DS4 Gateway activation for real SAP persistence.
 
+## 2026-09-29 16:30 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Approved — "delete both now" (shared backend stack + legacy generic create page). Completes Stage 2.
+- **Shared backend stack removed (no shared MovementType-branching logic remains on any path or the CAP surface)**:
+  - Deleted the shared `postGoodsIssue` CAP action (`service.cds`) and its `srv.on('postGoodsIssue')` handler (`goodsIssue.handler.js`); trimmed the now-unused `validateGoodsIssuePayload`/`normalizeGoodsIssuePayload` imports.
+  - Deleted the shared branched `validateGoodsIssuePayload` from `goodsIssue.validation.js` (kept `validateReversalPayload` + `isValidCalendarDate`) and the shared branched `mapToMaterialDocumentPayload` from `GoodsIssueMapper.js` (kept `formatDateToODataV2` + `mapToCancelHeaderUrl` for reversal).
+  - Replaced the shared branched client `postGoodsIssue` positional method with a thin `@deprecated` shim that normalizes positional args → domain object → `postByMovementType` (isolated dispatcher). No movement-type business logic in the shim; retained only for the queue-replay path and back-compat callers/tests.
+  - Fixed two parity bugs surfaced by migration: `ReservationItem` now zero-padded in `s4common.buildBaseItem`; `post261` checks reservation presence before the qty/unit guard (and pads only non-empty items - `''.padStart(4,'0')` was wrongly yielding `'0000'`).
+  - Scope note: single-line short-pick difference clearing is not exposed by the isolated per-type actions (frontend never sent it); it remains only on the multi-line `submitGoodsIssueRequest` path.
+- **Legacy generic create page deleted**:
+  - Removed `GoodsIssue.view.xml` + `GoodsIssue.controller.js` (the 1,755-line `mode`-branched page) and routes `wmGoodsIssueCreate`/`wmGoodsIssueCreateMode` + target `TargetGoodsIssueCreate` (`manifest.json`).
+  - **Correction during work**: initially also deleted `GoodsIssueService.js` and its `Component.js` wiring, but a live reload showed the GI **dashboard** controller depends on `GoodsIssueService.getDashboardData`/`getQueueSummary` (404 → dashboard failed to load). Restored both via `git checkout`; `GoodsIssueService` is a shared dashboard data service, not legacy-only. Only the page (view/controller) + routes were removed.
+- **Test migration (suite kept green)**:
+  - `goodsIssueService.test.js`, `goodsIssueQueueManager.test.js`: register `PerTypeGoodsIssueHandler` + retarget the shared-handler tests to `postGoodsIssue261`; retry/drain to `postGoodsIssueByType`.
+  - `goodsIssueQueue.test.js`, `goodsIssue201PostReversal.test.js`: retarget POSTs to `/postGoodsIssue261` / `/postGoodsIssue201` with per-type fields; positional→object adapter-call assertion for 201.
+  - `goodsIssueValidation.test.js`: removed the `validateGoodsIssuePayload` describes (kept `isValidCalendarDate` + reversal); `goodsIssueMapper.test.js`: removed the `mapToMaterialDocumentPayload` tests (kept normalize + formatDate + cancel-url); `goodsIssueClients.test.js`: updated 201/261/311 client tests to the isolated behavior.
+  - Deleted `goodsIssueController.test.js` (tested the removed legacy controller).
+- **Executed commands & results**:
+  - `npx cds compile srv`: OK (only the 4 per-type actions remain; shared action gone).
+  - `npx jest test/unit test/integration --no-coverage`: **109 suites, 1608/1608 passed**.
+  - `npx eslint srv`: 0 errors (2 pre-existing warnings, untouched `reverseGoodsIssue`). `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. `git diff --check`: clean.
+- **Live verification (running CAP, live S/4HANA)**: app bootstraps clean after legacy removal — GI dashboard renders live per-type data (201=54, 261=9671, 301=3024, 311…), **no console errors**; "New Transfer (301)" opens `#/wm/goods-issue/plant-transfer-301` (dedicated routing intact). Earlier in the session the isolated `POST /postGoodsIssue261` was live-verified end to end (200, honest QUEUED).
+- **Result**: PHASE 1 complete. Each movement type (201/261/301/311) now has one fully isolated path — dedicated route → view → controller → model → service → per-type CAP action → per-type handler → per-type validation → per-type S/4 mapper → per-type posting-client method → S/4 entity. Shared code that remains is pure infrastructure (date/regex/HTTP transport, normalize, queue) or a thin dispatcher/shim with no movement-type business logic. Import-graph test enforces no per-type file imports another type's file.
+- **Next recommended action**: Commit/push to `origin/feature/CL01`. Pursue DS4 Gateway activation to validate real SAP-persisted postings end to end (still queue-only until then).
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

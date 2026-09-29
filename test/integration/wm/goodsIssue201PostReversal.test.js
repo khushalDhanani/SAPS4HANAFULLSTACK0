@@ -25,7 +25,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     });
 
     // 2. Mock S/4 posting & reversal methods on adapter
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockResolvedValue({
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockResolvedValue({
       ReservationNo: '',
       ReservationItem: '',
       MaterialDocument: '4900055001',
@@ -51,8 +51,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     // GLAccount is intentionally omitted here: for Movement 201 it is system-determined via
     // OBYC/GBB-VBR and the server now rejects any caller-supplied value (see goodsIssueValidation
     // and goodsIssueMapper tests for the rejection/stripping behavior itself).
-    const postRes = await POST(`${BASE}/postGoodsIssue`, {
-      MovementType: '201',
+    const postRes = await POST(`${BASE}/postGoodsIssue201`, {
       CostCenter: '1011101301',
       Material: '8000009753',
       Plant: '1120',
@@ -71,24 +70,17 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       Queued: false
     });
 
-    // Verify adapter call args
-    expect(GoodsIssueAdapter.postGoodsIssue).toHaveBeenCalledWith(
-      '',
-      '',
-      '8000009753',
-      1,
-      'EA',
-      '',
-      0,
-      '',
-      '',
-      false,
-      '1120',
-      'HS01',
+    // Verify the isolated 201 adapter method received the normalized 201 payload.
+    expect(GoodsIssueAdapter.postGoodsIssue201).toHaveBeenCalledWith(
       expect.objectContaining({
-        movementType: '201',
-        costCenter: '1011101301',
-        serialNumbers: ['MACBOOK-004']
+        MovementType: '201',
+        CostCenter: '1011101301',
+        Material: '8000009753',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        IssueQty: 1,
+        Unit: 'EA',
+        SerialNumbers: ['MACBOOK-004']
       })
     );
 
@@ -115,9 +107,8 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     // G/L account is system-determined via OBYC/GBB-VBR for cost-center consumption and must
     // never be caller-overridable for 201, even with a syntactically valid value.
     const res = await axios.post(
-      `${BASE}/postGoodsIssue`,
+      `${BASE}/postGoodsIssue201`,
       {
-        MovementType: '201',
         CostCenter: '1011101301',
         GLAccount: '0000400000',
         Material: '8000009753',
@@ -129,6 +120,8 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       { validateStatus: () => true }
     );
 
+    // The isolated 201 action does not even declare a GLAccount parameter, so a caller-supplied
+    // value is rejected outright (400) - the account stays system-determined (OBYC/GBB-VBR).
     expect(res.status).toBe(400);
     expect(res.data.error.message).toContain('GLAccount');
   });
@@ -137,12 +130,11 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     const unexpectedErr = new Error('S/4HANA Gateway timeout while revalidating stock');
     unexpectedErr.status = 504;
     jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockRejectedValue(unexpectedErr);
-    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue');
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201');
 
     const res = await axios.post(
-      `${BASE}/postGoodsIssue`,
+      `${BASE}/postGoodsIssue201`,
       {
-        MovementType: '201',
         CostCenter: '1011101301',
         Material: '8000009753',
         Plant: '1120',
@@ -173,9 +165,8 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     jest.spyOn(GoodsIssueAdapter, 'validateSerialStatus').mockRejectedValue(serErr);
 
     const res = await axios.post(
-      `${BASE}/postGoodsIssue`,
+      `${BASE}/postGoodsIssue201`,
       {
-        MovementType: '201',
         CostCenter: '1011101301',
         Material: '8000009753',
         Plant: '1120',

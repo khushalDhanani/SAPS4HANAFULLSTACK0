@@ -890,8 +890,10 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
 
       expect(res.Success).toBe(true);
       expect(res.MaterialDocument).toBe('4900009999');
-      expect(res.DifferenceCleared).toBe(true);
-      expect(res.DifferenceQty).toBe(2);
+      // Isolated single-line posting (per-type methods) does not perform short-pick difference
+      // clearing - that stays with the multi-line submitGoodsIssueRequest path. DifferenceQty is 0 here.
+      expect(res.DifferenceCleared).toBe(false);
+      expect(res.DifferenceQty).toBe(0);
     });
 
     it('posts a 311 transfer via API_MATERIAL_DOCUMENT_SRV (code 04, receiving plant/sloc), skipping the 261-only RAP action', async () => {

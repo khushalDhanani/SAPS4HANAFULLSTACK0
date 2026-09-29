@@ -48,165 +48,36 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /**
-   * Post goods issue for a single reservation component line (Bound Action)
+   * @deprecated Legacy positional signature retained only for the internal queue-replay path and
+   * back-compat callers/tests. Contains NO movement-type business logic - it normalizes the
+   * positional arguments into a domain object and delegates to the isolated per-type dispatcher
+   * (`postByMovementType`), which routes to post201/261/301/311. New code calls the per-type
+   * methods (or `postByMovementType`) directly.
    */
   async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
-    const sCostCenter = String(options.costCenter || '').trim();
-    const sMvt = String(options.movementType || '261').trim();
-    if (!POSTABLE_MOVEMENT_TYPES.includes(sMvt)) {
-      const err = new Error(`Movement type ${sMvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
-      err.status = 400;
-      throw err;
-    }
-    const sRecvPlant = String(options.receivingPlant || '').trim();
-    const sRecvSLoc = String(options.receivingStorageLocation || '').trim();
-    const sReserv = String(reservationNo || '').trim();
-    const rawItem = reservationItem != null ? String(reservationItem).trim() : '';
-    const sItem = rawItem ? rawItem.padStart(4, '0') : '';
-    const nQty = Number(issueQty);
-    const nDiffQty = Number(differenceQty) || 0;
-    // Interim storage type for differences is WM customizing: caller-supplied, else configured (s4.differenceStorageType).
-    // Only needed when a difference is actually posted; never assumed.
-    let sDiffStorageType = String(differenceStorageType || '').trim();
-    if (!sDiffStorageType && nDiffQty > 0) {
-      try {
-        sDiffStorageType = s4Config.getDifferenceStorageType();
-      } catch (cfgErr) {
-        cfgErr.status = 400;
-        throw cfgErr;
-      }
-    }
-
-    if (sMvt !== '201' && (!sReserv || !sItem)) {
-      const err = new Error('ReservationNo and ReservationItem are required for Goods Issue');
-      err.status = 400;
-      throw err;
-    }
-    if (isNaN(nQty) || nQty <= 0) {
-      const err = new Error('IssueQty must be a positive decimal number');
-      err.status = 400;
-      throw err;
-    }
-
-    const effectiveUnit = unit ? String(unit).trim().toUpperCase() : '';
-    if (!effectiveUnit) {
-      const err = new Error('Unit of measure (EntryUnit) is required for Goods Issue');
-      err.status = 400;
-      throw err;
-    }
-
-    // SLED Hard-Stop Validation: Block expired, deleted, or restricted batch
-    const effectiveBatch = batch ? String(batch).trim() : '';
-    if (effectiveBatch) {
-      const validateBatchFn = (mat, bch) => {
-        if (this.adapter && typeof this.adapter.validateBatch === 'function') {
-          return this.adapter.validateBatch(mat, bch);
-        }
-        if (this.batchesClient && typeof this.batchesClient.validateBatch === 'function') {
-          return this.batchesClient.validateBatch(mat, bch);
-        }
-        return { valid: true };
-      };
-
-      const valResult = await validateBatchFn(material, effectiveBatch);
-      if (!valResult.valid) {
-        const err = new Error(valResult.reason || `Batch ${effectiveBatch} is invalid or expired.`);
-        err.status = 400;
-        throw err;
-      }
-    }
-
-    // Live SAP Posting: check destination
-    const dest = await this._getDestination();
-    if (!dest) {
-      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
-      err.status = 502;
-      throw err;
-    }
-
-    // Tier 1: Attempt Custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4
-    try {
-      // The RAP action only posts 261; a transfer (301/311) or cost-center GI (201) goes straight to the standard API.
-      if (sMvt !== '261') throw new Error(`ZUI_GI_ORDER_RSV_O4 posts movement type 261 only; ${sMvt} uses API_MATERIAL_DOCUMENT_SRV`);
-      const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
-      const response = await this._post(path, {
-        IssueQty: nQty,
-        Batch: effectiveBatch,
-        DifferenceQty: nDiffQty,
-        DifferenceReason: differenceReason || '',
-        DifferenceStorageType: sDiffStorageType,
-        FinalIssue: !!finalIssue
-      });
-
-      if (response && (response.MaterialDocument || response.MatDoc)) {
-        return {
-          ReservationNo: sReserv,
-          ReservationItem: sItem,
-          MaterialDocument: response.MaterialDocument || response.MatDoc,
-          MaterialDocYear: response.MaterialDocYear || String(new Date().getFullYear()),
-          TransferOrder: response.TransferOrder || response.ToNumber || '',
-          DifferenceCleared: response.DifferenceCleared !== undefined ? response.DifferenceCleared : (nDiffQty > 0),
-          DifferenceQty: nDiffQty,
-          Success: true,
-          Message: `Goods Issue 261 posted successfully in S/4HANA.${nDiffQty > 0 ? ` Difference of ${nDiffQty} cleared to Storage Type ${sDiffStorageType}.` : ''}`
-        };
-      }
-      // A 2xx without a material document is NOT a success. Throw so Tier 2 runs;
-      // falling through here would return undefined to the caller.
-      throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
-    } catch (v4Err) {
-      // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV
-      try {
-        const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
-        const aSerials = Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
-          ? options.serialNumbers
-          : options.serialNumber
-            ? [options.serialNumber]
-            : [];
-        const v2Payload = GoodsIssueMapper.mapToMaterialDocumentPayload({
-          MovementType: sMvt,
-          Material: material || '',
-          Plant: plant || '',
-          StorageLocation: storageLocation || '',
-          IssueQty: nQty,
-          Unit: effectiveUnit,
-          CostCenter: sCostCenter,
-          GLAccount: options.glAccount || options.GLAccount || '',
-          ReservationNo: sReserv,
-          ReservationItem: sItem,
-          Batch: effectiveBatch || '',
-          ReceivingPlant: sRecvPlant,
-          ReceivingStorageLocation: sRecvSLoc,
-          SerialNumbers: aSerials,
-          PostingDate: options.postingDate || options.PostingDate,
-          DocumentDate: options.documentDate || options.DocumentDate
-        });
-        const v2Res = await this._post(v2Path, v2Payload);
-        GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
-        const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
-        const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
-        if (matDoc) {
-          return {
-            ReservationNo: sReserv,
-            ReservationItem: sItem,
-            MaterialDocument: matDoc,
-            MaterialDocYear: matYear,
-            TransferOrder: '',
-            DifferenceCleared: nDiffQty > 0,
-            DifferenceQty: nDiffQty,
-            Success: true,
-            Message: `${sMvt === '201' ? 'Goods Issue to Cost Center' : sMvt === '261' ? 'Goods Issue' : 'Transfer posting'} ${sMvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
-          };
-        }
-        // A 2xx/no-exception response without a genuine material document and without a
-        // sap-message error is NOT a success either; never let the function resolve `undefined`
-        // (which upstream callers would otherwise treat as a fabricated success).
-        throw new Error(`SAP S/4HANA did not return a material document for movement ${sMvt} posting, and no sap-message error was present in the response.`);
-      } catch (v2Err) {
-        throw this._reclassifyPostingError(v4Err, v2Err, `single-item movement ${sMvt}`);
-      }
-    }
+    const data = {
+      MovementType: String(options.movementType || '261').trim(),
+      ReservationNo: reservationNo || '',
+      ReservationItem: reservationItem || '',
+      Material: material || '',
+      IssueQty: issueQty,
+      Unit: unit || '',
+      Batch: batch || '',
+      Plant: plant || '',
+      StorageLocation: storageLocation || '',
+      CostCenter: options.costCenter || '',
+      GLAccount: options.glAccount || options.GLAccount || '',
+      ReceivingPlant: options.receivingPlant || '',
+      ReceivingStorageLocation: options.receivingStorageLocation || '',
+      PostingDate: options.postingDate || options.PostingDate,
+      DocumentDate: options.documentDate || options.DocumentDate,
+      SerialNumbers: Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
+        ? options.serialNumbers
+        : (options.serialNumber ? [options.serialNumber] : [])
+    };
+    return this.postByMovementType(data);
   }
+
 
   // ==========================================================================
   // ISOLATED per-movement-type posting (Phase 1). Each public method owns its
@@ -295,14 +166,15 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
   /** Movement 261 (Goods Issue for Order/Reservation) - RAP first, standard API fallback. */
   async post261(data) {
-    this._assertPostable(data);
     const sReserv = String(data.ReservationNo || '').trim();
-    const sItem = data.ReservationItem != null ? String(data.ReservationItem).trim().padStart(4, '0') : '';
+    const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
+    const sItem = rawItem ? rawItem.padStart(4, '0') : '';
     if (!sReserv || !sItem) {
       const err = new Error('ReservationNo and ReservationItem are required for Goods Issue');
       err.status = 400;
       throw err;
     }
+    this._assertPostable(data);
     await this._preflightPosting(data);
     // Tier 1: custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4 (posts 261 only).
     try {

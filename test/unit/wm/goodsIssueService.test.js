@@ -4,6 +4,7 @@ const cds = require('@sap/cds');
 cds.test(__dirname + '/../../../');
 
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
+const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const {
   createMockReservationItems,
@@ -24,6 +25,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       })
     };
     GoodsIssueHandler.init(srv);
+    PerTypeGoodsIssueHandler.init(srv);
   });
 
   afterEach(() => {
@@ -41,7 +43,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue'](req);
+      await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('ReservationNo and ReservationItem are required'));
     });
 
@@ -55,7 +57,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue'](req);
+      await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('positive decimal number'));
     });
 
@@ -232,7 +234,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue'](req);
+      await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-01-15'));
     });
 
@@ -491,7 +493,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue'](req);
+      await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-06-24'));
     });
 
@@ -591,7 +593,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      const result = await handlers['postGoodsIssue'](req);
+      const result = await handlers['postGoodsIssue261'](req);
       expect(result).toBeDefined();
       expect(result.Success).toBe(true);
       expect(result.Queued).toBe(true);
@@ -640,7 +642,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      const result = await handlers['postGoodsIssue'](req);
+      const result = await handlers['postGoodsIssue261'](req);
       expect(result.Queued).toBe(true);
       expect(result.QueueReference).toBeDefined();
 

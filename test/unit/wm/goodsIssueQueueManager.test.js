@@ -5,6 +5,7 @@ cds.test(__dirname + '/../../../');
 const queueSingleton = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 const { GoodsIssueQueueManager, QueueStoreUnavailableError } = queueSingleton;
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
+const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
 function sapPostingUnavailable() {
@@ -22,6 +23,7 @@ function fakeService() {
     })
   };
   GoodsIssueHandler.init(srv);
+  PerTypeGoodsIssueHandler.init(srv);
   return handlers;
 }
 
@@ -156,10 +158,10 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
     });
 
     it('queues the transaction and reports QUEUED (never a SAP document) when SAP cannot post and a store is bound', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValue(sapPostingUnavailable());
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       const handlers = fakeService();
 
-      const result = await handlers['postGoodsIssue'](request());
+      const result = await handlers['postGoodsIssue261'](request());
 
       expect(result).toMatchObject({ Success: true, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
       expect(result.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
@@ -172,12 +174,12 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
     });
 
     it('fails closed with the SAP error when SAP cannot post and no queue store is bound', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValue(sapPostingUnavailable());
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       jest.spyOn(queueSingleton, 'enqueue').mockRejectedValue(new QueueStoreUnavailableError());
       const handlers = fakeService();
       const req = request();
 
-      await handlers['postGoodsIssue'](req);
+      await handlers['postGoodsIssue261'](req);
 
       expect(req.error).toHaveBeenCalledTimes(1);
       const [status, message] = req.error.mock.calls[0];

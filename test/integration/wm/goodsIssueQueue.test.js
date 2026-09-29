@@ -30,11 +30,10 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
     it('queues a goods issue when SAP cannot post, and serves it through the read-only entity set', async () => {
         const unavailable = new Error('SAP S/4HANA Backend Posting Capability Unavailable: posting service not activated');
         unavailable.status = 501;
-        jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValue(unavailable);
+        jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(unavailable);
 
-        const { status, data } = await POST(`${BASE}/postGoodsIssue`, {
-            ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG',
-            Batch: '', DifferenceQty: 0, DifferenceReason: '', DifferenceStorageType: '', FinalIssue: false
+        const { status, data } = await POST(`${BASE}/postGoodsIssue261`, {
+            ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG', Batch: ''
         });
         expect(status).toBe(200);
         expect(data).toMatchObject({ Success: true, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
@@ -79,12 +78,11 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
     it('returns the SAP error and records nothing when SAP cannot post and no queue store is bound', async () => {
         const unavailable = new Error('SAP S/4HANA Backend Posting Capability Unavailable: posting service not activated');
         unavailable.status = 501;
-        jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue').mockRejectedValue(unavailable);
+        jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(unavailable);
         jest.spyOn(queue, 'enqueue').mockRejectedValue(new queue.QueueStoreUnavailableError());
 
-        const res = await axios.post(`${BASE}/postGoodsIssue`, {
-            ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG',
-            Batch: '', DifferenceQty: 0, DifferenceReason: '', DifferenceStorageType: '', FinalIssue: false
+        const res = await axios.post(`${BASE}/postGoodsIssue261`, {
+            ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG', Batch: ''
         }, { validateStatus: () => true });
 
         expect(res.status).toBe(501);

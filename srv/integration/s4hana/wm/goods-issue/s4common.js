@@ -59,7 +59,7 @@ function buildBaseItem(data, goodsMovementType) {
     item.Reservation = String(data.ReservationNo).trim();
   }
   if (data.ReservationItem && String(data.ReservationItem).trim() !== '') {
-    item.ReservationItem = String(data.ReservationItem).trim();
+    item.ReservationItem = String(data.ReservationItem).trim().padStart(4, '0');
   }
   if (data.Batch && String(data.Batch).trim() !== '') {
     item.Batch = String(data.Batch).trim().toUpperCase();

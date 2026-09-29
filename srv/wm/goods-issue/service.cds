@@ -259,33 +259,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getQueueSummary() returns QueueSummary;
 
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
-    action postGoodsIssue(
-        ReservationNo         : String(10),
-        ReservationItem       : String(4),
-        Material              : String(40),
-        IssueQty              : Decimal(13, 3),
-        Unit                  : String(10),
-        Batch                 : String(20),
-        DifferenceQty         : Decimal(13, 3),
-        DifferenceReason      : String(4),
-        DifferenceStorageType : String(3),
-        FinalIssue            : Boolean,
-        OrderNo               : String(12),
-        MaterialDesc          : String(80),
-        Plant                 : String(4),
-        StorageLocation       : String(4),
-        MovementType          : String(3),
-        ReceivingPlant        : String(4),
-        ReceivingStorageLocation : String(4),
-        CostCenter            : String(10),
-        GLAccount             : String(10),
-        PostingDate           : Date,
-        DocumentDate          : Date,
-        SerialNumbers         : array of String(18),
-        SerialNumber          : String(18)
-    ) returns GIPostResult;
-
     // ── Isolated per-movement-type posting actions (Phase 1). Each accepts only its type's fields. ──
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
