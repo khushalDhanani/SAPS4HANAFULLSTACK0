@@ -6038,6 +6038,17 @@
 - **Result**: Step 2 done and live-verified — the opened pending item is actionable with a real per-scan S/4 validation + auto-fill + honest pass/fail feedback, auto-detecting SU vs serial vs plain-qty per material. (Wrong-material and quantity-exceeded feedback are unit-tested; the live pending data is SU-managed/plain-qty, so those two paths weren't reproducible against SAP in this session.)
 - **Next recommended action**: Confirm any further workflow steps (e.g. post-and-refresh the pending list), then commit/push to `origin/feature/CL01`.
 
+## 2026-09-29 21:50 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Step 3 of the 201 workflow — once all required lines/serials for the pending item are scanned/filled, "Complete" triggers the actual 201 `postGoodsIssue` call, reusing the existing 201 posting logic (no new backend posting path).
+- **Finding**: this was already wired by steps 1–2 — the footer post button (`onPostGoodsIssue` → `GoodsIssue201Service.postGoodsIssue` → `/postGoodsIssue201`) is gated on `isValid` (which now requires the scan to be complete for unit-managed lines) and its payload already carries `ReservationNo`/`ReservationItem` + any scanned serials. No new backend path needed.
+- **Change (frontend only)**: aligned the footer button to the workflow's "Complete" language — when the page was opened from a pending reservation (`fromReservation`) the button reads **"Complete Goods Issue (201)"**, otherwise the unplanned label **"Post Goods Issue (201)"**. Added i18n `gi201BtnComplete` to both bundles. No controller/service/backend change.
+- **Executed commands & results**:
+  - `npx jest test/unit/wm/ test/unit/dashboard/ test/integration/wm/`: 31 suites, **501/501 passed**. `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. `git diff --check`: clean. i18n parity 1/1.
+- **Live verification (running CAP, live S/4HANA, no console errors)**: reservation 493669 (iPad) scanned to 1/1 → button showed **"Complete Goods Issue (201)"**, enabled → pressing it posted **`POST /odata/v4/goods-issue/postGoodsIssue201 → 200`** (existing path) with the response echoing **ReservationNo `493669`/ReservationItem `0001`** (planned-reservation linkage carried through so SAP will mark it withdrawn) and the honest **QUEUED** result (`GI-QUEUE-493669-0001-8780`, Gateway inactive) shown as "Queued — Not Yet Posted to SAP".
+- **Result**: Step 3 done and live-verified — "Complete" triggers the real 201 `postGoodsIssue201` via the existing posting logic (no new backend), gated on scan/fill completion, carrying the reservation link. The three-step 201 pending-to-complete workflow (list pending → open+pre-fill → scan/confirm → Complete/post) is now end-to-end, awaiting only DS4 Gateway activation for real SAP persistence.
+- **Next recommended action**: Optionally add post-success return-and-refresh of the Pending list; commit/push to `origin/feature/CL01`.
+
 ## Next Steps
 0. Dedicated Movement 201 UI Page (Route `#/wm/goods-issue/cost-center-201`):
    - Fully built, validated, linted, and covered with 11 new tests (413 total WM tests, 100% green).

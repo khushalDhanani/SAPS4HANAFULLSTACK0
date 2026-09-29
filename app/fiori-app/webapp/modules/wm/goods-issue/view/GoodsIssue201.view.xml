@@ -381,7 +381,7 @@
                 <ToolbarSpacer />
                 <Button
                     id="btnPostGoodsIssue201"
-                    text="{i18n>gi201BtnPost}"
+                    text="{= ${gi201>/fromReservation} ? ${i18n>gi201BtnComplete} : ${i18n>gi201BtnPost} }"
                     icon="sap-icon://save"
                     type="Emphasized"
                     enabled="{gi201>/isValid}"
