@@ -14,7 +14,7 @@ const { baseNormalized } = require('./goodsIssue.mapper');
 function normalizeGoodsIssue261Payload(data, context = {}) {
   if (!data || typeof data !== 'object') return data;
   const n = baseNormalized(data, context, '261');
-  n.OrderNo = data.OrderNo ? String(data.OrderNo).trim() : '';
+  n.OrderNo = String(data.OrderNo || data.OrderID || '').trim();
   n.GLAccount = data.GLAccount ? String(data.GLAccount).trim() : '';
   return n;
 }

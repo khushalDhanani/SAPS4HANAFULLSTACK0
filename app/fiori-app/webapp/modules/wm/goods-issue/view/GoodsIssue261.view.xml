@@ -81,10 +81,23 @@
                         singleContainerFullSize="false">
                         <f:content>
 
-                            <!-- Reservation Assignment (Mandatory - no unplanned posting path exists) -->
-                            <core:Title id="titleReservationAssignment261" text="{i18n>gi261TitleReservationAssignment}" />
+                            <!-- Issue Mode Selection (Planned Reservation vs Unplanned Direct Order) -->
+                            <core:Title id="titleIssueMode261" text="{i18n>gi261TitleIssueMode}" />
+                            <Label id="lblIssueMode261" text="{i18n>gi261IssueMode}" visible="{= !${gi261>/fromReservation} }" />
+                            <SegmentedButton
+                                id="segIssueMode261"
+                                selectedKey="{= ${gi261>/isUnplanned} ? 'UNPLANNED' : 'PLANNED' }"
+                                selectionChange=".onIssueModeChange"
+                                visible="{= !${gi261>/fromReservation} }"
+                                class="sapUiTinyMarginBottom">
+                                <items>
+                                    <SegmentedButtonItem id="sbiPlanned261" key="PLANNED" text="{i18n>gi261ModePlanned}" />
+                                    <SegmentedButtonItem id="sbiUnplanned261" key="UNPLANNED" text="{i18n>gi261ModeUnplanned}" />
+                                </items>
+                            </SegmentedButton>
 
-                            <Label id="lblReservationNo261" text="{i18n>gi261ReservationNo}" required="true" />
+                            <!-- Assignment (Reservation in Planned Mode / Order in Unplanned Mode) -->
+                            <Label id="lblReservationNo261" text="{i18n>gi261ReservationNo}" required="true" visible="{= !${gi261>/isUnplanned} }" />
                             <Input
                                 id="inReservationNo261"
                                 value="{gi261>/reservationNo}"
@@ -94,9 +107,10 @@
                                 editable="false"
                                 valueState="{= ${gi261>/errors/reservationNo} ? 'Error' : 'None' }"
                                 valueStateText="{gi261>/errors/reservationNo}"
-                                maxLength="10" />
+                                maxLength="10"
+                                visible="{= !${gi261>/isUnplanned} }" />
 
-                            <Label id="lblReservationItem261" text="{i18n>gi261ReservationItem}" required="true" />
+                            <Label id="lblReservationItem261" text="{i18n>gi261ReservationItem}" required="true" visible="{= !${gi261>/isUnplanned} }" />
                             <Input
                                 id="inReservationItem261"
                                 value="{gi261>/reservationItem}"
@@ -106,20 +120,46 @@
                                 change=".onReservationItemChange"
                                 valueState="{= ${gi261>/errors/reservationItem} ? 'Error' : 'None' }"
                                 valueStateText="{gi261>/errors/reservationItem}"
-                                maxLength="4" />
+                                maxLength="4"
+                                visible="{= !${gi261>/isUnplanned} }" />
 
-                            <Label id="lblOrderNo261" text="{i18n>gi261OrderNo}" visible="{= !!${gi261>/orderNo} }" />
+                            <Label id="lblOrderNo261" text="{i18n>gi261OrderNo}" visible="{= !${gi261>/isUnplanned} &amp;&amp; !!${gi261>/orderNo} }" />
                             <Text
                                 id="txtOrderNo261"
                                 text="{gi261>/orderNo}"
                                 class="sapUiTinyMarginTop fontBold"
-                                visible="{= !!${gi261>/orderNo} }" />
+                                visible="{= !${gi261>/isUnplanned} &amp;&amp; !!${gi261>/orderNo} }" />
 
-                            <!-- Material & Location - read-only, derived from the resolved reservation item -->
+                            <!-- Order Assignment (Unplanned Mode) -->
+                            <Label id="lblOrderNoInput261" text="{i18n>gi261OrderNo}" required="true" visible="{gi261>/isUnplanned}" />
+                            <Input
+                                id="inOrderNo261"
+                                value="{gi261>/orderNo}"
+                                placeholder="{i18n>gi261OrderNoPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onOrderValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi261>/errors/orderNo} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/orderNo}"
+                                maxLength="12"
+                                visible="{gi261>/isUnplanned}" />
+
+                            <!-- Material & Location -->
                             <core:Title id="titleMaterialLocation261" text="{i18n>gi261TitleMaterialLocation}" />
 
-                            <Label id="lblMaterial261" text="{i18n>gi261Material}" />
-                            <Text id="txtMaterial261" text="{gi261>/material}" />
+                            <Label id="lblMaterial261" text="{i18n>gi261Material}" required="{gi261>/isUnplanned}" />
+                            <Text id="txtMaterial261" text="{gi261>/material}" visible="{= !${gi261>/isUnplanned} }" />
+                            <Input
+                                id="inMaterial261"
+                                value="{gi261>/material}"
+                                placeholder="{i18n>gi261MaterialPlaceholder}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onMaterialValueHelp"
+                                liveChange=".onMaterialLiveChange"
+                                valueState="{= ${gi261>/errors/material} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/material}"
+                                maxLength="40"
+                                visible="{gi261>/isUnplanned}" />
 
                             <Label id="lblMaterialDesc261" text="{i18n>gi261MaterialDesc}" visible="{= !!${gi261>/materialName} }" />
                             <Text
@@ -128,11 +168,29 @@
                                 class="sapUiTinyMarginTop fontBold"
                                 visible="{= !!${gi261>/materialName} }" />
 
-                            <Label id="lblPlant261" text="{i18n>gi261Plant}" />
-                            <Text id="txtPlant261" text="{gi261>/plant}" />
+                            <Label id="lblPlant261" text="{i18n>gi261Plant}" required="{gi261>/isUnplanned}" />
+                            <Text id="txtPlant261" text="{gi261>/plant}" visible="{= !${gi261>/isUnplanned} }" />
+                            <Input
+                                id="inPlant261"
+                                value="{gi261>/plant}"
+                                placeholder="{i18n>gi261PlantPlaceholder}"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi261>/errors/plant} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/plant}"
+                                maxLength="4"
+                                visible="{gi261>/isUnplanned}" />
 
-                            <Label id="lblStorageLocation261" text="{i18n>gi261StorageLocation}" />
-                            <Text id="txtStorageLocation261" text="{gi261>/storageLocation}" />
+                            <Label id="lblStorageLocation261" text="{i18n>gi261StorageLocation}" required="{gi261>/isUnplanned}" />
+                            <Text id="txtStorageLocation261" text="{gi261>/storageLocation}" visible="{= !${gi261>/isUnplanned} }" />
+                            <Input
+                                id="inStorageLocation261"
+                                value="{gi261>/storageLocation}"
+                                placeholder="{i18n>gi261StorageLocationPlaceholder}"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi261>/errors/storageLocation} ? 'Error' : 'None' }"
+                                valueStateText="{gi261>/errors/storageLocation}"
+                                maxLength="4"
+                                visible="{gi261>/isUnplanned}" />
 
                             <!-- Quantity & Posting Dates -->
                             <core:Title id="titleQuantityDates261" text="{i18n>gi261TitleQuantityDates}" />
@@ -151,7 +209,7 @@
                                 <Input
                                     id="inUnit261"
                                     value="{gi261>/unit}"
-                                    editable="{gi261>/isUnitEditable}"
+                                    editable="{= ${gi261>/isUnplanned} || ${gi261>/isUnitEditable} }"
                                     liveChange=".onFieldLiveChange"
                                     valueState="{= ${gi261>/errors/unit} ? 'Error' : 'None' }"
                                     valueStateText="{gi261>/errors/unit}"

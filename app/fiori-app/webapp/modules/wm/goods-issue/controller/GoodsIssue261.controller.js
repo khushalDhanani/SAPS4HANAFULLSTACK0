@@ -242,6 +242,170 @@ sap.ui.define([
         },
 
         // =============================================================
+        // ISSUE MODE (PLANNED VS UNPLANNED) & ORDER VALUE HELP
+        // =============================================================
+
+        onIssueModeChange: function (oEvt) {
+            var sKey = oEvt.getParameter("item") ? oEvt.getParameter("item").getKey() : oEvt.getParameter("key");
+            var bUnplanned = sKey === "UNPLANNED";
+            this._oModel.setProperty("/isUnplanned", bUnplanned);
+            if (bUnplanned) {
+                this._oModel.setProperty("/reservationNo", "");
+                this._oModel.setProperty("/reservationItem", "");
+                this._oModel.setProperty("/scanEnabled", false);
+                this._oModel.setProperty("/scannedUnits", []);
+                this._oModel.setProperty("/isUnitEditable", true);
+            } else {
+                this._oModel.setProperty("/orderNo", "");
+                this._oModel.setProperty("/material", "");
+                this._oModel.setProperty("/materialName", "");
+                this._oModel.setProperty("/plant", "");
+                this._oModel.setProperty("/storageLocation", "");
+                this._oModel.setProperty("/unit", "");
+                this._oModel.setProperty("/isUnitEditable", false);
+            }
+            this._validateLive();
+        },
+
+        onOrderValueHelp: function () {
+            var that = this;
+            var oDialog = new SelectDialog({
+                title: this.getText("gi261SelectOrder"),
+                noDataText: this.getText("gi261NoOrdersFound"),
+                search: function (oEvt) {
+                    var sVal = oEvt.getParameter("value") || "";
+                    var oBinding = oEvt.getSource().getBinding("items");
+                    if (oBinding) {
+                        var aFilters = sVal ? [
+                            new Filter({
+                                filters: [
+                                    new Filter("OrderNo", FilterOperator.Contains, sVal),
+                                    new Filter("Description", FilterOperator.Contains, sVal)
+                                ],
+                                and: false
+                            })
+                        ] : [];
+                        oBinding.filter(aFilters);
+                    }
+                },
+                confirm: function (oEvt) {
+                    var oSelectedItem = oEvt.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var sOrder = oSelectedItem.getTitle();
+                        var sPlant = oSelectedItem.getInfo();
+                        that._oModel.setProperty("/orderNo", sOrder);
+                        if (sPlant && !that._oModel.getProperty("/plant")) {
+                            that._oModel.setProperty("/plant", sPlant);
+                        }
+                        that._validateLive();
+                    }
+                }
+            });
+
+            var oItemTemplate = new StandardListItem({
+                title: "{OrderNo}",
+                description: "{Description}",
+                info: "{Plant}"
+            });
+
+            GoodsIssue261Service.fetchDistinctOrders()
+                .then(function (aOrders) {
+                    var oHelpModel = new JSONModel(aOrders);
+                    oDialog.setModel(oHelpModel);
+                    oDialog.bindAggregation("items", "/", oItemTemplate);
+                    oDialog.open();
+                })
+                .catch(function (err) {
+                    MessageBox.error("Failed to load Orders: " + (err.message || err));
+                });
+        },
+
+        onMaterialValueHelp: function () {
+            var that = this;
+            var oDialog = new SelectDialog({
+                title: this.getText("gi261SelectMaterial"),
+                noDataText: this.getText("gi261NoMaterialsFound"),
+                search: function (oEvt) {
+                    var sVal = oEvt.getParameter("value") || "";
+                    var oBinding = oEvt.getSource().getBinding("items");
+                    if (oBinding) {
+                        var aFilters = sVal ? [
+                            new Filter({
+                                filters: [
+                                    new Filter("Material", FilterOperator.Contains, sVal),
+                                    new Filter("MaterialName", FilterOperator.Contains, sVal)
+                                ],
+                                and: false
+                            })
+                        ] : [];
+                        oBinding.filter(aFilters);
+                    }
+                },
+                confirm: function (oEvt) {
+                    var oSelectedItem = oEvt.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var sMat = oSelectedItem.getTitle();
+                        var sDesc = oSelectedItem.getDescription();
+                        that._oModel.setProperty("/material", sMat);
+                        that._oModel.setProperty("/materialName", sDesc);
+                        that._loadMaterialInfo(sMat);
+                    }
+                }
+            });
+
+            var oItemTemplate = new StandardListItem({
+                title: "{Material}",
+                description: "{MaterialName}",
+                info: "{MaterialBaseUnit}"
+            });
+
+            var oODataModel = this.getModel();
+            if (oODataModel) {
+                oDialog.setModel(oODataModel);
+                oDialog.bindAggregation("items", "/MaterialVH", oItemTemplate);
+                oDialog.open();
+            } else {
+                var sMat = that._oModel.getProperty("/material") || "8500000035";
+                GoodsIssue261Service.fetchMaterialDetails(sMat, that._oModel.getProperty("/plant") || "1120")
+                    .then(function (oInfo) {
+                        var aList = oInfo ? [oInfo] : [];
+                        var oListModel = new JSONModel(aList);
+                        oDialog.setModel(oListModel);
+                        oDialog.bindAggregation("items", "/", oItemTemplate);
+                        oDialog.open();
+                    });
+            }
+        },
+
+        _loadMaterialInfo: function (sMaterial) {
+            var that = this;
+            var sPlant = this._oModel.getProperty("/plant") || "1120";
+            GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlant)
+                .then(function (oInfo) {
+                    if (oInfo) {
+                        that._oModel.setProperty("/materialName", oInfo.materialName || that._oModel.getProperty("/materialName"));
+                        if (oInfo.unit && !that._oModel.getProperty("/unit")) {
+                            that._oModel.setProperty("/unit", oInfo.unit);
+                        }
+                        that._oModel.setProperty("/isBatchManaged", !!oInfo.isBatchManaged);
+                    }
+                    that._validateLive();
+                })
+                .catch(function () {
+                    that._validateLive();
+                });
+        },
+
+        onMaterialLiveChange: function (oEvt) {
+            var sVal = oEvt.getParameter("value") || "";
+            this._oModel.setProperty("/material", sVal);
+            if (sVal.length >= 8) {
+                this._loadMaterialInfo(sVal);
+            }
+            this._validateLive();
+        },
+
+        // =============================================================
         // RESERVATION VALUE HELP & ITEM RESOLUTION
         // =============================================================
 

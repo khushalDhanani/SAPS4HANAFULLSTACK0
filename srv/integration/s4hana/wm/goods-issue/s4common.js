@@ -74,6 +74,19 @@ function buildBaseItem(data, goodsMovementType) {
     item.to_SerialNumbers = { results: serials.map(sn => ({ SerialNumber: String(sn).trim() })) };
   }
 
+  if (data.OrderNo || data.OrderID) {
+    const sOrd = String(data.OrderNo || data.OrderID).trim();
+    if (sOrd) {
+      item.ManufacturingOrder = /^\d+$/.test(sOrd) ? sOrd.padStart(12, '0') : sOrd;
+    }
+  }
+  if (data.OrderItem || data.ManufacturingOrderItem) {
+    const sOrdItem = String(data.OrderItem || data.ManufacturingOrderItem).trim();
+    if (sOrdItem) {
+      item.ManufacturingOrderItem = sOrdItem.padStart(4, '0');
+    }
+  }
+
   return item;
 }
 

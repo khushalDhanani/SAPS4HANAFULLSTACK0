@@ -22,7 +22,29 @@ function validateGoodsIssue261Payload(data) {
   const errors = [];
   const push = (e) => { if (e) errors.push(e); };
 
-  const hasReservation = C.checkReservationRequired(data, errors);
+  const sResv = String(data.ReservationNo || '').trim();
+  const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
+  const sItem = rawItem ? rawItem.padStart(4, '0') : '';
+  const sOrder = String(data.OrderNo || data.OrderID || '').trim();
+
+  const hasReservation = Boolean(sResv && sItem);
+  const hasOrder = Boolean(sOrder);
+
+  if (!hasReservation && !hasOrder) {
+    errors.push({ field: 'ReservationNo', message: 'ReservationNo and ReservationItem are required (or OrderNo for unplanned Movement 261)' });
+    errors.push({ field: 'OrderNo', message: 'Either (ReservationNo and ReservationItem) or OrderNo is required for Movement 261' });
+  } else if (!hasReservation && hasOrder) {
+    if (sOrder.length > 12) {
+      errors.push({ field: 'OrderNo', message: 'OrderNo exceeds maximum length of 12 characters' });
+    }
+  } else if (hasReservation) {
+    if (sResv.length > 10) {
+      errors.push({ field: 'ReservationNo', message: 'ReservationNo exceeds maximum length of 10 characters' });
+    }
+    if (sItem.length > 4) {
+      errors.push({ field: 'ReservationItem', message: 'ReservationItem exceeds maximum length of 4 characters' });
+    }
+  }
 
   push(C.checkQuantity(data.IssueQty));
   push(C.checkMaterial(data.Material, !hasReservation));

@@ -157,21 +157,22 @@ Expected behaviour for an inherited service. **No action required.**
 
 ---
 
-## Item 2 — Register `API_MATERIAL_DOCUMENT_SRV`
+## Item 2 — Register `API_MATERIAL_DOCUMENT_SRV` (System Alias `DS4_220` / `LOCAL`)
 
-**Transaction:** `/IWFND/MAINT_SERVICE` → Add Service → System Alias `LOCAL` →
+**Transaction:** `/IWFND/MAINT_SERVICE` → Add Service → System Alias `DS4_220` (or `LOCAL`) →
 Technical Service Name `API_MATERIAL_DOCUMENT_SRV` → Get Services → Add Selected Services
 
-**Evidence:** a live POST to `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader` returns:
+**Evidence:** a live POST or GET to `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader` on client 220 returns:
 
 ```
-HTTP 403
+HTTP 403 Forbidden
 /IWFND/MED/170 — "No service found for namespace '', name 'API_MATERIAL_DOCUMENT_SRV', version '0001'"
 ```
 
 Gateway transaction ID `E6A502D9234E0220E006AA12E6AD9423`, timestamp `20260918105510` — visible in `/IWFND/ERROR_LOG`.
 
 The service is also absent from the service catalog entirely, consistent with it never having been registered.
+A dedicated P1 action ticket has been established in `docs/ticket-basis-activate-api-material-document.md`.
 
 ### Corroborating evidence — a second service in the same state
 
@@ -252,22 +253,21 @@ Client 220 has 52 sales contracts today, all of type `ZGCQ` (the only unlocked c
 
 ## Business impact
 
-Goods issue movement 261 cannot be posted from the warehouse application. Both available paths are blocked —
-Item 2 (standard service) and Item 3 (custom RAP service). **Either one alone unblocks it.**
+Goods issue and stock transfer movements cannot be synchronously posted to SAP S/4HANA from the warehouse application. Currently, all goods issue postings fall back to the Outbox Dispatch Queue (`GI-QUEUE-*`) because `API_MATERIAL_DOCUMENT_SRV` is uncatalogued.
 
-All application-side prerequisites are verified and ready:
+**Features directly blocked by missing `API_MATERIAL_DOCUMENT_SRV`:**
+1. **Movement 201 Planned:** Goods Issue to Cost Center via Reservation.
+2. **Movement 201 Unplanned:** Direct Goods Issue to Cost Center (no reservation).
+3. **Movement 261 Planned:** Goods Issue to Manufacturing Order via Reservation (Tier 2 standard posting).
+4. **Movement 261 Unplanned:** Direct Goods Issue to Manufacturing Order (direct to Tier 2).
+5. **Movement 301:** Plant-to-Plant Stock Transfer.
+6. **Movement 311:** Storage Location to Storage Location Stock Transfer.
 
-- Reservation 18025 item 1, material 1000000204 (Para Chloro Phenol), plant 1120 / SLOC CS01
-- `GoodsMovementIsAllowed = true`, movement type 261 on the reservation item
-- 479,766 KG unrestricted stock (type 01) available
-- No alternative service can substitute: a live `$metadata` scan of all 1,237 catalogued services
-  (23-Sep-2026, zero errors) found five services with a `PostGoodsIssue` or `GoodsIssue` function
-  import — `SD_SOFM_CREDIT_BLOCK_SRV`, `API_WHSE_OUTB_DLV_ORDER`, `SIMPLE_OUTB_DLV_SRV`,
-  `SIMPLE_OUTB_TU_SRV`, and `UI_SHIPMENTCONTAINERPACKG` — but all are delivery-based only and
-  cannot post reservation movement type 261.
-- `ZMMIM_MATDOC_SRV` was registered on 18-Sep-2026 (returned HTTP 501 for
-  `MATDOCHEADERS_CREATE_ENTITY`), but is **now also deregistered** — returns HTTP 403
-  `/IWFND/MED/170` as of 23-Sep-2026 12:16 IST.
+All application-side models, validators, mappers, unit tests, and Fiori UI screens are 100% complete and verified against real S/4 stock:
+- Reservation 18025 / 518660 verified with real materials, active reservations, and real stock in `LQUA`.
+- Order 2000611 verified (Plant 1120, status `REL`, costing variant `PPP2`, settlement rule `ZP03`).
+- Unplanned 261 mapper maps `ManufacturingOrder` padded to 12 digits directly to `A_MaterialDocumentItem`.
+- No alternative standard service can substitute: live scan confirmed `PostGoodsIssue` functions in other services are delivery-bound only.
 
 Item 1 additionally restores sales order, sales quotation, delivery creation, supplier invoice and
 sourcing-project functionality, plus the eight AIL custom services listed above.

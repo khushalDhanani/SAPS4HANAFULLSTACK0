@@ -4,6 +4,104 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-29 17:25 IST
+- **Agent**: Antigravity
+- **Request**: "1. Check docs/ticket-gateway-remediation-ds4.md — confirm whether a Basis ticket has actually been opened/tracked for activating API_MATERIAL_DOCUMENT_SRV in /IWFND/MAINT_SERVICE for the DS4_220 system alias. If not, create one now with: service name, client, the specific error (/IWFND/MED/170), and a list of every feature currently blocked by it (201 planned, 261 planned, 261 unplanned, and by extension 301/311 whenever those are built). This is the one dependency unblocking all live verification going forward. 2. Once Basis confirms activation, do NOT re-run these live tests one movement type at a time. Instead run one consolidated pass: re-post the exact same three payloads already captured in this session (201 cost-center test, 261 planned/reservation 518660, 261 unplanned/Order 2000611) in a single sitting, paste all three real success responses (Material Document numbers) side by side, and confirm each one appears correctly in SAP (MB03 or MATDOC)."
+- **Scope & Implementation Details**:
+  1. Audited `docs/ticket-gateway-remediation-ds4.md`: Found that while Item 2 noted `API_MATERIAL_DOCUMENT_SRV`, it was embedded within a 300-line general document, specified System Alias `LOCAL` instead of `DS4_220`, and only listed Movement 261 reservation as impacted.
+  2. Created dedicated P1 Blocker Ticket: `docs/ticket-basis-activate-api-material-document.md`:
+     - Service Name: `API_MATERIAL_DOCUMENT_SRV` (Version `0001`).
+     - System / Client: `DS4`, Client `220` (`172.27.100.32:8000`).
+     - System Alias: `DS4_220` (and `LOCAL`).
+     - Error Code: `/IWFND/MED/170` — "No service found for namespace '', name 'API_MATERIAL_DOCUMENT_SRV', version '0001'".
+     - Step-by-step T-code instructions: `/IWFND/MAINT_SERVICE` -> Add Service -> `DS4_220` -> `API_MATERIAL_DOCUMENT_SRV` -> Get Services -> Add Selected Services.
+     - Documented all 6 blocked features:
+       1. Movement 201 Planned (Goods Issue to Cost Center via Reservation).
+       2. Movement 201 Unplanned (Direct Goods Issue to Cost Center).
+       3. Movement 261 Planned (Goods Issue to Manufacturing Order via Reservation, Tier 2 fallback).
+       4. Movement 261 Unplanned (Direct Goods Issue to Manufacturing Order).
+       5. Movement 301 (Plant-to-Plant Stock Transfer).
+       6. Movement 311 (Storage-Location-to-Storage-Location Stock Transfer).
+  3. Updated `docs/ticket-gateway-remediation-ds4.md` (Item 2 and Business Impact) to reference `DS4_220`, `/IWFND/MED/170`, and the complete list of 6 blocked movement features.
+  4. Established Consolidated Verification Protocol: Documented exact payloads for 201, 261 planned, and 261 unplanned for instant single-pass execution upon Basis activation confirmation.
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 errors).
+- **Next recommended action**: Deliver `docs/ticket-basis-activate-api-material-document.md` to Basis team for activation. Upon confirmation, execute single consolidated live verification pass across 201, 261 planned, and 261 unplanned.
+
+
+
+## 2026-09-29 17:15 IST
+- **Agent**: Antigravity
+- **Request**: "Build unplanned Movement 261 (direct Goods Issue to Order, no reservation) — approved scope, isolated to 261 only, no changes to 201/301/311."
+- **Scope & Implementation Details**:
+  1. `GoodsIssuePostingClient.js`:
+     - Made `ReservationNo`/`ReservationItem` optional when `OrderNo`/`OrderID` is present.
+     - In `post261()`, unplanned requests bypass the reservation-keyed Tier 1 RAP service (`zui_gi_order_rsv_o4`) and route directly to Tier 2 `_submitMaterialDocument` (`API_MATERIAL_DOCUMENT_SRV`).
+     - Added `OrderNo` to returned metadata and preserved backwards-compatible error substrings (`ReservationNo and ReservationItem are required`).
+  2. `goodsIssue261.validation.js`:
+     - Enforces either `(ReservationNo + ReservationItem)` OR `OrderNo`/`OrderID`.
+     - When unplanned (`!hasReservation && hasOrder`), enforces `Material`, `Plant`, and `StorageLocation` as mandatory.
+     - Preserves `ReservationNo` error field when neither is supplied for backwards compatibility with existing assertions.
+  3. `GoodsIssue261Service.js` / `GoodsIssue261Model.js`:
+     - `GoodsIssue261Model.js`: Added `isUnplanned` mode property to `getInitialData()`, added validation rules for `orderNo` and mandatory material/plant/sloc in unplanned mode, and updated `toBackendPayload()` to include `OrderNo` and omit reservation fields when unplanned.
+     - `GoodsIssue261Service.js`: Relaxed reservation check in `postGoodsIssue()`, forwarding `OrderNo`. Added `fetchDistinctOrders()` to query distinct Manufacturing Orders from S/4HANA reservations for value help.
+  4. S/4HANA Mapping (`s4common.js` / `GoodsIssue261Mapper.js`):
+     - `s4common.js`: Added `item.ManufacturingOrder = /^\d+$/.test(sOrd) ? sOrd.padStart(12, '0') : sOrd` and optional `item.ManufacturingOrderItem = sOrdItem.padStart(4, '0')`.
+     - `GoodsIssue261Mapper.js`: Generates dynamic header text `GI Order <OrderNo>` when reservation is absent.
+  5. UI (`GoodsIssue261.view.xml` & `GoodsIssue261.controller.js`):
+     - `GoodsIssue261.view.xml`: Added `SegmentedButton` mode toggle (`Planned (Reservation)` vs `Unplanned (Direct to Order)`) visible when `!fromReservation`. In unplanned mode, hides reservation inputs and displays editable `inOrderNo261` with value help, alongside editable `inMaterial261`, `inPlant261`, and `inStorageLocation261`.
+     - `GoodsIssue261.controller.js`: Added `onIssueModeChange()`, `onOrderValueHelp()`, `onMaterialValueHelp()`, `_loadMaterialInfo()`, and material live-change handlers.
+     - i18n (`i18n.properties` & `i18n_en.properties`): Added all unplanned keys (`gi261ModePlanned`, `gi261ModeUnplanned`, `gi261DialogOrderVhTitle`, `gi261OrderNoRequired`, etc.) with 100% parity.
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue261Unplanned.test.js`: 13/13 passed (100% green).
+  - `npx jest test/unit/wm/goodsIssue`: 326/326 tests passed across 22 test suites (100% green).
+  - `npm --prefix app/fiori-app run lint && npm --prefix app/fiori-app run build`: 0 lint errors, build succeeded in 1.19 s.
+  - Live Browser Test against Order `2000611`:
+    - Order preconditions verified: Plant `1120`, status `REL` (`I0002` active, `CRTD` inactive, not locked, not TECO), costing variant `PPP2`, settlement rule `ZP03`.
+    - Selected "Unplanned (Direct to Order)" mode toggle. Verified reservation fields hidden and Order number input enabled with value help dialog displaying real distinct S/4 orders.
+    - Entered Order `2000611`, Material `8500000035` (component with stock in `LQUA` Plant 1120 / SLoc CS01), Plant `1120`, Storage Location `CS01`, Unit `KG`, Quantity `1`. Form validated live and "Post Goods Issue" button became enabled.
+    - Clicked "Post Goods Issue". Captured real CAP request payload:
+      ```json
+      {
+        "MovementType": "261",
+        "OrderNo": "2000611",
+        "Material": "8500000035",
+        "Plant": "1120",
+        "StorageLocation": "CS01",
+        "IssueQty": 1,
+        "Unit": "KG",
+        "PostingDate": "2026-09-29",
+        "DocumentDate": "2026-09-29",
+        "HeaderTxt": "Test Unplanned 261"
+      }
+      ```
+    - Captured real SAP payload mapped to `API_MATERIAL_DOCUMENT_SRV`:
+      ```json
+      {
+        "GoodsMovementCode": "03",
+        "PostingDate": "/Date(1790640000000)/",
+        "DocumentDate": "/Date(1790640000000)/",
+        "MaterialDocumentHeaderText": "GI Order 2000611",
+        "to_MaterialDocumentItem": {
+          "results": [{
+            "Material": "8500000035",
+            "GoodsMovementType": "261",
+            "EntryUnit": "KG",
+            "QuantityInEntryUnit": "1",
+            "Plant": "1120",
+            "StorageLocation": "CS01",
+            "ManufacturingOrder": "000002000611"
+          }]
+        }
+      }
+      ```
+    - Real SAP Gateway Response: `HTTP 403 - No service found for namespace '', name 'API_MATERIAL_DOCUMENT_SRV', version '0001'` (Gateway service activation pending on DS4 Client 220).
+    - Dispatch Queue Action: CAP gracefully recorded `GI-QUEUE-UNPLANNED-0000-7561` in `GoodsIssueQueue`, confirmed via live OData GET query, and displayed honest Fiori Dialog: `Transaction recorded in the dispatch queue (GI-QUEUE-UNPLANNED-0000-7561), not yet posted in SAP. Pending SAP S/4HANA Gateway service activation.`
+  - `git diff --check`: 0 issues.
+- **Next recommended action**: Await Basis Gateway activation for `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220, or proceed with commit/push of feature/CL01.
+
+
+
 ## 2026-09-29 16:36 IST
 - **Agent**: Antigravity
 - **Request**: "Before we call the 261 Open Reservations workflow done, do a live browser verification — not another test run: 1. Confirm workspace on feature/CL01 at latest commit & fresh dev server; 2. Open dashboard, click '261 • Goods Issue' tile -> confirm lands on Open Reservations (261) page; 3. Pick real open reservation, confirm Order (OrderID) read-only, scan input with pass/fail feedback for serial/unit-managed, skip to quantity confirmation for non-serial; 4. Click 'Complete Goods Issue (261)' and paste actual result; 5. Confirm returned to Open Reservations (261) list with completed item gone."
@@ -4720,6 +4818,23 @@
   - **Next Recommended Action**: Proceed with remaining audit tasks or user requests.
 
 ## Current Status
+
+### Warehouse Management (WM) Goods Movement Implementation & Verification Matrix
+
+The table below provides a strict, unambiguous separation between **Code Complete & Unit-Tested** and **Live SAP-Verified** across all Goods Issue and Stock Transfer movement types:
+
+| Movement Type | Scope & Implementation Flow | Code Status | Automated Unit Tests | Live SAP Discovery / UI Flow (DS4 220) | Live Synchronous Posting in SAP | Operational Status & Dependency |
+|---|---|---|---|---|---|---|
+| **201 Planned** | Goods Issue to Cost Center via Reservation (`#/wm/goods-issue/201/open-reservations`) | **Complete**: Isolated model, service, controller, view, mapper, validator, i18n | **Passed**: 100% green | **Verified Live**: Queried 53 open reservations, serial/SU resolution, real stock lookups, pass/fail barcode validation | **Blocked by Gateway**: POST to `API_MATERIAL_DOCUMENT_SRV` returns `/IWFND/MED/170` -> Gracefully queued | **Code Ready**: Awaiting Basis activation of `API_MATERIAL_DOCUMENT_SRV` |
+| **201 Unplanned** | Direct Goods Issue to Cost Center without reservation (`#/wm/goods-issue/cost-center-201`) | **Complete**: Dedicated page, editable Cost Center with F4 VH, GLAccount derivation, unit tests | **Passed**: 100% green (37 tests) | **Verified Live**: Tested against Cost Center `1011202902`, Plant `1130`, SLoc `CS01`, Material `1000000980` | **Blocked by Gateway**: POST to `API_MATERIAL_DOCUMENT_SRV` returns `/IWFND/MED/170` -> Gracefully queued | **Code Ready**: Awaiting Basis activation of `API_MATERIAL_DOCUMENT_SRV` |
+| **261 Planned** | Goods Issue to Order via Reservation (`#/wm/goods-issue/261/open-reservations`) | **Complete**: Dedicated Open Resv page, scan-to-complete, OrderID read-only from resv item | **Passed**: 100% green | **Verified Live**: Resv `518660`, Order `1011`, unit `1000033379`, all 4 rejection paths (wrong mat, duplicate, excess qty, already issued) | **Blocked by Gateway**: Tier 1 RAP 404; Tier 2 standard returns `/IWFND/MED/170` -> Queued (`GI-QUEUE-518660-0001-6719`) | **Code Ready**: Awaiting Basis activation of `API_MATERIAL_DOCUMENT_SRV` |
+| **261 Unplanned** | Direct Goods Issue to Order without reservation (`#/wm/goods-issue/order-based-261`) | **Complete**: SegmentedButton mode toggle, editable Order input + F4 VH, `ManufacturingOrder` pad 12 | **Passed**: 100% green (13/13 dedicated tests) | **Verified Live**: Preconditions verified on Order `2000611` (status `REL`, costing `PPP2`, rule `ZP03`), SLoc `CS01`, Mat `8500000035` | **Blocked by Gateway**: Tier 1 bypassed; Tier 2 returns `/IWFND/MED/170` -> Queued (`GI-QUEUE-UNPLANNED-0000-7561`) | **Code Ready**: Awaiting Basis activation of `API_MATERIAL_DOCUMENT_SRV` |
+| **301** | Plant-to-Plant Stock Transfer | **Foundation Only**: Isolated mapper, validator, normalize, model logic exist | **Passed**: 100% green (isolated unit tests) | **Not Started**: Page not built / not wired to UI | **Blocked by Gateway**: Will hit identical `/IWFND/MED/170` Gateway error | **ON HOLD**: Gated until Basis activates `API_MATERIAL_DOCUMENT_SRV` |
+| **311** | Storage Location to Storage Location Stock Transfer | **Foundation Only**: Isolated mapper, validator, normalize, model logic exist | **Passed**: 100% green (isolated unit tests) | **Not Started**: Page not built / not wired to UI | **Blocked by Gateway**: Will hit identical `/IWFND/MED/170` Gateway error | **ON HOLD**: Gated until Basis activates `API_MATERIAL_DOCUMENT_SRV` |
+
+- **2026-09-29 17:25 IST (uncommitted)**: Created dedicated Basis Remediation P1 Blocker Ticket `docs/ticket-basis-activate-api-material-document.md` to activate `API_MATERIAL_DOCUMENT_SRV` in `/IWFND/MAINT_SERVICE` for System Alias `DS4_220` (Client 220). Formulated consolidated post-activation test protocol to re-post the 3 captured payloads (201, 261 planned, 261 unplanned) in a single sitting and compare Material Document numbers side-by-side in `MATDOC`/`MB03`. Feature development for 301 and 311 is explicitly placed on hold until Basis activation confirms synchronous material document creation.
+- **2026-09-29 17:15 IST (uncommitted)**: Built and live-verified Unplanned Movement 261 (Direct Goods Issue to Order without reservation). Added `SegmentedButton` mode toggle on `GoodsIssue261.view.xml`, editable Order input with F4 Value Help querying live S/4 manufacturing orders, and mandatory material/plant/sloc validation. Updated posting client to bypass RAP and route directly to Tier 2 `_submitMaterialDocument` with `item.ManufacturingOrder` 12-digit padding. Verified live against Order `2000611` (status `REL`, costing `PPP2`, rule `ZP03`) and captured real Gateway `/IWFND/MED/170` response and graceful queue fallback (`GI-QUEUE-UNPLANNED-0000-7561`). 13 new unit tests, 326 total WM tests green, 0 UI5 lint errors.
+- **2026-09-29 16:36 IST (uncommitted)**: Live-verified Movement 261 Planned Open Reservations workflow in browser against live S/4HANA backend: confirmed Order (`OrderID`) is read-only directly from reservation item, verified unit-managed vs non-serial detection, verified scan-to-complete with real barcode (`1000033379`), honest feedback, graceful queueing, and completed item removal from list. Tested all 4 business rejection paths (wrong material, duplicate scan, quantity exceeded, already issued/zero-stock unit `1000030107`) with 100% accurate feedback.
 - **2026-09-29 10:55 IST (uncommitted)**: Created and validated dedicated UI page for Movement Type 201 (Goods Issue to Cost Center) at route `#/wm/goods-issue/cost-center-201` without touching any existing goods-issue view/controller/model. Delivered `GoodsIssue201.view.xml`, `GoodsIssue201.controller.js`, `GoodsIssue201Model.js`, `GoodsIssue201Service.js`, registered route/target in `manifest.json`, added 35+ scoped `gi201*` i18n keys with 100% key parity, and added unit tests (`goodsIssue201Page.test.js`). Verified: UI5 linter 0 findings, UI5 build clean, 20/20 WM test suites passing (413/413 tests, 100% green), and `git diff --check` clean.
 - **2026-09-29 10:40 IST (uncommitted)**: Implemented and validated complete SAP S/4HANA backend for Movement 201 (Goods Issue to Cost Center) and 202 Reversal (`CancelHeader`) adhering strictly to AGENTS.md layering architecture. Added pure validation layer (`goodsIssue.validation.js`), CAP domain normalization mapper (`goodsIssue.mapper.js`), technical S/4 OData V2 mapper (`GoodsIssueMapper.js`), serial status pre-check (`validateSerialStatus` verifying `ESTO` / unrestricted in stock in `GoodsIssueStockUnitClient.js` before post), posting and `CancelHeader` reversal in `GoodsIssuePostingClient.js` & `GoodsIssueAdapter.js`, queue outbox schema support (`GLAccount`, `PostingDate`, `DocumentDate`), and handler integration. Verified 100% green across all 19 WM test suites (402/402 tests passing, including 37 new tests for 201 validation, mapping, posting, serial pre-check, and reversal). `cds compile srv` clean; `git diff --check` clean.
 - **2026-09-28 16:50 IST (uncommitted)**: Integrated Movement Type 201 (Goods Issue for Cost Center) into the Goods Issue Multi-Movement Dashboard (`#/wm/goods-issue`). Discovered 54 authentic postings in live SAP `MATDOC` table and 53 authentic open reservations in `UI_RESERVATION_ITM_MNG_V2`. Expanded dashboard across all 4 movement types (201, 261, 301, 311): added 201 KPI card with purple theme (`#8E44AD`), 4-way distribution donut chart, 4-series daily trend line chart, Recent Documents table with Cost Center column, live Cost Center search, filter toggle, and create wizard routing (`#/wm/goods-issue/create/201`). All 14 WM test suites (346 tests) 100% green; UI5 linter 0 findings; UI5 build succeeded; `git diff --check` clean.
@@ -6135,12 +6250,39 @@
   - View + controller updated to the renamed keys. Route pattern `wm/goods-issue/201/pending` → **`wm/goods-issue/201/open-reservations`** (route name unchanged, so `navTo`-by-name is unaffected). Dashboard code comment reworded.
 - **Executed commands & results**: `npx jest test/unit/wm/ test/unit/dashboard/`: 29 suites, **492/492 passed**. `npm --prefix app/fiori-app run lint`: clean. `run build`: succeeded. manifest valid JSON. `git diff --check`: clean. No leftover generic "pending" in the 201 page i18n values.
 - **Live verification (no console errors)**: `#/wm/goods-issue/201/open-reservations` renders header **"Open Reservations (201) - Goods Issue to Cost Center"** and list **"Open Reservations (50)"** with the real reservations; no "Pending" wording visible.
-- **Result**: the page now unambiguously reads as planned/reservation-based **Open Reservations (201)**.
+## 2026-09-29 16:48 IST
+- **Agent**: Antigravity
+- **Request**: Live-test real business-logic rejections in the browser against an open reservation (reservation 517575) using real S/4 stock unit barcodes:
+  1. Scan a valid stock unit belonging to a DIFFERENT material than the reservation's material — confirm the "wrong material" rejection message shown.
+  2. Scan the same valid unit twice in a row — confirm the "duplicate" rejection message shown.
+  3. On a reservation requiring qty > 1, scan more units than required — confirm the "quantity exceeded" message shown.
+  4. Find a unit already consumed/issued elsewhere and scan it — confirm the "already issued" message shown.
+- **Backend discovery & verification**:
+  - Reservation `517575` requires Material `8500000035` (TACH PURE DRYING G-1), Plant `1120`, SLoc `CS01`, Order `2000611`.
+  - Discovered real S/4 storage unit `1000034766` in `LQUA` belonging to Material `8500000032` (F MEP Distillation GR1).
+  - Discovered real S/4 storage units `1000027790`, `1000027791`, `1000027792` in `LQUA` belonging to expected Material `8500000035`.
+  - Discovered real S/4 storage unit `1000030107` in `LQUA` for Material `8500000035` whose stock is `0.000` (already consumed/issued).
+- **Live browser test results (URL: `#/wm/goods-issue/order-based-261?resv=517575`)**:
+  - **Case 1 (Wrong Material)**: Scanned real unit `1000034766`. Rejection state: `Error`.
+    - UI Message: `"Storage Unit 1000034766 holds material 8500000032 in plant 1120 / storage location CS01, but reservation 517575 item 0001 needs material 8500000035 in 1120 / CS01. Goods Issue is blocked."`
+  - **Case 2 (Duplicate Scan)**: Scanned unit `1000027790` twice.
+    - 1st scan: `"Matched unit 1000027790 (1 of 250)."` (scanned count: 1).
+    - 2nd scan: Rejection state: `Warning`. UI Message: `"Unit 1000027790 was already scanned."` (scanned count unchanged).
+  - **Case 3 (Quantity Exceeded)**: Configured line for required qty 2, scanned `1000027790` (1 of 2) and `1000027791` (2 of 2). Attempted 3rd scan with `1000027792`.
+    - Rejection state: `Warning`. UI Message: `"Quantity exceeded: 2 unit(s) already scanned for this line."` (scanned count capped at 2).
+  - **Case 4 (Already Consumed/Issued)**: Scanned real zero-stock unit `1000030107`. Rejection state: `Error`.
+    - UI Message: `"Storage Unit 1000030107 cannot be issued: no available stock."`
+    - Serial equipment status: Validated that serialized equipment in `EQUI`/`JEST` with non-`ESTO` status returns 422: `"Serial Number \"<sSerial>\" is already issued or not in unrestricted stock (Status: <statusText>). Serial numbers for Goods Issue must have status In-Stock (ESTO). Goods Issue is blocked."`
+- **Result**: All 4 business-logic rejection paths tested live in the browser against authentic S/4HANA backend data and confirmed working with exact feedback.
+
 ## Next Steps
 
 0. Dedicated Movement 201 & 261 UI Workflows:
    - Movement 201 Open Reservations (Route `#/wm/goods-issue/201/open-reservations`): Pending -> scan/match -> complete loop live-verified and tested (100% green).
-   - Movement 261 Open Reservations (Route `#/wm/goods-issue/261/open-reservations`): Pending -> scan/match -> complete loop live-verified against real SAP S/4HANA backend. Displays Order (`OrderID`) read-only directly from reservation item. Auto-detects serial/unit managed vs non-serial materials. Tested scan-to-complete with real barcode (`1000033379`), honest pass/fail feedback, graceful queueing (`GI-QUEUE-518660-0001-6719`), and return to Open Reservations list with completed item removed. Covered with 28 WM unit test suites (450/450 tests passing, 100% green).
+   - Movement 261 Planned & Unplanned Workflows (Route `#/wm/goods-issue/order-based-261` and `#/wm/goods-issue/261/open-reservations`):
+     - Planned (Reservation-based): Pending -> scan/match -> complete loop live-verified against real SAP S/4HANA backend. Displays Order (`OrderID`) read-only directly from reservation item. Auto-detects serial/unit managed vs non-serial materials. Tested scan-to-complete with real barcode (`1000033379`), honest pass/fail feedback, graceful queueing (`GI-QUEUE-518660-0001-6719`), and return to Open Reservations list with completed item removed.
+     - Unplanned (Direct to Order): SegmentedButton mode toggle ("Planned" vs "Unplanned") allows posting directly to an editable Manufacturing Order without reservation. Order number value help queries distinct active orders from S/4. Live-tested against released Order `2000611` (Plant 1120 / SLoc CS01, component `8500000035`), bypassing Tier 1 RAP and routing directly to Tier 2 `_submitMaterialDocument` (`API_MATERIAL_DOCUMENT_SRV`). Captured real payload and honest SAP Gateway response (`GI-QUEUE-UNPLANNED-0000-7561`).
+     - Covered with 23 WM unit test suites (326/326 tests passing, 100% green) plus dedicated `goodsIssue261Unplanned.test.js` (13/13 passing).
 1. WM Goods Issue Dashboard KPI Tiles (Route `#/wm/goods-issue` and `#/dashboard` EWM tab):
    - Fully implemented separate KPI tiles for movement types 201, 261, 301, 311, and Overall Total using standard `sap.m.GenericTile` controls.
    - Shows type label, total count, today's count, and click-to-filter toggle linking to the recent documents table.
@@ -6152,8 +6294,16 @@
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.
 4. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
-5. Provide Basis/Gateway team with updated `docs/ticket-gateway-remediation-ds4.md` to register `API_MATERIAL_DOCUMENT_SRV` on DS4 client 220 (System Alias `DS4_220`).
-6. Once registered by Basis, perform live probe of `$metadata` for `API_MATERIAL_DOCUMENT_SRV`, check `M_MSEG_BWA` and `S_SERVICE` authorizations for user `KHUSHAL`, and execute minimal live POST with reservation 18025.
+5. Basis Gateway Remediation: Provide Basis team with dedicated P1 ticket `docs/ticket-basis-activate-api-material-document.md` to register and activate `API_MATERIAL_DOCUMENT_SRV` on DS4 Client 220 (System Alias `DS4_220`).
+6. Consolidated Live Verification (Single Sitting): Once Basis confirms activation of `API_MATERIAL_DOCUMENT_SRV`, run ONE consolidated pass re-posting the 3 verified payloads:
+   - Movement 201 (Cost Center `1011202902`, Plant `1130`, SLoc `CS01`, Material `1000000980`, Qty `1`).
+   - Movement 261 Planned (Reservation `518660`, Item `0001`, Order `1011`, Material `8000009753`, Plant `1120`, SLoc `HS01`, Qty `1 NOS`).
+   - Movement 261 Unplanned (Order `2000611`, Material `8500000035`, Plant `1120`, SLoc `CS01`, Qty `1 KG`).
+   Paste all three real success responses (Material Document numbers) side-by-side and confirm persistence in `MATDOC` / `MB03`.
+6b. Movement 301 & 311 Development Hold:
+   - Do NOT begin feature implementation or UI screen wiring for Movement Types 301 (Plant-to-Plant) and 311 (SLoc-to-SLoc) while waiting on Basis.
+   - They share the exact same technical dependency (`API_MATERIAL_DOCUMENT_SRV`) and will hit the identical `/IWFND/MED/170` Gateway wall.
+   - Hold development until Basis activation confirms synchronous material document creation works end-to-end for at least one movement type.
 7. Select next development-ready capability to build from the verified list:
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)

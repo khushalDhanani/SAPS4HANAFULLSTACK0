@@ -139,6 +139,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     return {
       ReservationNo: String(meta.reservationNo || ''),
       ReservationItem: String(meta.reservationItem || ''),
+      OrderNo: String(meta.orderNo || ''),
       MaterialDocument: matDoc,
       MaterialDocYear: matYear,
       TransferOrder: '',
@@ -169,13 +170,25 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const sReserv = String(data.ReservationNo || '').trim();
     const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
     const sItem = rawItem ? rawItem.padStart(4, '0') : '';
-    if (!sReserv || !sItem) {
-      const err = new Error('ReservationNo and ReservationItem are required for Goods Issue');
+    const sOrder = String(data.OrderNo || data.OrderID || '').trim();
+
+    if ((!sReserv || !sItem) && !sOrder) {
+      const err = new Error('ReservationNo and ReservationItem are required (or OrderNo for unplanned Goods Issue)');
       err.status = 400;
       throw err;
     }
     this._assertPostable(data);
     await this._preflightPosting(data);
+
+    // Unplanned (no reservation, but order is provided): bypass Tier 1 reservation-keyed RAP service
+    // and route directly to Tier 2 standard API_MATERIAL_DOCUMENT_SRV.
+    if (!sReserv || !sItem) {
+      const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
+      return await this._submitMaterialDocument(payload, {
+        mvt: '261', label: 'Goods Issue for Order', reservationNo: '', reservationItem: '', orderNo: sOrder
+      });
+    }
+
     // Tier 1: custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4 (posts 261 only).
     try {
       const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
@@ -191,6 +204,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         return {
           ReservationNo: sReserv,
           ReservationItem: sItem,
+          OrderNo: sOrder,
           MaterialDocument: response.MaterialDocument || response.MatDoc,
           MaterialDocYear: response.MaterialDocYear || String(new Date().getFullYear()),
           TransferOrder: response.TransferOrder || response.ToNumber || '',
@@ -206,7 +220,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       try {
         const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
         return await this._submitMaterialDocument(payload, {
-          mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem
+          mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem, orderNo: sOrder
         });
       } catch (v2Err) {
         throw this._reclassifyPostingError(v4Err, v2Err, 'single-item movement 261');

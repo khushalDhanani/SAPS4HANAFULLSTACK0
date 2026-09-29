@@ -23,7 +23,9 @@ function mapToMaterialDocumentPayload(data) {
     item.GLAccount = String(data.GLAccount).trim();
   }
 
-  const headerText = `GI Resv ${data.ReservationNo || data.OrderNo || ''}`;
+  const headerText = data.ReservationNo
+    ? `GI Resv ${data.ReservationNo}`
+    : `GI Order ${data.OrderNo || data.OrderID || ''}`;
 
   return buildHeaderEnvelope({
     gmCode: '03',
