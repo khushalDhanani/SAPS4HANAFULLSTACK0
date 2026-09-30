@@ -576,10 +576,18 @@
                             text="{i18n>tabEWMTitle}"
                             tooltip="{i18n>tabEWMTooltip}">
                             <VBox class="sapUiSmallMarginTop">
-                                <VBox class="sapUiTinyMarginBottom">
-                                    <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
-                                    <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
-                                </VBox>
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <VBox>
+                                        <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
+                                    </VBox>
+                                    <Button
+                                        id="btnDashboardQueueTray"
+                                        text="{i18n>wmGIQueueTrayBtn}"
+                                        icon="sap-icon://inbox"
+                                        type="Transparent"
+                                        press=".onOpenQueueTray" />
+                                </HBox>
 
                                 <MessageStrip
                                     id="dashboardGiKpiError"

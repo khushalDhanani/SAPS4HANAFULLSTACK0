@@ -272,11 +272,6 @@
           "target": "TargetCreateSalesOrder"
         },
         {
-          "name": "wmGoodsIssue",
-          "pattern": "wm/goods-issue",
-          "target": "TargetGoodsIssueDashboard"
-        },
-        {
           "name": "wmGoodsIssue201Pending",
           "pattern": "wm/goods-issue/201/open-reservations:?query:",
           "target": "TargetGoodsIssue201Pending"
@@ -400,11 +395,6 @@
           "id": "createSalesOrder",
           "name": "CreateSalesOrder",
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
-        },
-        "TargetGoodsIssueDashboard": {
-          "id": "goodsIssueDashboard",
-          "name": "GoodsIssueDashboard",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue201": {
           "id": "goodsIssue201",

@@ -3,13 +3,15 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
-    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService"
+    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
+    "sap/ui/core/Fragment"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
     MessageToast,
-    GoodsIssueService
+    GoodsIssueService,
+    Fragment
 ) {
     "use strict";
 
@@ -424,7 +426,7 @@ sap.ui.define([
                 "301": "wmGoodsIssue301Pending",
                 "311": "wmGoodsIssue311Pending"
             };
-            var sRoute = mRoutes[sMvtType] || "wmGoodsIssue";
+            var sRoute = mRoutes[sMvtType] || "dashboard";
             this.getOwnerComponent().getRouter().navTo(sRoute);
             MessageToast.show(this._text(
                 "dashboardMvtOpenPostings",
@@ -447,6 +449,74 @@ sap.ui.define([
 
         onMvt311TilePress: function () {
             this._navigateToGiFiltered("311");
+        },
+
+        onOpenQueueTray: function () {
+            var oView = this.getView();
+            var that = this;
+
+            if (!this._pQueueDialog && Fragment) {
+                this._pQueueDialog = Fragment.load({
+                    id: oView.getId(),
+                    name: "saps4hana.fiori.modules.wm.goods-issue.view.QueueTrayDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    oView.addDependent(oDialog);
+                    return oDialog;
+                });
+            }
+
+            GoodsIssueService.getQueueSummary()
+                .then(function (oSummary) {
+                    var oQueueModel = that.getView().getModel("giQueue");
+                    if (!oQueueModel) {
+                        oQueueModel = new JSONModel();
+                        that.getView().setModel(oQueueModel, "giQueue");
+                    }
+                    oQueueModel.setData({
+                        queuedCount: oSummary.QueuedCount || 0,
+                        items: oSummary.Items || []
+                    });
+                    that._pQueueDialog.then(function (oDialog) {
+                        oDialog.open();
+                    });
+                })
+                .catch(function () {
+                    that._pQueueDialog.then(function (oDialog) {
+                        oDialog.open();
+                    });
+                });
+        },
+
+        onCloseQueueTray: function () {
+            if (this._pQueueDialog) {
+                this._pQueueDialog.then(function (oDialog) {
+                    oDialog.close();
+                });
+            }
+        },
+
+        onRefreshQueueTray: function () {
+            var that = this;
+            GoodsIssueService.getQueueSummary()
+                .then(function (oSummary) {
+                    var oQueueModel = that.getView().getModel("giQueue");
+                    if (oQueueModel) {
+                        oQueueModel.setData({
+                            queuedCount: oSummary.QueuedCount || 0,
+                            items: oSummary.Items || []
+                        });
+                    }
+                });
+        },
+
+        onExit: function () {
+            if (this._pQueueDialog) {
+                this._pQueueDialog.then(function (oDialog) {
+                    oDialog.destroy();
+                });
+                this._pQueueDialog = null;
+            }
         }
     });
 });

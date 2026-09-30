@@ -540,9 +540,9 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             expect(mockMessageToast.show).toHaveBeenCalled();
         });
 
-        it('onNavBack should navigate to the Goods Issue dashboard', () => {
+        it('onNavBack should navigate to the dashboard', () => {
             controller.onNavBack();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard');
         });
     });
 });

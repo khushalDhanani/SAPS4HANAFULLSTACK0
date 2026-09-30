@@ -265,9 +265,9 @@ describe('GoodsIssue311Pending Controller Unit Tests', () => {
     });
 
     describe('onNavBack', () => {
-        it('should navigate back to wmGoodsIssue', () => {
+        it('should navigate back to dashboard', () => {
             controller.onNavBack();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard');
         });
     });
 });

@@ -87,7 +87,7 @@ sap.ui.define([
         },
 
         onNavBack: function () {
-            this.getRouter().navTo("wmGoodsIssue");
+            this.getRouter().navTo("dashboard");
         }
     });
 });

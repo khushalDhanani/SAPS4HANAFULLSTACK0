@@ -722,9 +722,9 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             expect(oModel.getProperty('/reservationNo')).toBe('0000012345');
         });
 
-        it('onNavBack navigates to the wmGoodsIssue route when fromReservation is false', () => {
+        it('onNavBack navigates to the dashboard route when fromReservation is false', () => {
             controller.onNavBack();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard');
         });
 
         it('onNavBack navigates to wmGoodsIssue311Pending when fromReservation is true', () => {

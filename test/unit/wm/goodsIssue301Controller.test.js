@@ -662,9 +662,9 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
             expect(oModel.getProperty('/reservationNo')).toBe('0000012345');
         });
 
-        it('onNavBack navigates to the wmGoodsIssue route', () => {
+        it('onNavBack navigates to the dashboard route', () => {
             controller.onNavBack();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard');
         });
     });
 });

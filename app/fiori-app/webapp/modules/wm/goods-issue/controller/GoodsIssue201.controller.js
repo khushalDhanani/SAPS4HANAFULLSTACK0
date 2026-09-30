@@ -662,7 +662,11 @@ sap.ui.define([
         onNavBack: function () {
             var oRouter = this.getRouter();
             if (oRouter) {
-                oRouter.navTo("wmGoodsIssue");
+                if (this._oModel && this._oModel.getProperty("/fromReservation")) {
+                    oRouter.navTo("wmGoodsIssue201Pending");
+                } else {
+                    oRouter.navTo("dashboard");
+                }
             }
         }
     });

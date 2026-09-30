@@ -730,7 +730,7 @@ sap.ui.define([
                 if (this._oModel && this._oModel.getProperty("/fromReservation")) {
                     oRouter.navTo("wmGoodsIssue261Pending");
                 } else {
-                    oRouter.navTo("wmGoodsIssue");
+                    oRouter.navTo("dashboard");
                 }
             }
         }

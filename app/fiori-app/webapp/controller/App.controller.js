@@ -53,8 +53,6 @@ sap.ui.define([
                 this._updateShell("salesInquiryDetail", { SalesInquiry: sInqId });
             } else if (sHash.indexOf("sd/sales-inquiries") === 0) {
                 this._updateShell("salesInquiries");
-            } else if (sHash.indexOf("wm/goods-issue") === 0) {
-                this._updateShell("wmGoodsIssue");
             } else if (sHash.indexOf("wm/tr-to") === 0) {
                 this._updateShell("wmTrTo");
             } else if (sHash.indexOf("le/orders-due") === 0) {
@@ -140,10 +138,6 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("createSalesOrderTitle") : "Create Sales Order (VA01)";
                     bShowNav = true;
                     break;
-                case "wmGoodsIssue":
-                    sTitle = oBundle ? oBundle.getText("giDashboardPageTitle") : "Goods Issue & Stock Transfer Dashboard";
-                    bShowNav = true;
-                    break;
                 case "wmGoodsReceipt":
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
                     bShowNav = true;
@@ -204,7 +198,7 @@ sap.ui.define([
                 this.onNavBack("salesOrders");
             } else if (sRoute === "createCustomerReturn") {
                 this.onNavBack("customerReturns");
-            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsIssue" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
+            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {
                 this.onNavBack("dashboard");

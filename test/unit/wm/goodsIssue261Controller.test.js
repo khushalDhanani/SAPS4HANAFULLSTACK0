@@ -575,10 +575,10 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(mockMessageToast.show).toHaveBeenCalled();
         });
 
-        it('onNavBack should go to the Goods Issue dashboard for an unplanned/standalone issue', () => {
+        it('onNavBack should go to the dashboard for an unplanned/standalone issue', () => {
             controller._oModel.setProperty('/fromReservation', false);
             controller.onNavBack();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard');
         });
 
         it('onNavBack should go to the Pending list when completing a reservation', () => {

@@ -605,7 +605,7 @@ sap.ui.define([
                     oRouter.navTo(this._c.pendingRoute);
                     return;
                 }
-                oRouter.navTo("wmGoodsIssue");
+                oRouter.navTo("dashboard");
             }
         }
     });
