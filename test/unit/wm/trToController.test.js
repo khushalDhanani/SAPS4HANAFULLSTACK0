@@ -53,8 +53,7 @@ const mockTrToService = {
     ]),
     getTR: jest.fn(),
     checkSU: jest.fn(),
-    createTO: jest.fn(),
-    setSimulationActive: jest.fn()
+    createTO: jest.fn()
 };
 
 const mockDialog = {
@@ -480,7 +479,7 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
         });
     });
 
-    describe('Audio and Simulation Toggles', () => {
+    describe('Audio Toggle', () => {
         it('onToggleAudio should flip audioEnabled flag', () => {
             const model = controller.getModel('trToView');
             expect(model.getProperty('/audioEnabled')).toBe(true);
@@ -488,15 +487,6 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
             controller.onToggleAudio();
             expect(model.getProperty('/audioEnabled')).toBe(false);
             expect(mockMessageToast.show).toHaveBeenCalledWith('Audio cues muted');
-        });
-
-        it('onToggleSimulation should flip isSimulation and notify TrToService', () => {
-            const model = controller.getModel('trToView');
-            expect(model.getProperty('/isSimulation')).toBe(false);
-
-            controller.onToggleSimulation();
-            expect(model.getProperty('/isSimulation')).toBe(true);
-            expect(mockTrToService.setSimulationActive).toHaveBeenCalledWith(true);
         });
     });
 

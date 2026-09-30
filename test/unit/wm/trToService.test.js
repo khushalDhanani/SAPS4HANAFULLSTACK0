@@ -1,5 +1,7 @@
 /**
  * Unit Tests for TrToService (Warehouse Management TR to TO Client Service)
+ * Live SAP only — the mock/simulation path was removed (a fabricated TO number is never
+ * an acceptable substitute for a real SAP posting).
  */
 
 let TrToService;
@@ -22,7 +24,6 @@ describe('TrToService Unit Tests', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        TrToService.setSimulationActive(false);
     });
 
     describe('Model Management', () => {
@@ -30,14 +31,6 @@ describe('TrToService Unit Tests', () => {
             const mockModel = { name: 'testModel' };
             TrToService.setModel(mockModel);
             expect(TrToService.getModel()).toBe(mockModel);
-        });
-    });
-
-    describe('Simulation Toggle', () => {
-        it('should toggle simulation mode', () => {
-            expect(TrToService.isSimulationActive()).toBe(false);
-            TrToService.setSimulationActive(true);
-            expect(TrToService.isSimulationActive()).toBe(true);
         });
     });
 
@@ -56,11 +49,9 @@ describe('TrToService Unit Tests', () => {
             expect(result[0].Tbnum).toBe('0001000663');
         });
 
-        it('should return mock open TRs when simulation is active', async () => {
-            TrToService.setSimulationActive(true);
-            const result = await TrToService.getOpenTRs('W01', '319');
-            expect(result.length).toBeGreaterThan(0);
-            expect(result[0].Bwlvs).toBe('319');
+        it('should propagate backend errors (no mock fallback)', async () => {
+            mockODataClient.get.mockRejectedValue(new Error('Backend offline'));
+            await expect(TrToService.getOpenTRs('W01', '319')).rejects.toThrow('Backend offline');
         });
     });
 
@@ -88,20 +79,8 @@ describe('TrToService Unit Tests', () => {
             expect(result.Items).toHaveLength(1);
         });
 
-        it('should fallback to mock data when simulation is active and TR ends with 663', async () => {
-            TrToService.setSimulationActive(true);
-            mockODataClient.get.mockRejectedValue(new Error('Network error'));
-
-            const result = await TrToService.getTR('0001000663', 'W01');
-            expect(result.Tbnum).toBe('0001000663');
-            expect(result.Items[0].Material).toBe('1000000867');
-            expect(result.Items[0].OpenQty).toBe(17323.2);
-        });
-
-        it('should propagate error when simulation is false', async () => {
-            TrToService.setSimulationActive(false);
+        it('should propagate backend errors (no mock fallback)', async () => {
             mockODataClient.get.mockRejectedValue(new Error('Backend offline'));
-
             await expect(TrToService.getTR('0001000663', 'W01')).rejects.toThrow('Backend offline');
         });
     });
@@ -130,20 +109,8 @@ describe('TrToService Unit Tests', () => {
             expect(result.Quants[0].AvailableStock).toBe(11210.0);
         });
 
-        it('should fallback to mock data when simulation is active and SU ends with 43935', async () => {
-            TrToService.setSimulationActive(true);
-            mockODataClient.get.mockRejectedValue(new Error('Network error'));
-
-            const result = await TrToService.checkSU('1000043935', '0001000663', 'W01');
-            expect(result.IsValid).toBe(true);
-            expect(result.Lenum).toBe('00000000001000043935');
-            expect(result.Quants[0].AvailableStock).toBe(11210.0);
-        });
-
-        it('should propagate error when simulation is false', async () => {
-            TrToService.setSimulationActive(false);
+        it('should propagate backend errors (no mock fallback)', async () => {
             mockODataClient.get.mockRejectedValue(new Error('SU 99999 not found'));
-
             await expect(TrToService.checkSU('99999', '0001000663', 'W01')).rejects.toThrow('SU 99999 not found');
         });
     });
@@ -189,43 +156,13 @@ describe('TrToService Unit Tests', () => {
             expect(result.Confirmed).toBe(true);
         });
 
-        it('should fallback to mock TO creation when simulation is active', async () => {
-            TrToService.setSimulationActive(true);
+        it('should propagate backend errors (no mock fallback)', async () => {
             mockODataClient.post.mockRejectedValue(new Error('Gateway down'));
-
             const payload = {
-                lgnum: 'W01',
-                tbnum: '0001000663',
-                tbpos: '0001',
-                lenum: '1000043935',
-                qty: 500,
-                openQty: 1000,
-                confirmImmediate: true
+                lgnum: 'W01', tbnum: '0001000663', tbpos: '0001',
+                lenum: '1000043935', qty: 500, openQty: 1000, confirmImmediate: true
             };
-
-            const result = await TrToService.createTO(payload);
-            expect(result.Success).toBe(true);
-            expect(result.TransferOrder).toMatch(/^00010\d{5}$/);
-            expect(result.Confirmed).toBe(true);
-        });
-    });
-
-    describe('Direct Mock Methods', () => {
-        it('getMockTR should return structured TR header and items', () => {
-            const tr = TrToService.getMockTR('0001000663', 'W01');
-            expect(tr.Lgnum).toBe('W01');
-            expect(tr.Tbnum).toBe('0001000663');
-            expect(tr.Items).toHaveLength(2);
-            expect(tr.Items[0].Material).toBe('1000000867');
-            expect(tr.Items[0].OpenQty).toBe(17323.2);
-        });
-
-        it('getMockSU should return matching SU and quants', () => {
-            const su = TrToService.getMockSU('1000043935', '0001000663', 'W01');
-            expect(su.IsValid).toBe(true);
-            expect(su.Lenum).toBe('00000000001000043935');
-            expect(su.Quants[0].Quant).toBe('0001035375');
-            expect(su.Quants[0].AvailableStock).toBe(11210.0);
+            await expect(TrToService.createTO(payload)).rejects.toThrow('Gateway down');
         });
     });
 });

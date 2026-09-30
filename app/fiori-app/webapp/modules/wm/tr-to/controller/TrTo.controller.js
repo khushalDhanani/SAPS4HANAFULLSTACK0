@@ -44,9 +44,6 @@ sap.ui.define([
                 destBin: "",
                 destType: "",
                 audioEnabled: true,
-                isSimulation: false,
-                // Mock backend only for local development; never offered to operators.
-                isDevHost: /^(localhost|127\.0\.0\.1)$/.test(((typeof window !== "undefined" && window.location) || {}).hostname || ""),
                 hasMessage: false,
                 messageText: "",
                 messageType: "Information",
@@ -531,14 +528,6 @@ sap.ui.define([
             var bEnabled = !oModel.getProperty("/audioEnabled");
             oModel.setProperty("/audioEnabled", bEnabled);
             MessageToast.show(bEnabled ? "Audio cues enabled" : "Audio cues muted");
-        },
-
-        onToggleSimulation: function () {
-            var oModel = this.getModel("trToView");
-            var bActive = !oModel.getProperty("/isSimulation");
-            oModel.setProperty("/isSimulation", bActive);
-            TrToService.setSimulationActive(bActive);
-            MessageToast.show(bActive ? "Simulation mode enabled" : "Live S/4HANA mode enabled");
         },
 
         onCloseMessage: function () {

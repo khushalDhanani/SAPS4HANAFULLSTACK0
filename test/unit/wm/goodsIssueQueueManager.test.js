@@ -163,7 +163,7 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
 
       const result = await handlers['postGoodsIssue261'](request());
 
-      expect(result).toMatchObject({ Success: true, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
+      expect(result).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
       expect(result.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
       expect(result.Message).not.toMatch(/safely/i);
       await expect(manager.get(result.QueueReference)).resolves.toMatchObject({ ReservationNo: '18025', SyncStatus: 'QUEUED' });

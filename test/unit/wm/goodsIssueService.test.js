@@ -595,7 +595,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
       const result = await handlers['postGoodsIssue261'](req);
       expect(result).toBeDefined();
-      expect(result.Success).toBe(true);
+      expect(result.Success).toBe(false); // Queued != posted in SAP -> not a success (AGENTS.md rule 6)
       expect(result.Queued).toBe(true);
       expect(result.SyncStatus).toBe('QUEUED');
       expect(result.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);

@@ -579,17 +579,24 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const cancelUrl = GoodsIssueMapper.mapToCancelHeaderUrl(sDoc, sYear, postingDate);
     try {
       const response = await this._post(cancelUrl, {});
+      // Honor a sap-message severity=error on a 2xx (mirrors _submitMaterialDocument), and require a
+      // genuine reversal document. Never fall back to the original document number or claim success
+      // without proof — a reversal that SAP did not persist is not a success (AGENTS.md rule 6).
+      GoodsIssuePostingClient._throwIfSapBusinessError(response);
       const revMatDoc = response.MaterialDocument || response.d?.MaterialDocument || response.Cancel?.MaterialDocument || response.CancelHeader?.MaterialDocument;
       const revMatYear = response.MaterialDocumentYear || response.d?.MaterialDocumentYear || sYear;
+      if (!revMatDoc) {
+        throw new Error(`SAP S/4HANA did not return a reversal material document for the cancellation of ${sDoc}/${sYear}, and no sap-message error was present in the response. The reversal was NOT confirmed.`);
+      }
 
       return {
         OriginalMaterialDocument: sDoc,
         OriginalMaterialDocYear: sYear,
-        ReversalMaterialDocument: revMatDoc || sDoc,
+        ReversalMaterialDocument: revMatDoc,
         ReversalMaterialDocYear: revMatYear,
         PostingDate: postingDate || new Date().toISOString().split('T')[0],
         Success: true,
-        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via Cancel.${revMatDoc ? ` Reversal Document: ${revMatDoc}/${revMatYear}.` : ''}`
+        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via Cancel. Reversal Document: ${revMatDoc}/${revMatYear}.`
       };
     } catch (err) {
       throw S4ErrorMapper.mapS4Error(err, 'reverseGoodsIssue');

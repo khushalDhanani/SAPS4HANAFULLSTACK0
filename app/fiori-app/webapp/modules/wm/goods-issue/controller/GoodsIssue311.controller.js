@@ -315,14 +315,9 @@ sap.ui.define([
                     oDialog.bindAggregation("items", "/", oTemplate);
                     oDialog.open();
                 })
-                .catch(function () {
-                    var oModel = new JSONModel([
-                        { Plant: "1120", PlantName: "Aether Main Plant" },
-                        { Plant: "1110", PlantName: "Aether Specialty Plant" }
-                    ]);
-                    oDialog.setModel(oModel);
-                    oDialog.bindAggregation("items", "/", oTemplate);
-                    oDialog.open();
+                .catch(function (err) {
+                    // Never seed the value help with invented plants — surface the real SAP error.
+                    MessageBox.error("Failed to load receiving plants: " + ((err && err.message) || err));
                 });
         },
 
@@ -355,14 +350,9 @@ sap.ui.define([
                     oDialog.bindAggregation("items", "/", oTemplate);
                     oDialog.open();
                 })
-                .catch(function () {
-                    var oModel = new JSONModel([
-                        { StorageLocation: "HS01", StorageLocationName: "High Security 01", Plant: sPlant },
-                        { StorageLocation: "MT01", StorageLocationName: "Material Store 01", Plant: sPlant }
-                    ]);
-                    oDialog.setModel(oModel);
-                    oDialog.bindAggregation("items", "/", oTemplate);
-                    oDialog.open();
+                .catch(function (err) {
+                    // Never seed the value help with invented storage locations — surface the real SAP error.
+                    MessageBox.error("Failed to load receiving storage locations: " + ((err && err.message) || err));
                 });
         },
 

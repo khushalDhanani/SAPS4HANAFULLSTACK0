@@ -27,13 +27,6 @@
                     type="Transparent"
                     press=".onToggleAudio"
                     class="sapUiTinyMarginEnd" />
-                <Button
-                    id="btnToggleSimulation"
-                    visible="{trToView>/isDevHost}"
-                    text="{= ${trToView>/isSimulation} ? 'MOCK' : 'LIVE' }"
-                    type="{= ${trToView>/isSimulation} ? 'Attention' : 'Transparent' }"
-                    tooltip="Toggle Backend Live / Mock Simulation"
-                    press=".onToggleSimulation" />
             </HBox>
         </headerContent>
 

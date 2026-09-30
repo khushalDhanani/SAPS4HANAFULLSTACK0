@@ -68,6 +68,9 @@ sap.ui.define([
          * @returns {Promise<Array<{OrderNo: string, Plant: string, Description: string}>>}
          */
         fetchDistinctOrders: function () {
+            // Only orders derived from live SAP reservations. Never inject placeholder orders or a
+            // default plant — an invented order/plant in the value help would let the user post
+            // against data that does not exist in SAP. Errors propagate so the caller can surface them.
             return this.fetchOpenReservations()
                 .then(function (aResvs) {
                     var mOrders = {};
@@ -76,24 +79,12 @@ sap.ui.define([
                         if (ord && !mOrders[ord]) {
                             mOrders[ord] = {
                                 OrderNo: ord,
-                                Plant: r.Plant || "1120",
+                                Plant: String(r.Plant || "").trim(),
                                 Description: r.DisplayText || ("Manufacturing Order " + ord)
                             };
                         }
                     });
-                    if (!mOrders["2000611"]) {
-                        mOrders["2000611"] = { OrderNo: "2000611", Plant: "1120", Description: "Manufacturing Order 2000611 (Plant 1120)" };
-                    }
-                    if (!mOrders["2000608"]) {
-                        mOrders["2000608"] = { OrderNo: "2000608", Plant: "1120", Description: "Manufacturing Order 2000608 (Plant 1120)" };
-                    }
                     return Object.keys(mOrders).map(function (k) { return mOrders[k]; });
-                })
-                .catch(function () {
-                    return [
-                        { OrderNo: "2000611", Plant: "1120", Description: "Manufacturing Order 2000611 (Plant 1120)" },
-                        { OrderNo: "2000608", Plant: "1120", Description: "Manufacturing Order 2000608 (Plant 1120)" }
-                    ];
                 });
         },
 

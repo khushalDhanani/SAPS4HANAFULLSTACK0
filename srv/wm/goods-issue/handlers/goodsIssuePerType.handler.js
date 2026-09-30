@@ -111,7 +111,9 @@ async function postWithQueueFallback(req, normalized, postFn) {
         DifferenceQty: Number(normalized.DifferenceQty) || 0,
         SerialNumber: normalized.SerialNumber,
         SerialNumbers: normalized.SerialNumbers,
-        Success: true,
+        // Queued != posted: SAP did NOT persist the document, so this is not a success (AGENTS.md rule 6).
+        // Matches the legacy handler's honest queued result (goodsIssue.handler.js).
+        Success: false,
         Queued: true,
         QueueReference: queueRecord.QueueReference,
         SyncStatus: 'QUEUED',
