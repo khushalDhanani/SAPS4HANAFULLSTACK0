@@ -179,13 +179,41 @@ describe('GoodsIssue201Service Unit Tests', () => {
             expect(result.batches).toEqual([]);
         });
 
+        it('should query live stock via revalidateStock for non-batch materials', async () => {
+            mockODataClient.get
+                .mockResolvedValueOnce({ value: [{ MaterialName: 'Safety Shoes', MaterialBaseUnit: 'NOS' }] })
+                .mockResolvedValueOnce({ value: [] }) // no batches
+                .mockResolvedValueOnce({ CurrentStock: 10, BaseUnit: 'NOS', StockReadSuccess: true }); // revalidateStock
+
+            const result = await Service.fetchMaterialDetails('8000002212', '1120', 'HS01');
+            expect(result.isBatchManaged).toBe(false);
+            expect(result.availableStock).toBe(10);
+            expect(result.unit).toBe('NOS');
+            expect(mockODataClient.get.mock.calls[2][0]).toContain('/odata/v4/goods-issue/revalidateStock');
+            expect(mockODataClient.get.mock.calls[2][0]).toContain("storageLocation='HS01'");
+        });
+
         it('should propagate an error from the material query', async () => {
             mockODataClient.get.mockRejectedValue(new Error('MaterialVH down'));
             await expect(Service.fetchMaterialDetails('MAT-1')).rejects.toThrow('MaterialVH down');
         });
     });
 
-    describe('fetchCostCenters / fetchPlants / fetchStorageLocations', () => {
+    describe('fetchCostCenters / fetchCostCenterDetails / fetchPlants / fetchStorageLocations', () => {
+        it('fetchCostCenterDetails should query CostCenterVH for specific cost center', async () => {
+            mockODataClient.get.mockResolvedValue({ value: [{ CostCenter: '1011201601', CostCenterName: 'Electrical' }] });
+            const result = await Service.fetchCostCenterDetails('1011201601');
+            expect(mockODataClient.get).toHaveBeenCalledWith(
+                expect.stringContaining("/odata/v4/purchase-order/CostCenterVH?$filter=CostCenter eq '1011201601'&$top=1")
+            );
+            expect(result.CostCenterName).toBe('Electrical');
+        });
+
+        it('fetchCostCenterDetails should return null when cost center is empty', async () => {
+            const result = await Service.fetchCostCenterDetails('');
+            expect(result).toBeNull();
+        });
+
         it('fetchCostCenters should build a plain URL and unwrap value', async () => {
             mockODataClient.get.mockResolvedValue({ value: [{ CostCenter: 'CC1' }] });
             const result = await Service.fetchCostCenters();

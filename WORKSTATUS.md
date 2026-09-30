@@ -4,6 +4,62 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 17:17 IST
+- **Agent**: Antigravity
+- **Request**: "Two small remaining fixes on GoodsIssue201.view.xml: 1. Inconsistent empty-state placeholder: 'Cost Center Name' shows '—' (em dash) but 'Unrestricted Stock' shows '_' (underscore-looking character). Standardize both empty states to the same placeholder ('—'). 2. Uneven vertical gap in the Movement Overview card — there's a noticeably larger gap between 'Item Tracking' and 'Validation Status' rows than between the other rows in that card. Fix row spacing to be uniform across all 4 rows. Confirm and fix both, then confirm visually."
+- **Root Cause & Rationale**:
+  - **1. Standardize Empty-State Placeholder**:
+    - In `GoodsIssue201.controller.js`, `formatAvailableStock` returned `""` when `nStock` was null/undefined/empty string, and `GoodsIssue201.view.xml` used an embedded expression binding with `parts: [...]`.
+    - In addition, `<ObjectStatus>` in UI5 renders with 14px font, light gray color (`#6a6d70`), and baseline offset, which made the thin horizontal glyph look like an underscore `_` on the baseline.
+    - Updated `formatAvailableStock` to return the standardized em dash `" — "` (`"—"`, `\u2014`) when stock is null, undefined, or empty, and used clean composite binding `<ObjectStatus id="statStockStatusLine" text="{parts: [{path: 'gi201>/availableStock'}, {path: 'gi201>/unit'}], formatter: '.formatAvailableStock'}" ... />`.
+    - In `style.css`, standardized `.giFormValueText .sapMObjStatusText` to `font-size: 1rem !important; line-height: 1.25rem !important;` and `.giFormValueText.sapMObjStatusNone .sapMObjStatusText` to `color: var(--sapTextColor, #232629) !important;`. The placeholder now renders identically to "Cost Center Name" and "Material Description".
+  - **2. Movement Overview Card Vertical Row Rhythm**:
+    - In `#formMovementSummary`, Rows 1 & 2 (`Movement Type`, `Posting Mode`) are `<Text>` controls whose glyphs centered inside 32px height at top 407 and 439 (32px step).
+    - Row 3 (`Item Tracking`) was `<ObjectStatus>` with `.sapMObjStatusWrapper` and `display: block` text starting at top 463 (24px gap from Row 2), while Row 4 (`Validation Status`) had an alert icon sitting at top 503, resulting in a 40px visual leap between Row 3 and Row 4.
+    - Added flexbox alignment to `.giFormValueText .sapMObjStatusWrapper` and `.giFormValueText .sapMObjStatusText` (`display: inline-flex !important; align-items: center !important; height: 100% !important;`), and aligned `.sapMObjStatusIcon`.
+    - All 4 rows in `#formMovementSummary` now exhibit uniform 32px step rhythm (top coordinates: Row 1 = 413, Row 2 = 445, Row 3 = 477, Row 4 = 509).
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`
+  - `app/fiori-app/webapp/css/style.css`
+  - `test/unit/wm/goodsIssue201Controller.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 978 ms.
+  - `npm test -- test/unit/wm/goodsIssue201`: 6 test suites passed, 108/108 tests green.
+  - `npm test -- test/unit/wm/`: 42 test suites passed, 787/787 tests green.
+  - Visual verification: Reloaded and confirmed via Chrome DevTools screenshot (`goods_issue_201_verified.png`) that placeholders are identical em dashes and all 4 rows in Movement Overview have uniform spacing.
+- **Current Status**: Complete. Both issues confirmed, resolved, tested, and visually verified.
+- **Next Steps**: Awaiting user instructions.
+
+## 2026-09-30 17:05 IST
+- **Agent**: Antigravity
+- **Request**: "Fix layout/alignment issues on the 201 execution page @GoodsIssue201.view.xml : 1. Card headers show a stray secondary value floating top-right. 2. Field alignment inconsistent: labels and inputs across two-column layout don't align on same vertical grid between left and right cards. 3. 'Movement Overview' card mixes unrelated info with inconsistent spacing — tighten to clean key-value list. 4. Ensure consistent field height, label width, and spacing across ALL cards. 5. Value help icons should be vertically centered in their input. Show current view.xml grid/form structure first, then fix."
+- **Root Cause & Rationale**:
+  - **1. Stray Header Floating Values**: Card header toolbars contained floating `<ObjectStatus>` badges duplicating in-form values (Cost Center code in card 1, stock count in card 2, quantity in card 3, and ready badge in card 4). Removed the floating values so all 4 card headers present uniform `<Title level="H3" />` headers.
+  - **2. Dynamic Row Collapse & Vertical Grid Desync**: Conditionally showing/hiding Row 2 (`costCenterName` and `materialName`) via `visible="{= !!... }"` caused the left card to alternate between 3 and 4 rows while the right card had 5 rows, making fields jump and sit at different vertical heights across the columns. Resolved by maintaining consistent rows with fallback `—` for descriptions and pairing Plant and Storage Location in Row 3 (matching Quantity & Unit pairing in Card 3). Both top cards now have exactly 4 rows that align horizontally 1-to-1:
+    - Row 1: Cost Center <---> Material Number
+    - Row 2: Cost Center Name <---> Material Description
+    - Row 3: G/L Account <---> Plant & Storage Location
+    - Row 4: Header Text <---> Unrestricted Stock
+  - **3. Movement Overview Clean Key-Value List**: Changed `formMovementSummary` to `editable="true"` for uniform Fiori label margins and line-heights. Formatted all 4 rows into a clean, disciplined key-value list (Movement Type, Posting Mode, Item Tracking, Validation Status) using `.giFormValueText`.
+  - **4. Cohesive Card Heights & Spacing**: Added `.giCardPanel` with 100% height and flex column stretch; all 4 cards share `labelSpanXL="4"`, `labelSpanL="4"`, `labelSpanM="4"`, `labelSpanS="12"`.
+  - **5. Vertically Centered Value-Help Icons**: Added flex-centering styles in `style.css` on `.sapMInputBaseContentWrapper`, `.sapMInputBaseIconContainer`, `.sapMInputValHelp`, and `.sapMInputBaseIcon` (`line-height: 1 !important`) eliminating icon baseline offset.
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`
+  - `app/fiori-app/webapp/css/style.css`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - `npm run lint`: Clean (0 errors, 5 warnings in unrelated files).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 2.07 s.
+  - `npx jest test/unit/wm/goodsIssue201`: 6 test suites passed, 106/106 tests green.
+- **Current Status**: Complete. Goods Issue 201 execution page layout and grid alignment fully modernized and verified. All bindings, events, validations, and controller methods preserved intact.
+- **Next Steps**: Awaiting user instructions.
+
 ## 2026-09-30 16:55 IST
 - **Agent**: Antigravity
 - **Request**: "Delete the GoodsIssueDashboard hub entirely (route #/wm/goods-issue, GoodsIssueDashboard.view.xml, GoodsIssueDashboard.controller.js, and its route/target in manifest.json). Update onNavBack in all 8 controllers to route directly to main Launchpad dashboard (#/dashboard). Confirm tiles route directly to their respective Pending pages. Move QueueTrayDialog.fragment.xml usage to main Launchpad Dashboard."

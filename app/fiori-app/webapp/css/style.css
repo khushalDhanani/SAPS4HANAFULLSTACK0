@@ -442,3 +442,78 @@
     max-width: 100% !important;
     width: 100% !important;
 }
+
+/* Value Help Icon vertical centering inside Input controls */
+.sapMInputBaseContentWrapper {
+    align-items: center !important;
+}
+
+.sapMInputBaseIconContainer,
+.sapMInputValHelp {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 100% !important;
+    vertical-align: middle !important;
+}
+
+.sapMInputBaseIcon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    height: auto !important;
+}
+
+/* Goods Issue 201 Form Grid & Card Alignment */
+.giCardPanel {
+    height: 100% !important;
+}
+
+.giCardPanel .sapMPanelContent {
+    padding: 1rem 1.25rem !important;
+}
+
+.giFormValueText,
+.giFormValueText.sapMObjStatus,
+.giFormValueText.sapMText {
+    height: 2rem !important;
+    min-height: 2rem !important;
+    max-height: 2rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    line-height: 1.25rem !important;
+}
+
+.giFormValueText .sapMObjStatusWrapper {
+    height: 100% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    line-height: 1.25rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.giFormValueText .sapMObjStatusText {
+    height: 100% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    line-height: 1.25rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 1rem !important;
+}
+
+.giFormValueText .sapMObjStatusIcon {
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    margin-right: 0.375rem !important;
+}
+
+.giFormValueText.sapMObjStatusNone .sapMObjStatusText {
+    color: var(--sapTextColor, #232629) !important;
+}

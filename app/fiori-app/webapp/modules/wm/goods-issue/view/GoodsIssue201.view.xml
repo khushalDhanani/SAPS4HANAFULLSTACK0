@@ -64,17 +64,13 @@
                     class="sapUiNoMarginTop sapUiSmallMarginBottom">
 
                     <!-- Section 1 (Row 1 Left): Cost Center Assignment -->
-                    <Panel id="pnlCostAssignment">
+                    <Panel id="pnlCostAssignment" class="giCardPanel">
                         <layoutData>
                             <layout:GridData span="XL6 L6 M6 S12" />
                         </layoutData>
                         <headerToolbar>
                             <Toolbar>
                                 <Title text="{i18n>gi201TitleCostAssignment}" level="H3" />
-                                <ToolbarSpacer />
-                                <ObjectStatus
-                                    text="{= ${gi201>/costCenter} ? ${gi201>/costCenter} : ${i18n>gi201CostCenterRequired} }"
-                                    state="{= ${gi201>/costCenter} ? 'Success' : 'Warning' }" />
                             </Toolbar>
                         </headerToolbar>
                         <f:SimpleForm
@@ -103,16 +99,16 @@
                                     showValueHelp="true"
                                     valueHelpRequest=".onCostCenterValueHelp"
                                     liveChange=".onCostCenterLiveChange"
+                                    change=".onCostCenterChange"
                                     valueState="{= ${gi201>/errors/costCenter} ? 'Error' : 'None' }"
                                     valueStateText="{gi201>/errors/costCenter}"
                                     maxLength="10" />
 
-                                <Label id="lblCostCenterName" text="{i18n>gi201CostCenterName}" visible="{= !!${gi201>/costCenterName} }" />
+                                <Label id="lblCostCenterName" text="{i18n>gi201CostCenterName}" />
                                 <Text
                                     id="txtCostCenterName"
-                                    text="{gi201>/costCenterName}"
-                                    class="sapUiTinyMarginTop fontBold"
-                                    visible="{= !!${gi201>/costCenterName} }" />
+                                    text="{= ${gi201>/costCenterName} ? ${gi201>/costCenterName} : '—' }"
+                                    class="giFormValueText fontBold" />
 
                                 <Label id="lblGlAccount" text="{i18n>gi201GlAccountLabel}" />
                                 <Input
@@ -132,20 +128,13 @@
                     </Panel>
 
                     <!-- Section 2 (Row 1 Right): Material & Location -->
-                    <Panel id="pnlMaterialLocation">
+                    <Panel id="pnlMaterialLocation" class="giCardPanel">
                         <layoutData>
                             <layout:GridData span="XL6 L6 M6 S12" />
                         </layoutData>
                         <headerToolbar>
                             <Toolbar>
                                 <Title text="{i18n>gi201TitleMaterialLocation}" level="H3" />
-                                <ToolbarSpacer />
-                                <ObjectStatus
-                                    id="statAvailableStock"
-                                    text="{parts: [{path: 'gi201>/availableStock'}, {path: 'gi201>/unit'}], formatter: '.formatAvailableStock'}"
-                                    state="{= ${gi201>/availableStock} > 0 ? 'Success' : 'Warning' }"
-                                    icon="{= ${gi201>/availableStock} > 0 ? 'sap-icon://sys-enter-2' : 'sap-icon://alert' }"
-                                    visible="{= ${gi201>/availableStock} !== null }" />
                             </Toolbar>
                         </headerToolbar>
                         <f:SimpleForm
@@ -177,57 +166,61 @@
                                     valueState="{= ${gi201>/errors/material} ? 'Error' : 'None' }"
                                     valueStateText="{gi201>/errors/material}" />
 
-                                <Label id="lblMaterialDesc" text="{i18n>gi201MaterialDesc}" visible="{= !!${gi201>/materialName} }" />
+                                <Label id="lblMaterialDesc" text="{i18n>gi201MaterialDesc}" />
                                 <Text
                                     id="txtMaterialDesc"
-                                    text="{gi201>/materialName}"
-                                    class="sapUiTinyMarginTop fontBold"
-                                    visible="{= !!${gi201>/materialName} }" />
+                                    text="{= ${gi201>/materialName} ? ${gi201>/materialName} : '—' }"
+                                    class="giFormValueText fontBold" />
 
                                 <Label id="lblPlant" text="{i18n>gi201Plant}" required="true" />
-                                <Input
-                                    id="inPlant"
-                                    value="{gi201>/plant}"
-                                    showValueHelp="true"
-                                    valueHelpRequest=".onPlantValueHelp"
-                                    liveChange=".onFieldLiveChange"
-                                    valueState="{= ${gi201>/errors/plant} ? 'Error' : 'None' }"
-                                    valueStateText="{gi201>/errors/plant}"
-                                    maxLength="4" />
+                                <HBox id="boxPlantLocation" alignItems="Center">
+                                    <Input
+                                        id="inPlant"
+                                        value="{gi201>/plant}"
+                                        placeholder="{i18n>gi201Plant}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onPlantValueHelp"
+                                        liveChange=".onFieldLiveChange"
+                                        change=".onFieldChange"
+                                        valueState="{= ${gi201>/errors/plant} ? 'Error' : 'None' }"
+                                        valueStateText="{gi201>/errors/plant}"
+                                        maxLength="4"
+                                        width="7.5rem"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Label id="lblStorageLocation" text="{i18n>gi201StorageLocation}" required="true" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+                                    <Input
+                                        id="inStorageLocation"
+                                        value="{gi201>/storageLocation}"
+                                        placeholder="{i18n>gi201StorageLocation}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onStorageLocationValueHelp"
+                                        liveChange=".onFieldLiveChange"
+                                        change=".onFieldChange"
+                                        valueState="{= ${gi201>/errors/storageLocation} ? 'Error' : 'None' }"
+                                        valueStateText="{gi201>/errors/storageLocation}"
+                                        maxLength="4"
+                                        width="7.5rem" />
+                                </HBox>
 
-                                <Label id="lblStorageLocation" text="{i18n>gi201StorageLocation}" required="true" />
-                                <Input
-                                    id="inStorageLocation"
-                                    value="{gi201>/storageLocation}"
-                                    showValueHelp="true"
-                                    valueHelpRequest=".onStorageLocationValueHelp"
-                                    liveChange=".onFieldLiveChange"
-                                    valueState="{= ${gi201>/errors/storageLocation} ? 'Error' : 'None' }"
-                                    valueStateText="{gi201>/errors/storageLocation}"
-                                    maxLength="4" />
-
-                                <Label id="lblStockStatus" text="{i18n>gi201StockStatus}" visible="{= ${gi201>/availableStock} !== null }" />
+                                <Label id="lblStockStatus" text="{i18n>gi201StockStatus}" />
                                 <ObjectStatus
                                     id="statStockStatusLine"
                                     text="{parts: [{path: 'gi201>/availableStock'}, {path: 'gi201>/unit'}], formatter: '.formatAvailableStock'}"
-                                    state="{= ${gi201>/availableStock} > 0 ? 'Success' : 'Warning' }"
-                                    visible="{= ${gi201>/availableStock} !== null }" />
+                                    state="{= ${gi201>/availableStock} > 0 ? 'Success' : 'None' }"
+                                    icon="{= ${gi201>/availableStock} > 0 ? 'sap-icon://sys-enter-2' : '' }"
+                                    class="giFormValueText" />
                             </f:content>
                         </f:SimpleForm>
                     </Panel>
 
                     <!-- Section 3 (Row 2 Left): Quantity & Dates -->
-                    <Panel id="pnlQuantityDates">
+                    <Panel id="pnlQuantityDates" class="giCardPanel">
                         <layoutData>
                             <layout:GridData span="XL6 L6 M6 S12" />
                         </layoutData>
                         <headerToolbar>
                             <Toolbar>
                                 <Title text="{i18n>gi201TitleQuantityDates}" level="H3" />
-                                <ToolbarSpacer />
-                                <ObjectStatus
-                                    text="{= ${gi201>/quantity} ? (${gi201>/quantity} + ' ' + ${gi201>/unit}) : '' }"
-                                    state="Information" />
                             </Toolbar>
                         </headerToolbar>
                         <f:SimpleForm
@@ -311,6 +304,7 @@
                     <!-- Section 4a (Row 2 Right): Movement Overview & Verification (Default for standard items) -->
                     <Panel
                         id="panelMovementSummary"
+                        class="giCardPanel"
                         visible="{= !${gi201>/scanEnabled} &amp;&amp; !${gi201>/isSerialManaged} }">
                         <layoutData>
                             <layout:GridData span="XL6 L6 M6 S12" />
@@ -318,16 +312,11 @@
                         <headerToolbar>
                             <Toolbar>
                                 <Title text="{i18n>gi201TitleOverview}" level="H3" />
-                                <ToolbarSpacer />
-                                <ObjectStatus
-                                    text="{= ${gi201>/isValid} ? ${i18n>gi201StatusReady} : ${i18n>gi201StatusPending} }"
-                                    state="{= ${gi201>/isValid} ? 'Success' : 'None' }"
-                                    icon="{= ${gi201>/isValid} ? 'sap-icon://sys-enter-2' : 'sap-icon://information' }" />
                             </Toolbar>
                         </headerToolbar>
                         <f:SimpleForm
                             id="formMovementSummary"
-                            editable="false"
+                            editable="true"
                             layout="ResponsiveGridLayout"
                             labelSpanXL="4"
                             labelSpanL="4"
@@ -344,21 +333,23 @@
                             singleContainerFullSize="false">
                             <f:content>
                                 <Label text="{i18n>gi201LabelMovementType}" />
-                                <ObjectStatus text="{i18n>gi201MovementTypeName}" state="Information" icon="sap-icon://expense-report" />
+                                <Text text="{i18n>gi201MovementTypeName}" class="giFormValueText fontBold" />
 
                                 <Label text="{i18n>gi201LabelPostingScenario}" />
-                                <Text text="{= ${gi201>/fromReservation} ? (${i18n>gi201ScenarioResv} + ' ' + ${gi201>/reservationNo} + '/' + ${gi201>/reservationItem}) : ${i18n>gi201ScenarioDirect} }" />
+                                <Text text="{= ${gi201>/fromReservation} ? (${i18n>gi201ScenarioResv} + ' ' + ${gi201>/reservationNo} + '/' + ${gi201>/reservationItem}) : ${i18n>gi201ScenarioDirect} }" class="giFormValueText" />
 
                                 <Label text="{i18n>gi201LabelItemTracking}" />
                                 <ObjectStatus
                                     text="{= ${gi201>/isBatchManaged} ? ${i18n>gi201TrackingBatch} : ${i18n>gi201TrackingStandard} }"
-                                    state="{= ${gi201>/isBatchManaged} ? 'Warning' : 'None' }" />
+                                    state="{= ${gi201>/isBatchManaged} ? 'Warning' : 'None' }"
+                                    class="giFormValueText" />
 
                                 <Label text="{i18n>gi201LabelFormStatus}" />
                                 <ObjectStatus
                                     text="{= ${gi201>/isValid} ? ${i18n>gi201StatusReadyToPost} : ${i18n>gi201StatusIncomplete} }"
                                     state="{= ${gi201>/isValid} ? 'Success' : 'Warning' }"
-                                    icon="{= ${gi201>/isValid} ? 'sap-icon://sys-enter-2' : 'sap-icon://alert' }" />
+                                    icon="{= ${gi201>/isValid} ? 'sap-icon://sys-enter-2' : 'sap-icon://alert' }"
+                                    class="giFormValueText" />
                             </f:content>
                         </f:SimpleForm>
                     </Panel>

@@ -88,7 +88,16 @@ sap.ui.define([
          * @param {string} [sPlant]
          * @returns {Promise<Object>}
          */
-        fetchMaterialDetails: function (sMaterial, sPlant) {
+        /**
+         * Fetch material metadata (unit, description, batch-managed flag) and available stock.
+         * For batch-managed materials, stock is aggregated across valid batches.
+         * For standard (non-batch) materials, stock is queried live from SAP via revalidateStock.
+         * @param {string} sMaterial
+         * @param {string} [sPlant]
+         * @param {string} [sStorageLocation]
+         * @returns {Promise<Object|null>}
+         */
+        fetchMaterialDetails: function (sMaterial, sPlant, sStorageLocation) {
             if (!sMaterial) {
                 return Promise.resolve(null);
             }
@@ -116,24 +125,71 @@ sap.ui.define([
                                     nTotalStock += Number(b.AvailableStock) || 0;
                                 });
 
-                                return {
-                                    material: sMaterial,
-                                    materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
-                                    unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
-                                    isBatchManaged: bBatchManaged,
-                                    availableStock: bBatchManaged ? nTotalStock : null,
-                                    batches: aBatches
-                                };
+                                if (bBatchManaged) {
+                                    return {
+                                        material: sMaterial,
+                                        materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                        unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                        isBatchManaged: true,
+                                        availableStock: nTotalStock,
+                                        batches: aBatches
+                                    };
+                                }
+
+                                // For non-batch materials, query authentic SAP stock via revalidateStock
+                                var sStockUrl = BASE_PATH_GI + "/revalidateStock(material='" + sMatClean + "',plant='" + encodeURIComponent(sPlant) + "',storageLocation='" + encodeURIComponent(sStorageLocation || "") + "',batch='',requiredQty=0)";
+                                return ODataClient.get(sStockUrl)
+                                    .then(function (oStockRes) {
+                                        var nStock = (oStockRes && oStockRes.StockReadSuccess && oStockRes.CurrentStock !== undefined && oStockRes.CurrentStock !== null)
+                                            ? Number(oStockRes.CurrentStock)
+                                            : null;
+                                        return {
+                                            material: sMaterial,
+                                            materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                            unit: (oStockRes && oStockRes.BaseUnit) || (oMat ? (oMat.MaterialBaseUnit || "EA") : "EA"),
+                                            isBatchManaged: false,
+                                            availableStock: nStock,
+                                            batches: []
+                                        };
+                                    })
+                                    .catch(function () {
+                                        return {
+                                            material: sMaterial,
+                                            materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                            unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                            isBatchManaged: false,
+                                            availableStock: null,
+                                            batches: []
+                                        };
+                                    });
                             })
                             .catch(function () {
-                                return {
-                                    material: sMaterial,
-                                    materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
-                                    unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
-                                    isBatchManaged: false,
-                                    availableStock: null,
-                                    batches: []
-                                };
+                                // Fallback if batch query fails: attempt direct SAP stock check
+                                var sStockUrl = BASE_PATH_GI + "/revalidateStock(material='" + sMatClean + "',plant='" + encodeURIComponent(sPlant) + "',storageLocation='" + encodeURIComponent(sStorageLocation || "") + "',batch='',requiredQty=0)";
+                                return ODataClient.get(sStockUrl)
+                                    .then(function (oStockRes) {
+                                        var nStock = (oStockRes && oStockRes.StockReadSuccess && oStockRes.CurrentStock !== undefined && oStockRes.CurrentStock !== null)
+                                            ? Number(oStockRes.CurrentStock)
+                                            : null;
+                                        return {
+                                            material: sMaterial,
+                                            materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                            unit: (oStockRes && oStockRes.BaseUnit) || (oMat ? (oMat.MaterialBaseUnit || "EA") : "EA"),
+                                            isBatchManaged: false,
+                                            availableStock: nStock,
+                                            batches: []
+                                        };
+                                    })
+                                    .catch(function () {
+                                        return {
+                                            material: sMaterial,
+                                            materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
+                                            unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                            isBatchManaged: false,
+                                            availableStock: null,
+                                            batches: []
+                                        };
+                                    });
                             });
                     }
 
@@ -148,6 +204,27 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     return Promise.reject(err);
+                });
+        },
+
+        /**
+         * Fetch details for a specific Cost Center
+         * @param {string} sCostCenter
+         * @returns {Promise<Object|null>}
+         */
+        fetchCostCenterDetails: function (sCostCenter) {
+            if (!sCostCenter) {
+                return Promise.resolve(null);
+            }
+            var sClean = encodeURIComponent(String(sCostCenter).trim().toUpperCase());
+            var sUrl = BASE_PATH_MM + "/CostCenterVH?$filter=CostCenter eq '" + sClean + "'&$top=1";
+            return ODataClient.get(sUrl)
+                .then(function (oData) {
+                    var a = (oData && oData.value) || (Array.isArray(oData) ? oData : []);
+                    return a[0] || null;
+                })
+                .catch(function () {
+                    return null;
                 });
         },
 

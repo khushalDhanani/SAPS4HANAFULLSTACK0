@@ -77,6 +77,9 @@ sap.ui.define([
                     if (oItem.Unit) {
                         oModel.setProperty("/unit", oItem.Unit);
                     }
+                    if (oItem.CostCenter) {
+                        that._loadCostCenterInfo(oItem.CostCenter);
+                    }
                     // Enrich the material (batch/serial flags, available stock) and re-validate.
                     that._loadMaterialInfo(oItem.Material || "");
                     // Detect whether this line is unit-managed (scan-to-complete) or plain quantity.
@@ -112,7 +115,7 @@ sap.ui.define([
         },
 
         formatAvailableStock: function (nStock, sUnit) {
-            if (nStock === null || nStock === undefined) return "";
+            if (nStock === null || nStock === undefined || nStock === "") return "—";
             return nStock + " " + (sUnit || "") + " " + this.getText("gi201StockAvailable");
         },
 
@@ -132,10 +135,46 @@ sap.ui.define([
             this._validateLive();
         },
 
-        onCostCenterLiveChange: function (oEvent) {
-            var sVal = oEvent.getParameter("value") || "";
-            this._oModel.setProperty("/costCenter", sVal.toUpperCase());
+        onFieldChange: function () {
+            var sMat = this._oModel.getProperty("/material");
+            if (sMat) {
+                this._loadMaterialInfo(sMat);
+            }
             this._validateLive();
+        },
+
+        onCostCenterLiveChange: function (oEvent) {
+            var sVal = (oEvent.getParameter("value") || "").toUpperCase();
+            this._oModel.setProperty("/costCenter", sVal);
+            this._validateLive();
+        },
+
+        onCostCenterChange: function (oEvent) {
+            var sVal = (oEvent.getParameter("value") || "").trim().toUpperCase();
+            this._oModel.setProperty("/costCenter", sVal);
+            if (sVal) {
+                this._loadCostCenterInfo(sVal);
+            } else {
+                this._oModel.setProperty("/costCenterName", "");
+            }
+            this._validateLive();
+        },
+
+        _loadCostCenterInfo: function (sCostCenter) {
+            var that = this;
+            if (!sCostCenter) {
+                this._oModel.setProperty("/costCenterName", "");
+                return;
+            }
+            GoodsIssue201Service.fetchCostCenterDetails(sCostCenter)
+                .then(function (oCC) {
+                    if (oCC && oCC.CostCenterName) {
+                        that._oModel.setProperty("/costCenterName", oCC.CostCenterName);
+                    }
+                })
+                .catch(function () {
+                    // Non-blocking fallback
+                });
         },
 
         onQuantityLiveChange: function (oEvent) {
@@ -159,9 +198,14 @@ sap.ui.define([
 
             var that = this;
             var sPlant = this._oModel.getProperty("/plant") || "1120";
+            var sStorageLocation = this._oModel.getProperty("/storageLocation") || "";
             this._oModel.setProperty("/stockLoading", true);
 
-            GoodsIssue201Service.fetchMaterialDetails(sMat, sPlant)
+            var pFetch = sStorageLocation
+                ? GoodsIssue201Service.fetchMaterialDetails(sMat, sPlant, sStorageLocation)
+                : GoodsIssue201Service.fetchMaterialDetails(sMat, sPlant);
+
+            pFetch
                 .then(function (oInfo) {
                     if (oInfo) {
                         that._oModel.setProperty("/materialName", oInfo.materialName || "");

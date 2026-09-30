@@ -66,6 +66,7 @@ const mockService = {
     fetchStockUnitsForItem: jest.fn().mockResolvedValue({ StockUnits: [] }),
     resolveScanUnit: jest.fn().mockResolvedValue({ SuExists: true }),
     fetchCostCenters: jest.fn().mockResolvedValue([]),
+    fetchCostCenterDetails: jest.fn().mockResolvedValue(null),
     fetchPlants: jest.fn().mockResolvedValue([]),
     fetchStorageLocations: jest.fn().mockResolvedValue([]),
     postGoodsIssue: jest.fn().mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2025' }),
@@ -168,6 +169,7 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
         lastSelectDialog = null;
         mockService.fetchReservationItems.mockResolvedValue([]);
         mockService.fetchMaterialDetails.mockResolvedValue(null);
+        mockService.fetchCostCenterDetails.mockResolvedValue(null);
         mockService.fetchStockUnitsForItem.mockResolvedValue({ StockUnits: [] });
         mockService.resolveScanUnit.mockResolvedValue({ SuExists: true });
         mockService.postGoodsIssue.mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2025' });
@@ -188,6 +190,19 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             expect(controller._oModel.getProperty('/storageLocation')).toBe('');
             expect(controller._oModel.getProperty('/material')).toBe('');
             expect(controller._oModel.getProperty('/movementType')).toBe('201');
+        });
+    });
+
+    describe('Formatters', () => {
+        it('formatAvailableStock should return em dash — when stock is null, undefined, or empty', () => {
+            expect(controller.formatAvailableStock(null, 'EA')).toBe('—');
+            expect(controller.formatAvailableStock(undefined, 'EA')).toBe('—');
+            expect(controller.formatAvailableStock('', 'EA')).toBe('—');
+        });
+
+        it('formatAvailableStock should return formatted stock string when stock is a number', () => {
+            controller.getText = jest.fn().mockReturnValue('available');
+            expect(controller.formatAvailableStock(150, 'EA')).toBe('150 EA available');
         });
     });
 
