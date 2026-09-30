@@ -4,6 +4,54 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 16:55 IST
+- **Agent**: Antigravity
+- **Request**: "Delete the GoodsIssueDashboard hub entirely (route #/wm/goods-issue, GoodsIssueDashboard.view.xml, GoodsIssueDashboard.controller.js, and its route/target in manifest.json). Update onNavBack in all 8 controllers to route directly to main Launchpad dashboard (#/dashboard). Confirm tiles route directly to their respective Pending pages. Move QueueTrayDialog.fragment.xml usage to main Launchpad Dashboard."
+- **Root Cause & Rationale**:
+  - The multi-movement dashboard hub (`GoodsIssueDashboard`) at `#/wm/goods-issue` was superseded by dedicated, isolated pages for each movement type (201, 261, 301, 311) and the central Launchpad EWM tab.
+  - To prevent dead navigation routes after deleting `wmGoodsIssue`:
+    1. **Nav Back Redirection**: Redirected `onNavBack` in all 8 movement controllers (`GoodsIssue201Pending`, `GoodsIssue201`, `GoodsIssue261Pending`, `GoodsIssue261`, `GoodsIssue301Pending`, `GoodsIssue301`, `GoodsIssue311Pending`, `GoodsIssue311` via `GoodsIssueTransferBaseController`) to return to `dashboard` (`#/dashboard`) when not returning to an open reservation.
+    2. **Tile Route Verification**: Confirmed `tileOverviewGoodsIssue` routes to `wmGoodsIssue261Pending` and all 4 movement tiles on the Launchpad Overview & EWM tabs route to their respective Pending lists (`wmGoodsIssue201Pending`, `wmGoodsIssue261Pending`, `wmGoodsIssue301Pending`, `wmGoodsIssue311Pending`).
+    3. **Queue Tray Dialog Relocation**: Preserved `QueueTrayDialog.fragment.xml` and moved its open/close/refresh handlers to `Dashboard.controller.js`. Added `btnDashboardQueueTray` button to the EWM tab header in `Dashboard.view.xml` so warehouse dispatch queue monitoring remains directly accessible.
+    4. **Clean Deletion**: Removed route `wmGoodsIssue` and target `TargetGoodsIssueDashboard` from `manifest.json`; removed shell references from `App.controller.js`; deleted `GoodsIssueDashboard.view.xml`, `GoodsIssueDashboard.controller.js`, `GoodsIssueDashboardModel.js`, `MaterialDocumentDetailDialog.fragment.xml`, and `test/unit/wm/goodsIssueDashboardController.test.js`.
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201Pending.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261Pending.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue301Pending.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue311Pending.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`
+  - `app/fiori-app/webapp/controller/App.controller.js`
+  - `app/fiori-app/webapp/manifest.json`
+  - `test/unit/wm/goodsIssue201Controller.test.js`
+  - `test/unit/wm/goodsIssue201PendingController.test.js`
+  - `test/unit/wm/goodsIssue261Controller.test.js`
+  - `test/unit/wm/goodsIssue261PendingController.test.js`
+  - `test/unit/wm/goodsIssue301Controller.test.js`
+  - `test/unit/wm/goodsIssue301PendingController.test.js`
+  - `test/unit/wm/goodsIssue311Controller.test.js`
+  - `test/unit/wm/goodsIssue311PendingController.test.js`
+  - `test/unit/dashboard/dashboardMetrics.test.js`
+  - Deleted: `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssueDashboard.view.xml`
+  - Deleted: `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueDashboard.controller.js`
+  - Deleted: `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssueDashboardModel.js`
+  - Deleted: `app/fiori-app/webapp/modules/wm/goods-issue/view/MaterialDocumentDetailDialog.fragment.xml`
+  - Deleted: `test/unit/wm/goodsIssueDashboardController.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - `npm run lint`: Clean (0 errors, 5 warnings in unrelated files).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected.
+  - `cd app/fiori-app && npm run build`: Succeeded in 1.24 s.
+  - `npx jest test/unit/dashboard/dashboardMetrics.test.js`: Passed (36/36 tests green).
+  - `npx jest test/unit/dashboard/dashboardMvtKpi.test.js test/unit/wm/goodsIssueDashboardClient.test.js`: Passed (25/25 tests green).
+  - `npx jest test/unit/wm/goodsIssue`: Passed (35 test suites, 654/654 tests green).
+- **Current Status**: Complete. Obsolete `GoodsIssueDashboard` hub and route `#/wm/goods-issue` fully removed; all 8 movement pages safely route back to `#/dashboard`; Launchpad tiles route directly to dedicated Pending lists; Queue Tray monitor relocated to EWM tab on Launchpad dashboard.
+- **Next Steps**: Awaiting user instructions.
+
 ## 2026-09-30 16:40 IST
 - **Agent**: Antigravity
 - **Request**: "Remove the generic combined page at #/wm/goods-issue (GoodsIssue.view.xml / GoodsIssue.controller.js and its route in manifest.json) — it's obsolete now that 201/261/301/311 each have their own dedicated Open Transfers/Pending list + execution pages. Before removing, confirm: 1. No dashboard tile, route, or navigation anywhere still points to this page or route. 2. No other page links back to it (e.g. cancel/back navigation). 3. Its fragments (BatchSelectionDialog, ReservationValueHelpDialog, ShortPickDialog, QueueTrayDialog) — check if any per-type page still reuses them before deleting; if shared, keep the fragments, only remove the combined view/controller/route. List what will be removed and what any dependent page still needs, then remove it."
