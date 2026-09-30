@@ -4,6 +4,25 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 15:11 IST
+- **Agent**: Antigravity
+- **Request**: "1. Add i18n keys to i18n.properties and i18n_en.properties."
+- **Root Cause & Rationale**:
+  - Added all required user-facing i18n keys for the upcoming Movement 311 Open Transfers workflow (`GoodsIssue311Pending` and execution page), adhering strictly to the naming discipline: page title "Open Transfers (311)" (`gi311OpenTransfersTitle = "Open Transfers (311)"`), avoiding generic "Pending" wording in labels and titles.
+  - Added keys for table columns (`Reservation`, `Material`, `Plant`, `Issuing SLoc`, `Receiving SLoc`, `Created By`, `Items`), refresh button, no-data text, load error message, completed outcomes (posted material document and queued message), prefill error messages, and the completion action button (`gi311BtnComplete`).
+  - Added identical synchronized entries to both `app/fiori-app/webapp/i18n/i18n.properties` (base resource bundle) and `app/fiori-app/webapp/i18n/i18n_en.properties`.
+- **Affected Files**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 whitespace/formatting errors, trailing newline at EOF verified).
+  - `cd app/fiori-app && npm run lint`: Success, 0 findings detected.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 935 ms.
+  - `npx jest test/unit/wm`: 39/39 test suites passed, 734/734 tests passed.
+- **Current Status**: Complete. All i18n keys for Movement 311 Open Transfers are configured, synchronized, linted, and build-verified.
+- **Next Steps**: Step 2: Update `GoodsIssue311Model.js` with client-side intra-plant validation rules and initial data properties.
+
 ## 2026-09-30 13:30 IST
 - **Agent**: Antigravity
 - **Request**: "GoodsIssue201.view.xml - Make 2/2 Grid Page proper."
