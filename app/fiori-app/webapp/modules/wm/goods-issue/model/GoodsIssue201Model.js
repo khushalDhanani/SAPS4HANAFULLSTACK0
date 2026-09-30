@@ -72,12 +72,13 @@
                 costCenterName: "",
                 glAccount: "", // Read-only derived display
 
-                // Material & Location
+                // Material & Location — start blank; the user selects plant/storage location via value
+                // help. Never presume a specific plant/SLoc (it would flow into the SAP posting).
                 material: "",
                 materialName: "",
-                plant: "1120",
+                plant: "",
                 plantName: "",
-                storageLocation: "HS01",
+                storageLocation: "",
                 storageLocationName: "",
 
                 // Quantity & Unit

@@ -414,8 +414,8 @@ sap.ui.define([
                 oDialog.bindAggregation("items", "/MaterialVH", oItemTemplate);
                 oDialog.open();
             } else {
-                var sMat = that._oModel.getProperty("/material") || "8000009753";
-                GoodsIssue201Service.fetchMaterialDetails(sMat, "1120")
+                var sMat = that._oModel.getProperty("/material") || "";
+                GoodsIssue201Service.fetchMaterialDetails(sMat, that._oModel.getProperty("/plant") || "")
                     .then(function (oInfo) {
                         var aList = oInfo ? [oInfo] : [];
                         var oListModel = new JSONModel(aList);

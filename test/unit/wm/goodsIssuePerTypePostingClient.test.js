@@ -79,3 +79,15 @@ test('postByMovementType routes to the isolated method', async () => {
   expect(client.post301).toHaveBeenCalled();
   expect(res.mvt).toBe('301');
 });
+
+test('postByMovementType routes 311 to post311 (not 301/261)', async () => {
+  const { client } = makeClient();
+  client.post311 = jest.fn().mockResolvedValue({ Success: true, mvt: '311' });
+  client.post301 = jest.fn();
+  client.post261 = jest.fn();
+  const res = await client.postByMovementType({ ...base, MovementType: '311' });
+  expect(client.post311).toHaveBeenCalled();
+  expect(client.post301).not.toHaveBeenCalled();
+  expect(client.post261).not.toHaveBeenCalled();
+  expect(res.mvt).toBe('311');
+});

@@ -4,6 +4,23 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 11:07 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Continuation ("Next") — safe quick-wins batch from the WM/EWM audit: #24 and #18 (with #23 reassessed).
+- **Changes applied (each validated):**
+  1. **[#24] Added the missing 311 posting-client routing test.** 301/311 were already covered symmetrically by a parametrized `test.each`, but only 301 had a dedicated `postByMovementType` routing test. Added a 311 routing test asserting `postByMovementType({MovementType:'311'})` calls `post311` and NOT `post301`/`post261`. File: `test/unit/wm/goodsIssuePerTypePostingClient.test.js`.
+  2. **[#18] Removed the presumed-plant/SLoc prefill from the 201 create form.** `GoodsIssue201Model.getInitialData()` seeded `plant:'1120'`, `storageLocation:'HS01'` — a specific plant/SLoc that flows straight into the SAP posting. Now blank; the user selects via value help. No test asserted the defaults. Also removed the hardcoded fallback material `8000009753` and plant `1120` from the (dead) material value-help else-branch in `GoodsIssue201.controller.js` (now uses the model's material/plant, or blank). Files: `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue201Model.js`, `.../controller/GoodsIssue201.controller.js`.
+- **Reassessed / intentionally NOT changed:**
+  - **[#23b] i18n "truncated" trTo keys** (`trToLabelMate` = "Mate (Material)", etc.): these are **intentional narrow-RF-screen (Zebra MC220) column abbreviations**, not typos — left as-is. The English bundle (`i18n_en.properties`) missing the 24 `trTo` keys is a redundant secondary bundle (UI5 falls back to the complete base `i18n.properties`, which is English), so adding them is low-value busywork — deferred.
+  - **Remaining `|| "1120"` fallbacks** in the sloc/material value-help lookups (GI 201/261/301/311 controllers): these set the *lookup list* context, not the posted values (the user still selects from the list and reservation reconciliation + validation check the actual selection). Removing them cleanly requires a "select plant first" UX; left with a note rather than risking empty value-help lists.
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: **1609/1609 passed, 103/103 suites** (+1 = the 311 routing test).
+  - `cd app/fiori-app && npm run lint`: no findings. `npm run build`: succeeded.
+  - `git diff --check`: no new non-doc whitespace issues.
+- **Net regressions introduced: 0.**
+- **NOT YET FIXED (remaining audit findings)**: #6/#14/#19 dashboard performance (largest remaining real work); #7 write the missing controller/service unit tests; #12 301/311 destination rules (needs live SAP); #13 301≡311 de-duplication (**deferred — needs live re-verification**); #23a move the hardcoded MessageBox/Toast English strings (esp. Goods Receipt) to i18n keys.
+- **Not committed** — working tree now carries six uncommitted batches; strongly recommend committing (suite fully green — clean checkpoint).
+
 ## 2026-09-30 11:02 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode)
 - **Request**: Continuation ("Next") — audit finding #11: server-side qty/stock reconciliation for reservation-based Goods Issue (261/301/311).
