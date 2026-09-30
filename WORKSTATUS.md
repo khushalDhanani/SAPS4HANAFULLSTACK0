@@ -4,6 +4,23 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 10:52 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Continuation ("Next") — backend batch from the WM/EWM audit: findings #8, #9, #10 (with #11 assessed and deferred).
+- **Changes applied (each validated):**
+  1. **[#8] Dispatch-queue Outbox now has a passing regression guard.** The 5 `goodsIssueService.test.js` queue tests were failing because they called the real SAP adapter (which fails with a non-queue-eligible error in the test run) instead of forcing the 501/unavailable path — the store (`cds.test` in-memory SQLite) was already bound. Added a `sapPostingUnavailable()` helper and `jest.spyOn(GoodsIssueAdapter, ...).mockRejectedValue(...)` to the enqueue / retry / full-context / batch-fallback tests so the queue fallback is exercised deterministically (the same pattern `goodsIssueQueueManager.test.js` already uses). File: `test/unit/wm/goodsIssueService.test.js`. **Result: the entire unit suite is now GREEN — 103/103 suites, 1606/1606 tests** (was 5 failing).
+  2. **[#10] Serial pre-check now fails CLOSED.** `GoodsIssueStockUnitClient.validateSerialStatus` previously (a) swallowed the OData serial-master read error and (b) assumed `isEsto = true` (in unrestricted stock) when the JEST status read threw — so an unverifiable serial silently passed the pre-posting gate. Now: a genuine read failure (OData or RFC EQUI) sets a `statusReadErrored` flag and, if no record could be verified, throws HTTP 502 (blocks posting); an unreadable JEST/stock status throws 502 instead of assuming in-stock. A clean "not found" (read succeeded, no rows) is left as-is to avoid over-blocking. File: `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`. Added a fail-closed unit test. Validation: serial-status suite = **4/4 passed** (incl. new 502 fail-closed case); existing valid/422/409 cases unchanged.
+  3. **[#9] Documented the movement-261-only contract of `submitGoodsIssueRequest`.** Assessment first: the CDS action has **no movementType parameter** (takes ReservationNo/OrderNo/Items) and the adapter posts as 261 — so the audit's "301/311 batch silently posts as 261" scenario is **not reachable** (there is no input to express 301/311), and the dead frontend caller was already removed in the 10:35 batch (#15). Added a contract comment to `srv/wm/goods-issue/service.cds` so a future dev does not route other movement types through it (they must use `postGoodsIssue201/301/311`). No behavioral change needed.
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: **1606/1606 passed, 103/103 suites** (full green).
+  - `npx cds compile srv/wm/goods-issue/service.cds`: OK.
+  - `npx jest test/unit/wm/goodsIssue201Posting.test.js -t "Serial Status"`: 4 passed.
+  - `git diff --check`: no new non-doc whitespace issues (the 2 pre-existing markdown hard-break notes from the 10:35 batch remain).
+- **Net regressions introduced: 0.** All previously-failing tests are now resolved; the suite is fully green for the first time this session.
+- **NOTE on #10:** the base `_get` and (previously) `RfcClient` degrade errors to empty results, which is itself a fail-open pattern at the transport layer; the fix guards at the serial-validation layer. A deeper transport-layer review (distinguishing "empty" from "error" everywhere) is a larger follow-up, not done here.
+- **NOT YET FIXED (remaining audit findings)**: **#11** server-side qty/stock reconciliation for 261/301/311 before posting (largest remaining backend guard — read the reservation server-side and compare client Material/Plant/SLoc/open-qty; deferred to its own focused change); #6/#14/#19 dashboard performance; #7 write the missing controller/service unit tests; #12 301/311 destination rules (needs live SAP); #13 301≡311 de-duplication (**deferred — needs live re-verification**); #18 remaining hardcoded plant/sloc prefill defaults; #23 i18n; #24 thin 311 posting-client test.
+- **Not committed** — working tree now carries four uncommitted batches (cruft cleanup, honesty cluster, cleanup batch, this backend-guards batch); awaiting the user's commit decision.
+
 ## 2026-09-30 10:35 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode)
 - **Request**: Continuation of "Fix" → "Next" — the safe post-honesty batch from the WM/EWM audit (findings #21, #15-#18, #20, #22).

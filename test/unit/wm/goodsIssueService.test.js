@@ -11,6 +11,14 @@ const {
   mockBatchesRM4520
 } = require('./fixtures/goodsIssueFixtures');
 
+// SAP posting-capability-unavailable error (HTTP 501) — drives the dispatch-queue fallback
+// deterministically instead of depending on a live SAP backend in the test run.
+function sapPostingUnavailable() {
+  const err = new Error('SAP S/4HANA Backend Posting Capability Unavailable: posting service not activated');
+  err.status = 501;
+  return err;
+}
+
 describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () => {
   let srv;
   let handlers = {};
@@ -593,6 +601,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['postGoodsIssue261'](req);
       expect(result).toBeDefined();
       expect(result.Success).toBe(false); // Queued != posted in SAP -> not a success (AGENTS.md rule 6)
@@ -619,6 +628,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn()
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockRejectedValue(sapPostingUnavailable());
       const retryRes = await handlers['retryQueuedGoodsIssue'](retryReq);
       expect(retryRes).toBeDefined();
       expect(retryRes.QueueReference).toBe(item.QueueReference);
@@ -642,6 +652,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['postGoodsIssue261'](req);
       expect(result.Queued).toBe(true);
       expect(result.QueueReference).toBeDefined();
@@ -667,6 +678,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['submitGoodsIssueRequest'](req);
       expect(result).toBeDefined();
       expect(result.AllPosted).toBe(false);

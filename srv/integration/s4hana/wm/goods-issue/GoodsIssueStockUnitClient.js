@@ -1654,6 +1654,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       if (!sSerial) continue;
 
       let serialRecord = null;
+      // Track when a status source genuinely FAILS to read (vs. returns "not found"). A serial whose
+      // status cannot be verified must fail CLOSED (block posting), never fall through as valid.
+      let statusReadErrored = false;
       try {
         const serialFilter = `SerialNumber eq '${encodeURIComponent(sSerial)}' and Material eq '${encodeURIComponent(matClean)}'`;
         const rows = await this._get(
@@ -1665,41 +1668,61 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         }
       } catch (odataErr) {
         LOG.warn(`UI_MATERIALSERIALNUMBER query failed for serial ${sSerial}: ${odataErr.message}`);
+        statusReadErrored = true;
       }
 
       // Check RFC fallback if OData did not return
       if (!serialRecord && this.rfc && typeof this.rfc.readTable === 'function') {
+        let equi = null;
         try {
           const equiRows = await this.rfc.readTable('EQUI', ['EQUNR', 'SERNR', 'MATNR', 'WERK', 'LAGER'], [
             `SERNR = '${sSerial}'`,
             `AND ( MATNR = '${matClean}' OR MATNR = '${matPadded}' )`
           ]);
           if (Array.isArray(equiRows) && equiRows.length > 0) {
-            const equi = equiRows[0];
-            let isEsto = false;
-            try {
-              const objnr = `IE${equi.EQUNR}`;
-              const jestRows = await this.rfc.readTable('JEST', ['OBJNR', 'STAT', 'INACT'], [
-                `OBJNR = '${objnr}'`,
-                `AND STAT = 'I0184'`,
-                `AND INACT = ''`
-              ]);
-              isEsto = Array.isArray(jestRows) && jestRows.length > 0;
-            } catch (_jestErr) {
-              isEsto = true;
-            }
-            serialRecord = {
-              Material: equi.MATNR,
-              SerialNumber: equi.SERNR,
-              Plant: equi.WERK || targetPlant,
-              StorageLocation: equi.LAGER || targetSLoc,
-              InventoryStockType: isEsto ? '01' : '02',
-              InventoryStockType_Text: isEsto ? 'Unrestricted-Use Stock' : 'Not in Stock (ESTO)'
-            };
+            equi = equiRows[0];
           }
         } catch (_rfcErr) {
-          // RFC fallback failed
+          statusReadErrored = true;
         }
+        if (equi) {
+          let isEsto;
+          try {
+            const objnr = `IE${equi.EQUNR}`;
+            const jestRows = await this.rfc.readTable('JEST', ['OBJNR', 'STAT', 'INACT'], [
+              `OBJNR = '${objnr}'`,
+              `AND STAT = 'I0184'`,
+              `AND INACT = ''`
+            ]);
+            isEsto = Array.isArray(jestRows) && jestRows.length > 0;
+          } catch (_jestErr) {
+            // Fail CLOSED: the equipment exists but its stock status is unreadable, so we cannot
+            // confirm unrestricted stock. Block rather than assume in-stock.
+            const err = new Error(
+              `Serial Number "${sSerial}" stock status could not be verified in SAP (status read failed). Goods Issue is blocked.`
+            );
+            err.status = 502;
+            throw err;
+          }
+          serialRecord = {
+            Material: equi.MATNR,
+            SerialNumber: equi.SERNR,
+            Plant: equi.WERK || targetPlant,
+            StorageLocation: equi.LAGER || targetSLoc,
+            InventoryStockType: isEsto ? '01' : '02',
+            InventoryStockType_Text: isEsto ? 'Unrestricted-Use Stock' : 'Not in Stock (ESTO)'
+          };
+        }
+      }
+
+      // Fail CLOSED when the serial's status could not be read from any source (read error, not a
+      // clean "not found"). An unverifiable serial must not silently pass the pre-posting gate.
+      if (!serialRecord && statusReadErrored) {
+        const err = new Error(
+          `Serial Number "${sSerial}" could not be verified in SAP (serial master read failed). Goods Issue is blocked.`
+        );
+        err.status = 502;
+        throw err;
       }
 
       if (serialRecord) {

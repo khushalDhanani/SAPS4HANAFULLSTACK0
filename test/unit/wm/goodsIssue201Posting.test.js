@@ -239,5 +239,21 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
         message: expect.stringContaining('located in Plant 2200, but Goods Issue requires Plant 1120')
       });
     });
+
+    it('fails CLOSED (502) when the serial status cannot be read at all (no silent pass)', async () => {
+      const mockAdapter = {
+        // OData serial-master read errors...
+        _get: jest.fn().mockRejectedValue(new Error('serial master service unavailable'))
+      };
+      // ...and the RFC fallback returns nothing -> the serial's status is genuinely unverifiable.
+      const mockRfc = { readTable: jest.fn().mockResolvedValue([]) };
+      const suClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter, rfc: mockRfc });
+      await expect(
+        suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004'])
+      ).rejects.toMatchObject({
+        status: 502,
+        message: expect.stringContaining('could not be verified in SAP')
+      });
+    });
   });
 });

@@ -343,6 +343,10 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         ReversalReason   : String(4)
     ) returns GIReversalResult;
 
+    // Order/reservation-based batch scan-then-submit. This is movement type 261 ONLY (GI for order):
+    // there is deliberately no movementType parameter, and the adapter posts as 261. Do NOT route
+    // 201/301/311 through this action — use the dedicated postGoodsIssue201/301/311 actions, which
+    // carry the correct movement type and mappings.
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action submitGoodsIssueRequest(
         ReservationNo : String(10),
