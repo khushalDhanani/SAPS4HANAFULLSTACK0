@@ -17,8 +17,8 @@ sap.ui.define([
         "311": "panelRecent311",
         "ALL": "panelDistribution"
     };
-    // Each movement type has its own dedicated create page/route; the "New X" actions must open
-    // that page, not the shared generic GoodsIssue page (route wmGoodsIssueCreateMode).
+    // Each movement type has its own dedicated create page/route; the "New X" actions open the
+    // per-type route below (there is no shared/generic goods-issue create route).
     var CREATE_ROUTE_BY_TYPE = {
         "201": "wmGoodsIssue201",
         "261": "wmGoodsIssue261",
