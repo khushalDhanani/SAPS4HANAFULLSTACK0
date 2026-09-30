@@ -172,7 +172,7 @@ HTTP 403 Forbidden
 Gateway transaction ID `E6A502D9234E0220E006AA12E6AD9423`, timestamp `20260918105510` — visible in `/IWFND/ERROR_LOG`.
 
 The service is also absent from the service catalog entirely, consistent with it never having been registered.
-A dedicated P1 action ticket has been established in `docs/ticket-basis-activate-api-material-document.md`.
+A dedicated P1 action ticket has been established in `docs/archive/ticket-basis-activate-api-material-document.md` (resolved — API_MATERIAL_DOCUMENT_SRV activated on DS4 220).
 
 ### Corroborating evidence — a second service in the same state
 

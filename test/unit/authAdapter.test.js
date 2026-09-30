@@ -212,9 +212,9 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
     describe('resolveBaseUrl & Destination Resolution', () => {
         it('should resolve base URL from process.env.S4_DESTINATION_URL and trim trailing slashes', async () => {
-            process.env.S4_DESTINATION_URL = 'http://172.27.100.32:8000///';
+            process.env.S4_DESTINATION_URL = 'http://s4.example.test:8000///';
             const url = await authAdapter.resolveBaseUrl();
-            expect(url).toBe('http://172.27.100.32:8000');
+            expect(url).toBe('http://s4.example.test:8000');
         });
 
         it('should resolve base URL from BTP Destination Service when env is unset', async () => {

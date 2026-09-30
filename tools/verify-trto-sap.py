@@ -2,13 +2,14 @@
 """Read-only: settle the open SAP-side facts behind ZWM_RF_TRTO_SRV. Output: docs/wm-discovery/verify/.
 Usage: P='USER:PASS' python3 tools/verify-trto-sap.py"""
 import os, re, base64, urllib.request, urllib.error
-H, O = 'http://172.27.100.32:8000', 'docs/wm-discovery/verify'
+H, O = os.environ['S4_DESTINATION_URL'], 'docs/wm-discovery/verify'
+C = os.environ.get('S4_CLIENT', '220')
 os.makedirs(O, exist_ok=True)
 AUTH = 'Basic ' + base64.b64encode(os.environ['P'].encode()).decode()
 op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 def get(name, path):
-    r = urllib.request.Request(H + path, headers={'Authorization': AUTH, 'sap-client': '220', 'Accept': '*/*'})
+    r = urllib.request.Request(H + path, headers={'Authorization': AUTH, 'sap-client': C, 'Accept': '*/*'})
     try: resp = op.open(r, timeout=120); code = resp.status
     except urllib.error.HTTPError as e: resp, code = e, e.code
     body = resp.read().decode('utf-8', 'ignore'); open(f'{O}/{name}', 'w').write(body)

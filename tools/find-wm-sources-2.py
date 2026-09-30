@@ -3,7 +3,7 @@
 and live WM table samples via ADT data preview. Output: docs/wm-discovery/pass2/.
 Usage: P='USER:PASS' python3 tools/find-wm-sources-2.py"""
 import os, re, base64, urllib.request, urllib.error, http.cookiejar
-H, C = 'http://172.27.100.32:8000', '220'
+H, C = os.environ['S4_DESTINATION_URL'], os.environ.get('S4_CLIENT', '220')
 user, pw = os.environ['P'].split(':', 1)
 O = 'docs/wm-discovery/pass2'; os.makedirs(O, exist_ok=True)
 op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),

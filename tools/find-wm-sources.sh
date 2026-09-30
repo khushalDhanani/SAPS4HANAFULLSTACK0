@@ -2,8 +2,9 @@
 # Read-only discovery for the TR/SU RF screen. Writes raw results to docs/wm-discovery/.
 # Usage: P='USER:PASS' bash tools/find-wm-sources.sh   (or omit P to use .env.local)
 cd "$(dirname "$0")/.."
-H=http://172.27.100.32:8000; C=220
-[ -z "$P" ] && { set -a; . ./.env.local; set +a; P="$S4_USERNAME:$S4_PASSWORD"; H="${S4_DESTINATION_URL:-$H}"; }
+set -a; [ -f ./.env.local ] && . ./.env.local; set +a
+[ -z "$P" ] && P="$S4_USERNAME:$S4_PASSWORD"
+H="${S4_DESTINATION_URL}"; C="${S4_CLIENT:-220}"
 O=docs/wm-discovery; mkdir -p "$O"; J=$(mktemp)
 g(){ curl -s -m 120 -u "$P" -H "sap-client: $C" -b "$J" -c "$J" "$@"; }
 s(){ g -o "$O/$1.xml" -w "  %{http_code} $1\n" "$H/sap/bc/adt/repository/informationsystem/search?operation=quickSearch&maxResults=$3&query=$2${4:+&objectType=$4}"; }

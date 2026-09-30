@@ -2,7 +2,7 @@
 """Pass 3 (read-only): find the RF screen program, RFC flags of the TR FMs, OData projects,
 live WM table samples. Output: docs/wm-discovery/pass3/.  Usage: P='USER:PASS' python3 tools/find-wm-sources-3.py"""
 import os, re, base64, urllib.request, urllib.error
-H, C = 'http://172.27.100.32:8000', '220'
+H, C = os.environ['S4_DESTINATION_URL'], os.environ.get('S4_CLIENT', '220')
 AUTH = 'Basic ' + base64.b64encode(os.environ['P'].encode()).decode()
 O = 'docs/wm-discovery/pass3'; os.makedirs(O, exist_ok=True)
 op = urllib.request.build_opener(urllib.request.ProxyHandler({}))

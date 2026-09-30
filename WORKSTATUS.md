@@ -4,6 +4,33 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 09:56 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: "Scan the entire repo (feature/CL01) for cruft, dead code, and anything unusual that shouldn't ship — report before removing" → then "Fix All".
+- **Repo-wide cruft/dead-code audit performed first** (read-only): no committed secrets (`.env.local`/`.env.qas`/logs/CSVs/`gen/`/`Claude outputs/` all gitignored), no `console.log`, no TODO/FIXME, no orphan views/controllers, no dead per-type modules, no hardcoded IP in shipping backend source (`AuthAdapter.js` uses env + placeholders). Findings actioned below.
+- **Changes applied (each validated):**
+  1. **Remove junk dependencies `to@^0.2.9` and `update@^0.7.4`** — File: `package.json` (+ `package-lock.json`). Reason: accidental `npm install` artifacts (real npm packages), **0 references** anywhere in code. Validation: `npm install` → `npm ls to update` = `(empty)`; grep of lockfile for `node_modules/(to|update)` = none.
+  2. **Untrack regenerable catalog dump `srv/external/all_catalog_services.json`** (`git rm --cached`, added to `.gitignore`; file kept on disk). Reason: 1.9 MB generated dump (rebuilt by `tools/refresh-catalog.sh`; consumed by `tools/build-creatable-xlsx.py` et al.) that committed the internal SAP host IP 9,415×. Consistent with already-ignored `catalog-*.csv`. Validation: `git check-ignore` confirms ignored; file present on disk (1,980,056 bytes); tool consumers read same path, unaffected.
+  3. **Scrub internal SAP host IP `172.27.100.32` from 6 dev tool scripts** — Files: `tools/check-wm-live.py`, `tools/find-wm-sources.sh`, `tools/find-wm-sources-2.py`, `tools/find-wm-sources-3.py`, `tools/test-wm-rf-trto-flow.py`, `tools/verify-trto-sap.py`. Now read `S4_DESTINATION_URL`/`S4_CLIENT` from env/`.env.local` (matches the already-compliant catalog tools). Validation: `python3 -m py_compile` (5 py) OK; `bash -n` (1 sh) OK; `grep 172.27 tools/` = none.
+  4. **Scrub internal SAP host IP from test fixtures/tests** (→ placeholder `s4.example.test`) — Files: `test/fixtures/purchase-order/{draft,activation}Response.json`, `test/unit/authAdapter.test.js`, `test/unit/wm/trToAdapter.test.js`, `test/unit/wm/goodsReceiptService.test.js`. Validation: `npx jest` on the 3 touched suites = **73/73 passed**; `grep 172.27 test/` = none.
+  5. **Archive two resolved ticket docs** — `git mv docs/ticket-basis-activate-api-material-document.md` and `docs/ticket-vtaa-copy-control-zin-zqt.md` → `docs/archive/`. Reason: API_MATERIAL_DOCUMENT_SRV activation confirmed; app-side quotation feature removed. Inbound links updated in `README.md` and `docs/ticket-gateway-remediation-ds4.md`. Validation: `git status` shows clean renames; no remaining code links to old paths.
+  6. **Fix `.gitignore` contradiction** — `creatable-services.xlsx` was both ignored (`*.xlsx` + explicit line) and required-committed per AGENTS.md; added `!creatable-services.xlsx` negation. Validation: `git check-ignore creatable-services.xlsx` = not ignored (still committable).
+  7. **Remove orphan manifest target `TargetGoodsIssue`** — File: `app/fiori-app/webapp/manifest.json`. Byte-identical duplicate of `TargetGoodsIssueDashboard`, referenced by no route/navTo. Validation: valid JSON; `ui5lint` = "No findings"; `ui5 build` = "Build succeeded in 1.16 s".
+- **Executed Commands & Results**:
+  - `npm install`: OK (to/update removed from tree + lockfile; 8 pre-existing vulnerabilities unchanged by this work).
+  - `npx jest test/unit`: **1606/1613 passed, 100/103 suites passed.**
+  - Full-suite `npx jest test/unit` regression check (unchanged before/after this work): **7 failures in 3 suites** — `test/unit/s4HttpClient.test.js`, `test/unit/wm/goodsIssueMapper.test.js`, `test/unit/wm/goodsIssueService.test.js`.
+  - `cd app/fiori-app && npm run lint`: Success, no findings. `npm run build`: Build succeeded in 1.16 s.
+  - `git diff --cached --check`: clean (no whitespace/conflict-marker issues).
+- **PRE-EXISTING failures (NOT caused by, NOT in scope of, this cleanup — reported, not hidden)**:
+  - The 3 failing suites import only `S4HttpClient.js`, `GoodsIssueMapper.js`, `GoodsIssueAdapter.js`, goods-issue handlers/queue-manager — **none of which are in this changeset** (verified at HEAD). They are the WIP goods-issue posting/reversal files that were stat-dirty at session start.
+  - Example: `goodsIssueMapper.test.js` still expects the old `CancelHeader?...` URL, but the source was deliberately changed to `/Cancel?...` in the 2026-09-30 09:40 IST work (only `goodsIssue201Posting.test.js` was updated then; the mapper/service/httpclient tests were not). These stale tests need updating by the owner of that change.
+- **Deferred (with reason)**:
+  - **301/311 controller de-duplication** (`GoodsIssue301.controller.js` / `GoodsIssue311.controller.js`, ~95% identical): NOT done. The controllers have **zero unit-test coverage** (page tests cover only the Model) and were only live-SAP-verified in the browser; a base-class extraction validated by lint+build alone risks silent i18n-key/binding regressions on working critical-path UI that cannot be re-verified in this session. Recommend doing it only with live SAP re-verification.
+  - **`docs/wm-discovery/` (109 tracked SAP discovery files, 2.2 MB)**: reviewed, **kept**. Verified SAP metadata/ABAP discovery evidence; AGENTS.md prizes evidence preservation and deletion is irreversible. The gitignore inconsistency vs other metadata dirs is accepted.
+- **Note**: This audit did **not** trim `WORKSTATUS.md` (740 KB) — AGENTS.md mandates append-only history. Size is by design; archive closed periods to `logs/` if needed.
+- **Incident during work (self-corrected)**: a `git stash` used to baseline test failures reverted working-tree edits; all edits were recovered surgically via `git checkout stash -- <files>` and the catalog dump restored from HEAD blob. Final `git status` verified — no work lost. Not yet committed (awaiting user).
+
 ## 2026-09-30 09:40 IST
 - **Agent**: Antigravity
 - **Request**: "Okay, Now implment 201 MVT End to End." -> "Continue ans use dev tool mcp"

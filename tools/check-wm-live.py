@@ -2,12 +2,12 @@
 import os, base64, urllib.request, xml.etree.ElementTree as ET
 
 for line in open('.env.local'):
-    if line.startswith('S4_USERNAME=') or line.startswith('S4_PASSWORD='):
+    if line.split('=', 1)[0] in ('S4_USERNAME', 'S4_PASSWORD', 'S4_DESTINATION_URL', 'S4_CLIENT'):
         k, v = line.strip().split('=', 1)
         os.environ[k] = v.strip(' "\'')
 
 P = f"{os.environ.get('S4_USERNAME')}:{os.environ.get('S4_PASSWORD')}"
-H, C = 'http://172.27.100.32:8000', '220'
+H, C = os.environ['S4_DESTINATION_URL'], os.environ.get('S4_CLIENT', '220')
 AUTH = 'Basic ' + base64.b64encode(P.encode()).decode()
 op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 jar, tok = {}, ''

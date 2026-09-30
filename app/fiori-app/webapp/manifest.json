@@ -391,11 +391,6 @@
           "name": "CreateSalesOrder",
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetGoodsIssue": {
-          "id": "goodsIssueDashboard",
-          "name": "GoodsIssueDashboard",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
         "TargetGoodsIssueDashboard": {
           "id": "goodsIssueDashboard",
           "name": "GoodsIssueDashboard",

@@ -150,7 +150,7 @@ flowchart TD
   - Deep factsheet navigation displaying sold-to, ship-to, payer, and bill-to parties (`SD_F2369_INQY_FS_SRV`).
   - Item pricing conditions and schedule line tracking.
 - **Sales Quotation Note**:
-  - Sales Quotation creation was removed on 2026-09-18 - blocked in SAP, see docs/ticket-vtaa-copy-control-zin-zqt.md.
+  - Sales Quotation creation was removed on 2026-09-18 - blocked in SAP, see docs/archive/ticket-vtaa-copy-control-zin-zqt.md.
 
 ### 5. Financial Accounting (FI) — Journal Entries
 - **Journal Entry Verification**:

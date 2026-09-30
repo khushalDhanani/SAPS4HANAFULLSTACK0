@@ -10,7 +10,7 @@ Simulates:
 
 import os, base64, urllib.request, xml.etree.ElementTree as ET
 
-H, C = 'http://172.27.100.32:8000', '220'
+H, C = os.environ['S4_DESTINATION_URL'], os.environ.get('S4_CLIENT', '220')
 AUTH = 'Basic ' + base64.b64encode(os.environ['P'].encode()).decode()
 op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 jar, tok = {}, ''

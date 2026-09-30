@@ -69,7 +69,10 @@ claude output/
 # Analysis & Reality CSVs & Workbooks
 *.csv
 *.xlsx
-creatable-services.xlsx
+# creatable-services.xlsx is the one committed workbook (see AGENTS.md) — keep it tracked
+!creatable-services.xlsx
+# Regenerable raw catalog dump (rebuilt by tools/refresh-catalog.sh); do not commit
+srv/external/all_catalog_services.json
 
 # Python Bytecode & Environments
 __pycache__/

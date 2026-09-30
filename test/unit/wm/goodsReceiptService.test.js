@@ -748,7 +748,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
         });
 
         it('should throw on S/4HANA outage in getMaterialBatches instead of returning []', async () => {
-            const outageErr = new Error('connect ECONNREFUSED 172.27.100.32:8000');
+            const outageErr = new Error('connect ECONNREFUSED s4.example.test:8000');
             outageErr.code = 'ECONNREFUSED';
             const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockRejectedValueOnce(outageErr);
 

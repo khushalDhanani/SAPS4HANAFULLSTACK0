@@ -137,7 +137,7 @@ describe('TrToAdapter (RFC)', () => {
 });
 
 describe('RfcClient', () => {
-  const env = { S4_DESTINATION_URL: 'http://172.27.100.32:8000', S4_RFC_SYSNR: '00', S4_CLIENT: '220', S4_USERNAME: 'U', S4_PASSWORD: 'P' };
+  const env = { S4_DESTINATION_URL: 'http://s4.example.test:8000', S4_RFC_SYSNR: '00', S4_CLIENT: '220', S4_USERNAME: 'U', S4_PASSWORD: 'P' };
 
   it('returns 503 naming missing settings', () => {
     expect(() => new RfcClient({}).connectionParams()).toThrow(/S4_RFC_SYSNR/);
