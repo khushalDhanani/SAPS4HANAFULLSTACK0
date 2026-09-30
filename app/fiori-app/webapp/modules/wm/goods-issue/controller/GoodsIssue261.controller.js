@@ -154,7 +154,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Hard SAP condition (no open qty, wrong plant, etc.) - surface the real message
-                    that._setScanFeedback("Error", (err && err.message) || "Scan could not be validated in S/4HANA.");
+                    that._setScanFeedback("Error", (err && err.message) || that.getText("giScanValidateError"));
                 })
                 .finally(function () { that._validateLive(); });
         },
@@ -296,7 +296,7 @@ sap.ui.define([
                     oDialog.open();
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load Orders: " + (err.message || err));
+                    MessageBox.error(that.getText("gi261LoadOrdersError", [err.message || err]));
                 });
         },
 
@@ -441,7 +441,7 @@ sap.ui.define([
                     oDialog.open();
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load open Reservations: " + (err.message || err));
+                    MessageBox.error(that.getText("giLoadReservationsError", [err.message || err]));
                 });
         },
 
@@ -463,7 +463,7 @@ sap.ui.define([
                     that._validateLive();
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load Reservation Items: " + (err.message || err));
+                    MessageBox.error(that.getText("giLoadReservationItemsError", [err.message || err]));
                 })
                 .finally(function () {
                     that._oModel.setProperty("/itemLoading", false);

@@ -106,7 +106,7 @@ sap.ui.define([
             var oModel = this.getView().getModel("grView");
             var bCurrent = oModel.getProperty("/audioEnabled");
             oModel.setProperty("/audioEnabled", !bCurrent);
-            MessageToast.show(!bCurrent ? "Audio cues enabled" : "Audio cues muted");
+            MessageToast.show(this.getText(!bCurrent ? "grAudioEnabled" : "grAudioMuted"));
         },
 
         /**
@@ -243,7 +243,7 @@ sap.ui.define([
 
             if (!sBarcode) {
                 this._playBeep(false);
-                MessageBox.error("Please scan or enter an Inbound Delivery, Purchase Order, or Material Number.");
+                MessageBox.error(this.getText("grScanRequired"));
                 return Promise.resolve();
             }
 
@@ -305,7 +305,7 @@ sap.ui.define([
                         (sRawMsg && (sRawMsg.toLowerCase().includes("s/4hana outage") || sRawMsg.toLowerCase().includes("destination") || sRawMsg.toLowerCase().includes("econnrefused")));
                     if (isOutage) {
                         MessageBox.error(sRawMsg, {
-                            title: "S/4HANA Backend Outage / Service Unavailable",
+                            title: that.getText("grOutageTitle"),
                             actions: [MessageBox.Action.CLOSE]
                         });
                     } else {
@@ -315,7 +315,7 @@ sap.ui.define([
                         }
                         var sOpenVHTitle = that.getText("grBtnOpenValueHelp") || "Open Value Help";
                         MessageBox.error(sRawMsg, {
-                            title: "Validation Error: Document Not Found",
+                            title: that.getText("grDocNotFoundTitle"),
                             details: sGuidance || undefined,
                             actions: [MessageBox.Action.CLOSE, sOpenVHTitle],
                             emphasizedAction: sOpenVHTitle,
@@ -368,8 +368,8 @@ sap.ui.define([
                 if (found.StatusState === "Error" || found.StatusText === "EXPIRED") {
                     this._playBeep(false);
                     MessageBox.error(
-                        "Batch " + found.Batch + " expired on " + (found.ExpiryDate || "unknown date") + " (SLED exceeded).\n\nReceiving expired materials is strictly prohibited by quality control rules.",
-                        { title: "Expired Batch Blocked" }
+                        this.getText("grBatchExpiredSelectMsg", [found.Batch, found.ExpiryDate || "unknown date"]),
+                        { title: this.getText("grExpiredBatchTitle") }
                     );
                     return;
                 }
@@ -390,14 +390,14 @@ sap.ui.define([
 
             if (!oActive.StorageUnit && !oActive.DeliveryDocument && !oActive.PurchaseOrder) {
                 this._playBeep(false);
-                MessageBox.error("No active Inbound Delivery or Purchase Order selected for Goods Receipt.");
+                MessageBox.error(this.getText("grNoActiveDoc"));
                 return Promise.resolve();
             }
 
             var nQty = Number(oActive.Quantity);
             if (isNaN(nQty) || nQty <= 0) {
                 this._playBeep(false);
-                MessageBox.error("Quantity must be greater than zero.");
+                MessageBox.error(this.getText("grQtyPositive"));
                 return Promise.resolve();
             }
 
@@ -405,8 +405,8 @@ sap.ui.define([
             if (oActive.BatchStatusState === "Error" || oActive.BatchStatusText === "EXPIRED") {
                 this._playBeep(false);
                 MessageBox.error(
-                    "Goods Receipt blocked: Batch " + oActive.Batch + " has expired (SLED exceeded). Receiving expired chemicals or reagents is strictly prohibited.",
-                    { title: "Expired Batch Blocked" }
+                    this.getText("grBatchExpiredPostMsg", [oActive.Batch]),
+                    { title: this.getText("grExpiredBatchTitle") }
                 );
                 return Promise.resolve();
             }
@@ -416,8 +416,8 @@ sap.ui.define([
             var sDocType = oActive.DeliveryDocument ? "Inbound Delivery " : (oActive.PurchaseOrder ? "Purchase Order " : "Document ");
 
             return new Promise(function (resolve) {
-                MessageBox.confirm("Post Goods Receipt (101) in SAP for " + sDocType + sDoc + "?", {
-                    title: "Confirm Goods Receipt",
+                MessageBox.confirm(that.getText("grPostConfirmPrompt", [sDocType, sDoc]), {
+                    title: that.getText("grPostConfirmTitle"),
                     actions: [MessageBox.Action.YES, MessageBox.Action.NO],
                     emphasizedAction: MessageBox.Action.YES,
                     onClose: function (sAction) {
@@ -443,9 +443,9 @@ sap.ui.define([
                             GoodsReceiptService.postGoodsReceipt(oPayload)
                                 .then(function (oResult) {
                                     that._playBeep(true);
-                                    var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : "Goods Receipt posted successfully in SAP.";
+                                    var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : that.getText("grPostSuccessDefault");
                                     MessageBox.success(sSuccessMsg, {
-                                        title: "Goods Receipt Posted",
+                                        title: that.getText("grPostSuccessTitle"),
                                         onClose: function () {
                                             that.onResetWorkflow();
                                         }
@@ -454,7 +454,7 @@ sap.ui.define([
                                 })
                                 .catch(function (err) {
                                     that._playBeep(false);
-                                    MessageBox.error("Goods Receipt Failed: " + (err.message || err));
+                                    MessageBox.error(that.getText("grPostFailed", [err.message || err]));
                                     resolve(null);
                                 })
                                 .finally(function () {
@@ -508,7 +508,7 @@ sap.ui.define([
                 SupplierName: "",
                 SupplierCityName: ""
             });
-            MessageToast.show("Workflow reset");
+            MessageToast.show(this.getText("grWorkflowReset"));
         },
 
         /**

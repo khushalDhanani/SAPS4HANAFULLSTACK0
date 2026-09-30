@@ -106,6 +106,7 @@ const mockBaseController = {
             this.setModel = (m, n) => { this.models[n] = m; };
             this.getRouter = () => mockRouter;
             this.byId = jest.fn().mockReturnValue({ focus: jest.fn() });
+            this.getText = (k) => k;
         }
         return Controller;
     }
@@ -436,7 +437,7 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
                 qty: 50
             });
             expect(mockMessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining('Transfer Order 0001010943 created successfully and confirmed.'),
+                'trToCreateSuccessConfirmed',
                 expect.any(Object)
             );
         });
@@ -448,7 +449,7 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
 
             expect(mockMessageBox.error).toHaveBeenCalledWith(
                 'Storage Unit blocked for stock removal',
-                { title: 'TO Creation Failed' }
+                { title: 'trToCreateFailedTitle' }
             );
         });
     });
@@ -486,7 +487,7 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
 
             controller.onToggleAudio();
             expect(model.getProperty('/audioEnabled')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Audio cues muted');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('trToAudioMuted');
         });
     });
 

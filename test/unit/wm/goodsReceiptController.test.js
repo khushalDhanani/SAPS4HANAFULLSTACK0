@@ -181,11 +181,11 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             controller.onToggleAudio();
             const oModel = controller.getView().getModel('grView');
             expect(oModel.getProperty('/audioEnabled')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Audio cues muted');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('grAudioMuted');
 
             controller.onToggleAudio();
             expect(oModel.getProperty('/audioEnabled')).toBe(true);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Audio cues enabled');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('grAudioEnabled');
         });
 
         it('should reset workflow state on onResetWorkflow', () => {
@@ -196,7 +196,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             controller.onResetWorkflow();
             expect(oModel.getProperty('/storageUnitBarcode')).toBe('');
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Workflow reset');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('grWorkflowReset');
         });
 
         it('should navigate back on onNavBack', () => {
@@ -250,7 +250,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
         it('should show error when scanning with empty input', () => {
             controller.onScanStorageUnit();
-            expect(mockMessageBox.error).toHaveBeenCalledWith('Please scan or enter an Inbound Delivery, Purchase Order, or Material Number.');
+            expect(mockMessageBox.error).toHaveBeenCalledWith('grScanRequired');
         });
 
         it('should resolve Storage Unit and auto-populate form on successful scan', async () => {
@@ -361,7 +361,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
             expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('not found in SAP S/4HANA'), expect.objectContaining({
-                title: 'Validation Error: Document Not Found'
+                title: 'grDocNotFoundTitle'
             }));
         });
 
@@ -399,7 +399,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(mockMessageBox.error).toHaveBeenCalledWith(
                 expect.stringContaining('S/4HANA outage'),
                 expect.objectContaining({
-                    title: 'S/4HANA Backend Outage / Service Unavailable'
+                    title: 'grOutageTitle'
                 })
             );
         });
@@ -452,8 +452,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             controller.onBatchChange(mockEvent);
 
             expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining('expired on 2020-01-01'),
-                expect.objectContaining({ title: 'Expired Batch Blocked' })
+                'grBatchExpiredSelectMsg',
+                expect.objectContaining({ title: 'grExpiredBatchTitle' })
             );
 
             // Verify active batch remains unchanged
@@ -486,7 +486,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             oModel.setProperty('/activeSU/Quantity', 0);
 
             controller.onPostGoodsReceipt();
-            expect(mockMessageBox.error).toHaveBeenCalledWith('Quantity must be greater than zero.');
+            expect(mockMessageBox.error).toHaveBeenCalledWith('grQtyPositive');
             expect(mockMessageBox.confirm).not.toHaveBeenCalled();
         });
 
@@ -497,8 +497,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             controller.onPostGoodsReceipt();
             expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining('Goods Receipt blocked: Batch IN25000133 has expired'),
-                expect.objectContaining({ title: 'Expired Batch Blocked' })
+                'grBatchExpiredPostMsg',
+                expect.objectContaining({ title: 'grExpiredBatchTitle' })
             );
             expect(mockMessageBox.confirm).not.toHaveBeenCalled();
         });
@@ -517,7 +517,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             await controller.onPostGoodsReceipt();
 
             expect(mockMessageBox.confirm).toHaveBeenCalledWith(
-                expect.stringContaining('Post Goods Receipt (101) in SAP for Inbound Delivery 180000001'),
+                'grPostConfirmPrompt',
                 expect.any(Object)
             );
             expect(mockGoodsReceiptService.postGoodsReceipt).toHaveBeenCalledWith(
@@ -548,9 +548,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             await controller.onPostGoodsReceipt();
 
-            expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining('Goods Receipt Failed: SAP S/4HANA Backend Posting Capability Error')
-            );
+            expect(mockMessageBox.error).toHaveBeenCalledWith('grPostFailed');
         });
     });
 });

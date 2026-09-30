@@ -301,7 +301,7 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             mockService.fetchDistinctOrders.mockRejectedValueOnce(new Error('Order service down'));
             controller.onOrderValueHelp();
             await flush();
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Order service down'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi261LoadOrdersError');
         });
     });
 
@@ -318,7 +318,7 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             mockService.fetchOpenReservations.mockRejectedValueOnce(new Error('Reservation list unavailable'));
             controller.onReservationValueHelp();
             await flush();
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Reservation list unavailable'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('giLoadReservationsError');
         });
 
         it('_loadReservationItems should auto-apply the single item onto the model', async () => {

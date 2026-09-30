@@ -250,7 +250,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Hard SAP condition (no open qty, wrong plant, etc.) - surface the real message.
-                    that._setScanFeedback("Error", (err && err.message) || "Scan could not be validated in S/4HANA.");
+                    that._setScanFeedback("Error", (err && err.message) || that.getText("giScanValidateError"));
                 })
                 .finally(function () { that._validateLive(); });
         },
@@ -364,7 +364,7 @@ sap.ui.define([
                     oDialog.open();
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load Cost Centers: " + (err.message || err));
+                    MessageBox.error(that.getText("gi201LoadCostCentersError", [err.message || err]));
                 });
         },
 
@@ -459,7 +459,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Never seed the value help with invented plants — surface the real SAP error.
-                    MessageBox.error("Failed to load plants: " + ((err && err.message) || err));
+                    MessageBox.error(that.getText("gi201LoadPlantsError", [(err && err.message) || err]));
                 });
         },
 
@@ -494,7 +494,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Never seed the value help with invented storage locations — surface the real SAP error.
-                    MessageBox.error("Failed to load storage locations: " + ((err && err.message) || err));
+                    MessageBox.error(that.getText("gi201LoadStorageLocationsError", [(err && err.message) || err]));
                 });
         },
 

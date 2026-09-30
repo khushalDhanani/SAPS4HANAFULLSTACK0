@@ -164,7 +164,7 @@ sap.ui.define([
                     oDialog.open();
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load open Reservations: " + (err.message || err));
+                    MessageBox.error(that.getText("giLoadReservationsError", [err.message || err]));
                 });
         },
 
@@ -192,7 +192,7 @@ sap.ui.define([
                     that._validateLive();
                 })
                 .catch(function (err) {
-                    MessageBox.error("Failed to load Reservation Items: " + (err.message || err));
+                    MessageBox.error(that.getText("giLoadReservationItemsError", [err.message || err]));
                 })
                 .finally(function () {
                     that._oModel.setProperty("/itemLoading", false);
@@ -339,7 +339,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Never seed the value help with invented plants — surface the real SAP error.
-                    MessageBox.error("Failed to load receiving plants: " + ((err && err.message) || err));
+                    MessageBox.error(that.getText("giLoadReceivingPlantsError", [(err && err.message) || err]));
                 });
         },
 
@@ -375,7 +375,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Never seed the value help with invented storage locations — surface the real SAP error.
-                    MessageBox.error("Failed to load receiving storage locations: " + ((err && err.message) || err));
+                    MessageBox.error(that.getText("giLoadReceivingStorageLocationsError", [(err && err.message) || err]));
                 });
         },
 

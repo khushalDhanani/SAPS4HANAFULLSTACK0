@@ -469,10 +469,10 @@ sap.ui.define([
                 that._playAudio("success");
 
                 var sTanum = oResult.TransferOrder || "CREATED";
-                var sMsg = "Transfer Order " + sTanum + " created successfully" + (oResult.Confirmed ? " and confirmed." : ".");
+                var sMsg = that.getText(oResult.Confirmed ? "trToCreateSuccessConfirmed" : "trToCreateSuccess", [sTanum]);
 
                 MessageBox.success(sMsg, {
-                    title: "TO Created (" + sTanum + ")",
+                    title: that.getText("trToCreateSuccessTitle", [sTanum]),
                     onClose: function () {
                         that.onClearAll();
                     }
@@ -480,9 +480,9 @@ sap.ui.define([
             }).catch(function (oErr) {
                 that.getView().setBusy(false);
                 that._playAudio("error");
-                var sErrorMsg = oErr.message || "Failed to create Transfer Order in SAP S/4HANA.";
+                var sErrorMsg = oErr.message || that.getText("trToCreateError");
                 MessageBox.error(sErrorMsg, {
-                    title: "TO Creation Failed"
+                    title: that.getText("trToCreateFailedTitle")
                 });
             });
         },
@@ -527,7 +527,7 @@ sap.ui.define([
             var oModel = this.getModel("trToView");
             var bEnabled = !oModel.getProperty("/audioEnabled");
             oModel.setProperty("/audioEnabled", bEnabled);
-            MessageToast.show(bEnabled ? "Audio cues enabled" : "Audio cues muted");
+            MessageToast.show(this.getText(bEnabled ? "trToAudioEnabled" : "trToAudioMuted"));
         },
 
         onCloseMessage: function () {

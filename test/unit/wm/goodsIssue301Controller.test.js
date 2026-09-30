@@ -349,7 +349,7 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
             controller.onReservationValueHelp();
             await flush();
 
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Failed to load open Reservations'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('giLoadReservationsError');
         });
 
         it('confirming a reservation sets the number and triggers item load', async () => {
@@ -414,7 +414,7 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
 
             await controller._loadReservationItems('0000012345');
 
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Failed to load Reservation Items'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('giLoadReservationItemsError');
         });
 
         it('onReservationItemChange applies a matching cached item (padded)', () => {
@@ -513,7 +513,7 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
             controller.onReceivingPlantValueHelp();
             await flush();
 
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Failed to load receiving plants'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('giLoadReceivingPlantsError');
             const oDialog = createdSelectDialogs[createdSelectDialogs.length - 1];
             expect(oDialog.open).not.toHaveBeenCalled();
         });
@@ -535,7 +535,7 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
             controller.onReceivingStorageLocationValueHelp();
             await flush();
 
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Failed to load receiving storage locations'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('giLoadReceivingStorageLocationsError');
             const oDialog = createdSelectDialogs[createdSelectDialogs.length - 1];
             expect(oDialog.open).not.toHaveBeenCalled();
         });

@@ -4,6 +4,20 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 11:50 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode), orchestrating 1 general-purpose sub-agent.
+- **Request**: "Fix remaining." — #23a (i18n) done; #6/#14/#19 held (blocked on live SAP).
+- **Change applied (#23a): moved hardcoded user-facing strings to i18n keys.** ~31 literal `MessageBox`/`MessageToast` strings across 5 WM controllers replaced with `this.getText(...)` (dynamic values now use `{0}` placeholders); 32 namespaced keys added to `app/fiori-app/webapp/i18n/i18n.properties` (the manifest-active base bundle). Files: `goods-receipt/controller/GoodsReceipt.controller.js` (13), `tr-to/controller/TrTo.controller.js` (6), `goods-issue/controller/GoodsIssue201.controller.js` (4), `GoodsIssue261.controller.js` (4), `GoodsIssueTransferBaseController.js` (4, shared by 301/311); shared `gi*` keys reused across types. Left untouched: messages already using getText, log/console output, thrown `Error()` messages, and genuinely dynamic backend text (err.message, queue messages). Updated ~19 assertions across 6 controller test files (their `getText` mock returns the key, so exact-string assertions were retargeted to the keys; added a missing `getText` stub to the TrTo test's mock BaseController).
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: **1884/1884 passed, 113/113 suites**.
+  - `grep` for literal `MessageBox`/`MessageToast` strings in `modules/wm`: **none remain**.
+  - `cd app/fiori-app && npm run lint`: no findings. `npm run build`: succeeded.
+  - `git diff --check`: no new non-doc whitespace issues.
+- **Net regressions introduced: 0.**
+- **ONLY REMAINING AUDIT ITEM — #6 / #14 / #19 dashboard/transport performance — BLOCKED on live SAP (not shipped).** The correct fixes are SAP-side query changes: (#6) replace the unbounded all-time MATDOC row scan with a `$apply`/`$count` aggregate (a ROWCOUNT/date bound would silently change the KPI's meaning); (#14) batch the per-material `RFC_READ_TABLE(MAKT)` N+1 into `MATNR IN (...)` chunks (72-char WHERE-line limits) and collapse the dashboard's 5-call fan-out (which requires a backend response-shape change — the 5 per-type calls exist because a single combined top-N starves low-volume types); (#19) probe a cheap entity `$top=0` instead of `$metadata` for CSRF. AGENTS.md forbids implementing SAP integration from assumed queries/payloads and requires live-SAP verification; a unit test with mocked SAP would give false confidence. These require a live DS4 connection to implement and verify safely, so they are intentionally NOT shipped.
+- **Session status**: 24 of 25 audit findings fixed and green; the WM unit suite is at **1884 passing tests, 113 suites, 0 failing**, with full controller/service coverage. The sole open item is the live-SAP-dependent dashboard performance work (#6/#14/#19).
+- **Not committed** — the working tree carries the full set of this session's batches (cruft cleanup, honesty cluster, cleanup, backend guards, reconciliation, quick-wins, #7 tests, #12/#13, #23a) plus new test + base-controller files; strongly recommend committing this green checkpoint.
+
 ## 2026-09-30 11:32 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode)
 - **Request**: "Fix remaining." — continued: #12 (destination rules) and #13 (301≡311 de-duplication).

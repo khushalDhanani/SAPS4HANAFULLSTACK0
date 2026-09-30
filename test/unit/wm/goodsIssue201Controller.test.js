@@ -394,7 +394,7 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             mockService.fetchCostCenters.mockRejectedValueOnce(new Error('CC service down'));
             controller.onCostCenterValueHelp();
             await flush();
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('CC service down'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi201LoadCostCentersError');
         });
 
         it('onPlantValueHelp should populate the dialog from fetched plants', async () => {
@@ -409,14 +409,14 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             mockService.fetchPlants.mockRejectedValueOnce(new Error('Plant read failed'));
             controller.onPlantValueHelp();
             await flush();
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Plant read failed'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi201LoadPlantsError');
         });
 
         it('onStorageLocationValueHelp should surface the real SAP error on failure', async () => {
             mockService.fetchStorageLocations.mockRejectedValueOnce(new Error('SLoc read failed'));
             controller.onStorageLocationValueHelp();
             await flush();
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('SLoc read failed'));
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi201LoadStorageLocationsError');
         });
 
         it('onMaterialValueHelp should fetch a material into the dialog when no OData model is bound', async () => {
