@@ -283,7 +283,7 @@ sap.ui.define([
         },
 
         onNavigateToGoodsIssue: function () {
-            this.getOwnerComponent().getRouter().navTo("wmGoodsIssue");
+            this.getOwnerComponent().getRouter().navTo("wmGoodsIssue261Pending");
         },
 
         onNavigateToGoodsReceipt: function () {

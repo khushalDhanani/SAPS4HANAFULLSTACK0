@@ -141,7 +141,7 @@ sap.ui.define([
                     bShowNav = true;
                     break;
                 case "wmGoodsIssue":
-                    sTitle = oBundle ? oBundle.getText("giPageTitle") : "Goods Issue against Order / Reservation (261)";
+                    sTitle = oBundle ? oBundle.getText("giDashboardPageTitle") : "Goods Issue & Stock Transfer Dashboard";
                     bShowNav = true;
                     break;
                 case "wmGoodsReceipt":

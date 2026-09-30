@@ -4,6 +4,32 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 16:40 IST
+- **Agent**: Antigravity
+- **Request**: "Remove the generic combined page at #/wm/goods-issue (GoodsIssue.view.xml / GoodsIssue.controller.js and its route in manifest.json) — it's obsolete now that 201/261/301/311 each have their own dedicated Open Transfers/Pending list + execution pages. Before removing, confirm: 1. No dashboard tile, route, or navigation anywhere still points to this page or route. 2. No other page links back to it (e.g. cancel/back navigation). 3. Its fragments (BatchSelectionDialog, ReservationValueHelpDialog, ShortPickDialog, QueueTrayDialog) — check if any per-type page still reuses them before deleting; if shared, keep the fragments, only remove the combined view/controller/route. List what will be removed and what any dependent page still needs, then remove it."
+- **Root Cause & Rationale**:
+  - Investigated the current repository state against the user's checklist:
+    - **Legacy Generic Page**: Confirmed that the 1,755-line generic create page (`GoodsIssue.view.xml` and `GoodsIssue.controller.js`) and its dialog fragments (`BatchSelectionDialog.fragment.xml`, `ReservationValueHelpDialog.fragment.xml`, `ShortPickDialog.fragment.xml`) were already removed in earlier refactorings (commits `b11de01f` and `7a8506c1`).
+    - **Current Route `wmGoodsIssue` (`wm/goods-issue`)**: Route `wmGoodsIssue` in `manifest.json` does NOT point to a generic create page; it hosts `GoodsIssueDashboard.view.xml` / `GoodsIssueDashboard.controller.js` (the Goods Issue & Stock Transfer Multi-Movement KPI, Trend charts, Recent Postings for 201/261/301/311, and Queue Tray hub).
+    - **Navigation Audit**:
+      - Overview tile `tileOverviewGoodsIssue` ("Goods Issue (261) • Open Reservation Items") in `Dashboard.view.xml` called `onNavigateToGoodsIssue` which navigated to `wmGoodsIssue`. Updated `onNavigateToGoodsIssue` in `Dashboard.controller.js` to route directly to `wmGoodsIssue261Pending` ("Open Reservations (261)"), ensuring all Overview and EWM tiles route to their dedicated per-movement lists.
+      - Back navigation: Confirmed that all 8 dedicated movement pages (`GoodsIssue201`, `GoodsIssue201Pending`, `GoodsIssue261`, `GoodsIssue261Pending`, `GoodsIssue301`, `GoodsIssue301Pending`, `GoodsIssue311`, `GoodsIssue311Pending`) intentionally navigate back via `onNavBack` to `wmGoodsIssue` (the multi-movement dashboard hub).
+      - Fragments: Confirmed `QueueTrayDialog.fragment.xml` is used exclusively by `GoodsIssueDashboard.controller.js` for outbox queue monitoring; no per-type page depends on it.
+    - **Shell Header Alignment**: Updated `App.controller.js` shell title for route `wmGoodsIssue` to `{i18n>giDashboardPageTitle}` ("Goods Issue & Stock Transfer Dashboard").
+- **Affected Files**:
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+  - `app/fiori-app/webapp/controller/App.controller.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - `npm run lint`: Clean (0 errors).
+  - `cd app/fiori-app && npm run lint`: Clean (0 findings detected).
+  - `cd app/fiori-app && npm run build`: Succeeded in 3.31 s.
+  - `npx jest test/unit/dashboard/dashboardMetrics.test.js test/unit/wm/goodsIssueDashboardController.test.js`: 2 test suites passed, 55/55 tests green.
+  - `npx jest test/unit/wm/goodsIssue301`: 5 test suites passed, 104/104 tests green.
+- **Current Status**: Complete. Confirmed obsolete generic create files and fragments were already removed; GoodsIssueDashboard at `#/wm/goods-issue` preserved as the central multi-movement hub; Overview tile `tileOverviewGoodsIssue` re-pointed directly to `wmGoodsIssue261Pending`.
+- **Next Steps**: All goods issue and stock transfer movements (201, 261, 301, 311) and dashboards are clean, isolated, and fully functional. Proceed per user guidance.
+
 ## 2026-09-30 16:30 IST
 - **Agent**: Antigravity
 - **Request**: "Build 301 (Plant-to-Plant Transfer) now, following the exact same pattern as 311: 1. Confirm the open-reservation source for 301 (GoodsIssueReservationsClient.getOpenReservations('301') / GIItems), same as done for 311 — quick confirmation only, don't re-litigate, just verify the entity/filter works. 2. Build GoodsIssue301Pending.view.xml + controller, route wmGoodsIssue301Pending, dashboard tile wiring — same as 311. 3. Execution page: issuing Plant/SLoc/Material read-only from reservation; Receiving Plant editable and validated (must DIFFER from issuing plant — the inverse of 311's same-plant rule); Receiving SLoc can match or differ (per the difference documented earlier between 301 and 311 rules). 4. Reuse serial/batch scan pattern as-is. 5. On Complete: postGoodsIssue301, return to Open Transfers (301) list, show real Material Document. Test plan: same standard as 311 — unit tests, then live verification with a real open 301 reservation, real request/response payloads, real Material Document number, and SAP readback via API_MATERIAL_DOCUMENT_SRV confirming the plant-to-plant movement. i18n: gi301OpenTransfersTitle = 'Open Transfers (301)'."
