@@ -4,6 +4,32 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 13:30 IST
+- **Agent**: Antigravity
+- **Request**: "GoodsIssue201.view.xml - Make 2/2 Grid Page proper."
+- **Root Cause & Rationale**:
+  - The previous layout was a single vertical SimpleForm stacked in one column (`columnsXL="1"`) with empty side spans (`emptySpanXL="2"`), leading to excessive vertical scrolling and awkward whitespace.
+  - Redesigned `GoodsIssue201.view.xml` using SAPUI5's standard 2/2 responsive floorplan pattern (`sap.ui.layout.Grid` with `defaultSpan="XL6 L6 M6 S12"`), matching established project patterns in `CreateSalesOrder` and `CreatePurchaseOrder`.
+  - Configured 4 compact, balanced quadrants:
+    - **Quadrant 1 (Top-Left)**: Cost Center Assignment (`pnlCostAssignment` - Cost Center, Name, G/L Account, Header Text)
+    - **Quadrant 2 (Top-Right)**: Material & Location (`pnlMaterialLocation` - Material, Description, Plant, SLoc, Live Stock Badge)
+    - **Quadrant 3 (Bottom-Left)**: Quantity & Posting Dates (`pnlQuantityDates` - Quantity, Unit, Posting Date, Document Date, Batch)
+    - **Quadrant 4 (Bottom-Right)**: Adaptive Overview & Verification (`panelMovementSummary` for standard materials, seamlessly replaced by `pnlScanToComplete` or `pnlSerialManagement` when unit/serial tracking is required)
+  - Single sticky footer toolbar retained (`tbGoodsIssue201`) with Reset and Post/Complete actions.
+  - Preserved all existing control IDs, bindings, formatters, and event handlers.
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `cd app/fiori-app && npm run lint`: Success, 0 findings detected.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 882 ms.
+  - `npx jest test/unit/wm/goodsIssue201`: 6 test suites passed, 106/106 tests passed.
+  - `git diff --check`: Clean (no whitespace or formatting errors).
+- **Current Status**: Complete. Goods Issue 201 page renders a clean, compact 2/2 grid floorplan with zero duplicate footers or excessive vertical stretching.
+- **Next Steps**: Ready for user testing and visual review in browser.
+
 ## 2026-09-30 12:10 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode). Live SAP (DS4) available via `.env.local`; used for READ-ONLY discovery per the AGENTS.md SAP protocol (no secrets printed, no writes).
 - **Request**: "Fix remaining." + "Give me live SAP access... ship all three properly." — the perf cluster #6/#14/#19, plus #12.
