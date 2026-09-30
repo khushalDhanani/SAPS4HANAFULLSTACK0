@@ -4,6 +4,50 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 17:28 IST
+- **Agent**: Antigravity
+- **Request**: "When i'm in particual : /wm/goods-issue/cost-center-201?resv=514439 in this also not showing properly" (Investigate why Cost Center Name and Unrestricted Stock show empty '—' placeholders when navigating to a specific reservation).
+- **Root Cause & Rationale**:
+  - **1. Cost Center Name Missing**:
+    - In `GoodsIssue201.controller.js`, `_prefillFromReservation` copied `CostCenter` from the reservation item (`1011201601`), but never fetched `costCenterName` or invoked any lookup service, leaving `costCenterName: ""` (which rendered the empty placeholder `—`).
+  - **2. Unrestricted Stock Missing for Non-Batch Materials**:
+    - In `GoodsIssue201Service.js`, `fetchMaterialDetails(sMaterial, sPlant, sStorageLocation)` only determined `availableStock` if the material was batch-managed (`MaterialBatches` returned records). For non-batch materials like `8000002212` (Safety Shoes in Resv `514439`), it hardcoded `availableStock: null`, leaving Unrestricted Stock as `—`.
+    - Live SAP S/4HANA stock revalidation (`revalidateStock`) actually had `CurrentStock: 10, BaseUnit: "NOS", StockReadSuccess: true` for material `8000002212`, plant `1120`, storage location `HS01`.
+  - **Solution**:
+    - In `GoodsIssue201Service.js`:
+      - Added `fetchCostCenterDetails(sCostCenter)` querying `/odata/v4/purchase-order/CostCenterVH?$filter=CostCenter eq '<sCostCenter>'` to fetch authentic SAP Cost Center description (`AIL 8203 Electrical-`).
+      - In `fetchMaterialDetails(sMaterial, sPlant, sStorageLocation)`, when material is not batch-managed, query authentic SAP stock via `revalidateStock(material='...', plant='...', storageLocation='...', batch='', requiredQty=0)`.
+    - In `GoodsIssue201.controller.js`:
+      - Added `_loadCostCenterInfo(sCostCenter)` and wired it to `_prefillFromReservation` and `onCostCenterChange`.
+      - Added `onFieldChange()` to re-fetch stock when Plant or Storage Location is changed.
+      - Passed `storageLocation` into `fetchMaterialDetails`.
+    - In `GoodsIssue201.view.xml`:
+      - Wired `change=".onCostCenterChange"` to `inCostCenter`.
+      - Wired `change=".onFieldChange"` to `inPlant` and `inStorageLocation`.
+    - In `test/unit/wm/goodsIssue201ServiceUnit.test.js` & `test/unit/wm/goodsIssue201Controller.test.js`:
+      - Added unit tests for non-batch stock retrieval and `fetchCostCenterDetails`.
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue201Service.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`
+  - `test/unit/wm/goodsIssue201ServiceUnit.test.js`
+  - `test/unit/wm/goodsIssue201Controller.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - `cd app/fiori-app && npm run lint`: Success! No findings detected.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.01 s.
+  - `npm test -- test/unit/wm/`: 42 test suites passed, 790/790 tests green.
+  - Live Browser Verification in Chrome DevTools on `#/wm/goods-issue/cost-center-201?resv=514439`:
+    - Cost Center `1011201601` -> Cost Center Name populated with `AIL 8203 Electrical-`
+    - Material `8000002212` -> Material Description `Safety Shoes, Electric Size : 11`
+    - Plant `1120`, Storage Location `HS01`
+    - Unrestricted Stock populated with `✔ 10 NOS available`
+    - Status: `✔ Ready to Post`
+    - Screenshot verified and saved to artifact `goods_issue_201_resv514439_verified.png`.
+- **Current Status**: Complete. Real data from SAP S/4HANA verified for reservation 514439 and all non-batch materials.
+- **Next Steps**: Awaiting user instructions.
+
 ## 2026-09-30 17:17 IST
 - **Agent**: Antigravity
 - **Request**: "Two small remaining fixes on GoodsIssue201.view.xml: 1. Inconsistent empty-state placeholder: 'Cost Center Name' shows '—' (em dash) but 'Unrestricted Stock' shows '_' (underscore-looking character). Standardize both empty states to the same placeholder ('—'). 2. Uneven vertical gap in the Movement Overview card — there's a noticeably larger gap between 'Item Tracking' and 'Validation Status' rows than between the other rows in that card. Fix row spacing to be uniform across all 4 rows. Confirm and fix both, then confirm visually."
