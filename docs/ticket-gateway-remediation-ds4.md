@@ -2,7 +2,7 @@
 
 **Raised by:** Dipak Rathod, CIO — Aether Industries Limited
 **Date:** 18 September 2026
-**System:** DS4, client 220 (`172.27.100.32:8000`)
+**System:** DS4, client 220 (`<S4_HOST>:8000`)
 **Evidence:** `catalog-audit.csv` — all 1345 catalogued services probed live on 18-Sep-2026
 **Baseline Catalog:** `srv/external/all_catalog_services.json` (all 1345 services, regenerated via `./refresh-catalog.sh`)
 

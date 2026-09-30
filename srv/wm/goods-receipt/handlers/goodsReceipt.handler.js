@@ -2,6 +2,9 @@ const cds = require('@sap/cds');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
 const { extractFilterParam, extractFilterParams, applyPaging } = require('../../../common/filterUtils');
+// Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
+// across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
+const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
 
 const init = (srv) => {
     /**
@@ -114,6 +117,15 @@ const init = (srv) => {
         }
         if (!Quantity || Number(Quantity) <= 0) {
             return req.reject(400, 'Quantity must be greater than zero.');
+        }
+        // Field-format validation (reused WM primitives) before posting to SAP — presence is checked
+        // above, so these enforce the shape (plant/sloc = 4 alphanumerics, material/batch max length).
+        const formatErr = checkMaterial(Material, true)
+            || checkPlant(Plant, true)
+            || checkStorageLocation(StorageLocation, true)
+            || checkBatch(Batch);
+        if (formatErr) {
+            return req.reject(400, `${formatErr.field}: ${formatErr.message}`);
         }
 
         try {

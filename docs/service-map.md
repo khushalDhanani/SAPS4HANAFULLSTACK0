@@ -1,6 +1,6 @@
 # S/4HANA Service Map — verified
 
-**System:** DS4 client 220 (`172.27.100.32:8000`)  
+**System:** DS4 client 220 (`<S4_HOST>:8000`)  
 **Verified:** 18 September 2026, by fetching `$metadata` for every service and checking every
 entity set against it. Generated from a scan of `srv/`, not written by hand.
 

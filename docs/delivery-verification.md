@@ -3,7 +3,7 @@
 **Scope:** what this application and this S/4HANA system actually deliver, measured by execution.
 `service-map.md` proves the services answer. This proves what is behind them.
 
-**System:** DS4 client 220 (`172.27.100.32:8000`). **Run:** 19 September 2026.
+**System:** DS4 client 220 (`<S4_HOST>:8000`). **Run:** 19 September 2026.
 **Evidence:** `cap-endpoint-reality.csv` (application layer), `catalog-data-reality-classified.csv`
 (every catalogued service). Re-runnable: `probe-cap.py`, `verify-catalog-depth.py`, `reclassify.py`.
 

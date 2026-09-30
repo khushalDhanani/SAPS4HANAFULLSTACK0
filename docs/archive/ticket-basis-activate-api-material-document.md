@@ -4,7 +4,7 @@
 **Priority:** P1 — High / Blocker (Warehouse Management Goods Movements)  
 **System:** SAP S/4HANA Development (`DS4`)  
 **Client:** `220`  
-**Host / Port:** `172.27.100.32:8000`  
+**Host / Port:** `<S4_HOST>:8000`  
 **System Alias:** `DS4_220` (and `LOCAL`)  
 **Requested By:** SAP S/4HANA Full-Stack Engineering Team / Dipak Rathod, CIO  
 **Date:** 29 September 2026  

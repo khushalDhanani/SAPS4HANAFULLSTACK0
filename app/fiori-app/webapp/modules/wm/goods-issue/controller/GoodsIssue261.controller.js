@@ -97,26 +97,6 @@ sap.ui.define([
                 });
         },
 
-        _loadMaterialInfo: function (sMaterial, sPlant) {
-            var that = this;
-            if (!sMaterial) return;
-            GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlant)
-                .then(function (oInfo) {
-                    if (!oInfo) return;
-                    if (oInfo.materialName && !that._oModel.getProperty("/materialName")) {
-                        that._oModel.setProperty("/materialName", oInfo.materialName);
-                    }
-                    if (oInfo.unit && !that._oModel.getProperty("/unit")) {
-                        that._oModel.setProperty("/unit", oInfo.unit);
-                    }
-                    if (oInfo.isBatchManaged !== undefined) {
-                        that._oModel.setProperty("/isBatchManaged", oInfo.isBatchManaged);
-                    }
-                    that._validateLive();
-                })
-                .catch(function () { /* non-fatal enrichment */ });
-        },
-
         /**
          * Detect whether the reservation component is unit-managed (serial or storage unit).
          * If scannable units exist in S/4, enables scan-to-complete mode with pass/fail feedback.
@@ -377,10 +357,12 @@ sap.ui.define([
             }
         },
 
-        _loadMaterialInfo: function (sMaterial) {
+        _loadMaterialInfo: function (sMaterial, sPlant) {
             var that = this;
-            var sPlant = this._oModel.getProperty("/plant") || "1120";
-            GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlant)
+            if (!sMaterial) { return; }
+            // Prefer an explicitly passed plant (e.g. the reservation item's own plant) over the form's.
+            var sPlantVal = sPlant || this._oModel.getProperty("/plant") || "";
+            GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlantVal)
                 .then(function (oInfo) {
                     if (oInfo) {
                         that._oModel.setProperty("/materialName", oInfo.materialName || that._oModel.getProperty("/materialName"));

@@ -48,7 +48,8 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
 
     it('maps CancelHeader URL with proper encoding', () => {
       const url = mapToCancelHeaderUrl('4900012345', '2026', '2026-09-29');
-      expect(url).toContain("CancelHeader?MaterialDocument='4900012345'");
+      // Reversal uses the API_MATERIAL_DOCUMENT_SRV `Cancel` FunctionImport (not `CancelHeader`).
+      expect(url).toContain("Cancel?MaterialDocument='4900012345'");
       expect(url).toContain("MaterialDocumentYear='2026'");
       expect(url).toContain("PostingDate=datetime'2026-09-29T00:00:00'");
     });

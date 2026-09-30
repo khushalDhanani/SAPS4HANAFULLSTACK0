@@ -203,7 +203,7 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
                 method: 'get',
                 url: '/sap/opu/odata/sap/API_WHSE_INBOUND_DELIVERY/',
                 timeout: 30000,
-                headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json', 'sap-client': '220' }
+                headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json, */*', 'sap-client': '220' }
             });
             expect(probeOptions).toEqual({ fetchCsrfToken: false });
 

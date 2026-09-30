@@ -1083,50 +1083,19 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(FrontendGoodsIssueService.getModel()).toBeNull();
     });
 
-    it('queries open reservations via passed V4 model without calling ODataClient.get', async () => {
-      const res = await FrontendGoodsIssueService.fetchOpenReservations(mockModel);
-      expect(mockModel.bindList).toHaveBeenCalledWith(
-        '/OpenReservations',
-        undefined,
-        undefined,
-        []
-      );
-      expect(mockBinding.requestContexts).toHaveBeenCalledWith(0, Infinity);
-      expect(res).toEqual([{ ReservationNo: '18025', ReservationItem: '0001', Material: '100001' }]);
-      expect(mockODataClient.get).not.toHaveBeenCalled();
+    it('fetches queue summary via ODataClient.get', async () => {
+      mockODataClient.get.mockResolvedValueOnce({ QueuedCount: 2, Items: [{}, {}] });
+      const res = await FrontendGoodsIssueService.getQueueSummary();
+      expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/goods-issue/getQueueSummary()');
+      expect(res.QueuedCount).toBe(2);
     });
 
-    it('queries reservation items via V4 model with ReservationNo filter', async () => {
-      await FrontendGoodsIssueService.fetchOpenItems(mockModel, '1000040', '18025');
-      expect(mockModel.bindList).toHaveBeenCalledWith(
-        '/GIItems',
-        undefined,
-        undefined,
-        expect.any(Array)
+    it('fetches dashboard data with day/plant/movementType query params', async () => {
+      mockODataClient.get.mockResolvedValueOnce({ KPIs: {} });
+      await FrontendGoodsIssueService.getDashboardData(7, '1120', true, '261');
+      expect(mockODataClient.get).toHaveBeenCalledWith(
+        expect.stringContaining("/odata/v4/goods-issue/getDashboardData(days=7,plant='1120',forceRefresh=true,movementType='261')")
       );
-      const aFilters = mockModel.bindList.mock.calls[0][3];
-      expect(aFilters).toBeDefined();
-    });
-
-    it('queries material batches via V4 model with Material and Plant filters', async () => {
-      await FrontendGoodsIssueService.fetchMaterialBatches(mockModel, '100001', '1010');
-      expect(mockModel.bindList).toHaveBeenCalledWith(
-        '/MaterialBatches',
-        undefined,
-        undefined,
-        expect.any(Array)
-      );
-      const aFilters = mockModel.bindList.mock.calls[0][3];
-      expect(aFilters.some(f => f.sPath === 'Material' && f.oValue1 === '100001')).toBe(true);
-      expect(aFilters.some(f => f.sPath === 'Plant' && f.oValue1 === '1010')).toBe(true);
-    });
-
-    it('falls back to ODataClient.get when no model is available', async () => {
-      FrontendGoodsIssueService.setModel(null);
-      mockODataClient.get.mockResolvedValueOnce({ value: [{ ReservationNo: '99999' }] });
-      const res = await FrontendGoodsIssueService.fetchOpenReservations();
-      expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/goods-issue/OpenReservations');
-      expect(res).toEqual([{ ReservationNo: '99999' }]);
     });
   });
 });

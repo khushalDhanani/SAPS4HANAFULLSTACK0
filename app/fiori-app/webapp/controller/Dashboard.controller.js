@@ -2,12 +2,14 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
-    "sap/m/MessageToast"
+    "sap/m/MessageToast",
+    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
-    MessageToast
+    MessageToast,
+    GoodsIssueService
 ) {
     "use strict";
 
@@ -343,10 +345,9 @@ sap.ui.define([
             });
             oViewModel.setProperty("/giKpiError", "");
 
-            var sUrl = "/odata/v4/goods-issue/getDashboardData(" +
-                "days=30,plant='',forceRefresh=" + Boolean(bForceRefresh) + ")";
-
-            return ODataClient.get(sUrl)
+            // Reuse the shared GoodsIssueService (same call the WM dashboard uses) rather than
+            // re-building the getDashboardData URL inline.
+            return GoodsIssueService.getDashboardData(30, "", Boolean(bForceRefresh))
                 .then(function (oData) {
                     if (!oData || !oData.Kpis) {
                         throw new Error(that._text("dashboardMvtNoData", "No movement data"));
