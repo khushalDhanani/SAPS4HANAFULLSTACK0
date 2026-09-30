@@ -18,6 +18,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             expect(data.quantity).toBe(1);
             expect(data.isBatchManaged).toBe(false);
             expect(data.isSerialManaged).toBe(false);
+            expect(data.fromReservation).toBe(false);
             expect(data.reservationNo).toBe('');
             expect(data.reservationItem).toBe('');
             expect(data.orderNo).toBe('');
@@ -54,48 +55,51 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             expect(res.errors.reservationItem).toContain('Reservation Item is required');
         });
 
-        it('validates successfully once Reservation No/Item and derived fields are populated', () => {
+        it('rejects when Material is missing', () => {
             const data = GoodsIssue301Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
-            data.material = 'MAT1';
             data.plant = '1120';
             data.storageLocation = 'HS01';
             data.quantity = 1;
             data.unit = 'EA';
 
             const res = GoodsIssue301Model.validate(data);
-            expect(res.isValid).toBe(true);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.material).toContain('Material is required');
         });
 
-        it('applyReservationItem populates Order (display-only) but validate() never checks or requires it', () => {
+        it('validates and auto-pads Reservation Item when applied from reservation', () => {
             const data = GoodsIssue301Model.getInitialData();
             GoodsIssue301Model.applyReservationItem(data, {
-                ReservationItem: '10',
-                OrderNo: 'ORD123456',
-                Material: 'MAT1',
-                MaterialDesc: 'Widget',
+                ReservationItem: '1',
+                Material: 'MAT-301',
+                MaterialDesc: 'Reactor Part',
                 Plant: '1120',
                 StorageLocation: 'HS01',
                 Unit: 'EA',
+                OrderNo: '',
                 OpenQty: 5
             });
+
+            expect(data.reservationItem).toBe('0001');
+            expect(data.material).toBe('MAT-301');
+            expect(data.materialName).toBe('Reactor Part');
+            expect(data.plant).toBe('1120');
+            expect(data.storageLocation).toBe('HS01');
+            expect(data.unit).toBe('EA');
+            expect(data.isUnitEditable).toBe(false);
+            expect(data.fromReservation).toBe(true);
+
             data.reservationNo = 'RES001';
-
-            expect(data.orderNo).toBe('ORD123456');
-
             const res = GoodsIssue301Model.validate(data);
-            expect(res.isValid).toBe(true);
-            // Order/Network is never part of the errors object - it is purely descriptive
-            expect(res.errors.orderNo).toBeUndefined();
-
-            // Blanking it out does not affect validity - confirms it is not independently validated
-            data.orderNo = '';
-            const res2 = GoodsIssue301Model.validate(data);
-            expect(res2.isValid).toBe(true);
+            expect(res.errors.reservationItem).toBe('');
+            expect(res.errors.material).toBe('');
+            expect(res.errors.plant).toBe('');
+            expect(res.errors.storageLocation).toBe('');
         });
 
-        it('rejects non-positive quantities and quantities with more than 3 decimal places', () => {
+        it('validates quantity: positive, non-zero, max 3 decimal places', () => {
             const data = GoodsIssue301Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
@@ -175,7 +179,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             expect(res.errors.receivingStorageLocation).toBe('');
         });
 
-        it('flags Receiving Plant / Storage Location only on bad format, never as required', () => {
+        it('flags Receiving Plant / Storage Location on bad format length', () => {
             const data = GoodsIssue301Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
@@ -190,9 +194,44 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             expect(res.isValid).toBe(false);
             expect(res.errors.receivingPlant).toContain('4 characters');
 
-            data.receivingPlant = '1130';
+            data.receivingPlant = '1150';
             res = GoodsIssue301Model.validate(data);
             expect(res.errors.receivingPlant).toBe('');
+        });
+
+        it('enforces inter-plant destination invariant for Movement 301 (must DIFFER from issuing plant)', () => {
+            const data = GoodsIssue301Model.getInitialData();
+            data.reservationNo = 'RES001';
+            data.reservationItem = '0010';
+            data.material = 'MAT1';
+            data.plant = '1120';
+            data.storageLocation = 'HS01';
+            data.quantity = 1;
+            data.unit = 'EA';
+
+            // 1. Receiving Plant matching issuing plant must REJECT (inverse of 311's rule)
+            data.receivingPlant = '1120';
+            let res = GoodsIssue301Model.validate(data);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.receivingPlant).toContain('must differ from issuing plant');
+
+            // 2. Receiving Plant differing from issuing plant is ACCEPTED
+            data.receivingPlant = '1150';
+            res = GoodsIssue301Model.validate(data);
+            expect(res.isValid).toBe(true);
+            expect(res.errors.receivingPlant).toBe('');
+
+            // 3. Receiving SLoc can match issuing SLoc (unlike 311, same SLoc code across different plants is permitted)
+            data.receivingStorageLocation = 'HS01';
+            res = GoodsIssue301Model.validate(data);
+            expect(res.isValid).toBe(true);
+            expect(res.errors.receivingStorageLocation).toBe('');
+
+            // 4. Receiving SLoc differing from issuing SLoc is also valid
+            data.receivingStorageLocation = 'AD01';
+            res = GoodsIssue301Model.validate(data);
+            expect(res.isValid).toBe(true);
+            expect(res.errors.receivingStorageLocation).toBe('');
         });
 
         it('toBackendPayload includes ReceivingPlant/ReceivingStorageLocation when set', () => {
@@ -204,15 +243,15 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             data.storageLocation = 'HS01';
             data.quantity = 1;
             data.unit = 'EA';
-            data.receivingPlant = '1130';
-            data.receivingStorageLocation = 'MT01';
+            data.receivingPlant = '1150';
+            data.receivingStorageLocation = 'AD01';
 
             const payload = GoodsIssue301Model.toBackendPayload(data);
-            expect(payload.ReceivingPlant).toBe('1130');
-            expect(payload.ReceivingStorageLocation).toBe('MT01');
+            expect(payload.ReceivingPlant).toBe('1150');
+            expect(payload.ReceivingStorageLocation).toBe('AD01');
         });
 
-        it('toBackendPayload generates a clean payload with no CostCenter/GLAccount', () => {
+        it('toBackendPayload generates a clean payload with MovementType 301 and no CostCenter/GLAccount', () => {
             const data = GoodsIssue301Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '10';
@@ -239,7 +278,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
                 postGoodsIssue: (oPayload) => {
                     if (!oPayload) return Promise.reject(new Error('Goods Issue payload is required'));
                     if (!oPayload.ReservationNo) return Promise.reject(new Error('Reservation Number is required for Movement 301'));
-                    return mockODataClient.post('/odata/v4/goods-issue/postGoodsIssue', oPayload);
+                    return mockODataClient.post('/odata/v4/goods-issue/postGoodsIssue301', oPayload);
                 },
                 reverseGoodsIssue: (sDoc, sYear, sPostingDate, sReason) => {
                     if (!sDoc || !sYear) return Promise.reject(new Error('Material Document number and year are required for reversal'));
@@ -262,7 +301,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
                 .rejects.toThrow('Reservation Number is required');
         });
 
-        it('calls postGoodsIssue with the Reservation-based payload and returns Material Document', async () => {
+        it('calls postGoodsIssue301 with the Reservation-based payload and returns Material Document', async () => {
             mockODataClient.post.mockResolvedValue({
                 Success: true,
                 MaterialDocument: '4900099001',
@@ -279,7 +318,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             });
 
             expect(mockODataClient.post).toHaveBeenCalledWith(
-                '/odata/v4/goods-issue/postGoodsIssue',
+                '/odata/v4/goods-issue/postGoodsIssue301',
                 expect.objectContaining({ MovementType: '301', ReservationNo: 'RES001' })
             );
             expect(res.MaterialDocument).toBe('4900099001');
@@ -292,14 +331,14 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
                 ReversalMaterialDocYear: '2026'
             });
 
-            const res = await GoodsIssue301Service.reverseGoodsIssue('4900099001', '2026', '2026-09-29', '01');
+            const res = await GoodsIssue301Service.reverseGoodsIssue('4900099001', '2026', '2026-09-30', '01');
 
             expect(mockODataClient.post).toHaveBeenCalledWith(
                 '/odata/v4/goods-issue/reverseGoodsIssue',
                 {
                     MaterialDocument: '4900099001',
                     MaterialDocYear: '2026',
-                    PostingDate: '2026-09-29',
+                    PostingDate: '2026-09-30',
                     ReversalReason: '01'
                 }
             );

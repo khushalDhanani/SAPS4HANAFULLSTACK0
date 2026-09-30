@@ -68,6 +68,7 @@
                 // for any movement type other than 201).
                 reservationNo: "",
                 reservationItem: "",
+                fromReservation: false,
 
                 // Order/Network: purely descriptive, populated only once a reservation item
                 // resolves. Never an independent input, never independently validated.
@@ -258,12 +259,16 @@
                 }
             }
 
-            // 10. Receiving Plant / Storage Location are OPTIONAL for this movement type (the
-            // backend mapper never requires them - GoodsIssueMapper.js only forwards them if
-            // present). Format-only validation, never a "required" error.
+            // 10. Receiving Plant / Storage Location (Transfer Posting - Plant-to-Plant)
+            // Format-only validation if unset, but when supplied, plant-to-plant invariants apply:
+            // - ReceivingPlant must differ from issuing Plant (inverse of 311's same-plant rule)
+            // - ReceivingStorageLocation can match or differ from issuing StorageLocation
             var sRecvPlant = (oData.receivingPlant != null) ? String(oData.receivingPlant).trim().toUpperCase() : "";
             if (sRecvPlant && sRecvPlant.length !== 4) {
                 errors.receivingPlant = "Receiving Plant must be 4 characters";
+                bValid = false;
+            } else if (sRecvPlant && sPlant && sRecvPlant === sPlant) {
+                errors.receivingPlant = "Movement 301 is a plant-to-plant transfer: receiving plant '" + sRecvPlant + "' must differ from issuing plant '" + sPlant + "'";
                 bValid = false;
             }
             var sRecvSLoc = (oData.receivingStorageLocation != null) ? String(oData.receivingStorageLocation).trim().toUpperCase() : "";
@@ -327,9 +332,16 @@
             oData.unit = oItem.Unit || "";
             oData.isUnitEditable = !oItem.Unit;
             oData.isSerialManaged = !!oItem.IsSerialManaged;
-            oData.isBatchManaged = !!(oItem.Batch || oItem.BatchStatusState);
+            oData.isBatchManaged = !!(oItem.IsBatchManaged || oItem.Batch || (oItem.BatchStatusText && oItem.BatchStatusText !== "NO BATCH"));
             oData.batch = oItem.Batch || "";
             oData.openQty = (oItem.OpenQty !== undefined && oItem.OpenQty !== null) ? oItem.OpenQty : null;
+            if (oItem.ReceivingPlant) {
+                oData.receivingPlant = oItem.ReceivingPlant;
+            }
+            if (oItem.ReceivingStorageLocation) {
+                oData.receivingStorageLocation = oItem.ReceivingStorageLocation;
+            }
+            oData.fromReservation = true;
         },
 
         /**

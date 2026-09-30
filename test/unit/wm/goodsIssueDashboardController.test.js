@@ -425,15 +425,18 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             controller.onNavigateToPending261();
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending');
 
+            controller.onNavigateToPending301();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301Pending');
+
             controller.onNavigateToPending311();
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
         });
 
-        it('has mRoutes pointing 201, 261, 311 to pending/open routes and 301 to create', () => {
+        it('has mRoutes pointing 201, 261, 301, 311 to pending/open routes', () => {
             expect(controller.mRoutes).toEqual({
                 "201": "wmGoodsIssue201Pending",
                 "261": "wmGoodsIssue261Pending",
-                "301": "wmGoodsIssue301",
+                "301": "wmGoodsIssue301Pending",
                 "311": "wmGoodsIssue311Pending"
             });
         });

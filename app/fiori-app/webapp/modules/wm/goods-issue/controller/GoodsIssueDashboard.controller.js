@@ -26,11 +26,11 @@ sap.ui.define([
         "311": "wmGoodsIssue311"
     };
     // Movement type pending / open reservations list routes.
-    // 201, 261, and 311 open their Open Reservations/Transfers list; 301 opens its dedicated create page.
+    // 201, 261, 301, and 311 open their Open Reservations/Transfers list.
     var mRoutes = {
         "201": "wmGoodsIssue201Pending",
         "261": "wmGoodsIssue261Pending",
-        "301": "wmGoodsIssue301",
+        "301": "wmGoodsIssue301Pending",
         "311": "wmGoodsIssue311Pending"
     };
 
@@ -271,6 +271,10 @@ sap.ui.define([
 
         onNavigateToPending261: function () {
             this._navigateToPending("261");
+        },
+
+        onNavigateToPending301: function () {
+            this._navigateToPending("301");
         },
 
         onNavigateToPending311: function () {

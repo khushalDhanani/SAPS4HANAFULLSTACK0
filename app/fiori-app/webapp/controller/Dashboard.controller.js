@@ -64,7 +64,7 @@ sap.ui.define([
     var mRoutes = {
         "201": "wmGoodsIssue201Pending",
         "261": "wmGoodsIssue261Pending",
-        "301": "wmGoodsIssue301",
+        "301": "wmGoodsIssue301Pending",
         "311": "wmGoodsIssue311Pending"
     };
 
@@ -417,12 +417,11 @@ sap.ui.define([
          */
         _navigateToGiFiltered: function (sMvtType) {
             // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201, 261, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow);
-            // 301 opens its dedicated create page directly.
+            // 201, 261, 301, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow).
             var mRoutes = {
                 "201": "wmGoodsIssue201Pending",
                 "261": "wmGoodsIssue261Pending",
-                "301": "wmGoodsIssue301",
+                "301": "wmGoodsIssue301Pending",
                 "311": "wmGoodsIssue311Pending"
             };
             var sRoute = mRoutes[sMvtType] || "wmGoodsIssue";

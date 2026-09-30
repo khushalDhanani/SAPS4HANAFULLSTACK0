@@ -89,7 +89,7 @@
                                 id="inReservationNo301"
                                 value="{gi301>/reservationNo}"
                                 placeholder="{i18n>gi301ReservationNoPlaceholder}"
-                                showValueHelp="true"
+                                showValueHelp="{= !${gi301>/fromReservation} }"
                                 valueHelpRequest=".onReservationValueHelp"
                                 editable="false"
                                 valueState="{= ${gi301>/errors/reservationNo} ? 'Error' : 'None' }"
@@ -101,9 +101,10 @@
                                 id="inReservationItem301"
                                 value="{gi301>/reservationItem}"
                                 placeholder="{i18n>gi301ReservationItemPlaceholder}"
-                                showValueHelp="true"
+                                showValueHelp="{= !${gi301>/fromReservation} }"
                                 valueHelpRequest=".onReservationValueHelp"
                                 change=".onReservationItemChange"
+                                editable="{= !${gi301>/fromReservation} }"
                                 valueState="{= ${gi301>/errors/reservationItem} ? 'Error' : 'None' }"
                                 valueStateText="{gi301>/errors/reservationItem}"
                                 maxLength="4" />
@@ -315,8 +316,8 @@
                 <ToolbarSpacer />
                 <Button
                     id="btnPostGoodsIssue301"
-                    text="{i18n>gi301BtnPost}"
-                    icon="sap-icon://save"
+                    text="{= ${gi301>/fromReservation} ? ${i18n>gi301BtnComplete} : ${i18n>gi301BtnPost} }"
+                    icon="{= ${gi301>/fromReservation} ? 'sap-icon://accept' : 'sap-icon://save' }"
                     type="Emphasized"
                     enabled="{gi301>/isValid}"
                     press=".onPostGoodsIssue" />

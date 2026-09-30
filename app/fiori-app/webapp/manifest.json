@@ -297,8 +297,13 @@
           "target": "TargetGoodsIssue261"
         },
         {
+          "name": "wmGoodsIssue301Pending",
+          "pattern": "wm/goods-issue/301/open-transfers:?query:",
+          "target": "TargetGoodsIssue301Pending"
+        },
+        {
           "name": "wmGoodsIssue301",
-          "pattern": "wm/goods-issue/plant-transfer-301",
+          "pattern": "wm/goods-issue/plant-transfer-301:?query:",
           "target": "TargetGoodsIssue301"
         },
         {
@@ -419,6 +424,11 @@
         "TargetGoodsIssue261": {
           "id": "goodsIssue261",
           "name": "GoodsIssue261",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue301Pending": {
+          "id": "goodsIssue301Pending",
+          "name": "GoodsIssue301Pending",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue301": {
