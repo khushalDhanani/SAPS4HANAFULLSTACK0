@@ -4,6 +4,24 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 11:02 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: Continuation ("Next") — audit finding #11: server-side qty/stock reconciliation for reservation-based Goods Issue (261/301/311).
+- **Change applied (#11): server-side reservation reconciliation before posting 261/301/311.**
+  - Problem: client-supplied Material/Plant/StorageLocation/IssueQty went straight into the SAP item for reservation-based movements with no server-side reconciliation (only 201 had a stock pre-check). The Fiori UI derives these from the reservation, but the CAP action can be called directly.
+  - New adapter reader: `GoodsIssueAdapter.getReservationItemAuthoritative(reservationNo, reservationItem)` — lean single-item read delegating to `stockUnits._readOpenReservationItem`, returning normalized `{ Material(=Product), Plant, StorageLocation, Batch, Unit, RequiredQty, WithdrawnQty, OpenQty }` with `OpenQty = max(0, RequiredQtyInBaseUnit - WithdrawnQtyInBaseUnit)` (same base-unit formula the reservations client already uses). Throws 404 (item not open) / 502 (read failure). File: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`.
+  - New handler pre-check: `reservationReconcileCheck(req, normalized)` in `goodsIssuePerType.handler.js`, wired into the 261/301/311 handlers before the serial pre-check (NOT 201). It: skips cleanly when there is no reservation (261 unplanned direct-to-order); **fails CLOSED** (blocks) when the reservation cannot be read; rejects **409** when submitted Material/Plant/StorageLocation do not match the reservation item (compared normalized: leading-zeros stripped for material, case-insensitive); rejects **422** when IssueQty exceeds OpenQty. Only fields the client actually submitted are checked.
+  - Tests: added 2 dedicated guard tests (409 material mismatch, 422 over-issue, both asserting the post adapter is NOT called). Updated the 6 existing handler-post tests that now traverse the reconcile read to mock `getReservationItemAuthoritative` with matching data (batch-expiry tests ×2, queue tests ×2 in goodsIssueService.test.js; queue tests ×2 in goodsIssueQueueManager.test.js). Files: `test/unit/wm/goodsIssueService.test.js`, `test/unit/wm/goodsIssueQueueManager.test.js`.
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: **1608/1608 passed, 103/103 suites** (full green; +2 = the new reconcile guard tests).
+  - `npx jest` on the 3 handler-post suites (service/queueManager/phase5routing): 63/63 before the guard tests were added, all green after.
+  - `npx cds compile srv/wm/goods-issue/service.cds`: OK.
+  - `git diff --check`: no new non-doc whitespace issues.
+- **Net regressions introduced: 0.** Validation-first ordering means the phase5-routing and missing-field tests still reject at validation before reconciliation; reconciliation only engages for a well-formed reservation-based payload.
+- **Design notes / scope:** OpenQty uses SAP's authoritative required-minus-withdrawn (local dispatch-queue quantity is not deducted here — that is a UI-side display concern); a small floating-point epsilon (1e-9) avoids false over-issue rejections. The 261 unplanned (direct-to-order, no reservation) path is intentionally not reconciled (nothing to reconcile against).
+- **NOT YET FIXED (remaining audit findings)**: #6/#14/#19 dashboard performance; #7 write the missing controller/service unit tests; #12 301/311 destination rules (needs live SAP); #13 301≡311 de-duplication (**deferred — needs live re-verification**); #18 remaining hardcoded plant/sloc prefill defaults; #23 i18n; #24 thin 311 posting-client test.
+- **Not committed** — working tree now carries five uncommitted batches (cruft cleanup, honesty cluster, cleanup batch, backend-guards batch, this reconciliation change); awaiting the user's commit decision.
+
 ## 2026-09-30 10:52 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode)
 - **Request**: Continuation ("Next") — backend batch from the WM/EWM audit: findings #8, #9, #10 (with #11 assessed and deferred).

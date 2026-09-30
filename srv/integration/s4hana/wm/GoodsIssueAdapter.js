@@ -457,6 +457,29 @@ class GoodsIssueAdapter {
   }
 
   /**
+   * Read the authoritative open reservation item (Material/Plant/StorageLocation/open quantity) from
+   * SAP for server-side reconciliation before posting a reservation-based Goods Issue (261/301/311).
+   * OpenQty uses the same base-unit formula as the reservations client (required - withdrawn).
+   * Throws 404 when the item is not open, or 502 on a read failure — callers fail closed.
+   * @returns {Promise<{Material:string,Plant:string,StorageLocation:string,Batch:string,Unit:string,RequiredQty:number,WithdrawnQty:number,OpenQty:number}>}
+   */
+  async getReservationItemAuthoritative(reservationNo, reservationItem) {
+    const { resvItem } = await this.stockUnits._readOpenReservationItem(reservationNo, reservationItem);
+    const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit || 0);
+    const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0);
+    return {
+      Material: String(resvItem.Product || '').trim(),
+      Plant: String(resvItem.Plant || '').trim(),
+      StorageLocation: String(resvItem.StorageLocation || '').trim(),
+      Batch: String(resvItem.Batch || '').trim(),
+      Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || '').trim(),
+      RequiredQty: reqQty,
+      WithdrawnQty: wdnQty,
+      OpenQty: Math.max(0, reqQty - wdnQty)
+    };
+  }
+
+  /**
    * Fetch distinct open reservations for Goods Issue directly from UI_RESERVATION_ITM_MNG_V2
    */
   async getOpenReservations(movementType = '261', plant = '', options) {

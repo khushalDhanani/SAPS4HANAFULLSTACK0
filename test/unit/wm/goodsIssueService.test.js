@@ -229,6 +229,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
     it('should block single-line goods issue when batch is expired', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(mockBatchesRM4520);
+      // Reservation reconciliation passes (matching item, open qty) so the flow reaches the batch check.
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'RM-4520', Plant: '', StorageLocation: '', OpenQty: 100000 });
 
       const req = {
         data: {
@@ -489,6 +491,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
     });
 
     it('should block goods issue when attempting to issue real expired batch ABCD1234', async () => {
+      // Reservation reconciliation passes so the flow reaches the batch-expiry check.
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
       const req = {
         data: {
           ReservationNo: '18025',
@@ -503,6 +507,30 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
       await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-06-24'));
+    });
+
+    it('reconciles submitted values against the reservation: rejects (409) a Material mismatch before posting', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 500 });
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const req = {
+        data: { ReservationNo: '18025', ReservationItem: '0001', Material: '9999999999', Plant: '1120', StorageLocation: 'CS01', IssueQty: 10, Unit: 'KG' },
+        error: jest.fn((code, msg) => ({ code, message: msg }))
+      };
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(409, expect.stringContaining('do not match reservation'));
+      expect(postSpy).not.toHaveBeenCalled(); // must NOT post when reconciliation fails
+    });
+
+    it('reconciles submitted values against the reservation: rejects (422) an over-issue beyond open qty', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 5 });
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const req = {
+        data: { ReservationNo: '18025', ReservationItem: '0001', Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', IssueQty: 50, Unit: 'KG' },
+        error: jest.fn((code, msg) => ({ code, message: msg }))
+      };
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('exceeds the open reservation quantity'));
+      expect(postSpy).not.toHaveBeenCalled();
     });
 
     it('should query live open reservations for Goods Issue 261 via UI_RESERVATION_ITM_MNG_V2', async () => {
@@ -601,6 +629,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['postGoodsIssue261'](req);
       expect(result).toBeDefined();
@@ -652,6 +681,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 100000 });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['postGoodsIssue261'](req);
       expect(result.Queued).toBe(true);

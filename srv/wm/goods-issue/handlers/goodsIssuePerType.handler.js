@@ -61,6 +61,54 @@ async function stockPreCheck201(req, normalized) {
   }
 }
 
+/**
+ * Reservation reconciliation for reservation-based movements (261/301/311). The Fiori UI derives
+ * Material/Plant/StorageLocation from the resolved reservation item, but the CAP action can be
+ * called directly, so we reconcile server-side against SAP before posting: submitted master data
+ * must match the reservation item, and IssueQty must not exceed its open quantity. Skips cleanly
+ * when there is no reservation (e.g. 261 unplanned direct-to-order). Returns true to continue, or
+ * sends req.error and returns false. Fails CLOSED when the reservation cannot be read.
+ */
+async function reservationReconcileCheck(req, normalized) {
+  const sResv = String(normalized.ReservationNo || '').trim();
+  const sItem = String(normalized.ReservationItem || '').trim();
+  if (!sResv || !sItem) return true; // no reservation to reconcile against (unplanned path)
+  if (typeof GoodsIssueAdapter.getReservationItemAuthoritative !== 'function') return true;
+
+  let item;
+  try {
+    item = await GoodsIssueAdapter.getReservationItemAuthoritative(sResv, sItem);
+  } catch (resErr) {
+    // 404 (not open / not found) or 502 (read failure) -> block; never post against an unverifiable reservation.
+    req.error(resErr.status || 502, resErr.message || `Reservation ${sResv} item ${sItem} could not be verified before posting; Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const normMat = (s) => String(s || '').trim().replace(/^0+/, '').toUpperCase();
+  const norm = (s) => String(s || '').trim().toUpperCase();
+  const mismatches = [];
+  if (normalized.Material && normMat(normalized.Material) !== normMat(item.Material)) {
+    mismatches.push(`Material (submitted ${normalized.Material}, reservation ${item.Material})`);
+  }
+  if (normalized.Plant && norm(normalized.Plant) !== norm(item.Plant)) {
+    mismatches.push(`Plant (submitted ${normalized.Plant}, reservation ${item.Plant})`);
+  }
+  if (normalized.StorageLocation && norm(normalized.StorageLocation) !== norm(item.StorageLocation)) {
+    mismatches.push(`Storage Location (submitted ${normalized.StorageLocation}, reservation ${item.StorageLocation})`);
+  }
+  if (mismatches.length > 0) {
+    req.error(409, `Submitted values do not match reservation ${sResv} item ${sItem}: ${mismatches.join('; ')}. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const issueQty = Number(normalized.IssueQty);
+  if (!isNaN(issueQty) && issueQty > 0 && item.OpenQty > 0 && issueQty > item.OpenQty + 1e-9) {
+    req.error(422, `Issue quantity ${issueQty} exceeds the open reservation quantity ${item.OpenQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  return true;
+}
+
 /** Posts via the type's isolated adapter method; on capability-unavailable, records the dispatch queue. */
 async function postWithQueueFallback(req, normalized, postFn) {
   try {
@@ -139,6 +187,7 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
+      if (!(await reservationReconcileCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
     });
@@ -147,6 +196,7 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
+      if (!(await reservationReconcileCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
     });
@@ -155,6 +205,7 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
+      if (!(await reservationReconcileCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
     });

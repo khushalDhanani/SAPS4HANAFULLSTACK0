@@ -158,6 +158,7 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
     });
 
     it('queues the transaction and reports QUEUED (never a SAP document) when SAP cannot post and a store is bound', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       const handlers = fakeService();
 
@@ -174,6 +175,7 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
     });
 
     it('fails closed with the SAP error when SAP cannot post and no queue store is bound', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       jest.spyOn(queueSingleton, 'enqueue').mockRejectedValue(new QueueStoreUnavailableError());
       const handlers = fakeService();
