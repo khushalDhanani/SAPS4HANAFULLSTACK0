@@ -52,16 +52,13 @@ sap.ui.define([
         },
 
         _loadAll: function (bForceRefresh) {
-            var aPromises = [this._loadDashboardData(bForceRefresh)];
-            TYPES.forEach(function (sType) {
-                aPromises.push(this._loadRecentPostings(sType, bForceRefresh));
-            }, this);
-            return Promise.all(aPromises);
+            return this._loadDashboardData(bForceRefresh);
         },
 
         /**
-         * Loads the combined (unfiltered) getDashboardData call that feeds the KPI tiles (unchanged)
-         * and the Distribution / Trend mini-widgets. Independent of the 4 Recent Postings loads below.
+         * Loads the whole dashboard from a SINGLE combined getDashboardData call: KPI tiles, the
+         * Distribution / Trend widgets, AND all four per-type Recent Postings tables (from the
+         * response's RecentByType). This replaces the former 5-call fan-out (1 combined + 4 per-type).
          */
         _loadDashboardData: function (bForceRefresh) {
             var oModel = this._getModel();
@@ -69,6 +66,9 @@ sap.ui.define([
 
             oModel.setProperty("/loading", true);
             oModel.setProperty("/error", "");
+            TYPES.forEach(function (sType) {
+                GoodsIssueDashboardModel.setRecentPostingsLoading(oModel, sType);
+            }, this);
 
             var iDays = parseInt(oModel.getProperty("/trendPeriod") || "30", 10);
             var sPlant = oModel.getProperty("/plantFilter") || "";
@@ -78,6 +78,7 @@ sap.ui.define([
                 .then(function (oData) {
                     if (oData) {
                         GoodsIssueDashboardModel.setServerData(oModel, oData);
+                        GoodsIssueDashboardModel.setAllRecentPostings(oModel, oData);
                     } else {
                         oModel.setProperty("/loading", false);
                     }
@@ -87,34 +88,10 @@ sap.ui.define([
                     var sMsg = (err && err.message) || String(err || "");
                     oModel.setProperty("/loading", false);
                     oModel.setProperty("/error", sMsg || that.getText("giLoadErrorMsg", null, "Failed to load Goods Issue dashboard data from SAP S/4HANA."));
-                });
-        },
-
-        /**
-         * Loads one movement type's independent Recent Postings table via its own server-side
-         * MovementType-filtered getDashboardData call. Each of the 4 types has its own loading/
-         * error/items state in /recent/{type}, set independently of the other 3.
-         * @param {string} sType - "201" | "261" | "301" | "311"
-         * @param {boolean} [bForceRefresh]
-         */
-        _loadRecentPostings: function (sType, bForceRefresh) {
-            var oModel = this._getModel();
-            if (!oModel) return;
-
-            GoodsIssueDashboardModel.setRecentPostingsLoading(oModel, sType);
-
-            var iDays = parseInt(oModel.getProperty("/trendPeriod") || "30", 10);
-            var sPlant = oModel.getProperty("/plantFilter") || "";
-            var that = this;
-
-            return GoodsIssueService.getDashboardData(iDays, sPlant, bForceRefresh, sType)
-                .then(function (oData) {
-                    GoodsIssueDashboardModel.setRecentPostings(oModel, sType, oData);
-                })
-                .catch(function (err) {
-                    var sMsg = (err && err.message) || String(err || "");
-                    GoodsIssueDashboardModel.setRecentPostingsError(oModel, sType,
-                        sMsg || that.getText("giRecentPostingsLoadError", null, "Failed to load recent postings."));
+                    TYPES.forEach(function (sType) {
+                        GoodsIssueDashboardModel.setRecentPostingsError(oModel, sType,
+                            sMsg || that.getText("giRecentPostingsLoadError", null, "Failed to load recent postings."));
+                    }, this);
                 });
         },
 

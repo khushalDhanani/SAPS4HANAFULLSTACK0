@@ -15,15 +15,30 @@
 
 const GoodsIssueDashboardClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueDashboardClient');
 
+// All-time counts come from a SAP-side OData $count (client.getText). This returns the per-movement
+// -type count from the $filter, mirroring SAP, so the unit test never hits a live backend.
+function countByType(map) {
+    return (path, opts) => {
+        const f = decodeURIComponent((opts && opts.query) || '');
+        const m = f.match(/GoodsMovementType eq '(\d+)'/);
+        const t = m ? m[1] : '';
+        return Promise.resolve(String(map[t] != null ? map[t] : 0));
+    };
+}
+
 describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', () => {
     let client;
     let mockRfc;
+    let mockClient;
     let mockReservationsClient;
     let mockQueueManager;
 
     beforeEach(() => {
         mockRfc = {
             readTable: jest.fn().mockResolvedValue([])
+        };
+        mockClient = {
+            getText: jest.fn().mockResolvedValue('0')
         };
         mockReservationsClient = {
             getOpenReservations: jest.fn().mockResolvedValue([])
@@ -33,6 +48,7 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         };
         client = new GoodsIssueDashboardClient({
             rfc: mockRfc,
+            client: mockClient,
             reservationsClient: mockReservationsClient,
             queueManager: mockQueueManager
         });
@@ -65,17 +81,10 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         const today = new Date();
         const todayYMD = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
 
-        // All-time query returns movement type distribution
+        // All-time counts now come from the SAP-side OData $count (per movement type).
+        mockClient.getText.mockImplementation(countByType({ '201': 2, '261': 3, '301': 1, '311': 1 }));
+        // Window rows still come from RFC MATDOC.
         mockRfc.readTable
-            .mockResolvedValueOnce([ // All-time MATDOC
-                { MBLNR: '5000001', BWART: '201' },
-                { MBLNR: '5000002', BWART: '201' },
-                { MBLNR: '5000003', BWART: '261' },
-                { MBLNR: '5000004', BWART: '261' },
-                { MBLNR: '5000005', BWART: '261' },
-                { MBLNR: '5000006', BWART: '301' },
-                { MBLNR: '5000007', BWART: '311' }
-            ])
             .mockResolvedValueOnce([ // Window MATDOC — includes today
                 { MBLNR: '5000001', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '1000000001', WERKS: '1000', LGORT: 'HS01', CHARG: '', MENGE: '100', MEINS: 'KG', BUDAT: todayYMD, USNAM: 'KHUSHAL', KOSTL: '', AUFNR: '', RSNUM: '', RSPOS: '', SHKZG: 'H' },
                 { MBLNR: '5000003', MJAHR: '2026', ZEILE: '0001', BWART: '261', MATNR: '1000000002', WERKS: '1000', LGORT: 'HS01', CHARG: '', MENGE: '50', MEINS: 'KG', BUDAT: todayYMD, USNAM: 'KHUSHAL', KOSTL: '', AUFNR: '1001', RSNUM: '', RSPOS: '', SHKZG: 'H' }
@@ -134,6 +143,8 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
     });
 
     test('handles MATDOC read failure with MSEG fallback gracefully', async () => {
+        // OData $count unavailable -> all-time count falls back to the RFC MATDOC/MSEG row-count.
+        mockClient.getText.mockRejectedValue(new Error('OData $count not available'));
         mockRfc.readTable
             .mockRejectedValueOnce(new Error('MATDOC not authorized'))  // all-time
             .mockResolvedValueOnce([{ MBLNR: '1', BWART: '261' }])     // MSEG fallback

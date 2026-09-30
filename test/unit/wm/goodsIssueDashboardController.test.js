@@ -178,6 +178,13 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             { PostingDate: '2026-09-27', DateLabel: '09/27', Count201: 1, Count261: 3, Count301: 1, Count311: 2, Total: 7 }
         ],
         RecentDocuments: allDocuments,
+        // The combined call now returns per-type Recent Postings so the UI needs only ONE call.
+        RecentByType: {
+            Mvt201: allDocuments.filter((d) => d.MovementType === '201'),
+            Mvt261: allDocuments.filter((d) => d.MovementType === '261'),
+            Mvt301: allDocuments.filter((d) => d.MovementType === '301'),
+            Mvt311: allDocuments.filter((d) => d.MovementType === '311')
+        },
         LastUpdated: '2026-09-28T10:00:00.000Z',
         PlantFilter: '',
         Days: 30
@@ -191,13 +198,9 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
         });
     }
 
+    // The dashboard now loads everything from the single combined call (no movementType fan-out).
     function mockRoutedService() {
-        mockGoodsIssueService.getDashboardData.mockImplementation((days, plant, forceRefresh, movementType) => {
-            if (movementType) {
-                return Promise.resolve(dashboardDataForType(movementType));
-            }
-            return Promise.resolve(sampleDashboardData);
-        });
+        mockGoodsIssueService.getDashboardData.mockResolvedValue(sampleDashboardData);
     }
 
     beforeEach(() => {
@@ -291,25 +294,20 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsIssue');
         });
 
-        it('loads the combined call and all 4 independent Recent Postings calls on refresh, each with its own movementType filter', async () => {
+        it('loads the whole dashboard (KPIs + all 4 Recent Postings tables) from ONE combined call', async () => {
             mockRoutedService();
             controller.onInit();
 
             await controller.onRefresh();
 
-            // Combined call for KPIs/Distribution/Trend - no movementType
+            // A single combined call now feeds everything - no per-type movementType fan-out.
             expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true);
-            // 4 independent per-type calls
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '201');
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '261');
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '301');
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(30, '', true, '311');
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(5);
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(1);
 
             const model = controller.getView().getModel('dashboardView');
             expect(model.getProperty('/kpis/mvt201/totalCount')).toBe(40);
 
-            // Each table only received its own type's rows
+            // Each per-type table is populated from the combined call's RecentByType payload
             expect(model.getProperty('/recent/201/items').length).toBe(1);
             expect(model.getProperty('/recent/201/items')[0].MovementType).toBe('201');
             expect(model.getProperty('/recent/261/items').length).toBe(1);
@@ -318,49 +316,21 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(model.getProperty('/recent/311/items').length).toBe(1);
         });
 
-        it('handles combined-call failure independently of the 4 Recent Postings loads', async () => {
-            mockGoodsIssueService.getDashboardData.mockImplementation((days, plant, forceRefresh, movementType) => {
-                if (movementType) {
-                    return Promise.resolve(dashboardDataForType(movementType));
-                }
-                return Promise.reject(new Error('S/4HANA Gateway unavailable'));
-            });
+        it('a combined-call failure surfaces the error on both the KPIs and all 4 Recent Postings tables', async () => {
+            mockGoodsIssueService.getDashboardData.mockRejectedValue(new Error('S/4HANA Gateway unavailable'));
             controller.onInit();
 
             await controller._loadAll(false);
             const model = controller.getView().getModel('dashboardView');
 
-            // Combined call failed -> KPI/chart error state set
             expect(model.getProperty('/loading')).toBe(false);
             expect(model.getProperty('/error')).toContain('S/4HANA Gateway unavailable');
 
-            // Recent Postings tables succeeded independently, unaffected by the combined call's failure
-            expect(model.getProperty('/recent/201/error')).toBe('');
-            expect(model.getProperty('/recent/201/items').length).toBe(1);
-        });
-
-        it('records an independent error for just one Recent Postings table when only that type fails', async () => {
-            mockGoodsIssueService.getDashboardData.mockImplementation((days, plant, forceRefresh, movementType) => {
-                if (movementType === '301') {
-                    return Promise.reject(new Error('301 lookup failed'));
-                }
-                if (movementType) {
-                    return Promise.resolve(dashboardDataForType(movementType));
-                }
-                return Promise.resolve(sampleDashboardData);
+            // With the single-call design, the failure propagates to every Recent Postings table.
+            ['201', '261', '301', '311'].forEach((sType) => {
+                expect(model.getProperty('/recent/' + sType + '/error')).toContain('S/4HANA Gateway unavailable');
+                expect(model.getProperty('/recent/' + sType + '/loading')).toBe(false);
             });
-            controller.onInit();
-
-            await controller._loadAll(false);
-            const model = controller.getView().getModel('dashboardView');
-
-            expect(model.getProperty('/recent/301/error')).toContain('301 lookup failed');
-            expect(model.getProperty('/recent/301/loading')).toBe(false);
-
-            // The other 3 tables are unaffected
-            expect(model.getProperty('/recent/201/error')).toBe('');
-            expect(model.getProperty('/recent/261/error')).toBe('');
-            expect(model.getProperty('/recent/311/error')).toBe('');
         });
 
         it('Phase 3: pressing a KPI tile scrolls directly to its section, with no filter toggle', () => {
@@ -416,7 +386,7 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(model.getProperty('/kpis/overall/totalCount')).toBe(265);
         });
 
-        it('reloads the combined call and all 4 Recent Postings tables when the trend period changes', async () => {
+        it('reloads the dashboard from the single combined call when the trend period changes', async () => {
             mockRoutedService();
             controller.onInit();
             await controller.onRefresh();
@@ -427,8 +397,7 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
 
             expect(controller._getModel().getProperty('/trendPeriod')).toBe('7');
             expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(7, '', true);
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledWith(7, '', true, '201');
-            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(5);
+            expect(mockGoodsIssueService.getDashboardData).toHaveBeenCalledTimes(1);
         });
 
         it('navigates each "New X" action to its dedicated per-type create page (not the generic one)', () => {

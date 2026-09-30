@@ -2,8 +2,20 @@
 
 const GoodsIssueDashboardClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueDashboardClient');
 
+// All-time counts now come from a SAP-side OData $count (client.getText), not from an RFC MATDOC
+// row scan. This helper returns the per-movement-type count based on the $filter, mirroring SAP.
+function countByType(map) {
+  return (path, opts) => {
+    const f = decodeURIComponent((opts && opts.query) || '');
+    const m = f.match(/GoodsMovementType eq '(\d+)'/);
+    const t = m ? m[1] : '';
+    return Promise.resolve(String(map[t] != null ? map[t] : 0));
+  };
+}
+
 describe('GoodsIssueDashboardClient Unit Tests', () => {
   let mockRfc;
+  let mockClient;
   let mockReservationsClient;
   let mockQueueManager;
   let client;
@@ -11,6 +23,10 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
   beforeEach(() => {
     mockRfc = {
       readTable: jest.fn()
+    };
+    // OData client used for the all-time $count (getText -> raw count string).
+    mockClient = {
+      getText: jest.fn().mockResolvedValue('0')
     };
     mockReservationsClient = {
       getOpenReservations: jest.fn()
@@ -21,6 +37,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
 
     client = new GoodsIssueDashboardClient({
       rfc: mockRfc,
+      client: mockClient,
       reservationsClient: mockReservationsClient,
       queueManager: mockQueueManager
     });
@@ -56,36 +73,33 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
   describe('Caching Behavior', () => {
     it('returns cached data on subsequent call without invoking RFC again within TTL', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
-      mockRfc.readTable
-        .mockResolvedValueOnce([{ MBLNR: '1001', BWART: '261' }]) // all-time totals
-        .mockResolvedValueOnce([]); // window rows
+      mockClient.getText.mockImplementation(countByType({ '261': 1 })); // all-time counts via OData $count
+      mockRfc.readTable.mockResolvedValue([]); // window rows (no materials -> no MAKT read)
 
       const res1 = await client.getDashboardData({ days: 7, plant: '1120' });
       expect(res1.Kpis.Mvt261.TotalCount).toBe(1);
-      expect(mockRfc.readTable).toHaveBeenCalledTimes(2);
+      expect(mockClient.getText).toHaveBeenCalledTimes(4); // one $count per movement type
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1); // window only
 
       // Second call with same parameters should hit cache
       const res2 = await client.getDashboardData({ days: 7, plant: '1120' });
       expect(res2).toBe(res1);
-      expect(mockRfc.readTable).toHaveBeenCalledTimes(2);
+      expect(mockClient.getText).toHaveBeenCalledTimes(4);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
     });
 
     it('bypasses cache when forceRefresh is true', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
-      mockRfc.readTable
-        .mockResolvedValueOnce([{ MBLNR: '1001', BWART: '261' }])
-        .mockResolvedValueOnce([]);
+      mockClient.getText.mockImplementation(countByType({ '261': 1 }));
+      mockRfc.readTable.mockResolvedValue([]);
 
       await client.getDashboardData({ days: 7, plant: '1120' });
-      expect(mockRfc.readTable).toHaveBeenCalledTimes(2);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
 
-      mockRfc.readTable
-        .mockResolvedValueOnce([{ MBLNR: '1001', BWART: '261' }, { MBLNR: '1002', BWART: '301' }])
-        .mockResolvedValueOnce([]);
-
+      mockClient.getText.mockImplementation(countByType({ '261': 1, '301': 1 }));
       const refreshed = await client.getDashboardData({ days: 7, plant: '1120', forceRefresh: true });
       expect(refreshed.Kpis.Mvt301.TotalCount).toBe(1);
-      expect(mockRfc.readTable).toHaveBeenCalledTimes(4);
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(2); // window re-read on forced refresh
     });
   });
 
@@ -105,18 +119,12 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
         { MovementType: '311', ItemId: 'Q2' }
       ]);
 
+      // All-time counts now come from the SAP-side OData $count (per movement type).
+      mockClient.getText.mockImplementation(countByType({ '201': 1, '261': 2, '301': 1, '311': 1 }));
+
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
       const todayYMD = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-
-      // All-time rows
-      const allRows = [
-        { MBLNR: '1000', BWART: '201' },
-        { MBLNR: '1001', BWART: '261' },
-        { MBLNR: '1002', BWART: '261' },
-        { MBLNR: '1003', BWART: '301' },
-        { MBLNR: '1004', BWART: '311' }
-      ];
 
       // Window rows including today's posting
       const windowRows = [
@@ -180,11 +188,12 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       ];
 
       mockRfc.readTable
-        .mockResolvedValueOnce(allRows) // 1. MATDOC all-time
-        .mockResolvedValueOnce(windowRows) // 2. MATDOC window rows
-        .mockResolvedValueOnce([{ MATNR: '000000000000000514', MAKTX: 'Flange Steel 514' }]) // MAKT for 514
-        .mockResolvedValueOnce([{ MATNR: '000000000000000421', MAKTX: 'Macbook Air M3' }]) // MAKT for 421
-        .mockResolvedValueOnce([{ MATNR: '000000000000000515', MAKTX: 'Pipe Copper 515' }]); // MAKT for 515
+        .mockResolvedValueOnce(windowRows) // 1. MATDOC window rows
+        .mockResolvedValueOnce([ // 2. MAKT descriptions — now a single batched read for all materials
+          { MATNR: '000000000000000514', MAKTX: 'Flange Steel 514' },
+          { MATNR: '000000000000000421', MAKTX: 'Macbook Air M3' },
+          { MATNR: '000000000000000515', MAKTX: 'Pipe Copper 515' }
+        ]);
 
       const data = await client.getDashboardData({ days: 30, plant: '1120' });
 
@@ -235,6 +244,8 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
     it('falls back to MSEG when MATDOC table read throws an error', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
       mockQueueManager.getAll.mockResolvedValue([]);
+      // OData $count unavailable -> the all-time count falls back to the RFC MATDOC/MSEG row-count path.
+      mockClient.getText.mockRejectedValue(new Error('OData $count not available'));
 
       mockRfc.readTable
         .mockRejectedValueOnce(new Error('MATDOC table not active')) // MATDOC all-time fails
@@ -269,18 +280,23 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
         .rejects.toThrow("Invalid movement type '999'");
     });
 
-    it('queries BWART = <type> (not the combined IN clause) when movementType is given', async () => {
+    it('queries only the requested type (not the combined set) when movementType is given', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
+      mockClient.getText.mockImplementation(countByType({ '301': 0 }));
       mockRfc.readTable.mockResolvedValue([]);
 
       await client.getDashboardData({ days: 30, plant: '1120', movementType: '301' });
 
-      const totalWhere = mockRfc.readTable.mock.calls[0][2];
-      expect(totalWhere[0]).toBe("BWART = '301'");
-      expect(totalWhere.join(' ')).not.toContain("IN ('201','261','301','311')");
+      // All-time count: a single OData $count for movement type 301 only (not 4 calls).
+      expect(mockClient.getText).toHaveBeenCalledTimes(1);
+      const countFilter = decodeURIComponent(mockClient.getText.mock.calls[0][1].query);
+      expect(countFilter).toContain("GoodsMovementType eq '301'");
+      expect(countFilter).toContain("Plant eq '1120'");
 
-      const windowWhere = mockRfc.readTable.mock.calls[1][2];
+      // Window read (readTable call 0) is scoped to BWART = '301', not the combined IN clause.
+      const windowWhere = mockRfc.readTable.mock.calls[0][2];
       expect(windowWhere[0]).toBe("BWART = '301'");
+      expect(windowWhere.join(' ')).not.toContain("IN ('201','261','301','311')");
     });
 
     it('returns RecentDocuments containing only the requested type, with ReceivingPlant/ReceivingStorageLocation mapped from UMWRK/UMLGO', async () => {
@@ -295,10 +311,10 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
         }
       ];
 
+      mockClient.getText.mockImplementation(countByType({ '301': 1 })); // all-time count via OData $count
       mockRfc.readTable
-        .mockResolvedValueOnce([{ MBLNR: '3001', BWART: '301' }]) // all-time totals
         .mockResolvedValueOnce(windowRows) // window rows
-        .mockResolvedValueOnce([{ MATNR: '000000000000000515', MAKTX: 'Copper Pipe 515' }]); // MAKT
+        .mockResolvedValueOnce([{ MATNR: '000000000000000515', MAKTX: 'Copper Pipe 515' }]); // MAKT (batched)
 
       const data = await client.getDashboardData({ days: 30, plant: '1120', movementType: '301' });
 

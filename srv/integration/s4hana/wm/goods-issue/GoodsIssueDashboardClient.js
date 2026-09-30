@@ -74,23 +74,76 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     return counts;
   }
 
+  /**
+   * Build RFC_READ_TABLE OPTIONS lines for an OR over padded material numbers, then AND the language.
+   * Each option line is kept <= 72 chars (SAP's per-line limit) by packing whole tokens; SAP joins
+   * the lines with a space. Verified live: the whole clause on one line exceeds the limit and errors,
+   * but split across lines it returns every match — so this replaces the previous per-material N+1.
+   */
+  _buildMaktWhere(paddedMatnrs) {
+    const clause = '( ' + paddedMatnrs.map((m) => `MATNR = '${m}'`).join(' OR ') + " ) AND SPRAS = 'E'";
+    const words = clause.split(' ');
+    const lines = [];
+    let line = '';
+    for (const w of words) {
+      if (line === '') line = w;
+      else if ((line + ' ' + w).length <= 72) line += ' ' + w;
+      else { lines.push(line); line = w; }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  /**
+   * All-time count of material-document items for one movement type via OData $count — returns only
+   * the number (no row transfer). Optionally scoped to a plant. Throws on a non-numeric response so
+   * the caller can fall back to the RFC row-count.
+   */
+  async _countMovementTypeViaOData(bwart, plant) {
+    let filter = `GoodsMovementType eq '${bwart}'`;
+    if (plant) {
+      filter += ` and Plant eq '${plant}'`;
+    }
+    const body = await this.client.getText(
+      '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem/$count',
+      { query: `$filter=${encodeURIComponent(filter)}`, accept: 'text/plain' }
+    );
+    const n = parseInt(String(body).trim(), 10);
+    if (isNaN(n)) {
+      throw new Error(`OData $count returned a non-numeric response for movement type ${bwart}`);
+    }
+    return n;
+  }
+
   async _descriptions(matnrs) {
     const out = {};
-    const unique = [...new Set(matnrs.filter(Boolean))];
-    for (const m of unique) {
+    const unique = [...new Set(matnrs.filter(Boolean))].map((m) => String(m).trim());
+    if (unique.length === 0) return out;
+
+    // Batch the MAKT reads: one RFC_READ_TABLE per chunk (OR over MATNR) instead of one per material.
+    const CHUNK = 20;
+    const byPadded = {};
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const chunk = unique.slice(i, i + CHUNK);
       try {
-        const sMat = String(m).trim();
         const rows = await this.rfc.readTable(
           'MAKT',
           ['MATNR', 'MAKTX'],
-          [`MATNR = '${sMat.padStart(18, '0')}'`, "AND SPRAS = 'E'"]
+          this._buildMaktWhere(chunk.map((m) => m.padStart(18, '0')))
         );
-        if (rows && rows[0]) {
-          out[sMat] = rows[0].MAKTX || '';
-          out[alphaOut(sMat)] = rows[0].MAKTX || '';
+        for (const row of (rows || [])) {
+          byPadded[String(row.MATNR || '').trim()] = row.MAKTX || '';
         }
       } catch (err) {
-        LOG.warn(`Could not fetch description for material ${m}: ${err.message}`);
+        LOG.warn(`Could not fetch descriptions for ${chunk.length} materials: ${err.message}`);
+      }
+    }
+
+    for (const m of unique) {
+      const desc = byPadded[m.padStart(18, '0')];
+      if (desc !== undefined) {
+        out[m] = desc;
+        out[alphaOut(m)] = desc;
       }
     }
     return out;
@@ -173,30 +226,34 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     const openPending311 = (r311 ? r311.length : 0) + queueCounts['311'];
     const openPendingOverall = openPending201 + openPending261 + openPending301 + openPending311;
 
-    // 3. Query all-time total counts from MATDOC/MSEG
-    const totalWhere = [sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','261','301','311')"];
-    if (sPlant) {
-      totalWhere.push(`AND WERKS = '${sPlant}'`);
+    // 3. All-time total counts. Prefer the SAP-side OData $count (returns only the number, no row
+    //    transfer) over pulling every MATDOC row and counting in JS. Verified live that
+    //    A_MaterialDocumentItem/$count by GoodsMovementType (+Plant) equals the MATDOC row count.
+    //    Falls back to the RFC MATDOC/MSEG row-count if the OData $count is unavailable.
+    const countTypes = sMovementType ? [sMovementType] : ['201', '261', '301', '311'];
+    let allTimeTotals = { '201': 0, '261': 0, '301': 0, '311': 0, overall: 0 };
+    let countedViaOData = true;
+    try {
+      const counts = await Promise.all(countTypes.map((t) => this._countMovementTypeViaOData(t, sPlant)));
+      counts.forEach((n, i) => {
+        allTimeTotals[countTypes[i]] = n;
+        allTimeTotals.overall += n;
+      });
+    } catch (odataErr) {
+      countedViaOData = false;
+      allTimeTotals = { '201': 0, '261': 0, '301': 0, '311': 0, overall: 0 };
+      LOG.warn(`OData $count unavailable (${odataErr.message}); falling back to RFC MATDOC/MSEG row-count.`);
     }
 
-    let allTimeTotals = { '201': 0, '261': 0, '301': 0, '311': 0, overall: 0 };
-    try {
-      const allRows = await this.rfc.readTable('MATDOC', ['MBLNR', 'BWART'], totalWhere);
-      if (Array.isArray(allRows)) {
-        for (const row of allRows) {
-          const mvt = row.BWART;
-          if (allTimeTotals[mvt] !== undefined) {
-            allTimeTotals[mvt]++;
-          }
-          allTimeTotals.overall++;
-        }
+    if (!countedViaOData) {
+      const totalWhere = [sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','261','301','311')"];
+      if (sPlant) {
+        totalWhere.push(`AND WERKS = '${sPlant}'`);
       }
-    } catch (err) {
-      LOG.warn(`MATDOC all-time read failed: ${err.message}. Trying MSEG fallback.`);
       try {
-        const msegRows = await this.rfc.readTable('MSEG', ['MBLNR', 'BWART'], totalWhere);
-        if (Array.isArray(msegRows)) {
-          for (const row of msegRows) {
+        const allRows = await this.rfc.readTable('MATDOC', ['MBLNR', 'BWART'], totalWhere);
+        if (Array.isArray(allRows)) {
+          for (const row of allRows) {
             const mvt = row.BWART;
             if (allTimeTotals[mvt] !== undefined) {
               allTimeTotals[mvt]++;
@@ -204,8 +261,22 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
             allTimeTotals.overall++;
           }
         }
-      } catch (msegErr) {
-        LOG.error(`Both MATDOC and MSEG all-time queries failed: ${msegErr.message}`);
+      } catch (err) {
+        LOG.warn(`MATDOC all-time read failed: ${err.message}. Trying MSEG fallback.`);
+        try {
+          const msegRows = await this.rfc.readTable('MSEG', ['MBLNR', 'BWART'], totalWhere);
+          if (Array.isArray(msegRows)) {
+            for (const row of msegRows) {
+              const mvt = row.BWART;
+              if (allTimeTotals[mvt] !== undefined) {
+                allTimeTotals[mvt]++;
+              }
+              allTimeTotals.overall++;
+            }
+          }
+        } catch (msegErr) {
+          LOG.error(`Both MATDOC and MSEG all-time queries failed: ${msegErr.message}`);
+        }
       }
     }
 
@@ -308,12 +379,29 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     }
     const trend = Array.from(trendMap.values());
 
-    // 8. Recent documents table (top 50) with enriched material descriptions
+    // 8. Recent documents table (top 50) with enriched material descriptions.
+    //    For the combined (unfiltered) call, ALSO build a per-type top-50 slice (RecentByType) so the
+    //    Fiori dashboard can populate all four Recent Postings tables from this single call instead of
+    //    firing four extra movement-type-filtered getDashboardData calls (5 backend loads -> 1).
     const topRecent = windowRows.slice(0, 50);
-    const matnrs = topRecent.map((r) => r.MATNR).filter(Boolean);
-    const descriptions = await this._descriptions(matnrs);
 
-    const recentDocuments = topRecent.map((r) => {
+    const byType = { '201': [], '261': [], '301': [], '311': [] };
+    if (!sMovementType) {
+      for (const r of windowRows) {
+        if (byType[r.BWART] && byType[r.BWART].length < 50) {
+          byType[r.BWART].push(r);
+        }
+      }
+    }
+
+    // One batched description read (see _descriptions) covering the global slice and every per-type slice.
+    const descMatnrs = topRecent.map((r) => r.MATNR);
+    if (!sMovementType) {
+      ['201', '261', '301', '311'].forEach((t) => byType[t].forEach((r) => descMatnrs.push(r.MATNR)));
+    }
+    const descriptions = await this._descriptions(descMatnrs.filter(Boolean));
+
+    const mapRow = (r) => {
       const sMatClean = alphaOut(r.MATNR);
       return {
         MaterialDocument: alphaOut(r.MBLNR),
@@ -338,7 +426,15 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
         ReceivingPlant: r.UMWRK || '',
         ReceivingStorageLocation: r.UMLGO || ''
       };
-    });
+    };
+
+    const recentDocuments = topRecent.map(mapRow);
+    const recentByType = sMovementType ? undefined : {
+      Mvt201: byType['201'].map(mapRow),
+      Mvt261: byType['261'].map(mapRow),
+      Mvt301: byType['301'].map(mapRow),
+      Mvt311: byType['311'].map(mapRow)
+    };
 
     const result = {
       Kpis: {
@@ -375,6 +471,10 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
       PlantFilter: sPlant,
       Days: nDays
     };
+    // Only present on the combined call; lets the UI fill all 4 per-type Recent Postings tables at once.
+    if (recentByType) {
+      result.RecentByType = recentByType;
+    }
 
     this._cache.set(cacheKey, { timestamp: now, data: result });
     return result;

@@ -89,12 +89,16 @@ class BaseGoodsIssueClient {
   }
 
   /**
-   * Derives a CSRF probe path scoped to the SAME service the caller is about to POST to
-   * (service root + `/$metadata`), instead of a hardcoded, unrelated service. Fetching the CSRF
-   * token from a different service than the transactional POST target has caused cross-service
-   * CSRF token rejection on this SAP system before (see GoodsReceiptAdapter's own CSRF fetch
-   * path being "harmonized" with its POST target for the same reason). `$metadata` is a safe,
-   * side-effect-free GET that any user authorized for that service can call.
+   * Derives a CSRF probe path scoped to the SAME service the caller is about to POST to (the service
+   * root document), instead of a hardcoded, unrelated service. Fetching the CSRF token from a
+   * different service than the transactional POST target has caused cross-service CSRF token
+   * rejection on this SAP system before (see GoodsReceiptAdapter's own CSRF fetch path being
+   * "harmonized" with its POST target for the same reason).
+   *
+   * The service root ("/<service>/") is a safe, side-effect-free GET that returns a CSRF token for
+   * any POST target on the service (entity-set deep insert OR function import such as Cancel), and is
+   * ~360x smaller than the service `$metadata` document it previously fetched on every POST
+   * (verified live: service root ~107 bytes vs `$metadata` ~38 KB, both returning a token).
    *
    * @private
    */
@@ -106,7 +110,7 @@ class BaseGoodsIssueClient {
       const segments = basePart.split('/').filter(Boolean);
       if (segments.length < 2) return fallback;
       segments.pop(); // drop the entity set / function import / action segment, keep the service root
-      return '/' + segments.join('/') + '/$metadata';
+      return '/' + segments.join('/') + '/';
     } catch (_e) {
       return fallback;
     }

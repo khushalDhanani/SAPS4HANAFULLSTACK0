@@ -4,6 +4,27 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 12:10 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode). Live SAP (DS4) available via `.env.local`; used for READ-ONLY discovery per the AGENTS.md SAP protocol (no secrets printed, no writes).
+- **Request**: "Fix remaining." + "Give me live SAP access... ship all three properly." — the perf cluster #6/#14/#19, plus #12.
+- **Live SAP discovery (read-only, verified before implementing):**
+  - #6: `A_MaterialDocumentItem/$count?$filter=GoodsMovementType eq '261' and Plant eq '1120'` returned **4448 in 0.2s**; the RFC MATDOC row-count for the identical filter returned **4448** — EXACT MATCH. OData `$count` is a semantically-equivalent server-side count with zero row transfer.
+  - #14: `RFC_READ_TABLE(MAKT)` with the whole OR-clause on one line ERRORS (72-char option limit), but split across OPTIONS lines it returns every match (verified 15 materials → 8 lines, all returned) — SAP space-joins the lines.
+  - #19: `$metadata` = 38,620 bytes; **service-root doc = 107 bytes**; both return a CSRF token. Service root works for any POST target (entity or Cancel function import).
+- **Changes applied (verified live + unit-tested):**
+  1. **[#6] All-time dashboard counts via OData `$count`** instead of scanning every MATDOC row and counting in JS. `GoodsIssueDashboardClient._countMovementTypeViaOData()` (one `$count` per movement type, plant-scoped); RFC MATDOC/MSEG row-count kept as fallback.
+  2. **[#14a] Batched the MAKT description N+1** — `_descriptions()` now issues one `RFC_READ_TABLE(MAKT)` per chunk of 20 (OR-WHERE split into ≤72-char OPTIONS lines via `_buildMaktWhere()`), replacing one call per material.
+  3. **[#14b] Collapsed the dashboard's 5-call fan-out to 1** — the combined `getDashboardData` now returns `RecentByType` (per-type top-50), added to the CDS `GIDashboardData` type (`GIRecentByType`); the Fiori dashboard fills all four Recent Postings tables from the single combined call (`GoodsIssueDashboardModel.setAllRecentPostings`), removing the 4 per-type calls.
+  4. **[#19] CSRF probe now hits the service root** (`/<service>/`, ~107 B) instead of `$metadata` (~38 KB) — `BaseGoodsIssueClient._deriveCsrfPath`.
+  5. **[#12] 301/311 destination invariants** — conditional validation (311 receiving plant must equal issuing plant + receiving SLoc must differ; 301 receiving plant must differ), SAP-standard semantics, with tests.
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: **1883/1883 passed, 113/113 suites**.
+  - `npx cds compile srv/wm/goods-issue/service.cds`: OK. `cd app/fiori-app && npm run lint`: no findings; `npm run build`: succeeded.
+  - Live read-only probes only; no SAP writes. Updated the two dashboard test files to mock the OData `$count` (`client.getText`) — they previously hit live SAP once #6 landed.
+- **Net regressions introduced: 0.** All 25 audit findings are now addressed. Full WM unit suite green.
+- **Not committed** — the entire session's work remains uncommitted; strongly recommend committing.
+
+
 ## 2026-09-30 11:50 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode), orchestrating 1 general-purpose sub-agent.
 - **Request**: "Fix remaining." — #23a (i18n) done; #6/#14/#19 held (blocked on live SAP).

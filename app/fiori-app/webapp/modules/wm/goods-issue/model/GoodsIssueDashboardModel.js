@@ -273,6 +273,24 @@ sap.ui.define([
         },
 
         /**
+         * Populate all four per-type Recent Postings tables from the combined call's RecentByType
+         * payload (keys Mvt201/Mvt261/Mvt301/Mvt311). This lets the dashboard load every table from
+         * the single getDashboardData call instead of firing four movement-type-filtered calls.
+         * @param {sap.ui.model.json.JSONModel} oModel
+         * @param {Object} oData - combined getDashboardData result (may include RecentByType)
+         */
+        setAllRecentPostings: function (oModel, oData) {
+            var oByType = (oData && oData.RecentByType) || {};
+            ["201", "261", "301", "311"].forEach(function (sType) {
+                var aDocs = oByType["Mvt" + sType] || [];
+                oModel.setProperty("/recent/" + sType + "/items", aDocs);
+                oModel.setProperty("/recent/" + sType + "/total", aDocs.length);
+                oModel.setProperty("/recent/" + sType + "/loading", false);
+                oModel.setProperty("/recent/" + sType + "/error", "");
+            });
+        },
+
+        /**
          * Record an independent load failure for one type's Recent Postings table.
          * @param {sap.ui.model.json.JSONModel} oModel
          * @param {string} sType

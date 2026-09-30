@@ -556,11 +556,21 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         ReceivingStorageLocation : String(4);
     };
 
+    // Per-movement-type recent postings, returned only on the combined (unfiltered) call so the Fiori
+    // dashboard can fill all four Recent Postings tables from one request instead of four extra calls.
+    type GIRecentByType {
+        Mvt201 : array of GIMaterialDocumentItem;
+        Mvt261 : array of GIMaterialDocumentItem;
+        Mvt301 : array of GIMaterialDocumentItem;
+        Mvt311 : array of GIMaterialDocumentItem;
+    };
+
     type GIDashboardData {
         Kpis            : GIDashboardKpis;
         Distribution    : array of GIDistributionItem;
         Trend           : array of GITrendItem;
         RecentDocuments : array of GIMaterialDocumentItem;
+        RecentByType    : GIRecentByType;
         LastUpdated     : Timestamp;
         PlantFilter     : String(4);
         Days            : Integer;
