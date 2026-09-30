@@ -155,7 +155,7 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
 
       expect(mockAdapter._post).toHaveBeenCalledTimes(1);
       const [url] = mockAdapter._post.mock.calls[0];
-      expect(url).toContain("CancelHeader?MaterialDocument='4900055001'");
+      expect(url).toContain("Cancel?MaterialDocument='4900055001'");
       expect(url).toContain("MaterialDocumentYear='2026'");
 
       expect(res).toMatchObject({
@@ -165,7 +165,7 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
         ReversalMaterialDocYear: '2026',
         Success: true
       });
-      expect(res.Message).toContain('reversed successfully in S/4HANA via CancelHeader');
+      expect(res.Message).toContain('reversed successfully in S/4HANA via Cancel');
     });
 
     it('rejects reversal when MaterialDocument or Year is missing', async () => {

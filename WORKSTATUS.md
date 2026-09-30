@@ -4,6 +4,45 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 09:40 IST
+- **Agent**: Antigravity
+- **Request**: "Okay, Now implment 201 MVT End to End." -> "Continue ans use dev tool mcp"
+- **Movement Type 201 (Goods Issue to Cost Center) End-to-End Live Implementation & SAP Verification**:
+  1. Root Cause & Prerequisites Eliminated:
+     - Basis activated `API_MATERIAL_DOCUMENT_SRV` with System Alias `DS4_220` and Default flag on DS4 Client 220.
+     - Resolved CSRF probe returning 406 on `$metadata` by requesting XML accept headers (`application/xml, text/xml, */*`) when probing `$metadata` in `S4HttpClient.js`.
+     - Targeted CSRF probe in `GoodsIssueAdapter.js` directly to `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/` for all `API_MATERIAL_DOCUMENT_SRV` calls and ensured response headers (`_headers['sap-message']`) are attached for SAP business error inspection.
+     - Updated `GoodsIssue201Mapper.js` to ensure numeric Cost Centers are padded to 10 digits (`padStart(10, '0')`), matching SAP ALPHA conversion for `KOSTL`.
+     - Identified authentic Cost Center in SAP: `1011101101` (AIL HW-B21/7Anal Dev in Company Code 1000 / Controlling Area 1000) and authentic unrestricted batch stock in `MCHB`: Material `1000000264` (N-octylamine), Plant `1110`, SLoc `CS01`, Batch `IN26000905` (4,000 KG available, Expiry 2027-08-01).
+  2. Live Backend S/4HANA Posting Proof:
+     - Direct `S4HttpClient.post` created authentic Material Document **`4900049848`** in SAP DS4 Client 220 (HTTP 201). Read back confirmed.
+     - Adapter invocation `GoodsIssueAdapter.postGoodsIssue201` created authentic Material Document **`4900049849`** in SAP DS4 Client 220. Read back confirmed.
+     - CAP Action `postGoodsIssue201` (`/odata/v4/goods-issue/postGoodsIssue201`) created authentic Material Document **`4900049850`** with `SyncStatus: 'POSTED_IN_SAP'`. Read back confirmed.
+  3. Fiori UI Browser End-to-End Verification (`chrome-devtools-mcp`):
+     - Navigated to `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/cost-center-201`.
+     - Filled form: Cost Center `1011101101`, Material `1000000264`, Plant `1110`, SLoc `CS01`, Batch `IN26000905`, Qty `1 KG`.
+     - Auto-detected batch management, loaded unrestricted stock (`76800 KG available`), and dynamically enabled the "Post Goods Issue (201)" button.
+     - Clicked "Post Goods Issue (201)". The UI posted directly to CAP and SAP S/4HANA.
+     - Displayed modal success dialog and MessageStrip:
+       `"Goods Issue to Cost Center 201 posted successfully! Material Document: 4900049851 Material Document Year: 2026"`.
+     - Captured full-page inline screenshot proving visual excellence and authentic dialog state.
+     - Read back document **`4900049851`** directly from SAP:
+       `Read back MatDoc header: 4900049851 2026 KHUSHAL`
+       `Item: 1 Mat: 1000000264 Mvt: 201 Plant: 1110 Sloc: CS01 Batch: IN26000905 CostCenter: 1011101101 Qty: 1.000 KG`.
+  4. Movement 202 Reversal Verification:
+     - Inspected `$metadata` of `API_MATERIAL_DOCUMENT_SRV` and discovered the actual SAP Gateway cancellation FunctionImport is named **`Cancel`** (not `CancelHeader`), taking `MaterialDocument`, `MaterialDocumentYear`, and `PostingDate`.
+     - Updated `GoodsIssueMapper.mapToCancelHeaderUrl` to target `/Cancel` and updated `GoodsIssuePostingClient.js` to parse `response.Cancel?.MaterialDocument`.
+     - Verified live SAP cancellation of document `4900049848`, successfully generating Reversal Material Document **`4900049852`** (Movement Type 202, ReversedDoc: `4900049848`).
+     - Updated unit test expectations in `test/unit/wm/goodsIssue201Posting.test.js` to match the verified `Cancel` endpoint.
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue201Posting.test.js test/unit/wm/goodsIssue201Page.test.js test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssuePerTypeMapper.test.js test/unit/wm/goodsIssuePerTypeNormalize.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/integration/wm/goodsIssue201PostReversal.test.js`: 7/7 test suites passed, 59/59 tests green (100%).
+  - `npm --prefix app/fiori-app run lint`: Success, no findings detected (0 errors).
+  - `npm --prefix app/fiori-app run build`: Build succeeded in 1.22 s.
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+  - Browser inspection via `chrome-devtools-mcp`: Snapshot, DOM state, modal dialog, and full page screenshot verified live.
+- **Next recommended action**: Now that Movement 201 has been proven end-to-end with live SAP document creation and reversal, proceed to execute the remaining movements in the consolidated pass (261 planned with reservation 518660, 261 unplanned with order 2000611, and 301/311 transfers).
+
+
 ## 2026-09-29 18:18 IST
 - **Agent**: Antigravity
 - **Request**: "Check noe"
@@ -6374,16 +6413,14 @@ The table below provides a strict, unambiguous separation between **Code Complet
    - Phase 0 to Phase 5 Complete: All layers (Discovery, Service Spec, CAP backend, S/4 Adapter, 6 Scenario Unit Tests, Live SAP verification, and Fiori RF Zebra MC220 mobile screen with live TR Selection Value Help dialog) fully built, wired, and verified with 79 passing tests (100% green). Screen completely adheres to pure standard SAPUI5 with zero custom CSS and verified in live browser.
    - Basis/ABAP Handover: Provide Basis team with `docs/wm_rf_trto_srv_spec.md` to activate Gateway service `ZWM_RF_TRTO_SRV` on DS4 Client 220. Once activated, test live end-to-end against live TR `0001000663` and SU `1000043935`.
 4. Demonstrate verified PO creation across all 16 PO types in the Fiori UI (`#/mm/purchase-orders/create`), and verified Orders Due for Delivery data & live Delivery Without Reference (`#/le/orders-due`).
-5. Basis Gateway Remediation: Provide Basis team with dedicated P1 ticket `docs/ticket-basis-activate-api-material-document.md` to register and activate `API_MATERIAL_DOCUMENT_SRV` on DS4 Client 220 (System Alias `DS4_220`).
-6. Consolidated Live Verification (Single Sitting): Once Basis confirms activation of `API_MATERIAL_DOCUMENT_SRV`, run ONE consolidated pass re-posting the 3 verified payloads:
-   - Movement 201 (Cost Center `1011202902`, Plant `1130`, SLoc `CS01`, Material `1000000980`, Qty `1`).
-   - Movement 261 Planned (Reservation `518660`, Item `0001`, Order `1011`, Material `8000009753`, Plant `1120`, SLoc `HS01`, Qty `1 NOS`).
-   - Movement 261 Unplanned (Order `2000611`, Material `8500000035`, Plant `1120`, SLoc `CS01`, Qty `1 KG`).
-   Paste all three real success responses (Material Document numbers) side-by-side and confirm persistence in `MATDOC` / `MB03`.
-6b. Movement 301 & 311 Development Hold:
-   - Do NOT begin feature implementation or UI screen wiring for Movement Types 301 (Plant-to-Plant) and 311 (SLoc-to-SLoc) while waiting on Basis.
-   - They share the exact same technical dependency (`API_MATERIAL_DOCUMENT_SRV`) and will hit the identical `/IWFND/MED/170` Gateway wall.
-   - Hold development until Basis activation confirms synchronous material document creation works end-to-end for at least one movement type.
+5. Movement Type 201 End-to-End Live Verified:
+   - Live SAP S/4HANA material document creation (`API_MATERIAL_DOCUMENT_SRV`) fully operational and verified through all 3 tiers: direct SDK, CAP action (`postGoodsIssue201`), and Fiori UI (`#/wm/goods-issue/cost-center-201`).
+   - Authentic SAP Material Documents generated: `4900049848`, `4900049849`, `4900049850`, `4900049851` and verified directly in SAP.
+   - Movement 202 Reversal verified via live `Cancel` FunctionImport creating authentic SAP Reversal Material Document `4900049852`.
+6. Consolidated Live Verification - Remaining Movements:
+   - Movement 261 Planned: Re-post reservation `518660`, Item `0001`, Order `1011`, Material `8000009753`, Plant `1120`, SLoc `HS01`, Qty `1 NOS`.
+   - Movement 261 Unplanned: Re-post Order `2000611`, Material `8500000035`, Plant `1120`, SLoc `CS01`, Qty `1 KG`.
+   - Movement 301 / 311: Proceed with verified `API_MATERIAL_DOCUMENT_SRV` posting now that Gateway service activation and deep-insert posting have been 100% proven end-to-end.
 7. Select next development-ready capability to build from the verified list:
    - Credit block release action (`SD_SOFM_CREDIT_BLOCK_SRV`)
    - Request for Quotation (`MM_PUR_RFQ_MAINT_V2_SRV`)
