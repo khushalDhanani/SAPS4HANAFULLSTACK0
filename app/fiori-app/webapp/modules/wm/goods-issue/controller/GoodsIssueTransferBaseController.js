@@ -56,8 +56,14 @@ sap.ui.define([
             }
         },
 
-        _onRouteMatched: function () {
+        _onRouteMatched: function (oEvent) {
             this._resetModel();
+            var oArgs = oEvent && oEvent.getParameter("arguments");
+            var oQuery = oArgs && oArgs["?query"];
+            var sResv = oQuery && oQuery.resv;
+            if (sResv) {
+                this._prefillFromReservation(sResv, oQuery.item);
+            }
         },
 
         _resetModel: function () {
@@ -65,6 +71,57 @@ sap.ui.define([
             this._oModel.setData(oInitData);
             this._aResolvedItems = [];
             this._validateLive();
+        },
+
+        /**
+         * Pre-fill the transfer form from an open reservation (e.g. from the Open Transfers list page).
+         * @param {string} sResv - Reservation Number
+         * @param {string} [sItem] - Optional specific Reservation Item
+         */
+        _prefillFromReservation: function (sResv, sItem) {
+            var that = this;
+            var cfg = this._c;
+            var oModel = this._oModel;
+            oModel.setProperty("/busy", true);
+            oModel.setProperty("/fromReservation", true);
+            oModel.setProperty("/reservationNo", sResv);
+
+            return cfg.Service.fetchReservationItems(sResv)
+                .then(function (aItems) {
+                    that._aResolvedItems = aItems || [];
+                    var oTargetItem = null;
+                    if (sItem) {
+                        var sPadded = String(sItem).padStart(4, "0");
+                        oTargetItem = that._aResolvedItems.find(function (i) {
+                            return String(i.ReservationItem) === String(sItem) || String(i.ReservationItem) === sPadded;
+                        });
+                    }
+                    if (!oTargetItem) {
+                        oTargetItem = that._aResolvedItems.find(function (i) {
+                            return Number(i.OpenQty) > 0;
+                        }) || that._aResolvedItems[0];
+                    }
+
+                    if (!oTargetItem) {
+                        MessageToast.show(that._t("PrefillNoOpenItem", [sResv]));
+                        return;
+                    }
+
+                    cfg.Model.applyReservationItem(oModel.getData(), oTargetItem);
+                    var nOpen = Number(oTargetItem.OpenQty);
+                    if (!isNaN(nOpen) && nOpen > 0) {
+                        oModel.setProperty("/quantity", nOpen);
+                        oModel.setProperty("/openQty", nOpen);
+                    }
+                    that._oModel.refresh(true);
+                    that._validateLive();
+                })
+                .catch(function (err) {
+                    MessageBox.error((err && err.message) || that._t("PrefillError"));
+                })
+                .finally(function () {
+                    oModel.setProperty("/busy", false);
+                });
         },
 
         // =============================================================
@@ -400,6 +457,22 @@ sap.ui.define([
                 .then(function (res) {
                     that._oModel.setProperty("/busy", false);
 
+                    // Open/Pending list workflow: return to the pending list page carrying completion outcome
+                    if (that._oModel.getProperty("/fromReservation") && cfg.pendingRoute) {
+                        var oOutcome = {
+                            resv: that._oModel.getProperty("/reservationNo"),
+                            item: that._oModel.getProperty("/reservationItem")
+                        };
+                        if (res && res.MaterialDocument) {
+                            oOutcome.doc = res.MaterialDocument;
+                            oOutcome.year = res.MaterialDocYear || new Date().getFullYear().toString();
+                        } else {
+                            oOutcome.queued = (res && res.QueueReference) || "1";
+                        }
+                        that.getRouter().navTo(cfg.pendingRoute, { "?query": oOutcome });
+                        return;
+                    }
+
                     // Honest outcome: a QUEUED result (no SAP material document) means SAP has NOT
                     // persisted the document - it was only recorded in the dispatch queue while the
                     // S/4HANA Gateway service is inactive. Never claim a successful SAP posting or
@@ -528,6 +601,10 @@ sap.ui.define([
         onNavBack: function () {
             var oRouter = this.getRouter();
             if (oRouter) {
+                if (this._oModel && this._oModel.getProperty("/fromReservation") && this._c && this._c.pendingRoute) {
+                    oRouter.navTo(this._c.pendingRoute);
+                    return;
+                }
                 oRouter.navTo("wmGoodsIssue");
             }
         }

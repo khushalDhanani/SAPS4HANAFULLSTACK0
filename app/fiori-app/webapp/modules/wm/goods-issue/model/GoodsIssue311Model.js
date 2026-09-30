@@ -68,6 +68,7 @@
                 // for any movement type other than 201).
                 reservationNo: "",
                 reservationItem: "",
+                fromReservation: false,
 
                 // Order/Network: purely descriptive, populated only once a reservation item
                 // resolves. Never an independent input, never independently validated.
@@ -261,14 +262,24 @@
             // 10. Receiving Plant / Storage Location are OPTIONAL for this movement type (the
             // backend mapper never requires them - GoodsIssueMapper.js only forwards them if
             // present). Format-only validation, never a "required" error.
+            // When supplied, intra-plant invariants apply:
+            // - ReceivingPlant must equal issuing Plant
+            // - ReceivingStorageLocation must differ from issuing StorageLocation
             var sRecvPlant = (oData.receivingPlant != null) ? String(oData.receivingPlant).trim().toUpperCase() : "";
             if (sRecvPlant && sRecvPlant.length !== 4) {
                 errors.receivingPlant = "Receiving Plant must be 4 characters";
                 bValid = false;
+            } else if (sRecvPlant && sPlant && sRecvPlant !== sPlant) {
+                errors.receivingPlant = "Movement 311 is a storage-location transfer within one plant: receiving plant '" + sRecvPlant + "' must equal issuing plant '" + sPlant + "'";
+                bValid = false;
             }
+
             var sRecvSLoc = (oData.receivingStorageLocation != null) ? String(oData.receivingStorageLocation).trim().toUpperCase() : "";
             if (sRecvSLoc && sRecvSLoc.length !== 4) {
                 errors.receivingStorageLocation = "Receiving Storage Location must be 4 characters";
+                bValid = false;
+            } else if (sRecvSLoc && sSLoc && sRecvSLoc === sSLoc) {
+                errors.receivingStorageLocation = "Receiving storage location '" + sRecvSLoc + "' must differ from the issuing storage location for a 311 transfer";
                 bValid = false;
             }
 
@@ -327,9 +338,16 @@
             oData.unit = oItem.Unit || "";
             oData.isUnitEditable = !oItem.Unit;
             oData.isSerialManaged = !!oItem.IsSerialManaged;
-            oData.isBatchManaged = !!(oItem.Batch || oItem.BatchStatusState);
+            oData.isBatchManaged = !!(oItem.IsBatchManaged || oItem.Batch || (oItem.BatchStatusText && oItem.BatchStatusText !== "NO BATCH"));
             oData.batch = oItem.Batch || "";
             oData.openQty = (oItem.OpenQty !== undefined && oItem.OpenQty !== null) ? oItem.OpenQty : null;
+            if (oItem.ReceivingPlant) {
+                oData.receivingPlant = oItem.ReceivingPlant;
+            }
+            if (oItem.ReceivingStorageLocation) {
+                oData.receivingStorageLocation = oItem.ReceivingStorageLocation;
+            }
+            oData.fromReservation = true;
         },
 
         /**

@@ -18,6 +18,7 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
             expect(data.quantity).toBe(1);
             expect(data.isBatchManaged).toBe(false);
             expect(data.isSerialManaged).toBe(false);
+            expect(data.fromReservation).toBe(false);
             expect(data.reservationNo).toBe('');
             expect(data.reservationItem).toBe('');
             expect(data.orderNo).toBe('');
@@ -190,9 +191,40 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
             expect(res.isValid).toBe(false);
             expect(res.errors.receivingPlant).toContain('4 characters');
 
-            data.receivingPlant = '1130';
+            data.receivingPlant = '1120';
             res = GoodsIssue311Model.validate(data);
             expect(res.errors.receivingPlant).toBe('');
+        });
+
+        it('enforces intra-plant destination invariants for Movement 311', () => {
+            const data = GoodsIssue311Model.getInitialData();
+            data.reservationNo = 'RES001';
+            data.reservationItem = '0010';
+            data.material = 'MAT1';
+            data.plant = '1120';
+            data.storageLocation = 'HS01';
+            data.quantity = 1;
+            data.unit = 'EA';
+
+            // 1. Receiving Plant must equal issuing plant
+            data.receivingPlant = '1130';
+            let res = GoodsIssue311Model.validate(data);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.receivingPlant).toContain('must equal issuing plant');
+
+            // 2. Receiving Storage Location must differ from issuing storage location
+            data.receivingPlant = '1120';
+            data.receivingStorageLocation = 'HS01';
+            res = GoodsIssue311Model.validate(data);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.receivingStorageLocation).toContain('must differ from the issuing storage location');
+
+            // 3. Valid intra-plant transfer (same plant, different storage location)
+            data.receivingStorageLocation = 'HS02';
+            res = GoodsIssue311Model.validate(data);
+            expect(res.isValid).toBe(true);
+            expect(res.errors.receivingPlant).toBe('');
+            expect(res.errors.receivingStorageLocation).toBe('');
         });
 
         it('toBackendPayload includes ReceivingPlant/ReceivingStorageLocation when set', () => {

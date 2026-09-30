@@ -25,8 +25,18 @@ sap.ui.define([
         "301": "wmGoodsIssue301",
         "311": "wmGoodsIssue311"
     };
+    // Movement type pending / open reservations list routes.
+    // 201, 261, and 311 open their Open Reservations/Transfers list; 301 opens its dedicated create page.
+    var mRoutes = {
+        "201": "wmGoodsIssue201Pending",
+        "261": "wmGoodsIssue261Pending",
+        "301": "wmGoodsIssue301",
+        "311": "wmGoodsIssue311Pending"
+    };
 
     return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssueDashboard", {
+        mRoutes: mRoutes,
+
         onInit: function () {
             var oModel = GoodsIssueDashboardModel.createModel();
             this.getView().setModel(oModel, "dashboardView");
@@ -249,6 +259,28 @@ sap.ui.define([
         onNavBackToOverview: function () {
             var oRouter = this.getOwnerComponent().getRouter();
             oRouter.navTo("dashboard");
+        },
+
+        // =============================================================
+        // OPEN RESERVATIONS / TRANSFERS NAVIGATION
+        // =============================================================
+
+        onNavigateToPending201: function () {
+            this._navigateToPending("201");
+        },
+
+        onNavigateToPending261: function () {
+            this._navigateToPending("261");
+        },
+
+        onNavigateToPending311: function () {
+            this._navigateToPending("311");
+        },
+
+        _navigateToPending: function (sMode) {
+            var oRouter = this.getOwnerComponent().getRouter();
+            var sRoute = (this.mRoutes && this.mRoutes[sMode]) || mRoutes[sMode] || mRoutes["311"];
+            oRouter.navTo(sRoute);
         },
 
         // =============================================================

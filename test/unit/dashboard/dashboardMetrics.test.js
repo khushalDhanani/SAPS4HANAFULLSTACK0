@@ -307,6 +307,30 @@ describe('Unit: Dashboard Controller live figures', () => {
             'onSelectTabTM', 'onSelectTabService', 'onSelectTabHCM', 'onSelectTabAnalytics', 'onSelectTabAdmin']
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
+
+    test('routes movement type tile presses to their dedicated pages (201/261/311 pending, 301 direct)', () => {
+        const controller = new DashboardControllerClass();
+        controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
+
+        expect(controller.mRoutes).toEqual({
+            "201": "wmGoodsIssue201Pending",
+            "261": "wmGoodsIssue261Pending",
+            "301": "wmGoodsIssue301",
+            "311": "wmGoodsIssue311Pending"
+        });
+
+        controller.onMvt201TilePress();
+        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201Pending');
+
+        controller.onMvt261TilePress();
+        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending');
+
+        controller.onMvt301TilePress();
+        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301');
+
+        controller.onMvt311TilePress();
+        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
+    });
 });
 
 describe('Unit: Dashboard view binds only live figures', () => {

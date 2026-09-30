@@ -14,6 +14,7 @@ sap.ui.define([
                 modelName: "gi311",
                 i18nPrefix: "gi311",
                 route: "wmGoodsIssue311",
+                pendingRoute: "wmGoodsIssue311Pending",
                 Model: GoodsIssue311Model,
                 Service: GoodsIssue311Service
             };

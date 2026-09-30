@@ -61,6 +61,13 @@ sap.ui.define([
         "mvt311Total", "mvt311Today"
     ];
 
+    var mRoutes = {
+        "201": "wmGoodsIssue201Pending",
+        "261": "wmGoodsIssue261Pending",
+        "301": "wmGoodsIssue301",
+        "311": "wmGoodsIssue311Pending"
+    };
+
     function toCount(vValue) {
         if (vValue === null || vValue === undefined || String(vValue).trim() === "") {
             return null;
@@ -71,6 +78,7 @@ sap.ui.define([
 
     return BaseController.extend("saps4hana.fiori.controller.Dashboard", {
         METRIC_KEYS: METRIC_KEYS,
+        mRoutes: mRoutes,
 
         onInit: function () {
             var oViewModel = new JSONModel({
@@ -409,13 +417,13 @@ sap.ui.define([
          */
         _navigateToGiFiltered: function (sMvtType) {
             // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201 and 261 open their Open Reservations list (a reservation-to-complete workflow); the
-            // others open their dedicated create pages directly.
+            // 201, 261, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow);
+            // 301 opens its dedicated create page directly.
             var mRoutes = {
                 "201": "wmGoodsIssue201Pending",
                 "261": "wmGoodsIssue261Pending",
                 "301": "wmGoodsIssue301",
-                "311": "wmGoodsIssue311"
+                "311": "wmGoodsIssue311Pending"
             };
             var sRoute = mRoutes[sMvtType] || "wmGoodsIssue";
             this.getOwnerComponent().getRouter().navTo(sRoute);

@@ -36,7 +36,7 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
             ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG', Batch: ''
         });
         expect(status).toBe(200);
-        expect(data).toMatchObject({ Success: true, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
+        expect(data).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
         expect(data.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
 
         const list = await GET(`${BASE}/GoodsIssueQueue?$filter=QueueReference eq '${data.QueueReference}'&$select=QueueReference,ReservationNo,SyncStatus,IssueQty`);

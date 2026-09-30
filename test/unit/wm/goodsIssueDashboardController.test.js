@@ -416,6 +416,28 @@ describe('GoodsIssue Dashboard Controller & Model Unit Tests', () => {
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311');
         });
 
+        it('navigates open/pending actions to their dedicated open reservations/transfers list', () => {
+            controller.onInit();
+
+            controller.onNavigateToPending201();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201Pending');
+
+            controller.onNavigateToPending261();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending');
+
+            controller.onNavigateToPending311();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
+        });
+
+        it('has mRoutes pointing 201, 261, 311 to pending/open routes and 301 to create', () => {
+            expect(controller.mRoutes).toEqual({
+                "201": "wmGoodsIssue201Pending",
+                "261": "wmGoodsIssue261Pending",
+                "301": "wmGoodsIssue301",
+                "311": "wmGoodsIssue311Pending"
+            });
+        });
+
         it('opens document detail dialog when clicking a row in any of the 4 tables', async () => {
             controller.onInit();
             const oDoc = allDocuments[2];

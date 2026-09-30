@@ -302,8 +302,13 @@
           "target": "TargetGoodsIssue301"
         },
         {
+          "name": "wmGoodsIssue311Pending",
+          "pattern": "wm/goods-issue/311/open-transfers:?query:",
+          "target": "TargetGoodsIssue311Pending"
+        },
+        {
           "name": "wmGoodsIssue311",
-          "pattern": "wm/goods-issue/sloc-transfer-311",
+          "pattern": "wm/goods-issue/sloc-transfer-311:?query:",
           "target": "TargetGoodsIssue311"
         },
         {
@@ -419,6 +424,11 @@
         "TargetGoodsIssue301": {
           "id": "goodsIssue301",
           "name": "GoodsIssue301",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue311Pending": {
+          "id": "goodsIssue311Pending",
+          "name": "GoodsIssue311Pending",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue311": {

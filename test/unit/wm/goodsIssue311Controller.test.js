@@ -274,6 +274,22 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             expect(controller._aResolvedItems).toEqual([]);
             expect(mockGoodsIssue311Model.validate).toHaveBeenCalled();
         });
+
+        it('_onRouteMatched with resv query param pre-fills from reservation', async () => {
+            const oItem = { ReservationItem: '0010', Material: 'MAT1', Plant: '1120', StorageLocation: 'HS01', OpenQty: 5 };
+            mockGoodsIssue311Service.fetchReservationItems.mockResolvedValueOnce([oItem]);
+
+            controller._onRouteMatched({
+                getParameter: () => ({ '?query': { resv: '519367' } })
+            });
+            await flush();
+
+            const oModel = controller.getView().getModel('gi311');
+            expect(oModel.getProperty('/fromReservation')).toBe(true);
+            expect(oModel.getProperty('/reservationNo')).toBe('519367');
+            expect(mockGoodsIssue311Service.fetchReservationItems).toHaveBeenCalledWith('519367');
+            expect(mockGoodsIssue311Model.applyReservationItem).toHaveBeenCalled();
+        });
     });
 
     // =============================================================
@@ -601,6 +617,50 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             expect(mockMessageBox.error).toHaveBeenCalledWith('Deficit of stock', expect.objectContaining({ title: 'gi311PostFailedTitle' }));
             expect(oModel.getProperty('/busy')).toBe(false);
         });
+
+        it('onPostGoodsIssue with fromReservation:true returns to wmGoodsIssue311Pending with outcome query', async () => {
+            mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
+            mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900000999', MaterialDocYear: '2026' });
+
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/fromReservation', true);
+            oModel.setProperty('/reservationNo', '519367');
+            oModel.setProperty('/reservationItem', '0010');
+
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending', {
+                '?query': {
+                    resv: '519367',
+                    item: '0010',
+                    doc: '4900000999',
+                    year: '2026'
+                }
+            });
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+        });
+
+        it('onPostGoodsIssue with fromReservation:true and queued result returns to wmGoodsIssue311Pending with queue ref', async () => {
+            mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
+            mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ Queued: true, QueueReference: 'Q-311-001' });
+
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/fromReservation', true);
+            oModel.setProperty('/reservationNo', '519367');
+            oModel.setProperty('/reservationItem', '0010');
+
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending', {
+                '?query': {
+                    resv: '519367',
+                    item: '0010',
+                    queued: 'Q-311-001'
+                }
+            });
+        });
     });
 
     // =============================================================
@@ -662,9 +722,17 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             expect(oModel.getProperty('/reservationNo')).toBe('0000012345');
         });
 
-        it('onNavBack navigates to the wmGoodsIssue route', () => {
+        it('onNavBack navigates to the wmGoodsIssue route when fromReservation is false', () => {
             controller.onNavBack();
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue');
+        });
+
+        it('onNavBack navigates to wmGoodsIssue311Pending when fromReservation is true', () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/fromReservation', true);
+
+            controller.onNavBack();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
         });
     });
 });

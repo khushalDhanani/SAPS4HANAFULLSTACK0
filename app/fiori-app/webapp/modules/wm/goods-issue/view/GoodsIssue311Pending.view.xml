@@ -1,0 +1,78 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue311Pending"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <Page
+        id="pageGi311Pending"
+        title="{i18n>gi311OpenTransfersTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack">
+        <content>
+            <MessageStrip
+                id="msPending311Result"
+                text="{gi311p>/resultText}"
+                type="{= ${gi311p>/resultState} === 'None' ? 'Information' : ${gi311p>/resultState} }"
+                showIcon="true"
+                showCloseButton="true"
+                close=".onCloseResult"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi311p>/resultText} }" />
+
+            <MessageStrip
+                id="msPending311Error"
+                text="{gi311p>/error}"
+                type="Error"
+                showIcon="true"
+                showCloseButton="true"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi311p>/error} }" />
+
+            <Table
+                id="tblPending311"
+                items="{gi311p>/items}"
+                busy="{gi311p>/busy}"
+                growing="true"
+                growingThreshold="50"
+                noDataText="{i18n>gi311OpenTransfersNoData}"
+                itemPress=".onOpenReservation"
+                class="sapUiResponsiveMargin"
+                width="auto">
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title id="ttlPending311" text="{= ${i18n>gi311OpenTransfersListTitle} + ' (' + (${gi311p>/items}.length || 0) + ')' }" level="H2" />
+                        <ToolbarSpacer />
+                        <Button id="btnPending311Refresh" icon="sap-icon://refresh" tooltip="{i18n>gi311OpenTransfersRefresh}" press=".onRefresh" />
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column id="colPendingResv"><Text text="{i18n>gi311OpenTransfersColReservation}" /></Column>
+                    <Column id="colPendingMaterial"><Text text="{i18n>gi311OpenTransfersColMaterial}" /></Column>
+                    <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi311OpenTransfersColPlant}" /></Column>
+                    <Column id="colPendingIssuingSLoc" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>gi311OpenTransfersColIssuingSLoc}" /></Column>
+                    <Column id="colPendingReceivingSLoc" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>gi311OpenTransfersColReceivingSLoc}" /></Column>
+                    <Column id="colPendingCreatedBy" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>gi311OpenTransfersColCreatedBy}" /></Column>
+                    <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi311OpenTransfersColItems}" /></Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Navigation" press=".onOpenReservation">
+                        <cells>
+                            <ObjectIdentifier title="{gi311p>ReservationNo}" text="{gi311p>MovementTypeName}" />
+                            <VBox>
+                                <Text text="{gi311p>SampleMaterial}" />
+                                <Text text="{gi311p>SampleMaterialDesc}" class="sapUiTinyMarginTop" visible="{= !!${gi311p>SampleMaterialDesc} }" />
+                            </VBox>
+                            <Text text="{gi311p>Plant}" />
+                            <Text text="{= ${gi311p>StorageLocation} ? ${gi311p>StorageLocation} : '-' }" />
+                            <Text text="{= ${gi311p>ReceivingStorageLocation} ? ${gi311p>ReceivingStorageLocation} : '-' }" />
+                            <Text text="{= ${gi311p>CreatedByUser} ? ${gi311p>CreatedByUser} : '-' }" />
+                            <ObjectNumber number="{gi311p>ItemCount}" unit="{i18n>gi311OpenTransfersItemsUnit}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+    </Page>
+</mvc:View>
