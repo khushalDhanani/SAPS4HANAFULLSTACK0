@@ -1,0 +1,535 @@
+sap.ui.define([
+    "saps4hana/fiori/controller/BaseController",
+    "sap/ui/model/json/JSONModel",
+    "sap/m/MessageBox",
+    "sap/m/MessageToast",
+    "sap/m/SelectDialog",
+    "sap/m/StandardListItem",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator"
+], function (
+    BaseController,
+    JSONModel,
+    MessageBox,
+    MessageToast,
+    SelectDialog,
+    StandardListItem,
+    Filter,
+    FilterOperator
+) {
+    "use strict";
+
+    /**
+     * GoodsIssueTransferBaseController
+     * Shared controller logic for the reservation-based transfer-posting movement types 301 (plant-to-
+     * plant) and 311 (storage-location-to-storage-location). These two screens are behaviourally
+     * identical apart from their movement number, so each concrete controller supplies only a small
+     * config via _getConfig() and inherits all behaviour here.
+     *
+     * A subclass MUST implement:
+     *   _getConfig() -> { type, modelName, i18nPrefix, route, Model, Service }
+     *
+     * For every movement type other than 201 the backend requires ReservationNo + ReservationItem, so
+     * Material/Plant/Storage Location/Unit/Order are always DERIVED from the resolved reservation item,
+     * never freely entered.
+     */
+    return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssueTransferBase", {
+
+        /** Subclasses override this. */
+        _getConfig: function () {
+            throw new Error("GoodsIssueTransferBaseController subclass must implement _getConfig()");
+        },
+
+        /** Prefixed getText: resolves an i18n key under the movement type's prefix (e.g. gi301/gi311). */
+        _t: function (sKey, aArgs) {
+            return this.getText(this._c.i18nPrefix + sKey, aArgs);
+        },
+
+        onInit: function () {
+            this._c = this._getConfig();
+            this._oModel = this._c.Model.createInitialModel();
+            this.getView().setModel(this._oModel, this._c.modelName);
+
+            var oRouter = this.getRouter();
+            if (oRouter) {
+                oRouter.getRoute(this._c.route).attachPatternMatched(this._onRouteMatched, this);
+            }
+        },
+
+        _onRouteMatched: function () {
+            this._resetModel();
+        },
+
+        _resetModel: function () {
+            var oInitData = this._c.Model.getInitialData();
+            this._oModel.setData(oInitData);
+            this._aResolvedItems = [];
+            this._validateLive();
+        },
+
+        // =============================================================
+        // FORMATTERS
+        // =============================================================
+
+        formatSuccessBanner: function (sDoc, sYear) {
+            if (!sDoc) return "";
+            return this._t("SuccessBannerText", [sDoc, sYear || ""]);
+        },
+
+        formatReversalBanner: function (sDoc, sYear) {
+            if (!sDoc) return "";
+            return this._t("ReversalBannerText", [sDoc, sYear || ""]);
+        },
+
+        formatOpenQty: function (nQty, sUnit) {
+            if (nQty === null || nQty === undefined) return "";
+            return nQty + " " + (sUnit || "");
+        },
+
+        // =============================================================
+        // LIVE VALIDATION
+        // =============================================================
+
+        _validateLive: function () {
+            var oData = this._oModel.getData();
+            var oResult = this._c.Model.validate(oData);
+            this._oModel.setProperty("/errors", oResult.errors);
+            this._oModel.setProperty("/isValid", oResult.isValid);
+            return oResult.isValid;
+        },
+
+        onFieldLiveChange: function () {
+            this._validateLive();
+        },
+
+        onQuantityLiveChange: function (oEvent) {
+            var sVal = oEvent.getParameter("value") || "";
+            var nVal = parseFloat(sVal);
+            this._oModel.setProperty("/quantity", isNaN(nVal) ? sVal : nVal);
+            this._validateLive();
+        },
+
+        // =============================================================
+        // RESERVATION VALUE HELP & ITEM RESOLUTION
+        // =============================================================
+
+        onReservationValueHelp: function () {
+            var that = this;
+            var cfg = this._c;
+            var oDialog = new SelectDialog({
+                title: this._t("SelectReservation"),
+                noDataText: this._t("NoReservationsFound"),
+                search: function (oEvt) {
+                    var sVal = oEvt.getParameter("value") || "";
+                    var oBinding = oEvt.getSource().getBinding("items");
+                    if (oBinding) {
+                        var aFilters = sVal ? [
+                            new Filter({
+                                filters: [
+                                    new Filter("ReservationNo", FilterOperator.Contains, sVal),
+                                    new Filter("OrderNo", FilterOperator.Contains, sVal),
+                                    new Filter("DisplayText", FilterOperator.Contains, sVal)
+                                ],
+                                and: false
+                            })
+                        ] : [];
+                        oBinding.filter(aFilters);
+                    }
+                },
+                confirm: function (oEvt) {
+                    var oSelectedItem = oEvt.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var sResv = oSelectedItem.getTitle();
+                        that._oModel.setProperty("/reservationNo", sResv);
+                        that._oModel.setProperty("/reservationItem", "");
+                        that._oModel.setProperty("/orderNo", "");
+                        that._oModel.setProperty("/material", "");
+                        that._oModel.setProperty("/materialName", "");
+                        that._loadReservationItems(sResv);
+                    }
+                }
+            });
+
+            var oItemTemplate = new StandardListItem({
+                title: "{ReservationNo}",
+                description: "{DisplayText}",
+                info: "{OrderNo}"
+            });
+
+            cfg.Service.fetchOpenReservations()
+                .then(function (aItems) {
+                    var oHelpModel = new JSONModel(aItems);
+                    oDialog.setModel(oHelpModel);
+                    oDialog.bindAggregation("items", "/", oItemTemplate);
+                    oDialog.open();
+                })
+                .catch(function (err) {
+                    MessageBox.error("Failed to load open Reservations: " + (err.message || err));
+                });
+        },
+
+        /**
+         * Load and cache the open items of a Reservation. Auto-applies the item when exactly one
+         * is open; otherwise lets the user pick one via a second Value Help (or via typing the
+         * Reservation Item number directly and triggering onReservationItemChange).
+         */
+        _loadReservationItems: function (sReservationNo) {
+            var that = this;
+            var cfg = this._c;
+            this._oModel.setProperty("/itemLoading", true);
+
+            return cfg.Service.fetchReservationItems(sReservationNo)
+                .then(function (aItems) {
+                    that._aResolvedItems = aItems || [];
+                    if (that._aResolvedItems.length === 1) {
+                        cfg.Model.applyReservationItem(that._oModel.getData(), that._aResolvedItems[0]);
+                        that._oModel.refresh(true);
+                    } else if (that._aResolvedItems.length > 1) {
+                        that._openReservationItemPicker();
+                    } else {
+                        MessageToast.show(that._t("NoItemsFound"));
+                    }
+                    that._validateLive();
+                })
+                .catch(function (err) {
+                    MessageBox.error("Failed to load Reservation Items: " + (err.message || err));
+                })
+                .finally(function () {
+                    that._oModel.setProperty("/itemLoading", false);
+                });
+        },
+
+        _openReservationItemPicker: function () {
+            var that = this;
+            var cfg = this._c;
+            var oDialog = new SelectDialog({
+                title: this._t("SelectReservationItem"),
+                confirm: function (oEvt) {
+                    var oSelectedItem = oEvt.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var oCtx = oSelectedItem.getBindingContext();
+                        var oRow = oCtx ? oCtx.getObject() : null;
+                        if (oRow) {
+                            cfg.Model.applyReservationItem(that._oModel.getData(), oRow);
+                            that._oModel.refresh(true);
+                            that._validateLive();
+                        }
+                    }
+                }
+            });
+
+            var oTemplate = new StandardListItem({
+                title: "{ReservationItem}",
+                description: "{Material} - {MaterialDesc}",
+                info: "{OpenQty} {Unit}"
+            });
+
+            var oListModel = new JSONModel(this._aResolvedItems);
+            oDialog.setModel(oListModel);
+            oDialog.bindAggregation("items", "/", oTemplate);
+            oDialog.open();
+        },
+
+        /**
+         * Manual entry path: the user typed a Reservation Item number directly (already knows the
+         * combination) instead of using the picker. Matches it against the cached items for the
+         * current Reservation, fetching them first if the cache is empty.
+         */
+        onReservationItemChange: function (oEvent) {
+            var that = this;
+            var cfg = this._c;
+            var sTyped = (oEvent.getParameter("value") || "").trim();
+            var sResv = this._oModel.getProperty("/reservationNo");
+            if (!sTyped || !sResv) {
+                this._validateLive();
+                return;
+            }
+
+            var sPadded = sTyped.padStart(4, "0");
+
+            var applyFromCache = function () {
+                var oMatch = (that._aResolvedItems || []).filter(function (it) {
+                    var sItemNo = it.ReservationItem != null ? String(it.ReservationItem).trim().padStart(4, "0") : "";
+                    return sItemNo === sPadded;
+                })[0];
+                if (oMatch) {
+                    cfg.Model.applyReservationItem(that._oModel.getData(), oMatch);
+                    that._oModel.refresh(true);
+                } else {
+                    MessageToast.show(that._t("NoItemsFound"));
+                }
+                that._validateLive();
+            };
+
+            if (this._aResolvedItems && this._aResolvedItems.length > 0) {
+                applyFromCache();
+            } else {
+                this._loadReservationItems(sResv).then(applyFromCache);
+            }
+        },
+
+        // =============================================================
+        // SERIAL NUMBERS SCAN & MANAGEMENT
+        // =============================================================
+
+        onAddSerialPress: function () {
+            var sInput = this._oModel.getProperty("/serialInput") || "";
+            var oData = this._oModel.getData();
+            var oRes = this._c.Model.addSerialNumber(oData, sInput);
+
+            if (!oRes.success) {
+                MessageToast.show(oRes.message);
+                return;
+            }
+
+            this._oModel.refresh(true);
+            this._validateLive();
+            MessageToast.show(this._t("SerialAdded", [sInput.trim().toUpperCase()]));
+        },
+
+        onSerialInputSubmit: function () {
+            this.onAddSerialPress();
+        },
+
+        onDeleteSerial: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oCtx = oSource.getBindingContext(this._c.modelName);
+            if (!oCtx) return;
+
+            var sPath = oCtx.getPath();
+            var nIndex = parseInt(sPath.split("/").pop(), 10);
+            var oData = this._oModel.getData();
+            this._c.Model.removeSerialNumber(oData, nIndex);
+
+            this._oModel.refresh(true);
+            this._validateLive();
+            MessageToast.show(this._t("SerialRemoved"));
+        },
+
+        // =============================================================
+        // RECEIVING PLANT / STORAGE LOCATION VALUE HELP (optional fields)
+        // =============================================================
+
+        onReceivingPlantValueHelp: function () {
+            var that = this;
+            var cfg = this._c;
+            var oDialog = new SelectDialog({
+                title: this._t("SelectReceivingPlant"),
+                confirm: function (oEvt) {
+                    var oItem = oEvt.getParameter("selectedItem");
+                    if (oItem) {
+                        that._oModel.setProperty("/receivingPlant", oItem.getTitle());
+                        that._oModel.setProperty("/receivingPlantName", oItem.getDescription());
+                        that._validateLive();
+                    }
+                }
+            });
+
+            var oTemplate = new StandardListItem({
+                title: "{Plant}",
+                description: "{PlantName}"
+            });
+
+            cfg.Service.fetchPlants()
+                .then(function (aPlants) {
+                    var oModel = new JSONModel(aPlants);
+                    oDialog.setModel(oModel);
+                    oDialog.bindAggregation("items", "/", oTemplate);
+                    oDialog.open();
+                })
+                .catch(function (err) {
+                    // Never seed the value help with invented plants — surface the real SAP error.
+                    MessageBox.error("Failed to load receiving plants: " + ((err && err.message) || err));
+                });
+        },
+
+        onReceivingStorageLocationValueHelp: function () {
+            var that = this;
+            var cfg = this._c;
+            var sPlant = this._oModel.getProperty("/receivingPlant") || "1120";
+
+            var oDialog = new SelectDialog({
+                title: this._t("SelectReceivingStorageLocation"),
+                confirm: function (oEvt) {
+                    var oItem = oEvt.getParameter("selectedItem");
+                    if (oItem) {
+                        that._oModel.setProperty("/receivingStorageLocation", oItem.getTitle());
+                        that._oModel.setProperty("/receivingStorageLocationName", oItem.getDescription());
+                        that._validateLive();
+                    }
+                }
+            });
+
+            var oTemplate = new StandardListItem({
+                title: "{StorageLocation}",
+                description: "{StorageLocationName}",
+                info: "{Plant}"
+            });
+
+            cfg.Service.fetchStorageLocations(sPlant)
+                .then(function (aLocations) {
+                    var oModel = new JSONModel(aLocations);
+                    oDialog.setModel(oModel);
+                    oDialog.bindAggregation("items", "/", oTemplate);
+                    oDialog.open();
+                })
+                .catch(function (err) {
+                    // Never seed the value help with invented storage locations — surface the real SAP error.
+                    MessageBox.error("Failed to load receiving storage locations: " + ((err && err.message) || err));
+                });
+        },
+
+        // =============================================================
+        // SUBMIT POST GOODS ISSUE (301/311)
+        // =============================================================
+
+        onPostGoodsIssue: function () {
+            if (!this._validateLive()) {
+                MessageBox.error(this._t("ValidationErrorsSummary"));
+                return;
+            }
+
+            var that = this;
+            var cfg = this._c;
+            var oData = this._oModel.getData();
+            var oPayload = cfg.Model.toBackendPayload(oData);
+
+            this._oModel.setProperty("/busy", true);
+
+            cfg.Service.postGoodsIssue(oPayload)
+                .then(function (res) {
+                    that._oModel.setProperty("/busy", false);
+
+                    // Honest outcome: a QUEUED result (no SAP material document) means SAP has NOT
+                    // persisted the document - it was only recorded in the dispatch queue while the
+                    // S/4HANA Gateway service is inactive. Never claim a successful SAP posting or
+                    // offer reversal for a document that does not exist in SAP.
+                    if (res && (res.Queued === true || !res.MaterialDocument)) {
+                        that._oModel.setProperty("/hasPosted", false);
+                        MessageBox.warning(res.Message || that.getText("giPostQueuedMsg"), {
+                            title: that.getText("giPostQueuedTitle")
+                        });
+                        return;
+                    }
+
+                    that._oModel.setProperty("/hasPosted", true);
+                    that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
+                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || new Date().getFullYear().toString());
+
+                    var sDocMsg = that._t("PostSuccessMsg", [
+                        res.MaterialDocument || "Document",
+                        res.MaterialDocYear || ""
+                    ]);
+
+                    MessageBox.success(sDocMsg, {
+                        title: that._t("PostSuccessTitle"),
+                        actions: [that._t("ActionReverseNow"), MessageBox.Action.CLOSE],
+                        emphasizedAction: MessageBox.Action.CLOSE,
+                        onClose: function (sAction) {
+                            if (sAction === that._t("ActionReverseNow")) {
+                                that.onReverseGoodsIssue();
+                            }
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    that._oModel.setProperty("/busy", false);
+                    // Backend surfaces the real SAP business error (sap-message severity, or a
+                    // reclassified 400/409/422) as err.message - see GoodsIssuePostingClient.
+                    var sErrMsg = err.message || that._t("PostGenericError");
+                    if (err.response && err.response.data && err.response.data.error) {
+                        var oErr = err.response.data.error;
+                        sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
+                    }
+                    MessageBox.error(sErrMsg, {
+                        title: that._t("PostFailedTitle")
+                    });
+                });
+        },
+
+        // =============================================================
+        // REVERSAL (via Cancel)
+        // =============================================================
+
+        onReverseGoodsIssue: function () {
+            var sDoc = this._oModel.getProperty("/postedDocument");
+            var sYear = this._oModel.getProperty("/postedYear") || new Date().getFullYear().toString();
+            var sPostingDate = this._oModel.getProperty("/postingDate");
+
+            if (!sDoc) {
+                MessageToast.show(this._t("NoDocumentToReverse"));
+                return;
+            }
+
+            var that = this;
+            var sConfirmMsg = this._t("ReverseConfirmPrompt", [sDoc, sYear]);
+
+            MessageBox.confirm(sConfirmMsg, {
+                title: this._t("ReverseConfirmTitle"),
+                actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                emphasizedAction: MessageBox.Action.OK,
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._executeReversal(sDoc, sYear, sPostingDate);
+                    }
+                }
+            });
+        },
+
+        _executeReversal: function (sDoc, sYear, sPostingDate) {
+            var that = this;
+            var cfg = this._c;
+            this._oModel.setProperty("/reversalBusy", true);
+
+            cfg.Service.reverseGoodsIssue(sDoc, sYear, sPostingDate, "01")
+                .then(function (res) {
+                    that._oModel.setProperty("/reversalBusy", false);
+                    that._oModel.setProperty("/hasReversed", true);
+                    that._oModel.setProperty("/reversalDocument", res.ReversalMaterialDocument || "");
+                    that._oModel.setProperty("/reversalYear", res.ReversalMaterialDocYear || sYear);
+
+                    var sSuccess = that._t("ReverseSuccessMsg", [
+                        sDoc,
+                        res.ReversalMaterialDocument || ""
+                    ]);
+
+                    MessageBox.success(sSuccess, {
+                        title: that._t("ReverseSuccessTitle"),
+                        onClose: function () {
+                            that._resetModel();
+                        }
+                    });
+                })
+                .catch(function (err) {
+                    that._oModel.setProperty("/reversalBusy", false);
+                    var sErrMsg = err.message || that._t("ReverseGenericError");
+                    if (err.response && err.response.data && err.response.data.error) {
+                        var oErr = err.response.data.error;
+                        sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
+                    }
+                    MessageBox.error(sErrMsg, {
+                        title: that._t("ReverseFailedTitle")
+                    });
+                });
+        },
+
+        onResetForm: function () {
+            var that = this;
+            MessageBox.confirm(this._t("ResetConfirm"), {
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._resetModel();
+                        MessageToast.show(that._t("FormReset"));
+                    }
+                }
+            });
+        },
+
+        onNavBack: function () {
+            var oRouter = this.getRouter();
+            if (oRouter) {
+                oRouter.navTo("wmGoodsIssue");
+            }
+        }
+    });
+});

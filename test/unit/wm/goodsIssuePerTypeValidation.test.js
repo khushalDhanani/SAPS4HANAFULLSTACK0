@@ -76,3 +76,34 @@ describe.each([
     expect(r.errors.some(e => e.field === 'CostCenter')).toBe(false);
   });
 });
+
+describe('301 destination invariant (plant-to-plant transfer)', () => {
+  const resv = { ReservationNo: '519944', ReservationItem: '0001', Plant: '1120', StorageLocation: 'CS01' };
+  test('rejects a receiving plant equal to the issuing plant', () => {
+    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1120' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingPlant' && /must differ/.test(e.message))).toBe(true);
+  });
+  test('accepts a receiving plant different from the issuing plant', () => {
+    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1130' });
+    expect(r.isValid).toBe(true);
+  });
+});
+
+describe('311 destination invariant (intra-plant storage-location transfer)', () => {
+  const resv = { ReservationNo: '519944', ReservationItem: '0001', Plant: '1120', StorageLocation: 'CS01' };
+  test('rejects a receiving plant different from the issuing plant', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1130' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingPlant' && /must equal/.test(e.message))).toBe(true);
+  });
+  test('rejects a receiving storage location equal to the issuing one', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingStorageLocation: 'CS01' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
+  });
+  test('accepts same-plant, different storage location', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS02' });
+    expect(r.isValid).toBe(true);
+  });
+});

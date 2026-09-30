@@ -33,6 +33,15 @@ function validateGoodsIssue301Payload(data) {
   push(C.checkOptionalFourChar(data.ReceivingPlant, 'ReceivingPlant'));
   push(C.checkOptionalFourChar(data.ReceivingStorageLocation, 'ReceivingStorageLocation'));
 
+  // 301 is a plant-to-plant transfer. When a receiving plant is supplied it must differ from the
+  // issuing plant (a 301 into the same plant is contradictory). Conditional invariant only — it never
+  // makes the field required, so reservation-derived postings are unaffected.
+  const sPlant301 = String(data.Plant || '').trim().toUpperCase();
+  const sRecvPlant301 = String(data.ReceivingPlant || '').trim().toUpperCase();
+  if (sRecvPlant301 && sPlant301 && sRecvPlant301 === sPlant301) {
+    push({ field: 'ReceivingPlant', message: `Movement 301 is a plant-to-plant transfer: receiving plant '${sRecvPlant301}' must differ from issuing plant '${sPlant301}'` });
+  }
+
   C.checkDates(data).forEach(push);
   C.checkSerialNumbers(data).forEach(push);
   push(C.checkBatch(data.Batch));

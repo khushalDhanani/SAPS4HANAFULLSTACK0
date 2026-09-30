@@ -186,33 +186,38 @@ const mockRouter = {
     navTo: jest.fn()
 };
 
-const mockBaseController = {
-    extend: (name, proto) => {
-        function Controller() {
-            Object.assign(this, proto);
-            this.models = {};
-            this.getView = () => ({
-                getId: () => 'mockViewId',
-                getModel: (n) => this.models[n],
-                setModel: (m, n) => { this.models[n] = m; },
-                setBusy: jest.fn(),
-                addDependent: jest.fn()
-            });
-            this.getModel = (n) => this.models[n] || null;
-            this.setModel = (m, n) => { this.models[n] = m; };
-            this.getRouter = () => mockRouter;
-            this.byId = jest.fn();
-            this.getText = (k) => k;
-            this.getOwnerComponent = () => ({ getRouter: () => mockRouter });
-        }
-        return Controller;
+// Chained extend mock: each proto in the chain (base first, subclass last) is assigned onto the
+// instance, and the returned constructor itself supports .extend so the thin controller can extend
+// the shared base. Scaffolding (getView/getText/getRouter/...) mimics the real BaseController.
+function defineController(protoChain) {
+    function Controller() {
+        this.models = {};
+        this.getView = () => ({
+            getId: () => 'mockViewId',
+            getModel: (n) => this.models[n],
+            setModel: (m, n) => { this.models[n] = m; },
+            setBusy: jest.fn(),
+            addDependent: jest.fn()
+        });
+        this.getModel = (n) => this.models[n] || null;
+        this.setModel = (m, n) => { this.models[n] = m; };
+        this.getRouter = () => mockRouter;
+        this.byId = jest.fn();
+        this.getText = (k) => k;
+        this.getOwnerComponent = () => ({ getRouter: () => mockRouter });
+        protoChain.forEach((p) => Object.assign(this, p));
     }
-};
+    Controller.extend = (name, proto) => defineController(protoChain.concat([proto]));
+    return Controller;
+}
+const mockBaseController = { extend: (name, proto) => defineController([proto]) };
 
+// Load the shared transfer base controller (UI-layer deps mocked)...
+let GoodsIssueTransferBase;
 global.sap = {
     ui: {
         define: (deps, factory) => {
-            GoodsIssue301Controller = factory(
+            GoodsIssueTransferBase = factory(
                 mockBaseController,
                 MockJSONModel,
                 mockMessageBox,
@@ -220,14 +225,17 @@ global.sap = {
                 MockSelectDialog,
                 MockStandardListItem,
                 MockFilter,
-                MockFilterOperator,
-                mockGoodsIssue301Model,
-                mockGoodsIssue301Service
+                MockFilterOperator
             );
         }
     }
 };
+require('../../../app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js');
 
+// ...then the thin 301 controller, which extends the base and supplies the per-type Model/Service.
+global.sap.ui.define = (deps, factory) => {
+    GoodsIssue301Controller = factory(GoodsIssueTransferBase, mockGoodsIssue301Model, mockGoodsIssue301Service);
+};
 require('../../../app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue301.controller.js');
 
 describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {

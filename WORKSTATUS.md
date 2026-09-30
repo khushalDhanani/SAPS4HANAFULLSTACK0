@@ -4,6 +4,23 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-09-30 11:32 IST
+- **Agent**: Claude Opus 4.8 (Ponytail mode)
+- **Request**: "Fix remaining." — continued: #12 (destination rules) and #13 (301≡311 de-duplication).
+- **Changes applied (each validated):**
+  1. **[#12] Enforced 301/311 movement-type destination invariants** (server-side validation, SAP-standard semantics — no live-SAP query needed). `goodsIssue311.validation.js`: a supplied receiving plant must equal the issuing plant (311 = intra-plant SLoc→SLoc), and a supplied receiving storage location must differ from the issuing one. `goodsIssue301.validation.js`: a supplied receiving plant must differ from the issuing plant (301 = plant→plant). Rules are **conditional** (only when the field is supplied), so reservation-derived postings that omit receiving fields are unaffected. Added dedicated tests. Files: `srv/wm/goods-issue/validation/goodsIssue301.validation.js`, `goodsIssue311.validation.js`, `test/unit/wm/goodsIssuePerTypeValidation.test.js`. Validation: per-type validation suite green (incl. new 301/311 destination cases).
+  2. **[#13] De-duplicated the 301 and 311 controllers** (now safe because #7 added 78 behavioral tests as a net). Extracted all shared logic into a new `GoodsIssueTransferBaseController.js` parameterized via `_getConfig() -> { type, modelName, i18nPrefix, route, Model, Service }` and a prefixed-getText helper `_t()`; `GoodsIssue301.controller.js` and `GoodsIssue311.controller.js` are now ~22-line thin subclasses. **1040 lines → 579** (net −461). The controller class names (referenced by the views) are unchanged. Updated the two controller test harnesses to load the base (UI deps mocked) then the thin controller; the 78 behavioral assertions (model name, route, i18n prefixes, per-handler Service calls) are unchanged and **all still pass**, validating the refactor. Files: new `GoodsIssueTransferBaseController.js`; rewrote `GoodsIssue301.controller.js`, `GoodsIssue311.controller.js`, `test/unit/wm/goodsIssue301Controller.test.js`, `goodsIssue311Controller.test.js`.
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: **1884/1884 passed, 113/113 suites**.
+  - `cd app/fiori-app && npm run lint`: no findings. `npm run build`: succeeded.
+  - `git diff --check`: no new non-doc whitespace issues.
+- **Net regressions introduced: 0.**
+- **REMAINING (genuinely blocked or optional):**
+  - **[#6 / #14 / #19] Dashboard/transport performance — BLOCKED on live SAP.** The correct fixes are SAP-side query changes (a `$apply`/`$count` aggregate; an `RFC_READ_TABLE(MAKT) MATNR IN (...)` batch with 72-char WHERE-line limits; a cheaper CSRF probe than `$metadata` on a system with known cross-service CSRF sensitivity). AGENTS.md forbids implementing SAP integration from assumed queries/payloads and requires live-SAP verification, which is unavailable in this environment. Not shipped — would risk the working hot path.
+  - **[#23a] Hardcoded MessageBox/Toast strings → i18n keys — deferred (optional, no bug).** Pure translatability polish; the GR/TR-TO/GI controller tests assert exact English strings, so it is coordinated controller+test+i18n churn with zero functional gain. Recommend leaving unless translatability is required.
+- **Session status**: Every audit finding that is a bug / safety / correctness / security / dead-code / test-coverage / maintainability issue is now fixed and green (WM unit suite 1884 tests). The only open items are the **live-SAP-dependent performance work** (#6/#14/#19) and **optional i18n polish** (#23a).
+- **Not committed** — working tree carries eight batches of edits plus new test + base-controller files; strongly recommend committing this green checkpoint.
+
 ## 2026-09-30 11:21 IST
 - **Agent**: Claude Opus 4.8 (Ponytail mode), orchestrating 3 general-purpose sub-agents.
 - **Request**: "Fix remaining." — the remaining WM/EWM audit findings (#7, #13, #23a, #25, #6/#14/#19, #12).

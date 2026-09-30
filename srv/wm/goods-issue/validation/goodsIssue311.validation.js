@@ -33,6 +33,21 @@ function validateGoodsIssue311Payload(data) {
   push(C.checkOptionalFourChar(data.ReceivingPlant, 'ReceivingPlant'));
   push(C.checkOptionalFourChar(data.ReceivingStorageLocation, 'ReceivingStorageLocation'));
 
+  // 311 is a storage-location-to-storage-location transfer WITHIN one plant. When a receiving plant
+  // is supplied it must equal the issuing plant; when a receiving storage location is supplied it
+  // must differ from the issuing one (a transfer to the same bin is a no-op). These are conditional
+  // invariants (they never make the fields required) so reservation-derived postings are unaffected.
+  const sPlant311 = String(data.Plant || '').trim().toUpperCase();
+  const sRecvPlant311 = String(data.ReceivingPlant || '').trim().toUpperCase();
+  if (sRecvPlant311 && sPlant311 && sRecvPlant311 !== sPlant311) {
+    push({ field: 'ReceivingPlant', message: `Movement 311 is a storage-location transfer within one plant: receiving plant '${sRecvPlant311}' must equal issuing plant '${sPlant311}'` });
+  }
+  const sSLoc311 = String(data.StorageLocation || '').trim().toUpperCase();
+  const sRecvSLoc311 = String(data.ReceivingStorageLocation || '').trim().toUpperCase();
+  if (sRecvSLoc311 && sSLoc311 && sRecvSLoc311 === sSLoc311) {
+    push({ field: 'ReceivingStorageLocation', message: `Receiving storage location '${sRecvSLoc311}' must differ from the issuing storage location for a 311 transfer` });
+  }
+
   C.checkDates(data).forEach(push);
   C.checkSerialNumbers(data).forEach(push);
   push(C.checkBatch(data.Batch));
