@@ -579,7 +579,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const cancelUrl = GoodsIssueMapper.mapToCancelHeaderUrl(sDoc, sYear, postingDate);
     try {
       const response = await this._post(cancelUrl, {});
-      const revMatDoc = response.MaterialDocument || response.d?.MaterialDocument || response.CancelHeader?.MaterialDocument;
+      const revMatDoc = response.MaterialDocument || response.d?.MaterialDocument || response.Cancel?.MaterialDocument || response.CancelHeader?.MaterialDocument;
       const revMatYear = response.MaterialDocumentYear || response.d?.MaterialDocumentYear || sYear;
 
       return {
@@ -589,7 +589,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         ReversalMaterialDocYear: revMatYear,
         PostingDate: postingDate || new Date().toISOString().split('T')[0],
         Success: true,
-        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via CancelHeader.${revMatDoc ? ` Reversal Document: ${revMatDoc}/${revMatYear}.` : ''}`
+        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via Cancel.${revMatDoc ? ` Reversal Document: ${revMatDoc}/${revMatYear}.` : ''}`
       };
     } catch (err) {
       throw S4ErrorMapper.mapS4Error(err, 'reverseGoodsIssue');

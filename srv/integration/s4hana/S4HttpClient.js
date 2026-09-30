@@ -292,7 +292,11 @@ class S4HttpClient {
             method: 'get',
             url: csrfPath,
             timeout: S4HttpClient.requestTimeoutMs(),
-            headers: { 'x-csrf-token': 'Fetch', Accept: 'application/json', ...S4HttpClient.sapClientHeader(dest) }
+            headers: {
+                'x-csrf-token': 'Fetch',
+                Accept: (csrfPath && csrfPath.includes('$metadata')) ? 'application/xml, text/xml, */*' : 'application/json, */*',
+                ...S4HttpClient.sapClientHeader(dest)
+            }
         };
         try {
             const res = await executeFn(dest, requestConfig, {

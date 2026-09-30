@@ -58,7 +58,7 @@ function mapToCancelHeaderUrl(materialDocument, materialDocYear, postingDate) {
     throw new Error('MaterialDocument and MaterialDocYear are required for CancelHeader');
   }
 
-  let url = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/CancelHeader?MaterialDocument=${odataString(doc)}&MaterialDocumentYear=${odataString(year)}`;
+  let url = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/Cancel?MaterialDocument=${odataString(doc)}&MaterialDocumentYear=${odataString(year)}`;
   if (postingDate) {
     // OData V2 FunctionImport parameters of type Edm.DateTime use the literal `datetime'...'`
     // form directly in the URL (unlike the JSON body's `/Date(epoch)/` form produced by

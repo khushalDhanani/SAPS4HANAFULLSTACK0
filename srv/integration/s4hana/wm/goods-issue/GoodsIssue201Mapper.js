@@ -20,7 +20,8 @@ function mapToMaterialDocumentPayload(data) {
 
   const item = buildBaseItem(data, '201');
   if (data.CostCenter) {
-    item.CostCenter = String(data.CostCenter).trim().toUpperCase();
+    const sCc = String(data.CostCenter).trim().toUpperCase();
+    item.CostCenter = /^\d+$/.test(sCc) ? sCc.padStart(10, '0') : sCc;
   }
   // G/L account is intentionally never forwarded for 201.
 

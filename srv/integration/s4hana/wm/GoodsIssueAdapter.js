@@ -123,15 +123,19 @@ class GoodsIssueAdapter {
    * cookies are fetched for this call only and sent with it; nothing is cached on the adapter.
    */
   async _post(servicePath, payload = {}, customHeaders = {}) {
-    const { data } = await this.client.post(servicePath, {
+    const csrfPath = servicePath.includes('API_MATERIAL_DOCUMENT_SRV')
+      ? '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/'
+      : GoodsIssueAdapter.CSRF_FETCH_PATH;
+    const { data, headers } = await this.client.post(servicePath, {
       data: payload,
       headers: customHeaders,
-      csrfPath: GoodsIssueAdapter.CSRF_FETCH_PATH
+      csrfPath
     });
-    if (data && typeof data === 'object') {
-      return data.d || data;
+    const res = (data && typeof data === 'object') ? (data.d || data) : data;
+    if (res && typeof res === 'object' && headers) {
+      res._headers = headers;
     }
-    return true;
+    return res;
   }
 
   /**
