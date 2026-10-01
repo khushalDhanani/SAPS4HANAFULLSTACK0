@@ -4,6 +4,27 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 09:38 IST
+- **Agent**: Claude Code
+- **Request**: "@app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml Make this UI 2/2 Grid"
+- **Change**: Switched the `formGoodsIssue301` `SimpleForm` from a single column to a two-column `ResponsiveGridLayout` (same attribute change as the 09:36 GoodsIssue261 entry). This form has five titled sections, so on M/L/XL screens they render as: Reservation Assignment | Material & Location, Receiving Location | Quantity & Posting Dates, then Batch Management alone on a third row. Phones (S) still stack in one column.
+  - `columnsXL/L/M`: `1` -> `2`
+  - `labelSpanXL/L`: `3` -> `4`
+  - `emptySpanXL/L/M`: `2/2/1` -> `0`
+  - No controls, ids, bindings, or controller code changed. Serial panel untouched.
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean.
+  - `cd app/fiori-app && npm run lint`: Success, no findings.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 2.6 s.
+  - `npm test -- test/unit/wm/`: 42 suites passed, 790/790 tests passed.
+  - Live browser check: **NOT performed** (app requires login; agent did not sign in). Layout is not visually verified.
+- **Known Limitation**: Five sections do not fill a strict 2 x 2; Batch Management sits alone on row 3 and shows only its title when the material is not batch-managed.
+- **Current Status**: In Progress — change made and lint/build/unit tests pass; visual verification pending.
+- **Next Steps**: User to open the Movement 301 screen while logged in and confirm the layout; decide whether Batch Management should be folded into the Quantity & Posting Dates section to get an exact 2 x 2.
+
 ## 2026-10-01 09:36 IST
 - **Agent**: Claude Code
 - **Request**: "@app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml Make this 2/2 Gird UI."
