@@ -80,6 +80,8 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
           { movementType: '201', costCenter: '4110' }
         )
       ).rejects.toMatchObject({
+        // 422, so the handler surfaces it instead of queueing it as "capability unavailable".
+        status: 422,
         message: expect.stringContaining('Cost center 4110 is blocked for actual postings')
       });
     });
@@ -97,6 +99,9 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
           { movementType: '201', costCenter: '4110' }
         )
       ).rejects.toMatchObject({
+        // HTTP success without a document: SAP may have posted, so the outcome is unknown.
+        status: 504,
+        code: 'GI_POSTING_OUTCOME_UNKNOWN',
         message: expect.stringContaining('did not return a material document')
       });
     });
@@ -121,9 +126,29 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       });
     });
 
-    it('still wraps a real capability-unavailable failure (HTTP 403/404) as "Backend Posting Capability Unavailable" for the dispatch queue', async () => {
-      const unavailableErr = new Error('HTTP 403 Forbidden');
-      unavailableErr.status = 403;
+    it('surfaces a plain HTTP 403 as an authorization failure instead of queueing it', async () => {
+      const authErr = new Error('HTTP 403 Forbidden');
+      authErr.status = 403;
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockRejectedValue(authErr)
+      };
+
+      const client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      const err = await client.postGoodsIssue(
+          '', '', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+          { movementType: '201', costCenter: '4110' }
+        ).catch((e) => e);
+      expect(err.status).toBe(403);
+      expect(err.message).toContain('NOT posted and NOT queued');
+      expect(err.message).not.toContain('Unavailable');
+    });
+
+    it.each([
+      ['an unregistered service (HTTP 403 + /IWFND/MED/170)', Object.assign(new Error("/IWFND/MED/170 No service found for namespace '', name 'API_MATERIAL_DOCUMENT_SRV', version '0001'"), { status: 403 })],
+      ['an inactive service (HTTP 404)', Object.assign(new Error('HTTP 404 Not Found'), { status: 404 })],
+      ['a refused connection', Object.assign(new Error('connect ECONNREFUSED'), { status: 502, code: 'ECONNREFUSED' })]
+    ])('wraps %s as "Backend Posting Capability Unavailable" (501) for the dispatch queue', async (_label, unavailableErr) => {
       const mockAdapter = {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockRejectedValue(unavailableErr)
@@ -138,6 +163,134 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       ).rejects.toMatchObject({
         status: 501,
         message: expect.stringContaining('Backend Posting Capability Unavailable')
+      });
+    });
+
+    it.each([
+      ['a request timeout', Object.assign(new Error('timeout of 30000ms exceeded'), { status: 502, code: 'ECONNABORTED' })],
+      ['a connection reset', Object.assign(new Error('read ECONNRESET'), { status: 502, code: 'ECONNRESET' })],
+      ['a bare socket hang up', new Error('socket hang up')]
+    ])('reports %s as an unknown outcome (504) that must never be queued', async (_label, networkErr) => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
+        _post: jest.fn().mockRejectedValue(networkErr)
+      };
+
+      const client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      const err = await client.postGoodsIssue(
+          '', '', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
+          { movementType: '201', costCenter: '4110' }
+        ).catch((e) => e);
+      expect(err.status).toBe(504);
+      expect(err.code).toBe('GI_POSTING_OUTCOME_UNKNOWN');
+      expect(err.message).toContain('NOT queued');
+      expect(err.message).not.toContain('Unavailable');
+    });
+
+    describe('idempotency reference (ReferenceDocument)', () => {
+      const data = {
+        MovementType: '201', Material: '8000006645', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS',
+        CostCenter: '1011101301', ReferenceDocument: 'GIMUP29CU1'
+      };
+      const timeout = () => Object.assign(new Error('timeout of 30000ms exceeded'), { status: 502, code: 'ECONNABORTED' });
+      // Shape verified live: the 202 reversal copies the reference of the original 201.
+      const original = { MaterialDocument: '4900049865', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '201' }] } };
+      const reversal = { MaterialDocument: '4900049866', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '202' }] } };
+      const adapter = (overrides) => Object.assign({ _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }) }, overrides);
+      const savedDelays = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+
+      beforeAll(() => { process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0,0'; });
+      afterAll(() => {
+        if (savedDelays === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+        else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = savedDelays;
+      });
+
+      it('reads the lookup delays from GI_REFERENCE_LOOKUP_DELAYS_MS and defaults to 2/4/8 s', () => {
+        expect(GoodsIssuePostingClient.referenceLookupDelaysMs()).toEqual([0, 0]);
+        process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '500, 1500';
+        expect(GoodsIssuePostingClient.referenceLookupDelaysMs()).toEqual([500, 1500]);
+        process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = 'soon';
+        expect(GoodsIssuePostingClient.referenceLookupDelaysMs()).toEqual([2000, 4000, 8000]);
+        delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+        expect(GoodsIssuePostingClient.referenceLookupDelaysMs()).toEqual([2000, 4000, 8000]);
+        process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0,0';
+      });
+
+      it('filters the lookup on reference and posting date, ignores a 202-only hit and tolerates several 201 hits', async () => {
+        const second = { MaterialDocument: '4900049870', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '201' }] } };
+        const mock = adapter({ _get: jest.fn().mockResolvedValueOnce([reversal]).mockResolvedValueOnce([second, reversal, original]) });
+        const client = new GoodsIssuePostingClient({ adapter: mock });
+
+        expect(await client.findPostedByReference('GIMUP29CU1', '201', '2026-09-30')).toBeNull();
+        expect(await client.findPostedByReference('GIMUP29CU1', '201', '2026-09-30')).toMatchObject({ MaterialDocument: '4900049865' });
+        expect(decodeURIComponent(mock._get.mock.calls[0][1])).toContain("ReferenceDocument eq 'GIMUP29CU1' and PostingDate eq datetime'2026-09-30T00:00:00'");
+      });
+
+      it('sends the reference on the header, cut to 16 characters', async () => {
+        const mock = adapter({ _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900055001', MaterialDocumentYear: '2026' }) });
+        await new GoodsIssuePostingClient({ adapter: mock }).post201({ ...data, ReferenceDocument: 'GI345678901234567890' });
+        expect(mock._post.mock.calls[0][1].ReferenceDocument).toBe('GI34567890123456');
+      });
+
+      it('returns the document SAP posted when the POST timed out but the reference is found on a later check', async () => {
+        const mock = adapter({
+          _post: jest.fn().mockRejectedValue(timeout()),
+          _get: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([reversal, original])
+        });
+        const res = await new GoodsIssuePostingClient({ adapter: mock }).post201(data);
+        expect(res).toMatchObject({ Success: true, MaterialDocument: '4900049865', MaterialDocYear: '2026' });
+        expect(mock._get).toHaveBeenCalledTimes(2);
+        expect(mock._get.mock.calls[0][1]).toContain(encodeURIComponent("ReferenceDocument eq 'GIMUP29CU1'"));
+      });
+
+      it('reports an unconfirmed outcome (504 GI_POSTING_UNCONFIRMED), never "can be posted again", when every check comes back empty', async () => {
+        const mock = adapter({ _post: jest.fn().mockRejectedValue(timeout()), _get: jest.fn().mockResolvedValue([reversal]) });
+        const err = await new GoodsIssuePostingClient({ adapter: mock }).post201(data).catch((e) => e);
+        expect(err).toMatchObject({ status: 504, code: 'GI_POSTING_UNCONFIRMED' });
+        expect(err.message).toContain('may still appear');
+        expect(err.message).toContain('before posting again');
+        expect(err.message).not.toMatch(/can be posted again|NOT posted/);
+        expect(err.message).not.toContain('Unavailable');
+        expect(mock._get).toHaveBeenCalledTimes(2);
+      });
+
+      it('maps a closed posting period to a clear 400 that keeps the SAP text in details', async () => {
+        const sapText = 'Posting only possible in periods 2026/06 and 2026/05 in company code 1000';
+        const sapErr = Object.assign(new Error(`S/4HANA POST /sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader failed: HTTP 400 - ${sapText}`), { status: 400 });
+        const mock = adapter({ _post: jest.fn().mockRejectedValue(sapErr), _get: jest.fn() });
+        const err = await new GoodsIssuePostingClient({ adapter: mock }).post201(data).catch((e) => e);
+        expect(err).toMatchObject({ status: 400, code: 'POSTING_PERIOD_CLOSED' });
+        expect(err.message).toContain('posting period');
+        expect(err.message).toContain('MMPV');
+        expect(err.message).toContain('2026/06 and 2026/05');
+        expect(err.details[0].message).toBe(sapText);
+        expect(mock._get).not.toHaveBeenCalled();
+      });
+
+      it('keeps the manual-check unknown-outcome error when the lookup itself fails', async () => {
+        const mock = adapter({ _post: jest.fn().mockRejectedValue(timeout()), _get: jest.fn().mockRejectedValue(new Error('socket hang up')) });
+        const err = await new GoodsIssuePostingClient({ adapter: mock }).post201(data).catch((e) => e);
+        expect(err).toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
+      });
+
+      it('does not look anything up for a business rejection', async () => {
+        const mock = adapter({ _post: jest.fn().mockRejectedValue(Object.assign(new Error('Cost center does not exist'), { status: 400 })), _get: jest.fn() });
+        await expect(new GoodsIssuePostingClient({ adapter: mock }).post201(data)).rejects.toMatchObject({ status: 400 });
+        expect(mock._get).not.toHaveBeenCalled();
+      });
+
+      it('queue replay does not post again when the reference already exists in SAP', async () => {
+        const mock = adapter({ _post: jest.fn(), _get: jest.fn().mockResolvedValue([original]) });
+        const res = await new GoodsIssuePostingClient({ adapter: mock }).postByMovementType(data);
+        expect(res).toMatchObject({ Success: true, MaterialDocument: '4900049865' });
+        expect(mock._post).not.toHaveBeenCalled();
+      });
+
+      it('queue replay posts with the stored reference when SAP has no document for it', async () => {
+        const mock = adapter({ _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900055002', MaterialDocumentYear: '2026' }), _get: jest.fn().mockResolvedValue([]) });
+        const res = await new GoodsIssuePostingClient({ adapter: mock }).postByMovementType(data);
+        expect(res.MaterialDocument).toBe('4900055002');
+        expect(mock._post.mock.calls[0][1].ReferenceDocument).toBe('GIMUP29CU1');
       });
     });
 

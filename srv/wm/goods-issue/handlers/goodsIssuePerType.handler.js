@@ -8,6 +8,7 @@
 
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
+const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
 const { normalizeGoodsIssue201Payload } = require('../mapping/goodsIssue201.normalize');
 const { normalizeGoodsIssue261Payload } = require('../mapping/goodsIssue261.normalize');
 const { normalizeGoodsIssue301Payload } = require('../mapping/goodsIssue301.normalize');
@@ -17,6 +18,10 @@ const { validateGoodsIssue261Payload } = require('../validation/goodsIssue261.va
 const { validateGoodsIssue301Payload } = require('../validation/goodsIssue301.validation');
 const { validateGoodsIssue311Payload } = require('../validation/goodsIssue311.validation');
 const LOG = require('../../../common/logger')('goods-issue-pertype-handler');
+const crypto = require('crypto');
+
+/** Unique per posting attempt, <=16 chars (SAP header ReferenceDocument); reused unchanged on queue replay. */
+const newPostingReference = () => `GI${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`.toUpperCase();
 
 /** Serial-status pre-check (ESTO). Returns true to continue, or sends req.error and returns false. */
 async function serialPreCheck(req, normalized) {
@@ -111,16 +116,30 @@ async function reservationReconcileCheck(req, normalized) {
   return item;
 }
 
-/** Posts via the type's isolated adapter method; on capability-unavailable, records the dispatch queue. */
-async function postWithQueueFallback(req, normalized, postFn) {
+/** Posting-attempt status for an error the adapter raised: SAP did not answer vs. SAP said no. */
+const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
+
+/**
+ * Posts via the type's isolated adapter method; on capability-unavailable, records the dispatch queue.
+ * `onOutcome(status, fields)` (optional) is told how the attempt ended: posted / queued /
+ * unconfirmed / rejected.
+ */
+async function postWithQueueFallback(req, normalized, postFn, onOutcome = async () => {}) {
   try {
     const result = await postFn(normalized);
+    await onOutcome('posted', { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
     return Object.assign({ Queued: false, QueueReference: '', SyncStatus: 'POSTED_IN_SAP' }, result);
   } catch (err) {
     if (err.status === 400 || err.status === 422) {
-      return req.error(err.status, err.message || 'Validation failed for Goods Issue');
+      await onOutcome('rejected', { LastError: err.message });
+      const message = err.message || 'Validation failed for Goods Issue';
+      // Keep the original SAP text (e.g. closed posting period) available to the client.
+      return Array.isArray(err.details) && err.details.length > 0
+        ? req.error({ code: err.code || String(err.status), status: err.status, message, details: err.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') })) })
+        : req.error(err.status, message);
     }
-    if (err.status === 501 || err.status === 403 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
+    // A plain 403 is an authorization/CSRF refusal, not an availability problem: it is surfaced below, not queued.
+    if (err.status === 501 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
       let queueRecord;
       try {
         queueRecord = await GoodsIssueQueueManager.enqueue({
@@ -146,11 +165,14 @@ async function postWithQueueFallback(req, normalized, postFn) {
           PostingDate: normalized.PostingDate,
           DocumentDate: normalized.DocumentDate,
           SerialNumber: normalized.SerialNumber,
+          ReferenceDocument: normalized.ReferenceDocument,
           LastSyncError: err.message
         });
       } catch (queueErr) {
+        await onOutcome('rejected', { LastError: `${err.message} Not recorded in the dispatch queue: ${queueErr.message}` });
         return req.error(err.status || 503, `${err.message || 'Failed to post Goods Issue in S/4HANA'} The transaction could not be recorded in the dispatch queue either: ${queueErr.message}`);
       }
+      await onOutcome('queued', { LastError: err.message });
       return {
         ReservationNo: String(normalized.ReservationNo || ''),
         ReservationItem: String(normalized.ReservationItem || ''),
@@ -170,6 +192,7 @@ async function postWithQueueFallback(req, normalized, postFn) {
         Message: `Transaction recorded in the dispatch queue (${queueRecord.QueueReference}), not yet posted in SAP. Pending SAP S/4HANA Gateway service activation.`
       };
     }
+    await onOutcome(UNCONFIRMED_CODES.includes(err.code) ? 'unconfirmed' : 'rejected', { LastError: err.message });
     return req.error(err.status || 400, err.message || 'Failed to post Goods Issue in S/4HANA');
   }
 }
@@ -180,9 +203,23 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue201Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
-      if (!(await stockPreCheck201(req, normalized))) return;
-      if (!(await serialPreCheck(req, normalized))) return;
-      return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d));
+      // The attempt is persisted (own committed transaction) BEFORE anything is sent to SAP, with the
+      // reference that goes into the document header. No attempt row -> no posting.
+      normalized.ReferenceDocument = newPostingReference();
+      try {
+        await GoodsIssueAttemptStore.create(normalized);
+      } catch (attemptErr) {
+        LOG.error('Posting attempt could not be recorded; posting blocked:', attemptErr.message || attemptErr);
+        return req.error(503, `Goods Issue was NOT sent to SAP: the posting attempt could not be recorded (${attemptErr.message || 'database unavailable'}).`);
+      }
+      const settle = (status, fields) => GoodsIssueAttemptStore.setStatus(normalized.ReferenceDocument, status, fields)
+        .catch((e) => LOG.error(`Posting attempt ${normalized.ReferenceDocument} could not be set to ${status}; the re-check job will resolve it:`, e.message || e));
+
+      if (!(await stockPreCheck201(req, normalized)) || !(await serialPreCheck(req, normalized))) {
+        await settle('rejected', { LastError: 'Rejected by the stock or serial pre-check; not sent to SAP.' });
+        return;
+      }
+      return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), settle);
     });
 
     srv.on('postGoodsIssue261', async (req) => {

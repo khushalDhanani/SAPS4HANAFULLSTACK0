@@ -98,10 +98,12 @@ function buildBaseItem(data, goodsMovementType) {
  * @param {string|Date} params.postingDate
  * @param {string|Date} params.documentDate
  * @param {Object} params.item
+ * @param {string} [params.referenceDocument] - <=16 char idempotency reference (header ReferenceDocument)
  * @returns {Object}
  */
-function buildHeaderEnvelope({ gmCode, headerText, postingDate, documentDate, item }) {
+function buildHeaderEnvelope({ gmCode, headerText, postingDate, documentDate, item, referenceDocument }) {
   return {
+    ...(referenceDocument ? { ReferenceDocument: String(referenceDocument).trim().slice(0, 16) } : {}),
     GoodsMovementCode: gmCode,
     PostingDate: formatDateToODataV2(postingDate),
     DocumentDate: formatDateToODataV2(documentDate || postingDate),

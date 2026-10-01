@@ -1,5 +1,6 @@
 const cds = require('@sap/cds');
 const crypto = require('crypto');
+const GoodsIssueAttemptStore = require('./GoodsIssueAttemptStore');
 
 const { INSERT, SELECT, UPDATE, DELETE } = cds.ql;
 
@@ -37,6 +38,9 @@ class QueueStoreUnavailableError extends Error {
  * never claim SAP persistence.
  */
 class GoodsIssueQueueManager {
+  /** Adapter error codes meaning SAP did not confirm the outcome of a posting. */
+  static UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
+
   /**
    * @param {Object} [options]
    * @param {Object|null} [options.db] - Database service to use (tests); default: cds.db at call time
@@ -119,6 +123,7 @@ class GoodsIssueQueueManager {
       SerialNumber: String(data.SerialNumber || (Array.isArray(data.SerialNumbers) ? data.SerialNumbers[0] : '') || '').trim(),
       PostingDate: data.PostingDate || null,
       DocumentDate: data.DocumentDate || null,
+      ReferenceDocument: String(data.ReferenceDocument || '').trim(),
       SyncStatus: 'QUEUED',
       SyncAttempts: 1,
       LastSyncError: String(data.LastSyncError || 'SAP Gateway posting service unavailable').slice(0, 500),
@@ -325,8 +330,28 @@ class GoodsIssueQueueManager {
 
     let syncedCount = 0;
     let failedCount = 0;
+    let skippedCount = 0;
 
     for (const item of pendingItems) {
+      // A record whose posting attempt is not `queued` (e.g. unconfirmed after a timed-out replay)
+      // must not be replayed; the attempt re-check job resolves it.
+      const guard = await GoodsIssueAttemptStore.replayGuard(item);
+      if (!guard.replay) {
+        if (guard.attempt.Status === 'posted') {
+          await this.update(item.QueueReference, {
+            SyncStatus: 'POSTED_IN_SAP',
+            SapMaterialDocument: guard.attempt.MaterialDocument,
+            SapMaterialDocYear: guard.attempt.MaterialDocYear,
+            SyncedAt: new Date().toISOString()
+          });
+          syncedCount++;
+        } else {
+          skippedCount++;
+        }
+        continue;
+      }
+      const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
+
       try {
         // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
         const result = await adapter.postGoodsIssueByType(item);
@@ -338,6 +363,7 @@ class GoodsIssueQueueManager {
             SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
             SyncedAt: new Date().toISOString()
           });
+          await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
           syncedCount++;
         } else {
           await this.update(item.QueueReference, {
@@ -353,6 +379,9 @@ class GoodsIssueQueueManager {
           LastSyncError: String(err.message || 'Posting rejected by SAP Gateway').slice(0, 500),
           SyncStatus: 'FAILED'
         });
+        if (GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(err.code)) {
+          await settle('unconfirmed', { LastError: err.message });
+        }
         failedCount++;
       }
     }
@@ -369,9 +398,13 @@ class GoodsIssueQueueManager {
       message = `Sync attempted for ${pendingItems.length} item(s). 0 posted to SAP (Gateway posting service unavailable); ${failedCount} item(s) remain in queue.`;
     }
 
+    if (skippedCount > 0) {
+      message += ` ${skippedCount} item(s) were not replayed because their last posting attempt is still being confirmed in SAP.`;
+    }
+
     return {
       TotalQueued: pendingItems.length,
-      Attempted: pendingItems.length,
+      Attempted: pendingItems.length - skippedCount,
       SyncedToSap: syncedCount,
       Failed: failedCount,
       RemainingQueued: remainingPending,

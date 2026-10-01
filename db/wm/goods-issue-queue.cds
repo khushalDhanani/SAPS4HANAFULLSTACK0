@@ -27,6 +27,7 @@ entity GoodsIssueQueue : cuid, managed {
     SerialNumber          : String(18);
     PostingDate           : Date;
     DocumentDate          : Date;
+    ReferenceDocument     : String(16);   // idempotency reference sent to SAP; checked before replay
     SyncStatus            : String(30);   // 'QUEUED', 'SYNCING', 'POSTED_IN_SAP', 'FAILED'
     SyncAttempts          : Integer default 0;
     LastSyncError         : String(500);

@@ -529,6 +529,11 @@ class GoodsIssueAdapter {
   async postGoodsIssue301(data) { return this.posting.post301(data); }
   async postGoodsIssue311(data) { return this.posting.post311(data); }
 
+  /** Material document already posted under an idempotency reference (read-only), or null. */
+  async findPostedGoodsIssueByReference(referenceDocument, movementType, postingDate) {
+    return this.posting.findPostedByReference(referenceDocument, movementType, postingDate);
+  }
+
   /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 

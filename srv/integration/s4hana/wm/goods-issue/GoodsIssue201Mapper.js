@@ -34,7 +34,9 @@ function mapToMaterialDocumentPayload(data) {
     headerText,
     postingDate: data.PostingDate,
     documentDate: data.DocumentDate,
-    item
+    item,
+    // Idempotency reference (proven live on DS4/220: persisted on the header and filterable).
+    referenceDocument: data.ReferenceDocument
   });
 }
 

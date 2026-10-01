@@ -83,6 +83,78 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
   });
 });
 
+describe('postGoodsIssue201 queue fallback (only a posting that never reached SAP is queued)', () => {
+  const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+  const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+  const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+  const handlers = fakeService();
+  const payload = { CostCenter: '1011101301', Material: '8000009753', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
+  let enqueue;
+  let setStatus;
+
+  beforeEach(() => {
+    // No database in this suite: the attempt log is stubbed (its own behaviour is covered in goodsIssueAttempt.test.js).
+    jest.spyOn(GoodsIssueAttemptStore, 'create').mockResolvedValue({});
+    setStatus = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockResolvedValue();
+    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
+    enqueue = jest.spyOn(GoodsIssueQueueManager, 'enqueue').mockResolvedValue({ QueueReference: 'GI-QUEUE-UNPLANNED-0000-1234' });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test.each([
+    [422, 'Deficit of SL Unrestr. prod. 1 NOS'],
+    [403, 'HTTP 403 Forbidden'],
+    [504, 'SAP S/4HANA did not confirm the outcome']
+  ])('surfaces a %i from the adapter and does not queue it', async (status, message) => {
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error(message), { status }));
+    const r = req(payload);
+    await handlers['postGoodsIssue201'](r);
+    expect(r.error).toHaveBeenCalledWith(status, expect.stringContaining(message));
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalledWith(expect.stringMatching(/^GI/), 'rejected', expect.anything());
+  });
+
+  test('blocks the posting with 503 when the attempt cannot be recorded', async () => {
+    GoodsIssueAttemptStore.create.mockRejectedValue(Object.assign(new Error('no database is bound'), { status: 503 }));
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201');
+    const r = req(payload);
+    await handlers['postGoodsIssue201'](r);
+    expect(r.error).toHaveBeenCalledWith(503, expect.stringContaining('NOT sent to SAP'));
+    expect(post).not.toHaveBeenCalled();
+    expect(GoodsIssueAdapter.revalidateStockBeforePosting).not.toHaveBeenCalled();
+  });
+
+  test('a closed posting period is surfaced as 400 with the SAP text in details and is not queued', async () => {
+    const details = [{ code: 'UNKNOWN', message: 'Posting only possible in periods 2026/06 and 2026/05 in company code 1000' }];
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error('The posting period for the posting date is closed'), { status: 400, code: 'POSTING_PERIOD_CLOSED', details }));
+    const r = req(payload);
+    await handlers['postGoodsIssue201'](r);
+    expect(r.error).toHaveBeenCalledWith(expect.objectContaining({ status: 400, code: 'POSTING_PERIOD_CLOSED', details }));
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalledWith(expect.anything(), 'rejected', expect.anything());
+  });
+
+  test('queues the 501 capability-unavailable error and reports it as not posted', async () => {
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error('SAP S/4HANA Backend Posting Capability Unavailable'), { status: 501 }));
+    const r = req(payload);
+    const res = await handlers['postGoodsIssue201'](r);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(res).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
+    // The reference sent to SAP is stored on the queue record, so a replay can check SAP first.
+    const sent = GoodsIssueAdapter.postGoodsIssue201.mock.calls[0][0].ReferenceDocument;
+    expect(sent).toMatch(/^GI[0-9A-Z]{6,14}$/);
+    expect(enqueue.mock.calls[0][0].ReferenceDocument).toBe(sent);
+    expect(GoodsIssueQueueManager.GoodsIssueQueueManager.buildRecord(enqueue.mock.calls[0][0]).ReferenceDocument).toBe(sent);
+  });
+
+  test('generates a new reference for every posting attempt', async () => {
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockResolvedValue({ MaterialDocument: '4900055001', MaterialDocYear: '2026', Success: true });
+    await handlers['postGoodsIssue201'](req(payload));
+    await handlers['postGoodsIssue201'](req(payload));
+    expect(post.mock.calls[0][0].ReferenceDocument).not.toBe(post.mock.calls[1][0].ReferenceDocument);
+  });
+});
+
 describe('Phase 5 #4 - frontend service contract (each posts only to its own action)', () => {
   const FE = path.resolve(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue/service');
 

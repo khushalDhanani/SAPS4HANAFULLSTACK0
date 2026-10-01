@@ -4,6 +4,7 @@ const { extractFilterParam, applyPaging } = require('../../../common/filterUtils
 const { validateReversalPayload } = require('../validation/goodsIssue.validation');
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
+const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
 
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
@@ -146,8 +147,9 @@ class GoodsIssueHandler {
           return req.error(400, err.message || 'Batch Goods Issue submission failed');
         }
 
-        // If backend posting capability is unavailable (501 / 403 / 404), route all items to Dispatch Queue
-        if (err.status === 501 || err.status === 403 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
+        // If backend posting capability is unavailable (501 / 404), route all items to Dispatch Queue.
+        // A plain 403 is an authorization/CSRF refusal and is surfaced, not queued.
+        if (err.status === 501 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
           const lineResults = [];
           for (const it of Items) {
             try {
@@ -219,6 +221,13 @@ class GoodsIssueHandler {
         return req.error(404, `Queued transaction ${QueueReference} not found`);
       }
 
+      // Same guard as the bulk drain: only an attempt in `queued` status may be replayed.
+      const guard = await GoodsIssueAttemptStore.replayGuard(item);
+      if (!guard.replay) {
+        return req.error(409, `Queued transaction ${QueueReference} cannot be retried: its last posting attempt is '${guard.attempt.Status}' (reference ${item.ReferenceDocument}) and is being confirmed in SAP.`);
+      }
+      const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
+
       try {
         // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
         const result = await GoodsIssueAdapter.postGoodsIssueByType(item);
@@ -230,6 +239,7 @@ class GoodsIssueHandler {
           SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
           SyncedAt: new Date().toISOString()
         });
+        await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
 
         return Object.assign({
           Success: true,
@@ -243,6 +253,9 @@ class GoodsIssueHandler {
           SyncAttempts: (item.SyncAttempts || 1) + 1,
           LastSyncError: err.message || 'Posting rejected by Gateway'
         });
+        if (GoodsIssueQueueManager.GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(err.code)) {
+          await settle('unconfirmed', { LastError: err.message });
+        }
 
         return {
           ReservationNo: item.ReservationNo,
@@ -286,8 +299,13 @@ class GoodsIssueHandler {
           Items: []
         };
       }
+      // Resolve attempts SAP has answered in the meantime before deciding what may be replayed.
+      await GoodsIssueAttemptStore.recheck(GoodsIssueAdapter);
       return GoodsIssueQueueManager.drainQueue(GoodsIssueAdapter);
     });
+
+    // ACTION: recheckPostingAttempts (resolve `sending` / `unconfirmed` attempts against S/4HANA)
+    srv.on('recheckPostingAttempts', async () => GoodsIssueAttemptStore.recheck(GoodsIssueAdapter));
 
     // ──────────────────────────────────────────────────────────
     // FUNCTION: resolveStockUnit — SU Barcode → Stock → Batch

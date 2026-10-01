@@ -112,6 +112,13 @@ function _extractErrorCode(error) {
     return 'UNKNOWN';
 }
 
+/** SAP rejects a posting whose date lies outside the open periods (materials or FI period). */
+const POSTING_PERIOD_CLOSED_REGEX = /Posting only possible in periods?\s+(.+?)\s+in company code\s+(\w+)/i;
+
+function isPostingPeriodClosed(message) {
+    return POSTING_PERIOD_CLOSED_REGEX.test(String(message || ''));
+}
+
 /**
  * Maps an S/4HANA or Cloud SDK error into a semantic SAP error object:
  * - 400: Invalid user/business input format
@@ -138,6 +145,18 @@ function mapS4Error(error) {
 
     const message = extractS4ErrorMessage(error);
     const code = _extractErrorCode(error);
+
+    // Closed posting period: a user-facing 400 with the fix, the SAP text kept in details.
+    // The posting date is never changed automatically.
+    const period = message.match(POSTING_PERIOD_CLOSED_REGEX);
+    if (period) {
+        return {
+            status: 400,
+            message: `The posting period for the posting date is closed in company code ${period[2]} (SAP currently allows periods ${period[1]}). Contact finance to open the period (MMPV). The posting date was not changed and nothing was posted.`,
+            code: 'POSTING_PERIOD_CLOSED',
+            details: [{ code, message: period[0], severity: 'error' }]
+        };
+    }
     const sMessageLower = message.toLowerCase();
     const sCodeUpper = String(code).toUpperCase();
     const httpStatus = error.response?.status;
@@ -243,5 +262,6 @@ function mapS4Error(error) {
 
 module.exports = {
     extractS4ErrorMessage,
-    mapS4Error
+    mapS4Error,
+    isPostingPeriodClosed
 };

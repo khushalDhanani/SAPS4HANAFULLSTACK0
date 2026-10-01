@@ -16,6 +16,18 @@ const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
 const POSTABLE_MOVEMENT_TYPES = ['201', '261', '301', '311'];
 
 class GoodsIssuePostingClient extends BaseGoodsIssueClient {
+  /**
+   * Waits (ms) before each idempotency-reference lookup after an unknown posting outcome
+   * (GI_REFERENCE_LOOKUP_DELAYS_MS, comma-separated, default 2000,4000,8000). These only give a fast
+   * answer when SAP commits quickly; the commit lag was observed to exceed them, so an empty result
+   * is never proof that nothing was posted - the attempt re-check job decides that later.
+   */
+  static referenceLookupDelaysMs() {
+    const raw = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+    const parsed = String(raw || '').split(',').map((v) => v.trim()).filter(Boolean).map(Number);
+    return parsed.length > 0 && parsed.every((n) => Number.isFinite(n) && n >= 0) ? parsed : [2000, 4000, 8000];
+  }
+
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
@@ -43,6 +55,8 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     if (severity === 'ERROR' || severity === 'E') {
       const err = new Error(sapMsgObj.message || 'SAP S/4HANA rejected the Goods Issue posting');
       err.code = sapMsgObj.code || 'SAP_BUSINESS_ERROR';
+      // SAP answered and rejected the posting: a business error, never a queueable availability problem.
+      err.status = 422;
       throw err;
     }
   }
@@ -150,6 +164,53 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     };
   }
 
+  /**
+   * Looks up a material document this app already posted under an idempotency reference.
+   * SAP does not enforce uniqueness on ReferenceDocument and the 202 reversal copies it from the
+   * original, so several headers can match: only one carrying an item of the expected movement type
+   * counts. The posting date narrows the filter when known. The SAP user is not filtered on: it is
+   * the destination's technical (or propagated) user, which this layer does not know.
+   *
+   * @param {string} referenceDocument
+   * @param {string} mvt - expected GoodsMovementType of the original document
+   * @param {string|Date} [postingDate]
+   * @returns {Promise<{MaterialDocument:string,MaterialDocumentYear:string}|null>}
+   */
+  async findPostedByReference(referenceDocument, mvt, postingDate) {
+    const ref = String(referenceDocument || '').trim().replace(/'/g, '');
+    if (!ref) return null;
+    const day = postingDate ? this._formatDate(postingDate) : '';
+    const filter = `ReferenceDocument eq '${ref}'` +
+      (/^\d{4}-\d{2}-\d{2}$/.test(day) ? ` and PostingDate eq datetime'${day}T00:00:00'` : '');
+    const hits = await this._get(
+      '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader',
+      `$format=json&$expand=to_MaterialDocumentItem&$filter=${encodeURIComponent(filter)}`
+    );
+    const originals = (Array.isArray(hits) ? hits : [])
+      .filter((h) => (h.to_MaterialDocumentItem?.results || []).some((i) => i.GoodsMovementType === mvt))
+      .sort((a, b) => String(a.MaterialDocument).localeCompare(String(b.MaterialDocument)));
+    if (originals.length > 1) {
+      LOG.warn(`Reference ${ref} matches ${originals.length} movement ${mvt} documents (${originals.map((h) => h.MaterialDocument).join(', ')}); using the first.`);
+    }
+    return originals[0] || null;
+  }
+
+  /** @private Posting result for a document found by its idempotency reference. */
+  static _resultFromReference(doc, data, mvt, label) {
+    return {
+      ReservationNo: String(data.ReservationNo || ''),
+      ReservationItem: String(data.ReservationItem || ''),
+      OrderNo: '',
+      MaterialDocument: doc.MaterialDocument,
+      MaterialDocYear: doc.MaterialDocumentYear,
+      TransferOrder: '',
+      DifferenceCleared: false,
+      DifferenceQty: 0,
+      Success: true,
+      Message: `${label} ${mvt} is already posted in S/4HANA (MatDoc: ${doc.MaterialDocument}/${doc.MaterialDocumentYear}, found by reference ${data.ReferenceDocument}); it was not posted again.`
+    };
+  }
+
   /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
   async post201(data) {
     this._assertPostable(data);
@@ -161,9 +222,34 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
       });
     } catch (v2Err) {
-      throw this._reclassifyPostingError(new Error('movement 201 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 201');
+      const err = this._reclassifyPostingError(new Error('movement 201 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 201');
+      if (err.code !== 'GI_POSTING_OUTCOME_UNKNOWN' || !data.ReferenceDocument) throw err;
+
+      // Unknown outcome: ask SAP whether the document exists. The lookup can run before SAP has
+      // committed (observed live: no hit immediately after a successful POST, a hit about a minute
+      // later), so empty lookups prove nothing and the outcome stays unconfirmed.
+      const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
+      for (const delayMs of delays) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        let doc;
+        try {
+          doc = await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate);
+        } catch (lookupErr) {
+          LOG.warn(`Reference lookup ${data.ReferenceDocument} failed: ${lookupErr.message}`);
+          throw err; // cannot verify: keep the manual-check message
+        }
+        if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '201', 'Goods Issue to Cost Center');
+      }
+      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 201, and no material document with reference ${data.ReferenceDocument} is visible yet after ${delays.length} check(s). The posting may still appear. It was NOT queued; check again in a few minutes or in MB51 (reference ${data.ReferenceDocument}) before posting again.`);
+      unconfirmed.status = 504;
+      unconfirmed.code = 'GI_POSTING_UNCONFIRMED';
+      throw unconfirmed;
     }
   }
+
+  // TODO(idempotency): 261, 301, 311 and the batch path send no ReferenceDocument, so their unknown
+  // outcomes cannot be looked up and their queue replay is not idempotent. Each type needs its own
+  // live proof that SAP persists the header field before a reference is added (see WORKSTATUS.md).
 
   /** Movement 261 (Goods Issue for Order/Reservation) - RAP first, standard API fallback. */
   async post261(data) {
@@ -266,7 +352,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   async postByMovementType(data) {
     const mvt = String(data.MovementType || '261').trim();
     switch (mvt) {
-      case '201': return this.post201(data);
+      case '201': {
+        // Replay: never post a queued record whose reference already exists in SAP.
+        const prior = data.ReferenceDocument ? await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate) : null;
+        if (prior) return GoodsIssuePostingClient._resultFromReference(prior, data, '201', 'Goods Issue to Cost Center');
+        return this.post201(data);
+      }
       case '261': return this.post261(data);
       case '301': return this.post301(data);
       case '311': return this.post311(data);
@@ -457,14 +548,24 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     return m ? Number(m[0]) : null;
   }
 
+  /** Gateway answers a service that is not registered on the hub with HTTP 403 + /IWFND/MED/170. */
+  static _isServiceNotRegistered(err) {
+    return /IWFND\/MED\/170|No service found/i.test(String(err?.message || '') + JSON.stringify(err?.response?.data || ''));
+  }
+
   /**
-   * Decides whether a Tier 2 (API_MATERIAL_DOCUMENT_SRV) failure is a genuine business/validation
-   * rejection (locked cost center, closed posting period, stock deficit, duplicate serial, our own
-   * pre-flight validation, ...) that must be surfaced to the caller as-is, or an actual backend
-   * capability problem (service not registered/activated, not authorized, Gateway unreachable) that
-   * should be wrapped into the diagnostic "capability unavailable" error and routed to the dispatch
-   * queue. Only HTTP 403/404/502/503 are treated as "capability unavailable" - everything else
-   * (400/401/409/422/...) is a real, surfaceable error and must never be silently queued for retry.
+   * Classifies a Tier 2 (API_MATERIAL_DOCUMENT_SRV) failure into one of three outcomes:
+   *
+   * 1. Rejected by SAP (400/401/409/422/..., or a business message recognised by S4ErrorMapper):
+   *    surfaced to the caller as-is, never queued.
+   * 2. Never reached the posting (service not activated/registered, connection refused, DNS failure,
+   *    HTTP 503): wrapped into the diagnostic "capability unavailable" 501 error, which the handlers
+   *    route to the dispatch queue. Replaying it later cannot create a duplicate.
+   * 3. Unknown outcome (timeout, connection reset, proxy 502/504, or a 2xx response without a
+   *    material document): SAP may have posted. Surfaced as 504 GI_POSTING_OUTCOME_UNKNOWN and never
+   *    queued, because an automatic replay could post the goods issue twice.
+   *
+   * A plain HTTP 403 (no /IWFND/MED/170) is an authorization or CSRF refusal: surfaced, not queued.
    *
    * @private
    */
@@ -472,20 +573,24 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const UNAVAILABLE_STATUSES = [403, 404, 502, 503];
 
     // An error that already carries an explicit, non-"unavailable" HTTP status was already
-    // correctly classified by the code that raised it (our own pre-flight validation, or a real
-    // SAP HTTP error surfaced by S4HttpClient with its true status) - never re-wrap it.
+    // correctly classified by the code that raised it (our own pre-flight validation, the
+    // sap-message business error, or a real SAP HTTP error surfaced by S4HttpClient with its true
+    // status) - never re-wrap it.
     const explicitStatus = this._extractStatus(v2Err);
+    if (S4ErrorMapper.isPostingPeriodClosed(v2Err?.message)) {
+      const mappedPeriod = S4ErrorMapper.mapS4Error(v2Err);
+      const periodErr = new Error(mappedPeriod.message);
+      periodErr.status = mappedPeriod.status;
+      periodErr.code = mappedPeriod.code;
+      periodErr.details = mappedPeriod.details;
+      return periodErr;
+    }
     if (explicitStatus !== null && !UNAVAILABLE_STATUSES.includes(explicitStatus)) {
       return v2Err;
     }
 
-    // Otherwise - an explicit 403/404/502/503, or no status at all (raw network/socket error, or
-    // our own sap-message-derived error which carries no HTTP status) - defer to S4ErrorMapper's
-    // keyword-based business-error detection (locked/blocked, posting period, lock/enqueue, ...).
-    // Only a positively-identified business status escapes the "capability unavailable" wrap; an
-    // unclassifiable error (mapped to the mapper's 500 default, e.g. a bare "socket hang up" with
-    // no business content) is still treated as an availability problem, not invented as a 500
-    // business error.
+    // An explicit 403/404/502/503, or no status at all: defer to S4ErrorMapper's keyword-based
+    // business-error detection (locked/blocked, posting period, lock/enqueue, ...).
     const mapped = S4ErrorMapper.mapS4Error(v2Err);
     if (!UNAVAILABLE_STATUSES.includes(mapped.status) && mapped.status !== 500) {
       const businessErr = new Error(mapped.message);
@@ -495,7 +600,25 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       return businessErr;
     }
 
-    return this._buildPostingUnavailableError(v4Err, v2Err, operationName);
+    const networkCode = String(v2Err?.code || v2Err?.cause?.code || '').toUpperCase();
+    const neverPosted = explicitStatus === 404 || explicitStatus === 503 ||
+      (explicitStatus === 403 && GoodsIssuePostingClient._isServiceNotRegistered(v2Err)) ||
+      ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(networkCode);
+    if (neverPosted) {
+      return this._buildPostingUnavailableError(v4Err, v2Err, operationName);
+    }
+
+    if (explicitStatus === 403) {
+      const authErr = new Error(`${mapped.message} SAP refused the ${operationName} (authorization or CSRF token). It was NOT posted and NOT queued; check SU53 for the destination user (S_SERVICE, M_MSEG_BWA, M_MSEG_WWA).`);
+      authErr.status = 403;
+      authErr.code = mapped.code;
+      return authErr;
+    }
+
+    const unknownErr = new Error(`SAP S/4HANA did not confirm the outcome of the ${operationName} (${mapped.message}). The goods issue may or may not have been posted, so it was NOT queued for automatic retry. Check the material documents in SAP (MB51) before posting again.`);
+    unknownErr.status = 504;
+    unknownErr.code = 'GI_POSTING_OUTCOME_UNKNOWN';
+    return unknownErr;
   }
 
   /**
@@ -524,7 +647,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
     // Tier 2 diagnostic (Standard V2 service)
     let t2Diag;
-    const v2NotRegistered = /IWFND\/MED\/170|No service found/i.test(String(v2Err?.message || '') + JSON.stringify(v2Err?.response?.data || ''));
+    const v2NotRegistered = GoodsIssuePostingClient._isServiceNotRegistered(v2Err);
     if (v2Status === 403 && v2NotRegistered) {
       // Gateway answers /IWFND/MED/170 with HTTP 403. This is NOT an authorization
       // failure - the service is not registered on the hub. Verified 2026-09-18.

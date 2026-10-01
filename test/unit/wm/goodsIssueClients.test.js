@@ -1100,7 +1100,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       });
     });
 
-    it('should distinguish 403 from 404 in submitGoodsIssueRequest and specify required SAP teams', async () => {
+    it('should surface a plain 403 in submitGoodsIssueRequest as an authorization failure instead of queueing it', async () => {
       const v4Err = new Error('Not Found');
       v4Err.status = 404;
       const v2Err = new Error('Forbidden');
@@ -1121,11 +1121,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         await postingClient.submitGoodsIssueRequest('18025', '1000040', items);
         throw new Error('Expected submitGoodsIssueRequest to throw');
       } catch (err) {
-        expect(err.status).toBe(501);
-        expect(err.message).toContain('HTTP 404 - NOT PUBLISHED');
-        expect(err.message).toContain('ABAP/Basis');
-        expect(err.message).toContain('it IS registered and this is an authorization failure');
-        expect(err.message).toContain('Security must grant S_SERVICE');
+        // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
+        expect(err.status).toBe(403);
+        expect(err.message).toContain('NOT posted and NOT queued');
+        expect(err.message).toContain('SU53');
+        expect(err.message).not.toContain('Unavailable');
       }
     });
 
@@ -1135,7 +1135,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         .rejects.toThrow(/Unit of measure \(EntryUnit\) is required for Goods Issue/);
     });
 
-    it('should distinguish 403 from 404 in postGoodsIssue and specify required SAP teams', async () => {
+    it('should surface a plain 403 in postGoodsIssue as an authorization failure instead of queueing it', async () => {
       const v4Err = new Error('HTTP 404 Not Found');
       v4Err.status = 404;
       const v2Err = new Error('HTTP 403 Forbidden');
@@ -1156,11 +1156,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01');
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
-        expect(err.status).toBe(501);
-        expect(err.message).toContain('HTTP 404 - NOT PUBLISHED');
-        expect(err.message).toContain('ABAP/Basis');
-        expect(err.message).toContain('it IS registered and this is an authorization failure');
-        expect(err.message).toContain('Security must grant S_SERVICE');
+        // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
+        expect(err.status).toBe(403);
+        expect(err.message).toContain('NOT posted and NOT queued');
+        expect(err.message).toContain('SU53');
+        expect(err.message).not.toContain('Unavailable');
       }
     });
 
@@ -1194,7 +1194,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       }
     });
 
-    it('should not invent an HTTP status when the error carries none', async () => {
+    it('should report an unknown outcome when the error carries no HTTP status', async () => {
       const v4Err = new Error('connect ETIMEDOUT');   // no .status
       const v2Err = new Error('socket hang up');      // no .status
 
@@ -1213,7 +1213,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01');
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
-        expect(err.message).toContain('no HTTP status');
+        // No response at all: SAP may have posted, so this is an unknown outcome, never queued.
+        expect(err.status).toBe(504);
+        expect(err.code).toBe('GI_POSTING_OUTCOME_UNKNOWN');
+        expect(err.message).toContain('socket hang up');
+        expect(err.message).not.toContain('Unavailable');
         expect(err.message).not.toContain('NOT PUBLISHED');
         expect(err.message).not.toContain('NOT REGISTERED');
       }

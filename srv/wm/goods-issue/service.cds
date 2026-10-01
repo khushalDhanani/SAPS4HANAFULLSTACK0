@@ -1,6 +1,8 @@
 namespace saps4hana.wm;
 
 using { saps4hana.wm.GoodsIssueQueue as DBGoodsIssueQueue } from '../../../db/wm/goods-issue-queue';
+// Posting-attempt log (written before S/4HANA is called); internal, not exposed as an entity.
+using from '../../../db/wm/goods-issue-attempt';
 
 @(requires: 'authenticated-user')
 service GoodsIssueService @(path: '/odata/v4/goods-issue') {
@@ -366,6 +368,20 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action drainQueue() returns QueueDrainResult;
+
+    type PostingAttemptRecheckResult {
+        Checked   : Integer;
+        Posted    : Integer;
+        NotPosted : Integer;
+        Requeued  : Integer;
+        StillOpen : Integer;
+        Errors    : Integer;
+    }
+
+    // Looks up posting attempts left in `sending` / `unconfirmed` in S/4HANA by their reference.
+    // Also runs on a timer (GI_ATTEMPT_RECHECK_INTERVAL_MS) and before every drainQueue.
+    @(requires: ['WarehouseManager', 'Admin'])
+    action recheckPostingAttempts() returns PostingAttemptRecheckResult;
 
     // ──────────────────────────────────────────────────────────
     // Stock Unit (SU) Barcode → Batch Determination

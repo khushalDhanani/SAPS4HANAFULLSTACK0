@@ -7322,6 +7322,139 @@ The table below provides a strict, unambiguous separation between **Code Complet
     - Serial equipment status: Validated that serialized equipment in `EQUI`/`JEST` with non-`ESTO` status returns 422: `"Serial Number \"<sSerial>\" is already issued or not in unrestricted stock (Status: <statusText>). Serial numbers for Goods Issue must have status In-Stock (ESTO). Goods Issue is blocked."`
 - **Result**: All 4 business-logic rejection paths tested live in the browser against authentic S/4HANA backend data and confirmed working with exact feedback.
 
+## 2026-10-01 10:15 IST
+- **Agent**: Claude Code
+- **Request**: Debug Movement 201 (UI5 → `postGoodsIssue201` → `API_MATERIAL_DOCUMENT_SRV`). No symptom, payload or log was supplied (template placeholders unfilled), so this was a read-only investigation. **No code changed.**
+- **Checked**:
+  - `npx jest test/unit/wm/goodsIssue201 test/unit/wm/goodsIssuePerType --no-coverage`: 10 suites, **152/152 passed**.
+  - Live read-only GETs via `.env.local`: `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$top=1` → OK (1 row); `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` (open 201) → OK. Service is registered, reachable and the user authenticates for READ. **No live POST was made**, so CSRF/POST authorization and SAP posting checks are not verified in this session.
+  - Payload mapping read (`GoodsIssue201Mapper.js`, `s4common.js`, `goodsIssue.mapper.js`): GoodsMovementCode `03`, type `201`, quantity sent as string, numeric cost center padded to 10, reservation item padded to 4, G/L account never sent. No defect found.
+- **Finding (not fixed, awaiting decision)**: `GoodsIssuePostingClient._reclassifyPostingError` wraps any posting error that carries no HTTP status and is not keyword-matched by `S4ErrorMapper` into the 501 "capability unavailable" error, which `postWithQueueFallback` then queues with the text "Pending SAP S/4HANA Gateway service activation". Reproduced with a node one-off: status-less SAP messages for account determination, stock deficit, posting period, blocked/nonexistent cost center, missing authorization, "Enter Batch" and a bare "socket hang up" all returned 501 (→ queued). The same message with an explicit HTTP 400 is surfaced correctly. Status-less errors arise from the `sap-message` header path (`_throwIfSapBusinessError`), the "no material document returned" error, and network timeouts. `postWithQueueFallback` also queues every HTTP 403. The behaviour is deliberate per the code comment, so it was left unchanged.
+- **Next action**: get the actual symptom (UI text / `GI-QUEUE-…` reference / response body) from the user; decide whether status-less SAP business errors should be surfaced instead of queued.
+
+## 2026-10-01 10:20 IST
+- **Agent**: Claude Code
+- **Request**: Implement the Goods Issue error-classification fix found in the 10:15 entry: business errors as 422, queue only when SAP was not reached, idempotency check for timeouts and replay, with unit tests. Symptom/data/evidence fields of the request were again unfilled, so no specific failing posting was diagnosed.
+- **Status**: classification fix **done and unit-tested, not live-verified**. Idempotency check **Blocked** (needs a live SAP test posting, not performed).
+- **Change 1 - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`** (shared by 201/261/301/311 and the batch path):
+  - `_throwIfSapBusinessError`: the `sap-message` severity-error now carries `status = 422`, so it is surfaced instead of being reclassified.
+  - `_reclassifyPostingError`: three outcomes. (1) Rejected by SAP - unchanged, surfaced. (2) Never reached the posting - HTTP 404, HTTP 503, HTTP 403 carrying `/IWFND/MED/170`, or network code `ECONNREFUSED`/`ENOTFOUND`/`EAI_AGAIN` - still wrapped as the 501 "capability unavailable" error (queued). (3) Unknown outcome - timeout, connection reset, bare socket error, proxy 502/504, or HTTP success without a material document - new 504 `GI_POSTING_OUTCOME_UNKNOWN`, never queued. A plain 403 (no MED/170) is returned as a 403 authorization/CSRF error, not queued.
+  - New `_isServiceNotRegistered` helper (the regex formerly inline in `_buildPostingUnavailableError`).
+- **Change 2 - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`**: `postWithQueueFallback` no longer queues `err.status === 403`.
+- **Change 3 - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`**: batch `submitGoodsIssueRequest` fallback no longer queues `err.status === 403`.
+- **Change 4 - tests**: `goodsIssue201Posting.test.js` (sap-message → 422; no-document → 504; plain 403 → 403; MED/170 403, 404, ECONNREFUSED → 501; timeout, ECONNRESET, socket hang up → 504), `goodsIssueClients.test.js` (three tests that asserted the old behaviour - plain 403 → 501 and socket hang up → "no HTTP status" 501 - rewritten to the new behaviour), `goodsIssuePhase5Routing.test.js` (handler: 422/403/504 surfaced and not enqueued; 501 enqueued and reported as not posted).
+- **Behaviour change to note**: for Movement 261 with the RAP tier not published (404) and a plain 403 on `API_MATERIAL_DOCUMENT_SRV`, the result is now a surfaced 403 instead of a queued 501 with the two-team diagnostic.
+- **Executed commands & results**:
+  - `npx jest test/unit test/integration --no-coverage` before the test updates: 4 failures, all four asserting the old behaviour. After: **127 suites, 2007/2007 passed**.
+  - `npx eslint` on the changed files: 0 errors, 2 warnings (unused `documentDate`/`reversalReason` args in the reversal method, not touched by this change).
+  - `git diff --check`: clean.
+- **S/4 checks (read-only GET, no POST)**: `API_MATERIAL_DOCUMENT_SRV/$metadata` - `A_MaterialDocumentHeaderType` has `ReferenceDocument` (Edm.String, MaxLength 16); `$filter=ReferenceDocument ne ''` on `A_MaterialDocumentHeader` works (returned documents 5000005570-5000005572 with their references).
+- **Not done / Blocked**:
+  - Idempotency check (unique `ReferenceDocument` per posting attempt, stored on the queue record, looked up before a retry/replay and after an unknown outcome). Requires proving with a real POST that SAP accepts and persists `ReferenceDocument` on a 201 deep insert; no live POST was made because it creates a real material document.
+  - Queue replay is therefore still not idempotent: `drainQueue` marks a failed replay `FAILED`, which stays pending and is replayed again, including after an unknown-outcome replay.
+  - No live verification of the new classification against SAP.
+- **Next action**: user to approve one live 201 test posting (with `ReferenceDocument`, then read back and reverse with 202) so the idempotency check can be implemented; user to supply the actual symptom/queue reference for the failing posting.
+
+## 2026-10-01 10:24 IST
+- **Agent**: Claude Code
+- **Request**: Review notes on the 10:20 change (confirm client is a test client, commit the classifier separately, run a live negative test first, prefer a non-serial/non-batch line, idempotency design points). **No code changed; no commit; no live POST.** Read-only preparation only.
+- **Read-only S/4 checks**: scanned 25 open 201 reservation lines (`UI_RESERVATION_ITM_MNG_V2`) with storage-unit listing and the stock pre-check. Candidate for the live test: material 8000006645, plant 1120, storage location HS01 (open reservation 378074/0001, 1 NOS, no storage units, no batch on the line, stock 20). Serial profile / batch flag could **not** be verified: `API_PRODUCT_SRV` returns 403 `/IWFND/MED/170` (not registered on this Gateway).
+- **Blocked on user**: (1) confirmation that DS4 client 220 may receive test postings, (2) go-ahead to commit the classifier change on `feature/CL01`, (3) go-ahead for the live negative test (201 with a nonexistent cost center), (4) decision whether the plain-403 change stays for 261.
+- **Next action**: on approval - commit classifier, run the negative test, then the `ReferenceDocument` proof posting + read-back + 202 reversal, then implement the idempotency lookup (delayed retries after unknown outcome; lookup before every queue replay; reference stored on the queue record before the call).
+
+## 2026-10-01 10:30 IST
+- **Agent**: Claude Code
+- **Request**: User approved live test postings on DS4 client 220 (negative test + one real 201 with its 202 reversal), chose **not to commit yet**, and chose to keep the plain-403 "surface, don't queue" behaviour for all movement types including 261. Then: prove `ReferenceDocument` live and implement the idempotency check.
+- **Status**: implemented and unit-tested; lookup and replay guard verified live read-only. **Not verified**: a real posting through the changed handler/mapper path (would be a second real document; not approved yet). Uncommitted.
+- **Live finding (probable cause of today's 201 failures)**: a 201 dated today (2026-10-01) is rejected by SAP with `Posting only possible in periods 2026/06 and 2026/05 in company code 1000` (HTTP 400). A 2026-06-30 date gets the same message and 2026-09-30 is accepted, so the fiscal year is April-March and the open materials periods are August and September 2026: the October period (2026/07) is not open yet (MMPV, company code 1000). Every goods issue dated today fails until it is opened. The app surfaces this as a 400 and does not queue it.
+- **Live tests performed (through the real per-type handler, enqueue stubbed to count calls)**:
+  1. 201, cost center `ZZINVALID9`, posting date today → 400 period error above; enqueue calls 0; no document.
+  2. Same, posting date 2026-09-30 → 400 `Cost center 1000/ZZINVALID9 does not exist on 30.09.2026.`; enqueue calls 0; no document.
+- **Live proof posting (direct adapter POST, mapper payload + `ReferenceDocument`)**: material 8000006645, plant 1120, SLoc HS01, 1 NOS, cost center 1011101301, posting date 2026-09-30, reference `GIMUP29CU1`. Stock before 20.
+  - POST → **Material Document 4900049865/2026**, response echoed the reference; item read back: 201, qty 1, cost center 1011101301, G/L 500020 (system-determined). Stock 19.
+  - Reversal via `reverseGoodsIssue` → **4900049866/2026** (item 202, `ReversedMaterialDocument` 4900049865). Stock back to **20** (the read immediately after the reversal still showed 19; a later read showed 20).
+  - Header read by key: both 4900049865 and 4900049866 carry `ReferenceDocument = GIMUP29CU1` (the reversal copies it).
+  - `$filter=ReferenceDocument eq 'GIMUP29CU1'` **immediately after the successful POST returned 0 hits**; about a minute later it returned both documents. The lag was observed, not measured.
+  - `$expand=to_MaterialDocumentItem` on that filter works and distinguishes the 201 from the 202.
+- **Change 1 - `s4common.js`**: `buildHeaderEnvelope` takes optional `referenceDocument` → header `ReferenceDocument` (cut to 16).
+- **Change 2 - `GoodsIssue201Mapper.js`**: passes `data.ReferenceDocument`. 261/301/311 mappers unchanged (not proven live for them).
+- **Change 3 - `GoodsIssuePostingClient.js`**: `_findPostedByReference(ref, mvt)` (header filter + expanded items, requires an item of the expected movement type so the reversal is ignored); `post201` on `GI_POSTING_OUTCOME_UNKNOWN` with a reference waits and looks up (`REFERENCE_LOOKUP_DELAYS_MS = [2000, 4000, 8000]`): found → success result with the SAP document; all empty → 504 `GI_POSTING_NOT_CONFIRMED` ("not posted, not queued, can be posted again"); lookup itself fails → the original unknown-outcome error. `postByMovementType` (queue replay/retry) looks the reference up first for 201 and does not post when the document exists.
+- **Change 4 - `goodsIssuePerType.handler.js`**: `postGoodsIssue201` generates a reference per attempt (`GI` + base36 timestamp + 4 hex, 14 chars) and passes it to the adapter and to the queue record.
+- **Change 5 - `GoodsIssueQueueManager.js` + `db/wm/goods-issue-queue.cds`**: new `ReferenceDocument : String(16)` on the queue record. A deployed database needs this column deployed.
+- **Change 6 - tests**: `goodsIssue201Posting.test.js` (+7: header field/16 chars, timeout then found, all checks empty, lookup failure, no lookup on business error, replay skips existing, replay posts with stored reference), `goodsIssuePhase5Routing.test.js` (+1 and extended: reference generated, unique per attempt, stored on the queue record).
+- **Executed commands & results**:
+  - `npx jest test/unit test/integration --no-coverage`: **127 suites, 2015/2015 passed**.
+  - `npx eslint` on `srv/integration/s4hana/wm/goods-issue`, `srv/wm/goods-issue` and the two test files: 0 errors, the same 2 existing unused-arg warnings.
+  - `npx cds compile db srv --to sql`: OK. `git diff --check`: clean.
+  - Live read-only check of the new code with POST disabled: `_findPostedByReference('GIMUP29CU1','201')` → 4900049865/2026; unknown reference → null; `postGoodsIssueByType` with that reference → returned 4900049865, 0 POST attempts.
+- **Known limits / not done**:
+  - No real posting has gone through the changed handler → mapper path end to end; the UI was not exercised.
+  - Idempotency covers 201 only. 261/301/311 and the batch path send no reference, so their unknown outcomes keep the manual MB51 message and their queue replay is still not idempotent.
+  - The reference is held in memory during the request and written to the queue record only when the posting is queued; it is not persisted before the SAP call.
+  - Lookup delays (2/4/8 s) are a guess; the commit lag was not measured.
+  - Serial-managed regression posting (reservation 519658/0001) not run. Serial/batch flags of 8000006645 could not be read (`API_PRODUCT_SRV` not registered); the posting succeeded without serial or batch.
+  - After `GI_POSTING_NOT_CONFIRMED` a manual re-post gets a new reference.
+- **Next action**: open the October materials period in SAP (MMPV, company code 1000) or post with a September date; user to approve a second real 201 + 202 through the app to verify the changed path end to end; commit when the user says so.
+
+## 2026-10-01 10:44 IST - Session summary (201 idempotency vs. SAP commit lag)
+- **Agent**: Claude Code
+- **Request**: Make the 201 idempotency path safe against SAP commit lag and close the in-flight-attempt gap (5 tasks). Constraints honoured: **no live POST, no commit, no MMPV change**; 261/301/311/batch behaviour unchanged except the shared closed-period message (Change 6).
+- **User decisions**: re-check runs on a timer inside CAP plus an action plus before every drain; a posting is **blocked (503)** when the attempt row cannot be written; a queued item whose attempt is found `not_posted` goes **back to `queued`**.
+- **Status**: implemented and unit-tested; lookup and re-check job verified read-only against live SAP. **Not verified**: a real posting through the changed path (forbidden in this session). **Uncommitted.**
+- **Supersedes** the 10:30 behaviour "all lookups empty -> 504 `GI_POSTING_NOT_CONFIRMED`, can be posted again": that claim is removed (Change 4).
+- **Spike before implementing**: a throwaway `cds.test` case showed a separate root transaction (`db.tx({...}, fn)`) started inside a request commits and survives that request's rollback on in-memory SQLite, before and after the request transaction has read the database. So attempt writes run in their own transaction directly; no request hooks needed. Spike file deleted.
+
+## 2026-10-01 10:44 IST - Change 1: posting-attempt entity
+- **Files**: new `db/wm/goods-issue-attempt.cds` (`saps4hana.wm.GoodsIssuePostingAttempt`: reference, movement type, reservation/item, material, plant, storage location, cost center, quantity, unit, posting user, posting date, status, resolvedAt, material document/year, last error; `createdAt` from `managed`); `srv/wm/goods-issue/service.cds` (`using from` so the entity is part of the deployed model; not exposed as a service entity).
+- **Reason**: persist every 201 attempt before SAP is called.
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Change 2: attempt store and re-check job
+- **Files**: new `srv/wm/goods-issue/GoodsIssueAttemptStore.js`.
+- **Behaviour**: `create` (status `sending`), `setStatus`, `getByReference`, `replayGuard`, `recheck(adapter, now)`. Every write is its own committed transaction. `recheck` takes `sending`/`unconfirmed` attempts older than `GI_ATTEMPT_RECHECK_AGE_MS` (default 180000): found in SAP -> `posted` + document (and the queue record with that reference -> `POSTED_IN_SAP`); not found and older than `GI_ATTEMPT_NOT_POSTED_AGE_MS` (default 900000) -> `not_posted` (then back to `queued` if a queue record carries the reference); not found and younger -> unchanged; lookup error -> unchanged, logged. Only `recheck` writes `not_posted`.
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Change 3: 201 handler writes the attempt before calling SAP
+- **Files**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`.
+- **Behaviour**: `postGoodsIssue201` generates the reference, writes the attempt (`sending`) as its first step, and returns **503 without calling SAP** if that write fails. Final status: `posted` / `queued` / `unconfirmed` (`GI_POSTING_OUTCOME_UNKNOWN`, `GI_POSTING_UNCONFIRMED`) / `rejected` (SAP rejection, plain 403, stock or serial pre-check). `postWithQueueFallback` gained an optional outcome callback; 261/301/311 do not pass one. The queue record takes the attempt's reference. If the process dies mid-call the row stays `sending`.
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Change 4: unconfirmed result, configurable delays, stricter lookup
+- **Files**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`.
+- **Behaviour**: lookup delays come from `GI_REFERENCE_LOOKUP_DELAYS_MS` (comma list, default `2000,4000,8000`). All lookups empty -> 504 **`GI_POSTING_UNCONFIRMED`** ("may still appear; check again in a few minutes or in MB51 before posting again"); the "NOT posted ... can be posted again" text and `GI_POSTING_NOT_CONFIRMED` are gone. `findPostedByReference(ref, mvt, postingDate)` filters on reference + posting date, accepts only a header with an item of the expected movement type (ignores the 202 reversal), and with several matches uses the lowest document number and logs a warning. New adapter passthrough `findPostedGoodsIssueByReference`. TODO comment: 261/301/311/batch send no reference.
+- **Deviation from the request**: the lookup does **not** filter on the SAP user. `CreatedByUser` is the destination's technical (or propagated) user, which CAP does not know; the CAP user is stored on the attempt instead.
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Change 5: queue replay respects the attempt; job wiring
+- **Files**: `srv/wm/goods-issue/GoodsIssueQueueManager.js` (`drainQueue`), `srv/wm/goods-issue/handlers/goodsIssue.handler.js` (`retryQueuedGoodsIssue`, `drainQueue`, new `recheckPostingAttempts`), `srv/wm/goods-issue/service.cds` (action + result type, WarehouseManager/Admin), `srv/wm/goods-issue/service.js` (timer).
+- **Behaviour**: a queue record with a reference is replayed only while its attempt is `queued`; attempt `posted` -> the queue record is marked `POSTED_IN_SAP` without posting; any other status -> skipped (single retry returns 409). After a replay: success -> attempt `posted`; unconfirmed/unknown -> attempt `unconfirmed` (so later drains skip it until the job resolves it). Records without a reference or without an attempt replay as before. `drainQueue` action runs `recheck` first. Timer: `setInterval` every `GI_ATTEMPT_RECHECK_INTERVAL_MS` (default 60000; `0` or `NODE_ENV=test` -> not started; `unref`'d). With several app instances each runs the timer; the job only reads SAP and writes idempotent status updates.
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Change 6: clear message for a closed posting period
+- **Files**: `srv/integration/s4hana/S4ErrorMapper.js` (`isPostingPeriodClosed`, mapping), `GoodsIssuePostingClient._reclassifyPostingError`, `goodsIssuePerType.handler.js` (400/422 branch passes `details`).
+- **Behaviour**: SAP text `Posting only possible in periods <...> in company code <...>` -> HTTP 400, code `POSTING_PERIOD_CLOSED`, message naming the company code and the periods SAP allows and telling the user to contact finance (MMPV); original SAP text in `details`. Not queued; the posting date is not changed. Applies to every caller of `S4ErrorMapper.mapS4Error` and, through the shared classifier, to 201/261/301/311/batch. Detection is on the English SAP text only (no message class/number was available in the live response).
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Change 7: tests
+- **Files**: new `test/unit/wm/goodsIssueAttempt.test.js` (19 tests, in-memory DB, SAP mocked); `test/unit/wm/goodsIssue201Posting.test.js` (+3: env delays, lookup filter/202/multiple hits, closed period; the "not posted" test rewritten to the unconfirmed result); `test/unit/wm/goodsIssuePhase5Routing.test.js` (+2: 503 block, closed period not queued; attempt store stubbed because this suite has no database).
+- **Covered**: all lookups empty -> unconfirmed, never "can be posted again"; attempt row is `sending` when the adapter is invoked (read inside the adapter mock); final statuses; insert failure -> 503, SAP not called; crash case `sending` -> `posted`; nothing past 15 min -> `not_posted`; nothing before -> unchanged; lookup error -> unchanged; 202-only hit ignored; multiple hits; replay skips non-`queued`; replay marks done when the document exists; unconfirmed replay is skipped by the next drain; records without a reference replay as before.
+- **Result**: Validation for all 10:44 entries is recorded once in the "10:44 IST - Validation" entry below.
+
+## 2026-10-01 10:44 IST - Validation (all changes above)
+- `npx jest test/unit test/integration --no-coverage`: **128 suites, 2039/2039 passed** (previous baseline 127 suites / 2015). Intermediate run after the code changes and before the test updates: 6 failures, all in my own 201 tests from 10:20/10:30 that asserted the removed behaviour or had no attempt store; an earlier intermediate run failed many suites on a wrong `require` path in `service.js`, fixed.
+- `npx eslint` on `srv/integration/s4hana/S4ErrorMapper.js`, `srv/integration/s4hana/wm`, `srv/wm/goods-issue` and the three test files: 0 errors, the same 2 existing unused-argument warnings in the reversal method.
+- `git diff --check`: clean. `npx cds compile db srv --to sql`: OK.
+- `npx cds build --production`: completed (one existing warning in `srv/wm/tr-to/service.cds`); `gen/db/src/gen` contains `saps4hana.wm.GoodsIssuePostingAttempt.hdbtable` and `saps4hana.wm.GoodsIssueQueue.hdbtable` with `ReferenceDocument NVARCHAR(16)`. `gen/` is git-ignored.
+- **Live, read-only (POST disabled, in-memory DB, real SAP GETs)**: lookup `GIMUP29CU1` + posting date 2026-09-30 -> 4900049865/2026; same reference with 2026-09-29 -> null. Re-check over two seeded `sending` attempts: at +4 min `Posted 1, StillOpen 1`; at +16 min `NotPosted 1`; final statuses `GIMUP29CU1 -> posted 4900049865`, `GINOSUCHREF0001 -> not_posted`; 0 POST attempts.
+- **Not validated**: a real posting through the changed handler/mapper path; the UI; the timer inside a running server; HANA (only SQLite ran); `mbt validate` not run (no MTA file changed).
+
+## 2026-10-01 10:44 IST - Deployment note and open items
+- **Deployment (Task 5)**: there is no hand-written migration in this project; the HDI artifacts are generated from the CDS model by `npx cds build --production` (`mta.yaml`) and deployed by `saps4hana-db-deployer`. **Before this code goes live, the deployed HDI container must receive** the new table `saps4hana.wm.GoodsIssuePostingAttempt` and the new column `ReferenceDocument` on `saps4hana.wm.GoodsIssueQueue`. Without the attempt table every 201 posting returns 503 (by design: no attempt row, no posting).
+- **Out of scope, not done**: no `ReferenceDocument` for 261/301/311/batch - each type needs its own live proof that SAP persists the header field; their unknown outcomes keep the manual MB51 message and their queue replay is not idempotent (TODO in `GoodsIssuePostingClient.js`).
+- **Known limits**: attempt rows are never purged; the 2/4/8 s and 3/15 min defaults are not measured against SAP's real commit lag; a database outage stops all 201 postings (chosen behaviour).
+- **Proposed commits (not created)**: (1) classifier + tests, message naming the 261 plain-403 change; (2) idempotency: reference, attempt entity, store/job, replay guard, period message, CDS model. `GoodsIssuePostingClient.js`, `goodsIssuePerType.handler.js`, `goodsIssue.handler.js`, `goodsIssue201Posting.test.js` and `goodsIssuePhase5Routing.test.js` contain hunks of both and need a hunk-level split (`git add -p`).
+- **Next action**: user to commit; deploy the DB artifacts before the code; open the October materials period (MMPV) or post with a September date; approve a real 201 + 202 through the app to verify the changed path end to end.
+
 ## Next Steps
 
 0. Dedicated Movement 201 & 261 UI Workflows:
@@ -7361,3 +7494,9 @@ The table below provides a strict, unambiguous separation between **Code Complet
     - Update 2026-10-01 09:53 IST: item 10 fixed in code and unit-tested (see the 09:53 entry); uncommitted and not yet verified live.
 12. FEATURE REQUEST (not built): scan-to-complete for Movement 301/311 in `GoodsIssueTransferBaseController.js`, mirroring 201/261. See the 2026-10-01 10:02 entry.
 13. Movement 301 follow-up (not fixed): Header Text is ignored (`GoodsIssue301Mapper.js` hardcodes it); handle together with item 11.
+14. Movement 201 queue-fallback finding (not fixed, awaiting decision): status-less SAP business errors and timeouts are reclassified to 501 and queued as "pending Gateway activation" (`GoodsIssuePostingClient._reclassifyPostingError`, `postWithQueueFallback`). See the 2026-10-01 10:15 entry.
+    - Update 2026-10-01 10:20 IST: classification fixed and unit-tested (see the 10:20 entry); uncommitted, not live-verified. Still open: idempotency check via `ReferenceDocument` for unknown outcomes and queue replay - blocked on an approved live 201 test posting.
+    - Update 2026-10-01 10:30 IST: idempotency reference implemented for 201 and unit-tested; lookup and replay guard verified live read-only (see the 10:30 entry). Open: end-to-end real posting through the changed path, 261/301/311 coverage, queue column deployment. Uncommitted.
+15. SAP period: materials period for October 2026 (fiscal 2026/07) is not open in company code 1000, so every goods issue dated 2026-10-01 or later is rejected. Needs MMPV in SAP. See the 10:30 entry.
+    - Update 2026-10-01 10:44 IST: attempt log, re-check job, replay guard, unconfirmed result and closed-period message implemented and unit-tested (see the 10:44 entries). Open: real posting through the changed path, 261/301/311/batch reference (each needs its own live proof). Uncommitted.
+16. DEPLOYMENT PREREQUISITE: the HDI container must receive table `saps4hana.wm.GoodsIssuePostingAttempt` and column `GoodsIssueQueue.ReferenceDocument` before the 10:44 code goes live; otherwise every 201 posting returns 503. See the 10:44 deployment note.
