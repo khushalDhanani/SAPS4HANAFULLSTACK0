@@ -265,6 +265,7 @@
                         <HBox alignItems="Center" class="sapUiTinyMarginBottom">
                             <Input
                                 id="inSerialScan301"
+                                editable="{= !${gi301>/serialVerifying} }"
                                 value="{gi301>/serialInput}"
                                 placeholder="{i18n>gi301SerialScanPlaceholder}"
                                 submit=".onSerialInputSubmit"
@@ -273,6 +274,8 @@
                                 class="sapUiTinyMarginEnd" />
                             <Button
                                 id="btnAddSerial301"
+                                busy="{gi301>/serialVerifying}"
+                                busyIndicatorDelay="0"
                                 text="{i18n>gi301BtnAddSerial}"
                                 icon="sap-icon://bar-code"
                                 press=".onAddSerialPress"
@@ -282,6 +285,14 @@
                                 text="{= ${gi301>/serialNumbers}.length + ' / ' + ${gi301>/quantity} + ' ' + ${i18n>gi301SerialsScanned} }"
                                 state="{= ${gi301>/serialNumbers}.length === ${gi301>/quantity} ? 'Success' : 'Warning' }" />
                         </HBox>
+
+                        <MessageStrip
+                            id="stripSerialScan301"
+                            text="{gi301>/serialScanText}"
+                            type="{gi301>/serialScanState}"
+                            showIcon="true"
+                            visible="{= !!${gi301>/serialScanText} }"
+                            class="sapUiTinyMarginBottom" />
 
                         <Text
                             id="txtSerialError301"
@@ -305,7 +316,9 @@
                                     <cells>
                                         <Text text="{= ${path: ''} ? '' : '' }" />
                                         <Text text="{gi301>}" class="fontBold" />
-                                        <ObjectStatus text="{i18n>gi301SerialPendingStockVerify}" state="Information" />
+                                        <ObjectStatus
+                                            text="{parts: [{path: 'gi301>'}, {path: 'gi301>/serialStatus'}], formatter: '.formatSerialStatusText'}"
+                                            state="{parts: [{path: 'gi301>'}, {path: 'gi301>/serialStatus'}], formatter: '.formatSerialStatusState'}" />
                                         <Button
                                             icon="sap-icon://delete"
                                             type="Transparent"

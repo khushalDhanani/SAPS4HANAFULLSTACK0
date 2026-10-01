@@ -307,6 +307,16 @@ class GoodsIssueHandler {
     // ACTION: recheckPostingAttempts (resolve `sending` / `unconfirmed` attempts against S/4HANA)
     srv.on('recheckPostingAttempts', async () => GoodsIssueAttemptStore.recheck(GoodsIssueAdapter));
 
+    // FUNCTION: verifySerialNumber — live SAP status of one scanned serial for one reservation item.
+    // Always answers with a Status (UNVERIFIED when SAP could not be read); never a default.
+    srv.on('verifySerialNumber', async (req) => {
+      const { serialNumber, reservationNo, reservationItem, storageLocation } = req.data || {};
+      if (!serialNumber || !reservationNo || !reservationItem) {
+        return req.error(400, 'serialNumber, reservationNo and reservationItem parameters are required');
+      }
+      return GoodsIssueAdapter.verifySerialForReservation(serialNumber, reservationNo, reservationItem, storageLocation || '');
+    });
+
     // ──────────────────────────────────────────────────────────
     // FUNCTION: resolveStockUnit — SU Barcode → Stock → Batch
     // Returns StockUnitResolution with SuExists:false for business-level

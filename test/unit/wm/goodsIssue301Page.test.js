@@ -158,6 +158,10 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
 
             data.serialNumbers = ['SN-001', 'SN-002'];
             res = GoodsIssue301Model.validate(data);
+            expect(res.errors.serials).toContain('not verified with SAP');
+
+            data.serialStatus = { 'SN-001': { available: true }, 'SN-002': { available: true } };
+            res = GoodsIssue301Model.validate(data);
             expect(res.errors.serials).toBe('');
         });
 

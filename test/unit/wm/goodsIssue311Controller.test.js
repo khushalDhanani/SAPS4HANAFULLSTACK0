@@ -485,25 +485,92 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
 
     // =============================================================
     describe('Serial Number Management', () => {
-        it('onAddSerialPress adds a serial and shows a confirmation toast', () => {
+        // A scanned serial is only accepted after SAP confirmed it for the current reservation item.
+        const scan = (oVerify, mSetup) => {
             const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/reservationNo', '520235');
+            oModel.setProperty('/reservationItem', '0001');
+            oModel.setProperty('/storageLocation', 'CS02');
+            oModel.setProperty('/quantity', 2);
             oModel.setProperty('/serialInput', 'sn001');
+            if (mSetup) mSetup(oModel);
+            mockGoodsIssue311Service.verifySerial = jest.fn(oVerify);
+            const p = controller.onAddSerialPress();
+            return { oModel, p };
+        };
+        const available = { Status: 'AVAILABLE', Available: true, Message: 'Serial number SN001 is in plant 1150, storage location CS02, Unrestricted-Use Stock.', Plant: '1150', StorageLocation: 'CS02', StockTypeText: 'Unrestricted-Use Stock', VerifiedAt: '2026-10-01T06:30:00Z' };
 
-            controller.onAddSerialPress();
-
-            expect(mockGoodsIssue311Model.addSerialNumber).toHaveBeenCalled();
+        it('asks SAP with the exact scanned serial and the reservation item, and adds it only when SAP says available', async () => {
+            const { oModel, p } = scan(() => Promise.resolve(available));
+            expect(mockGoodsIssue311Service.verifySerial).toHaveBeenCalledWith('SN001', '520235', '0001', 'CS02');
+            expect(oModel.getProperty('/serialNumbers')).toEqual([]); // nothing is listed before SAP answered
+            expect(oModel.getProperty('/serialVerifying')).toBe(true);
+            await p;
             expect(oModel.getProperty('/serialNumbers')).toEqual(['SN001']);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('gi311SerialAdded');
+            expect(oModel.getProperty('/serialStatus').SN001).toMatchObject({ available: true, status: 'AVAILABLE', verifiedAt: '2026-10-01T06:30:00Z' });
+            expect(oModel.getProperty('/serialScanState')).toBe('Success');
+            expect(oModel.getProperty('/serialVerifying')).toBe(false);
+            expect(controller.formatSerialStatusState('SN001', oModel.getProperty('/serialStatus'))).toBe('Success');
+            expect(controller.formatSerialStatusText('SN001', oModel.getProperty('/serialStatus'))).toBe('gi311SerialAvailable');
         });
 
-        it('onAddSerialPress shows the failure message and does not add on invalid input', () => {
+        it.each([
+            ['OTHER_PLANT', 'Serial number SN001 is in plant 1110, storage location -, Stock in Transit; plant 1150 is required.'],
+            ['OTHER_STORAGE_LOCATION', 'Serial number SN001 is in plant 1150, storage location FG01, Unrestricted-Use Stock; storage location CS02 is required.'],
+            ['OTHER_MATERIAL', 'Serial number SN001 belongs to material 8000009803, not to material 8000009802.'],
+            ['NOT_IN_STOCK', 'Serial number SN001 exists in SAP but is not in stock (already issued or not yet received).'],
+            ['NOT_FOUND', 'Serial number SN001 does not exist in SAP for material 8000009802.'],
+            ['RESERVATION_NOT_OPEN', 'Reservation 520235 item 0001 not found or already completed in SAP.']
+        ])('SAP status %s: the serial is not added and the SAP reason is shown', async (Status, Message) => {
+            const { oModel, p } = scan(() => Promise.resolve({ Status, Available: false, Message }));
+            await p;
+            expect(oModel.getProperty('/serialNumbers')).toEqual([]);
+            expect(oModel.getProperty('/serialScanState')).toBe('Error');
+            expect(oModel.getProperty('/serialScanText')).toBe(Message);
+        });
+
+        it.each([
+            ['SAP answered UNVERIFIED', () => Promise.resolve({ Status: 'UNVERIFIED', Available: false, Message: 'SAP serial number stock could not be read: timeout' })],
+            ['the request failed', () => Promise.reject(new Error('HTTP 502'))],
+            ['the answer is incomplete', () => Promise.resolve({})]
+        ])('%s: "unable to verify" is shown, never a pending or valid status, and nothing is added', async (_label, oVerify) => {
+            const { oModel, p } = scan(oVerify);
+            await p;
+            expect(oModel.getProperty('/serialNumbers')).toEqual([]);
+            expect(oModel.getProperty('/serialScanState')).toBe('Warning');
+            expect(oModel.getProperty('/serialScanText')).toBe('gi311SerialUnableToVerify');
+            expect(oModel.getProperty('/serialVerifying')).toBe(false);
+        });
+
+        it('ignores a second scan while SAP is still answering (no duplicate request)', async () => {
+            const { p } = scan(() => Promise.resolve(available));
+            controller.onAddSerialPress();
+            expect(mockGoodsIssue311Service.verifySerial).toHaveBeenCalledTimes(1);
+            await p;
+        });
+
+        it('drops the SAP answer when the reservation item changed in the meantime', async () => {
+            const { oModel, p } = scan(() => Promise.resolve(available));
+            oModel.setProperty('/reservationItem', '0002');
+            await p;
+            expect(oModel.getProperty('/serialNumbers')).toEqual([]);
+        });
+
+        it('a listed serial without a SAP verification is shown as not verified (never as pending)', () => {
+            expect(controller.formatSerialStatusText('SN009', {})).toBe('gi311SerialNotVerified');
+            expect(controller.formatSerialStatusState('SN009', {})).toBe('Error');
+        });
+
+        it('onAddSerialPress shows the failure message and does not ask SAP on invalid input', () => {
             mockGoodsIssue311Model.addSerialNumber.mockReturnValueOnce({ success: false, message: 'Serial number cannot be empty' });
             const oModel = controller.getView().getModel('gi311');
             oModel.setProperty('/serialInput', '');
+            mockGoodsIssue311Service.verifySerial = jest.fn();
 
             controller.onAddSerialPress();
 
             expect(mockMessageToast.show).toHaveBeenCalledWith('Serial number cannot be empty');
+            expect(mockGoodsIssue311Service.verifySerial).not.toHaveBeenCalled();
         });
 
         it('onDeleteSerial removes the serial at the bound index', () => {

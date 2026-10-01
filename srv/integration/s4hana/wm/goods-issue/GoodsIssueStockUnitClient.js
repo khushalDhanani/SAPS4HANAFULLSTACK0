@@ -1645,6 +1645,111 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * Current SAP status of ONE serial number for a goods movement out of material / plant / storage
+   * location. Never throws for a business outcome and never assumes: every result is what SAP
+   * returned, or UNVERIFIED when SAP could not be read.
+   *   AVAILABLE              in unrestricted stock at the required plant / storage location
+   *   OTHER_PLANT / OTHER_STORAGE_LOCATION / NOT_UNRESTRICTED / SPECIAL_STOCK   in stock, but not usable here
+   *   OTHER_MATERIAL         the serial number is in stock for a different material
+   *   NOT_IN_STOCK           exists in SAP (equipment master) but is not in stock, e.g. already issued
+   *   NOT_FOUND              unknown to SAP for this material
+   *   UNVERIFIED             a SAP read failed or returned contradictory data
+   * Sources: UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber (lists only serials currently in stock),
+   * then EQUI / JEST status I0184 (ESTO) via RFC to tell "issued" from "unknown".
+   * @returns {Promise<Object>}
+   */
+  async getSerialStatus(material, plant, storageLocation, serialNumber) {
+    const sSerial = String(serialNumber || '').replace(/[\r\n\t]/g, '').trim().toUpperCase();
+    const matClean = String(material || '').trim().replace(/^0+/, '');
+    const targetPlant = String(plant || '').trim().toUpperCase();
+    const targetSLoc = String(storageLocation || '').trim().toUpperCase();
+    const SERIAL_SET = '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber';
+    const result = (Status, Message, rec = {}) => ({
+      SerialNumber: sSerial,
+      Material: matClean,
+      RequiredPlant: targetPlant,
+      RequiredStorageLocation: targetSLoc,
+      Status,
+      Available: Status === 'AVAILABLE',
+      Message,
+      Plant: String(rec.Plant || '').trim(),
+      StorageLocation: String(rec.StorageLocation || '').trim(),
+      StockType: String(rec.InventoryStockType || '').trim(),
+      StockTypeText: String(rec.InventoryStockType_Text || '').trim(),
+      VerifiedAt: new Date().toISOString()
+    });
+    const where = (rec) => `plant ${rec.Plant || '-'}, storage location ${rec.StorageLocation || '-'}, ${rec.InventoryStockType_Text || `stock type ${rec.InventoryStockType || '-'}`}`;
+    const lit = (v) => encodeURIComponent(String(v).replace(/'/g, "''"));
+
+    if (!sSerial || !matClean) {
+      return result('UNVERIFIED', 'Serial number and material are required to verify a serial number with SAP.');
+    }
+
+    let rec;
+    try {
+      const rows = await this._get(SERIAL_SET, `$filter=${encodeURIComponent(`SerialNumber eq '`)}${lit(sSerial)}${encodeURIComponent(`' and Material eq '`)}${lit(matClean)}${encodeURIComponent(`'`)}&$format=json`);
+      rec = Array.isArray(rows) ? rows[0] : null;
+    } catch (err) {
+      return result('UNVERIFIED', `SAP serial number stock could not be read: ${err.message}`);
+    }
+
+    if (rec) {
+      const recPlant = String(rec.Plant || '').trim().toUpperCase();
+      const recSLoc = String(rec.StorageLocation || '').trim().toUpperCase();
+      const stockType = String(rec.InventoryStockType || '').trim();
+      if (!stockType) {
+        return result('UNVERIFIED', `SAP returned serial number ${sSerial} without a stock type.`, rec);
+      }
+      if (targetPlant && recPlant !== targetPlant) {
+        return result('OTHER_PLANT', `Serial number ${sSerial} is in ${where(rec)}; plant ${targetPlant} is required.`, rec);
+      }
+      if (targetSLoc && recSLoc !== targetSLoc) {
+        return result('OTHER_STORAGE_LOCATION', `Serial number ${sSerial} is in ${where(rec)}; storage location ${targetSLoc} is required.`, rec);
+      }
+      if (stockType !== '01') {
+        return result('NOT_UNRESTRICTED', `Serial number ${sSerial} is not in unrestricted stock (${where(rec)}).`, rec);
+      }
+      if (String(rec.InventorySpecialStockType || '').trim()) {
+        return result('SPECIAL_STOCK', `Serial number ${sSerial} is special stock (${rec.InventorySpecialStockType_Text || rec.InventorySpecialStockType}).`, rec);
+      }
+      return result('AVAILABLE', `Serial number ${sSerial} is in ${where(rec)}.`, rec);
+    }
+
+    // Not in stock for this material. In stock for another material?
+    try {
+      const others = await this._get(SERIAL_SET, `$filter=${encodeURIComponent(`SerialNumber eq '`)}${lit(sSerial)}${encodeURIComponent(`'`)}&$top=5&$format=json`);
+      const other = (Array.isArray(others) ? others : []).find((r) => String(r.Material || '').replace(/^0+/, '') !== matClean);
+      if (other) {
+        return result('OTHER_MATERIAL', `Serial number ${sSerial} belongs to material ${String(other.Material).replace(/^0+/, '')} (${where(other)}), not to material ${matClean}.`, other);
+      }
+    } catch (err) {
+      return result('UNVERIFIED', `SAP serial number stock could not be read: ${err.message}`);
+    }
+
+    // Known to SAP at all? (issued serials keep their equipment record but lose status ESTO)
+    // The values go into an RFC_READ_TABLE WHERE clause: only quote-free serial characters pass.
+    const sKey = /^[A-Z0-9 ._/-]{1,18}$/.test(sSerial) ? sSerial : '';
+    const mKey = wmKey(matClean);
+    if (!sKey || !mKey) {
+      return result('NOT_IN_STOCK', `Serial number ${sSerial} is not in stock for material ${matClean} in SAP.`);
+    }
+    try {
+      const matnr = /^\d+$/.test(mKey) ? mKey.padStart(18, '0') : mKey;
+      const equi = await this.rfc.readTable('EQUI', ['EQUNR'], [`SERNR = '${sKey}'`, `AND MATNR = '${matnr}'`]);
+      if (!equi.length) {
+        return result('NOT_FOUND', `Serial number ${sSerial} does not exist in SAP for material ${matClean}.`);
+      }
+      const jest = await this.rfc.readTable('JEST', ['STAT'], [`OBJNR = 'IE${equi[0].EQUNR}'`, "AND STAT = 'I0184'", "AND INACT = ''"]);
+      if (jest.length) {
+        return result('UNVERIFIED', `SAP data for serial number ${sSerial} is inconsistent: status "in stock" (ESTO) without a stock record.`);
+      }
+      return result('NOT_IN_STOCK', `Serial number ${sSerial} exists in SAP for material ${matClean} but is not in stock (already issued or not yet received).`);
+    } catch (err) {
+      return result('UNVERIFIED', `Serial number ${sSerial} is not in stock for material ${matClean}; its SAP serial master could not be read: ${err.message}`);
+    }
+  }
+
+  /**
    * Pre-check serial number stock status (must be ESTO / unrestricted stock, not already issued).
    *
    * @param {string} material

@@ -332,19 +332,92 @@ sap.ui.define([
         // SERIAL NUMBERS SCAN & MANAGEMENT
         // =============================================================
 
+        /**
+         * A scanned serial number is accepted only after SAP confirmed it for the current reservation
+         * item (material, plant, storage location, unrestricted stock). The status shown per serial is
+         * the SAP answer; when SAP cannot be asked the scan is rejected as "unable to verify".
+         * @returns {Promise<void>|undefined}
+         */
         onAddSerialPress: function () {
-            var sInput = this._oModel.getProperty("/serialInput") || "";
-            var oData = this._oModel.getData();
-            var oRes = this._c.Model.addSerialNumber(oData, sInput);
+            var that = this;
+            var cfg = this._c;
+            var oModel = this._oModel;
+            var oData = oModel.getData();
+            var sInput = oModel.getProperty("/serialInput") || "";
+            if (oData.serialVerifying) {
+                return; // one SAP verification at a time: no duplicate requests, no out-of-order answers
+            }
 
-            if (!oRes.success) {
-                MessageToast.show(oRes.message);
+            // Local checks first (empty, length, duplicate, quantity reached) on a copy: nothing is added yet.
+            var oProbe = { quantity: oData.quantity, serialNumbers: (oData.serialNumbers || []).slice() };
+            var oCheck = cfg.Model.addSerialNumber(oProbe, sInput);
+            if (!oCheck.success) {
+                MessageToast.show(oCheck.message);
+                return;
+            }
+            var sSerial = oProbe.serialNumbers[oProbe.serialNumbers.length - 1];
+            var sResv = oData.reservationNo;
+            var sItem = oData.reservationItem;
+            if (!sResv || !sItem) {
+                this._setSerialScan("Error", this._t("SerialNeedsReservation"));
                 return;
             }
 
-            this._oModel.refresh(true);
-            this._validateLive();
-            MessageToast.show(this._t("SerialAdded", [sInput.trim().toUpperCase()]));
+            oModel.setProperty("/serialVerifying", true);
+            this._setSerialScan("None", "");
+            return cfg.Service.verifySerial(sSerial, sResv, sItem, oData.storageLocation)
+                .then(function (oRes) {
+                    var oNow = oModel.getData();
+                    if (oNow.reservationNo !== sResv || oNow.reservationItem !== sItem) {
+                        return; // the reservation item changed while SAP was answering: the answer no longer applies
+                    }
+                    if (!oRes || !oRes.Status || oRes.Status === "UNVERIFIED") {
+                        that._setSerialScan("Warning", that._t("SerialUnableToVerify", [sSerial, (oRes && oRes.Message) || ""]));
+                        return;
+                    }
+                    if (oRes.Available !== true) {
+                        that._setSerialScan("Error", oRes.Message || that._t("SerialNotAvailable", [sSerial, oRes.Status]));
+                        return;
+                    }
+                    var oAdd = cfg.Model.addSerialNumber(oNow, sSerial);
+                    if (!oAdd.success) {
+                        that._setSerialScan("Error", oAdd.message);
+                        return;
+                    }
+                    var mStatus = Object.assign({}, oNow.serialStatus);
+                    mStatus[sSerial] = {
+                        available: true,
+                        status: oRes.Status,
+                        text: that._t("SerialAvailable", [oRes.Plant, oRes.StorageLocation, oRes.StockTypeText || oRes.StockType]),
+                        verifiedAt: oRes.VerifiedAt || ""
+                    };
+                    oNow.serialStatus = mStatus;
+                    that._setSerialScan("Success", oRes.Message || that._t("SerialAdded", [sSerial]));
+                })
+                .catch(function (err) {
+                    that._setSerialScan("Warning", that._t("SerialUnableToVerify", [sSerial, (err && err.message) || ""]));
+                })
+                .finally(function () {
+                    oModel.setProperty("/serialVerifying", false);
+                    oModel.refresh(true);
+                    that._validateLive();
+                });
+        },
+
+        _setSerialScan: function (sState, sText) {
+            this._oModel.setProperty("/serialScanState", sState);
+            this._oModel.setProperty("/serialScanText", sText);
+        },
+
+        /** Status text of one listed serial: the SAP answer stored at verification, never a default. */
+        formatSerialStatusText: function (sSerial, mStatus) {
+            var o = mStatus && mStatus[sSerial];
+            return (o && o.available) ? o.text : this._t("SerialNotVerified");
+        },
+
+        formatSerialStatusState: function (sSerial, mStatus) {
+            var o = mStatus && mStatus[sSerial];
+            return (o && o.available) ? "Success" : "Error";
         },
 
         onSerialInputSubmit: function () {

@@ -64,6 +64,22 @@ sap.ui.define([
         },
 
         /**
+         * Live SAP status of one scanned serial number for one open reservation item
+         * (material / plant / storage location come from the reservation in SAP).
+         * @param {string} sSerial
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @param {string} [sStorageLocation] used only when the reservation item carries none
+         * @returns {Promise<Object>} SerialVerification: Status, Available, Message, Plant, StorageLocation, ...
+         */
+        verifySerial: function (sSerial, sReservationNo, sReservationItem, sStorageLocation) {
+            var enc = function (v) { return encodeURIComponent(String(v || "").trim().replace(/'/g, "''")); };
+            return ODataClient.get(BASE_PATH_GI + "/verifySerialNumber(serialNumber='" + enc(sSerial) +
+                "',reservationNo='" + enc(sReservationNo) + "',reservationItem='" + enc(sReservationItem) +
+                "',storageLocation='" + enc(sStorageLocation) + "')");
+        },
+
+        /**
          * Reverse a posted Material Document via CancelHeader
          * @param {string} sMaterialDocument
          * @param {string} sMaterialDocYear

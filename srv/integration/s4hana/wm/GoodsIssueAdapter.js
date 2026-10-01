@@ -548,6 +548,32 @@ class GoodsIssueAdapter {
   /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 
+  /**
+   * Verify ONE scanned serial number against the open reservation item it is scanned for: the
+   * material / plant / storage location come from the reservation in SAP (the caller's storage
+   * location is used only when the reservation item carries none), the status from SAP stock.
+   * Always resolves with a Status; a reservation or SAP read failure is UNVERIFIED, never "valid".
+   */
+  async verifySerialForReservation(serialNumber, reservationNo, reservationItem, storageLocation) {
+    const ref = { ReservationNo: String(reservationNo || '').trim(), ReservationItem: String(reservationItem || '').trim().padStart(4, '0') };
+    let item;
+    try {
+      item = await this.getReservationItemAuthoritative(reservationNo, reservationItem);
+    } catch (err) {
+      const closed = err.status === 404;
+      return Object.assign({
+        SerialNumber: String(serialNumber || '').trim().toUpperCase(),
+        Material: '', RequiredPlant: '', RequiredStorageLocation: '', Plant: '', StorageLocation: '', StockType: '', StockTypeText: '',
+        Status: closed ? 'RESERVATION_NOT_OPEN' : 'UNVERIFIED',
+        Available: false,
+        Message: closed ? err.message : `Reservation ${ref.ReservationNo} item ${ref.ReservationItem} could not be read from SAP: ${err.message}`,
+        VerifiedAt: new Date().toISOString()
+      }, ref);
+    }
+    const status = await this.stockUnits.getSerialStatus(item.Material, item.Plant, item.StorageLocation || storageLocation, serialNumber);
+    return Object.assign(status, ref);
+  }
+
   /** Whether the material has a serial number profile in the plant (MARC-SERNP). */
   async isSerialManaged(material, plant) {
     return this.stockUnits.isSerialManaged(material, plant);

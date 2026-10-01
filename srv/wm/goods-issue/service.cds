@@ -471,6 +471,32 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         reservationItem : String(4)
     ) returns StockUnitResolution;
 
+    // Live SAP status of one scanned serial number for one open reservation item.
+    type SerialVerification {
+        SerialNumber            : String(18);
+        ReservationNo           : String(10);
+        ReservationItem         : String(4);
+        Material                : String(40);
+        RequiredPlant           : String(4);
+        RequiredStorageLocation : String(4);
+        Status                  : String(30);
+        Available               : Boolean;
+        Message                 : String(500);
+        Plant                   : String(4);
+        StorageLocation         : String(4);
+        StockType               : String(2);
+        StockTypeText           : String(60);
+        VerifiedAt              : Timestamp;
+    };
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function verifySerialNumber(
+        serialNumber    : String(18),
+        reservationNo   : String(10),
+        reservationItem : String(4),
+        storageLocation : String(4)
+    ) returns SerialVerification;
+
     type StockUnitListItem {
         StorageUnit     : String(20);
         Warehouse       : String(3);

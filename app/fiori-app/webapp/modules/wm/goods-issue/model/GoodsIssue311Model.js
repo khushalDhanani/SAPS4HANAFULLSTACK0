@@ -104,6 +104,12 @@
                 isSerialManaged: false,
                 serialInput: "",
                 serialNumbers: [],
+                // SAP verification per scanned serial: { "<serial>": { available, status, text, verifiedAt } }.
+                // A serial is only in serialNumbers after SAP confirmed it for the current reservation item.
+                serialStatus: {},
+                serialVerifying: false,
+                serialScanState: "None",     // result of the last scan: Success | Error | Warning
+                serialScanText: "",
 
                 // Reservation Item lookup state
                 itemLoading: false,
@@ -319,6 +325,11 @@
                             bValid = false;
                             break;
                         }
+                        if (!(oData.serialStatus && oData.serialStatus[sn] && oData.serialStatus[sn].available)) {
+                            errors.serials = "Serial number '" + sn + "' is not verified with SAP - scan it again";
+                            bValid = false;
+                            break;
+                        }
                         seen[sn] = true;
                     }
                 }
@@ -354,6 +365,11 @@
             oData.unit = oItem.Unit || "";
             oData.isUnitEditable = !oItem.Unit;
             oData.isSerialManaged = !!oItem.IsSerialManaged;
+            // Serials are verified against ONE reservation item: a different item starts empty.
+            oData.serialNumbers = [];
+            oData.serialStatus = {};
+            oData.serialScanState = "None";
+            oData.serialScanText = "";
             oData.isBatchManaged = !!(oItem.IsBatchManaged || oItem.Batch || (oItem.BatchStatusText && oItem.BatchStatusText !== "NO BATCH"));
             oData.batch = oItem.Batch || "";
             oData.openQty = (oItem.OpenQty !== undefined && oItem.OpenQty !== null) ? oItem.OpenQty : null;
@@ -406,7 +422,10 @@
          */
         removeSerialNumber: function (oData, nIndex) {
             if (Array.isArray(oData.serialNumbers) && nIndex >= 0 && nIndex < oData.serialNumbers.length) {
-                oData.serialNumbers.splice(nIndex, 1);
+                var sRemoved = oData.serialNumbers.splice(nIndex, 1)[0];
+                if (oData.serialStatus) {
+                    delete oData.serialStatus[sRemoved];
+                }
             }
         },
 

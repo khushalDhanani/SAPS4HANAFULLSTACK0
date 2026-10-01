@@ -86,8 +86,12 @@ describe('311 screen model - Complete stays disabled until serials == quantity',
     GoodsIssue311Model.addSerialNumber(d, '110');
     expect(GoodsIssue311Model.validate(d).isValid).toBe(false);
     GoodsIssue311Model.addSerialNumber(d, '111');
+    expect(GoodsIssue311Model.validate(d).isValid).toBe(false); // listed but not verified with SAP
+    d.serialStatus = { 110: { available: true }, 111: { available: true } };
     expect(GoodsIssue311Model.validate(d).isValid).toBe(true);
     expect(GoodsIssue311Model.toBackendPayload(d).SerialNumbers).toEqual(['110', '111']);
+    GoodsIssue311Model.removeSerialNumber(d, 0);
+    expect(d.serialStatus).toEqual({ 111: { available: true } });
   });
 
   test('non-serial item needs no serials', () => {
@@ -174,5 +178,78 @@ describe('OpenReservations (301/311 list) carries issuing and receiving storage 
     const a = adapter(() => Promise.resolve(headers));
     await new GoodsIssueReservationsClient({ adapter: a }).getOpenReservations('261');
     expect(a._get.mock.calls.some(([p]) => p.includes('C_ReservationDocTP_F4839'))).toBe(false);
+  });
+});
+
+describe('live SAP serial status (getSerialStatus / verifySerialForReservation)', () => {
+  const inStock = { Material: '8000009802', SerialNumber: '0FGC3NJR500011', Plant: '1150', StorageLocation: 'CS02', InventoryStockType: '01', InventoryStockType_Text: 'Unrestricted-Use Stock', InventorySpecialStockType: '' };
+  const client = (odata, rfc) => new GoodsIssueStockUnitClient({ adapter: { _get: jest.fn(odata) }, rfc: rfc || { readTable: jest.fn().mockResolvedValue([]) } });
+  const forMaterial = (rows, others = []) => (_path, q) => Promise.resolve(decodeURIComponent(q).includes('and Material eq') ? rows : others);
+  const status = (c, sloc = 'CS02', plant = '1150') => c.getSerialStatus('8000009802', plant, sloc, ' 0fgc3njr500011\n');
+
+  test('in unrestricted stock at the required plant / storage location -> AVAILABLE (exact serial, material filter)', async () => {
+    const c = client(forMaterial([inStock]));
+    await expect(status(c)).resolves.toMatchObject({ Status: 'AVAILABLE', Available: true, SerialNumber: '0FGC3NJR500011', Plant: '1150', StorageLocation: 'CS02', StockType: '01' });
+    expect(decodeURIComponent(c.adapter._get.mock.calls[0][1])).toContain("SerialNumber eq '0FGC3NJR500011' and Material eq '8000009802'");
+  });
+
+  test.each([
+    ['OTHER_PLANT', { Plant: '1110', StorageLocation: '', InventoryStockType: '06', InventoryStockType_Text: 'Stock in Transit' }],
+    ['OTHER_STORAGE_LOCATION', { StorageLocation: 'FG01' }],
+    ['NOT_UNRESTRICTED', { InventoryStockType: '02', InventoryStockType_Text: 'Quality Inspection' }],
+    ['SPECIAL_STOCK', { InventorySpecialStockType: 'K' }],
+    ['UNVERIFIED', { InventoryStockType: '' }]
+  ])('%s is reported from the SAP record, never as available', async (Status, overrides) => {
+    await expect(status(client(forMaterial([{ ...inStock, ...overrides }])))).resolves.toMatchObject({ Status, Available: false });
+  });
+
+  test('in stock for another material -> OTHER_MATERIAL', async () => {
+    const c = client(forMaterial([], [{ ...inStock, Material: '8000009803' }]));
+    await expect(status(c)).resolves.toMatchObject({ Status: 'OTHER_MATERIAL', Available: false });
+  });
+
+  test('not in stock but known to SAP without status ESTO -> NOT_IN_STOCK; unknown -> NOT_FOUND', async () => {
+    const issued = { readTable: jest.fn((t) => Promise.resolve(t === 'EQUI' ? [{ EQUNR: '10000123' }] : [])) };
+    await expect(status(client(forMaterial([]), issued))).resolves.toMatchObject({ Status: 'NOT_IN_STOCK', Available: false });
+    await expect(status(client(forMaterial([])))).resolves.toMatchObject({ Status: 'NOT_FOUND', Available: false });
+  });
+
+  test.each([
+    ['the SAP stock read fails', () => Promise.reject(new Error('HTTP 503')), undefined],
+    ['the serial master read fails', forMaterial([]), { readTable: jest.fn().mockRejectedValue(new Error('RFC down')) }],
+    ['SAP is contradictory (ESTO without a stock record)', forMaterial([]), { readTable: jest.fn((t) => Promise.resolve(t === 'EQUI' ? [{ EQUNR: '1' }] : [{ STAT: 'I0184' }])) }]
+  ])('%s -> UNVERIFIED, never available', async (_label, odata, rfc) => {
+    await expect(status(client(odata, rfc))).resolves.toMatchObject({ Status: 'UNVERIFIED', Available: false });
+  });
+
+  describe('against the reservation item', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    test('material / plant / storage location come from the reservation in SAP, not from the caller', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '8000009802', Plant: '1150', StorageLocation: 'CS02', OpenQty: 1 });
+      const spy = jest.spyOn(GoodsIssueAdapter.stockUnits, 'getSerialStatus').mockResolvedValue({ Status: 'AVAILABLE', Available: true });
+      const r = await GoodsIssueAdapter.verifySerialForReservation('0FGC3NJR500011', '520235', '1', 'XXXX');
+      expect(spy).toHaveBeenCalledWith('8000009802', '1150', 'CS02', '0FGC3NJR500011');
+      expect(r).toMatchObject({ Status: 'AVAILABLE', ReservationNo: '520235', ReservationItem: '0001' });
+    });
+
+    test.each([[404, 'RESERVATION_NOT_OPEN'], [502, 'UNVERIFIED']])('reservation read error %s -> %s without asking for the serial', async (httpStatus, Status) => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockRejectedValue(Object.assign(new Error('reservation read'), { status: httpStatus }));
+      const spy = jest.spyOn(GoodsIssueAdapter.stockUnits, 'getSerialStatus');
+      await expect(GoodsIssueAdapter.verifySerialForReservation('SN1', '520235', '0001', '')).resolves.toMatchObject({ Status, Available: false });
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('311 / 301 serial status is bound to the SAP verification, not to a fixed text', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const dir = path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue/view');
+  test.each(['301', '311'])('GoodsIssue%s.view.xml', (n) => {
+    const xml = fs.readFileSync(path.join(dir, `GoodsIssue${n}.view.xml`), 'utf8');
+    expect(xml).not.toContain('SerialPendingStockVerify');
+    expect(xml).toContain(`text="{parts: [{path: 'gi${n}>'}, {path: 'gi${n}>/serialStatus'}], formatter: '.formatSerialStatusText'}"`);
+    expect(xml).toContain(`text="{gi${n}>/serialScanText}"`);
   });
 });
