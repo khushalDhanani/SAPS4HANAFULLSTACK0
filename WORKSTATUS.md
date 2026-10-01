@@ -4,6 +4,55 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 09:53 IST
+- **Agent**: Claude Code
+- **Request**: Approved — apply all four Movement 201 scan fixes in one pass (port the 261 count-vs-quantity and batch-capture fix, surface the scan-incomplete message, add Quantity/Batch columns).
+- **Changes**:
+  - `GoodsIssue201Model.js`: new `scannedQty(oData)` (serial covers 1, storage unit covers the stock it holds; unknown stock counts as 1). `validate` requires scanned quantity >= required instead of unit count === required; `errors.scan` is now part of the errors object. `applyScanResolution` stores `qty`, `unit`, `batch` per unit, fills `batch`/`isBatchManaged` from the first matched unit, rejects a unit from a different batch, and uses covered quantity for "quantity exceeded". Added `scannedQty` to the initial data.
+  - `GoodsIssue201.controller.js`: required quantity is the open quantity without flooring; batch written to the model after a scan; `_validateLive` keeps `/scannedQty` current.
+  - `GoodsIssue201.view.xml`: progress shows covered / required quantity with unit; new warning strip bound to `errors/scan` explains why Complete is disabled; scanned-units table gained Quantity and Batch columns.
+  - `i18n.properties`, `i18n_en.properties`: `gi201ScanColQty`, `gi201ScanColBatch`.
+  - `test/unit/wm/goodsIssue201Scan.test.js`: 2 new tests (full-quantity unit covers the line and captures batch; partial units accumulate, different batch and excess rejected).
+- **Resolves**: the open 201 defect documented in the 09:52 entry and Next Steps item 10 (code-level; not yet verified live).
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue201Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssue201Scan.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean.
+  - `cd app/fiori-app && npm run lint`: Success, no findings.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 3.3 s.
+  - `npm test -- test/unit/wm/`: 42 suites passed, 795/795 tests passed.
+  - Live browser run (201 / 493669 and 261 / 518021): **NOT performed** — the built-in browser still redirects to `#/login`.
+  - Live SAP posting for 493669 and 518021: **NOT performed**.
+- **Notes**:
+  - The 261 fixes and the three grid changes were already committed by the user (`0daee2e`, `29c9a5c`, `80433f4`, `68b3380`).
+  - Timestamp correction: the entry below was written as "10:01 IST" and the 201-defect entry as "09:52 IST" without checking the clock; both were written between 09:47 and 09:53 IST.
+- **Current Status**: In Progress — 201 fixes implemented and unit-tested, uncommitted; live verification and postings pending.
+- **Next Steps**: User signs in to the built-in browser pane; run 201 (493669) then 261 (518021) live up to an enabled Complete; post each only after the user's own confirmation; then commit and record the Material Document numbers.
+
+## 2026-10-01 09:52 IST (second entry; time approximate)
+- **Agent**: Claude Code
+- **Request**: Debug `#/wm/goods-issue/cost-center-201?resv=493669` end to end — report first, no fixes and no posting without approval.
+- **Investigation (read-only; local CAP with the mocked dev user; no code changed)**:
+  - `GIItems` for 493669: item 0001, Cost Center 1011202301, Material 8000009790 "IPAD (A16) WI-FI 128GB - SILVER", Plant 1120, SLoc HS01, open 1 NOS, movement 201, no batch.
+  - `CostCenterVH`: 1011202301 = "AIL 8203 Procurement". `MaterialVH`: base unit NOS. `MaterialBatches`: empty (not batch-managed). `revalidateStock`: 6 NOS in 1120/HS01.
+  - `getStockUnitsForItem`: 6 WM storage units (1000054693-98, warehouse W13), 1 NOS each -> storage-unit managed, not serial-managed.
+  - `resolveStockUnit` 1000054693: match (WM_STORAGE_UNIT, 1 NOS, no batch). `resolveStockUnit` 2000018944: rejected with a clear wrong-material message.
+- **Findings**:
+  1. Count-vs-quantity defect (see 09:52 entry) is present in the 201 code but does NOT block this reservation: open quantity is 1 and each storage unit holds 1, so one scan satisfies `scannedUnits.length === requiredScanCount`.
+  2. Batch-from-scan is discarded in `GoodsIssue201Model.applyScanResolution` (line 380) and never written to `/batch` (controller line 292). No effect on this reservation (material not batch-managed); would block a batch-managed 201 line whose reservation carries no batch.
+  3. The scan-incomplete reason (`errors.scan`, `GoodsIssue201Model.js:290`) is not in the initial errors object and is not bound anywhere in `GoodsIssue201.view.xml`, so Complete is simply disabled with no explanation.
+  4. Scanned-units table shows no per-unit quantity/batch (cosmetic; same as 261 issue 5).
+- **Not verified**: on-screen route load/prefill, duplicate / quantity-exceeded / already-issued feedback in the UI, Complete enablement, posting, return to the 201 list, browser console — the built-in browser is still on `#/login`.
+- **Executed Commands & Results**: read-only `curl` GETs listed above (all HTTP 200). No tests run (no code changed).
+- **Current Status**: Reported; awaiting approval for fixes, sign-in for the live UI run, and explicit confirmation before any posting.
+- **Next Steps**: On approval, port the 261 fix to 201 (findings 1, 2, 4) and surface the scan-incomplete message (finding 3).
+
 ## 2026-10-01 09:52 IST
 - **Agent**: Claude Code
 - **Request**: Document (do not fix) the Movement 201 scan count-vs-quantity defect so it is not rediscovered blind.
@@ -7253,3 +7302,4 @@ The table below provides a strict, unambiguous separation between **Code Complet
 
 10. OPEN DEFECT (not fixed): Movement 201 scan-to-complete compares the number of scanned units to the open quantity (`GoodsIssue201.controller.js:260`, `GoodsIssue201Model.js:286-289`), so storage-unit lines with quantity > 1 can never be completed. Port the 261 fix from the 2026-10-01 09:47 entry. See the 2026-10-01 09:52 entry.
 11. Movement 261 follow-ups (scoped, not fixed): Header Text is dropped before posting (`GoodsIssue261Service.js:48`, `service.cds:283`); unknown-barcode scans show the raw EWM diagnostic text (`GoodsIssueStockUnitClient.js:473`).
+    - Update 2026-10-01 09:53 IST: item 10 fixed in code and unit-tested (see the 09:53 entry); uncommitted and not yet verified live.

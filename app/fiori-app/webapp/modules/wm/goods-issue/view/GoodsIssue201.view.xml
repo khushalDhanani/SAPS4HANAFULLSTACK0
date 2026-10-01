@@ -368,8 +368,8 @@
                                 <ObjectStatus
                                     id="osScanProgress"
                                     title="{i18n>gi201ScanProgress}"
-                                    text="{= ${gi201>/scannedUnits}.length + ' / ' + ${gi201>/requiredScanCount} }"
-                                    state="{= ${gi201>/scannedUnits}.length === ${gi201>/requiredScanCount} ? 'Success' : 'Warning' }" />
+                                    text="{= ${gi201>/scannedQty} + ' / ' + ${gi201>/requiredScanCount} + ' ' + ${gi201>/unit} }"
+                                    state="{= ${gi201>/scannedQty} >= ${gi201>/requiredScanCount} ? 'Success' : 'Warning' }" />
                             </Toolbar>
                         </headerToolbar>
                         <VBox class="sapUiSmallMargin">
@@ -395,6 +395,13 @@
                                 showIcon="true"
                                 visible="{= ${gi201>/lastScanState} !== 'None' }"
                                 class="sapUiTinyMarginBottom" />
+                            <MessageStrip
+                                id="msScanIncomplete"
+                                text="{gi201>/errors/scan}"
+                                type="Warning"
+                                showIcon="true"
+                                visible="{= !!${gi201>/errors/scan} }"
+                                class="sapUiTinyMarginBottom" />
                             <Table
                                 id="tblScannedUnits"
                                 items="{gi201>/scannedUnits}"
@@ -406,6 +413,8 @@
                                 <columns>
                                     <Column id="colScanUnit"><Text text="{i18n>gi201ScanColUnit}" /></Column>
                                     <Column id="colScanMaterial"><Text text="{i18n>gi201ScanColMaterial}" /></Column>
+                                    <Column id="colScanQty" hAlign="End"><Text text="{i18n>gi201ScanColQty}" /></Column>
+                                    <Column id="colScanBatch"><Text text="{i18n>gi201ScanColBatch}" /></Column>
                                     <Column id="colScanKind" hAlign="End"><Text text="{i18n>gi201ScanColKind}" /></Column>
                                 </columns>
                                 <items>
@@ -413,6 +422,8 @@
                                         <cells>
                                             <Text text="{= ${gi201>serial} ? ${gi201>serial} : ${gi201>barcode} }" />
                                             <Text text="{gi201>material}" />
+                                            <Text text="{= ${gi201>qty} ? ${gi201>qty} + ' ' + ${gi201>unit} : '—' }" />
+                                            <Text text="{= ${gi201>batch} || '—' }" />
                                             <ObjectStatus
                                                 text="{= ${gi201>isSerial} ? ${i18n>gi201ScanKindSerial} : ${i18n>gi201ScanKindSU} }"
                                                 state="Information" />

@@ -71,3 +71,29 @@ describe('GoodsIssue201Model.applyScanResolution', () => {
     expect(data.scannedUnits).toHaveLength(1);
   });
 });
+
+describe('GoodsIssue201Model storage-unit quantity coverage', () => {
+  const su = (qty, batch) => ({ SuExists: true, Material: 'M1', IsSerialManaged: false, SuStockQty: qty, BaseUnit: 'KG', DeterminedBatch: batch });
+  const line = (overrides) => Object.assign({ material: 'M1', requiredScanCount: 100, scannedUnits: [], scanEnabled: true }, overrides || {});
+
+  test('one storage unit holding the full quantity covers the line and captures its batch', () => {
+    const data = line();
+    expect(GoodsIssue201Model.validate(data).errors.scan).toMatch(/Scan 100 unit/);
+    const res = GoodsIssue201Model.applyScanResolution(data, su(100, 'B1'), 'SU1');
+    expect(res.ok).toBe(true);
+    expect(data.scannedUnits[0]).toMatchObject({ qty: 100, unit: 'KG', batch: 'B1' });
+    expect(GoodsIssue201Model.scannedQty(data)).toBe(100);
+    expect(data.batch).toBe('B1');
+    expect(data.isBatchManaged).toBe(true);
+    expect(GoodsIssue201Model.validate(data).errors.scan).toBe('');
+  });
+
+  test('partial units accumulate, then excess and a different batch are rejected', () => {
+    const data = line();
+    GoodsIssue201Model.applyScanResolution(data, su(40, 'B1'), 'SU1');
+    expect(GoodsIssue201Model.validate(data).errors.scan).toMatch(/40 scanned/);
+    expect(GoodsIssue201Model.applyScanResolution(data, su(60, 'B2'), 'SU2').text).toMatch(/batch B2/);
+    expect(GoodsIssue201Model.applyScanResolution(data, su(60, 'B1'), 'SU3').ok).toBe(true);
+    expect(GoodsIssue201Model.applyScanResolution(data, su(60, 'B1'), 'SU4').text).toMatch(/exceeded/i);
+  });
+});

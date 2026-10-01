@@ -99,8 +99,9 @@
                 scanEnabled: false,
                 scanUnitKind: "",           // "SERIAL" | "SU" (derived per scan) - label only
                 scanInput: "",
-                scannedUnits: [],           // [{ barcode, material, serial, isSerial }]
-                requiredScanCount: 0,
+                scannedUnits: [],           // [{ key, barcode, material, serial, isSerial, qty, unit, batch }]
+                scannedQty: 0,              // quantity covered by scannedUnits (see scannedQty())
+                requiredScanCount: 0,       // quantity the scans must cover (open reservation quantity)
                 lastScanState: "None",      // MessageStrip state: Success | Error | Warning | None
                 lastScanText: "",
 
@@ -129,7 +130,8 @@
                     postingDate: "",
                     documentDate: "",
                     batch: "",
-                    serials: ""
+                    serials: "",
+                    scan: ""
                 },
                 isValid: false
             };
@@ -163,7 +165,8 @@
                 postingDate: "",
                 documentDate: "",
                 batch: "",
-                serials: ""
+                serials: "",
+                scan: ""
             };
             var bValid = true;
 
@@ -282,11 +285,11 @@
                 }
             }
 
-            // 10. Scan-to-complete (unit-managed reservations): every required unit must be scanned.
+            // 10. Scan-to-complete (unit-managed reservations): the scanned units must cover the quantity.
             if (oData.scanEnabled) {
-                var nScanned = Array.isArray(oData.scannedUnits) ? oData.scannedUnits.length : 0;
+                var nScanned = this.scannedQty(oData);
                 var nReq = Number(oData.requiredScanCount) || 0;
-                if (nScanned !== nReq) {
+                if (nScanned < nReq) {
                     errors.scan = "Scan " + nReq + " unit(s) to complete this reservation (" + nScanned + " scanned).";
                     bValid = false;
                 }
@@ -374,13 +377,39 @@
             if (aScanned.some(function (u) { return u.key === sKey; })) {
                 return { ok: false, state: "Warning", text: "Unit " + sKey + " was already scanned." };
             }
-            if (aScanned.length >= nRequired) {
-                return { ok: false, state: "Warning", text: "Quantity exceeded: " + nRequired + " unit(s) already scanned for this line." };
+            if (this.scannedQty(oData) >= nRequired) {
+                return { ok: false, state: "Warning", text: "Quantity exceeded: " + nRequired + " already covered by the scanned unit(s) for this line." };
             }
-            aScanned.push({ key: sKey, barcode: sScan, material: sResMat, serial: sSerial, isSerial: !!oRes.IsSerialManaged });
+            // One goods issue line posts one batch: a unit from another batch cannot be mixed in.
+            var sUnitBatch = String(oRes.DeterminedBatch || "").trim().toUpperCase();
+            var sLineBatch = String(oData.batch || "").trim().toUpperCase();
+            if (sUnitBatch && sLineBatch && sUnitBatch !== sLineBatch) {
+                return { ok: false, state: "Error", text: "Unit " + sKey + " is batch " + sUnitBatch + ", but this issue is for batch " + sLineBatch + "." };
+            }
+            var nUnitQty = Number(oRes.SuStockQty != null ? oRes.SuStockQty : oRes.CurrentStock) || 0;
+            aScanned.push({
+                key: sKey, barcode: sScan, material: sResMat, serial: sSerial, isSerial: !!oRes.IsSerialManaged,
+                qty: nUnitQty, unit: oRes.BaseUnit || "", batch: sUnitBatch
+            });
             oData.scannedUnits = aScanned;
+            if (sUnitBatch && !sLineBatch) {
+                oData.batch = sUnitBatch;
+                oData.isBatchManaged = true;
+            }
             var sLabel = sSerial ? ("serial " + sSerial) : ("unit " + sKey);
-            return { ok: true, state: "Success", text: "Matched " + sLabel + " (" + aScanned.length + " of " + nRequired + ")." };
+            return { ok: true, state: "Success", text: "Matched " + sLabel + " (" + this.scannedQty(oData) + " of " + nRequired + ")." };
+        },
+
+        /**
+         * Quantity covered by the scanned units: a serial covers 1, a storage unit covers the stock
+         * it holds (a unit whose stock is unknown counts as 1).
+         * @param {Object} oData model data
+         * @returns {number}
+         */
+        scannedQty: function (oData) {
+            return (Array.isArray(oData.scannedUnits) ? oData.scannedUnits : []).reduce(function (nSum, u) {
+                return nSum + (!u.isSerial && u.qty > 0 ? u.qty : 1);
+            }, 0);
         },
 
         toBackendPayload: function (oData) {
