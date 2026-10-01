@@ -4,8 +4,8 @@
     <Dialog
         id="dlgReturnItems"
         title="{i18n>returnItemsDialogTitle} - {customerReturnsView>/selectedReturnNumber}"
-        contentWidth="850px"
-        contentHeight="480px"
+        contentWidth="53.125rem"
+        contentHeight="30rem"
         resizable="true"
         draggable="true">
         <content>

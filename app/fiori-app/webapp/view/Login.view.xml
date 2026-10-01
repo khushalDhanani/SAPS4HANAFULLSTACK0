@@ -17,7 +17,7 @@
                 alignItems="Center"
                 justifyContent="Center">
                 
-                <Panel id="loginPanel" width="400px" class="sapUiResponsiveMargin">
+                <Panel id="loginPanel" width="25rem" class="sapUiResponsiveMargin loginPanel">
                     <headerToolbar>
                         <Toolbar>
                             <core:Icon src="sap-icon://dimension" />

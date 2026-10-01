@@ -6,7 +6,7 @@
         id="journalEntryDetailDialog"
         title="{i18n>fiDialogTitle} — {fiService>AccountingDocument}"
         type="Message"
-        contentWidth="520px"
+        contentWidth="32.5rem"
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiSmallMargin">

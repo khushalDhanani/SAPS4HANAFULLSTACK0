@@ -8,9 +8,6 @@
 
     <Page
         id="pageGoodsIssue301"
-        title="{i18n>gi301PageTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         busy="{gi301>/busy}"
         busyIndicatorDelay="0"
         class="sapUiSizeCompact">
@@ -300,7 +297,7 @@
                             <columns>
                                 <Column id="colSerialIndex301" width="4rem"><Text text="#" /></Column>
                                 <Column id="colSerialNumber301"><Text text="{i18n>gi301ColSerialNumber}" /></Column>
-                                <Column id="colSerialStatus301" width="10rem"><Text text="{i18n>gi301ColSerialStatus}" /></Column>
+                                <Column id="colSerialStatus301" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" width="10rem"><Text text="{i18n>gi301ColSerialStatus}" /></Column>
                                 <Column id="colSerialAction301" width="4rem" hAlign="End"><Text text="" /></Column>
                             </columns>
                             <items>

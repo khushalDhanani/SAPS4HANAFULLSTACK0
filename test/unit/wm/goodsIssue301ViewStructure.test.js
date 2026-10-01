@@ -13,6 +13,7 @@ describe('Movement 301: View Structure, Declarative Bindings & Manifest Contract
     const sI18nEnPath = path.join(__dirname, '../../../app/fiori-app/webapp/i18n/i18n_en.properties');
 
     const sPendingXml = fs.readFileSync(sPendingViewPath, 'utf8');
+const sAppController = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/App.controller.js'), 'utf8');
     const sExecXml = fs.readFileSync(sExecViewPath, 'utf8');
     const oManifest = JSON.parse(fs.readFileSync(sManifestPath, 'utf8'));
     const sI18n = fs.readFileSync(sI18nPath, 'utf8');
@@ -25,7 +26,9 @@ describe('Movement 301: View Structure, Declarative Bindings & Manifest Contract
         });
 
         test('page title binds strictly to gi301OpenTransfersTitle ("Open Transfers (301)")', () => {
-            expect(sPendingXml).toContain('title="{i18n>gi301OpenTransfersTitle}"');
+            // The title is shown by the application ShellBar (App.controller), like on every other page.
+            expect(sPendingXml).toContain('showHeader="false"');
+            expect(sAppController).toContain('wmGoodsIssue301Pending: "gi301OpenTransfersTitle"');
             expect(sI18n).toContain('gi301OpenTransfersTitle=Open Transfers (301)');
             expect(sI18nEn).toContain('gi301OpenTransfersTitle=Open Transfers (301)');
         });
@@ -73,8 +76,9 @@ describe('Movement 301: View Structure, Declarative Bindings & Manifest Contract
             expect(sPendingXml).toContain('text="{gi301p>/error}"');
         });
 
-        test('navButtonPress binds to onNavBack', () => {
-            expect(sPendingXml).toContain('navButtonPress=".onNavBack"');
+        test('back navigation is owned by the ShellBar (no second back button on the page)', () => {
+            expect(sPendingXml).not.toContain('showNavButton');
+            expect(sAppController).toMatch(/case "wmGoodsIssue301Pending":/);
         });
     });
 

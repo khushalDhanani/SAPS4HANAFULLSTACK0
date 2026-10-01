@@ -9,8 +9,6 @@
 
     <Page
         id="trToPage"
-        title="{i18n>trToPageTitle}"
-        showNavButton="false"
         class="sapUiSizeCompact">
 
         <headerContent>
@@ -158,7 +156,7 @@
                         <form:content>
 
                             <!-- COLUMN 1: MATERIAL & BATCH SPECIFICATION -->
-                            <core:Title text="Material Specification" />
+                            <core:Title text="{i18n>trToMaterialSpecification}" />
 
                             <!-- FIELD: Mate (Material Number) -->
                             <Label text="{i18n>trToLabelMate}" />
@@ -182,7 +180,7 @@
                                 editable="false" />
 
                             <!-- COLUMN 2: QUANTITY & DESTINATION -->
-                            <core:Title text="Stock &amp; Destination" />
+                            <core:Title text="{i18n>trToStockDestination}" />
 
                             <!-- FIELD: OQty (Open Quantity) -->
                             <Label text="{i18n>trToLabelOQty}" />
@@ -191,7 +189,7 @@
                                     id="inputOQty"
                                     value="{trToView>/openQty}"
                                     editable="false"
-                                    width="140px"
+                                    width="9rem"
                                     class="sapUiTinyMarginEnd" />
                                 <Text text="{trToView>/unit}" />
                             </HBox>
@@ -203,7 +201,7 @@
                                     id="inputSQty"
                                     value="{trToView>/scanQty}"
                                     type="Number"
-                                    width="140px"
+                                    width="9rem"
                                     change=".onQtyChange"
                                     class="sapUiTinyMarginEnd" />
                                 <Text text="{trToView>/unit}" class="sapUiTinyMarginEnd" />
@@ -221,9 +219,9 @@
                                     id="inputDestBin"
                                     value="{trToView>/destBin}"
                                     editable="false"
-                                    width="140px"
+                                    width="9rem"
                                     class="sapUiTinyMarginEnd" />
-                                <Text text="Type: " class="sapUiTinyMarginEnd" />
+                                <Text text="{i18n>trToType}" class="sapUiTinyMarginEnd" />
                                 <Text text="{trToView>/destType}" />
                             </HBox>
 
@@ -241,15 +239,16 @@
                     class="sapUiSmallMarginBottom">
                     <Table
                         id="tableTrItems"
+                        noDataText="{i18n>noDataText}"
                         items="{trToView>/items}"
                         mode="SingleSelectMaster"
                         selectionChange=".onItemSelectionChange">
                         <columns>
-                            <Column width="3.5rem"><Text text="Item" /></Column>
-                            <Column><Text text="Material / Description" /></Column>
-                            <Column width="6rem" hAlign="End"><Text text="Open Qty" /></Column>
-                            <Column width="4.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="UoM" /></Column>
-                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="Dest Bin" /></Column>
+                            <Column width="3.5rem"><Text text="{i18n>trToItem}" /></Column>
+                            <Column><Text text="{i18n>trToMaterialDescription}" /></Column>
+                            <Column width="6rem" hAlign="End"><Text text="{i18n>trToOpenQty}" /></Column>
+                            <Column width="4.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>trToUoM}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>trToDestBin}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -277,7 +276,7 @@
                 <!-- F3: Back -->
                 <Button
                     id="btnF3Back"
-                    text="F3 Back"
+                    text="{i18n>trToF3Back}"
                     icon="sap-icon://nav-back"
                     press=".onNavBack" />
 
@@ -286,7 +285,7 @@
                 <!-- F1: Clear All -->
                 <Button
                     id="btnF1Clear"
-                    text="F1 Clear"
+                    text="{i18n>trToF1Clear}"
                     icon="sap-icon://clear-all"
                     type="Reject"
                     press=".onClearAll"
@@ -295,7 +294,7 @@
                 <!-- F2: Create Transfer Order -->
                 <Button
                     id="btnF2Create"
-                    text="F2 Create TO"
+                    text="{i18n>trToF2CreateTO}"
                     icon="sap-icon://accept"
                     type="Emphasized"
                     enabled="{= !!${trToView>/canCreateTO} }"

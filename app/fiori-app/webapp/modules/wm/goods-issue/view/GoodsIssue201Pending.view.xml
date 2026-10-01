@@ -7,9 +7,7 @@
 
     <Page
         id="pageGi201Pending"
-        title="{i18n>gi201OpenResvTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack">
+        showHeader="false">
         <content>
             <MessageStrip
                 id="msPending201Result"
@@ -50,8 +48,8 @@
                 <columns>
                     <Column id="colPendingResv"><Text text="{i18n>gi201OpenResvColReservation}" /></Column>
                     <Column id="colPendingMaterial"><Text text="{i18n>gi201OpenResvColMaterial}" /></Column>
-                    <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi201OpenResvColPlant}" /></Column>
-                    <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi201OpenResvColItems}" /></Column>
+                    <Column id="colPendingPlant" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="Begin"><Text text="{i18n>gi201OpenResvColPlant}" /></Column>
+                    <Column id="colPendingItems" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>gi201OpenResvColItems}" /></Column>
                 </columns>
                 <items>
                     <ColumnListItem type="Navigation" press=".onOpenReservation">

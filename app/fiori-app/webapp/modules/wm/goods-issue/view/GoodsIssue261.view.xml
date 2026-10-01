@@ -8,9 +8,6 @@
 
     <Page
         id="pageGoodsIssue261"
-        title="{i18n>gi261PageTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         busy="{gi261>/busy}"
         busyIndicatorDelay="0"
         class="sapUiSizeCompact">
@@ -315,10 +312,10 @@
                             delete=".onDeleteScannedUnit">
                             <columns>
                                 <Column id="colScanUnit261"><Text text="{i18n>gi261ScanColUnit}" /></Column>
-                                <Column id="colScanMaterial261"><Text text="{i18n>gi261ScanColMaterial}" /></Column>
+                                <Column id="colScanMaterial261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261ScanColMaterial}" /></Column>
                                 <Column id="colScanQty261" hAlign="End"><Text text="{i18n>gi261ScanColQty}" /></Column>
-                                <Column id="colScanBatch261"><Text text="{i18n>gi261ScanColBatch}" /></Column>
-                                <Column id="colScanKind261" hAlign="End"><Text text="{i18n>gi261ScanColKind}" /></Column>
+                                <Column id="colScanBatch261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261ScanColBatch}" /></Column>
+                                <Column id="colScanKind261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>gi261ScanColKind}" /></Column>
                             </columns>
                             <items>
                                 <ColumnListItem>
@@ -381,7 +378,7 @@
                             <columns>
                                 <Column id="colSerialIndex261" width="4rem"><Text text="#" /></Column>
                                 <Column id="colSerialNumber261"><Text text="{i18n>gi261ColSerialNumber}" /></Column>
-                                <Column id="colSerialStatus261" width="10rem"><Text text="{i18n>gi261ColSerialStatus}" /></Column>
+                                <Column id="colSerialStatus261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" width="10rem"><Text text="{i18n>gi261ColSerialStatus}" /></Column>
                                 <Column id="colSerialAction261" width="4rem" hAlign="End"><Text text="" /></Column>
                             </columns>
                             <items>

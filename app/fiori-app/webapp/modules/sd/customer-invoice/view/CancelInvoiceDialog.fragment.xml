@@ -8,7 +8,7 @@
         title="{i18n>cancelInvoiceDialogTitle}"
         type="Message"
         state="Warning"
-        contentWidth="450px">
+        contentWidth="28.125rem">
 
         <content>
             <VBox class="sapUiSmallMargin">

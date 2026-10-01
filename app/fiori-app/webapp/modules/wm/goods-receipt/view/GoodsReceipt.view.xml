@@ -9,9 +9,6 @@
 
     <Page
         id="goodsReceiptPage"
-        title="{i18n>grTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         class="sapUiSizeCompact">
 
         <headerContent>
@@ -88,7 +85,8 @@
                                     sorter: { path: 'DeliveryDocument' }
                                 }"
                                 change=".onSelectInboundDelivery"
-                                width="340px">
+                                width="21rem"
+                                maxWidth="100%">
                                 <core:Item
                                     key="{grView>DeliveryDocument}"
                                     text="{grView>DeliveryDocument} - {grView>MaterialName} ({grView>SupplierName})" />
@@ -201,7 +199,7 @@
                                         id="inputReceiptQty"
                                         type="Number"
                                         value="{grView>/activeSU/Quantity}"
-                                        width="140px"
+                                        width="9rem"
                                         class="sapUiTinyMarginEnd" />
                                     <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold sapUiSmallMarginEnd" />
                                     <Text

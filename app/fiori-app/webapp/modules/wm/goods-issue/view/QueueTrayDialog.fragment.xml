@@ -4,8 +4,8 @@
     <Dialog
         id="queueTrayDialog"
         title="{i18n>wmGIQueueTrayTitle}"
-        contentWidth="850px"
-        contentHeight="550px"
+        contentWidth="53.125rem"
+        contentHeight="34.375rem"
         resizable="true"
         draggable="true"
         class="sapUiSizeCompact">

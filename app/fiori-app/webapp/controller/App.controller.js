@@ -1,7 +1,8 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
-    "sap/ui/model/json/JSONModel"
-], function (BaseController, JSONModel) {
+    "sap/ui/model/json/JSONModel",
+    "sap/ui/core/Messaging"
+], function (BaseController, JSONModel, Messaging) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.controller.App", {
@@ -77,6 +78,70 @@ sap.ui.define([
             var sRouteName = oEvent.getParameter("name");
             var oArgs = oEvent.getParameter("arguments");
             this._updateShell(sRouteName, oArgs);
+            this._attachListErrorStates(oEvent.getParameter("view"));
+        },
+
+        /**
+         * A failed OData read must not look like "no data": every table of the displayed page that is
+         * bound to an OData V4 list shows the load error in its no-data area until a read succeeds.
+         * A read that fails before the request is sent (e.g. $metadata rejected) raises no dataReceived
+         * event; the model reports it as a technical message, so both sources are observed.
+         */
+        _attachListErrorStates: function (oView) {
+            if (!oView || typeof oView.findAggregatedObjects !== "function") {
+                return;
+            }
+            var that = this;
+            oView.findAggregatedObjects(true, function (oControl) {
+                return oControl.isA && oControl.isA("sap.m.Table");
+            }).forEach(function (oTable) {
+                var oBinding = oTable.getBinding("items");
+                if (!oBinding || oBinding._bLoadErrorState || !oBinding.isA("sap.ui.model.odata.v4.ODataListBinding")) {
+                    return;
+                }
+                oBinding._bLoadErrorState = true;
+                var oModel = oBinding.getModel();
+                var sNoData = oTable.getNoDataText();
+                var fnShow = function (sMessage) {
+                    oTable.setNoDataText(sMessage === null ? sNoData : that.getText("listLoadError", [sMessage || ""], "Data could not be loaded: {0}"));
+                };
+                var fnModelErrors = function () {
+                    return Messaging.getMessageModel().getData().filter(function (oMessage) {
+                        return oMessage.getMessageProcessor() === oModel && oMessage.getTechnical() && oMessage.getType() === "Error";
+                    });
+                };
+
+                var aErrors = fnModelErrors();
+                var iSeen = aErrors.length;
+                if (iSeen && !oBinding.isLengthFinal()) {
+                    fnShow(aErrors[iSeen - 1].getMessage()); // the read already failed before this page was shown
+                }
+                oBinding.attachDataReceived(function (oDataEvent) {
+                    var oError = oDataEvent.getParameter("error");
+                    fnShow(oError ? oError.message : null);
+                });
+                // ponytail: one message binding per list table, never released (router views live for the app's lifetime)
+                var oMessages = Messaging.getMessageModel().bindList("/");
+                oMessages.attachChange(function () {
+                    var aNow = fnModelErrors();
+                    if (aNow.length > iSeen) {
+                        fnShow(aNow[aNow.length - 1].getMessage());
+                    }
+                    iSeen = aNow.length;
+                });
+            });
+        },
+
+        /** Goods issue routes: shell title key, and for an execution page the list it returns to. */
+        _mGoodsIssueTitles: {
+            wmGoodsIssue201Pending: "gi201OpenResvTitle",
+            wmGoodsIssue201: "gi201PageTitle",
+            wmGoodsIssue261Pending: "gi261OpenResvTitle",
+            wmGoodsIssue261: "gi261PageTitle",
+            wmGoodsIssue301Pending: "gi301OpenTransfersTitle",
+            wmGoodsIssue301: "gi301PageTitle",
+            wmGoodsIssue311Pending: "gi311OpenTransfersTitle",
+            wmGoodsIssue311: "gi311PageTitle"
         },
 
         _updateShell: function (sRouteName, oArgs) {
@@ -136,6 +201,17 @@ sap.ui.define([
                     break;
                 case "createSalesOrder":
                     sTitle = oBundle ? oBundle.getText("createSalesOrderTitle") : "Create Sales Order (VA01)";
+                    bShowNav = true;
+                    break;
+                case "wmGoodsIssue201Pending":
+                case "wmGoodsIssue201":
+                case "wmGoodsIssue261Pending":
+                case "wmGoodsIssue261":
+                case "wmGoodsIssue301Pending":
+                case "wmGoodsIssue301":
+                case "wmGoodsIssue311Pending":
+                case "wmGoodsIssue311":
+                    sTitle = this.getText(this._mGoodsIssueTitles[sRouteName]);
                     bShowNav = true;
                     break;
                 case "wmGoodsReceipt":
@@ -198,6 +274,8 @@ sap.ui.define([
                 this.onNavBack("salesOrders");
             } else if (sRoute === "createCustomerReturn") {
                 this.onNavBack("customerReturns");
+            } else if (/^wmGoodsIssue\d{3}$/.test(sRoute)) {
+                this.onNavBack(sRoute + "Pending");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {

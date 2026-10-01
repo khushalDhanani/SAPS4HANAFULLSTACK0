@@ -103,24 +103,24 @@
 
                                         <GenericTile
                                             id="tileOverviewCostCenters"
-                                            header="Cost Centers"
-                                            subheader="Controlling Master Data"
+                                            header="{i18n>dashCostCenters}"
+                                            subheader="{i18n>dashControllingMasterData}"
                                             press=".onSelectTabMasterData"
                                             state="{path: 'dashboardView>/costCenterCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Cost Centers">
+                                            <TileContent unit="{i18n>dashCostCenters}">
                                                 <NumericContent value="{path: 'dashboardView>/costCenterCount', formatter: '.formatMetricValue'}" icon="sap-icon://money-bills" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewGLAccounts"
-                                            header="G/L Accounts"
-                                            subheader="Financial Master Data"
+                                            header="{i18n>dashGLAccounts}"
+                                            subheader="{i18n>dashFinancialMasterData}"
                                             press=".onSelectTabMasterData"
                                             state="{path: 'dashboardView>/glAccountCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Accounts">
+                                            <TileContent unit="{i18n>dashAccounts}">
                                                 <NumericContent value="{path: 'dashboardView>/glAccountCount', formatter: '.formatMetricValue'}" icon="sap-icon://ledger" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -154,7 +154,7 @@
                                             press=".onNavigateToPurchaseOrders"
                                             state="{path: 'dashboardView>/supplierCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Suppliers">
+                                            <TileContent unit="{i18n>dashSuppliers}">
                                                 <NumericContent id="kpiSuppliersVal" value="{path: 'dashboardView>/supplierCount', formatter: '.formatMetricValue'}" icon="sap-icon://supplier" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -162,22 +162,22 @@
                                         <GenericTile
                                             id="tileOverviewSD"
                                             header="{i18n>tabSDTitle}"
-                                            subheader="Open Sales Orders"
+                                            subheader="{i18n>dashOpenSalesOrders}"
                                             press=".onSelectTabSD"
                                             state="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Open Orders">
+                                            <TileContent unit="{i18n>dashOpenOrders}">
                                                 <NumericContent value="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-order" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewCreateSalesOrder"
-                                            header="Create Sales Order"
-                                            subheader="New Order (VA01)"
+                                            header="{i18n>dashCreateSalesOrder}"
+                                            subheader="{i18n>dashNewOrderVA01}"
                                             press=".onNavigateToCreateSalesOrder"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Action">
+                                            <TileContent unit="{i18n>dashAction}">
                                                 <NumericContent icon="sap-icon://add" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -185,35 +185,35 @@
                                         <GenericTile
                                             id="tileOverviewEWM"
                                             header="{i18n>tabEWMTitle}"
-                                            subheader="Warehouses"
+                                            subheader="{i18n>dashWarehouses}"
                                             press=".onSelectTabEWM"
                                             state="{path: 'dashboardView>/warehouseCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Warehouses">
+                                            <TileContent unit="{i18n>dashWarehouses}">
                                                 <NumericContent value="{path: 'dashboardView>/warehouseCount', formatter: '.formatMetricValue'}" icon="sap-icon://inventory" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewGoodsIssue"
-                                            header="Goods Issue (261)"
-                                            subheader="Open Reservation Items"
+                                            header="{i18n>dashGoodsIssue261}"
+                                            subheader="{i18n>dashOpenReservationItems}"
                                             press=".onNavigateToGoodsIssue"
                                             state="{path: 'dashboardView>/openReservationCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Reservation Items">
+                                            <TileContent unit="{i18n>dashReservationItems}">
                                                 <NumericContent value="{path: 'dashboardView>/openReservationCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewGoodsReceipt"
-                                            header="Goods Receipt (101)"
-                                            subheader="Inbound Deliveries"
+                                            header="{i18n>dashGoodsReceipt101}"
+                                            subheader="{i18n>dashInboundDeliveries}"
                                             press=".onNavigateToGoodsReceipt"
                                             state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Deliveries">
+                                            <TileContent unit="{i18n>dashDeliveries}">
                                                 <NumericContent value="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatMetricValue'}" icon="sap-icon://inbox" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -266,35 +266,35 @@
                                     <HBox wrap="Wrap" alignItems="Center" class="dashboardTileContainer">
                                         <GenericTile
                                             id="tileOverviewBupaMD"
-                                            header="Business Partners"
-                                            subheader="Central BP Records"
+                                            header="{i18n>dashBusinessPartners}"
+                                            subheader="{i18n>dashCentralBPRecords}"
                                             press=".onSelectTabMasterData"
                                             state="{path: 'dashboardView>/bpCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Partners">
+                                            <TileContent unit="{i18n>dashPartners}">
                                                 <NumericContent value="{path: 'dashboardView>/bpCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewProdMD"
-                                            header="Products"
-                                            subheader="Material Master Records"
+                                            header="{i18n>dashProducts}"
+                                            subheader="{i18n>dashMaterialMasterRecords}"
                                             press=".onSelectTabMasterData"
                                             state="{path: 'dashboardView>/productCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Products">
+                                            <TileContent unit="{i18n>dashProducts}">
                                                 <NumericContent value="{path: 'dashboardView>/productCount', formatter: '.formatMetricValue'}" icon="sap-icon://product" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
 
                                         <GenericTile
                                             id="tileOverviewGateway"
-                                            header="Gateway Services"
-                                            subheader="SAP Gateway Catalog"
+                                            header="{i18n>dashGatewayServices}"
+                                            subheader="{i18n>dashSAPGatewayCatalog}"
                                             state="{path: 'dashboardView>/gatewayCatalogCount', formatter: '.formatTileState'}"
                                             class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Catalog Services">
+                                            <TileContent unit="{i18n>dashCatalogServices}">
                                                 <NumericContent value="{path: 'dashboardView>/gatewayCatalogCount', formatter: '.formatMetricValue'}" icon="sap-icon://sys-monitor" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -324,23 +324,23 @@
                                     expandable="true"
                                     expanded="true">
                                     <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                        <GenericTile header="Business Partners" subheader="Central BP Records" state="{path: 'dashboardView>/bpCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Records">
+                                        <GenericTile header="{i18n>dashBusinessPartners}" subheader="{i18n>dashCentralBPRecords}" state="{path: 'dashboardView>/bpCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashRecords}">
                                                 <NumericContent value="{path: 'dashboardView>/bpCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Suppliers" subheader="Purchasing Suppliers" state="{path: 'dashboardView>/supplierCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Suppliers">
+                                        <GenericTile header="{i18n>dashSuppliers}" subheader="{i18n>dashPurchasingSuppliers}" state="{path: 'dashboardView>/supplierCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashSuppliers}">
                                                 <NumericContent value="{path: 'dashboardView>/supplierCount', formatter: '.formatMetricValue'}" icon="sap-icon://supplier" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Customers" subheader="Sales Customers" state="{path: 'dashboardView>/customerCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Customers">
+                                        <GenericTile header="{i18n>dashCustomers}" subheader="{i18n>dashSalesCustomers}" state="{path: 'dashboardView>/customerCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashCustomers}">
                                                 <NumericContent value="{path: 'dashboardView>/customerCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Purchase Contracts" subheader="Outline Agreements" state="{path: 'dashboardView>/purchaseContractCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Contracts">
+                                        <GenericTile header="{i18n>dashPurchaseContracts}" subheader="{i18n>dashOutlineAgreements}" state="{path: 'dashboardView>/purchaseContractCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashContracts}">
                                                 <NumericContent value="{path: 'dashboardView>/purchaseContractCount', formatter: '.formatMetricValue'}" icon="sap-icon://table-view" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -354,23 +354,23 @@
                                     expandable="true"
                                     expanded="true">
                                     <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                        <GenericTile header="Products" subheader="Material Master Records" state="{path: 'dashboardView>/productCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Products">
+                                        <GenericTile header="{i18n>dashProducts}" subheader="{i18n>dashMaterialMasterRecords}" state="{path: 'dashboardView>/productCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashProducts}">
                                                 <NumericContent value="{path: 'dashboardView>/productCount', formatter: '.formatMetricValue'}" icon="sap-icon://product" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Material Groups" subheader="Product Groups" state="{path: 'dashboardView>/materialGroupCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Groups">
+                                        <GenericTile header="{i18n>dashMaterialGroups}" subheader="{i18n>dashProductGroups}" state="{path: 'dashboardView>/materialGroupCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashGroups}">
                                                 <NumericContent value="{path: 'dashboardView>/materialGroupCount', formatter: '.formatMetricValue'}" icon="sap-icon://add-coursebook" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Purchasing Organizations" subheader="Purchasing Org Units" state="{path: 'dashboardView>/purchasingOrgCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Orgs">
+                                        <GenericTile header="{i18n>dashPurchasingOrganizations}" subheader="{i18n>dashPurchasingOrgUnits}" state="{path: 'dashboardView>/purchasingOrgCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashOrgs}">
                                                 <NumericContent value="{path: 'dashboardView>/purchasingOrgCount', formatter: '.formatMetricValue'}" icon="sap-icon://tree" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Purchasing Groups" subheader="Buyer Groups" state="{path: 'dashboardView>/purchasingGroupCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Groups">
+                                        <GenericTile header="{i18n>dashPurchasingGroups}" subheader="{i18n>dashBuyerGroups}" state="{path: 'dashboardView>/purchasingGroupCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashGroups}">
                                                 <NumericContent value="{path: 'dashboardView>/purchasingGroupCount', formatter: '.formatMetricValue'}" icon="sap-icon://switch-views" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -384,28 +384,28 @@
                                     expandable="true"
                                     expanded="true">
                                     <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                        <GenericTile header="G/L Accounts" subheader="Chart of Accounts" state="{path: 'dashboardView>/glAccountCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="G/L Accounts">
+                                        <GenericTile header="{i18n>dashGLAccounts}" subheader="{i18n>dashChartOfAccounts}" state="{path: 'dashboardView>/glAccountCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashGLAccounts}">
                                                 <NumericContent value="{path: 'dashboardView>/glAccountCount', formatter: '.formatMetricValue'}" icon="sap-icon://lead" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Profit Centers" subheader="Profitability Units" state="{path: 'dashboardView>/profitCenterCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Centers">
+                                        <GenericTile header="{i18n>dashProfitCenters}" subheader="{i18n>dashProfitabilityUnits}" state="{path: 'dashboardView>/profitCenterCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashCenters}">
                                                 <NumericContent value="{path: 'dashboardView>/profitCenterCount', formatter: '.formatMetricValue'}" icon="sap-icon://money-bills" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Cost Centers" subheader="Cost Responsibility Units" state="{path: 'dashboardView>/costCenterCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Centers">
+                                        <GenericTile header="{i18n>dashCostCenters}" subheader="{i18n>dashCostResponsibilityUnits}" state="{path: 'dashboardView>/costCenterCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashCenters}">
                                                 <NumericContent value="{path: 'dashboardView>/costCenterCount', formatter: '.formatMetricValue'}" icon="sap-icon://pie-chart" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Internal Orders" subheader="Controlling Orders" state="{path: 'dashboardView>/internalOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Orders">
+                                        <GenericTile header="{i18n>dashInternalOrders}" subheader="{i18n>dashControllingOrders}" state="{path: 'dashboardView>/internalOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashOrders}">
                                                 <NumericContent value="{path: 'dashboardView>/internalOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://official-service" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="WBS Elements" subheader="Project Structure" state="{path: 'dashboardView>/wbsElementCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="WBS Elements">
+                                        <GenericTile header="{i18n>dashWBSElements}" subheader="{i18n>dashProjectStructure}" state="{path: 'dashboardView>/wbsElementCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashWBSElements}">
                                                 <NumericContent value="{path: 'dashboardView>/wbsElementCount', formatter: '.formatMetricValue'}" icon="sap-icon://project-definition-triangle-2" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -419,23 +419,23 @@
                                     expandable="true"
                                     expanded="true">
                                     <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                        <GenericTile header="Company Codes" subheader="Legal Entities" state="{path: 'dashboardView>/companyCodeCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Company Codes">
+                                        <GenericTile header="{i18n>dashCompanyCodes}" subheader="{i18n>dashLegalEntities}" state="{path: 'dashboardView>/companyCodeCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashCompanyCodes}">
                                                 <NumericContent value="{path: 'dashboardView>/companyCodeCount', formatter: '.formatMetricValue'}" icon="sap-icon://building" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Plants" subheader="Operating Facilities" state="{path: 'dashboardView>/plantCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Plants">
+                                        <GenericTile header="{i18n>dashPlants}" subheader="{i18n>dashOperatingFacilities}" state="{path: 'dashboardView>/plantCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashPlants}">
                                                 <NumericContent value="{path: 'dashboardView>/plantCount', formatter: '.formatMetricValue'}" icon="sap-icon://functional-location" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Storage Locations" subheader="Plant Storage Locations" state="{path: 'dashboardView>/storageLocationCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Locations">
+                                        <GenericTile header="{i18n>dashStorageLocations}" subheader="{i18n>dashPlantStorageLocations}" state="{path: 'dashboardView>/storageLocationCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashLocations}">
                                                 <NumericContent value="{path: 'dashboardView>/storageLocationCount', formatter: '.formatMetricValue'}" icon="sap-icon://inventory" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
-                                        <GenericTile header="Fixed Assets" subheader="Asset Master Records" state="{path: 'dashboardView>/fixedAssetCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="Assets">
+                                        <GenericTile header="{i18n>dashFixedAssets}" subheader="{i18n>dashAssetMasterRecords}" state="{path: 'dashboardView>/fixedAssetCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                            <TileContent unit="{i18n>dashAssets}">
                                                 <NumericContent value="{path: 'dashboardView>/fixedAssetCount', formatter: '.formatMetricValue'}" icon="sap-icon://machine" valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>
@@ -462,7 +462,7 @@
                                 </HBox>
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile header="{i18n>dashboardModuleFI}" subheader="G/L Line Items to Be Verified" press=".onNavigateToJournalEntries" state="{path: 'dashboardView>/fiDocCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                    <GenericTile header="{i18n>dashboardModuleFI}" subheader="{i18n>dashGLLineItemsToBeVerified}" press=".onNavigateToJournalEntries" state="{path: 'dashboardView>/fiDocCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>dashboardKpiFIDocs}">
                                             <NumericContent value="{path: 'dashboardView>/fiDocCount', formatter: '.formatMetricValue'}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
                                         </TileContent>
@@ -497,7 +497,7 @@
                                         </TileContent>
                                     </GenericTile>
                                     <GenericTile id="tileMMSuppliers" header="{i18n>dashboardKpiSuppliers}" subheader="{i18n>dashboardKpiSuppliersDesc}" press=".onNavigateToPurchaseOrders" state="{path: 'dashboardView>/supplierCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Suppliers">
+                                        <TileContent unit="{i18n>dashSuppliers}">
                                             <NumericContent value="{path: 'dashboardView>/supplierCount', formatter: '.formatMetricValue'}" icon="sap-icon://supplier" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
@@ -519,33 +519,33 @@
                                 </VBox>
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile id="tileSDOpenOrders" header="Open Sales Orders" subheader="Not Fully Processed" press=".onNavigateToSalesOrders" state="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Orders">
+                                    <GenericTile id="tileSDOpenOrders" header="{i18n>dashOpenSalesOrders}" subheader="{i18n>dashNotFullyProcessed}" press=".onNavigateToSalesOrders" state="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashOrders}">
                                             <NumericContent value="{path: 'dashboardView>/openSalesOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-order" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDTotalOrders" header="All Sales Orders" subheader="Sales Order Worklist" press=".onNavigateToSalesOrders" state="{path: 'dashboardView>/totalSalesOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Orders">
+                                    <GenericTile id="tileSDTotalOrders" header="{i18n>dashAllSalesOrders}" subheader="{i18n>dashSalesOrderWorklist}" press=".onNavigateToSalesOrders" state="{path: 'dashboardView>/totalSalesOrderCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashOrders}">
                                             <NumericContent value="{path: 'dashboardView>/totalSalesOrderCount', formatter: '.formatMetricValue'}" icon="sap-icon://sales-document" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDCreateOrder" header="Create Sales Order" subheader="New Sales Order (VA01)" press=".onNavigateToCreateSalesOrder" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Action">
+                                    <GenericTile id="tileSDCreateOrder" header="{i18n>dashCreateSalesOrder}" subheader="{i18n>dashNewSalesOrderVA01}" press=".onNavigateToCreateSalesOrder" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashAction}">
                                             <NumericContent icon="sap-icon://add" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDInquiries" header="Sales Inquiries" subheader="Manage Sales Inquiries" press=".onNavigateToSalesInquiries" state="{path: 'dashboardView>/salesInquiryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Inquiries">
+                                    <GenericTile id="tileSDInquiries" header="{i18n>dashSalesInquiries}" subheader="{i18n>dashManageSalesInquiries}" press=".onNavigateToSalesInquiries" state="{path: 'dashboardView>/salesInquiryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashInquiries}">
                                             <NumericContent value="{path: 'dashboardView>/salesInquiryCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDCreateInquiry" header="Create Inquiry" subheader="New Sales Inquiry" press=".onNavigateToCreateSalesInquiry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Action">
+                                    <GenericTile id="tileSDCreateInquiry" header="{i18n>dashCreateInquiry}" subheader="{i18n>dashNewSalesInquiry}" press=".onNavigateToCreateSalesInquiry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashAction}">
                                             <NumericContent icon="sap-icon://add" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileSDCustomers" header="Customers" subheader="Sales Customers" state="{path: 'dashboardView>/customerCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Customers">
+                                    <GenericTile id="tileSDCustomers" header="{i18n>dashCustomers}" subheader="{i18n>dashSalesCustomers}" state="{path: 'dashboardView>/customerCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashCustomers}">
                                             <NumericContent value="{path: 'dashboardView>/customerCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
@@ -672,13 +672,13 @@
                                 </Panel>
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile id="tileGoodsReceipt" header="Goods Receipt (101)" subheader="Inbound Deliveries" press=".onNavigateToGoodsReceipt" state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="Deliveries">
+                                    <GenericTile id="tileGoodsReceipt" header="{i18n>dashGoodsReceipt101}" subheader="{i18n>dashInboundDeliveries}" press=".onNavigateToGoodsReceipt" state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashDeliveries}">
                                             <NumericContent value="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatMetricValue'}" icon="sap-icon://inbox" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileTrTo" header="TO Creation (ZTO)" subheader="Transfer Orders from TR" press=".onNavigateToTrTo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="RF Mobile">
+                                    <GenericTile id="tileTrTo" header="{i18n>dashTOCreationZTO}" subheader="{i18n>dashTransferOrdersFromTR}" press=".onNavigateToTrTo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>dashRFMobile}">
                                             <NumericContent icon="sap-icon://bar-code" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>

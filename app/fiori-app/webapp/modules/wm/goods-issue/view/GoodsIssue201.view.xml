@@ -8,9 +8,6 @@
 
     <Page
         id="pageGoodsIssue201"
-        title="{i18n>gi201PageTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         busy="{gi201>/busy}"
         busyIndicatorDelay="0"
         class="sapUiSizeCompact">
@@ -175,7 +172,7 @@
                                     class="giFormValueText fontBold" />
 
                                 <Label id="lblPlant" text="{i18n>gi201Plant}" required="true" />
-                                <HBox id="boxPlantLocation" alignItems="Center">
+                                <HBox id="boxPlantLocation" alignItems="Center" wrap="Wrap">
                                     <Input
                                         id="inPlant"
                                         value="{gi201>/plant}"
@@ -416,10 +413,10 @@
                                 growingThreshold="5">
                                 <columns>
                                     <Column id="colScanUnit"><Text text="{i18n>gi201ScanColUnit}" /></Column>
-                                    <Column id="colScanMaterial"><Text text="{i18n>gi201ScanColMaterial}" /></Column>
+                                    <Column id="colScanMaterial" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi201ScanColMaterial}" /></Column>
                                     <Column id="colScanQty" hAlign="End"><Text text="{i18n>gi201ScanColQty}" /></Column>
-                                    <Column id="colScanBatch"><Text text="{i18n>gi201ScanColBatch}" /></Column>
-                                    <Column id="colScanKind" hAlign="End"><Text text="{i18n>gi201ScanColKind}" /></Column>
+                                    <Column id="colScanBatch" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi201ScanColBatch}" /></Column>
+                                    <Column id="colScanKind" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>gi201ScanColKind}" /></Column>
                                 </columns>
                                 <items>
                                     <ColumnListItem>
@@ -486,7 +483,7 @@
                                 <columns>
                                     <Column id="colSerialIndex" width="4rem"><Text text="#" /></Column>
                                     <Column id="colSerialNumber"><Text text="{i18n>gi201ColSerialNumber}" /></Column>
-                                    <Column id="colSerialStatus" width="10rem"><Text text="{i18n>gi201ColSerialStatus}" /></Column>
+                                    <Column id="colSerialStatus" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" width="10rem"><Text text="{i18n>gi201ColSerialStatus}" /></Column>
                                     <Column id="colSerialAction" width="4rem" hAlign="End"><Text text="" /></Column>
                                 </columns>
                                 <items>

@@ -5,8 +5,8 @@
     <Dialog
         id="dlgCreateCustomerReturn"
         title="{i18n>createReturnDialogTitle}"
-        contentWidth="880px"
-        contentHeight="580px"
+        contentWidth="55rem"
+        contentHeight="36.25rem"
         resizable="true"
         draggable="true">
         <content>

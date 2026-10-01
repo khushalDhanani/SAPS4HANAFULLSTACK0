@@ -29,7 +29,7 @@
                     columnsM="2"
                     singleContainerFullSize="false">
                     <form:content>
-                        <core:Title text="Header &amp; Organizational Data" />
+                        <core:Title text="{i18n>dlvNoRefHeaderOrganizationalData}" />
 
                         <Label text="{i18n>dlgDeliveryShippingPoint}" required="true" />
                         <ComboBox
@@ -51,10 +51,10 @@
                             id="selNoRefDeliveryType"
                             selectedKey="{deliveryNoRefDialog>/deliveryType}"
                             width="100%">
-                            <core:Item key="LO2" text="LO2 - Delivery w/o ref." />
-                            <core:Item key="LO" text="LO - Delivery w/o ref." />
-                            <core:Item key="LO3" text="LO3 - Delivery w/o ref." />
-                            <core:Item key="LD" text="LD - Delivery w/o ref." />
+                            <core:Item key="LO2" text="{i18n>dlvNoRefLO2DeliveryWORef}" />
+                            <core:Item key="LO" text="{i18n>dlvNoRefLODeliveryWORef}" />
+                            <core:Item key="LO3" text="{i18n>dlvNoRefLO3DeliveryWORef}" />
+                            <core:Item key="LD" text="{i18n>dlvNoRefLDDeliveryWORef}" />
                         </Select>
 
                         <Label text="{i18n>dlgShipToParty}" required="true" />
@@ -72,7 +72,7 @@
                             displayFormat="medium"
                             width="100%" />
 
-                        <core:Title text="Plant &amp; Sales Area Data" />
+                        <core:Title text="{i18n>dlvNoRefPlantSalesAreaData}" />
 
                         <Label text="{i18n>dlgDelivPlant}" required="true" />
                         <Input
@@ -112,6 +112,7 @@
                 <!-- Line Items Table -->
                 <Table
                     id="tableNoRefItems"
+                    noDataText="{i18n>noDataText}"
                     items="{deliveryNoRefDialog>/items}"
                     class="sapUiSmallMarginTop">
                     <headerToolbar>

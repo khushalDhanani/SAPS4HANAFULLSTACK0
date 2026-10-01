@@ -7,9 +7,7 @@
 
     <Page
         id="pageGi261Pending"
-        title="{i18n>gi261OpenResvTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack">
+        showHeader="false">
         <content>
             <MessageStrip
                 id="msPending261Result"
@@ -49,11 +47,11 @@
                 </headerToolbar>
                 <columns>
                     <Column id="colPendingResv"><Text text="{i18n>gi261OpenResvColReservation}" /></Column>
-                    <Column id="colPendingOrder"><Text text="{i18n>gi261OpenResvColOrder}" /></Column>
+                    <Column id="colPendingOrder" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261OpenResvColOrder}" /></Column>
                     <Column id="colPendingMaterial"><Text text="{i18n>gi261OpenResvColMaterial}" /></Column>
-                    <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi261OpenResvColPlant}" /></Column>
-                    <Column id="colPendingCreatedBy" hAlign="Begin"><Text text="{i18n>gi261OpenResvColCreatedBy}" /></Column>
-                    <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi261OpenResvColItems}" /></Column>
+                    <Column id="colPendingPlant" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="Begin"><Text text="{i18n>gi261OpenResvColPlant}" /></Column>
+                    <Column id="colPendingCreatedBy" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" hAlign="Begin"><Text text="{i18n>gi261OpenResvColCreatedBy}" /></Column>
+                    <Column id="colPendingItems" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>gi261OpenResvColItems}" /></Column>
                 </columns>
                 <items>
                     <ColumnListItem type="Navigation" press=".onOpenReservation">

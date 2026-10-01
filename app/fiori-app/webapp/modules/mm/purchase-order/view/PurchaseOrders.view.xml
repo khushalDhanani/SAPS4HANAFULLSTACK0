@@ -182,6 +182,7 @@
                 <!-- Responsive Table -->
                 <Table
                     id="purchaseOrdersTable"
+                    noDataText="{i18n>poNoDataText}"
                     items="{
                         path: '/PurchaseOrders',
                         parameters: {
@@ -208,7 +209,7 @@
                             <SearchField
                                 id="searchField"
                                 placeholder="{i18n>searchPlaceholder}"
-                                width="300px"
+                                width="18rem"
                                 search=".onSearch"
                                 liveChange=".onSearch" />
                             <Button

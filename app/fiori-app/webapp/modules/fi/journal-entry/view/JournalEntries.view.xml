@@ -182,7 +182,7 @@
                             <ToolbarSpacer />
                             <SearchField
                                 id="searchField"
-                                width="300px"
+                                width="18rem"
                                 placeholder="{i18n>fiSearchPlaceholder}"
                                 search=".onSearch"
                                 liveChange=".onSearch">
