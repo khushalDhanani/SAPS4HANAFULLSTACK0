@@ -4,6 +4,60 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 09:52 IST
+- **Agent**: Claude Code
+- **Request**: Document (do not fix) the Movement 201 scan count-vs-quantity defect so it is not rediscovered blind.
+- **KNOWN DEFECT — NOT FIXED — Movement 201 scan-to-complete (count vs quantity)**:
+  - **Where**: `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js:260` sets `requiredScanCount = Math.max(1, Math.floor(openQty))`; `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue201Model.js:286-289` requires `scannedUnits.length === requiredScanCount`; `GoodsIssue201Model.js:361` uses the same count for "quantity exceeded"; `GoodsIssue201.view.xml:371-372` shows count / required.
+  - **Effect**: for any 201 reservation line whose stock is held in storage units and whose open quantity is greater than 1 (bulk / non-serial, e.g. 100 KG in one storage unit), the screen demands as many scans as the quantity, so "Complete" never enables. This is the same failure reservation 518021 hit on the 261 screen before the 09:47 fix.
+  - **Evidence**: verified by reading the code on 2026-10-01 (identical logic to the pre-fix 261 code). NOT reproduced live on a 201 reservation.
+  - **Why the earlier 201 live test passed**: per the log entry for reservation 493669, that line was storage-unit managed with quantity 1 ("scanned to 1/1"), so unit count and quantity coincided.
+  - **Fix when scheduled**: port the 261 change (`scannedQty` coverage, per-unit qty/batch capture, batch auto-fill, Quantity/Batch columns) to the 201 model, controller and view, with tests.
+- **Affected Files**: `WORKSTATUS.md` only (no code changed).
+- **Executed Commands & Results**: `sed`/`grep` inspection of the 201 controller, model and this log; no tests needed (documentation only).
+- **Current Status**: Documented; defect open.
+- **Next Steps**: See Next Steps item 10.
+
+## 2026-10-01 09:47 IST
+- **Agent**: Claude Code
+- **Request**: Debug `#/wm/goods-issue/order-based-261?resv=518021` end to end; report first, then fix issues 1, 2 and 5 only (issues 3 and 4 deferred to a separate follow-up).
+- **Investigation (read-only, live via local CAP with the mocked dev user)**:
+  - Reservation 518021 item 0001: Order 1002741, Material 1000001002 "TEST RM -HU (Prostab)", Plant 1130, SLoc CS02, open 100 KG, movement 261. Not serial-managed; stock is held in WM storage units 2000018944 (100 KG) and 2000018945-48 (200 KG each), all batch IN26091921.
+  - `resolveStockUnit` for 2000018944: match, 100 KG, `DeterminedBatch` IN26091921. For 1000033379: rejected with a clear wrong-material message. For 9999999999: rejected, but with a ~1000-character internal EWM diagnostic text (issue 4).
+- **Issues found**:
+  1. Complete could never enable: `requiredScanCount` was set to the open quantity (100) and compared to the NUMBER of scanned units, so a 100 KG storage-unit line demanded 100 scans.
+  2. Batch-managed material with no batch on the reservation: the batch returned by the scan (`DeterminedBatch`) was discarded, leaving the mandatory Batch field empty.
+  3. (Deferred) Header Text is dropped: not sent by `GoodsIssue261Service.postGoodsIssue` and not a parameter of the `postGoodsIssue261` action.
+  4. (Deferred) Unknown-barcode scan shows the raw EWM diagnostic string from `GoodsIssueStockUnitClient.js:473`.
+  5. Scanned-units table showed no quantity or batch per unit.
+- **Changes (issues 1, 2, 5)**:
+  - `GoodsIssue261Model.js`: new `scannedQty(oData)` (a serial covers 1, a storage unit covers the stock it holds; unknown stock counts as 1). `validate` now requires scanned quantity >= required instead of unit count === required. `applyScanResolution` stores `qty`, `unit`, `batch` per scanned unit, fills `batch`/`isBatchManaged` from the first matched unit, rejects a unit from a different batch, and uses covered quantity for the "quantity exceeded" check. Added `scannedQty` to the initial data.
+  - `GoodsIssue261.controller.js`: required quantity is the open quantity without flooring; after a scan the batch is written to the model; `_validateLive` keeps `/scannedQty` current.
+  - `GoodsIssue261.view.xml`: progress shows covered quantity / required quantity with unit; scanned-units table gained Quantity and Batch columns.
+  - `i18n.properties`, `i18n_en.properties`: `gi261ScanColQty`, `gi261ScanColBatch`.
+  - `test/unit/wm/goodsIssue261Scan.test.js`: 3 new tests (full-quantity unit covers the line and captures batch; partial units accumulate and then reject excess; different batch rejected).
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssue261Scan.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean.
+  - `cd app/fiori-app && npm run lint`: Success, no findings.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.29 s.
+  - `npm test -- test/unit/wm/`: first run 1 failed / 792 passed (an existing test asserts the wording "Required 2 units scanned"; wording restored), final run 42 suites passed, 793/793 tests passed.
+  - Live browser run of the flow: **NOT performed** — the app still redirects to `#/login`; waiting for the user to sign in.
+  - Live SAP posting for 518021: **NOT performed**.
+- **Known Limitations**:
+  - The same count-vs-quantity logic exists in the Movement 201 screen (`GoodsIssue201.controller.js:260`, `GoodsIssue201Model.js:288`); not changed.
+  - Removing all scanned units does not clear the auto-filled batch; the Batch field stays editable.
+  - Required quantity is taken from the reservation's open quantity, not from an edited Quantity field (unchanged behavior).
+- **Current Status**: In Progress — fixes 1/2/5 implemented and unit-tested; live UI verification and live posting pending.
+- **Next Steps**: User signs in to the browser pane; then run prefill -> scan 2000018944 -> confirm batch/quantity/Complete enabled -> post (after the user's typed confirmation) -> confirm the reservation clears from the 261 open list. Then scope issues 3 and 4 as a separate item.
+
 ## 2026-10-01 09:39 IST
 - **Agent**: Claude Code
 - **Request**: "@app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml Make this UI 2/2 Grid."
@@ -7197,3 +7251,5 @@ The table below provides a strict, unambiguous separation between **Code Complet
 8. Set `NVIDIA_API_KEY` in `.env` (from build.nvidia.com) and run a live `POST /odata/v4/ai/askAI` smoke test; then wire `aiClient.askAI` into a business action (e.g. PO summary) if wanted.
 9. Review the uncommitted changes (`git status`, `git diff`), then stage, commit, and push to `origin/feature/CL01`.
 
+10. OPEN DEFECT (not fixed): Movement 201 scan-to-complete compares the number of scanned units to the open quantity (`GoodsIssue201.controller.js:260`, `GoodsIssue201Model.js:286-289`), so storage-unit lines with quantity > 1 can never be completed. Port the 261 fix from the 2026-10-01 09:47 entry. See the 2026-10-01 09:52 entry.
+11. Movement 261 follow-ups (scoped, not fixed): Header Text is dropped before posting (`GoodsIssue261Service.js:48`, `service.cds:283`); unknown-barcode scans show the raw EWM diagnostic text (`GoodsIssueStockUnitClient.js:473`).

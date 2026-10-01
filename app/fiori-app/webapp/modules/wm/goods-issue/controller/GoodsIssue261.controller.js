@@ -117,7 +117,7 @@ sap.ui.define([
                     var aUnits = (oData && oData.StockUnits) || [];
                     if (aUnits.length > 0) {
                         oModel.setProperty("/scanEnabled", true);
-                        oModel.setProperty("/requiredScanCount", Math.max(1, Math.floor(nOpenQty || 1)));
+                        oModel.setProperty("/requiredScanCount", nOpenQty > 0 ? nOpenQty : 1);
                         // The scan section takes over from the manual serial entry table
                         oModel.setProperty("/isSerialManaged", false);
                     }
@@ -150,6 +150,8 @@ sap.ui.define([
                     var oData = oModel.getData();
                     var oFb = GoodsIssue261Model.applyScanResolution(oData, oRes, sBarcode);
                     oModel.setProperty("/scannedUnits", oData.scannedUnits);
+                    oModel.setProperty("/batch", oData.batch);
+                    oModel.setProperty("/isBatchManaged", oData.isBatchManaged);
                     that._setScanFeedback(oFb.state, oFb.text);
                 })
                 .catch(function (err) {
@@ -205,6 +207,7 @@ sap.ui.define([
         _validateLive: function () {
             var oData = this._oModel.getData();
             var oResult = GoodsIssue261Model.validate(oData);
+            this._oModel.setProperty("/scannedQty", GoodsIssue261Model.scannedQty(oData));
             this._oModel.setProperty("/errors", oResult.errors);
             this._oModel.setProperty("/isValid", oResult.isValid);
             return oResult.isValid;
