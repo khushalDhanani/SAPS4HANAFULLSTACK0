@@ -87,6 +87,7 @@
                 storageLocation: "",
                 // True only when the reservation item carries no storage location: the user picks it.
                 isStorageLocationEditable: false,
+                prefilled: {},              // fields the reservation supplied, shown read-only (batch)
 
                 // Quantity & Unit
                 quantity: 1,
@@ -231,6 +232,10 @@
                 if (parts.length > 1 && parts[1].length > 3) {
                     errors.quantity = "Quantity cannot exceed 3 decimal places";
                     bValid = false;
+                } else if (oData.fromReservation && oData.openQty != null && nQty > Number(oData.openQty)) {
+                    // Partial issue is allowed, more than the open reservation quantity is not.
+                    errors.quantity = "Quantity cannot exceed the open reservation quantity (" + oData.openQty + ")";
+                    bValid = false;
                 }
             }
 
@@ -338,6 +343,7 @@
             oData.plant = oItem.Plant || "";
             oData.storageLocation = oItem.StorageLocation || "";
             oData.isStorageLocationEditable = !oItem.StorageLocation;
+            oData.prefilled = { batch: !!oItem.Batch };
             oData.unit = oItem.Unit || "";
             oData.isUnitEditable = !oItem.Unit;
             oData.isSerialManaged = !!oItem.IsSerialManaged;

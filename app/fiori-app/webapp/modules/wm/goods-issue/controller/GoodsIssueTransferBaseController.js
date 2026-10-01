@@ -103,7 +103,9 @@ sap.ui.define([
                     }
 
                     if (!oTargetItem) {
-                        MessageToast.show(that._t("PrefillNoOpenItem", [sResv]));
+                        // Missing, closed or unknown reservation: say so and leave the form empty and editable.
+                        that._resetModel();
+                        MessageBox.error(that._t("PrefillNoOpenItem", [sResv]));
                         return;
                     }
 
@@ -117,6 +119,7 @@ sap.ui.define([
                     that._validateLive();
                 })
                 .catch(function (err) {
+                    that._resetModel();
                     MessageBox.error((err && err.message) || that._t("PrefillError"));
                 })
                 .finally(function () {

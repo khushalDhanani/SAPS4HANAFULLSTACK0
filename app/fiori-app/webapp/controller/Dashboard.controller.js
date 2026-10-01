@@ -94,10 +94,13 @@ sap.ui.define([
             var oOwnerComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
             var oRouter = oOwnerComp ? oOwnerComp.getRouter() : null;
             if (oRouter) {
-                var oRoute = oRouter.getRoute("dashboard");
-                if (oRoute) {
-                    oRoute.attachPatternMatched(this._onDashboardMatched, this);
-                }
+                // "default" (empty hash) shows this view too, so it must load the figures as well.
+                ["dashboard", "default"].forEach(function (sRoute) {
+                    var oRoute = oRouter.getRoute(sRoute);
+                    if (oRoute) {
+                        oRoute.attachPatternMatched(this._onDashboardMatched, this);
+                    }
+                }, this);
             }
         },
 
@@ -127,8 +130,27 @@ sap.ui.define([
         _onDashboardMatched: function () {
             var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
             if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                // The session check (SSO / getUserInfo) may still be running when the route matches.
+                // Load as soon as it authenticates; otherwise the tiles would stay in "Loading" forever.
+                this._bLoadPending = true;
+                if (!this._oAuthBinding && typeof oAuthModel.bindProperty === "function") {
+                    this._oAuthBinding = oAuthModel.bindProperty("/isAuthenticated");
+                    this._oAuthBinding.attachChange(this._onAuthChanged, this);
+                }
                 return;
             }
+            this._loadDashboard();
+        },
+
+        _onAuthChanged: function () {
+            var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
+            if (this._bLoadPending && oAuthModel && oAuthModel.getProperty("/isAuthenticated") === true) {
+                this._loadDashboard();
+            }
+        },
+
+        _loadDashboard: function () {
+            this._bLoadPending = false;
             this._loadMetrics();
             this._loadGiKpis();
         },
@@ -511,6 +533,10 @@ sap.ui.define([
         },
 
         onExit: function () {
+            if (this._oAuthBinding) {
+                this._oAuthBinding.detachChange(this._onAuthChanged, this);
+                this._oAuthBinding = null;
+            }
             if (this._pQueueDialog) {
                 this._pQueueDialog.then(function (oDialog) {
                     oDialog.destroy();

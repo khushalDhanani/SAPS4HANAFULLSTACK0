@@ -132,8 +132,18 @@
                             <Label id="lblPlant311" text="{i18n>gi311Plant}" />
                             <Text id="txtPlant311" text="{gi311>/plant}" />
 
-                            <Label id="lblStorageLocation311" text="{i18n>gi311StorageLocation}" />
-                            <Text id="txtStorageLocation311" text="{gi311>/storageLocation}" />
+                            <Label id="lblStorageLocation311" text="{i18n>gi311StorageLocation}" required="{gi311>/isStorageLocationEditable}" />
+                            <Text id="txtStorageLocation311" text="{gi311>/storageLocation}" visible="{= !${gi311>/isStorageLocationEditable} }" />
+                            <Input
+                                id="inStorageLocation311"
+                                value="{gi311>/storageLocation}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onStorageLocationValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi311>/errors/storageLocation} ? 'Error' : 'None' }"
+                                valueStateText="{gi311>/errors/storageLocation}"
+                                maxLength="4"
+                                visible="{gi311>/isStorageLocationEditable}" />
 
                             <!-- Receiving Plant / Storage Location (OPTIONAL - Transfer Posting) -->
                             <core:Title id="titleReceivingLocation311" text="{i18n>gi311TitleReceivingLocation}" />
@@ -142,7 +152,8 @@
                             <Input
                                 id="inReceivingPlant311"
                                 value="{gi311>/receivingPlant}"
-                                showValueHelp="true"
+                                editable="{= !${gi311>/prefilled/receivingPlant} }"
+                                showValueHelp="{= !${gi311>/prefilled/receivingPlant} }"
                                 valueHelpRequest=".onReceivingPlantValueHelp"
                                 liveChange=".onFieldLiveChange"
                                 valueState="{= ${gi311>/errors/receivingPlant} ? 'Error' : 'None' }"
@@ -153,7 +164,8 @@
                             <Input
                                 id="inReceivingStorageLocation311"
                                 value="{gi311>/receivingStorageLocation}"
-                                showValueHelp="true"
+                                editable="{= !${gi311>/prefilled/receivingStorageLocation} }"
+                                showValueHelp="{= !${gi311>/prefilled/receivingStorageLocation} }"
                                 valueHelpRequest=".onReceivingStorageLocationValueHelp"
                                 liveChange=".onFieldLiveChange"
                                 valueState="{= ${gi311>/errors/receivingStorageLocation} ? 'Error' : 'None' }"
@@ -225,6 +237,7 @@
                             <Input
                                 id="inBatch311"
                                 value="{gi311>/batch}"
+                                editable="{= !${gi311>/prefilled/batch} }"
                                 placeholder="{i18n>gi311BatchPlaceholder}"
                                 liveChange=".onFieldLiveChange"
                                 valueState="{= ${gi311>/errors/batch} ? 'Error' : 'None' }"

@@ -95,8 +95,9 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
    * @returns {Promise<Map<string,{ReceivingPlant:string,ReceivingStorageLocation:string}>>} keyed by unpadded reservation
    */
   async _fetchReservationHeaderReceiving(movementType, sResv) {
-    const mvts = String(movementType).split(',').map((m) => m.trim()).filter(Boolean);
-    let filter = `IsActiveEntity eq true and (${mvts.map((m) => `GoodsMovementType eq '${encodeURIComponent(m)}'`).join(' or ')})`;
+    const mvts = String(movementType || '').split(',').map((m) => m.trim()).filter(Boolean);
+    let filter = 'IsActiveEntity eq true';
+    if (mvts.length) filter += ` and (${mvts.map((m) => `GoodsMovementType eq '${encodeURIComponent(m)}'`).join(' or ')})`;
     if (sResv) {
       filter += ` and (Reservation eq '${encodeURIComponent(sResv.replace(/^0+/, ''))}' or Reservation eq '${encodeURIComponent(sResv.padStart(10, '0'))}')`;
     }
@@ -342,21 +343,27 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     if (Array.isArray(results) && results.length > 0) {
       const pendingQueueMap = await this._getPendingQueueMap(rawReserv);
 
-      // In SAP S/4HANA, CostCenter is stored at the reservation header level (UI_RESERVATION_HDR_MNG_V2)
+      // In SAP S/4HANA, CostCenter and the receiving plant / storage location of a transfer are
+      // stored at the reservation header level (UI_RESERVATION_HDR_MNG_V2), not on the item.
       let sHeaderCostCenter = '';
-      const has201 = results.some(r => r.GoodsMovementType === '201');
-      if (has201 && rawReserv) {
+      let sHeaderRecvPlant = '';
+      let sHeaderRecvSLoc = '';
+      const isTransfer = (r) => r.GoodsMovementType === '301' || r.GoodsMovementType === '311';
+      const needsHeader = results.some(r => r.GoodsMovementType === '201' || isTransfer(r));
+      if (needsHeader && rawReserv) {
         try {
           const sResClean = String(rawReserv).trim().replace(/^0+/, '');
           const hdr = await this._get(
             `/sap/opu/odata/sap/UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839(Reservation='${sResClean}',IsActiveEntity=true)`,
-            '$select=CostCenter'
+            '$select=CostCenter,IssuingOrReceivingPlant,IssuingOrReceivingStorageLoc'
           );
           if (hdr && hdr.CostCenter) {
             sHeaderCostCenter = String(hdr.CostCenter).trim().replace(/^0+/, '');
           }
+          sHeaderRecvPlant = String((hdr && hdr.IssuingOrReceivingPlant) || '').trim();
+          sHeaderRecvSLoc = String((hdr && hdr.IssuingOrReceivingStorageLoc) || '').trim();
         } catch (hdrErr) {
-          LOG.warn(`Could not fetch CostCenter from UI_RESERVATION_HDR_MNG_V2 for reservation ${rawReserv}: ${hdrErr.message}`);
+          LOG.warn(`Could not fetch CostCenter / receiving location from UI_RESERVATION_HDR_MNG_V2 for reservation ${rawReserv}: ${hdrErr.message}`);
         }
       }
 
@@ -458,8 +465,8 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           ReservationItem: (r.ReservationItem || '').padStart(4, '0'),
           OrderNo: r.OrderID || '',
           // 301/311: receiving side of the transfer (field name differs between SAP service versions)
-          ReceivingPlant: r.IssuingOrReceivingPlant || r.ReceivingPlant || '',
-          ReceivingStorageLocation: r.IssuingOrReceivingStorageLoc || r.ReceivingStorageLocation || '',
+          ReceivingPlant: r.IssuingOrReceivingPlant || r.ReceivingPlant || (isTransfer(r) ? sHeaderRecvPlant : ''),
+          ReceivingStorageLocation: r.IssuingOrReceivingStorageLoc || r.ReceivingStorageLocation || (isTransfer(r) ? sHeaderRecvSLoc : ''),
           Material: r.Product || '',
           MaterialDesc: r.ProductName || '',
           Plant: r.Plant || '',

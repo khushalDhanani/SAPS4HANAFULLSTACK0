@@ -245,6 +245,10 @@
                 if (parts.length > 1 && parts[1].length > 3) {
                     errors.quantity = "Quantity cannot exceed 3 decimal places";
                     bValid = false;
+                } else if (oData.fromReservation && oData.openQty != null && nQty > Number(oData.openQty)) {
+                    // Partial issue is allowed, more than the open reservation quantity is not.
+                    errors.quantity = "Quantity cannot exceed the open reservation quantity (" + oData.openQty + ")";
+                    bValid = false;
                 }
             }
 

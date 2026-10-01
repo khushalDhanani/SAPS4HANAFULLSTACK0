@@ -467,11 +467,22 @@ class GoodsIssueAdapter {
     const { resvItem } = await this.stockUnits._readOpenReservationItem(reservationNo, reservationItem);
     const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit || 0);
     const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0);
+    // Transfers: the receiving side lives on the reservation header. Unreadable -> blank (not enforced).
+    let recv = {};
+    if (['301', '311'].includes(String(resvItem.GoodsMovementType || ''))) {
+      try {
+        const sResv = String(reservationNo).trim();
+        recv = (await this.reservations._fetchReservationHeaderReceiving('', sResv)).get(sResv.replace(/^0+/, '')) || {};
+      } catch (err) {
+        LOG.warn(`Could not read receiving plant / storage location of reservation ${reservationNo}: ${err.message}`);
+      }
+    }
     return {
       Material: String(resvItem.Product || '').trim(),
       Plant: String(resvItem.Plant || '').trim(),
       StorageLocation: String(resvItem.StorageLocation || '').trim(),
-      ReceivingPlant: String(resvItem.IssuingOrReceivingPlant || resvItem.ReceivingPlant || '').trim(),
+      ReceivingPlant: String(resvItem.IssuingOrReceivingPlant || resvItem.ReceivingPlant || recv.ReceivingPlant || '').trim(),
+      ReceivingStorageLocation: String(recv.ReceivingStorageLocation || '').trim(),
       Batch: String(resvItem.Batch || '').trim(),
       Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || '').trim(),
       RequiredQty: reqQty,

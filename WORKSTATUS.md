@@ -4,6 +4,67 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 11:35 IST
+- **Agent**: Claude Code
+- **Request**: Audit the Fiori app at runtime: the page loads but the skeleton loader never disappears and no data is populated. Find the exact root cause (UI -> controller -> model -> service -> response -> binding), fix it, and make sure the skeleton goes away only after data is loaded or an error state is shown.
+- **Investigation (running app in the built-in browser, `http://localhost:4004/saps4hana-fiori-app/index.html`)**:
+  - The only skeleton in the app is the `sap.m.GenericTile` "Loading" state on the dashboard (`Dashboard.view.xml`, `state="{path: 'dashboardView>/<count>', formatter: '.formatTileState'}"`): `undefined` -> Loading, `null` -> Failed, number -> Loaded. Every bound path is set by the controller (checked: none missing).
+  - Reproduced: with the session check (`/odata/v4/auth/getUserInfo()`) answering "authenticated" AFTER the route matched (the deployed XSUAA/SSO case, simulated in-page by stubbing that one response; no credentials used), the dashboard is shown with the user name, all tiles stay in "Loading", status stays "Checking S/4HANA connection…", and the network log contains only `getUserInfo()` - `getDashboardMetrics()` and `getDashboardData(...)` are never requested. No console errors.
+- **Root cause**: `app/fiori-app/webapp/controller/Dashboard.controller.js`, `_onDashboardMatched` (old lines 127-134): `if (oAuthModel.getProperty("/isAuthenticated") === false) { return; }`. `AuthService.init` starts the session check asynchronously and the router matches the route before it resolves, so the handler returns without loading and nothing calls it again when `/isAuthenticated` becomes true (the component route guard deliberately "stays on route"). Second path with the same result: `onInit` (old lines 94-101) attached the handler to route `dashboard` only, while route `default` (empty hash) also targets the dashboard view.
+  - Not the cause: OData V4 model configuration, service URLs, metadata, entity sets and bindings (the dashboard uses two function calls through `ODataClient`, both reachable: they answer 401 without a session); promise/error handling in `_loadMetrics` / `_loadGiKpis` (both already end in the Failed state on error).
+- **Changes**: `Dashboard.controller.js` only -
+  - `onInit`: handler attached to both `dashboard` and `default`.
+  - `_onDashboardMatched`: when not authenticated yet, marks the load as pending and listens (once) to `auth>/isAuthenticated`; new `_onAuthChanged` runs the load when it turns true; new `_loadDashboard` (clears the pending flag, calls `_loadMetrics` + `_loadGiKpis`); `onExit` detaches the listener.
+  - Tests: 5 new in `test/unit/dashboard/dashboardMetrics.test.js` (both routes attached; signed-in loads immediately; late authentication loads exactly once; never authenticated requests nothing; failed call ends in Failed + error text, not Loading).
+- **Affected Files**: `app/fiori-app/webapp/controller/Dashboard.controller.js`, `test/unit/dashboard/dashboardMetrics.test.js`, `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit/dashboard`: 2 suites, 55/55 passed. `npx jest test/unit`: 119 suites, 2037/2037 passed.
+  - `cd app/fiori-app && npm run lint`: no findings. `npm run build`: succeeded. `git diff --check`: clean. (Root `eslint` ignores `app/fiori-app/webapp` by configuration.)
+  - Browser re-run of the same scenario after the fix: `getDashboardMetrics()` and `getDashboardData(...)` are now requested; with the simulated session (no token) both return 401 and the page shows 0 skeleton tiles, tiles in "Cannot load tile", the error strip "Live figures could not be loaded from SAP S/4HANA: Unauthorized" and status "S/4HANA not reachable".
+  - NOT verified: the success path with real figures on screen (needs a real sign-in, which the agent does not perform), and a deployed XSUAA environment. Integration / e2e suites not run.
+- **Observation (not changed)**: `ODataClient` requests have no client-side timeout, so a backend call that never answers would also leave tiles in "Loading"; not observed here.
+- **Current Status**: In Progress - fix implemented, unit-tested and reproduced/verified in the browser for the error path; uncommitted. Earlier 311 work (10:55 / 11:02 / 11:10 entries) unchanged.
+- **Next Steps**: sign in locally and confirm the tiles show live figures; confirm in the deployed (XSUAA) environment.
+
+## 2026-10-01 11:10 IST
+- **Agent**: Claude Code
+- **Request**: When a 311 page opens with `?resv=<number>`, prefill everything from the reservation (generic, no hardcoded IDs); prefilled fields read-only; clear error and empty editable form for a missing / invalid / closed reservation; server re-reads the reservation, ignores client values and rejects a mismatch with 400 without queueing; serial count rule on client and server; same pattern for 201 / 261 / 301 where they already support `?resv=`; unit tests.
+- **Inspection**: all four screens already support `?resv=` (201 and 261 in their own controllers, 301 and 311 through `GoodsIssueTransferBaseController`). The 311 prefill source is `GIItems` (`getOpenItems`, `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`); `API_RESERVATION_DOCUMENT_SRV` is not used by this code. Fields the 311 model takes from it: reservation item, order, material, description, plant, storage location, unit, open quantity, batch, serial flag, receiving plant, receiving storage location. The last two were never filled because they exist only on the reservation header (see the 11:02 entry).
+- **Changes - backend**:
+  - `GoodsIssueReservationsClient.getOpenItems`: the existing single header read (`UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839`, until now 201 cost center only) also runs for 301/311 and selects `IssuingOrReceivingPlant`, `IssuingOrReceivingStorageLoc`; `GIItems.ReceivingPlant` / `ReceivingStorageLocation` are filled from it for transfer items. `_fetchReservationHeaderReceiving` accepts an empty movement type.
+  - `GoodsIssueAdapter.getReservationItemAuthoritative`: for 301/311 also returns `ReceivingPlant` / `ReceivingStorageLocation` from the header (an unreadable header logs a warning and leaves them blank, i.e. not enforced).
+  - `goodsIssuePerType.handler.js` `reservationReconcileCheck` (shared by 201/261/301/311): a Material / Plant / Storage Location mismatch is now **HTTP 400** (was 409); after a successful check the reservation's Material, Plant, Storage Location and Batch REPLACE the submitted values, so the posting never uses client master data. New option `receiving` (used by 311 only): receiving plant / storage location are compared with the header (400 on mismatch) and applied. `postGoodsIssue201` now runs the check when a reservation is supplied (it had none). `postGoodsIssue301` now also runs `serialCountCheck`.
+- **Changes - frontend**:
+  - `GoodsIssue311Model`: `prefilled` map (receivingPlant, receivingStorageLocation, batch) and `isStorageLocationEditable` set by `applyReservationItem`; quantity may be reduced (partial issue) but not above the open reservation quantity.
+  - `GoodsIssue311.view.xml`: receiving plant, receiving storage location and batch are not editable when the reservation supplied them; issuing storage location is an input with value help only when the reservation has none (same as 301). Material, plant, reservation number were already display-only; reservation item and unit already locked.
+  - `GoodsIssueTransferBaseController` (301 + 311): a `?resv=` with no open item or a failed read now resets the form and shows `MessageBox.error` (was a toast with `fromReservation` and the reservation number left set).
+  - 301: `prefilled.batch` + read-only batch, quantity cap. 261: reservation item not editable once opened from a reservation, quantity cap, error box instead of toast. 201: `prefilled` map (cost center, material, plant, storage location) set by the prefill, those four inputs read-only when supplied, error box instead of toast.
+  - i18n (both files): `gi311SelectStorageLocation` added; `gi201/261/301/311PrefillNoOpenItem` reworded to "Reservation {0} was not found or has no open item. Nothing was prefilled."
+- **Tests**: new `test/unit/wm/goodsIssueResvPrefill.test.js` (24 tests: prefill mapping for two different reservations, editable-only-when-not-supplied, quantity cap 311/301, view read-only bindings 311/301/261/201, header receiving in `GIItems` and in the authoritative read, tampered Material / Plant / Storage Location / Receiving Storage Location -> 400 not posted not queued, values taken from the reservation, quantity above open -> 422, tampered 201/261/301 -> 400, 301 serial count). `goodsIssue311Controller.test.js`: 2 new (invalid resv / failed read -> error, empty form). Existing tests changed to the requested behaviour: `goodsIssue201Controller.test.js` (toast -> error box), `goodsIssueService.test.js` (409 -> 400). Serial count mismatch (client Complete + server 400) stays covered by `goodsIssue311Serial.test.js`.
+- **Affected Files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue201Model.js`, `GoodsIssue261Model.js`, `GoodsIssue301Model.js`, `GoodsIssue311Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue201.view.xml`, `GoodsIssue261.view.xml`, `GoodsIssue301.view.xml`, `GoodsIssue311.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`, `GoodsIssue261.controller.js`, `GoodsIssueTransferBaseController.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`, `i18n_en.properties`
+  - `test/unit/wm/goodsIssueResvPrefill.test.js`, `goodsIssue311Controller.test.js`, `goodsIssue201Controller.test.js`, `goodsIssueService.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: intermediate runs failed on 1 test each (201 controller toast assertion; `goodsIssueService` 409 assertion) - both updated as above; final run 119 suites, 2032/2032 passed.
+  - `npx jest test/unit/wm`: 45 suites, 882/882 passed.
+  - `npx eslint srv/wm/goods-issue srv/integration/s4hana/wm` + new test: 0 errors, 2 warnings in `GoodsIssuePostingClient.js:686` (not touched). `git diff --check`: clean. `npx cds compile srv`: clean.
+  - `cd app/fiori-app && npm run lint`: no findings. `npm run build`: succeeded.
+  - Live read-only check through the adapter: `getOpenItems` 519367 -> 1120/HS01 -> 1120/CIS1, 2 NOS, serial-managed; 520236 -> 1150/CS02 -> 1150/CIS1; 519144 (301) -> receiving 1120/MT01; unknown reservation 999999999 -> no items. `getReservationItemAuthoritative('519367','0001')` returns receiving 1120/CIS1.
+  - NOT run: integration / e2e suites, browser run of any screen (local CAP on :4004 answers 401 without a sign-in), any posting.
+- **Gaps / notes (not changed)**:
+  - 301: receiving plant / storage location are now PREFILLED from the header but stay editable and are not enforced server-side. Reason: the screen and backend require the receiving plant to differ from the issuing plant, while real 301 reservations on this system carry the same plant (519144, 519366: 1120 -> 1120); locking the field would make them impossible to complete. 519144 now opens with receiving plant 1120 and the "must differ" error until the user changes it. Needs a decision on that rule.
+  - 201 / 261: no client quantity cap on 201 (its model has no open quantity; the server now rejects above-open with 422); batch on 201/261 comes from the scan / material lookup, not from the reservation item, so it is not locked; `serialCountCheck` is not wired into 201/261 (their serials come from scan-to-complete).
+  - Posting dates and header text stay editable on all screens (not supplied by the reservation).
+  - A reservation with several open items opens on the first open item (or `&item=` on 301/311), as before.
+  - Queue still stores one serial number (10:55 entry).
+- **Current Status**: In Progress - implemented and unit-tested, uncommitted; no on-screen or live posting verification yet.
+- **Next Steps**: sign in and check `#/wm/goods-issue/sloc-transfer-311?resv=519367` (all fields filled and locked, 2 serials required), `?resv=999999999` (error, empty form), then post 519367 with real serials and read the material document back. Decide the 301 same-plant rule.
+
 ## 2026-10-01 11:02 IST
 - **Agent**: Claude Code
 - **Request**: `#/wm/goods-issue/311/open-transfers` - the Issuing SLoc and Receiving SLoc columns are not bound (show "-").

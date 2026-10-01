@@ -59,10 +59,16 @@ sap.ui.define([
                 .then(function (aItems) {
                     var oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
                     if (!oItem) {
-                        MessageToast.show(that.getText("gi201PrefillNoOpenItem", [sResv]));
+                        MessageBox.error(that.getText("gi201PrefillNoOpenItem", [sResv]));
                         return;
                     }
                     oModel.setProperty("/fromReservation", true);
+                    oModel.setProperty("/prefilled", {
+                        costCenter: !!oItem.CostCenter,
+                        material: !!oItem.Material,
+                        plant: !!oItem.Plant,
+                        storageLocation: !!oItem.StorageLocation
+                    });
                     oModel.setProperty("/reservationNo", oItem.ReservationNo || sResv);
                     oModel.setProperty("/reservationItem", oItem.ReservationItem || "");
                     oModel.setProperty("/costCenter", oItem.CostCenter || "");

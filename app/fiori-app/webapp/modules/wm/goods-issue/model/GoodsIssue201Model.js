@@ -66,6 +66,7 @@
                 reservationNo: "",
                 reservationItem: "",
                 fromReservation: false,
+                prefilled: {},              // fields the reservation supplied, shown read-only
 
                 // Cost Assignment
                 costCenter: "",

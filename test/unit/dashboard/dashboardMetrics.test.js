@@ -300,6 +300,75 @@ describe('Unit: Dashboard Controller live figures', () => {
         expect(controller.formatMetricValue(2729)).toBe('2729');
     });
 
+    describe('load vs. sign-in timing (tiles must not stay in "Loading")', () => {
+        const makeAuthModel = (bAuth) => {
+            const listeners = [];
+            return {
+                value: bAuth,
+                getProperty: function () { return this.value; },
+                bindProperty: jest.fn(() => ({
+                    attachChange: (fn, ctx) => listeners.push(fn.bind(ctx)),
+                    detachChange: jest.fn()
+                })),
+                set: function (b) { this.value = b; listeners.forEach((fn) => fn()); }
+            };
+        };
+        const setup = (oAuthModel) => {
+            const controller = makeController(new MockJSONModel({}));
+            controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: (n) => (n === 'auth' ? oAuthModel : null) });
+            controller._loadMetrics = jest.fn();
+            controller._loadGiKpis = jest.fn();
+            return controller;
+        };
+
+        test('onInit loads on both routes that show the dashboard ("dashboard" and the empty-hash "default")', () => {
+            const controller = new DashboardControllerClass();
+            controller.getView = () => ({ setModel: jest.fn() });
+            controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
+            controller.onInit();
+            expect(mockRouter.getRoute.mock.calls.map((c) => c[0])).toEqual(['dashboard', 'default']);
+        });
+
+        test('already signed in: loads immediately', () => {
+            const controller = setup(makeAuthModel(true));
+            controller._onDashboardMatched();
+            expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
+            expect(controller._loadGiKpis).toHaveBeenCalledTimes(1);
+        });
+
+        test('route matched before the session check finished: loads once it authenticates, exactly once', () => {
+            const oAuth = makeAuthModel(false);
+            const controller = setup(oAuth);
+            controller._onDashboardMatched();
+            controller._onDashboardMatched();
+            expect(controller._loadMetrics).not.toHaveBeenCalled();
+            expect(oAuth.bindProperty).toHaveBeenCalledTimes(1);
+
+            oAuth.set(true);
+            oAuth.set(true);
+            expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
+            expect(controller._loadGiKpis).toHaveBeenCalledTimes(1);
+        });
+
+        test('never authenticated (redirect to login): nothing is requested', () => {
+            const oAuth = makeAuthModel(false);
+            const controller = setup(oAuth);
+            controller._onDashboardMatched();
+            oAuth.set(false);
+            expect(controller._loadMetrics).not.toHaveBeenCalled();
+        });
+
+        test('a failed metrics call ends in the error state, not in "Loading"', async () => {
+            const oViewModel = new MockJSONModel({});
+            const controller = makeController(oViewModel);
+            mockODataClient.get.mockRejectedValueOnce(new Error('HTTP 502'));
+            await controller._loadMetrics();
+            controller.METRIC_KEYS.forEach((key) => expect(controller.formatTileState(oViewModel.getProperty('/' + key))).toBe('Failed'));
+            expect(oViewModel.getProperty('/metricsError')).toContain('HTTP 502');
+            expect(oViewModel.getProperty('/connectionState')).toBe('Error');
+        });
+    });
+
     test('exposes no simulator, info-dialog or placeholder-tab handlers', () => {
         const controller = new DashboardControllerClass();
         ['onSimulateCarLoan', 'onNewCarLoanApp', 'onShowMasterDataInfo', '_loadIndividualMetrics',

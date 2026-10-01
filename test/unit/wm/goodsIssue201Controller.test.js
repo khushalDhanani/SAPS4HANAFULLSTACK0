@@ -247,11 +247,11 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             expect(m.getProperty('/costCenter')).toBe('CC42');
         });
 
-        it('should surface a toast (not fabricate) when the reservation has no open item', async () => {
+        it('should show a clear error (not fabricate) when the reservation has no open item', async () => {
             mockService.fetchReservationItems.mockResolvedValueOnce([]);
             controller._prefillFromReservation('0000999999');
             await flush();
-            expect(mockMessageToast.show).toHaveBeenCalled();
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi201PrefillNoOpenItem');
             expect(controller._oModel.getProperty('/fromReservation')).toBe(false);
         });
 

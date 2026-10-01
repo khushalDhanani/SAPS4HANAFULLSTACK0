@@ -65,7 +65,7 @@ sap.ui.define([
                 .then(function (aItems) {
                     var oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
                     if (!oItem) {
-                        MessageToast.show(that.getText("gi261PrefillNoOpenItem", [sResv]));
+                        MessageBox.error(that.getText("gi261PrefillNoOpenItem", [sResv]));
                         return;
                     }
                     oModel.setProperty("/fromReservation", true);

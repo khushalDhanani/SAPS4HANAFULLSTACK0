@@ -85,6 +85,10 @@
                 materialName: "",
                 plant: "",
                 storageLocation: "",
+                isStorageLocationEditable: false,   // true only when the reservation item carries none
+
+                // Fields the reservation supplied: shown read-only (receivingPlant, receivingStorageLocation, batch)
+                prefilled: {},
 
                 // Quantity & Unit
                 quantity: 1,
@@ -209,7 +213,9 @@
             // 5. Storage Location (derived, 4 chars)
             var sSLoc = (oData.storageLocation != null) ? String(oData.storageLocation).trim().toUpperCase() : "";
             if (!sSLoc) {
-                errors.storageLocation = "Storage Location is required - select a Reservation Item first";
+                errors.storageLocation = oData.isStorageLocationEditable
+                    ? "Storage Location is required - the reservation has none, select one"
+                    : "Storage Location is required - select a Reservation Item first";
                 bValid = false;
             } else if (sSLoc.length !== 4) {
                 errors.storageLocation = "Storage Location must be 4 characters";
@@ -226,6 +232,10 @@
                 var parts = sQtyStr.split(".");
                 if (parts.length > 1 && parts[1].length > 3) {
                     errors.quantity = "Quantity cannot exceed 3 decimal places";
+                    bValid = false;
+                } else if (oData.fromReservation && oData.openQty != null && nQty > Number(oData.openQty)) {
+                    // Partial issue is allowed, more than the open reservation quantity is not.
+                    errors.quantity = "Quantity cannot exceed the open reservation quantity (" + oData.openQty + ")";
                     bValid = false;
                 }
             }
@@ -335,6 +345,12 @@
             oData.materialName = oItem.MaterialDesc || "";
             oData.plant = oItem.Plant || "";
             oData.storageLocation = oItem.StorageLocation || "";
+            oData.isStorageLocationEditable = !oItem.StorageLocation;
+            oData.prefilled = {
+                receivingPlant: !!oItem.ReceivingPlant,
+                receivingStorageLocation: !!oItem.ReceivingStorageLocation,
+                batch: !!oItem.Batch
+            };
             oData.unit = oItem.Unit || "";
             oData.isUnitEditable = !oItem.Unit;
             oData.isSerialManaged = !!oItem.IsSerialManaged;

@@ -509,7 +509,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-06-24'));
     });
 
-    it('reconciles submitted values against the reservation: rejects (409) a Material mismatch before posting', async () => {
+    it('reconciles submitted values against the reservation: rejects (400) a Material mismatch before posting', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 500 });
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
       const req = {
@@ -517,7 +517,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
       await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(409, expect.stringContaining('do not match reservation'));
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('do not match reservation'));
       expect(postSpy).not.toHaveBeenCalled(); // must NOT post when reconciliation fails
     });
 

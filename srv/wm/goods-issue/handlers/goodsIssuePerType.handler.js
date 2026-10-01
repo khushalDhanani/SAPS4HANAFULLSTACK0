@@ -75,8 +75,11 @@ async function stockPreCheck201(req, normalized) {
  * (or true when there was nothing to reconcile) to continue, or sends req.error and returns false.
  * Fails CLOSED when the reservation cannot be read. A storage location the reservation does not
  * carry cannot be reconciled, so a submitted one is accepted in that case.
+ * On success the reservation's own Material / Plant / Storage Location / Batch replace the submitted
+ * ones, so what is posted never comes from the client. With `receiving` (311) the receiving plant /
+ * storage location of the reservation header are reconciled and applied the same way.
  */
-async function reservationReconcileCheck(req, normalized) {
+async function reservationReconcileCheck(req, normalized, { receiving = false } = {}) {
   const sResv = String(normalized.ReservationNo || '').trim();
   const sItem = String(normalized.ReservationItem || '').trim();
   if (!sResv || !sItem) return true; // no reservation to reconcile against (unplanned path)
@@ -103,8 +106,16 @@ async function reservationReconcileCheck(req, normalized) {
   if (normalized.StorageLocation && item.StorageLocation && norm(normalized.StorageLocation) !== norm(item.StorageLocation)) {
     mismatches.push(`Storage Location (submitted ${normalized.StorageLocation}, reservation ${item.StorageLocation})`);
   }
+  if (receiving) {
+    if (normalized.ReceivingPlant && item.ReceivingPlant && norm(normalized.ReceivingPlant) !== norm(item.ReceivingPlant)) {
+      mismatches.push(`Receiving Plant (submitted ${normalized.ReceivingPlant}, reservation ${item.ReceivingPlant})`);
+    }
+    if (normalized.ReceivingStorageLocation && item.ReceivingStorageLocation && norm(normalized.ReceivingStorageLocation) !== norm(item.ReceivingStorageLocation)) {
+      mismatches.push(`Receiving Storage Location (submitted ${normalized.ReceivingStorageLocation}, reservation ${item.ReceivingStorageLocation})`);
+    }
+  }
   if (mismatches.length > 0) {
-    req.error(409, `Submitted values do not match reservation ${sResv} item ${sItem}: ${mismatches.join('; ')}. Goods Issue was NOT posted.`);
+    req.error(400, `Submitted values do not match reservation ${sResv} item ${sItem}: ${mismatches.join('; ')}. Goods Issue was NOT posted.`);
     return false;
   }
 
@@ -113,6 +124,8 @@ async function reservationReconcileCheck(req, normalized) {
     req.error(422, `Issue quantity ${issueQty} exceeds the open reservation quantity ${item.OpenQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
     return false;
   }
+  const fromReservation = ['Material', 'Plant', 'StorageLocation', 'Batch'].concat(receiving ? ['ReceivingPlant', 'ReceivingStorageLocation'] : []);
+  fromReservation.forEach((f) => { if (item[f]) normalized[f] = item[f]; });
   return item;
 }
 
@@ -225,6 +238,7 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue201Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
+      if (!(await reservationReconcileCheck(req, normalized))) return;
       // The attempt is persisted (own committed transaction) BEFORE anything is sent to SAP, with the
       // reference that goes into the document header. No attempt row -> no posting.
       normalized.ReferenceDocument = newPostingReference();
@@ -263,6 +277,7 @@ const PerTypeGoodsIssueHandler = {
       if (!normalized.ReceivingPlant && !resvItem.ReceivingPlant) {
         return req.error(400, `ReceivingPlant is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving plant. Goods Issue was NOT posted.`);
       }
+      if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
     });
@@ -271,7 +286,7 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
-      if (!(await reservationReconcileCheck(req, normalized))) return;
+      if (!(await reservationReconcileCheck(req, normalized, { receiving: true }))) return;
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));

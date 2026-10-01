@@ -290,6 +290,25 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             expect(mockGoodsIssue311Service.fetchReservationItems).toHaveBeenCalledWith('519367');
             expect(mockGoodsIssue311Model.applyReservationItem).toHaveBeenCalled();
         });
+
+        it.each([
+            ['unknown / closed reservation (no open item)', () => Promise.resolve([]), 'gi311PrefillNoOpenItem'],
+            ['failed reservation read', () => Promise.reject(new Error('SAP read failed')), 'SAP read failed']
+        ])('resv query param with %s shows an error and leaves the form empty and editable', async (_label, result, sMessage) => {
+            mockGoodsIssue311Service.fetchReservationItems.mockImplementationOnce(result);
+
+            controller._onRouteMatched({ getParameter: () => ({ '?query': { resv: '999999' } }) });
+            await flush();
+
+            const oModel = controller.getView().getModel('gi311');
+            expect(mockMessageBox.error).toHaveBeenCalledWith(sMessage);
+            expect(mockMessageToast.show).not.toHaveBeenCalled();
+            expect(mockGoodsIssue311Model.applyReservationItem).not.toHaveBeenCalled();
+            expect(oModel.getProperty('/fromReservation')).toBeFalsy();
+            expect(oModel.getProperty('/reservationNo')).toBe('');
+            expect(oModel.getProperty('/material')).toBeFalsy();
+            expect(oModel.getProperty('/busy')).toBeFalsy();
+        });
     });
 
     // =============================================================

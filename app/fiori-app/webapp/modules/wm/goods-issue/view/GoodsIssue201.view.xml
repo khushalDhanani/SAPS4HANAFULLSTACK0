@@ -95,6 +95,7 @@
                                 <Input
                                     id="inCostCenter"
                                     value="{gi201>/costCenter}"
+                                    editable="{= !${gi201>/prefilled/costCenter} }"
                                     placeholder="{i18n>gi201CostCenterPlaceholder}"
                                     showValueHelp="true"
                                     valueHelpRequest=".onCostCenterValueHelp"
@@ -159,6 +160,7 @@
                                 <Input
                                     id="inMaterial"
                                     value="{gi201>/material}"
+                                    editable="{= !${gi201>/prefilled/material} }"
                                     placeholder="{i18n>gi201MaterialPlaceholder}"
                                     showValueHelp="true"
                                     valueHelpRequest=".onMaterialValueHelp"
@@ -177,6 +179,7 @@
                                     <Input
                                         id="inPlant"
                                         value="{gi201>/plant}"
+                                        editable="{= !${gi201>/prefilled/plant} }"
                                         placeholder="{i18n>gi201Plant}"
                                         showValueHelp="true"
                                         valueHelpRequest=".onPlantValueHelp"
@@ -191,6 +194,7 @@
                                     <Input
                                         id="inStorageLocation"
                                         value="{gi201>/storageLocation}"
+                                        editable="{= !${gi201>/prefilled/storageLocation} }"
                                         placeholder="{i18n>gi201StorageLocation}"
                                         showValueHelp="true"
                                         valueHelpRequest=".onStorageLocationValueHelp"

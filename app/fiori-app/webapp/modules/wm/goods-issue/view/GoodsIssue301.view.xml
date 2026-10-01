@@ -244,6 +244,7 @@
                             <Input
                                 id="inBatch301"
                                 value="{gi301>/batch}"
+                                editable="{= !${gi301>/prefilled/batch} }"
                                 placeholder="{i18n>gi301BatchPlaceholder}"
                                 liveChange=".onFieldLiveChange"
                                 valueState="{= ${gi301>/errors/batch} ? 'Error' : 'None' }"
