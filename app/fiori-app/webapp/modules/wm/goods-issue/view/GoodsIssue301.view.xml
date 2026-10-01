@@ -122,6 +122,15 @@
                             <Label id="lblMaterial301" text="{i18n>gi301Material}" />
                             <Text id="txtMaterial301" text="{gi301>/material}" />
 
+                            <!-- Why Complete is disabled: material/plant/storage location problems on the resolved item -->
+                            <Label id="lblLocationError301" visible="{= !!${gi301>/reservationItem} &amp;&amp; !!(${gi301>/errors/material} || ${gi301>/errors/plant} || ${gi301>/errors/storageLocation}) }" />
+                            <MessageStrip
+                                id="msLocationError301"
+                                text="{= ${gi301>/errors/material} || ${gi301>/errors/plant} || ${gi301>/errors/storageLocation} }"
+                                type="Error"
+                                showIcon="true"
+                                visible="{= !!${gi301>/reservationItem} &amp;&amp; !!(${gi301>/errors/material} || ${gi301>/errors/plant} || ${gi301>/errors/storageLocation}) }" />
+
                             <Label id="lblMaterialDesc301" text="{i18n>gi301MaterialDesc}" visible="{= !!${gi301>/materialName} }" />
                             <Text
                                 id="txtMaterialDesc301"
@@ -132,13 +141,23 @@
                             <Label id="lblPlant301" text="{i18n>gi301Plant}" />
                             <Text id="txtPlant301" text="{gi301>/plant}" />
 
-                            <Label id="lblStorageLocation301" text="{i18n>gi301StorageLocation}" />
-                            <Text id="txtStorageLocation301" text="{gi301>/storageLocation}" />
+                            <Label id="lblStorageLocation301" text="{i18n>gi301StorageLocation}" required="{gi301>/isStorageLocationEditable}" />
+                            <Text id="txtStorageLocation301" text="{gi301>/storageLocation}" visible="{= !${gi301>/isStorageLocationEditable} }" />
+                            <Input
+                                id="inStorageLocation301"
+                                value="{gi301>/storageLocation}"
+                                showValueHelp="true"
+                                valueHelpRequest=".onStorageLocationValueHelp"
+                                liveChange=".onFieldLiveChange"
+                                valueState="{= ${gi301>/errors/storageLocation} ? 'Error' : 'None' }"
+                                valueStateText="{gi301>/errors/storageLocation}"
+                                maxLength="4"
+                                visible="{gi301>/isStorageLocationEditable}" />
 
                             <!-- Receiving Plant / Storage Location (OPTIONAL - Transfer Posting) -->
                             <core:Title id="titleReceivingLocation301" text="{i18n>gi301TitleReceivingLocation}" />
 
-                            <Label id="lblReceivingPlant301" text="{i18n>gi301ReceivingPlant}" />
+                            <Label id="lblReceivingPlant301" text="{i18n>gi301ReceivingPlant}" required="true" />
                             <Input
                                 id="inReceivingPlant301"
                                 value="{gi301>/receivingPlant}"

@@ -161,7 +161,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             expect(res.errors.serials).toBe('');
         });
 
-        it('does NOT fail validation when Receiving Plant / Storage Location are blank (optional fields)', () => {
+        it('requires Receiving Plant; Receiving Storage Location stays optional', () => {
             const data = GoodsIssue301Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
@@ -173,10 +173,26 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             data.receivingPlant = '';
             data.receivingStorageLocation = '';
 
-            const res = GoodsIssue301Model.validate(data);
+            let res = GoodsIssue301Model.validate(data);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.receivingPlant).toContain('Receiving Plant is required');
+            expect(res.errors.receivingStorageLocation).toBe('');
+
+            data.receivingPlant = '1150';
+            res = GoodsIssue301Model.validate(data);
             expect(res.isValid).toBe(true);
             expect(res.errors.receivingPlant).toBe('');
-            expect(res.errors.receivingStorageLocation).toBe('');
+        });
+
+        it('makes the issuing Storage Location editable only when the reservation item has none', () => {
+            const data = GoodsIssue301Model.getInitialData();
+            GoodsIssue301Model.applyReservationItem(data, { ReservationItem: '1', Material: 'MAT1', Plant: '1120', StorageLocation: '', Unit: 'NOS', OpenQty: 1 });
+            expect(data.isStorageLocationEditable).toBe(true);
+            expect(GoodsIssue301Model.validate(data).errors.storageLocation).toContain('the reservation has none');
+
+            GoodsIssue301Model.applyReservationItem(data, { ReservationItem: '1', Material: 'MAT1', Plant: '1120', StorageLocation: 'HS01', Unit: 'NOS', OpenQty: 1 });
+            expect(data.isStorageLocationEditable).toBe(false);
+            expect(GoodsIssue301Model.validate(data).errors.storageLocation).toBe('');
         });
 
         it('flags Receiving Plant / Storage Location on bad format length', () => {

@@ -471,6 +471,7 @@ class GoodsIssueAdapter {
       Material: String(resvItem.Product || '').trim(),
       Plant: String(resvItem.Plant || '').trim(),
       StorageLocation: String(resvItem.StorageLocation || '').trim(),
+      ReceivingPlant: String(resvItem.IssuingOrReceivingPlant || resvItem.ReceivingPlant || '').trim(),
       Batch: String(resvItem.Batch || '').trim(),
       Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || '').trim(),
       RequiredQty: reqQty,

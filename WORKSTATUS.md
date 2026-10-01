@@ -4,6 +4,62 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 10:02 IST
+- **Agent**: Claude Code
+- **Request**: Approved — fix 301 issues 1, 2 and 3 only (editable storage location with value help when the reservation leaves it blank; surface validation messages; require receiving plant when the reservation has none, client and backend). Issue 4 (scan-to-complete for 301/311) and issue 5 (Header Text) NOT in this pass. Do not post 519144.
+- **Changes**:
+  - `GoodsIssue301Model.js`: new `isStorageLocationEditable` (set by `applyReservationItem` when the reservation item has no storage location) with a matching validation message; Receiving Plant is now mandatory on the client ("must differ from issuing plant" unchanged). Receiving Storage Location stays optional.
+  - `GoodsIssueTransferBaseController.js` (shared by 301 and 311): the receiving storage-location value help was factored into `_storageLocationValueHelp`; new `onStorageLocationValueHelp` for the issuing storage location. 311 behavior unchanged (its view does not call the new handler).
+  - `GoodsIssue301.view.xml`: issuing Storage Location shows an Input with value help only when `isStorageLocationEditable`; an error strip in "Material & Location" shows the material / plant / storage-location validation message once a reservation item is resolved; Receiving Plant label marked required.
+  - `goodsIssuePerType.handler.js`: `reservationReconcileCheck` now returns the reservation item and skips the storage-location comparison when the reservation carries none (otherwise a user-chosen storage location would always be rejected with 409); `postGoodsIssue301` rejects with 400 when neither the request nor the reservation has a receiving plant. 261 and 311 handlers unchanged apart from the shared storage-location relaxation.
+  - `GoodsIssueAdapter.getReservationItemAuthoritative`: also returns `ReceivingPlant`.
+  - `i18n.properties`, `i18n_en.properties`: `gi301SelectStorageLocation`.
+  - Tests: `goodsIssue301Page.test.js` (the "receiving plant optional" test rewritten to the new rule; new storage-location-editable test), `goodsIssuePhase5Routing.test.js` (2 new handler tests: blocked without receiving plant; accepted with user-chosen storage location and receiving plant).
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue301Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `test/unit/wm/goodsIssue301Page.test.js`
+  - `test/unit/wm/goodsIssuePhase5Routing.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean.
+  - `cd app/fiori-app && npm run lint`: Success, no findings.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.36 s.
+  - `npm test -- test/unit/wm/`: first run 1 failed / 794 passed (existing test asserted receiving plant is optional; rewritten to the approved rule); final run 42 suites, 798/798 passed.
+  - `npm run test:unit`: 116 suites, 1948/1948 passed.
+  - Integration / e2e suites: not run.
+  - Live browser run and live SAP posting: **NOT performed** (built-in browser still on `#/login`; 519144 is not authorized for posting).
+- **Deferred (not fixed, by instruction)**:
+  - FEATURE REQUEST: scan-to-complete for 301/311 (storage-unit / serial scanning via `getStockUnitsForItem` + `resolveStockUnit`, as on 201/261, including the quantity-coverage and batch-capture logic). Shared controller `GoodsIssueTransferBaseController.js`; neither screen has any unit scan today.
+  - 301 Header Text typed on the screen is ignored (`GoodsIssue301Mapper.js` hardcodes it) — same bucket as the 261 Header Text item (Next Steps item 11).
+- **Notes**: the 201 fixes from the 09:53 entry were committed outside this session (`d8d2ee8`). The 311 screen has the same read-only storage location and optional receiving location pattern; not examined or changed.
+- **Current Status**: In Progress — 301 fixes implemented and unit-tested, uncommitted; live verification pending.
+- **Next Steps**: After the user signs in: 201 flow for 493669 and post (authorized by the user's own selection); 261 flow for 518021 up to an enabled Complete (posting NOT yet authorized by the user directly); 301 flow for 519144 up to an enabled Complete after the user enters storage location and receiving plant (no posting).
+
+## 2026-10-01 09:58 IST
+- **Agent**: Claude Code
+- **Request**: Debug `#/wm/goods-issue/plant-transfer-301?resv=519144` end to end — report first, no fixes and no posting until approved.
+- **Investigation (read-only; local CAP with the mocked dev user; no code changed)**:
+  - `GIItems` for 519144: item 0001, Material 8000009753 "Apple Macbook Pro 14\", M5", Plant 1120, **StorageLocation blank**, **ReceivingPlant blank**, **ReceivingStorageLocation blank**, open 1 NOS, movement 301, no batch. The adapter reads the full `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` entity (no `$select`), so the blanks come from what that service returns; the raw SAP record was not inspected separately.
+  - `getStockUnitsForItem`: no units — "Reservation item has no storage location; Storage Units cannot be determined."
+  - `revalidateStock`: 2 NOS of 8000009753 in plant 1120 (same figure with and without HS01). `MaterialBatches`: empty (not batch-managed).
+  - `resolveStockUnit` 1000033379 against 519144: match, WM storage unit, 1 NOS, no batch.
+- **Findings**:
+  1. BLOCKER for this reservation: issuing Storage Location is blank on the reservation item, the 301 screen shows it as read-only text, and `GoodsIssue301Model.validate` requires it — Complete can never enable and there is no way to enter it.
+  2. The reason is invisible: `errors.material` / `errors.plant` / `errors.storageLocation` are not bound to anything in `GoodsIssue301.view.xml`.
+  3. Receiving Plant / Storage Location are not on the reservation item, so they are not prefilled; they are optional in client and backend validation, so a 301 with no receiving plant would be allowed through to SAP once finding 1 is resolved. The "must differ from issuing plant" rule itself is intact (client `GoodsIssue301Model.js` validate, backend `goodsIssue301.validation.js`).
+  4. 301 (and 311, same shared controller) has no scan-to-complete at all: no `getStockUnitsForItem` / `resolveStockUnit` calls, no scan section, no scanned-units table. The count-vs-quantity and dropped-batch defects therefore do not exist in 301; the capability they belong to is absent.
+  5. Header Text typed on the 301 screen is not used: the backend mapper hardcodes `TP 301 Resv <no>` (`GoodsIssue301Mapper.js`).
+- **Not verified**: on-screen route load/prefill, Complete enablement on screen, browser console — the built-in browser is still on `#/login`. No posting attempted.
+- **Executed Commands & Results**: read-only `curl` GETs listed above (all HTTP 200). No tests run (no code changed).
+- **Current Status**: Reported; awaiting the user's decisions and approval.
+- **Next Steps**: User to decide how the issuing storage location and receiving plant should be supplied for 301 reservations that lack them, and whether scan-to-complete should be added to 301/311.
+
 ## 2026-10-01 09:53 IST
 - **Agent**: Claude Code
 - **Request**: Approved — apply all four Movement 201 scan fixes in one pass (port the 261 count-vs-quantity and batch-capture fix, surface the scan-incomplete message, add Quantity/Batch columns).
@@ -7303,3 +7359,5 @@ The table below provides a strict, unambiguous separation between **Code Complet
 10. OPEN DEFECT (not fixed): Movement 201 scan-to-complete compares the number of scanned units to the open quantity (`GoodsIssue201.controller.js:260`, `GoodsIssue201Model.js:286-289`), so storage-unit lines with quantity > 1 can never be completed. Port the 261 fix from the 2026-10-01 09:47 entry. See the 2026-10-01 09:52 entry.
 11. Movement 261 follow-ups (scoped, not fixed): Header Text is dropped before posting (`GoodsIssue261Service.js:48`, `service.cds:283`); unknown-barcode scans show the raw EWM diagnostic text (`GoodsIssueStockUnitClient.js:473`).
     - Update 2026-10-01 09:53 IST: item 10 fixed in code and unit-tested (see the 09:53 entry); uncommitted and not yet verified live.
+12. FEATURE REQUEST (not built): scan-to-complete for Movement 301/311 in `GoodsIssueTransferBaseController.js`, mirroring 201/261. See the 2026-10-01 10:02 entry.
+13. Movement 301 follow-up (not fixed): Header Text is ignored (`GoodsIssue301Mapper.js` hardcodes it); handle together with item 11.

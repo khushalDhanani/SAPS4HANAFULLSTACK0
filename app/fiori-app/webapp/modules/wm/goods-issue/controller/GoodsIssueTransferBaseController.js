@@ -401,17 +401,29 @@ sap.ui.define([
         },
 
         onReceivingStorageLocationValueHelp: function () {
+            this._storageLocationValueHelp(
+                this._oModel.getProperty("/receivingPlant") || "1120",
+                "SelectReceivingStorageLocation", "/receivingStorageLocation", "giLoadReceivingStorageLocationsError");
+        },
+
+        /** Issuing storage location: only offered when the reservation item carries none. */
+        onStorageLocationValueHelp: function () {
+            this._storageLocationValueHelp(
+                this._oModel.getProperty("/plant"),
+                "SelectStorageLocation", "/storageLocation", "gi201LoadStorageLocationsError");
+        },
+
+        _storageLocationValueHelp: function (sPlant, sTitleKey, sProp, sErrorKey) {
             var that = this;
             var cfg = this._c;
-            var sPlant = this._oModel.getProperty("/receivingPlant") || "1120";
 
             var oDialog = new SelectDialog({
-                title: this._t("SelectReceivingStorageLocation"),
+                title: this._t(sTitleKey),
                 confirm: function (oEvt) {
                     var oItem = oEvt.getParameter("selectedItem");
                     if (oItem) {
-                        that._oModel.setProperty("/receivingStorageLocation", oItem.getTitle());
-                        that._oModel.setProperty("/receivingStorageLocationName", oItem.getDescription());
+                        that._oModel.setProperty(sProp, oItem.getTitle());
+                        that._oModel.setProperty(sProp + "Name", oItem.getDescription());
                         that._validateLive();
                     }
                 }
@@ -432,7 +444,7 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     // Never seed the value help with invented storage locations — surface the real SAP error.
-                    MessageBox.error(that.getText("giLoadReceivingStorageLocationsError", [(err && err.message) || err]));
+                    MessageBox.error(that.getText(sErrorKey, [(err && err.message) || err]));
                 });
         },
 

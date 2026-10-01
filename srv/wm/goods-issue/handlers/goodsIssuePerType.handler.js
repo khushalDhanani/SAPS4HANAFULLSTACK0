@@ -66,8 +66,10 @@ async function stockPreCheck201(req, normalized) {
  * Material/Plant/StorageLocation from the resolved reservation item, but the CAP action can be
  * called directly, so we reconcile server-side against SAP before posting: submitted master data
  * must match the reservation item, and IssueQty must not exceed its open quantity. Skips cleanly
- * when there is no reservation (e.g. 261 unplanned direct-to-order). Returns true to continue, or
- * sends req.error and returns false. Fails CLOSED when the reservation cannot be read.
+ * when there is no reservation (e.g. 261 unplanned direct-to-order). Returns the reservation item
+ * (or true when there was nothing to reconcile) to continue, or sends req.error and returns false.
+ * Fails CLOSED when the reservation cannot be read. A storage location the reservation does not
+ * carry cannot be reconciled, so a submitted one is accepted in that case.
  */
 async function reservationReconcileCheck(req, normalized) {
   const sResv = String(normalized.ReservationNo || '').trim();
@@ -93,7 +95,7 @@ async function reservationReconcileCheck(req, normalized) {
   if (normalized.Plant && norm(normalized.Plant) !== norm(item.Plant)) {
     mismatches.push(`Plant (submitted ${normalized.Plant}, reservation ${item.Plant})`);
   }
-  if (normalized.StorageLocation && norm(normalized.StorageLocation) !== norm(item.StorageLocation)) {
+  if (normalized.StorageLocation && item.StorageLocation && norm(normalized.StorageLocation) !== norm(item.StorageLocation)) {
     mismatches.push(`Storage Location (submitted ${normalized.StorageLocation}, reservation ${item.StorageLocation})`);
   }
   if (mismatches.length > 0) {
@@ -106,7 +108,7 @@ async function reservationReconcileCheck(req, normalized) {
     req.error(422, `Issue quantity ${issueQty} exceeds the open reservation quantity ${item.OpenQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
     return false;
   }
-  return true;
+  return item;
 }
 
 /** Posts via the type's isolated adapter method; on capability-unavailable, records the dispatch queue. */
@@ -196,7 +198,12 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
-      if (!(await reservationReconcileCheck(req, normalized))) return;
+      const resvItem = await reservationReconcileCheck(req, normalized);
+      if (!resvItem) return;
+      // A plant-to-plant transfer needs a destination: from the request, or from the reservation.
+      if (!normalized.ReceivingPlant && !resvItem.ReceivingPlant) {
+        return req.error(400, `ReceivingPlant is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving plant. Goods Issue was NOT posted.`);
+      }
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
     });

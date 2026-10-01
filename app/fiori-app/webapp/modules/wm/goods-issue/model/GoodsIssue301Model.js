@@ -85,6 +85,8 @@
                 materialName: "",
                 plant: "",
                 storageLocation: "",
+                // True only when the reservation item carries no storage location: the user picks it.
+                isStorageLocationEditable: false,
 
                 // Quantity & Unit
                 quantity: 1,
@@ -209,7 +211,9 @@
             // 5. Storage Location (derived, 4 chars)
             var sSLoc = (oData.storageLocation != null) ? String(oData.storageLocation).trim().toUpperCase() : "";
             if (!sSLoc) {
-                errors.storageLocation = "Storage Location is required - select a Reservation Item first";
+                errors.storageLocation = oData.isStorageLocationEditable
+                    ? "Storage Location is required - the reservation has none, select one"
+                    : "Storage Location is required - select a Reservation Item first";
                 bValid = false;
             } else if (sSLoc.length !== 4) {
                 errors.storageLocation = "Storage Location must be 4 characters";
@@ -260,11 +264,15 @@
             }
 
             // 10. Receiving Plant / Storage Location (Transfer Posting - Plant-to-Plant)
-            // Format-only validation if unset, but when supplied, plant-to-plant invariants apply:
+            // Receiving Plant is mandatory (pre-filled when the reservation carries it) and plant-to-plant
+            // invariants apply:
             // - ReceivingPlant must differ from issuing Plant (inverse of 311's same-plant rule)
             // - ReceivingStorageLocation can match or differ from issuing StorageLocation
             var sRecvPlant = (oData.receivingPlant != null) ? String(oData.receivingPlant).trim().toUpperCase() : "";
-            if (sRecvPlant && sRecvPlant.length !== 4) {
+            if (!sRecvPlant) {
+                errors.receivingPlant = "Receiving Plant is required for Movement 301";
+                bValid = false;
+            } else if (sRecvPlant.length !== 4) {
                 errors.receivingPlant = "Receiving Plant must be 4 characters";
                 bValid = false;
             } else if (sRecvPlant && sPlant && sRecvPlant === sPlant) {
@@ -329,6 +337,7 @@
             oData.materialName = oItem.MaterialDesc || "";
             oData.plant = oItem.Plant || "";
             oData.storageLocation = oItem.StorageLocation || "";
+            oData.isStorageLocationEditable = !oItem.StorageLocation;
             oData.unit = oItem.Unit || "";
             oData.isUnitEditable = !oItem.Unit;
             oData.isSerialManaged = !!oItem.IsSerialManaged;

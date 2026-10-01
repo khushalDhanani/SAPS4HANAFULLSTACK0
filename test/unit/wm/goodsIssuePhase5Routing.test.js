@@ -49,6 +49,31 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('ReservationNo'));
   });
 
+  describe('postGoodsIssue301 against a reservation with no storage location / receiving plant', () => {
+    const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+    const body = { ReservationNo: '519144', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
+    let post;
+    beforeEach(() => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'M1', Plant: '1120', StorageLocation: '', ReceivingPlant: '', OpenQty: 1 });
+      post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2026' });
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    test('blocks the post when neither the request nor the reservation has a receiving plant', async () => {
+      const r = req(body);
+      await handlers['postGoodsIssue301'](r);
+      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('ReceivingPlant is required'));
+      expect(post).not.toHaveBeenCalled();
+    });
+
+    test('accepts a user-chosen storage location and receiving plant', async () => {
+      const r = req(Object.assign({ ReceivingPlant: '1130' }, body));
+      const res = await handlers['postGoodsIssue301'](r);
+      expect(r.error).not.toHaveBeenCalled();
+      expect(res.MaterialDocument).toBe('4900000001');
+    });
+  });
+
   test('all four per-type actions are registered (and no shared postGoodsIssue action)', () => {
     expect(typeof handlers['postGoodsIssue201']).toBe('function');
     expect(typeof handlers['postGoodsIssue261']).toBe('function');
