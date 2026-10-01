@@ -4,6 +4,75 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 11:02 IST
+- **Agent**: Claude Code
+- **Request**: `#/wm/goods-issue/311/open-transfers` - the Issuing SLoc and Receiving SLoc columns are not bound (show "-").
+- **Finding (root cause)**: the columns ARE bound in `GoodsIssue311Pending.view.xml` (and `GoodsIssue301Pending.view.xml`) to `StorageLocation` / `ReceivingStorageLocation`, but the backend `OpenReservations` entity never returned those fields: `getOpenReservations` did not `$select` `StorageLocation`, did not map it, and `service.cds` did not declare either property. The receiving side is not on the reservation ITEM entity at all.
+- **SAP checks (read-only)**:
+  - `UI_RESERVATION_ITM_MNG_V2/$metadata`: `ReservationDocumentItemType` has `StorageLocation` (issuing) and no receiving plant / storage location property; `ReservationDocumentType` has neither (`$select=IssuingOrReceivingPlant` -> HTTP 404 "Resource not found for the segment").
+  - `UI_RESERVATION_HDR_MNG_V2/$metadata`: header `C_ReservationDocTP_F4839Type` has `IssuingOrReceivingPlant` and `IssuingOrReceivingStorageLoc`. List read filtered by `GoodsMovementType` + `IsActiveEntity eq true`: HTTP 200 in 0.2-0.5 s (311: 101 headers, 301: 55). 519367 -> 1120 / CIS1; 516246 -> 1120 / MT01; 519144 -> 1120 / MT01.
+- **Changes**:
+  - `GoodsIssueReservationsClient.js`: `StorageLocation` added to `OPEN_RESV_SELECT` and mapped per reservation (first item that has one); new `_fetchReservationHeaderReceiving` reads receiving plant / storage location from the reservation header, called only for 301/311 lists; a failed header read logs a warning and leaves the columns blank.
+  - `service.cds`: `OpenReservations` gains `StorageLocation`, `ReceivingPlant`, `ReceivingStorageLocation`.
+  - Tests: 3 new in `goodsIssue311Serial.test.js` (issuing from item + receiving from header; header failure tolerated; 261 list does not read headers); `goodsIssueClients.test.js` `$select` assertion updated for the added field.
+  - No UI file changed (the bindings were already correct). 301 list is fixed by the same change.
+- **Affected Files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `test/unit/wm/goodsIssue311Serial.test.js`
+  - `test/unit/wm/goodsIssueClients.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit`: first run 1 failed / 2005 passed (existing test asserted the exact old `$select` list; updated for `StorageLocation`); final run 118 suites, 2006/2006 passed.
+  - `npx jest test/unit/wm`: 44 suites, 856/856 passed.
+  - `npx eslint` on the changed files: no findings. `git diff --check`: clean. `npx cds compile srv`: clean.
+  - Live read-only check through `GoodsIssueAdapter.getOpenReservations`: 311 -> 72 open, receiving blank on 0, issuing blank on 5; 301 -> 28 open, receiving blank on 0, issuing blank on 5 (e.g. 519144, whose reservation item has no storage location in SAP). 519367 -> HS01 -> 1120 / CIS1.
+  - NOT run: integration / e2e suites, UI5 lint/build (no UI file changed), browser check of the list (local CAP on :4004 answers 401 without a sign-in).
+- **Known limits / observations (not changed)**:
+  - The header read takes the newest 500 headers per movement type; older open transfers beyond that would show a blank receiving location.
+  - `GIItems` (execution pages 301/311) still reads `ReceivingPlant` / `ReceivingStorageLocation` from the item entity, where they do not exist, so the execution page never prefills them and `getReservationItemAuthoritative.ReceivingPlant` is always blank. This corrects the 09:58 note that 519144 has no receiving plant: its header carries 1120 / MT01. For 519144 (movement 301) the receiving plant equals the issuing plant.
+- **Current Status**: In Progress - list fix implemented and unit-tested, uncommitted; on-screen check pending sign-in. The 10:55 serial work is unchanged and still awaits a live posting.
+- **Next Steps**: restart/refresh the local CAP and confirm the two columns on `#/wm/goods-issue/311/open-transfers` and `#/wm/goods-issue/301/open-transfers`. Decide whether the execution pages should prefill receiving plant / storage location from the reservation header.
+
+## 2026-10-01 10:55 IST
+- **Agent**: Claude Code
+- **Request**: `postGoodsIssue311` for reservation 519367 returns "HTTP 400 - Maintain serial numbers for total quantity" from `API_MATERIAL_DOCUMENT_SRV`. Trace how 201 passes serials, find where 311 drops them, fix UI rule / server-side check / mapper, add unit tests, log.
+- **Finding (root cause)**:
+  - The 311 payload path is NOT where serials are lost: `GoodsIssue311Model.toBackendPayload` -> `GoodsIssue311Service` -> `postGoodsIssue311` -> `baseNormalized` -> `GoodsIssue311Mapper` all carry `SerialNumbers`, and the mapper uses the same shared `buildBaseItem` (`s4common.js`) as 201 (`to_SerialNumbers: { results: [{ SerialNumber }] }`).
+  - The gap is the **serial-managed flag**. The 311 (and 301) screen shows its serial panel and requires serials only when `GIItems.IsSerialManaged` is true, and nothing in the backend ever set that field (`getOpenItems` did not return it), so it was always false: no serial panel, Complete enabled, `SerialNumbers: []` sent, SAP rejects. 201 does not depend on that flag: it captures serials through scan-to-complete (`getStockUnitsForItem` + `resolveStockUnit`), which 301/311 do not have.
+  - Server side had the same hole: `checkSerialNumbers` only compares count to quantity when `IsSerialManaged` is set, and `baseNormalized` derives that from "serials were supplied", so zero serials always passed.
+  - SECONDARY, NOT FIXED: the dispatch queue stores a single `SerialNumber` (`db/wm/goods-issue-queue.cds`, `postWithQueueFallback`, `GoodsIssueQueueManager.postOptions`), so a queued posting with quantity > 1 would be replayed with one serial. Affects all movement types.
+- **SAP checks (read-only)**:
+  - `API_MATERIAL_DOCUMENT_SRV/$metadata` (HTTP 200): `A_MaterialDocumentItemType` navigation `to_SerialNumbers` -> `A_SerialNumberMaterialDocumentType`, property `SerialNumber` (Edm.String, MaxLength 18, UpperCase). Matches the names already used by `buildBaseItem`; no padding applies.
+  - `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` for 519367 (HTTP 200): item 0001 open 2 NOS and item 0002 open 1 NOS, Material 8000000001 "Iphone 16, 12GB", Plant 1120, SLoc HS01, movement 311. The entity carries no serial indicator.
+  - `API_PRODUCT_SRV` (for `A_ProductPlant.SerialNumberProfile`): HTTP 403 `/IWFND/MED/170` "No service found" - not active on this system, not used.
+  - `RFC_READ_TABLE` on `MARC` (`SERNP`), plant 1120: 8000000001 = ZSN1, 8000002951 = ZSN1, 8000009753 = ZSN1, 8300000214 = blank. Used as the serial-managed source.
+- **Changes**:
+  - `GoodsIssueStockUnitClient.isSerialManaged(material, plant)`: reads `MARC-SERNP` through the existing `RfcClient`; throws when the read fails.
+  - `GoodsIssueAdapter.isSerialManaged`: delegate.
+  - `GoodsIssueReservationsClient.getOpenItems`: every item now carries `IsSerialManaged` (one read per material/plant per call; an unreadable profile logs a warning and yields false). Shared by 201/261/301/311 `GIItems`; the 301 and 311 serial panels now appear for serial-managed items, 261 shows its plain serial panel only when the line has no scannable units (its scan mode resets the flag, as before).
+  - `goodsIssuePerType.handler.js`: new `serialCountCheck`, wired into `postGoodsIssue311` only, after the reservation reconciliation and before the serial status pre-check. Serial-managed material with serial count != quantity -> HTTP 400 before SAP is called, nothing queued. An unreadable profile does not block (SAP enforces the same rule).
+  - 311 mapper and 311 UI model/view/controller: no change needed (mapper already emits one entry per serial; the model already requires serials == quantity once the flag is true).
+  - New `test/unit/wm/goodsIssue311Serial.test.js` (13 tests): mapper with/without serials, `MARC-SERNP` lookup, `GIItems` flag, screen model Complete rule, handler full / too few / none / non-serial / unreadable profile.
+- **Affected Files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `test/unit/wm/goodsIssue311Serial.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue311Serial.test.js`: 13/13 passed.
+  - `npx jest test/unit/wm`: 44 suites, 853/853 passed.
+  - `npx jest test/unit`: 118 suites, 2003/2003 passed.
+  - `npx eslint` on the changed files and `srv/integration/s4hana/wm`: 0 errors, 2 warnings in `GoodsIssuePostingClient.js:686` (unused args, not touched in this change).
+  - `git diff --check`: clean. `npx cds compile srv`: clean (cds-dk 10.1.2).
+  - Live read-only check through `GoodsIssueAdapter.getOpenItems('', '519367')`: items 0001 and 0002 return `IsSerialManaged: true`; reservation 519945 (plant 1130, non-serial materials) returns false on every item.
+  - NOT run: integration / e2e suites, UI5 lint/build (no UI file changed), browser run of the 311 screen (local CAP on :4004 answers 401 without a sign-in), and **no posting of 519367** - the fix is not yet proven by a real material document.
+- **Known limits**: the serial-count check is wired into 311 only; `postGoodsIssue301` / `postGoodsIssue261` still rely on SAP to reject a missing serial. `IsSerialManaged` depends on RFC (`node-rfc`); where RFC is unavailable the flag is false and behaviour is as before this change. Queue keeps one serial (see finding).
+- **Current Status**: In Progress - implemented and unit-tested, uncommitted; live 311 posting of 519367 with scanned serials pending.
+- **Next Steps**: sign in, open `#/wm/goods-issue/sloc-transfer-311?resv=519367`, confirm the serial panel appears and Complete stays disabled until 2 serials are scanned for item 0001, then post with real in-stock serials of 8000000001 in 1120/HS01 and read the material document back (`to_SerialNumbers`). Decide whether to wire `serialCountCheck` into 301/261 and whether to extend the queue to hold all serials.
+
 ## 2026-10-01 10:02 IST
 - **Agent**: Claude Code
 - **Request**: Approved — fix 301 issues 1, 2 and 3 only (editable storage location with value help when the reservation leaves it blank; surface validation messages; require receiving plant when the reservation has none, client and backend). Issue 4 (scan-to-complete for 301/311) and issue 5 (Header Text) NOT in this pass. Do not post 519144.

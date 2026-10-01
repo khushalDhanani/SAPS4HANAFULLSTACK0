@@ -537,6 +537,11 @@ class GoodsIssueAdapter {
   /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 
+  /** Whether the material has a serial number profile in the plant (MARC-SERNP). */
+  async isSerialManaged(material, plant) {
+    return this.stockUnits.isSerialManaged(material, plant);
+  }
+
   /**
    * Pre-check serial number stock status (must be ESTO / unrestricted stock, not already issued).
    */

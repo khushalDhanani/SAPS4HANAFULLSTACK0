@@ -75,6 +75,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         key ReservationNo      : String(10);
             OrderNo            : String(12);
             Plant              : String(4);
+            StorageLocation    : String(4);
+            ReceivingPlant     : String(4);
+            ReceivingStorageLocation : String(4);
             MovementType       : String(4);
             MovementTypeName   : String(40);
             CreatedByUser      : String(12);

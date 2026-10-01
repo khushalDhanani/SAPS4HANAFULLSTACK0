@@ -1631,6 +1631,20 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * Whether the material carries a serial number profile in the plant (MARC-SERNP, RFC_READ_TABLE;
+   * API_PRODUCT_SRV is not active on this system). Throws when the profile cannot be read.
+   * @returns {Promise<boolean>}
+   */
+  async isSerialManaged(material, plant) {
+    const m = wmKey(material);
+    const w = wmKey(plant);
+    if (!m || !w) return false;
+    const matnr = /^\d+$/.test(m) ? m.padStart(18, '0') : m;
+    const rows = await this.rfc.readTable('MARC', ['SERNP'], [`MATNR = '${matnr}'`, `AND WERKS = '${w}'`]);
+    return rows.some((r) => !!r.SERNP);
+  }
+
+  /**
    * Pre-check serial number stock status (must be ESTO / unrestricted stock, not already issued).
    *
    * @param {string} material

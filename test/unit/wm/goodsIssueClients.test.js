@@ -204,7 +204,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(q).toContain(encodeURIComponent("GoodsMovementType eq '261'"));
       expect(q).not.toContain(encodeURIComponent("'201'"));
       expect(q).not.toContain(encodeURIComponent("'531'"));
-      expect(q).toContain('$select=Reservation,ReservationItem,OrderID,Plant,GoodsMovementType,GoodsMovementTypeName,Product,ProductName,ResvnItmRequiredQtyInBaseUnit,ResvnItmWithdrawnQtyInBaseUnit');
+      expect(q).toContain('$select=Reservation,ReservationItem,OrderID,Plant,StorageLocation,GoodsMovementType,GoodsMovementTypeName,Product,ProductName,ResvnItmRequiredQtyInBaseUnit,ResvnItmWithdrawnQtyInBaseUnit');
       expect(q).toContain(`$orderby=${encodeURIComponent('Reservation desc')}`);
       expect(q).toContain('$top=1000&$skip=0');
     });

@@ -4,7 +4,7 @@ const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 // Only the fields the reservation list needs: the full entity is ~60 fields per item, which made
 // the 2,000-item scan slow. Newest reservations first, so a truncated list keeps the recent ones.
 const OPEN_RESV_SELECT = [
-  'Reservation', 'ReservationItem', 'OrderID', 'Plant', 'GoodsMovementType', 'GoodsMovementTypeName',
+  'Reservation', 'ReservationItem', 'OrderID', 'Plant', 'StorageLocation', 'GoodsMovementType', 'GoodsMovementTypeName',
   'Product', 'ProductName', 'ResvnItmRequiredQtyInBaseUnit', 'ResvnItmWithdrawnQtyInBaseUnit'
 ].join(',');
 
@@ -86,6 +86,33 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
       }
     }
     return userMap;
+  }
+
+  /**
+   * Receiving plant / storage location of transfer reservations (301/311). They exist only on the
+   * reservation header (UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839), not on the item entity.
+   * ponytail: newest 500 headers per call (open and closed); page it if older open transfers show blank.
+   * @returns {Promise<Map<string,{ReceivingPlant:string,ReceivingStorageLocation:string}>>} keyed by unpadded reservation
+   */
+  async _fetchReservationHeaderReceiving(movementType, sResv) {
+    const mvts = String(movementType).split(',').map((m) => m.trim()).filter(Boolean);
+    let filter = `IsActiveEntity eq true and (${mvts.map((m) => `GoodsMovementType eq '${encodeURIComponent(m)}'`).join(' or ')})`;
+    if (sResv) {
+      filter += ` and (Reservation eq '${encodeURIComponent(sResv.replace(/^0+/, ''))}' or Reservation eq '${encodeURIComponent(sResv.padStart(10, '0'))}')`;
+    }
+    const headers = await this._get(
+      '/sap/opu/odata/sap/UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839',
+      `$select=Reservation,IssuingOrReceivingPlant,IssuingOrReceivingStorageLoc&$orderby=${encodeURIComponent('Reservation desc')}&$top=500&$filter=${encodeURIComponent(filter)}&$format=json`
+    );
+    const map = new Map();
+    for (const h of Array.isArray(headers) ? headers : []) {
+      if (!h.Reservation) continue;
+      map.set(String(h.Reservation).replace(/^0+/, ''), {
+        ReceivingPlant: h.IssuingOrReceivingPlant || '',
+        ReceivingStorageLocation: h.IssuingOrReceivingStorageLoc || ''
+      });
+    }
+    return map;
   }
 
   /**
@@ -186,6 +213,9 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               ReservationNo: sRes,
               OrderNo: r.OrderID || '',
               Plant: r.Plant || '',
+              StorageLocation: r.StorageLocation || '',
+              ReceivingPlant: '',
+              ReceivingStorageLocation: '',
               MovementType: r.GoodsMovementType || '',
               MovementTypeName: r.GoodsMovementTypeName || '',
               CreatedByUser: r.CreatedByUser || r.UserID || '',
@@ -198,6 +228,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
             const entry = resvMap.get(sRes);
             entry.ItemCount++;
             if (!entry.OrderNo && r.OrderID) entry.OrderNo = r.OrderID;
+            if (!entry.StorageLocation && r.StorageLocation) entry.StorageLocation = r.StorageLocation;
             if (!entry.CreatedByUser && (r.CreatedByUser || r.UserID)) entry.CreatedByUser = r.CreatedByUser || r.UserID;
           }
         }
@@ -218,6 +249,18 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
             }
           } catch (uErr) {
             LOG.warn(`Could not enrich reservation user headers: ${uErr.message}`);
+          }
+        }
+
+        // Transfers (301/311): receiving plant / storage location from the reservation header
+        if (/\b(301|311)\b/.test(String(movementType || ''))) {
+          try {
+            const recvMap = await this._fetchReservationHeaderReceiving(movementType, sResv);
+            for (const [sRes, entry] of resvMap.entries()) {
+              Object.assign(entry, recvMap.get(sRes.replace(/^0+/, '')));
+            }
+          } catch (rErr) {
+            LOG.warn(`Could not read receiving plant / storage location from reservation headers: ${rErr.message}`);
           }
         }
 
@@ -337,6 +380,21 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
         return [];
       };
 
+      // Serial number profile (MARC-SERNP), read once per material/plant. Unreadable -> false: the
+      // screen then asks for no serials and SAP itself rejects a serial-managed posting without them.
+      const serialFlags = new Map();
+      const isSerialManagedFn = (mat, plant) => {
+        if (!(this.adapter && typeof this.adapter.isSerialManaged === 'function')) return false;
+        const key = `${mat}|${plant}`;
+        if (!serialFlags.has(key)) {
+          serialFlags.set(key, Promise.resolve().then(() => this.adapter.isSerialManaged(mat, plant)).catch((err) => {
+            LOG.warn(`Could not read the serial number profile of material ${mat} in plant ${plant}: ${err.message}`);
+            return false;
+          }));
+        }
+        return serialFlags.get(key);
+      };
+
       const mappedItems = await Promise.all(results.map(async (r) => {
         const sResClean = String(r.Reservation || '').trim().replace(/^0+/, '');
         const sItemClean = String(r.ReservationItem || '').trim().replace(/^0+/, '');
@@ -418,6 +476,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           MovementType: r.GoodsMovementType || '',
           MovementTypeName: r.GoodsMovementTypeName || '',
           CostCenter: r.CostCenter || (r.GoodsMovementType === '201' ? sHeaderCostCenter : ''),
+          IsSerialManaged: Boolean(await isSerialManagedFn(r.Product, r.Plant)),
           PackagingUnits: packagingUnits
         };
       }));

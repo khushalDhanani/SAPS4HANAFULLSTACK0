@@ -116,6 +116,28 @@ async function reservationReconcileCheck(req, normalized) {
   return item;
 }
 
+/**
+ * Serial-managed materials need exactly one serial number per unit. Checked against SAP master data
+ * (not a client flag) before posting. Returns true to continue, or sends req.error(400) and returns
+ * false. An unreadable serial profile does not block: SAP enforces the same rule on the posting.
+ */
+async function serialCountCheck(req, normalized) {
+  if (typeof GoodsIssueAdapter.isSerialManaged !== 'function') return true;
+  let serialManaged;
+  try {
+    serialManaged = await GoodsIssueAdapter.isSerialManaged(normalized.Material, normalized.Plant);
+  } catch (err) {
+    LOG.warn(`Serial number profile of material ${normalized.Material} could not be read; SAP will enforce serials:`, err.message || err);
+    return true;
+  }
+  if (!serialManaged) return true;
+  const qty = Number(normalized.IssueQty);
+  const count = (normalized.SerialNumbers || []).length;
+  if (count === qty) return true;
+  req.error(400, `Material ${normalized.Material} is serial-managed: ${count} serial number(s) supplied for quantity ${qty}. Scan one serial number per unit. Goods Issue was NOT posted.`);
+  return false;
+}
+
 /** Posting-attempt status for an error the adapter raised: SAP did not answer vs. SAP said no. */
 const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
 
@@ -250,6 +272,7 @@ const PerTypeGoodsIssueHandler = {
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
       if (!(await reservationReconcileCheck(req, normalized))) return;
+      if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
     });
