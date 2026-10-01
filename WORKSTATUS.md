@@ -4,6 +4,27 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-01 09:36 IST
+- **Agent**: Claude Code
+- **Request**: "@app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml Make this 2/2 Gird UI."
+- **Change**: Switched the `formGoodsIssue261` `SimpleForm` from a single column to a two-column `ResponsiveGridLayout`, so its four titled sections render as a 2 x 2 grid on M/L/XL screens (Issue Mode | Material & Location on the first row, Quantity & Posting Dates | Batch Management on the second). Phones (S) still stack in one column.
+  - `columnsXL/L/M`: `1` -> `2`
+  - `labelSpanXL/L`: `3` -> `4` (labels need more room in the narrower half-width columns)
+  - `emptySpanXL/L/M`: `2/2/1` -> `0` (no wasted right-hand gutter inside each half)
+  - No controls, ids, bindings, or controller code changed. Scan-to-complete and Serial panels untouched.
+- **Affected Files**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Clean.
+  - `cd app/fiori-app && npm run lint`: Success, no findings.
+  - `cd app/fiori-app && npm run build`: Build succeeded in 1.07 s.
+  - `npm test -- test/unit/wm/`: 42 suites passed, 790/790 tests passed.
+  - Live browser check of `#/wm/goods-issue/order-based-261` on `http://localhost:4004`: **NOT performed** — the app redirected to `#/login` and the agent did not sign in. The 2 x 2 rendering is therefore not visually verified.
+- **Known Limitation**: The Batch Management section has no visible fields when the material is not batch-managed, so the bottom-right cell shows only its title in that case.
+- **Current Status**: In Progress — change made and lint/build/unit tests pass; visual verification pending.
+- **Next Steps**: User to open `#/wm/goods-issue/order-based-261` while logged in and confirm the 2 x 2 layout (and decide whether the empty Batch Management cell should be hidden for non-batch materials).
+
 ## 2026-09-30 17:28 IST
 - **Agent**: Antigravity
 - **Request**: "When i'm in particual : /wm/goods-issue/cost-center-201?resv=514439 in this also not showing properly" (Investigate why Cost Center Name and Unrestricted Stock show empty '—' placeholders when navigating to a specific reservation).
