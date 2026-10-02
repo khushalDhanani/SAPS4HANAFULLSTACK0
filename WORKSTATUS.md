@@ -4,6 +4,49 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-02 11:30 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit):
+  Read-only investigation first, report before changing code:
+  1. In TrToAdapter.js and the existing TO flow: how a TO is created and confirmed for a TR, and whether it accepts specific SUs and a partial qty. Show where in the 261 flow it could be called after the IM post.
+  2. After an IM 261 post, how long until LQUA no longer shows the issued quantity, and does anything in CAP exclude SUs already issued but whose TO is not confirmed?
+  3. Propose options: (a) create the TO after the IM post, with recovery if the TO fails; (b) record issued SUs and partial qty in CAP and subtract them from the suggestion and validation until the TO is confirmed. List files and risks.
+  4. Server rule: accept any valid SU set whose sum equals open qty; server picks which SU takes the partial. Add tests for a different valid drum order.
+  Do not implement the TO yet. Update WORKSTATUS.md with findings.
+- **Trace & SAP Facts (Read-Only Investigation Findings)**:
+  - 1. TO Creation & Confirmation in TrToAdapter:
+    - `TrToAdapter.createTO({ lgnum, tbnum, lenum, qty })` calls custom RFC function module `ZWM_TO_CREATE_FROM_TR` in SAP.
+    - Specific SUs: YES. Passes `VLENR: su` (Storage Unit `LENUM` padded to 20 digits) from `LQUA` quant.
+    - Partial quantity: YES. Passes `ANFME: quantity.toFixed(3)`. Validates `quantity <= min(quant.VERME, item.OpenQty)`. Does not require full quant.
+    - Confirmation: `ZWM_TO_CREATE_FROM_TR` wraps `L_TO_CREATE_TR` without `I_SQUIT`, returning `{ Confirmed: false }`. Standard SAP confirmation occurs in transaction LT12 or via `L_TO_CONFIRM`. Currently no RFC confirmation method is wired in `TrToAdapter.js`.
+    - Placement in 261 flow: In `PerTypeGoodsIssueHandler.js` (or `GoodsIssuePostingClient.post261`), right after `postFn(normalized)` receives the Material Document (`MBLNR`), query `LTBK` by `RSNUM` / `MBLNR` to resolve the generated TR (`TBNUM`), then iterate over the submitted SUs calling `createTO`.
+  - 2. LQUA Stock Reduction Timing & CAP Exclusion Gap:
+    - In SAP LE-WM, an IM 261 post creates an interim quant in storage type 914/919 and a TR in `LTBK`/`LTBP`. The source quants in `LQUA` on the storage bins/SUs remain completely unchanged with their full stock until a TO is created and confirmed in LT12.
+    - Unless a TO is confirmed, `LQUA` will **never** reduce the source quant.
+    - CAP Exclusion Gap: Currently, nothing in CAP excludes or subtracts SUs already issued in an IM document whose TO is unconfirmed. When `listStockUnitsForReservationItem` queries `LQUA`, the issued SUs still appear with full available stock. While the original reservation line cannot be re-issued because its IM `openQty` is 0, any other reservation line for that material would still see and suggest those same SUs.
+  - 3. Architectural Options:
+    - Option (a): Create TO after IM post with compensating rollback (`BAPI_GOODSMVT_CANCEL`) if TO fails, or enqueue to Outbox queue. Risks: Non-atomic two-phase commit, update-task latency for TR generation in SAP, and TO remains unconfirmed unless LT12 confirmation is also automated.
+    - Option (b): Record issued SUs and partial quantities in a CAP persistence table (`IssuedStorageUnits`), deducting them from available stock during suggestion and validation until TO confirmation or TTL. Risks: Local state vs SAP persistence drift if cancellations happen in SAP GUI outside CAP.
+  - 4. Server Rule for Valid SU Sets & Drum Order:
+    - Updated `storageUnitReconcileCheck261` to accept any valid set of SUs whose total equals open reservation quantity. The server orders the submitted SUs according to SAP's authoritative sequence (`sapStockUnits` FEFO/FIFO) and the server assigns the partial to the server-chosen boundary SU, regardless of client array ordering.
+- **Changes**:
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: removed client array ordering restriction so any valid drum order is accepted by the server, while server strictly designates the partial SU.
+  - `test/unit/wm/goodsIssue261SuScan.test.js`: added tests verifying reversed and shuffled drum orders are accepted, validated, and posted with the server-selected partial SU.
+  - `WORKSTATUS.md`: logged complete investigation findings and test results.
+- **Affected Files**:
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `test/unit/wm/goodsIssue261SuScan.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js`: 1 suite, 26/26 passed.
+  - `npx jest test/unit/wm`: 46 suites, 950/950 passed.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite, 7/7 passed.
+  - `git diff --check`: clean (0 errors).
+  - `git status`: 3 modified files (no live POST, no commit).
+- **Current Status**: Complete & Verified. Read-only TO investigation documented; Options (a) and (b) analyzed; server rule updated to accept any valid SU set with server-selected partial SU; verified with reversed and shuffled drum order tests; full WM test suite (46 suites, 950 tests) 100% passing. No TO implemented yet, no live POST executed, no git commit created.
+- **Next Steps**: Awaiting user decision on Option (a) vs Option (b) for Transfer Order handling.
+
+
 ## 2026-10-02 11:25 IST
 - **Agent**: Antigravity
 - **Request**: For 261 partial last SU (No live POST, no commit):

@@ -300,13 +300,7 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       return false;
     }
 
-    // Tampered order check (Requirement 4): client's last SU in submittedSUs MUST be the server-chosen partial SU
-    const clientLastSuId = String(submittedSUs[numSUs - 1]).trim().toUpperCase();
-    if (clientLastSuId !== partialSuId) {
-      req.error(400, `Tampered StorageUnits order cannot move partial quantity to another Storage Unit. Server chooses ${partialSuId} for partial issue. Goods Issue was NOT posted.`);
-      return false;
-    }
-
+    // Server rule: accept any valid SU set whose sum equals open qty; server picks which SU takes the partial
     if (explicitLastQty !== null) {
       if (isNaN(explicitLastQty) || explicitLastQty <= 0) {
         req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${partialSuId} must be greater than zero. Goods Issue was NOT posted.`);

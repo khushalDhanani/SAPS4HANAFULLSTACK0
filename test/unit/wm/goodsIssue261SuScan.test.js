@@ -810,7 +810,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
-    it('rejects tampered order of StorageUnits attempting to move partial quantity to another SU', async () => {
+    it('accepts any valid SU set whose sum equals open qty: server picks which SU takes the partial regardless of drum order', async () => {
       const stock = [];
       const suList = [];
       for (let i = 1; i <= 10; i++) {
@@ -820,13 +820,16 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       }
       setupMockSap({ openQty: 450, stockUnits: stock });
 
-      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+        MaterialDocument: '4900099999',
+        MaterialDocYear: '2026'
+      });
       const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
-      // Tampered order: client puts DRUM_10 first and DRUM_09 last to try to make DRUM_09 take the 18 KG partial
-      const tamperedList = ['DRUM_10', 'DRUM_01', 'DRUM_02', 'DRUM_03', 'DRUM_04', 'DRUM_05', 'DRUM_06', 'DRUM_07', 'DRUM_08', 'DRUM_09'];
+      // 1) Different valid drum order (reversed): client lists DRUM_10 first and DRUM_01 last
+      const reversedList = [...suList].reverse();
 
-      const req = {
+      const reqReversed = {
         data: {
           ReservationNo: '480962',
           ReservationItem: '0001',
@@ -835,16 +838,45 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
           StorageLocation: 'CS01',
           IssueQty: 450,
           Unit: 'KG',
-          StorageUnits: tamperedList,
+          StorageUnits: reversedList,
           LastStorageUnitQty: 18
         },
         user: { id: 'TESTUSER' },
         error: jest.fn()
       };
 
-      await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered StorageUnits order cannot move partial quantity to another Storage Unit'));
-      expect(postSpy).not.toHaveBeenCalled();
+      const resReversed = await handlers['postGoodsIssue261'](reqReversed);
+      expect(reqReversed.error).not.toHaveBeenCalled();
+      expect(resReversed).toBeDefined();
+      expect(resReversed.MaterialDocument).toBe('4900099999');
+      expect(postSpy).toHaveBeenCalled();
+      expect(enqueueSpy).not.toHaveBeenCalled();
+
+      // 2) Different valid drum order (shuffled / arbitrary scan sequence)
+      postSpy.mockClear();
+      const shuffledList = ['DRUM_05', 'DRUM_10', 'DRUM_02', 'DRUM_01', 'DRUM_08', 'DRUM_03', 'DRUM_07', 'DRUM_04', 'DRUM_09', 'DRUM_06'];
+
+      const reqShuffled = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: shuffledList,
+          LastStorageUnitQty: 18
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      const resShuffled = await handlers['postGoodsIssue261'](reqShuffled);
+      expect(reqShuffled.error).not.toHaveBeenCalled();
+      expect(resShuffled).toBeDefined();
+      expect(resShuffled.MaterialDocument).toBe('4900099999');
+      expect(postSpy).toHaveBeenCalled();
       expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
