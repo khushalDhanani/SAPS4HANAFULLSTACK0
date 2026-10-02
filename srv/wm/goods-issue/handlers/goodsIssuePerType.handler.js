@@ -381,23 +381,42 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
 const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
 
 /**
+ * Returns true when the error code/status represents a DEFINITIVE SAP rejection
+ * (document was NOT posted). Returns false for unknown outcomes (timeout, reset,
+ * 504, 2xx without document, etc.) — those must keep the `claiming` row alive.
+ */
+function isDefinitiveRejection(err) {
+  if (GoodsIssueIssuedSuStore && typeof GoodsIssueIssuedSuStore.isDefinitiveRejection === 'function') {
+    return GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
+  }
+  const s = err && (err.status || err.statusCode);
+  if (s === 400 || s === 409 || s === 422) return true;
+  if (/deficit|consumed|storage unit|insufficient stock/i.test(err && err.message || '')) return true;
+  return false;
+}
+
+/**
  * Posts via the type's isolated adapter method; on capability-unavailable, records the dispatch queue.
  * `onOutcome(status, fields)` (optional) is told how the attempt ended: posted / queued /
  * unconfirmed / rejected.
+ * Returns the result augmented with `_definitiveRejection: boolean` so callers can decide
+ * whether to delete (definitive) or keep (unknown) claiming rows.
  */
 async function postWithQueueFallback(req, normalized, postFn, onOutcome = async () => {}) {
   try {
     const result = await postFn(normalized);
     await onOutcome('posted', { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
-    return Object.assign({ Queued: false, QueueReference: '', SyncStatus: 'POSTED_IN_SAP' }, result);
+    return Object.assign({ Queued: false, QueueReference: '', SyncStatus: 'POSTED_IN_SAP', _definitiveRejection: false }, result);
   } catch (err) {
-    if (err.status === 400 || err.status === 422 || /deficit|consumed|storage unit|insufficient stock/i.test(err.message || '')) {
+    if (isDefinitiveRejection(err)) {
       await onOutcome('rejected', { LastError: err.message });
       const message = err.message || 'Validation failed for Goods Issue';
-      // Keep the original SAP text (e.g. closed posting period) available to the client.
-      return Array.isArray(err.details) && err.details.length > 0
+      const errResult = Array.isArray(err.details) && err.details.length > 0
         ? req.error({ code: err.code || String(err.status || 400), status: err.status || 400, message, details: err.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') })) })
         : req.error(err.status || 400, message);
+      const ret = (errResult && typeof errResult === 'object') ? errResult : { _definitiveRejection: true, isError: true };
+      ret._definitiveRejection = true;
+      return ret;
     }
     // A plain 403 is an authorization/CSRF refusal, not an availability problem: it is surfaced below, not queued.
     if (err.status === 501 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
@@ -451,11 +470,16 @@ async function postWithQueueFallback(req, normalized, postFn, onOutcome = async 
         Queued: true,
         QueueReference: queueRecord.QueueReference,
         SyncStatus: 'QUEUED',
+        _definitiveRejection: false, // outcome is unknown until replay
         Message: `Transaction recorded in the dispatch queue (${queueRecord.QueueReference}), not yet posted in SAP. Pending SAP S/4HANA Gateway service activation.`
       };
     }
     await onOutcome(UNCONFIRMED_CODES.includes(err.code) ? 'unconfirmed' : 'rejected', { LastError: err.message });
-    return req.error(err.status || 400, err.message || 'Failed to post Goods Issue in S/4HANA');
+    // Unknown outcome (timeout, 504, reset, etc.) — _definitiveRejection = false
+    const unknownResult = req.error(err.status || 400, err.message || 'Failed to post Goods Issue in S/4HANA');
+    const ret = (unknownResult && typeof unknownResult === 'object') ? unknownResult : { _definitiveRejection: false, isError: true };
+    ret._definitiveRejection = false;
+    return ret;
   }
 }
 
@@ -519,7 +543,8 @@ const PerTypeGoodsIssueHandler = {
         res = await postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
       } catch (err) {
         if (claimIds.length > 0) {
-          await GoodsIssueIssuedSuStore.deleteClaims(claimIds);
+          const isDef = GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
+          await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: isDef });
         }
         throw err;
       }
@@ -536,10 +561,16 @@ const PerTypeGoodsIssueHandler = {
             LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
           }
         }
-      } else {
-        // Post failed, rejected, or queued: delete claiming rows
+      } else if (res && res.Queued === true) {
+        // Queued: outcome unknown until replay — keep 'claiming' rows for release-job resolution
         if (claimIds.length > 0) {
-          await GoodsIssueIssuedSuStore.deleteClaims(claimIds);
+          await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: false });
+        }
+      } else {
+        // Delete claiming rows ONLY on explicit definitive rejection; unknown outcomes default to keep
+        const definitive = Boolean(res && res._definitiveRejection === true);
+        if (claimIds.length > 0) {
+          await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive });
         }
       }
       return res;

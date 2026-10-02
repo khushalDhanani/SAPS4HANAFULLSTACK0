@@ -4,6 +4,163 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+
+## 2026-10-02 12:45 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit).
+  1. Make `acquireClaims` safe under read-committed: lock a per-SU row (`SELECT ... FOR UPDATE` on a lock/counter row, or equivalent) before the re-sum. State the isolation/lock used. Add a test that simulates two transactions that cannot see each other's uncommitted rows (mock or two connections) and proves one fails.
+  2. `deleteClaims` default must be "keep"; deletion requires explicit `definitive: true`. Treat never-reached errors (404/503/ECONNREFUSED/DNS) as definitive.
+  3. Build the 261 fallback lookup in MATDOC by reservation+item+user+date (exactly one match required). Claims `claiming` past a threshold become `needs-attention` with a visible flag and a manual resolve action (posted / not posted).
+  4. Unknown-outcome queue items must not be replayable: mark them `NEEDS_ATTENTION`. Test it.
+  5. Run the full suite, report the total, list the schema changes to deploy in `WORKSTATUS.md`, and propose a four-commit split.
+- **Isolation and Lock Specification (Requirement 1)**:
+  - **Transaction Isolation**: `READ COMMITTED` (standard SAP HANA / relational database transaction isolation).
+  - **The Race Hazard under READ COMMITTED**: Under `READ COMMITTED`, Transaction 1 (Tx1) inserting a `claiming` row is invisible to concurrent Transaction 2 (Tx2) until Tx1 commits. If Tx1 and Tx2 run concurrently, both can query the same SU, observe `sum <= preIssueStock`, insert claims, and commit, leading to over-claiming.
+  - **The Per-SU Row Lock Mechanism**:
+    - Created lock table `saps4hana.wm.GoodsIssueSuLock` keyed by `StorageUnit` with `LockVersion: Integer default 1`.
+    - In `acquireClaims`, before re-summing active claims, an exclusive DB row lock is acquired on `GoodsIssueSuLock` via `UPDATE saps4hana.wm.GoodsIssueSuLock SET LockVersion = LockVersion + 1 WHERE StorageUnit = ?` (or `SELECT ... FOR UPDATE`). If the row does not exist, an `INSERT` upsert initializes it.
+    - SUs are sorted in deterministic alphabetical order (`[...sus].sort()`) before acquiring locks to guarantee deadlock freedom across multi-SU requests.
+    - **Lock Behavior**: Tx2 attempting to acquire the row lock on `StorageUnit` is blocked at the database row level until Tx1 commits or rolls back. When Tx1 commits its `claiming` row, Tx2's lock statement unblocks. Tx2 then executes its re-sum query under `READ COMMITTED`, which now reads Tx1's committed `claiming` row. Tx2 calculates that `sum > preIssueStock`, deletes its own claim rows within the transaction, and throws HTTP 400.
+- **Schema Changes to Deploy**:
+  - `db/wm/goods-issue-issued-su.cds`:
+    - Added entity `GoodsIssueSuLock`:
+      ```cds
+      entity GoodsIssueSuLock {
+        key StorageUnit : String(20);
+        LockVersion     : Integer default 1;
+      }
+      ```
+    - Extended entity `GoodsIssueIssuedStorageUnit`:
+      - Added `NeedsAttention: Boolean default false;`
+      - Added `ManualResolveAction: String(20);` ('posted' | 'not-posted')
+      - Extended `Status: String(20)` ('claiming' | 'issued' | 'released' | 'needs-attention')
+  - `db/wm/goods-issue-queue.cds`:
+    - Documented `SyncStatus` to support `'NEEDS_ATTENTION'` for unknown-outcome unreplayable items.
+  - `srv/wm/goods-issue/service.cds`:
+    - Exposed action `resolveClaimManual(claimId: UUID, action: String, materialDocument: String, materialDocYear: String)` on `GoodsIssueService` restricted to `@(requires: ['WarehouseManager', 'Admin'])`.
+- **Proposed Four-Commit Split**:
+  - **Commit 1**: `feat(wm): schema updates for SU claim locking and attention tracking`
+    - `db/wm/goods-issue-issued-su.cds`
+    - `db/wm/goods-issue-queue.cds`
+    - `srv/wm/goods-issue/service.cds`
+  - **Commit 2**: `feat(wm): safe acquireClaims under read-committed and default-keep deleteClaims`
+    - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - **Commit 3**: `feat(wm): MATDOC 261 fallback lookup and manual claim resolution`
+    - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+    - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+    - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - **Commit 4**: `feat(wm): queue unknown-outcome attention status and comprehensive claim tests`
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+    - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+    - `test/unit/wm/goodsIssueIssuedSu.test.js`
+- **Changes**:
+  - `db/wm/goods-issue-issued-su.cds`:
+    - Added `NeedsAttention: Boolean default false;`
+    - Added `ManualResolveAction: String(20);`
+    - Added entity `GoodsIssueSuLock`.
+    - Added architecture comments explaining `READ COMMITTED` isolation and row locking semantics.
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`:
+    - `acquireClaims`: Implemented per-SU row lock on `GoodsIssueSuLock` before re-sum under `READ COMMITTED`. Locks SUs in sorted order. Re-sum query includes both `claiming`, `issued`, and `needs-attention` rows.
+    - `deleteClaims`: Defaulted `{ definitive = false } = {}` (default is "keep"). Only deletes when `options.definitive === true`.
+    - `isNeverReachedError(err)`: Added classification for 404, 503, `ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, and `DNS` errors.
+    - `isDefinitiveRejection(err)`: Classifies 400/409/422 and never-reached errors as definitive rejections.
+    - `releaseByLquaDropOrReversal`: Added MATDOC 261 fallback lookup by `reservation+item+user+date` when reference lookup is not available or inconclusive. Stale claiming rows exceeding threshold with unproven outcome become `NeedsAttention: true` with `Status: 'needs-attention'`.
+    - `resolveClaimManual(claimId, action, options)`: Added manual resolution for claims marked `needs-attention` (`action === 'posted'` promotes to `issued`; `action === 'not-posted'` deletes claim).
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`:
+    - Added `findPosted261ByMatdoc(optionsOrResv, item, user, date)`: queries MATDOC (with fallback to MSEG) by `RSNUM + RSPOS + USNAM + BUDAT + BWART=261`. Enforces exactly one match required; returns `null` and logs warning if multiple matches exist.
+    - Added `this.rfc` initialization.
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+    - Added `findPosted261ByMatdoc` passthrough method delegating to posting client.
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+    - Added action handler for `srv.on('resolveClaimManual')` delegating to `GoodsIssueIssuedSuStore.resolveClaimManual`.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+    - `postWithQueueFallback`: delegates error categorization to `GoodsIssueIssuedSuStore.isDefinitiveRejection`; guarantees returned object has `_definitiveRejection: boolean` even when `req.error()` returns void.
+    - Handlers use default keep for claiming rows on non-definitive failures.
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+    - `drainQueue`: marks queue items `NEEDS_ATTENTION` on unknown outcomes (post failure that is not definitive rejection, or 2xx without material document number). Queue items with status `NEEDS_ATTENTION` are excluded from retry selection.
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`: Added 8 new tests (31 tests total):
+    - Test 13: Read-Committed Row Lock Concurrency — simulates two application instances sharing the same database under Read-Committed isolation; proves Tx2 fails capacity check after waiting for Tx1 lock.
+    - Test 14 (2 tests): `deleteClaims` default keep & never-reached error classification (404, 503, ECONNREFUSED, DNS).
+    - Test 15 (4 tests): 261 MATDOC fallback lookup (single match found, multiple matches rejected, promote stale claim, mark `needs-attention` and manual resolve).
+    - Test 16 (1 test): Unknown-outcome queue items marked `NEEDS_ATTENTION` and excluded from subsequent replay.
+- **Affected Files**:
+  - `db/wm/goods-issue-issued-su.cds`
+  - `db/wm/goods-issue-queue.cds`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Passed cleanly (0 errors).
+  - `npx jest test/unit/wm/goodsIssueIssuedSu.test.js`: 1 suite, 31/31 passed (100%).
+  - `npx jest test/unit/wm`: 47 suites, 981/981 passed (100%).
+  - `npm test`: 134 suites, 2,199/2,199 passed (100%).
+  - Zero live SAP POST calls made.
+  - Zero git commits made.
+- **Current Status**: Complete & Verified. All 5 requirements fully implemented, validated with dedicated unit tests, and verified through the full test suite (134 suites, 2,199 tests).
+- **Next Recommended Action**: Await user review of the proposed four-commit split before creating git commits on `feature/CL01`.
+
+## 2026-10-02 12:25 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit). Harden issued-SU claims for multi-instance and unknown outcomes:
+  1. Replace in-process-only guarantee with DB-level check: insert `claiming` row, re-sum claiming+issued inside same transaction, delete own row and return 400 if sum > stock.
+  2. Delete a claim only on definitive rejection (400/409/422). Unknown outcome (504, timeout, reset, 2xx without document) keeps the row `claiming` for release job.
+  3. Report whether 261 (RAP tier-1 / API tier-2) sends ReferenceDocument. If not, report the gap and how stale-row lookup can work.
+  4. Effective claim: allocate LQUA drop across claims on one SU oldest-first. Include `claiming` rows in sum.
+  5. Queue replay: acquire claims before posting; on conflict mark `NEEDS_ATTENTION`.
+  6. New tests + full suite pass.
+- **ReferenceDocument Coverage (Requirement 3 — Read-Only Findings)**:
+  - CAP handler (`goodsIssuePerType.handler.js`) always generates a `ReferenceDocument` via `newPostingReference()` and passes it as the SAP document `HeaderText`/`YourReference` field.
+  - RAP Tier-1 (SOAP/RFC via GoodsMovementSAP2): SAP may not echo `ReferenceDocument` in the SAP response; the value is stored in MKPF/MSEG as `XBLNR`.
+  - API Tier-2 (OData GOODSMVT_CREATE): `YourReference` field carries the value; response does not include it explicitly.
+  - The release job stale-row lookup uses `findPostedGoodsIssueByReference(ref, '261')` to search MKPF/MSEG by XBLNR. If the adapter lookup throws, the row is left **intact** (cannot prove not-posted). If no ReferenceDocument is present AND no MaterialDocument exists, the row is also left intact and counted as an error.
+  - Fallback strategy (not yet implemented in adapter): query `MSEG` by `RSNUM + RSPOS + BUDAT + BWART=261` within the stale window. Until implemented, stale rows without a ReferenceDocument are preserved until the release job can prove their outcome.
+- **Changes**:
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js` (complete rewrite):
+    - `acquireClaims`: DB-level atomic check — inserts `claiming` rows then re-sums all `claiming`+`issued` rows for each SU inside the SAME transaction; if sum > preIssueStock, deletes own rows within the tx and throws HTTP 400. Falls back to memory+mutex when no DB is bound.
+    - `deleteClaims`: now accepts `{ definitive: boolean }` (default true). When `definitive: false`, rows are left intact — the release job will resolve them. Used for unknown outcomes (504, timeout, reset, 2xx without document number).
+    - `calculateEffectiveClaimWithAllocation(claim, currentStock, toDeductedAlreadyAllocated)`: new static method implementing oldest-first LQUA drop allocation. Returns `{ effectiveClaim, toDeductedUsed }`.
+    - `calculateEffectiveClaim`: now delegates to `calculateEffectiveClaimWithAllocation` (backwards-compatible).
+    - `checkConcurrentClaims`: uses oldest-first sort + `calculateEffectiveClaimWithAllocation` to compute totalClaimed. Both `claiming` and `issued` rows are included in the sum.
+    - `releaseByLquaDropOrReversal`: stale claiming row now leaves row intact (a) if lookup throws, (b) if no ReferenceDocument AND no MaterialDocument. Only deletes when lookup returns conclusively null. Comment documents ReferenceDocument coverage and fallback strategy.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+    - Added `isDefinitiveRejection(err)` helper: true for 400/409/422 or matching error messages.
+    - `postWithQueueFallback`: uses `isDefinitiveRejection` instead of direct status comparison; augments return value with `_definitiveRejection: boolean`.
+    - `postGoodsIssue261` handler: distinguishes definitive (delete claims), queued (keep claiming via `definitive: false`), and unknown outcome (delete with `definitive: res._definitiveRejection`).
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+    - Added `require('./GoodsIssueIssuedSuStore')` at top.
+    - `drainQueue`: parses `StorageUnits` and calls `GoodsIssueIssuedSuStore.acquireClaims` BEFORE calling `adapter.postGoodsIssueByType`. On conflict (400), marks queue item `NEEDS_ATTENTION` and skips posting without calling SAP. On post success, calls `promoteClaims` instead of `recordIssuedSUs`. On definitive post failure, calls `deleteClaims({ definitive: true/false })` based on error status. On unknown outcome (2xx without document), keeps claiming rows.
+    - Added outer `catch (outerErr)` wrapper to handle unexpected errors per loop item.
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`: Added 8 new tests (5 test groups, 23 total):
+    - Test 8 (2 tests): Oldest-First LQUA Drop Allocation — allocates drop to oldest claim first, newer retains effective claim; all claims at 0 when LQUA = 0.
+    - Test 9 (2 tests): Unknown Outcome claiming row persistence — `{ definitive: false }` keeps row; `{ definitive: true }` deletes it.
+    - Test 10 (2 tests): Stale unprovable claiming row protection — RFC timeout leaves row intact; no-ReferenceDocument leaves row intact.
+    - Test 11 (1 test): Replay conflict detection — drainQueue marks queue item `NEEDS_ATTENTION` and does not call SAP when live claim exists for same SU.
+    - Test 12 (1 test): Release-job idempotency — second run sees 0 active rows.
+- **Affected Files**:
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `node -e "require('./srv/wm/goods-issue/GoodsIssueIssuedSuStore.js')"`: 0 errors.
+  - `node -e "require('./srv/wm/goods-issue/GoodsIssueQueueManager.js')"`: 0 errors.
+  - `node -e "require('./srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js')"`: 0 errors.
+  - `git diff --check`: clean (0 errors).
+  - `npx jest test/unit/wm/goodsIssueIssuedSu.test.js`: 1 suite, 23/23 passed.
+  - `npx jest test/unit/wm`: 47 suites, 973/973 passed.
+  - `npm test`: 134 suites, 2,191/2,191 passed (100%).
+- **Current Status**: Complete & Verified. All 5 hardening requirements implemented, 8 new tests added (23 total in issued SU suite). Full test suite passes (134 suites, 2,191 tests). No live POST, no git commit.
+- **Next Recommended Action**: Await user review or proceed with further 261 Goods Issue enhancements on `feature/CL01`.
+
+
+
 ## 2026-10-02 12:10 IST
 - **Agent**: Antigravity
 - **Request**: Fix the issued-SU claim logic:

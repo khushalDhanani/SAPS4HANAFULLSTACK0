@@ -546,6 +546,11 @@ class GoodsIssueAdapter {
     return this.posting.findPostedByReference(referenceDocument, movementType, postingDate);
   }
 
+  /** Fallback lookup in MATDOC for 261 Goods Issue by reservation+item+user+date (exactly one match required). */
+  async findPosted261ByMatdoc(...args) {
+    return this.posting.findPosted261ByMatdoc(...args);
+  }
+
   /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 

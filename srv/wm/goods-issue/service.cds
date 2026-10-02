@@ -636,6 +636,23 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         forceRefresh : Boolean,
         movementType : String(4)
     ) returns GIDashboardData;
+
+    @(requires: ['WarehouseManager', 'Admin'])
+    action resolveClaimManual(
+        claimId          : UUID,
+        action           : String(20), // 'posted' | 'not-posted'
+        materialDocument : String(10),
+        materialDocYear  : String(4)
+    ) returns GoodsIssueIssuedStorageUnit;
+
+    @(requires: ['WarehouseManager', 'Admin'])
+    action resolveQueueItemManual(
+        queueId          : UUID,
+        action           : String(20), // 'posted' | 'not-posted'
+        materialDocument : String(10),
+        materialDocYear  : String(4),
+        reason           : String(100)
+    ) returns GoodsIssueQueue;
 }
 
 // These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:

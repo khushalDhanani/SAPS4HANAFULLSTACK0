@@ -29,7 +29,9 @@ entity GoodsIssueQueue : cuid, managed {
     PostingDate           : Date;
     DocumentDate          : Date;
     ReferenceDocument     : String(16);   // idempotency reference sent to SAP; checked before replay
-    SyncStatus            : String(30);   // 'QUEUED', 'SYNCING', 'POSTED_IN_SAP', 'FAILED'
+    SyncStatus            : String(30);   // 'QUEUED', 'SYNCING', 'POSTED_IN_SAP', 'FAILED', 'NEEDS_ATTENTION'
+                                          //   NEEDS_ATTENTION: unknown outcome; not re-drained automatically;
+                                          //   operator must resolve via manual-resolve API or admin UI.
     SyncAttempts          : Integer default 0;
     LastSyncError         : String(500);
     SapMaterialDocument   : String(10);

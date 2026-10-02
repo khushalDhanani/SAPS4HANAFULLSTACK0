@@ -86,6 +86,45 @@ class GoodsIssueHandler {
       return GoodsIssueIssuedSuStore.getActiveIssuedSUs();
     });
 
+    // ACTION: resolveClaimManual: Operator action to resolve a needs-attention claim ('posted' | 'not-posted')
+    srv.on('resolveClaimManual', async (req) => {
+      const { claimId, action, materialDocument, materialDocYear } = req.data || {};
+      if (!claimId || !action) {
+        return req.error(400, 'claimId and action ("posted" or "not-posted") are required');
+      }
+      try {
+        const resolved = await GoodsIssueIssuedSuStore.resolveClaimManual(claimId, action, {
+          materialDocument,
+          materialDocYear,
+          adapter: GoodsIssueAdapter,
+          user: req.user ? req.user.id : 'OPERATOR'
+        });
+        return resolved;
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    });
+
+    // ACTION: resolveQueueItemManual: Operator action to resolve a NEEDS_ATTENTION queue item ('posted' | 'not-posted')
+    srv.on('resolveQueueItemManual', async (req) => {
+      const { queueId, action, materialDocument, materialDocYear, reason } = req.data || {};
+      if (!queueId || !action) {
+        return req.error(400, 'queueId and action ("posted" or "not-posted") are required');
+      }
+      try {
+        const resolved = await GoodsIssueQueueManager.resolveQueueItemManual(queueId, action, {
+          materialDocument,
+          materialDocYear,
+          reason,
+          adapter: GoodsIssueAdapter,
+          user: req.user ? req.user.id : 'OPERATOR'
+        });
+        return resolved;
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    });
+
     // FUNCTION: getQueueSummary: pending count, items and whether a queue store is bound at all
     srv.on('getQueueSummary', async () => {
       return GoodsIssueQueueManager.getSummary();

@@ -2,6 +2,7 @@ const LOG = require('../../logger')('goods-issue-posting');
 const s4Config = require('../../s4Config');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
+const { RfcClient } = require('../../RfcClient');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
 const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
@@ -31,6 +32,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
+    this.rfc = options.rfc || (options.adapter && options.adapter.rfc) || new RfcClient();
   }
 
   /**
@@ -247,9 +249,174 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
   }
 
-  // TODO(idempotency): 261, 301, 311 and the batch path send no ReferenceDocument, so their unknown
-  // outcomes cannot be looked up and their queue replay is not idempotent. Each type needs its own
-  // live proof that SAP persists the header field before a reference is added (see WORKSTATUS.md).
+  /**
+   * MATDOC Fallback Lookup for Movement 261:
+   * When SAP does not echo ReferenceDocument or no reference lookup is available,
+   * searches MATDOC (with fallback to MSEG) by reservation + item + user + date.
+   *
+   * Hardened verification requirements:
+   *   1. Exclude reversed documents (STORNO = 'X', BWART = '262', cancelled by SMBLN).
+   *   2. Quantity must equal the claim's quantity (if provided).
+   *   3. Document must be created at or after the claim's createdAt timestamp
+   *      (an earlier same-day posting must not prove a later attempt).
+   *   4. Exactly ONE match is required:
+   *      - 1 match: returns { MaterialDocument, MaterialDocYear }
+   *      - 0 matches: returns null
+   *      - >1 matches: logs warning and returns null (cannot disambiguate)
+   *
+   * @param {Object|string} optionsOrResv
+   * @param {string} [item]
+   * @param {string} [user]
+   * @param {string|Date} [date]
+   * @param {number} [quantity]
+   * @param {string|Date} [createdAt]
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string }|null>}
+   */
+  async findPosted261ByMatdoc(optionsOrResv, item, user, date, quantity, createdAt) {
+    let sResv, sItem, sUser, sDate, sQty, sCreatedAt;
+    if (typeof optionsOrResv === 'object' && optionsOrResv !== null) {
+      sResv = optionsOrResv.reservationNo || optionsOrResv.ReservationNo;
+      sItem = optionsOrResv.reservationItem || optionsOrResv.ReservationItem;
+      sUser = optionsOrResv.user || optionsOrResv.userName || optionsOrResv.CreatedByUser || optionsOrResv.USNAM;
+      sDate = optionsOrResv.date || optionsOrResv.postingDate || optionsOrResv.PostingDate;
+      sQty = optionsOrResv.quantity != null ? optionsOrResv.quantity : (optionsOrResv.issuedQty != null ? optionsOrResv.issuedQty : optionsOrResv.IssuedQty);
+      sCreatedAt = optionsOrResv.createdAt || optionsOrResv.CreatedAt;
+    } else {
+      sResv = optionsOrResv;
+      sItem = item;
+      sUser = user;
+      sDate = date;
+      sQty = quantity;
+      sCreatedAt = createdAt;
+    }
+
+    if (!sResv || !sItem) return null;
+
+    const rsnum = String(sResv).trim().padStart(10, '0');
+    const rspos = String(sItem).trim().padStart(4, '0');
+    const usnam = sUser ? String(sUser).trim().toUpperCase() : '';
+    const dDay = sDate ? this._formatDate(sDate).replace(/-/g, '') : '';
+
+    const where = [
+      `RSNUM = '${rsnum}'`,
+      `AND RSPOS = '${rspos}'`,
+      `AND (BWART = '261' OR BWART = '262')`
+    ];
+    if (usnam) where.push(`AND USNAM = '${usnam}'`);
+    if (dDay) where.push(`AND (BUDAT = '${dDay}' OR CPUDT = '${dDay}')`);
+
+    const fields = [
+      'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
+      'CPUDT', 'CPUTM', 'MENGE', 'ERFMG', 'STORNO', 'SMBLN', 'SJAHR', 'XAUTO'
+    ];
+
+    let rows = [];
+    const readTable = (this.rfc && typeof this.rfc.readTable === 'function')
+      ? (t, f, w) => this.rfc.readTable(t, f, w)
+      : (this.adapter && typeof this.adapter.readTable === 'function')
+        ? (t, f, w) => this.adapter.readTable(t, f, w)
+        : null;
+
+    if (readTable) {
+      try {
+        rows = await readTable('MATDOC', fields, where);
+      } catch (matdocErr) {
+        LOG.warn(`MATDOC read failed for 261 fallback lookup, trying MSEG: ${matdocErr.message}`);
+        try {
+          const msegFields = [
+            'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
+            'CPUDT', 'CPUTM', 'MENGE', 'ERFMG', 'SMBLN', 'SJAHR'
+          ];
+          const msegWhere = [
+            `RSNUM = '${rsnum}'`,
+            `AND RSPOS = '${rspos}'`,
+            `AND (BWART = '261' OR BWART = '262')`
+          ];
+          rows = await readTable('MSEG', msegFields, msegWhere);
+        } catch (msegErr) {
+          LOG.warn(`MSEG read also failed for 261 fallback lookup: ${msegErr.message}`);
+          throw matdocErr;
+        }
+      }
+    }
+
+    const allRows = Array.isArray(rows) ? rows : [];
+
+    // Track cancelled or reversal documents
+    const reversedDocKeys = new Set();
+    for (const r of allRows) {
+      if (r.STORNO === 'X' || r.STORNO === true || r.XAUTO === 'X' || r.Reversed === true || r.Cancelled === true) {
+        reversedDocKeys.add(`${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`);
+      }
+      if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') {
+        reversedDocKeys.add(`${String(r.SMBLN).trim()}-${String(r.SJAHR || r.MJAHR || '').trim()}`);
+      }
+    }
+
+    // Filter candidate 261 documents
+    const claimTimeMs = sCreatedAt ? new Date(sCreatedAt).getTime() : null;
+    const expectedQty = sQty != null ? Number(sQty) : null;
+
+    const matches = allRows.filter((r) => {
+      // Must be movement 261
+      if (String(r.BWART).trim() !== '261') return false;
+
+      // Exclude reversed documents
+      const docKey = `${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`;
+      if (reversedDocKeys.has(docKey)) return false;
+      if (r.STORNO === 'X' || r.STORNO === true || r.Reversed === true || r.Cancelled === true) return false;
+      if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') return false;
+
+      // Quantity filter: must equal claim's quantity
+      if (expectedQty !== null && Number.isFinite(expectedQty)) {
+        const candQty = Number(r.MENGE != null ? r.MENGE : (r.ERFMG != null ? r.ERFMG : r.Quantity));
+        if (Number.isFinite(candQty) && Math.abs(candQty - expectedQty) > 0.001) {
+          return false;
+        }
+      }
+
+      // Timestamp filter: must be created at or after the claim's createdAt
+      if (claimTimeMs !== null && Number.isFinite(claimTimeMs)) {
+        let docTimeMs = null;
+        if (r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp) {
+          docTimeMs = new Date(r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp).getTime();
+        } else if (r.CPUDT) {
+          const cpudt = String(r.CPUDT).trim();
+          const cputm = String(r.CPUTM || '000000').trim().padStart(6, '0');
+          const y = cpudt.slice(0, 4);
+          const m = cpudt.slice(4, 6);
+          const d = cpudt.slice(6, 8);
+          const hh = cputm.slice(0, 2);
+          const mm = cputm.slice(2, 4);
+          const ss = cputm.slice(4, 6);
+          docTimeMs = new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}Z`).getTime();
+        }
+        if (docTimeMs !== null && Number.isFinite(docTimeMs) && docTimeMs < claimTimeMs) {
+          // Document was created before the claim attempt
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (matches.length === 1) {
+      const match = matches[0];
+      return {
+        MaterialDocument: String(match.MBLNR).trim(),
+        MaterialDocYear: String(match.MJAHR || match.MBLNR_YEAR || new Date().getFullYear()).trim()
+      };
+    }
+
+    if (matches.length > 1) {
+      LOG.warn(`MATDOC 261 fallback lookup for reservation ${sResv} item ${sItem} returned ${matches.length} matches; exactly one match required. Outcome cannot be proved uniquely.`);
+      return null;
+    }
+
+    return null;
+  }
+
+  // Fallback MATDOC lookup implemented above for 261; 301, 311 and batch path can follow the same pattern.
 
   /** Movement 261 (Goods Issue for Order/Reservation) - RAP first, standard API fallback. */
   async post261(data) {

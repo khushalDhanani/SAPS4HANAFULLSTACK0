@@ -1,6 +1,7 @@
 const cds = require('@sap/cds');
 const crypto = require('crypto');
 const GoodsIssueAttemptStore = require('./GoodsIssueAttemptStore');
+const GoodsIssueIssuedSuStore = require('./GoodsIssueIssuedSuStore');
 
 const { INSERT, SELECT, UPDATE, DELETE } = cds.ql;
 
@@ -99,7 +100,7 @@ class GoodsIssueQueueManager {
 
     return {
       ID: crypto.randomUUID(),
-      QueueReference: `GI-QUEUE-${sReserv || 'UNPLANNED'}-${sItem || '0000'}-${randSuffix}`,
+      QueueReference: String(data.QueueReference || `GI-QUEUE-${sReserv || 'UNPLANNED'}-${sItem || '0000'}-${randSuffix}`),
       ReservationNo: sReserv,
       ReservationItem: sItem,
       OrderNo: String(data.OrderNo || '').trim(),
@@ -356,8 +357,79 @@ class GoodsIssueQueueManager {
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
 
       try {
+        // --- Parse StorageUnits for SU claim management ---
+        let suAllocations = [];
+        if (item.StorageUnits) {
+          try {
+            const parsed = JSON.parse(item.StorageUnits);
+            const arr = Array.isArray(parsed) ? parsed : [];
+            suAllocations = arr.map((su) => {
+              if (typeof su === 'string') return { storageUnit: su, issuedQty: item.IssueQty, preIssueStock: item.IssueQty };
+              return {
+                storageUnit: su.storageUnit || su.StorageUnit,
+                issuedQty: su.issuedQty != null ? su.issuedQty : (su.IssuedQty || item.IssueQty),
+                preIssueStock: su.preIssueStock != null ? su.preIssueStock : (su.PreIssueStock || item.IssueQty)
+              };
+            }).filter((s) => Boolean(s.storageUnit));
+          } catch (_) { /* ignore parse error */ }
+        }
+
+        // --- Acquire SU claims BEFORE posting (replay conflict detection) ---
+        let replayClaimIds = [];
+        if (suAllocations.length > 0) {
+          try {
+            replayClaimIds = await GoodsIssueIssuedSuStore.acquireClaims({
+              reservationNo: item.ReservationNo,
+              reservationItem: item.ReservationItem,
+              material: item.Material,
+              plant: item.Plant,
+              storageLocation: item.StorageLocation,
+              referenceDocument: item.ReferenceDocument,
+              items: suAllocations
+            });
+          } catch (claimErr) {
+            if (claimErr.status === 400) {
+              // Another live claim exists for this SU: mark needs-attention and skip posting
+              await this.update(item.QueueReference, {
+                SyncAttempts: (item.SyncAttempts || 1) + 1,
+                LastSyncError: `Replay conflict: ${claimErr.message}`,
+                SyncStatus: 'NEEDS_ATTENTION'
+              });
+              failedCount++;
+              continue;
+            }
+            // Non-conflict error: log and continue to attempt posting anyway
+            LOG.warn ? LOG.warn(`SU claim acquire failed for queue item ${item.QueueReference}: ${claimErr.message}`) : undefined;
+          }
+        }
+
         // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
-        const result = await adapter.postGoodsIssueByType(item);
+        let result;
+        try {
+          result = await adapter.postGoodsIssueByType(item);
+        } catch (postErr) {
+          const isNeverReached = GoodsIssueIssuedSuStore.isNeverReachedError ? GoodsIssueIssuedSuStore.isNeverReachedError(postErr) : false;
+          const definitive = postErr.status === 400 || postErr.status === 409 || postErr.status === 422 || isNeverReached;
+          const isUnknown = !definitive || GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(postErr.code);
+
+          if (replayClaimIds.length > 0) {
+            await GoodsIssueIssuedSuStore.deleteClaims(replayClaimIds, { definitive });
+          }
+
+          // Unknown-outcome queue items must NOT be replayable: mark them NEEDS_ATTENTION.
+          // Definitive rejections (400/409/422 or never-reached) can be marked FAILED.
+          const syncStatus = isUnknown ? 'NEEDS_ATTENTION' : 'FAILED';
+          await this.update(item.QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 1) + 1,
+            LastSyncError: String(postErr.message || (isUnknown ? 'Unknown posting outcome; operator attention required' : 'Posting rejected by SAP Gateway')).slice(0, 500),
+            SyncStatus: syncStatus
+          });
+          if (GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(postErr.code)) {
+            await settle('unconfirmed', { LastError: postErr.message });
+          }
+          failedCount++;
+          continue;
+        }
 
         if (result && result.MaterialDocument) {
           await this.update(item.QueueReference, {
@@ -368,64 +440,51 @@ class GoodsIssueQueueManager {
           });
           await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
 
-          // Requirement 3: Queue replay (drain job) must record issued SUs too, using the same code path.
-          if (item.StorageUnits) {
+          // Promote SU claims to 'issued'
+          if (replayClaimIds.length > 0) {
+            await GoodsIssueIssuedSuStore.promoteClaims(replayClaimIds, {
+              materialDocument: result.MaterialDocument,
+              materialDocYear: result.MaterialDocYear || String(new Date().getFullYear())
+            });
+          } else if (suAllocations.length > 0) {
+            // Fallback: acquireClaims was skipped (e.g. no-DB); record directly
             try {
-              const suStore = require('./GoodsIssueIssuedSuStore');
-              let parsedItems = [];
-              try {
-                const parsed = JSON.parse(item.StorageUnits);
-                parsedItems = Array.isArray(parsed) ? parsed : [];
-              } catch (_) {
-                parsedItems = [item.StorageUnits];
-              }
-              const suAllocations = parsedItems.map((su) => {
-                if (typeof su === 'string') {
-                  return { storageUnit: su, issuedQty: item.IssueQty, preIssueStock: item.IssueQty };
-                }
-                return {
-                  storageUnit: su.storageUnit || su.StorageUnit,
-                  issuedQty: su.issuedQty != null ? su.issuedQty : (su.IssuedQty || item.IssueQty),
-                  preIssueStock: su.preIssueStock != null ? su.preIssueStock : (su.PreIssueStock || item.IssueQty)
-                };
-              }).filter((s) => Boolean(s.storageUnit));
-
-              if (suAllocations.length > 0) {
-                await suStore.recordIssuedSUs({
-                  materialDocument: result.MaterialDocument,
-                  materialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
-                  reservationNo: item.ReservationNo,
-                  reservationItem: item.ReservationItem,
-                  referenceDocument: item.ReferenceDocument,
-                  material: item.Material,
-                  plant: item.Plant,
-                  storageLocation: item.StorageLocation,
-                  items: suAllocations
-                });
-              }
-            } catch (suErr) {
-              // Keep sync successful, non-fatal SU recording log
-            }
+              await GoodsIssueIssuedSuStore.recordIssuedSUs({
+                materialDocument: result.MaterialDocument,
+                materialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+                reservationNo: item.ReservationNo,
+                reservationItem: item.ReservationItem,
+                referenceDocument: item.ReferenceDocument,
+                material: item.Material,
+                plant: item.Plant,
+                storageLocation: item.StorageLocation,
+                items: suAllocations
+              });
+            } catch (suErr) { /* non-fatal */ }
           }
 
           syncedCount++;
         } else {
+          // Success response but no material document: unknown outcome -> NEEDS_ATTENTION (not replayable)
+          if (replayClaimIds.length > 0) {
+            await GoodsIssueIssuedSuStore.deleteClaims(replayClaimIds, { definitive: false });
+          }
           await this.update(item.QueueReference, {
             SyncAttempts: (item.SyncAttempts || 1) + 1,
-            LastSyncError: (result && result.Message) || 'Posting completed without material document',
-            SyncStatus: 'FAILED'
+            LastSyncError: (result && result.Message) || 'Posting completed without material document; operator attention required',
+            SyncStatus: 'NEEDS_ATTENTION'
           });
           failedCount++;
         }
-      } catch (err) {
-        await this.update(item.QueueReference, {
-          SyncAttempts: (item.SyncAttempts || 1) + 1,
-          LastSyncError: String(err.message || 'Posting rejected by SAP Gateway').slice(0, 500),
-          SyncStatus: 'FAILED'
-        });
-        if (GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(err.code)) {
-          await settle('unconfirmed', { LastError: err.message });
-        }
+      } catch (outerErr) {
+        // Unexpected error for this queue item: log and mark as failed
+        try {
+          await this.update(item.QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 1) + 1,
+            LastSyncError: String(outerErr.message || 'Unexpected error during queue drain').slice(0, 500),
+            SyncStatus: 'FAILED'
+          });
+        } catch (_) { /* best effort */ }
         failedCount++;
       }
     }
@@ -455,6 +514,186 @@ class GoodsIssueQueueManager {
       Message: message,
       Items: updatedAll
     };
+  }
+
+  /**
+   * Manual resolution of a queue item in NEEDS_ATTENTION (or FAILED) status by an operator.
+   * On 'posted': verifies the document in MATDOC (261, same reservation/item, not linked to another queue item)
+   *             and updates SyncStatus to 'POSTED_IN_SAP'.
+   * On 'not-posted': updates SyncStatus to 'DISCARDED' with reason/user/time and releases any SU claims.
+   *
+   * @param {string} queueId
+   * @param {'posted'|'not-posted'} action
+   * @param {Object} [options]
+   * @param {string} [options.materialDocument]
+   * @param {string} [options.materialDocYear]
+   * @param {string} [options.reason]
+   * @param {string} [options.user]
+   * @param {Object} [options.adapter]
+   * @returns {Promise<Object>} The updated queue record
+   */
+  async resolveQueueItemManual(queueId, action, options = {}) {
+    if (!queueId) {
+      const err = new Error('queueId is required');
+      err.status = 400;
+      throw err;
+    }
+    const act = String(action || '').trim().toLowerCase();
+    if (act !== 'posted' && act !== 'not-posted') {
+      const err = new Error(`Invalid resolve action "${action}". Must be "posted" or "not-posted".`);
+      err.status = 400;
+      throw err;
+    }
+
+    const db = this._requireDb();
+    const rows = await db.run(
+      SELECT.from(QUEUE_ENTITY).where({ ID: queueId })
+    );
+    const item = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (!item) {
+      const err = new Error(`Queue item ${queueId} not found`);
+      err.status = 404;
+      throw err;
+    }
+
+    const nowIso = new Date().toISOString();
+    const user = options.user ? String(options.user).trim() : 'OPERATOR';
+
+    if (act === 'posted') {
+      const matDoc = String(options.materialDocument || item.SapMaterialDocument || '').trim();
+      const matYear = String(options.materialDocYear || item.SapMaterialDocYear || new Date().getFullYear()).trim();
+      if (!matDoc) {
+        const err = new Error('materialDocument is required for action "posted"');
+        err.status = 400;
+        throw err;
+      }
+
+      // 1. Verify not linked to another queue item
+      const dupRows = await db.run(
+        SELECT.from(QUEUE_ENTITY).where({
+          SapMaterialDocument: matDoc,
+          SapMaterialDocYear: matYear,
+          ID: { '!=': queueId },
+          SyncStatus: 'POSTED_IN_SAP'
+        })
+      );
+      if (Array.isArray(dupRows) && dupRows.length > 0) {
+        const err = new Error(`Material document ${matDoc}/${matYear} is already linked to queue item ${dupRows[0].ID}`);
+        err.status = 422;
+        throw err;
+      }
+
+      // 2. Verify the document in MATDOC (261, same reservation/item)
+      const adapter = options.adapter;
+      const readTable = (adapter && typeof adapter.readTable === 'function')
+        ? (t, f, w) => adapter.readTable(t, f, w)
+        : (adapter && adapter.client && typeof adapter.client.readTable === 'function')
+          ? (t, f, w) => adapter.client.readTable(t, f, w)
+          : null;
+
+      if (readTable) {
+        const docFields = ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS'];
+        const docWhere = [`MBLNR = '${matDoc}'`, `AND MJAHR = '${matYear}'`];
+        let docRows = [];
+        try {
+          docRows = await readTable('MATDOC', docFields, docWhere);
+        } catch (matErr) {
+          try {
+            docRows = await readTable('MSEG', docFields, docWhere);
+          } catch (msegErr) {
+            const err = new Error(`Failed to verify document ${matDoc} in SAP: ${matErr.message}`);
+            err.status = 502;
+            throw err;
+          }
+        }
+
+        if (!Array.isArray(docRows) || docRows.length === 0) {
+          const err = new Error(`Material document ${matDoc}/${matYear} not found in SAP MATDOC/MSEG`);
+          err.status = 422;
+          throw err;
+        }
+
+        const expectedMvt = String(item.MovementType || '261').trim();
+        const hasMvt = docRows.some((r) => String(r.BWART).trim() === expectedMvt);
+        if (!hasMvt) {
+          const err = new Error(`Material document ${matDoc}/${matYear} has movement type ${docRows[0].BWART}, expected ${expectedMvt}`);
+          err.status = 422;
+          throw err;
+        }
+
+        if (item.ReservationNo && item.ReservationItem) {
+          const sResv = String(item.ReservationNo).trim().padStart(10, '0');
+          const sItem = String(item.ReservationItem).trim().padStart(4, '0');
+          const matchesResv = docRows.some((r) => {
+            const rResv = String(r.RSNUM || '').trim().padStart(10, '0');
+            const rItem = String(r.RSPOS || '').trim().padStart(4, '0');
+            return rResv === sResv && rItem === sItem;
+          });
+          if (!matchesResv) {
+            const err = new Error(`Material document ${matDoc}/${matYear} does not match queue item reservation ${item.ReservationNo} item ${item.ReservationItem}`);
+            err.status = 422;
+            throw err;
+          }
+        }
+      }
+
+      await this.update(item.QueueReference, {
+        SyncStatus: 'POSTED_IN_SAP',
+        SapMaterialDocument: matDoc,
+        SapMaterialDocYear: matYear,
+        SyncedAt: nowIso,
+        LastSyncError: options.reason || `MANUALLY_RESOLVED_POSTED by ${user}`
+      });
+
+      // Promote any SU claims if StorageUnits is present
+      if (item.StorageUnits && GoodsIssueIssuedSuStore) {
+        try {
+          const parsed = JSON.parse(item.StorageUnits);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const suKeys = parsed.map((p) => p.storageUnit || p.StorageUnit).filter(Boolean);
+            const activeClaims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs(item.Material, item.Plant, item.StorageLocation);
+            const matchingClaims = (Array.isArray(activeClaims) ? activeClaims : []).filter(
+              (c) => suKeys.includes(c.StorageUnit) && c.ReservationNo === item.ReservationNo
+            );
+            if (matchingClaims.length > 0) {
+              await GoodsIssueIssuedSuStore.promoteClaims(matchingClaims.map((c) => c.ID), {
+                materialDocument: matDoc,
+                materialDocYear: matYear
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
+      return (await db.run(SELECT.from(QUEUE_ENTITY).where({ ID: queueId })))[0];
+    } else {
+      // 'not-posted': mark DISCARDED and release SU claims
+      const reason = options.reason || `MANUALLY_RESOLVED_NOT_POSTED by ${user}`;
+      await this.update(item.QueueReference, {
+        SyncStatus: 'DISCARDED',
+        SyncedAt: nowIso,
+        LastSyncError: reason
+      });
+
+      // Release any active SU claims to free drums immediately
+      if (item.StorageUnits && GoodsIssueIssuedSuStore) {
+        try {
+          const parsed = JSON.parse(item.StorageUnits);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const suKeys = parsed.map((p) => p.storageUnit || p.StorageUnit).filter(Boolean);
+            const activeClaims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs(item.Material, item.Plant, item.StorageLocation);
+            const matchingClaims = (Array.isArray(activeClaims) ? activeClaims : []).filter(
+              (c) => suKeys.includes(c.StorageUnit) && c.ReservationNo === item.ReservationNo
+            );
+            for (const c of matchingClaims) {
+              await GoodsIssueIssuedSuStore.release(c.ID, reason);
+            }
+          }
+        } catch (_) {}
+      }
+
+      return (await db.run(SELECT.from(QUEUE_ENTITY).where({ ID: queueId })))[0];
+    }
   }
 
   /**

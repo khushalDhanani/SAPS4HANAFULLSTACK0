@@ -912,4 +912,848 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       expect(instruction).toBe('');
     });
   });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 8: Oldest-first LQUA allocation (one TO confirmed, one not)
+  // ──────────────────────────────────────────────────────────
+  describe('Oldest-First LQUA Drop Allocation (Requirement 4)', () => {
+    it('allocates LQUA drop to oldest claim first — newer claim retains its full effective qty', () => {
+      // Drum: 48 KG. Claim 1 (older): 18 KG. Claim 2 (newer): 30 KG.
+      // LQUA drops to 30 KG (18 KG TO confirmed — only older claim covered).
+      // Expected: effectiveClaim(claim1) = max(0, 18 - 18) = 0
+      //           effectiveClaim(claim2) = max(0, 30 - 0) = 30
+      const GoodsIssueIssuedSuStoreClass = GoodsIssueIssuedSuStore.GoodsIssueIssuedSuStore;
+      const older = { IssuedQty: 18, PreIssueStock: 48 };
+      const newer = { IssuedQty: 30, PreIssueStock: 48 };
+      const currentStock = 30;
+
+      let toAllocated = 0;
+      const { effectiveClaim: eff1, toDeductedUsed: used1 } =
+        GoodsIssueIssuedSuStoreClass.calculateEffectiveClaimWithAllocation(older, currentStock, toAllocated);
+      toAllocated = Math.round((toAllocated + used1) * 1000) / 1000;
+      const { effectiveClaim: eff2 } =
+        GoodsIssueIssuedSuStoreClass.calculateEffectiveClaimWithAllocation(newer, currentStock, toAllocated);
+
+      expect(eff1).toBe(0);   // Older claim fully covered by LQUA drop
+      expect(eff2).toBe(30);  // Newer claim: remaining drop = 0; still fully active
+    });
+
+    it('effective total is 0 when all claims are covered by confirmed TO (LQUA = 0)', () => {
+      const GoodsIssueIssuedSuStoreClass = GoodsIssueIssuedSuStore.GoodsIssueIssuedSuStore;
+      const claimA = { IssuedQty: 18, PreIssueStock: 48 };
+      const claimB = { IssuedQty: 30, PreIssueStock: 48 };
+      const currentStock = 0;
+
+      let toAllocated = 0;
+      const { effectiveClaim: eA, toDeductedUsed: uA } =
+        GoodsIssueIssuedSuStoreClass.calculateEffectiveClaimWithAllocation(claimA, currentStock, toAllocated);
+      toAllocated = Math.round((toAllocated + uA) * 1000) / 1000;
+      const { effectiveClaim: eB } =
+        GoodsIssueIssuedSuStoreClass.calculateEffectiveClaimWithAllocation(claimB, currentStock, toAllocated);
+
+      expect(eA).toBe(0);
+      expect(eB).toBe(0);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 9: Unknown-outcome persistence (claiming row kept)
+  // ──────────────────────────────────────────────────────────
+  describe('Unknown Outcome — Claiming Row Persistence (Requirement 2)', () => {
+    it('keeps claiming row when deleteClaims called with { definitive: false }', async () => {
+      const ids = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100300',
+        reservationItem: '0001',
+        material: 'CH-UNKNOWN-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'GI_UNKNOWN_REF_01',
+        items: [{ storageUnit: 'DRUM_UNKNOWN_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      expect(ids).toHaveLength(1);
+
+      // Simulate unknown outcome (timeout/504): do NOT delete
+      await GoodsIssueIssuedSuStore.deleteClaims(ids, { definitive: false });
+
+      const active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-UNKNOWN-01', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+      expect(active[0].Status).toBe('claiming');
+    });
+
+    it('deletes claiming row when deleteClaims called with { definitive: true }', async () => {
+      const ids = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100301',
+        reservationItem: '0001',
+        material: 'CH-DEFINITIVE-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'GI_DEF_REF_01',
+        items: [{ storageUnit: 'DRUM_DEF_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      await GoodsIssueIssuedSuStore.deleteClaims(ids, { definitive: true });
+
+      const active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-DEFINITIVE-01', '1120', 'CS01');
+      expect(active).toHaveLength(0);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 10: Stale unprovable claiming row protected from deletion
+  // ──────────────────────────────────────────────────────────
+  describe('Stale Unprovable Claiming Row Protection (Requirement 3)', () => {
+    it('leaves claiming row intact when ReferenceDocument lookup throws (cannot prove not-posted)', async () => {
+      await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100310',
+        reservationItem: '0001',
+        material: 'CH-UNPROVABLE-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'GI_UNPROVABLE_REF',
+        items: [{ storageUnit: 'DRUM_UNPROV_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      // Adapter lookup throws — cannot prove not-posted
+      const failingAdapter = {
+        findPostedGoodsIssueByReference: jest.fn().mockRejectedValue(new Error('RFC connection timed out'))
+      };
+
+      const result = await GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(failingAdapter, {
+        now: Date.now(),
+        staleClaimAgeMs: 0 // force stale-age check immediately
+      });
+
+      const active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-UNPROVABLE-01', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+      expect(active[0].Status).toBe('claiming');
+      expect(result.errors).toBe(1);
+      expect(result.resolvedClaiming).toBe(0);
+    });
+
+    it('leaves claiming row intact when no ReferenceDocument or MaterialDocument present', () => {
+      const GoodsIssueIssuedSuStoreClass = GoodsIssueIssuedSuStore.GoodsIssueIssuedSuStore;
+      const localStore = new GoodsIssueIssuedSuStoreClass({ db: null });
+
+      const id = 'STALE-NO-REF-01';
+      localStore._memoryStore.set(id, {
+        ID: id, StorageUnit: 'DRUM_NOREF_01', Material: 'CH-NOREF-01', Plant: '1120',
+        StorageLocation: 'CS01', IssuedQty: 48, PreIssueStock: 48, Status: 'claiming',
+        MaterialDocument: '', ReferenceDocument: '',
+        createdAt: new Date(Date.now() - 999999).toISOString(),
+        CreatedAt: new Date(Date.now() - 999999).toISOString()
+      });
+
+      const noopAdapter = {};
+      return localStore.releaseByLquaDropOrReversal(noopAdapter, { now: Date.now(), staleClaimAgeMs: 0 })
+        .then((result) => {
+          const still = localStore._memoryStore.get(id);
+          expect(still).toBeDefined();
+          expect(still.Status).toBe('claiming');
+          expect(result.errors).toBe(1);
+        });
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 11: Replay conflict detection in drainQueue
+  // ──────────────────────────────────────────────────────────
+  describe('Replay Conflict Detection in drainQueue (Requirement 5)', () => {
+    it('marks queue item NEEDS_ATTENTION and skips posting when a live claim exists for the same SU', async () => {
+      // Pre-claim the drum (a live in-flight claim exists)
+      await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100400',
+        reservationItem: '0001',
+        material: 'CH-CONFLICT-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'LIVE_CLAIM_REF',
+        items: [{ storageUnit: 'DRUM_CONFLICT_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      // Enqueue a replay item for the same drum
+      await GoodsIssueQueueManager.enqueue({
+        ReservationNo: '0000100401',
+        ReservationItem: '0001',
+        Material: 'CH-CONFLICT-01',
+        Plant: '1120',
+        StorageLocation: 'CS01',
+        IssueQty: 48,
+        Unit: 'KG',
+        MovementType: '261',
+        StorageUnits: [{ storageUnit: 'DRUM_CONFLICT_01', issuedQty: 48, preIssueStock: 48 }],
+        LastSyncError: 'SAP Gateway unavailable'
+      });
+
+      const postSpy = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocYear: '2026', Success: true });
+      const drainResult = await GoodsIssueQueueManager.drainQueue({ postGoodsIssueByType: postSpy });
+
+      // SAP was NOT called for the conflicted item
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(drainResult.SyncedToSap).toBe(0);
+
+      // Queue item should be NEEDS_ATTENTION
+      const allItems = await GoodsIssueQueueManager.getAll();
+      const conflictItem = allItems.find((i) => i.ReservationNo === '0000100401');
+      expect(conflictItem).toBeDefined();
+      expect(conflictItem.SyncStatus).toBe('NEEDS_ATTENTION');
+      expect(conflictItem.LastSyncError).toMatch(/Replay conflict/i);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 12: Release-job idempotency
+  // ──────────────────────────────────────────────────────────
+  describe('Release Job Idempotency (Requirement 4)', () => {
+    it('running the release job twice on the same already-released row has no further effect', async () => {
+      const [record] = await GoodsIssueIssuedSuStore.recordIssuedSUs({
+        materialDocument: '4900099800',
+        materialDocYear: '2026',
+        reservationNo: '0000100500',
+        reservationItem: '0001',
+        material: 'MAT_IDEM_01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        items: [{ storageUnit: 'SU_IDEM_01', issuedQty: 18, preIssueStock: 48 }]
+      });
+      expect(record.Status).toBe('issued');
+
+      const mockAdapter = {
+        readTable: jest.fn().mockImplementation((table) => {
+          if (table === 'LQUA') return Promise.resolve([{ LENUM: '0000000000SU_IDEM_01', VERME: '30.000', LGTYP: '001' }]);
+          return Promise.resolve([]);
+        })
+      };
+
+      const result1 = await GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(mockAdapter);
+      expect(result1.released).toBe(1);
+
+      // Second run: no active rows remaining
+      const result2 = await GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(mockAdapter);
+      expect(result2.inspected).toBe(0);
+      expect(result2.released).toBe(0);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 13: Read-Committed Row Lock Concurrency, Bootstrap Retry & Stale Purge (Requirement 1)
+  // ──────────────────────────────────────────────────────────
+  describe('Read-Committed Row Lock Concurrency, Bootstrap Retry & Stale Purge (Requirement 1)', () => {
+    it('handles unique-key violation on concurrent first INSERT by retrying as UPDATE and proves one fails under Read Committed', async () => {
+      const committedRows = [];
+      const suLocks = new Map();
+      const existingSuLocks = new Set();
+      let uniqueConstraintHitCount = 0;
+
+      const mockDb = {
+        tx: async (options, callback) => {
+          const txBuffer = [];
+          const lockedKeys = [];
+
+          const txContext = {
+            run: async (query) => {
+              // 1. Lock GoodsIssueSuLock: UPDATE GoodsIssueSuLock SET LockVersion = LockVersion + 1 WHERE StorageUnit = ?
+              const updateEnt = query?.UPDATE?.entity?.ref?.[0] || query?.UPDATE?.entity;
+              if (updateEnt === 'saps4hana.wm.GoodsIssueSuLock') {
+                const su = query.UPDATE.where?.[2]?.val;
+                if (su) {
+                  while (suLocks.has(su)) {
+                    await suLocks.get(su);
+                  }
+                  let releaseLock;
+                  const p = new Promise((resolve) => { releaseLock = resolve; });
+                  p.resolve = releaseLock;
+                  suLocks.set(su, p);
+                  lockedKeys.push(su);
+                }
+                return 1;
+              }
+
+              // 2. INSERT into GoodsIssueSuLock: simulate unique key violation on concurrent first claim
+              const insertEnt = query?.INSERT?.into?.ref?.[0] || query?.INSERT?.into;
+              if (insertEnt === 'saps4hana.wm.GoodsIssueSuLock') {
+                const entries = query.INSERT.entries || [];
+                const entry = Array.isArray(entries) ? entries[0] : entries;
+                const su = entry?.StorageUnit;
+                if (su) {
+                  if (existingSuLocks.has(su)) {
+                    uniqueConstraintHitCount++;
+                    const err = new Error(`UNIQUE constraint failed: saps4hana.wm.GoodsIssueSuLock.StorageUnit (${su})`);
+                    err.code = 'SQLITE_CONSTRAINT_UNIQUE';
+                    throw err;
+                  }
+                  existingSuLocks.add(su);
+                  // Acquire lock for the inserting transaction
+                  while (suLocks.has(su)) {
+                    await suLocks.get(su);
+                  }
+                  let releaseLock;
+                  const p = new Promise((resolve) => { releaseLock = resolve; });
+                  p.resolve = releaseLock;
+                  suLocks.set(su, p);
+                  lockedKeys.push(su);
+                }
+                return 1;
+              }
+
+              // 3. INSERT into GoodsIssueIssuedStorageUnit
+              if (insertEnt === 'saps4hana.wm.GoodsIssueIssuedStorageUnit') {
+                const entries = query.INSERT.entries || [];
+                txBuffer.push(...entries);
+                return entries.length;
+              }
+
+              // 4. SELECT from GoodsIssueIssuedStorageUnit: READ COMMITTED view
+              const selectEnt = query?.SELECT?.from?.ref?.[0] || query?.SELECT?.from;
+              if (selectEnt === 'saps4hana.wm.GoodsIssueIssuedStorageUnit') {
+                const visible = [...committedRows, ...txBuffer].filter((r) => ['claiming', 'issued', 'needs-attention'].includes(r.Status));
+                return visible;
+              }
+
+              // 5. DELETE from GoodsIssueIssuedStorageUnit: remove from txBuffer
+              const delEnt = query?.DELETE?.from?.ref?.[0] || query?.DELETE?.from;
+              if (delEnt === 'saps4hana.wm.GoodsIssueIssuedStorageUnit') {
+                const ids = query.DELETE.where?.[2]?.list?.map((item) => item.val) || [];
+                for (let i = txBuffer.length - 1; i >= 0; i--) {
+                  if (ids.includes(txBuffer[i].ID)) txBuffer.splice(i, 1);
+                }
+                return ids.length;
+              }
+
+              return [];
+            }
+          };
+
+          try {
+            const res = await callback(txContext);
+            committedRows.push(...txBuffer);
+            return res;
+          } finally {
+            for (const key of lockedKeys) {
+              const lk = suLocks.get(key);
+              if (lk) {
+                suLocks.delete(key);
+                lk.resolve();
+              }
+            }
+          }
+        }
+      };
+
+      const GoodsIssueIssuedSuStoreClass = GoodsIssueIssuedSuStore.GoodsIssueIssuedSuStore;
+      const store1 = new GoodsIssueIssuedSuStoreClass({ db: mockDb });
+      const store2 = new GoodsIssueIssuedSuStoreClass({ db: mockDb });
+
+      const claim1Promise = store1.acquireClaims({
+        reservationNo: '0000100901',
+        reservationItem: '0001',
+        material: 'CH-RC-LOCK-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'REF_RC_01',
+        items: [{ storageUnit: 'DRUM_RC_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      const claim2Promise = store2.acquireClaims({
+        reservationNo: '0000100902',
+        reservationItem: '0001',
+        material: 'CH-RC-LOCK-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'REF_RC_02',
+        items: [{ storageUnit: 'DRUM_RC_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      const results = await Promise.allSettled([claim1Promise, claim2Promise]);
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0].reason.status).toBe(400);
+      expect(rejected[0].reason.message).toMatch(/Storage Unit DRUM_RC_01 is currently claimed/i);
+
+      // Unique-key violation was caught and retried as UPDATE:
+      expect(uniqueConstraintHitCount).toBeGreaterThanOrEqual(1);
+
+      expect(committedRows).toHaveLength(1);
+      expect(committedRows[0].IssuedQty).toBe(48);
+    });
+
+    it('purges stale lock rows with no active claims older than cutoff', async () => {
+      const activeClaims = [
+        { StorageUnit: 'DRUM_HAS_CLAIM' }
+      ];
+      const suLockRows = [
+        { StorageUnit: 'DRUM_STALE_01', updatedAt: '2026-09-01T00:00:00.000Z' },
+        { StorageUnit: 'DRUM_HAS_CLAIM', updatedAt: '2026-09-01T00:00:00.000Z' }
+      ];
+      let deletedLocks = [];
+
+      const mockDb = {
+        tx: async (options, callback) => {
+          const txContext = {
+            run: async (query) => {
+              const selectEnt = query?.SELECT?.from?.ref?.[0] || query?.SELECT?.from;
+              if (selectEnt === 'saps4hana.wm.GoodsIssueIssuedStorageUnit') {
+                return activeClaims;
+              }
+              if (selectEnt === 'saps4hana.wm.GoodsIssueSuLock') {
+                return suLockRows;
+              }
+              const delEnt = query?.DELETE?.from?.ref?.[0] || query?.DELETE?.from;
+              if (delEnt === 'saps4hana.wm.GoodsIssueSuLock') {
+                const list = query.DELETE.where?.[2]?.list?.map((it) => it.val) || [];
+                deletedLocks.push(...list);
+                return list.length;
+              }
+              return [];
+            }
+          };
+          return callback(txContext);
+        }
+      };
+
+      const GoodsIssueIssuedSuStoreClass = GoodsIssueIssuedSuStore.GoodsIssueIssuedSuStore;
+      const store = new GoodsIssueIssuedSuStoreClass({ db: mockDb });
+
+      const purged = await store.purgeStaleLocks({ maxAgeMs: 86400000 });
+      expect(purged).toBe(1);
+      expect(deletedLocks).toEqual(['DRUM_STALE_01']);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 14: deleteClaims Default Keep & Error Classification (Requirements 2 & 5)
+  // ──────────────────────────────────────────────────────────
+  describe('deleteClaims Default Keep & Error Classification (Requirements 2 & 5)', () => {
+    it('defaults to "keep" when deleteClaims is called without definitive: true', async () => {
+      const ids = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100910',
+        reservationItem: '0001',
+        material: 'CH-DEFAULT-KEEP',
+        plant: '1120',
+        storageLocation: 'CS01',
+        referenceDocument: 'REF_KEEP_01',
+        items: [{ storageUnit: 'DRUM_KEEP_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+      expect(ids).toHaveLength(1);
+
+      await GoodsIssueIssuedSuStore.deleteClaims(ids);
+      let active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-DEFAULT-KEEP', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+      expect(active[0].Status).toBe('claiming');
+
+      await GoodsIssueIssuedSuStore.deleteClaims(ids, {});
+      active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-DEFAULT-KEEP', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+
+      await GoodsIssueIssuedSuStore.deleteClaims(ids, { definitive: true });
+      active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-DEFAULT-KEEP', '1120', 'CS01');
+      expect(active).toHaveLength(0);
+    });
+
+    it('confirms plain 403 is definitive and 502/504/timeout/reset are not', () => {
+      // Plain 403 Forbidden is definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 403 })).toBe(true);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ statusCode: 403 })).toBe(true);
+
+      // 502 Bad Gateway is unknown / NOT definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 502 })).toBe(false);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ statusCode: 502 })).toBe(false);
+
+      // 504 Gateway Timeout is unknown / NOT definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 504 })).toBe(false);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection(new Error('504 Gateway Timeout'))).toBe(false);
+
+      // Timeout (ETIMEDOUT / message timeout) is NOT definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ code: 'ETIMEDOUT', message: 'Connection timed out' })).toBe(false);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection(new Error('Request timed out'))).toBe(false);
+
+      // Reset (ECONNRESET / reset / socket hang up) is NOT definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ code: 'ECONNRESET', message: 'socket hang up' })).toBe(false);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection(new Error('read ECONNRESET'))).toBe(false);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection(new Error('Connection reset by peer'))).toBe(false);
+
+      // Standard rejections remain definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 400 })).toBe(true);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 409 })).toBe(true);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 422 })).toBe(true);
+
+      // Never-reached errors remain definitive:
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 404 })).toBe(true);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ status: 503 })).toBe(true);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ code: 'ECONNREFUSED' })).toBe(true);
+      expect(GoodsIssueIssuedSuStore.isDefinitiveRejection({ code: 'ENOTFOUND' })).toBe(true);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 15: 261 MATDOC Fallback Lookup Filtering (Requirement 2)
+  // ──────────────────────────────────────────────────────────
+  describe('261 MATDOC Fallback Lookup Filtering (Requirement 2)', () => {
+    it('proves an earlier same-day posting does NOT prove a later attempt', async () => {
+      const mockPosting = GoodsIssueAdapter.posting;
+      if (!mockPosting.rfc) {
+        const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
+        mockPosting.rfc = new RfcClient();
+      }
+      // Earlier posting was created at 09:00:00 (CPUDT '20261002', CPUTM '090000')
+      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+        {
+          MBLNR: '4900019991', MJAHR: '2026', ZEILE: '0001', BWART: '261',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '090000',
+          MENGE: '48.000', STORNO: ''
+        }
+      ]);
+
+      // Later claim attempt created at 12:00:00
+      const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
+        reservationNo: '0000100930',
+        reservationItem: '0001',
+        user: 'OPERATOR1',
+        date: '2026-10-02',
+        createdAt: '2026-10-02T12:00:00.000Z',
+        quantity: 48
+      });
+
+      // Earlier posting must NOT prove the later attempt
+      expect(doc).toBeNull();
+    });
+
+    it('finds posted document created after claim createdAt with matching quantity', async () => {
+      const mockPosting = GoodsIssueAdapter.posting;
+      if (!mockPosting.rfc) {
+        const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
+        mockPosting.rfc = new RfcClient();
+      }
+      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+        {
+          MBLNR: '4900019999', MJAHR: '2026', ZEILE: '0001', BWART: '261',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
+          MENGE: '48.000', STORNO: ''
+        }
+      ]);
+
+      const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
+        reservationNo: '0000100930',
+        reservationItem: '0001',
+        user: 'OPERATOR1',
+        date: '2026-10-02',
+        createdAt: '2026-10-02T12:00:00.000Z',
+        quantity: 48
+      });
+
+      expect(doc).toEqual({ MaterialDocument: '4900019999', MaterialDocYear: '2026' });
+    });
+
+    it('rejects document with mismatched quantity', async () => {
+      const mockPosting = GoodsIssueAdapter.posting;
+      if (!mockPosting.rfc) {
+        const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
+        mockPosting.rfc = new RfcClient();
+      }
+      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+        {
+          MBLNR: '4900019993', MJAHR: '2026', ZEILE: '0001', BWART: '261',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
+          MENGE: '20.000', STORNO: ''
+        }
+      ]);
+
+      const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
+        reservationNo: '0000100930',
+        reservationItem: '0001',
+        createdAt: '2026-10-02T12:00:00.000Z',
+        quantity: 48
+      });
+
+      expect(doc).toBeNull();
+    });
+
+    it('excludes reversed documents (STORNO=X or cancelled by BWART 262 / SMBLN)', async () => {
+      const mockPosting = GoodsIssueAdapter.posting;
+      if (!mockPosting.rfc) {
+        const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
+        mockPosting.rfc = new RfcClient();
+      }
+      // Document 4900019994 has cancellation document 4900019995 (BWART 262)
+      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+        {
+          MBLNR: '4900019994', MJAHR: '2026', ZEILE: '0001', BWART: '261',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
+          MENGE: '48.000', STORNO: ''
+        },
+        {
+          MBLNR: '4900019995', MJAHR: '2026', ZEILE: '0001', BWART: '262',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120600',
+          MENGE: '48.000', SMBLN: '4900019994', SJAHR: '2026'
+        }
+      ]);
+
+      const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
+        reservationNo: '0000100930',
+        reservationItem: '0001',
+        createdAt: '2026-10-02T12:00:00.000Z',
+        quantity: 48
+      });
+
+      expect(doc).toBeNull();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 16: Manual Resolution & Needs-Attention Re-check (Requirements 3 & 4)
+  // ──────────────────────────────────────────────────────────
+  describe('Manual Resolution & Needs-Attention Re-check (Requirements 3 & 4)', () => {
+    it('verifies document in MATDOC on manual resolve action "posted"', async () => {
+      const [claimId] = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100960',
+        reservationItem: '0001',
+        material: 'CH-MANUAL-VERIFY',
+        plant: '1120',
+        storageLocation: 'CS01',
+        items: [{ storageUnit: 'DRUM_MAN_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      // 1. Rejects when document does not exist in MATDOC
+      const mockAdapterNotFound = {
+        readTable: jest.fn().mockResolvedValue([])
+      };
+      await expect(
+        GoodsIssueIssuedSuStore.resolveClaimManual(claimId, 'posted', {
+          materialDocument: '4900088881',
+          materialDocYear: '2026',
+          adapter: mockAdapterNotFound
+        })
+      ).rejects.toThrow(/not found in SAP MATDOC\/MSEG/i);
+
+      // 2. Rejects when document has wrong movement type (e.g. 201 instead of 261)
+      const mockAdapterWrongMvt = {
+        readTable: jest.fn().mockResolvedValue([
+          { MBLNR: '4900088882', MJAHR: '2026', ZEILE: '0001', BWART: '201', RSNUM: '0000100960', RSPOS: '0001' }
+        ])
+      };
+      await expect(
+        GoodsIssueIssuedSuStore.resolveClaimManual(claimId, 'posted', {
+          materialDocument: '4900088882',
+          materialDocYear: '2026',
+          adapter: mockAdapterWrongMvt
+        })
+      ).rejects.toThrow(/movement type 201, expected 261/i);
+
+      // 3. Rejects when document is for different reservation/item
+      const mockAdapterWrongResv = {
+        readTable: jest.fn().mockResolvedValue([
+          { MBLNR: '4900088883', MJAHR: '2026', ZEILE: '0001', BWART: '261', RSNUM: '0000100999', RSPOS: '0001' }
+        ])
+      };
+      await expect(
+        GoodsIssueIssuedSuStore.resolveClaimManual(claimId, 'posted', {
+          materialDocument: '4900088883',
+          materialDocYear: '2026',
+          adapter: mockAdapterWrongResv
+        })
+      ).rejects.toThrow(/does not match claim reservation/i);
+
+      // 4. Succeeds when document is verified: promotes to issued
+      const mockAdapterSuccess = {
+        readTable: jest.fn().mockResolvedValue([
+          { MBLNR: '4900088888', MJAHR: '2026', ZEILE: '0001', BWART: '261', RSNUM: '0000100960', RSPOS: '0001' }
+        ])
+      };
+      const resolved = await GoodsIssueIssuedSuStore.resolveClaimManual(claimId, 'posted', {
+        materialDocument: '4900088888',
+        materialDocYear: '2026',
+        adapter: mockAdapterSuccess
+      });
+      expect(resolved.Status).toBe('issued');
+      expect(resolved.MaterialDocument).toBe('4900088888');
+      expect(resolved.NeedsAttention).toBe(false);
+
+      // 5. Rejects when another claim attempts to link to the same document
+      const [claimId2] = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100960',
+        reservationItem: '0001',
+        material: 'CH-MANUAL-VERIFY',
+        plant: '1120',
+        storageLocation: 'CS01',
+        items: [{ storageUnit: 'DRUM_MAN_02', issuedQty: 10, preIssueStock: 48 }]
+      });
+      await expect(
+        GoodsIssueIssuedSuStore.resolveClaimManual(claimId2, 'posted', {
+          materialDocument: '4900088888',
+          materialDocYear: '2026',
+          adapter: mockAdapterSuccess
+        })
+      ).rejects.toThrow(/already linked to claim/i);
+    });
+
+    it('sets status released with reason/user/time instead of deleting on manual resolve action "not-posted"', async () => {
+      const [claimId] = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100965',
+        reservationItem: '0001',
+        material: 'CH-MANUAL-RELEASE',
+        plant: '1120',
+        storageLocation: 'CS01',
+        items: [{ storageUnit: 'DRUM_REL_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      const resolved = await GoodsIssueIssuedSuStore.resolveClaimManual(claimId, 'not-posted', {
+        user: 'OPERATOR_BOB',
+        reason: 'CONFIRMED_NEVER_POSTED'
+      });
+
+      // Status must be 'released', NOT deleted!
+      expect(resolved.Status).toBe('released');
+      expect(resolved.NeedsAttention).toBe(false);
+      expect(resolved.ManualResolveAction).toBe('not-posted');
+      expect(resolved.ReleaseReason).toBe('CONFIRMED_NEVER_POSTED');
+      expect(resolved.ReleasedAt).toBeDefined();
+
+      // Verified: row remains in store
+      const active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-MANUAL-RELEASE', '1120', 'CS01');
+      // No longer active, but record exists
+      expect(active).toHaveLength(0);
+    });
+
+    it('resolves NEEDS_ATTENTION queue items via resolveQueueItemManual', async () => {
+      const qRef = `Q-RES-${Date.now()}`;
+      const enqueued = await GoodsIssueQueueManager.enqueue({
+        QueueReference: qRef,
+        ReservationNo: '0000100970',
+        ReservationItem: '0001',
+        Material: 'CH-Q-RESOLVE-01',
+        Plant: '1120',
+        StorageLocation: 'CS01',
+        IssueQty: 48,
+        Unit: 'KG',
+        MovementType: '261',
+        StorageUnits: [{ storageUnit: 'DRUM_Q_RES_01', issuedQty: 48, preIssueStock: 48 }],
+        LastSyncError: 'Unknown outcome'
+      });
+      await GoodsIssueQueueManager.update(enqueued.ID, { SyncStatus: 'NEEDS_ATTENTION' });
+
+      const item = await GoodsIssueQueueManager.get(enqueued.ID);
+      expect(item).toBeDefined();
+      expect(item.SyncStatus).toBe('NEEDS_ATTENTION');
+
+      const mockAdapter = {
+        readTable: jest.fn().mockResolvedValue([
+          { MBLNR: '4900091111', MJAHR: '2026', ZEILE: '0001', BWART: '261', RSNUM: '0000100970', RSPOS: '0001' }
+        ])
+      };
+
+      const resolved = await GoodsIssueQueueManager.resolveQueueItemManual(item.ID, 'posted', {
+        materialDocument: '4900091111',
+        materialDocYear: '2026',
+        adapter: mockAdapter,
+        user: 'SUPERVISOR'
+      });
+
+      expect(resolved.SyncStatus).toBe('POSTED_IN_SAP');
+      expect(resolved.SapMaterialDocument).toBe('4900091111');
+    });
+
+    it('keeps re-checking needs-attention claims in release job and auto-resolves when document appears', async () => {
+      const [claimId] = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: '0000100980',
+        reservationItem: '0001',
+        material: 'CH-AUTO-RESOLVE-01',
+        plant: '1120',
+        storageLocation: 'CS01',
+        items: [{ storageUnit: 'DRUM_AUTO_01', issuedQty: 48, preIssueStock: 48 }]
+      });
+
+      // Force transition to needs-attention
+      const mockAdapterNoDoc = {
+        findPosted261ByMatdoc: jest.fn().mockResolvedValue(null)
+      };
+      await GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(mockAdapterNoDoc, {
+        now: Date.now(),
+        staleClaimAgeMs: 0,
+        needsAttentionAgeMs: 0
+      });
+
+      let active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-AUTO-RESOLVE-01', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+      expect(active[0].Status).toBe('needs-attention');
+      expect(active[0].NeedsAttention).toBe(true);
+
+      // Cycle 1: document still not found in SAP -> remains needs-attention
+      await GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(mockAdapterNoDoc, {
+        now: Date.now() + 60000,
+        staleClaimAgeMs: 0,
+        needsAttentionAgeMs: 0
+      });
+      active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-AUTO-RESOLVE-01', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+      expect(active[0].Status).toBe('needs-attention');
+
+      // Cycle 2: document now appears in SAP -> auto-resolves to 'issued'
+      const mockAdapterDocAppears = {
+        findPosted261ByMatdoc: jest.fn().mockResolvedValue({
+          MaterialDocument: '4900099888',
+          MaterialDocYear: '2026'
+        })
+      };
+      const result = await GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(mockAdapterDocAppears, {
+        now: Date.now() + 120000,
+        staleClaimAgeMs: 0,
+        needsAttentionAgeMs: 0
+      });
+
+      expect(result.resolvedClaiming).toBe(1);
+      active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-AUTO-RESOLVE-01', '1120', 'CS01');
+      expect(active).toHaveLength(1);
+      expect(active[0].Status).toBe('issued');
+      expect(active[0].NeedsAttention).toBe(false);
+      expect(active[0].MaterialDocument).toBe('4900099888');
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Test 17: Unknown-Outcome Queue Items Mark Needs-Attention (Requirement 4)
+  // ──────────────────────────────────────────────────────────
+  describe('Unknown-Outcome Queue Items Mark Needs-Attention (Requirement 4)', () => {
+    it('marks queue item NEEDS_ATTENTION on unknown outcome and excludes it from subsequent drainQueue replays', async () => {
+      await GoodsIssueQueueManager.enqueue({
+        ReservationNo: '0000100950',
+        ReservationItem: '0001',
+        Material: 'CH-UNKNOWN-Q-01',
+        Plant: '1120',
+        StorageLocation: 'CS01',
+        IssueQty: 48,
+        Unit: 'KG',
+        MovementType: '261',
+        StorageUnits: [{ storageUnit: 'DRUM_UNK_Q_01', issuedQty: 48, preIssueStock: 48 }],
+        LastSyncError: 'Initial Gateway failure'
+      });
+
+      const timeoutErr = new Error('504 Gateway Timeout: SAP did not respond');
+      timeoutErr.status = 504;
+      const failingAdapter = {
+        postGoodsIssueByType: jest.fn().mockRejectedValue(timeoutErr)
+      };
+
+      const result1 = await GoodsIssueQueueManager.drainQueue(failingAdapter);
+      expect(failingAdapter.postGoodsIssueByType).toHaveBeenCalledTimes(1);
+
+      const allItems = await GoodsIssueQueueManager.getAll();
+      const qItem = allItems.find((i) => i.ReservationNo === '0000100950');
+      expect(qItem).toBeDefined();
+      expect(qItem.SyncStatus).toBe('NEEDS_ATTENTION');
+      expect(qItem.LastSyncError).toMatch(/504|Gateway Timeout|Unknown/i);
+
+      const secondAdapter = {
+        postGoodsIssueByType: jest.fn().mockResolvedValue({ MaterialDocument: '4900099999' })
+      };
+
+      const result2 = await GoodsIssueQueueManager.drainQueue(secondAdapter);
+      expect(secondAdapter.postGoodsIssueByType).not.toHaveBeenCalled();
+      expect(result2.TotalQueued).toBe(0);
+      expect(result2.Attempted).toBe(0);
+    });
+  });
 });
+
