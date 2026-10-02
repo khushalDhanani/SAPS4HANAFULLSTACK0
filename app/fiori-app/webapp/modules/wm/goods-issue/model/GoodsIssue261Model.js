@@ -106,6 +106,9 @@
                 suggestedUnits: [],         // suggested SUs (FEFO/FIFO order)
                 suggestedUnitsCount: 0,     // count of suggested SUs
                 availableUnits: [],         // all valid SUs in stock from SAP
+                partialInstruction: "",     // partial drum instruction before scanning e.g. "18 kg from SU X"
+                excludedUnconfirmedNote: "",// note on SUs excluded due to unconfirmed posting
+                excludedUnconfirmedCount: 0,
                 noSuDataGap: "",            // gap message when no SU data exists in SAP
                 lastScanState: "None",      // MessageStrip state: Success | Error | Warning | None
                 lastScanText: "",
@@ -480,6 +483,29 @@
                 }
             }
             return aSuggested;
+        },
+
+        /**
+         * Derive partial drum instruction string for display before scanning
+         * e.g. "18 kg from SU DRUM_10"
+         * @param {Array<Object>} aSuggested - Suggested stock units
+         * @returns {string}
+         */
+        getPartialInstruction: function (aSuggested) {
+            if (!Array.isArray(aSuggested) || aSuggested.length === 0) {
+                return "";
+            }
+            var oPartial = aSuggested.find(function (su) {
+                return su && (su.IsPartial === true || su.isPartial === true);
+            });
+            if (!oPartial) {
+                return "";
+            }
+            var sQty = String(oPartial.SuggestedQty != null ? oPartial.SuggestedQty : "");
+            var sUnit = (oPartial.Unit || "").toLowerCase();
+            var sSu = String(oPartial.StorageUnit || "").trim();
+            var sUnitPart = sUnit ? " " + sUnit : "";
+            return sQty + sUnitPart + " from SU " + sSu;
         },
 
         /**

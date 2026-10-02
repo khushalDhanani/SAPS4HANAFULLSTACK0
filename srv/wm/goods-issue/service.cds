@@ -1,6 +1,7 @@
 namespace saps4hana.wm;
 
 using { saps4hana.wm.GoodsIssueQueue as DBGoodsIssueQueue } from '../../../db/wm/goods-issue-queue';
+using { saps4hana.wm.GoodsIssueIssuedStorageUnit as DBGoodsIssueIssuedStorageUnit } from '../../../db/wm/goods-issue-issued-su';
 // Posting-attempt log (written before S/4HANA is called); internal, not exposed as an entity.
 using from '../../../db/wm/goods-issue-attempt';
 
@@ -21,6 +22,11 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     @readonly
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity GoodsIssueQueue as projection on DBGoodsIssueQueue;
+
+    // Issued Storage Units tracking held until TO confirmation (LQUA stock drop) or doc reversal
+    @readonly
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    entity GoodsIssueIssuedStorageUnit as projection on DBGoodsIssueIssuedStorageUnit;
 
     @readonly
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])

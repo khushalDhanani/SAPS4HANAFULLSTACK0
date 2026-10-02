@@ -286,6 +286,26 @@
                     visible="{gi261>/scanEnabled}"
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
+                        <!-- Partial drum instruction before scanning (Requirement 5) -->
+                        <MessageStrip
+                            id="stripPartialInstruction261"
+                            text="{gi261>/partialInstruction}"
+                            type="Information"
+                            icon="sap-icon://sys-help"
+                            showIcon="true"
+                            visible="{= !!${gi261>/partialInstruction} }"
+                            class="sapUiTinyMarginBottom" />
+
+                        <!-- Note on SUs excluded because of an unconfirmed posting (Requirement 5) -->
+                        <MessageStrip
+                            id="stripExcludedUnconfirmed261"
+                            text="{gi261>/excludedUnconfirmedNote}"
+                            type="Warning"
+                            icon="sap-icon://alert"
+                            showIcon="true"
+                            visible="{= !!${gi261>/excludedUnconfirmedNote} }"
+                            class="sapUiTinyMarginBottom" />
+
                         <HBox alignItems="End" class="sapUiTinyMarginBottom" wrap="Wrap">
                             <Input
                                 id="inScanUnit261"
@@ -359,37 +379,47 @@
                     expanded="true"
                     visible="{= ${gi261>/scanEnabled} &amp;&amp; ${gi261>/suggestedUnits}.length > 0 }"
                     class="sapUiSmallMarginBottom">
-                    <Table
-                        id="tblSuggestedUnits261"
-                        items="{gi261>/suggestedUnits}"
-                        noDataText="{i18n>gi261SuggestedNoData}">
-                        <columns>
-                            <Column id="colSuggestedUnit261"><Text text="{i18n>gi261SuggestedColUnit}" /></Column>
-                            <Column id="colSuggestedBin261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColBin}" /></Column>
-                            <Column id="colSuggestedQty261" hAlign="End"><Text text="{i18n>gi261SuggestedColQty}" /></Column>
-                            <Column id="colSuggestedBatch261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColBatch}" /></Column>
-                            <Column id="colSuggestedStatus261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColStatus}" /></Column>
-                            <Column id="colSuggestedAction261" hAlign="End"><Text text="{i18n>gi261SuggestedColAction}" /></Column>
-                        </columns>
-                        <items>
-                            <ColumnListItem>
-                                <cells>
-                                    <Text text="{gi261>StorageUnit}" class="fontBold" />
-                                    <Text text="{= ${gi261>StorageType} ? (${gi261>StorageType} + ' / ' + ${gi261>StorageBin}) : ${gi261>StorageBin} }" />
-                                    <Text text="{= ${gi261>AvailableStock} + ' ' + ${gi261>Unit} }" />
-                                    <Text text="{= ${gi261>Batch} || '—' }" />
-                                    <ObjectStatus
-                                        text="{= ${gi261>StatusText} || ${gi261>StatusState} || 'Available' }"
-                                        state="{= ${gi261>StatusState} === 'Error' ? 'Error' : (${gi261>StatusState} === 'Warning' ? 'Warning' : 'Success') }" />
-                                    <Button
-                                        text="{i18n>gi261BtnScanSuggested}"
-                                        type="Transparent"
-                                        icon="sap-icon://bar-code"
-                                        press=".onScanSuggestedPress" />
-                                </cells>
-                            </ColumnListItem>
-                        </items>
-                    </Table>
+                    <VBox class="sapUiSmallMargin">
+                        <MessageStrip
+                            id="stripExcludedUnconfirmedSuggested261"
+                            text="{gi261>/excludedUnconfirmedNote}"
+                            type="Warning"
+                            icon="sap-icon://alert"
+                            showIcon="true"
+                            visible="{= !!${gi261>/excludedUnconfirmedNote} }"
+                            class="sapUiTinyMarginBottom" />
+                        <Table
+                            id="tblSuggestedUnits261"
+                            items="{gi261>/suggestedUnits}"
+                            noDataText="{i18n>gi261SuggestedNoData}">
+                            <columns>
+                                <Column id="colSuggestedUnit261"><Text text="{i18n>gi261SuggestedColUnit}" /></Column>
+                                <Column id="colSuggestedBin261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColBin}" /></Column>
+                                <Column id="colSuggestedQty261" hAlign="End"><Text text="{i18n>gi261SuggestedColQty}" /></Column>
+                                <Column id="colSuggestedBatch261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColBatch}" /></Column>
+                                <Column id="colSuggestedStatus261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColStatus}" /></Column>
+                                <Column id="colSuggestedAction261" hAlign="End"><Text text="{i18n>gi261SuggestedColAction}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{gi261>StorageUnit}" class="fontBold" />
+                                        <Text text="{= ${gi261>StorageType} ? (${gi261>StorageType} + ' / ' + ${gi261>StorageBin}) : ${gi261>StorageBin} }" />
+                                        <Text text="{= ${gi261>AvailableStock} + ' ' + ${gi261>Unit} }" />
+                                        <Text text="{= ${gi261>Batch} || '—' }" />
+                                        <ObjectStatus
+                                            text="{= ${gi261>StatusText} || ${gi261>StatusState} || 'Available' }"
+                                            state="{= ${gi261>StatusState} === 'Error' ? 'Error' : (${gi261>StatusState} === 'Warning' ? 'Warning' : 'Success') }" />
+                                        <Button
+                                            text="{i18n>gi261BtnScanSuggested}"
+                                            type="Transparent"
+                                            icon="sap-icon://bar-code"
+                                            press=".onScanSuggestedPress" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
                 </Panel>
 
                 <!-- 4. Conditional: Serial Numbers Management -->

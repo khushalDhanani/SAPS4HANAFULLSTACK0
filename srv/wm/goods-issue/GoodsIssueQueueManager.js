@@ -121,6 +121,9 @@ class GoodsIssueQueueManager {
       CostCenter: String(data.CostCenter || '').trim(),
       GLAccount: String(data.GLAccount || '').trim(),
       SerialNumber: String(data.SerialNumber || (Array.isArray(data.SerialNumbers) ? data.SerialNumbers[0] : '') || '').trim(),
+      StorageUnits: data.StorageUnits
+        ? (typeof data.StorageUnits === 'string' ? data.StorageUnits : JSON.stringify(data.StorageUnits))
+        : (data.AllocatedSuItems ? JSON.stringify(data.AllocatedSuItems) : null),
       PostingDate: data.PostingDate || null,
       DocumentDate: data.DocumentDate || null,
       ReferenceDocument: String(data.ReferenceDocument || '').trim(),
@@ -364,6 +367,47 @@ class GoodsIssueQueueManager {
             SyncedAt: new Date().toISOString()
           });
           await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
+
+          // Requirement 3: Queue replay (drain job) must record issued SUs too, using the same code path.
+          if (item.StorageUnits) {
+            try {
+              const suStore = require('./GoodsIssueIssuedSuStore');
+              let parsedItems = [];
+              try {
+                const parsed = JSON.parse(item.StorageUnits);
+                parsedItems = Array.isArray(parsed) ? parsed : [];
+              } catch (_) {
+                parsedItems = [item.StorageUnits];
+              }
+              const suAllocations = parsedItems.map((su) => {
+                if (typeof su === 'string') {
+                  return { storageUnit: su, issuedQty: item.IssueQty, preIssueStock: item.IssueQty };
+                }
+                return {
+                  storageUnit: su.storageUnit || su.StorageUnit,
+                  issuedQty: su.issuedQty != null ? su.issuedQty : (su.IssuedQty || item.IssueQty),
+                  preIssueStock: su.preIssueStock != null ? su.preIssueStock : (su.PreIssueStock || item.IssueQty)
+                };
+              }).filter((s) => Boolean(s.storageUnit));
+
+              if (suAllocations.length > 0) {
+                await suStore.recordIssuedSUs({
+                  materialDocument: result.MaterialDocument,
+                  materialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+                  reservationNo: item.ReservationNo,
+                  reservationItem: item.ReservationItem,
+                  referenceDocument: item.ReferenceDocument,
+                  material: item.Material,
+                  plant: item.Plant,
+                  storageLocation: item.StorageLocation,
+                  items: suAllocations
+                });
+              }
+            } catch (suErr) {
+              // Keep sync successful, non-fatal SU recording log
+            }
+          }
+
           syncedCount++;
         } else {
           await this.update(item.QueueReference, {

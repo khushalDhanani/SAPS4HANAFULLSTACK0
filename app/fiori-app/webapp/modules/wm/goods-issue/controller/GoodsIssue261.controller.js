@@ -122,6 +122,9 @@ sap.ui.define([
             oModel.setProperty("/suggestedUnitsCount", 0);
             oModel.setProperty("/availableUnits", []);
             oModel.setProperty("/noSuDataGap", "");
+            oModel.setProperty("/partialInstruction", "");
+            oModel.setProperty("/excludedUnconfirmedNote", "");
+            oModel.setProperty("/excludedUnconfirmedCount", 0);
             oModel.setProperty("/lastScanState", "None");
             oModel.setProperty("/lastScanText", "");
             if (!sResv || !sItem) {
@@ -130,13 +133,24 @@ sap.ui.define([
             GoodsIssue261Service.fetchStockUnitsForItem(sResv, sItem)
                 .then(function (oData) {
                     var aUnits = (oData && oData.StockUnits) || [];
+                    var nExcludedUnconfirmed = (oData && oData.ExcludedUnconfirmedCount) || 0;
+                    oModel.setProperty("/excludedUnconfirmedCount", nExcludedUnconfirmed);
+                    if (nExcludedUnconfirmed > 0) {
+                        var sExcludedNote = nExcludedUnconfirmed + " Storage Unit(s) excluded due to unconfirmed posting / pending Transfer Order confirmation.";
+                        oModel.setProperty("/excludedUnconfirmedNote", sExcludedNote);
+                    } else {
+                        oModel.setProperty("/excludedUnconfirmedNote", "");
+                    }
+
                     if (aUnits.length > 0) {
                         var aSuggested = GoodsIssue261Model.calculateSuggestedUnits(aUnits, nOpenQty > 0 ? nOpenQty : 1);
+                        var sPartialInstruction = GoodsIssue261Model.getPartialInstruction(aSuggested);
                         oModel.setProperty("/scanEnabled", true);
                         oModel.setProperty("/requiredScanCount", nOpenQty > 0 ? nOpenQty : 1);
                         oModel.setProperty("/availableUnits", aUnits);
                         oModel.setProperty("/suggestedUnits", aSuggested);
                         oModel.setProperty("/suggestedUnitsCount", aSuggested.length);
+                        oModel.setProperty("/partialInstruction", sPartialInstruction);
                         oModel.setProperty("/noSuDataGap", "");
                         // The scan section takes over from the manual serial entry table
                         oModel.setProperty("/isSerialManaged", false);

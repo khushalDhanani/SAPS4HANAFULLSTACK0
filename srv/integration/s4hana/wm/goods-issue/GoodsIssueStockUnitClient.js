@@ -57,8 +57,23 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
     this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
+    this.issuedSuStore = options.issuedSuStore || (this.adapter && this.adapter.issuedSuStore) || null;
     this._huModelCache = null;
     this.rfc = options.rfc || new RfcClient();
+  }
+
+  /**
+   * Resolve the issued SU store instance if available.
+   * @returns {Object|null}
+   */
+  _getIssuedSuStore() {
+    if (this.issuedSuStore) return this.issuedSuStore;
+    if (this.adapter && this.adapter.issuedSuStore) return this.adapter.issuedSuStore;
+    try {
+      return require('../../../../wm/goods-issue/GoodsIssueIssuedSuStore');
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -750,20 +765,70 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       return { ...base, Warehouse: '', StockUnits: [], ExcludedCount: 0, Message: `Reservation item has no storage location; Storage Units cannot be determined.` };
     }
 
-    const [quants, usableMap] = await Promise.all([
+    const [quants, usableMap, activeClaims] = await Promise.all([
       this._wmQuants(material, plant, sloc).catch((err) => {
         const e = new Error(`Could not read WM stock (LQUA) for material ${material}: ${err.message}`);
         e.status = err.status || 502;
         throw e;
       }),
-      this._usableBatchMap(material, plant, sloc)
+      this._usableBatchMap(material, plant, sloc),
+      (async () => {
+        try {
+          const store = this._getIssuedSuStore();
+          if (store && typeof store.getActiveIssuedSUs === 'function') {
+            return await store.getActiveIssuedSUs(material, plant, sloc);
+          }
+        } catch (e) {
+          LOG.warn('Could not read active issued SUs in listStockUnitsForReservationItem:', e.message || e);
+        }
+        return [];
+      })()
     ]);
 
     const suQuants = quants.filter((q) => q.LENUM);
     const issuable = suQuants.filter((q) => !this._wmQuantRejection(q, resvBatch, usableMap));
-    const stockUnits = this._wmGroupStockUnits(issuable, usableMap);
-    const shown = new Set(issuable.map((q) => q.LENUM));
-    const excludedCount = new Set(suQuants.filter((q) => !shown.has(q.LENUM)).map((q) => q.LENUM)).size;
+    const rawStockUnits = this._wmGroupStockUnits(issuable, usableMap);
+
+    // Effective claim at read time = max(0, claimed - (preIssueStock - currentStock)),
+    // so a confirmed TO is not double-counted (Requirement 5).
+    let excludedUnconfirmedCount = 0;
+    const stockUnits = [];
+
+    for (const su of rawStockUnits) {
+      const suKey = wmAlphaOut(su.StorageUnit);
+      const currentStock = Number(su.AvailableStock) || 0;
+      const suClaims = (activeClaims || []).filter(
+        (c) => c && ['issued', 'claiming'].includes(c.Status) && wmAlphaOut(c.StorageUnit) === suKey
+      );
+
+      let totalEffectiveClaim = 0;
+      for (const claim of suClaims) {
+        const claimed = Number(claim.IssuedQty) || 0;
+        const preStock = Number(claim.PreIssueStock != null ? claim.PreIssueStock : currentStock);
+        const toDeducted = Math.max(0, preStock - currentStock);
+        const effective = Math.max(0, claimed - toDeducted);
+        totalEffectiveClaim += effective;
+      }
+      totalEffectiveClaim = Math.round(totalEffectiveClaim * 1000) / 1000;
+
+      if (totalEffectiveClaim > 0) {
+        const netStock = Math.round((currentStock - totalEffectiveClaim) * 1000) / 1000;
+        if (netStock <= 0) {
+          // Drop SUs at 0
+          excludedUnconfirmedCount++;
+          continue;
+        }
+        // Show reduced qty for partials
+        su.AvailableStock = netStock;
+        su.PreIssueStock = currentStock;
+        su.IssuedPendingToQty = totalEffectiveClaim;
+        su.StatusText = `${netStock} ${su.Unit || ''} available (${totalEffectiveClaim} ${su.Unit || ''} pending TO confirmation)`.trim();
+      }
+      stockUnits.push(su);
+    }
+
+    const shown = new Set(stockUnits.map((s) => s.StorageUnit));
+    const excludedCount = new Set(suQuants.filter((q) => !shown.has(wmAlphaOut(q.LENUM))).map((q) => q.LENUM)).size;
     const warehouses = [...new Set(quants.map((q) => q.LGNUM).filter(Boolean))];
 
     let message = '';
@@ -771,7 +836,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       // Issuable stock that is NOT on a Storage Unit (bin stock) — say so instead of a bare "nothing found".
       const loose = quants.filter((q) => !q.LENUM && !this._wmQuantRejection(q, resvBatch, usableMap));
       const where = `material ${material} in plant ${plant} / storage location ${sloc}` + (resvBatch ? ` / batch ${resvBatch}` : '');
-      if (!quants.length) {
+      if (excludedUnconfirmedCount > 0) {
+        message = `All matching Storage Units for ${where} are currently pending Transfer Order confirmation.`;
+      } else if (!quants.length) {
         message = `No WM stock for ${where}.`;
       } else if (loose.length) {
         const total = Math.round(loose.reduce((n, q) => n + q.VERME, 0) * 1000) / 1000;
@@ -787,6 +854,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       Warehouse: warehouses.join(','),
       StockUnits: stockUnits,
       ExcludedCount: excludedCount,
+      ExcludedUnconfirmedCount: excludedUnconfirmedCount,
       Message: message
     };
   }
@@ -1083,7 +1151,43 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     });
     if (wm) {
       const { su } = wm;
-      const suStock = su.AvailableStock;
+      let activeClaims = [];
+      try {
+        const store = this._getIssuedSuStore();
+        if (store && typeof store.getActiveIssuedSUs === 'function') {
+          activeClaims = await store.getActiveIssuedSUs(resvMaterial, resvPlant, resvSLoc);
+        }
+      } catch (e) {
+        LOG.warn('Could not read active issued SUs in resolveStockUnitForGoodsIssue:', e.message || e);
+      }
+      const suAlpha = wmAlphaOut(su.StorageUnit);
+      const origStock = Number(su.AvailableStock) || 0;
+      const suClaims = (activeClaims || []).filter(
+        (c) => c && ['issued', 'claiming'].includes(c.Status) && wmAlphaOut(c.StorageUnit) === suAlpha
+      );
+
+      let totalEffectiveClaim = 0;
+      for (const claim of suClaims) {
+        const claimed = Number(claim.IssuedQty) || 0;
+        const preStock = Number(claim.PreIssueStock != null ? claim.PreIssueStock : origStock);
+        const toDeducted = Math.max(0, preStock - origStock);
+        totalEffectiveClaim += Math.max(0, claimed - toDeducted);
+      }
+      totalEffectiveClaim = Math.round(totalEffectiveClaim * 1000) / 1000;
+      const netStock = Math.max(0, Math.round((origStock - totalEffectiveClaim) * 1000) / 1000);
+
+      if (totalEffectiveClaim > 0 && netStock <= 0) {
+        return {
+          SuBarcode: sSu,
+          SuExists: false,
+          SuNotFoundReason: `Storage Unit ${su.StorageUnit} is already issued (pending Transfer Order confirmation).`,
+          ResolvedType: 'WM_STORAGE_UNIT',
+          Material: resvMaterial,
+          Plant: resvPlant,
+          StorageLocation: resvSLoc
+        };
+      }
+      const suStock = totalEffectiveClaim > 0 ? netStock : origStock;
       const stock = currentStock !== null && currentStock !== undefined ? Math.min(currentStock, suStock) : suStock;
       return {
         SuBarcode: sSu,

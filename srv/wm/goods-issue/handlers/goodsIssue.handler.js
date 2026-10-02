@@ -5,6 +5,7 @@ const { validateReversalPayload } = require('../validation/goodsIssue.validation
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
+const GoodsIssueIssuedSuStore = require('../GoodsIssueIssuedSuStore');
 
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
@@ -77,6 +78,12 @@ class GoodsIssueHandler {
     srv.on('READ', 'GoodsIssueQueue', async (req, next) => {
       if (!GoodsIssueQueueManager.isAvailable()) return [];
       return typeof next === 'function' ? next() : GoodsIssueQueueManager.getAll();
+    });
+
+    // READ GoodsIssueIssuedStorageUnit: active/released issued SUs held pending TO confirmation
+    srv.on('READ', 'GoodsIssueIssuedStorageUnit', async (req, next) => {
+      if (GoodsIssueIssuedSuStore.db) return typeof next === 'function' ? next() : [];
+      return GoodsIssueIssuedSuStore.getActiveIssuedSUs();
     });
 
     // FUNCTION: getQueueSummary: pending count, items and whether a queue store is bound at all
@@ -240,6 +247,46 @@ class GoodsIssueHandler {
           SyncedAt: new Date().toISOString()
         });
         await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
+
+        // Record issued SUs on retry success too
+        if (result.MaterialDocument && item.StorageUnits) {
+          try {
+            const suStore = require('../GoodsIssueIssuedSuStore');
+            let parsedItems = [];
+            try {
+              const parsed = JSON.parse(item.StorageUnits);
+              parsedItems = Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+              parsedItems = [item.StorageUnits];
+            }
+            const suAllocations = parsedItems.map((su) => {
+              if (typeof su === 'string') {
+                return { storageUnit: su, issuedQty: item.IssueQty, preIssueStock: item.IssueQty };
+              }
+              return {
+                storageUnit: su.storageUnit || su.StorageUnit,
+                issuedQty: su.issuedQty != null ? su.issuedQty : (su.IssuedQty || item.IssueQty),
+                preIssueStock: su.preIssueStock != null ? su.preIssueStock : (su.PreIssueStock || item.IssueQty)
+              };
+            }).filter((s) => Boolean(s.storageUnit));
+
+            if (suAllocations.length > 0) {
+              await suStore.recordIssuedSUs({
+                materialDocument: result.MaterialDocument,
+                materialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+                reservationNo: item.ReservationNo,
+                reservationItem: item.ReservationItem,
+                referenceDocument: item.ReferenceDocument,
+                material: item.Material,
+                plant: item.Plant,
+                storageLocation: item.StorageLocation,
+                items: suAllocations
+              });
+            }
+          } catch (suErr) {
+            // Keep retry result successful
+          }
+        }
 
         return Object.assign({
           Success: true,

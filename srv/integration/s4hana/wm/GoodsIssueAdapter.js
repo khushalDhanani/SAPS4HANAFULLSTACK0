@@ -37,11 +37,12 @@ class GoodsIssueAdapter {
     this.destinationName = this.client.destinationName;
 
     this.queueManager = options.queueManager || null;
+    this.issuedSuStore = options.issuedSuStore || null;
 
     // Instantiate domain clients
     this.batches = new GoodsIssueBatchesClient({ adapter: this, client: this.client });
     this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager });
-    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager });
+    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager, issuedSuStore: this.issuedSuStore });
     this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches });
     this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, queueManager: this.queueManager, rfc: options.rfc });
   }

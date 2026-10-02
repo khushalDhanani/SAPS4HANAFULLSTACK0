@@ -15,6 +15,7 @@
 const GoodsIssue261Model = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
+const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 
 describe('GoodsIssue261Model: SU Scanning & Drum Weight Calculations', () => {
 
@@ -296,8 +297,13 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     PerTypeGoodsIssueHandler.init(srv);
   });
 
-  afterEach(() => {
+  beforeEach(async () => {
+    await GoodsIssueIssuedSuStore.clear();
+  });
+
+  afterEach(async () => {
     jest.restoreAllMocks();
+    await GoodsIssueIssuedSuStore.clear();
   });
 
   const setupMockSap = ({ openQty = 480, stockUnits = [] } = {}) => {
@@ -853,6 +859,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(enqueueSpy).not.toHaveBeenCalled();
 
       // 2) Different valid drum order (shuffled / arbitrary scan sequence)
+      await GoodsIssueIssuedSuStore.clear();
       postSpy.mockClear();
       const shuffledList = ['DRUM_05', 'DRUM_10', 'DRUM_02', 'DRUM_01', 'DRUM_08', 'DRUM_03', 'DRUM_07', 'DRUM_04', 'DRUM_09', 'DRUM_06'];
 

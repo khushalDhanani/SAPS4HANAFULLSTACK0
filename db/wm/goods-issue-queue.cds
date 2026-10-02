@@ -25,6 +25,7 @@ entity GoodsIssueQueue : cuid, managed {
     CostCenter            : String(10);
     GLAccount             : String(10);
     SerialNumber          : String(18);
+    StorageUnits          : LargeString;
     PostingDate           : Date;
     DocumentDate          : Date;
     ReferenceDocument     : String(16);   // idempotency reference sent to SAP; checked before replay

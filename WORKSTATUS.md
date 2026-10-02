@@ -4,6 +4,153 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-02 12:10 IST
+- **Agent**: Antigravity
+- **Request**: Fix the issued-SU claim logic:
+  1. checkConcurrentClaims must be quantity-based: claimed + requested <= current LQUA stock for that SU. A partial residual must stay claimable. Remove the "any active claim rejects" rule.
+  2. Make claims atomic: write a `claiming` row (or lock) BEFORE the SAP call, promote it to `issued` with the material document on success, delete it on failure or rejection. Parallel requests for the same SU must not both succeed.
+  3. Queue replay (drain job) must record issued SUs too, using the same code path.
+  4. A `claiming` row older than a configurable age with no known outcome is resolved by the release job: look up the material document; found -> issued, not found after the threshold -> deleted.
+  5. Effective claim at read time = max(0, claimed - (preIssueStock - currentStock)), so a confirmed TO is not double-counted. A quant missing from LQUA counts as released, not as a lookup error.
+  6. Confirm the release job is scheduled; wire it if not. Add an index on (Material, Plant, StorageLocation, Status). Check the entity's authorization.
+  7. Tests: parallel Promise.all claims for one drum (exactly one wins); second reservation takes the 30 kg residual; replay records claims; claiming row resolved after a crash; no double-count after TO confirmation; deleted quant releases the claim.
+  Run the full suite, report the total, update WORKSTATUS.md.
+- **Changes**:
+  - `db/wm/goods-issue-issued-su.cds`:
+    - Added `@cds.persistence.indexes: { ClaimLookupIdx: { element: [Material, Plant, StorageLocation, Status] } }`.
+    - Added `ReferenceDocument : String(16);` for crash recovery lookup.
+    - Set default `Status: String(20) default 'claiming';` ('claiming' | 'issued' | 'released').
+  - `db/wm/goods-issue-queue.cds`:
+    - Added `StorageUnits : LargeString;` to persist SU allocations across queueing and replay.
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`:
+    - Implemented `AsyncKeyLock` per StorageUnit to prevent race conditions during concurrent `Promise.all` requests in the Node.js event loop.
+    - Quantity-based `checkConcurrentClaims(itemsOrUnits)`: replaced "any active claim rejects" rule with `claimed + requested <= current LQUA stock`. Supports partial residuals remaining claimable across successive reservations.
+    - Added atomic claim lifecycle:
+      - `acquireClaims(...)`: acquires `AsyncKeyLock`, verifies quantity-based claims, writes rows with `Status: 'claiming'`.
+      - `promoteClaims(...)`: promotes `claiming` rows to `issued` with `MaterialDocument` and `MaterialDocYear` on SAP success.
+      - `deleteClaims(...)`: deletes `claiming` rows on SAP failure, rejection, or enqueue.
+    - Implemented TO-deducted effective claim formula:
+      $$\text{effectiveClaim} = \max(0, \text{claimed} - (\text{preIssueStock} - \text{currentStock}))$$
+    - In `releaseByLquaDropOrReversal`:
+      - Resolves stale `claiming` rows older than `staleClaimAgeMs`: looks up material document via `findPostedGoodsIssueByReference`; found -> promote to `issued`, not found after threshold -> delete.
+      - Resolves `issued` rows: when quant is missing from LQUA, counts as released (`LQUA_QUANT_DELETED`), not as lookup error.
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+    - In `buildRecord`: persists `StorageUnits` on the queue record.
+    - In `drainQueue`: when replay produces `MaterialDocument`, parses `StorageUnits` and records issued SUs via `GoodsIssueIssuedSuStore.recordIssuedSUs`.
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+    - In `retryQueuedGoodsIssue`: records issued SUs via `GoodsIssueIssuedSuStore.recordIssuedSUs` upon successful retry.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+    - In `storageUnitReconcileCheck261`: removed old eager reject; evaluated quantity-based `checkConcurrentClaims` against server-allocated items (`allocatedSuItems`).
+    - In `postGoodsIssue261`: writes `claiming` rows before SAP call with `ReferenceDocument`; promotes on success; deletes on error, rejection, or queue fallback.
+    - In `postWithQueueFallback`: passes `StorageUnits: normalized._allocatedSuItems || normalized.StorageUnits` to `GoodsIssueQueueManager.enqueue`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+    - In `listStockUnitsForReservationItem` and `resolveStockUnitForGoodsIssue`: uses effective claim formula $\max(0, \text{claimed} - (\text{preIssueStock} - \text{currentStock}))$; prevents double counting against LQUA stock after TO confirmation.
+  - `srv/wm/goods-issue/service.js`:
+    - Wired background release job `GoodsIssueIssuedSuStore.releaseByLquaDropOrReversal(GoodsIssueAdapter)` on interval `releaseIntervalMs()` (default 60s, configurable via `GI_SU_RELEASE_INTERVAL_MS`).
+  - `srv/wm/goods-issue/service.cds`:
+    - Verified authorization: `GoodsIssueIssuedStorageUnit` is `@readonly` with `requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin']`. Modifying operations run privileged internally in CAP.
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`:
+    - Added comprehensive unit tests for all 6 required behaviors:
+      1. Parallel `Promise.all` claims for one drum (exactly one wins).
+      2. Second reservation takes the 30 kg residual.
+      3. Queue replay (drain job) records claims using the same code path.
+      4. Claiming row resolved after a crash (found in SAP -> issued; not found -> deleted).
+      5. No double-count after TO confirmation (`preIssueStock - currentStock`).
+      6. Deleted quant releases the claim (`LQUA_QUANT_DELETED`).
+- **Affected Files**:
+  - `db/wm/goods-issue-issued-su.cds`
+  - `db/wm/goods-issue-queue.cds`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`
+  - `srv/wm/goods-issue/service.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`
+  - `WORKSTATUS.md`
+- **Validation**:
+  - `git diff --check`: Passed cleanly (0 errors).
+  - Targeted unit tests: `npx jest test/unit/wm/goodsIssueIssuedSu.test.js` -> 15 passed, 15 total (100%).
+  - Full WM unit test suite: `npx jest test/unit/wm` -> 47 test suites passed, 965 tests passed (100%).
+  - Full repository test suite: `npm test` -> 134 test suites passed, 2,183 tests passed (100%).
+  - No live SAP POST was performed.
+  - No git commit was made.
+- **Current Status**: Complete and verified. All 6 claim hardening requirements and 6 test scenarios implemented and passing. Full test suite passes (134 suites, 2,183 tests).
+- **Next Recommended Action**: Await user confirmation or proceed with further 261 Goods Issue enhancements on `feature/CL01`.
+
+## 2026-10-02 11:55 IST
+- **Agent**: Antigravity
+- **Request**: Implement option (b) only. Do not create or confirm TOs.
+  1. New entity for issued SUs: materialDocument, year, reservation/item, SU, material, plant, sloc, issuedQty, preIssueStock, status (issued/released), createdAt, releasedAt. Add migration, note it in WORKSTATUS.md.
+  2. Write the records in the same step as a successful IM post (not before; if the post fails or is rejected, write nothing). Concurrent claim of the same SU must fail via a unique/locked check, returning 400 before SAP is called.
+  3. listStockUnitsForReservationItem subtracts active issuedQty from AvailableStock; drop SUs at 0; show reduced qty for partials.
+  4. Release job: set released when LQUA stock <= preIssueStock - issuedQty, or when the material document is reversed in SAP (check MATDOC/MSEG reversal). Lookup errors leave status unchanged and log.
+  5. UI: show the partial drum instruction before scanning ("18 kg from SU X"), and a note on SUs excluded because of an unconfirmed posting.
+  6. Read-only task: from a past 261 document, report whether LTBK/LTBP holds the TR and how soon after the post. No assumptions.
+  7. Tests: two reservations cannot claim the same drum; partial residual is suggested for the next reservation at reduced qty; failed post writes no record; release on LQUA drop and on reversal; existing tests pass.
+  Run the full suite, report the total, update WORKSTATUS.md.
+- **Trace & SAP Facts (Read-Only Task 6 Investigation)**:
+  - Table `LTBK` inspected in live S/4HANA DS4 Client 220 for `BWLVS = '261'`.
+  - Found real 261 Material Document `4900049861` (year `2026`) in warehouse `W01` (`BWLVS = '261'`, `BETYP = 'F'`, `BENUM = '0000001011'`) which created Transfer Requirement `0001000694`.
+  - Header timestamp comparison:
+    - `MKPF` (Material Document): `CPUDT = '20260930'`, `CPUTM = '160256'` (16:02:56).
+    - `LTBK` (Transfer Requirement): `BDATU = '20260930'`, `BZEIT = '160257'` (16:02:57).
+    - Delta: **1 second**.
+    - Proven Fact: `LTBK`/`LTBP` holds the Transfer Requirement record virtually instantaneously (1 second) after the 261 IM post.
+- **Migration & Persistence Note (Requirement 1)**:
+  - New CDS entity `saps4hana.wm.GoodsIssueIssuedStorageUnit` created in `db/wm/goods-issue-issued-su.cds`.
+  - In production / Cloud Foundry deployment, HDI artifacts are generated from the CDS model by `npx cds build --production` (`mta.yaml`) and deployed by `saps4hana-db-deployer`.
+  - The deployed HDI container must receive table `saps4hana.wm.GoodsIssueIssuedStorageUnit.hdbtable`. In local development and unit/integration test runs, CAP automatically deploys the entity schema to the in-memory SQLite database.
+- **Changes**:
+  - `db/wm/goods-issue-issued-su.cds`: Created entity `GoodsIssueIssuedStorageUnit` with `MaterialDocument`, `MaterialDocYear`, `ReservationNo`, `ReservationItem`, `StorageUnit`, `Material`, `Plant`, `StorageLocation`, `IssuedQty`, `PreIssueStock`, `Status` ('issued' | 'released'), `ReleasedAt`, `ReleaseReason`.
+  - `srv/wm/goods-issue/service.cds`: Imported `GoodsIssueIssuedStorageUnit` from `db/wm/goods-issue-issued-su` and projected it as `@readonly` in `GoodsIssueService`.
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`: Implemented store with `checkConcurrentClaims(storageUnits)`, `recordIssuedSUs(params)`, `getActiveIssuedSUs(material, plant, sloc)`, `release(id, reason)`, and `releaseByLquaDropOrReversal(adapter)`. Supports DB transactions with in-memory fallback and test cleanup `clear()`.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+    - In `storageUnitReconcileCheck261`: after validating reservation, duplicate scans, and SAP stock presence, checks `checkConcurrentClaims(submittedSUs)`. Fails fast with HTTP 400 before SAP is called if any drum is currently claimed in an active Goods Issue. Assembles `allocatedSuItems` tracking pre-issue stock and issued quantity.
+    - In `srv.on('postGoodsIssue261')`: only on successful IM post (`res.MaterialDocument` returned, `res.Queued !== true`), writes issued SU records via `GoodsIssueIssuedSuStore.recordIssuedSUs`. If post fails, is rejected, or enqueues, nothing is written.
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`: wired `@readonly` `READ GoodsIssueIssuedStorageUnit` handler.
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js` & `GoodsIssueStockUnitClient.js`:
+    - In `listStockUnitsForReservationItem`: queries `getActiveIssuedSUs(material, plant, sloc)`. Subtracts active `issuedQty` from `AvailableStock`. Drops SUs with net stock <= 0 (increments `ExcludedUnconfirmedCount`). Shows reduced quantity for partials with status text noting pending TO confirmation.
+    - In `resolveStockUnitForGoodsIssue`: queries active claims, returning `SuExists: false` if depleted by unconfirmed claim, or reduced available stock for partial.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`:
+    - Added `partialInstruction: ""`, `excludedUnconfirmedNote: ""`, `excludedUnconfirmedCount: 0` to initial model data.
+    - Added `getPartialInstruction(aSuggested)` returning `"18 kg from SU X"`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`:
+    - In `_detectScanMode`: derives `partialInstruction` from suggested units; sets `excludedUnconfirmedNote` when `ExcludedUnconfirmedCount > 0`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`:
+    - Added `stripPartialInstruction261` and `stripExcludedUnconfirmed261` message strips in `pnlScanToComplete261`.
+    - Added `stripExcludedUnconfirmedSuggested261` message strip in `pnlSuggestedUnits261`.
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`: Added 9 comprehensive unit tests covering concurrent claim rejection, partial residual suggestion, depleted drum drop, failed post isolation, release on LQUA stock drop, release on MSEG/MATDOC reversal, lookup error handling, and UI partial instruction formatting.
+  - `test/unit/wm/goodsIssue261SuScan.test.js`: Added `GoodsIssueIssuedSuStore.clear()` in `beforeEach`/`afterEach` and between test phases to ensure isolated test execution.
+- **Affected Files**:
+  - `db/wm/goods-issue-issued-su.cds`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`
+  - `test/unit/wm/goodsIssue261SuScan.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx cds compile srv/wm/goods-issue/service.cds --to json`: 0 errors.
+  - `npm --prefix app/fiori-app run build`: build succeeded in 1.67 s.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite, 7/7 passed.
+  - `npx jest test/unit/wm/goodsIssueIssuedSu.test.js`: 1 suite, 9/9 passed.
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js`: 1 suite, 26/26 passed.
+  - `npx jest test/unit/wm`: 47 suites, 959/959 passed.
+  - `npm test`: 134 suites, 2177/2177 passed.
+  - `git diff --check`: clean (0 errors).
+  - `git status`: clean diff on feature/CL01 (no live POST, no commit).
+- **Current Status**: Complete & Verified. Option (b) fully implemented and tested. Issued SUs recorded only upon successful IM post; concurrent claims blocked with HTTP 400 before SAP is called; active claims deducted from stock with residual partial suggestions and zero-quantity drop; release reconciliation job handles both LQUA stock drop (confirmed TO) and MSEG/MATDOC reversals, leaving status unchanged on lookup errors; UI displays partial drum instruction before scanning and note for excluded unconfirmed units; read-only live investigation proved TR is created in LTBK within 1 second of IM post. All 134 test suites (2,177 tests) passing. No TO created or confirmed, no live POST executed, no git commit created.
+- **Next Steps**: Awaiting user review and next instructions.
+
+
 ## 2026-10-02 11:30 IST
 - **Agent**: Antigravity
 - **Request**: Branch feature/CL01 (No live POST, no commit):
@@ -7922,3 +8069,5 @@ The table below provides a strict, unambiguous separation between **Code Complet
 15. SAP period: materials period for October 2026 (fiscal 2026/07) is not open in company code 1000, so every goods issue dated 2026-10-01 or later is rejected. Needs MMPV in SAP. See the 10:30 entry.
     - Update 2026-10-01 10:44 IST: attempt log, re-check job, replay guard, unconfirmed result and closed-period message implemented and unit-tested (see the 10:44 entries). Open: real posting through the changed path, 261/301/311/batch reference (each needs its own live proof). Uncommitted.
 16. DEPLOYMENT PREREQUISITE: the HDI container must receive table `saps4hana.wm.GoodsIssuePostingAttempt` and column `GoodsIssueQueue.ReferenceDocument` before the 10:44 code goes live; otherwise every 201 posting returns 503. See the 10:44 deployment note.
+17. DEPLOYMENT PREREQUISITE (Issued SU Claims & Queue Replay): the HDI container must receive table `saps4hana.wm.GoodsIssueIssuedStorageUnit` (with index `ClaimLookupIdx` on `Material, Plant, StorageLocation, Status`), and column `GoodsIssueQueue.StorageUnits` (LargeString/NCLOB) before the 2026-10-02 12:10 code goes live. All 134 test suites (2,183 tests) pass (100% green).
+

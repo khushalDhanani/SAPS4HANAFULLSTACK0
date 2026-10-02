@@ -9,6 +9,7 @@
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
+const GoodsIssueIssuedSuStore = require('../GoodsIssueIssuedSuStore');
 const { normalizeGoodsIssue201Payload } = require('../mapping/goodsIssue201.normalize');
 const { normalizeGoodsIssue261Payload } = require('../mapping/goodsIssue261.normalize');
 const { normalizeGoodsIssue301Payload } = require('../mapping/goodsIssue301.normalize');
@@ -254,11 +255,13 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
   let precedingSum = 0;
   let serverPartialSu = null;
   let serverPartialQty = 0;
+  const allocatedSuItems = [];
 
   for (let i = 0; i < authoritativeSUs.length; i++) {
     const suId = String(authoritativeSUs[i]).trim().toUpperCase();
     const su = validSuMap.get(suId);
     const avail = Number(su.AvailableStock != null ? su.AvailableStock : (su.CurrentStock != null ? su.CurrentStock : 0));
+    const fullStock = Number(su.PreIssueStock != null ? su.PreIssueStock : avail);
     const needed = Math.round((targetTotal - runningSum) * 1000) / 1000;
 
     if (needed <= 0) {
@@ -269,12 +272,22 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     if (avail <= needed) {
       precedingSum = runningSum;
       runningSum = Math.round((runningSum + avail) * 1000) / 1000;
+      allocatedSuItems.push({
+        storageUnit: suId,
+        issuedQty: avail,
+        preIssueStock: fullStock
+      });
     } else {
       // avail > needed: this SU is chosen by the server to take the partial
       serverPartialSu = su;
       serverPartialQty = needed;
       precedingSum = runningSum;
       runningSum = Math.round((runningSum + needed) * 1000) / 1000;
+      allocatedSuItems.push({
+        storageUnit: suId,
+        issuedQty: needed,
+        preIssueStock: fullStock
+      });
       if (i < authoritativeSUs.length - 1) {
         const excessSu = String(authoritativeSUs[i + 1]).trim().toUpperCase();
         req.error(400, `Storage Unit ${excessSu} is in excess of required quantity (${targetTotal}). Over-issue blocked. Goods Issue was NOT posted.`);
@@ -352,6 +365,15 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     }
   }
 
+  // Quantity-based concurrent claims check (Requirement 1):
+  // claimed + requested <= current LQUA stock for that SU. A partial residual stays claimable.
+  const claimCheck = await GoodsIssueIssuedSuStore.checkConcurrentClaims(allocatedSuItems);
+  if (claimCheck && claimCheck.hasClaim) {
+    req.error(400, `Storage Unit ${claimCheck.claimedSu} is currently claimed in an active Goods Issue (available: ${claimCheck.availableStock || 0}, requested: ${claimCheck.requestedQty || 0}, already claimed: ${claimCheck.totalClaimed || 0}). Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  normalized._allocatedSuItems = allocatedSuItems;
   return true;
 }
 
@@ -405,6 +427,7 @@ async function postWithQueueFallback(req, normalized, postFn, onOutcome = async 
           DocumentDate: normalized.DocumentDate,
           SerialNumber: normalized.SerialNumber,
           ReferenceDocument: normalized.ReferenceDocument,
+          StorageUnits: normalized._allocatedSuItems || normalized.StorageUnits,
           LastSyncError: err.message
         });
       } catch (queueErr) {
@@ -470,7 +493,56 @@ const PerTypeGoodsIssueHandler = {
       if (!resvItem) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       if (!(await serialPreCheck(req, normalized))) return;
-      return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
+
+      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
+
+      // Make claims atomic (Requirement 2): write 'claiming' rows BEFORE the SAP call
+      let claimIds = [];
+      if (Array.isArray(normalized._allocatedSuItems) && normalized._allocatedSuItems.length > 0) {
+        try {
+          claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
+            reservationNo: normalized.ReservationNo,
+            reservationItem: normalized.ReservationItem,
+            material: normalized.Material,
+            plant: normalized.Plant,
+            storageLocation: normalized.StorageLocation,
+            referenceDocument: normalized.ReferenceDocument,
+            items: normalized._allocatedSuItems
+          });
+        } catch (claimErr) {
+          return req.error(claimErr.status || 400, claimErr.message);
+        }
+      }
+
+      let res;
+      try {
+        res = await postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
+      } catch (err) {
+        if (claimIds.length > 0) {
+          await GoodsIssueIssuedSuStore.deleteClaims(claimIds);
+        }
+        throw err;
+      }
+
+      if (res && res.MaterialDocument && res.Queued !== true) {
+        // Promote claiming rows to issued on success
+        if (claimIds.length > 0) {
+          try {
+            await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
+              materialDocument: res.MaterialDocument,
+              materialDocYear: res.MaterialDocYear || new Date().getFullYear()
+            });
+          } catch (suErr) {
+            LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
+          }
+        }
+      } else {
+        // Post failed, rejected, or queued: delete claiming rows
+        if (claimIds.length > 0) {
+          await GoodsIssueIssuedSuStore.deleteClaims(claimIds);
+        }
+      }
+      return res;
     });
 
     srv.on('postGoodsIssue301', async (req) => {
