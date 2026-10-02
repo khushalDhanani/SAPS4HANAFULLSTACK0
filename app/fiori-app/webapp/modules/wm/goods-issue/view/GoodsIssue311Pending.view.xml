@@ -63,7 +63,9 @@
                                 <Text text="{gi311p>SampleMaterialDesc}" class="sapUiTinyMarginTop" visible="{= !!${gi311p>SampleMaterialDesc} }" />
                             </VBox>
                             <Text text="{gi311p>Plant}" />
-                            <Text text="{= ${gi311p>StorageLocation} ? ${gi311p>StorageLocation} : '-' }" />
+                            <ObjectStatus
+                                text="{= ${gi311p>StorageLocation} ? ${gi311p>StorageLocation} : ${i18n>gi311OpenTransfersSLocSelectAtIssue} }"
+                                state="{= ${gi311p>StorageLocation} ? 'None' : 'Information' }" />
                             <Text text="{= ${gi311p>ReceivingStorageLocation} ? ${gi311p>ReceivingStorageLocation} : '-' }" />
                             <Text text="{= ${gi311p>CreatedByUser} ? ${gi311p>CreatedByUser} : '-' }" />
                             <ObjectNumber number="{gi311p>ItemCount}" unit="{i18n>gi311OpenTransfersItemsUnit}" />

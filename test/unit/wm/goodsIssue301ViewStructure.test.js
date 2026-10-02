@@ -64,6 +64,13 @@ const sAppController = fs.readFileSync(path.join(__dirname, '../../../app/fiori-
             });
         });
 
+        test('issuing storage location binds ObjectStatus with Select at Issue fallback', () => {
+            expect(sPendingXml).toContain('text="{= ${gi301p>StorageLocation} ? ${gi301p>StorageLocation} : ${i18n>gi301OpenTransfersSLocSelectAtIssue} }"');
+            expect(sPendingXml).toContain("state=\"{= ${gi301p>StorageLocation} ? 'None' : 'Information' }\"");
+            expect(sI18n).toContain('gi301OpenTransfersSLocSelectAtIssue=Select at Issue');
+            expect(sI18nEn).toContain('gi301OpenTransfersSLocSelectAtIssue=Select at Issue');
+        });
+
         test('contains completion outcome message strip with close handler', () => {
             expect(sPendingXml).toContain('visible="{= !!${gi301p>/resultText} }"');
             expect(sPendingXml).toContain('text="{gi301p>/resultText}"');

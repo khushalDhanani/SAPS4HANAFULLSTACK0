@@ -65,7 +65,9 @@
                             </VBox>
                             <Text text="{gi301p>Plant}" />
                             <Text text="{= ${gi301p>ReceivingPlant} ? ${gi301p>ReceivingPlant} : '-' }" />
-                            <Text text="{= ${gi301p>StorageLocation} ? ${gi301p>StorageLocation} : '-' }" />
+                            <ObjectStatus
+                                text="{= ${gi301p>StorageLocation} ? ${gi301p>StorageLocation} : ${i18n>gi301OpenTransfersSLocSelectAtIssue} }"
+                                state="{= ${gi301p>StorageLocation} ? 'None' : 'Information' }" />
                             <Text text="{= ${gi301p>ReceivingStorageLocation} ? ${gi301p>ReceivingStorageLocation} : '-' }" />
                             <Text text="{= ${gi301p>CreatedByUser} ? ${gi301p>CreatedByUser} : '-' }" />
                             <ObjectNumber number="{gi301p>ItemCount}" unit="{i18n>gi301OpenTransfersItemsUnit}" />

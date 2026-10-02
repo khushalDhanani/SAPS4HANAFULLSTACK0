@@ -63,6 +63,13 @@ const sI18nEn = fs.readFileSync(sI18nEnPath, 'utf8');
             });
         });
 
+        test('issuing storage location binds ObjectStatus with Select at Issue fallback', () => {
+            expect(sPendingXml).toContain('text="{= ${gi311p>StorageLocation} ? ${gi311p>StorageLocation} : ${i18n>gi311OpenTransfersSLocSelectAtIssue} }"');
+            expect(sPendingXml).toContain("state=\"{= ${gi311p>StorageLocation} ? 'None' : 'Information' }\"");
+            expect(sI18n).toContain('gi311OpenTransfersSLocSelectAtIssue=Select at Issue');
+            expect(sI18nEn).toContain('gi311OpenTransfersSLocSelectAtIssue=Select at Issue');
+        });
+
         test('contains completion outcome message strip with close handler', () => {
             expect(sPendingXml).toContain('visible="{= !!${gi311p>/resultText} }"');
             expect(sPendingXml).toContain('text="{gi311p>/resultText}"');

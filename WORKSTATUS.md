@@ -4,6 +4,41 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-02 10:00 IST
+- **Agent**: Antigravity
+- **Request**: `wm/goods-issue/301/open-transfers`: Debug why Reservation 519144 does not show an Issuing SLoc in the open transfers table; implement fix to show an informative status ("Select at Issue") instead of a bare "-" when SAP leaves issuing storage location blank.
+- **Trace & SAP Facts (Read-Only)**:
+  - Inspected live SAP database table `RESB` via RFC for Reservation `0000519144` Item `0001`: Plant `1120`, `LGORT` is literally blank (`""`), Receiving Plant `1120`, Receiving SLoc `MT01`.
+  - Inspected SAP Gateway service `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`: confirms `Plant: "1120"`, `StorageLocation: ""`.
+  - Inspected SAP Gateway header service `UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839`: confirms `IssuingOrReceivingPlant: "1120"`, `IssuingOrReceivingStorageLoc: "MT01"` (Receiving SLoc).
+  - Queried live SAP stock for Material `8000009753` via `UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber`: stock exists in multiple storage locations across Plant 1120 (`CIS1`, `HS01`, `MT01`). SAP allows creating Movement 301 reservations without an issuing storage location so the picker selects source stock at execution time.
+  - In `OpenReservations` list of 28 open 301 transfers, 23 specify an issuing SLoc (e.g. `519366` has `HS01`), while 5 have no issuing SLoc in SAP (`519144`, `232583`, `204732`, etc.).
+  - Previously, `GoodsIssue301Pending.view.xml` evaluated `${gi301p>StorageLocation} ? ${gi301p>StorageLocation} : '-'`, displaying a bare `-` that appeared to users like missing/broken data.
+- **Changes**:
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301Pending.view.xml`: updated the Issuing SLoc column cell from a simple `Text` to `ObjectStatus` bound to `text="{= ${gi301p>StorageLocation} ? ${gi301p>StorageLocation} : ${i18n>gi301OpenTransfersSLocSelectAtIssue} }"` and `state="{= ${gi301p>StorageLocation} ? 'None' : 'Information' }"`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311Pending.view.xml`: updated Issuing SLoc column cell to `ObjectStatus` bound to `text="{= ${gi311p>StorageLocation} ? ${gi311p>StorageLocation} : ${i18n>gi311OpenTransfersSLocSelectAtIssue} }"` and `state="{= ${gi311p>StorageLocation} ? 'None' : 'Information' }"`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: added keys `gi301OpenTransfersSLocSelectAtIssue=Select at Issue` and `gi311OpenTransfersSLocSelectAtIssue=Select at Issue`.
+  - `test/unit/wm/goodsIssue301ViewStructure.test.js`: added test asserting the `ObjectStatus` binding and i18n bundle presence.
+  - `test/unit/wm/goodsIssue311ViewStructure.test.js`: added test asserting the `ObjectStatus` binding and i18n bundle presence.
+- **Affected Files**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301Pending.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311Pending.view.xml`
+  - `test/unit/wm/goodsIssue301ViewStructure.test.js`
+  - `test/unit/wm/goodsIssue311ViewStructure.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite, 7/7 passed.
+  - `npx jest test/unit/wm/goodsIssue301ViewStructure.test.js test/unit/wm/goodsIssue311ViewStructure.test.js`: 2 suites, 32/32 passed.
+  - `npx jest test/unit/wm`: 45 suites, 924/924 passed.
+  - `npx jest test/unit`: 120 suites, 2086/2086 passed.
+  - `cd app/fiori-app && npm run lint`: no findings detected.
+  - `cd app/fiori-app && npm run build`: ui5 build succeeded (946 ms).
+  - `git diff --check`: clean.
+- **Current Status**: Complete & Verified — UI reflects "Select at Issue" for unassigned issuing storage locations across 301 and 311 open transfers; all tests and build passed.
+- **Next Steps**: Test navigation from the open transfers list into Reservation 519144, verify that the storage location field is editable with F4 value help pre-filtered for Plant 1120, and complete transfer posting when required.
+
 ## 2026-10-01 12:14 IST
 - **Agent**: Claude Code
 - **Request**: `wm/goods-issue/sloc-transfer-311?resv=520235`: a scanned serial number always shows "Pending Stock Verification". Trace scanner -> controller -> validation -> API -> SAP -> model -> binding, find exactly why, and show the status from live SAP data ("Unable to verify with SAP" when SAP cannot answer); block serials SAP does not confirm.
