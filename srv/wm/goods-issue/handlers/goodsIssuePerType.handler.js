@@ -445,9 +445,13 @@ function classifyPostingError(err) {
   const isReset = code === 'ECONNRESET' || /connection reset|socket hang up/i.test(msg);
   const isUnknownCode = UNCONFIRMED_CODES.includes(err?.code);
   if (status === 502 || status === 504 || isTimeout || isReset || isUnknownCode) {
-    const unconfirmedMsg = msg && /unconfirmed/i.test(msg)
-      ? msg
-      : `Posting outcome unconfirmed in SAP S/4HANA${msg ? ` (${msg})` : ''}. The system is verifying document creation. Please do not post again.`;
+    let unconfirmedMsg;
+    if (msg && (/may or may not have been posted|may still appear|may have been posted/i.test(msg)) && /do not post again/i.test(msg)) {
+      unconfirmedMsg = msg;
+    } else {
+      const detailMsg = msg ? ` (${msg})` : '';
+      unconfirmedMsg = `Posting outcome unconfirmed in SAP S/4HANA${detailMsg}. The goods issue may have been posted in SAP. Please do not post again.`;
+    }
     return {
       category: 'unknown_outcome',
       status: status || 504,

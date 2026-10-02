@@ -1,12 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 
-describe('Repository Guard: No forbidden queue prefix references', () => {
+describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () => {
   const ROOT_DIR = path.resolve(__dirname, '../../..');
 
-  // Dynamically constructed so this test file never matches the forbidden literal
-  const FORBIDDEN_TERM = ['GI', 'QUEUE'].join('-');
-  const FORBIDDEN_REGEX = new RegExp(FORBIDDEN_TERM, 'i');
+  // Dynamically constructed so this test file never matches the forbidden literals
+  const FORBIDDEN_PATTERNS = [
+    { label: 'GI-QUEUE', regex: new RegExp(['GI', 'QUEUE'].join('-'), 'i') },
+    { label: 'ZAPI_MATERIAL_DOCUM', regex: new RegExp(['ZAPI', 'MATERIAL', 'DOCUM'].join('_'), 'i') },
+    { label: 'randSuffix', regex: new RegExp(['rand', 'Suffix'].join(''), '') }
+  ];
 
   const TARGET_SCAN_AREAS = [
     { name: 'source (srv)', path: 'srv', required: true },
@@ -63,7 +66,7 @@ describe('Repository Guard: No forbidden queue prefix references', () => {
     return fileList;
   }
 
-  it('scans source, tests, docs, gen/ and the UI5 dist and asserts 0 occurrences of forbidden queue prefix', () => {
+  it('scans source, tests, docs, gen/ and the UI5 dist and asserts 0 occurrences of forbidden patterns (GI-QUEUE, ZAPI_MATERIAL_DOCUM, randSuffix)', () => {
     const selfPath = path.resolve(__filename);
     const findings = [];
     let totalFilesScanned = 0;
@@ -89,18 +92,21 @@ describe('Repository Guard: No forbidden queue prefix references', () => {
 
         totalFilesScanned++;
         const content = fs.readFileSync(filePath, 'utf8');
-        if (FORBIDDEN_REGEX.test(content)) {
-          const lines = content.split(/\r?\n/);
-          lines.forEach((line, idx) => {
-            if (FORBIDDEN_REGEX.test(line)) {
-              findings.push({
-                area: area.name,
-                file: path.relative(ROOT_DIR, filePath),
-                line: idx + 1,
-                snippet: line.trim()
-              });
-            }
-          });
+        for (const pattern of FORBIDDEN_PATTERNS) {
+          if (pattern.regex.test(content)) {
+            const lines = content.split(/\r?\n/);
+            lines.forEach((line, idx) => {
+              if (pattern.regex.test(line)) {
+                findings.push({
+                  pattern: pattern.label,
+                  area: area.name,
+                  file: path.relative(ROOT_DIR, filePath),
+                  line: idx + 1,
+                  snippet: line.trim()
+                });
+              }
+            });
+          }
         }
       }
     }
@@ -110,9 +116,9 @@ describe('Repository Guard: No forbidden queue prefix references', () => {
 
     if (findings.length > 0) {
       const errorReport = findings
-        .map(f => `  - [${f.area}] ${f.file}:${f.line} -> "${f.snippet}"`)
+        .map(f => `  - [${f.pattern}] [${f.area}] ${f.file}:${f.line} -> "${f.snippet}"`)
         .join('\n');
-      fail(new Error(`Found ${findings.length} forbidden "${FORBIDDEN_TERM}" reference(s):\n${errorReport}`));
+      throw new Error(`Found ${findings.length} forbidden reference(s):\n${errorReport}`);
     }
 
     expect(findings).toEqual([]);

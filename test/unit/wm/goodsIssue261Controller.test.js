@@ -516,6 +516,39 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             );
         });
 
+        it('should show MessageBox.error when backend posting was never reached', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockRejectedValueOnce(new Error('SAP S/4HANA service unreachable or posting capability unavailable (HTTP 503). The posting was not made and can be tried again.'));
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('unreachable or posting capability unavailable'),
+                expect.any(Object)
+            );
+        });
+
+        it('should show MessageBox.error pointing to SU53 on plain 403 authorization failure', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockRejectedValueOnce(new Error('Authorization failed for SAP Goods Issue posting. Please check your SAP authorizations in transaction SU53.'));
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('SU53'),
+                expect.any(Object)
+            );
+        });
+
+        it('should show MessageBox.error on unknown outcome warning that it may have posted and not to post again', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockRejectedValueOnce(new Error('Posting outcome unconfirmed in SAP S/4HANA (timeout). The goods issue may have been posted in SAP. Please do not post again.'));
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringMatching(/may (have been posted|or may not have been posted).+do not post again/i),
+                expect.any(Object)
+            );
+        });
+
         it('should post an UNPLANNED order-based issue when in unplanned mode', async () => {
             const m = controller._oModel;
             m.setProperty('/isUnplanned', true);

@@ -658,6 +658,45 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
             expect(mockMessageBox.error).toHaveBeenCalledWith('Deficit of stock', expect.objectContaining({ title: 'gi301PostFailedTitle' }));
             expect(oModel.getProperty('/busy')).toBe(false);
         });
+
+        it('shows MessageBox.error when backend posting was never reached', async () => {
+            mockGoodsIssue301Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
+            mockGoodsIssue301Service.postGoodsIssue.mockRejectedValueOnce(new Error('SAP S/4HANA service unreachable or posting capability unavailable (HTTP 503). The posting was not made and can be tried again.'));
+
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('unreachable or posting capability unavailable'),
+                expect.objectContaining({ title: 'gi301PostFailedTitle' })
+            );
+        });
+
+        it('shows MessageBox.error pointing to SU53 on plain 403 authorization failure', async () => {
+            mockGoodsIssue301Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
+            mockGoodsIssue301Service.postGoodsIssue.mockRejectedValueOnce(new Error('Authorization failed for SAP Goods Issue posting. Please check your SAP authorizations in transaction SU53.'));
+
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('SU53'),
+                expect.objectContaining({ title: 'gi301PostFailedTitle' })
+            );
+        });
+
+        it('shows MessageBox.error on unknown outcome warning that it may have posted and not to post again', async () => {
+            mockGoodsIssue301Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
+            mockGoodsIssue301Service.postGoodsIssue.mockRejectedValueOnce(new Error('Posting outcome unconfirmed in SAP S/4HANA (timeout). The goods issue may have been posted in SAP. Please do not post again.'));
+
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringMatching(/may (have been posted|or may not have been posted).+do not post again/i),
+                expect.objectContaining({ title: 'gi301PostFailedTitle' })
+            );
+        });
     });
 
     // =============================================================

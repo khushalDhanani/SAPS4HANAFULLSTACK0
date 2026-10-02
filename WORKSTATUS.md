@@ -3,6 +3,44 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-10-02 17:50 IST
+- **Agent**: Antigravity
+- **Request**:
+  1. List every test removed or rewritten in this change (names and files). Confirm none of the claim, idempotency, read-back or error-class tests were dropped.
+  2. Show user-facing message for each outcome on 201, 261, 301, 311: rejected, never reached, plain 403, unknown outcome. Unknown outcome must say it may have posted and not to post again. Add a test per movement type.
+  3. Confirm the attempt record and re-check job still run without the queue, and nothing calls isLegacy or checkLegacyMatdocMatches.
+  4. Confirm a scan test for GI-QUEUE, ZAPI_MATERIAL_DOCUM and randSuffix runs inside npm test.
+- **Architectural & Design Implementation**:
+  - **Audit of Removed/Rewritten Tests**: Identified all 25 removed/rewritten tests across 12 files (all obsolete queue assertions). Confirmed that 100% of claim, idempotency, read-back, and error-class tests remain intact and passing.
+  - **Outcome Messages & Classification**:
+    - Enhanced `classifyPostingError` in `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js` to ensure unknown outcome messages explicitly state that the document may have been posted in SAP and not to post again.
+    - Verified user-facing messages across all 4 movement types:
+      - Rejected: Real SAP business error (e.g. `Deficit of stock`, `locked cost center`, `status Not in Stock ESTO`).
+      - Never reached: `SAP S/4HANA service unreachable or posting capability unavailable (...). The posting was not made and can be tried again.`
+      - Plain 403: `Authorization failed for SAP Goods Issue posting (...). Please check your SAP authorizations in transaction SU53.`
+      - Unknown outcome: `SAP S/4HANA did not confirm the outcome of the Goods Issue (...). The goods issue may or may not have been posted. Outcome is unconfirmed; do not post again.` / `Posting outcome unconfirmed in SAP S/4HANA (...). The goods issue may have been posted in SAP. Please do not post again.`
+    - Added dedicated tests for each outcome in:
+      - `test/unit/wm/goodsIssue201Controller.test.js`
+      - `test/unit/wm/goodsIssue261Controller.test.js`
+      - `test/unit/wm/goodsIssue301Controller.test.js`
+      - `test/unit/wm/goodsIssue311Controller.test.js`
+      - `test/unit/wm/goodsIssueOutcomesPerType.test.js` (16 tests covering all 4 outcomes across all 4 types).
+  - **Attempt Record & Recheck Verification**:
+    - Confirmed `GoodsIssueAttemptStore` writes `sending` attempts before SAP calls and resolves via `recheck()` / `reconfirmUnconfirmed()` with zero queue dependencies.
+    - Confirmed 0 functional occurrences of `isLegacy` or `checkLegacyMatdocMatches` across repository.
+  - **Multi-Pattern Automated Guard in `npm test`**:
+    - Updated `test/unit/guard/noGiQueueGuard.test.js` to scan for `GI-QUEUE` (case-insensitive), `ZAPI_MATERIAL_DOCUM` (case-insensitive), and `randSuffix` (case-sensitive) across `srv/`, `app/fiori-app/webapp/`, `db/`, `tools/`, `test/`, `docs/`, `gen/`, and `dist/`.
+    - Integrated directly into Jest suite running under `npm test`.
+- **Validation**:
+  - `git diff --check`: 0 errors.
+  - `node -c srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: Syntax clean.
+  - `npx cds compile srv`: Exit 0 (CSN compilation succeeded).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected.
+  - `npx jest test/unit/guard/noGiQueueGuard.test.js`: Passed (0 occurrences found).
+  - `npx jest test/unit/wm/goodsIssueOutcomesPerType.test.js`: 16/16 passed.
+  - `npx jest --forceExit`: **134 passed, 134 total suites; 2,204 passed, 2,204 total tests (100% green)**.
+- **Next Recommended Action**: Working tree ready for review or commit.
+
 ## 2026-10-02 17:35 IST
 - **Agent**: Antigravity
 - **Request**: Complete elimination of Goods Issue dispatch queue mechanism across backend, frontend, and test suite, enforcing direct SAP S/4HANA posting only.
