@@ -39,9 +39,10 @@ sap.ui.define([
             this._resetModel();
             var oArgs = oEvent && oEvent.getParameter("arguments");
             var oQuery = oArgs && oArgs["?query"];
-            var sResv = oQuery && oQuery.resv;
+            var sResv = oQuery && (oQuery.resv || oQuery.reservation);
+            var sItem = oQuery && (oQuery.item || oQuery.reservationItem);
             if (sResv) {
-                this._prefillFromReservation(sResv);
+                this._prefillFromReservation(sResv, sItem);
             }
         },
 
@@ -57,13 +58,22 @@ sap.ui.define([
          * Material, plant, storage location, unit, open quantity, and Order (OrderID)
          * are sourced directly from the reservation item — with no separate Order API call.
          */
-        _prefillFromReservation: function (sResv) {
+        _prefillFromReservation: function (sResv, sItemParam) {
             var that = this;
             var oModel = this._oModel;
             oModel.setProperty("/busy", true);
             GoodsIssue261Service.fetchReservationItems(sResv)
                 .then(function (aItems) {
-                    var oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
+                    var oItem;
+                    if (sItemParam) {
+                        oItem = (aItems || []).find(function (i) {
+                            return String(i.ReservationItem).trim() === String(sItemParam).trim() ||
+                                   String(i.ReservationItem).replace(/^0+/, "") === String(sItemParam).replace(/^0+/, "");
+                        });
+                    }
+                    if (!oItem) {
+                        oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
+                    }
                     if (!oItem) {
                         MessageBox.error(that.getText("gi261PrefillNoOpenItem", [sResv]));
                         return;
@@ -100,13 +110,18 @@ sap.ui.define([
         /**
          * Detect whether the reservation component is unit-managed (serial or storage unit).
          * If scannable units exist in S/4, enables scan-to-complete mode with pass/fail feedback.
-         * If non-serial: skips scan, proceeding directly to quantity/order confirmation.
+         * Suggests SUs using FIFO/FEFO until required quantity is covered.
+         * If no SU data exists: reports gap, allowing non-serial plain quantity confirmation.
          */
         _detectScanMode: function (sResv, sItem, nOpenQty) {
             var that = this;
             var oModel = this._oModel;
             oModel.setProperty("/scanEnabled", false);
             oModel.setProperty("/scannedUnits", []);
+            oModel.setProperty("/suggestedUnits", []);
+            oModel.setProperty("/suggestedUnitsCount", 0);
+            oModel.setProperty("/availableUnits", []);
+            oModel.setProperty("/noSuDataGap", "");
             oModel.setProperty("/lastScanState", "None");
             oModel.setProperty("/lastScanText", "");
             if (!sResv || !sItem) {
@@ -116,13 +131,24 @@ sap.ui.define([
                 .then(function (oData) {
                     var aUnits = (oData && oData.StockUnits) || [];
                     if (aUnits.length > 0) {
+                        var aSuggested = GoodsIssue261Model.calculateSuggestedUnits(aUnits, nOpenQty > 0 ? nOpenQty : 1);
                         oModel.setProperty("/scanEnabled", true);
                         oModel.setProperty("/requiredScanCount", nOpenQty > 0 ? nOpenQty : 1);
+                        oModel.setProperty("/availableUnits", aUnits);
+                        oModel.setProperty("/suggestedUnits", aSuggested);
+                        oModel.setProperty("/suggestedUnitsCount", aSuggested.length);
+                        oModel.setProperty("/noSuDataGap", "");
                         // The scan section takes over from the manual serial entry table
                         oModel.setProperty("/isSerialManaged", false);
+                    } else {
+                        var sGapMsg = (oData && oData.Message) || that.getText("gi261NoSuDataGap", [sResv, sItem]);
+                        oModel.setProperty("/noSuDataGap", sGapMsg);
                     }
                 })
-                .catch(function () { /* no scannable units -> non-serial plain quantity confirmation */ })
+                .catch(function (err) {
+                    var sGapMsg = (err && err.message) || that.getText("gi261NoSuDataGap", [sResv, sItem]);
+                    oModel.setProperty("/noSuDataGap", sGapMsg);
+                })
                 .finally(function () { that._validateLive(); });
         },
 
@@ -148,6 +174,18 @@ sap.ui.define([
             GoodsIssue261Service.resolveScanUnit(sBarcode, sResv, sItem)
                 .then(function (oRes) {
                     var oData = oModel.getData();
+                    if (oRes && !oRes.StorageLocation && Array.isArray(oData.availableUnits)) {
+                        var foundSu = oData.availableUnits.find(function (u) {
+                            return String(u.StorageUnit || "").trim().toUpperCase() === sBarcode.toUpperCase();
+                        });
+                        if (foundSu) {
+                            oRes.Plant = oRes.Plant || foundSu.Plant;
+                            oRes.StorageLocation = oRes.StorageLocation || foundSu.StorageLocation;
+                            if (oRes.SuStockQty == null && oRes.CurrentStock == null) {
+                                oRes.SuStockQty = foundSu.AvailableStock;
+                            }
+                        }
+                    }
                     var oFb = GoodsIssue261Model.applyScanResolution(oData, oRes, sBarcode);
                     oModel.setProperty("/scannedUnits", oData.scannedUnits);
                     oModel.setProperty("/batch", oData.batch);
@@ -159,6 +197,17 @@ sap.ui.define([
                     that._setScanFeedback("Error", (err && err.message) || that.getText("giScanValidateError"));
                 })
                 .finally(function () { that._validateLive(); });
+        },
+
+        onScanSuggestedPress: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oCtx = oSource && oSource.getBindingContext("gi261");
+            if (!oCtx) return;
+            var oSu = oCtx.getObject();
+            var sBarcode = oSu && (oSu.StorageUnit || oSu.storageUnit || oSu.barcode || oSu.key);
+            if (!sBarcode) return;
+            this._oModel.setProperty("/scanInput", sBarcode);
+            this.onScanUnit();
         },
 
         onScanInputSubmit: function () {

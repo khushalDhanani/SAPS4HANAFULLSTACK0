@@ -151,6 +151,104 @@ async function serialCountCheck(req, normalized) {
   return false;
 }
 
+/**
+ * Storage Unit reconciliation for Movement 261 reservation-based issue.
+ * Re-reads the real SUs for the reservation item from SAP stock (listStockUnitsForReservationItem).
+ * When SU data exists in SAP, validates:
+ *  - Client supplied StorageUnits
+ *  - No duplicate SUs
+ *  - Each SU exists in SAP stock for that reservation item (matching material, plant, sloc)
+ *  - Real sum of SU stock matches normalized.IssueQty (rejects tampered payloads with 400)
+ *  - Real sum of SU stock does not exceed reservation open quantity (blocks over-issue with 400)
+ *  - Real sum of SU stock matches reservation open quantity (complete issue with 400 on under/over)
+ * Returns true to continue, or calls req.error(400, ...) and returns false (no queueing).
+ */
+async function storageUnitReconcileCheck261(req, normalized, resvItem) {
+  const sResv = String(normalized.ReservationNo || '').trim();
+  const sItem = String(normalized.ReservationItem || '').trim();
+  if (!sResv || !sItem) return true; // unplanned path (no reservation)
+  const submittedSUs = Array.isArray(normalized.StorageUnits) ? normalized.StorageUnits : [];
+  if (submittedSUs.length === 0) return true; // Non-SU goods issue or standard order flow
+
+  let stockResult;
+  try {
+    stockResult = await GoodsIssueAdapter.listStockUnitsForReservationItem(sResv, sItem);
+  } catch (err) {
+    LOG.warn(`Could not read stock units for reservation ${sResv} item ${sItem}:`, err.message || err);
+    req.error(400, `Failed to verify Storage Units from SAP: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const sapStockUnits = (stockResult && Array.isArray(stockResult.StockUnits)) ? stockResult.StockUnits : [];
+
+  // If no SU data exists in SAP for this item:
+  if (sapStockUnits.length === 0) {
+    req.error(400, `No Storage Units exist in SAP for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  // Duplicate scan check
+  const seen = new Set();
+  for (const suId of submittedSUs) {
+    const cleanId = String(suId).trim().toUpperCase();
+    if (seen.has(cleanId)) {
+      req.error(400, `Duplicate Storage Unit ${cleanId} in submission. Goods Issue was NOT posted.`);
+      return false;
+    }
+    seen.add(cleanId);
+  }
+
+  // Build lookup map of SAP stock units
+  const validSuMap = new Map();
+  for (const su of sapStockUnits) {
+    validSuMap.set(String(su.StorageUnit).trim().toUpperCase(), su);
+  }
+
+  // Verify each submitted SU against SAP stock
+  let realSum = 0;
+  for (const suId of submittedSUs) {
+    const cleanId = String(suId).trim().toUpperCase();
+    const sapSu = validSuMap.get(cleanId);
+    if (!sapSu) {
+      req.error(400, `Storage Unit ${cleanId} is not valid for material ${normalized.Material} in plant ${normalized.Plant} storage location ${normalized.StorageLocation}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    const suQty = Number(sapSu.AvailableStock != null ? sapSu.AvailableStock : (sapSu.CurrentStock != null ? sapSu.CurrentStock : 0));
+    if (suQty <= 0) {
+      req.error(400, `Storage Unit ${cleanId} has no available stock in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    realSum += suQty;
+  }
+
+  realSum = Math.round(realSum * 1000) / 1000;
+  const issueQty = Math.round(Number(normalized.IssueQty) * 1000) / 1000;
+
+  // Tampered payload check: submitted IssueQty must equal real sum of SUs from SAP
+  if (Math.abs(realSum - issueQty) > 0.001) {
+    req.error(400, `Submitted IssueQty (${issueQty}) does not match real sum of Storage Units (${realSum}). Tampered payload detected. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  // Reservation open quantity checks
+  const openQty = resvItem && (resvItem.OpenQty !== undefined && resvItem.OpenQty !== null)
+    ? Math.round(Number(resvItem.OpenQty) * 1000) / 1000
+    : null;
+
+  if (openQty !== null && openQty > 0) {
+    if (realSum > openQty + 1e-9) {
+      req.error(400, `Storage Units total quantity (${realSum}) exceeds open reservation quantity (${openQty}). Over-issue blocked. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (Math.abs(realSum - openQty) > 0.001) {
+      req.error(400, `Storage Units total quantity (${realSum}) does not match required reservation quantity (${openQty}). Scanned quantity is ${realSum < openQty ? 'under' : 'over'}. Goods Issue was NOT posted.`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /** Posting-attempt status for an error the adapter raised: SAP did not answer vs. SAP said no. */
 const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
 
@@ -262,7 +360,9 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
-      if (!(await reservationReconcileCheck(req, normalized))) return;
+      const resvItem = await reservationReconcileCheck(req, normalized);
+      if (!resvItem) return;
+      if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       if (!(await serialPreCheck(req, normalized))) return;
       return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
     });

@@ -1,0 +1,519 @@
+/**
+ * goodsIssue261SuScan.test.js
+ * Comprehensive tests for Goods Issue 261 Storage Unit (SU) scan-to-complete workflow:
+ *  1. 6-drum case with unequal weights
+ *  2. 8-drum case with unequal weights
+ *  3. Partial last drum
+ *  4. Duplicate scan prevention (frontend & server-side)
+ *  5. Wrong SU detection (material, plant, storage location, invalid)
+ *  6. Over-issue blocking (frontend & server-side)
+ *  7. Tampered payload detection (server-side HTTP 400 without queueing)
+ *  8. Under-issue detection
+ *  9. No SU data gap reporting
+ */
+
+const GoodsIssue261Model = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
+const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
+
+describe('GoodsIssue261Model: SU Scanning & Drum Weight Calculations', () => {
+
+  describe('calculateSuggestedUnits', () => {
+    it('handles 6-drum case with unequal weights without assuming fixed weight', () => {
+      const available = [
+        { StorageUnit: 'SU01', AvailableStock: 75, Unit: 'KG', Batch: 'B01', StorageBin: '01-01' },
+        { StorageUnit: 'SU02', AvailableStock: 85, Unit: 'KG', Batch: 'B01', StorageBin: '01-02' },
+        { StorageUnit: 'SU03', AvailableStock: 90, Unit: 'KG', Batch: 'B01', StorageBin: '01-03' },
+        { StorageUnit: 'SU04', AvailableStock: 65, Unit: 'KG', Batch: 'B01', StorageBin: '01-04' },
+        { StorageUnit: 'SU05', AvailableStock: 110, Unit: 'KG', Batch: 'B01', StorageBin: '01-05' },
+        { StorageUnit: 'SU06', AvailableStock: 55, Unit: 'KG', Batch: 'B01', StorageBin: '01-06' },
+        { StorageUnit: 'SU07', AvailableStock: 80, Unit: 'KG', Batch: 'B01', StorageBin: '01-07' }
+      ];
+      // 75 + 85 + 90 + 65 + 110 + 55 = 480
+      const suggested = GoodsIssue261Model.calculateSuggestedUnits(available, 480);
+      expect(suggested).toHaveLength(6);
+      expect(suggested.map(s => s.StorageUnit)).toEqual(['SU01', 'SU02', 'SU03', 'SU04', 'SU05', 'SU06']);
+      const total = suggested.reduce((sum, s) => sum + s.AvailableStock, 0);
+      expect(total).toBe(480);
+    });
+
+    it('handles 8-drum case with unequal weights without assuming fixed weight', () => {
+      const available = [
+        { StorageUnit: 'DRUM01', AvailableStock: 52, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM02', AvailableStock: 68, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM03', AvailableStock: 55, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM04', AvailableStock: 65, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM05', AvailableStock: 60, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM06', AvailableStock: 58, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM07', AvailableStock: 62, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM08', AvailableStock: 60, Unit: 'KG', Batch: 'B02' },
+        { StorageUnit: 'DRUM09', AvailableStock: 100, Unit: 'KG', Batch: 'B02' }
+      ];
+      // 52+68+55+65+60+58+62+60 = 480
+      const suggested = GoodsIssue261Model.calculateSuggestedUnits(available, 480);
+      expect(suggested).toHaveLength(8);
+      expect(suggested.map(s => s.StorageUnit)).toEqual([
+        'DRUM01', 'DRUM02', 'DRUM03', 'DRUM04', 'DRUM05', 'DRUM06', 'DRUM07', 'DRUM08'
+      ]);
+      const total = suggested.reduce((sum, s) => sum + s.AvailableStock, 0);
+      expect(total).toBe(480);
+    });
+
+    it('handles partial last drum case correctly', () => {
+      const available = [
+        { StorageUnit: 'D1', AvailableStock: 100, Unit: 'KG' },
+        { StorageUnit: 'D2', AvailableStock: 100, Unit: 'KG' },
+        { StorageUnit: 'D3', AvailableStock: 100, Unit: 'KG' },
+        { StorageUnit: 'D4', AvailableStock: 100, Unit: 'KG' },
+        { StorageUnit: 'D5', AvailableStock: 80, Unit: 'KG' } // partial last drum
+      ];
+      // 4 x 100 + 1 x 80 = 480
+      const suggested = GoodsIssue261Model.calculateSuggestedUnits(available, 480);
+      expect(suggested).toHaveLength(5);
+      expect(suggested[4].AvailableStock).toBe(80);
+      const total = suggested.reduce((sum, s) => sum + s.AvailableStock, 0);
+      expect(total).toBe(480);
+    });
+  });
+
+  describe('applyScanResolution & validate', () => {
+    const makeBaseData = (requiredQty = 480) => {
+      const data = GoodsIssue261Model.getInitialData();
+      data.reservationNo = '480962';
+      data.reservationItem = '0001';
+      data.material = '1000000264';
+      data.plant = '1110';
+      data.storageLocation = 'CS01';
+      data.quantity = requiredQty;
+      data.openQty = requiredQty;
+      data.unit = 'KG';
+      data.scanEnabled = true;
+      data.requiredScanCount = requiredQty;
+      data.batch = 'IN26000905';
+      data.isBatchManaged = true;
+      data.fromReservation = true;
+      return data;
+    };
+
+    it('6-drum case: scans 6 unequal drums, updates progress and enables completion', () => {
+      const data = makeBaseData(480);
+      const drums = [
+        { su: 'SU01', qty: 75 },
+        { su: 'SU02', qty: 85 },
+        { su: 'SU03', qty: 90 },
+        { su: 'SU04', qty: 65 },
+        { su: 'SU05', qty: 110 },
+        { su: 'SU06', qty: 55 }
+      ];
+
+      for (let i = 0; i < drums.length; i++) {
+        const d = drums[i];
+        const res = GoodsIssue261Model.applyScanResolution(data, {
+          SuExists: true,
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          SuStockQty: d.qty,
+          BaseUnit: 'KG',
+          DeterminedBatch: 'IN26000905'
+        }, d.su);
+        expect(res.ok).toBe(true);
+        expect(res.state).toBe('Success');
+      }
+
+      expect(data.scannedUnits).toHaveLength(6);
+      expect(GoodsIssue261Model.scannedQty(data)).toBe(480);
+
+      const val = GoodsIssue261Model.validate(data);
+      expect(val.isValid).toBe(true);
+      expect(val.errors.scannedUnits).toBe('');
+
+      const payload = GoodsIssue261Model.toBackendPayload(data);
+      expect(payload.StorageUnits).toEqual(['SU01', 'SU02', 'SU03', 'SU04', 'SU05', 'SU06']);
+      expect(payload.IssueQty).toBe(480);
+    });
+
+    it('8-drum case: scans 8 unequal drums and reaches exact completion', () => {
+      const data = makeBaseData(480);
+      const drums = [
+        { su: 'D1', qty: 52 }, { su: 'D2', qty: 68 }, { su: 'D3', qty: 55 }, { su: 'D4', qty: 65 },
+        { su: 'D5', qty: 60 }, { su: 'D6', qty: 58 }, { su: 'D7', qty: 62 }, { su: 'D8', qty: 60 }
+      ];
+
+      for (const d of drums) {
+        const res = GoodsIssue261Model.applyScanResolution(data, {
+          SuExists: true,
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          SuStockQty: d.qty,
+          BaseUnit: 'KG',
+          DeterminedBatch: 'IN26000905'
+        }, d.su);
+        expect(res.ok).toBe(true);
+      }
+
+      expect(GoodsIssue261Model.scannedQty(data)).toBe(480);
+      const val = GoodsIssue261Model.validate(data);
+      expect(val.isValid).toBe(true);
+      expect(val.errors.scannedUnits).toBe('');
+    });
+
+    it('blocks duplicate scan and preserves single entry', () => {
+      const data = makeBaseData(480);
+      const res1 = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        SuStockQty: 75,
+        DeterminedBatch: 'IN26000905'
+      }, 'SU01');
+      expect(res1.ok).toBe(true);
+
+      const res2 = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        SuStockQty: 75,
+        DeterminedBatch: 'IN26000905'
+      }, 'SU01');
+      expect(res2.ok).toBe(false);
+      expect(res2.state).toBe('Warning');
+      expect(res2.text).toMatch(/already scanned/i);
+      expect(data.scannedUnits).toHaveLength(1);
+    });
+
+    it('rejects wrong material with clear error message', () => {
+      const data = makeBaseData(480);
+      const res = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '9999999999',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        SuStockQty: 80
+      }, 'SU_WRONG_MAT');
+      expect(res.ok).toBe(false);
+      expect(res.state).toBe('Error');
+      expect(res.text).toContain('Wrong material: scanned unit belongs to 9999999999, expected 1000000264.');
+      expect(data.scannedUnits).toHaveLength(0);
+    });
+
+    it('rejects wrong storage location with clear error message', () => {
+      const data = makeBaseData(480);
+      const res = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'WR01',
+        SuStockQty: 80
+      }, 'SU_WRONG_SLOC');
+      expect(res.ok).toBe(false);
+      expect(res.state).toBe('Error');
+      expect(res.text).toContain('Wrong storage location: scanned unit is in storage location WR01, expected CS01.');
+      expect(data.scannedUnits).toHaveLength(0);
+    });
+
+    it('rejects wrong plant with clear error message', () => {
+      const data = makeBaseData(480);
+      const res = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '2000',
+        StorageLocation: 'CS01',
+        SuStockQty: 80
+      }, 'SU_WRONG_PLANT');
+      expect(res.ok).toBe(false);
+      expect(res.state).toBe('Error');
+      expect(res.text).toContain('Wrong plant: scanned unit is in plant 2000, expected 1110.');
+      expect(data.scannedUnits).toHaveLength(0);
+    });
+
+    it('blocks over-issue when scan would exceed required quantity', () => {
+      const data = makeBaseData(480);
+      // Already scanned 400 KG
+      data.scannedUnits = [
+        { key: 'S1', storageUnit: 'S1', barcode: 'S1', material: '1000000264', plant: '1110', storageLocation: 'CS01', qty: 400, isSerial: false }
+      ];
+
+      // Scanning 100 KG drum would result in 500 > 480
+      const res = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        SuStockQty: 100,
+        DeterminedBatch: 'IN26000905'
+      }, 'SU_OVER');
+
+      expect(res.ok).toBe(false);
+      expect(res.state).toBe('Error');
+      expect(res.text).toContain('Over-issue blocked: Storage Unit SU_OVER quantity (100) would exceed required quantity (480). Remaining needed: 80.');
+      expect(data.scannedUnits).toHaveLength(1);
+    });
+
+    it('validate blocks completion when scanned sum is under required quantity', () => {
+      const data = makeBaseData(480);
+      data.scannedUnits = [
+        { key: 'S1', storageUnit: 'S1', barcode: 'S1', material: '1000000264', plant: '1110', storageLocation: 'CS01', qty: 300, isSerial: false }
+      ];
+
+      const val = GoodsIssue261Model.validate(data);
+      expect(val.isValid).toBe(false);
+      expect(val.errors.scannedUnits).toContain('Required 480 units scanned, currently 300');
+    });
+  });
+});
+
+describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
+  let handlers = {};
+
+  beforeAll(() => {
+    const srv = {
+      on: jest.fn((action, fn) => {
+        handlers[action] = fn;
+      })
+    };
+    PerTypeGoodsIssueHandler.init(srv);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const setupMockSap = ({ openQty = 480, stockUnits = [] } = {}) => {
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      ReservationNo: '480962',
+      ReservationItem: '0001',
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      Batch: 'IN26000905',
+      OpenQty: openQty,
+      RequiredQty: openQty
+    });
+
+    jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
+      ReservationNo: '480962',
+      ReservationItem: '0001',
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      StockUnits: stockUnits
+    });
+  };
+
+  it('posts 6-drum case with unequal weights when SUs match SAP stock and sum equals required', async () => {
+    const stock = [
+      { StorageUnit: 'SU01', AvailableStock: 75, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+      { StorageUnit: 'SU02', AvailableStock: 85, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+      { StorageUnit: 'SU03', AvailableStock: 90, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+      { StorageUnit: 'SU04', AvailableStock: 65, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+      { StorageUnit: 'SU05', AvailableStock: 110, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+      { StorageUnit: 'SU06', AvailableStock: 55, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' }
+    ];
+    setupMockSap({ openQty: 480, stockUnits: stock });
+
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+      MaterialDocument: '4900012345',
+      MaterialDocYear: '2026'
+    });
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 480,
+        Unit: 'KG',
+        Batch: 'IN26000905',
+        StorageUnits: ['SU01', 'SU02', 'SU03', 'SU04', 'SU05', 'SU06']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    const res = await handlers['postGoodsIssue261'](req);
+    expect(req.error).not.toHaveBeenCalled();
+    expect(res).toBeDefined();
+    expect(res.MaterialDocument).toBe('4900012345');
+    expect(res.Queued).toBe(false);
+  });
+
+  it('posts 8-drum case with unequal weights', async () => {
+    const stock = [
+      { StorageUnit: 'D1', AvailableStock: 52 }, { StorageUnit: 'D2', AvailableStock: 68 },
+      { StorageUnit: 'D3', AvailableStock: 55 }, { StorageUnit: 'D4', AvailableStock: 65 },
+      { StorageUnit: 'D5', AvailableStock: 60 }, { StorageUnit: 'D6', AvailableStock: 58 },
+      { StorageUnit: 'D7', AvailableStock: 62 }, { StorageUnit: 'D8', AvailableStock: 60 }
+    ];
+    setupMockSap({ openQty: 480, stockUnits: stock });
+
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+      MaterialDocument: '4900012346',
+      MaterialDocYear: '2026'
+    });
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 480,
+        Unit: 'KG',
+        StorageUnits: ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    const res = await handlers['postGoodsIssue261'](req);
+    expect(req.error).not.toHaveBeenCalled();
+    expect(res.MaterialDocument).toBe('4900012346');
+  });
+
+  it('returns 400 on duplicate scan in payload without queueing', async () => {
+    const stock = [
+      { StorageUnit: 'SU01', AvailableStock: 240 },
+      { StorageUnit: 'SU02', AvailableStock: 240 }
+    ];
+    setupMockSap({ openQty: 480, stockUnits: stock });
+
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 480,
+        Unit: 'KG',
+        StorageUnits: ['SU01', 'SU01'] // duplicate
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+    expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Duplicate Storage Unit SU01 in submission'));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 on wrong SU not in SAP stock without queueing', async () => {
+    const stock = [
+      { StorageUnit: 'SU01', AvailableStock: 480 }
+    ];
+    setupMockSap({ openQty: 480, stockUnits: stock });
+
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 480,
+        Unit: 'KG',
+        StorageUnits: ['SU_INVALID_999']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+    expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Storage Unit SU_INVALID_999 is not valid for material'));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 on tampered payload where IssueQty does not match real SU sum without queueing', async () => {
+    const stock = [
+      { StorageUnit: 'SU01', AvailableStock: 80 }
+    ];
+    setupMockSap({ openQty: 480, stockUnits: stock });
+
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 480, // Tampered: client claims 480, but SU01 in SAP is only 80
+        Unit: 'KG',
+        StorageUnits: ['SU01']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+    expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered payload detected'));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 on over-issue where SU total exceeds open reservation quantity without queueing', async () => {
+    const stock = [
+      { StorageUnit: 'SU01', AvailableStock: 300 },
+      { StorageUnit: 'SU02', AvailableStock: 250 } // Total = 550 > 480
+    ];
+    setupMockSap({ openQty: 480, stockUnits: stock });
+
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 550,
+        Unit: 'KG',
+        StorageUnits: ['SU01', 'SU02']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+    // Blocked either by reservationReconcileCheck or storageUnitReconcileCheck261
+    expect(req.error).toHaveBeenCalled();
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when no SU data exists in SAP for submitted StorageUnits without queueing', async () => {
+    setupMockSap({ openQty: 480, stockUnits: [] });
+
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 480,
+        Unit: 'KG',
+        StorageUnits: ['SU01']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+    expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('No Storage Units exist in SAP'));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+});

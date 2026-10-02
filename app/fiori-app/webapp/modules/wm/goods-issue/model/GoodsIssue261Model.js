@@ -100,9 +100,13 @@
                 scanEnabled: false,
                 scanUnitKind: "",           // "SERIAL" | "SU" (derived per scan) - label only
                 scanInput: "",
-                scannedUnits: [],           // [{ key, barcode, material, serial, isSerial, qty, unit, batch }]
+                scannedUnits: [],           // [{ key, storageUnit, barcode, material, plant, storageLocation, serial, isSerial, qty, unit, batch }]
                 scannedQty: 0,              // quantity covered by scannedUnits (see scannedQty())
                 requiredScanCount: 0,       // quantity the scans must cover (open reservation quantity)
+                suggestedUnits: [],         // suggested SUs (FEFO/FIFO order)
+                suggestedUnitsCount: 0,     // count of suggested SUs
+                availableUnits: [],         // all valid SUs in stock from SAP
+                noSuDataGap: "",            // gap message when no SU data exists in SAP
                 lastScanState: "None",      // MessageStrip state: Success | Error | Warning | None
                 lastScanText: "",
 
@@ -314,11 +318,59 @@
 
             // Scan-to-complete (Required if unit-managed reservation line)
             if (oData.scanEnabled) {
+                var aScannedUnits = Array.isArray(oData.scannedUnits) ? oData.scannedUnits : [];
                 var nScannedQty = this.scannedQty(oData);
                 var nRequiredUnits = Number(oData.requiredScanCount) || 0;
-                if (nScannedQty < nRequiredUnits) {
-                    errors.scannedUnits = "Required " + nRequiredUnits + " units scanned, currently " + nScannedQty;
+
+                if (aScannedUnits.length === 0) {
+                    errors.scannedUnits = "At least one Storage Unit must be scanned";
                     bValid = false;
+                } else {
+                    var seenSu = {};
+                    for (var k = 0; k < aScannedUnits.length; k++) {
+                        var suObj = aScannedUnits[k];
+                        var suKey = suObj.key || suObj.storageUnit || suObj.barcode;
+                        if (seenSu[suKey]) {
+                            errors.scannedUnits = "Storage Unit " + suKey + " has already been scanned.";
+                            bValid = false;
+                            break;
+                        }
+                        seenSu[suKey] = true;
+
+                        var uMat = String(suObj.material || "").trim().toUpperCase();
+                        var expMat = String(oData.material || "").trim().toUpperCase();
+                        if (expMat && uMat && uMat !== expMat) {
+                            errors.scannedUnits = "Wrong material: scanned unit belongs to " + uMat + ", expected " + expMat + ".";
+                            bValid = false;
+                            break;
+                        }
+                        var uPlant = String(suObj.plant || "").trim().toUpperCase();
+                        var expPlant = String(oData.plant || "").trim().toUpperCase();
+                        if (expPlant && uPlant && uPlant !== expPlant) {
+                            errors.scannedUnits = "Wrong plant: scanned unit is in plant " + uPlant + ", expected " + expPlant + ".";
+                            bValid = false;
+                            break;
+                        }
+                        var uSLoc = String(suObj.storageLocation || "").trim().toUpperCase();
+                        var expSLoc = String(oData.storageLocation || "").trim().toUpperCase();
+                        if (expSLoc && uSLoc && uSLoc !== expSLoc) {
+                            errors.scannedUnits = "Wrong storage location: scanned unit is in storage location " + uSLoc + ", expected " + expSLoc + ".";
+                            bValid = false;
+                            break;
+                        }
+                    }
+
+                    if (!errors.scannedUnits) {
+                        var nDiff = Math.abs(nScannedQty - nRequiredUnits);
+                        if (nDiff > 0.001) {
+                            if (nScannedQty < nRequiredUnits) {
+                                errors.scannedUnits = "Required " + nRequiredUnits + " units scanned, currently " + nScannedQty;
+                            } else {
+                                errors.scannedUnits = "Scanned quantity (" + nScannedQty + ") exceeds required quantity (" + nRequiredUnits + "). Over-issue blocked.";
+                            }
+                            bValid = false;
+                        }
+                    }
                 }
             }
 
@@ -396,6 +448,32 @@
         },
 
         /**
+         * Suggest SUs (FEFO/FIFO order) until the required quantity is met.
+         * Never assumes fixed drum sizes (handles 6-drum, 8-drum, variable weights, partial last drum).
+         * @param {Array<Object>} aAvailableUnits - Available stock units sorted by FEFO/FIFO
+         * @param {number} nRequiredQty - Target quantity to cover
+         * @returns {Array<Object>}
+         */
+        calculateSuggestedUnits: function (aAvailableUnits, nRequiredQty) {
+            if (!Array.isArray(aAvailableUnits) || aAvailableUnits.length === 0 || !(nRequiredQty > 0)) {
+                return [];
+            }
+            var aSuggested = [];
+            var nAccumulated = 0;
+            for (var i = 0; i < aAvailableUnits.length; i++) {
+                var su = aAvailableUnits[i];
+                var nQty = Number(su.AvailableStock != null ? su.AvailableStock : (su.CurrentStock != null ? su.CurrentStock : (su.SuStockQty != null ? su.SuStockQty : su.qty))) || 0;
+                if (nQty <= 0) continue;
+                aSuggested.push(su);
+                nAccumulated += nQty;
+                if (nAccumulated >= nRequiredQty - 1e-9) {
+                    break;
+                }
+            }
+            return aSuggested;
+        },
+
+        /**
          * Apply a resolveStockUnit result for ONE scan against the current line. Auto-detects serial
          * vs storage unit, gives clear pass/fail feedback (matched / wrong material / already issued /
          * duplicate / quantity exceeded) and, on a match, appends to scannedUnits. Never a silent fill.
@@ -406,6 +484,8 @@
          */
         applyScanResolution: function (oData, oRes, sBarcode) {
             var sExpectedMat = String(oData.material || "").trim().toUpperCase();
+            var sExpectedPlant = String(oData.plant || "").trim().toUpperCase();
+            var sExpectedSLoc = String(oData.storageLocation || "").trim().toUpperCase();
             var nRequired = Number(oData.requiredScanCount) || 0;
             var aScanned = Array.isArray(oData.scannedUnits) ? oData.scannedUnits : [];
             var sScan = String(sBarcode || "").trim();
@@ -417,24 +497,53 @@
             if (sExpectedMat && sResMat && sResMat !== sExpectedMat) {
                 return { ok: false, state: "Error", text: "Wrong material: scanned unit belongs to " + sResMat + ", expected " + sExpectedMat + "." };
             }
+            var sResPlant = String(oRes.Plant || "").trim().toUpperCase();
+            if (sExpectedPlant && sResPlant && sResPlant !== sExpectedPlant) {
+                return { ok: false, state: "Error", text: "Wrong plant: scanned unit is in plant " + sResPlant + ", expected " + sExpectedPlant + "." };
+            }
+            var sResSLoc = String(oRes.StorageLocation || "").trim().toUpperCase();
+            if (sExpectedSLoc && sResSLoc && sResSLoc !== sExpectedSLoc) {
+                return { ok: false, state: "Error", text: "Wrong storage location: scanned unit is in storage location " + sResSLoc + ", expected " + sExpectedSLoc + "." };
+            }
             var sSerial = String(oRes.DeterminedSerial || oRes.SerialNumber || "").trim();
             var sKey = sSerial || sScan;
-            if (aScanned.some(function (u) { return u.key === sKey; })) {
-                return { ok: false, state: "Warning", text: "Unit " + sKey + " was already scanned." };
+            if (aScanned.some(function (u) { return u.key === sKey || u.barcode === sScan || (u.storageUnit && u.storageUnit === sKey); })) {
+                return { ok: false, state: "Warning", text: "Storage Unit " + sKey + " was already scanned." };
             }
-            if (this.scannedQty(oData) >= nRequired) {
+
+            var nUnitQty = Number(oRes.SuStockQty != null ? oRes.SuStockQty : (oRes.CurrentStock != null ? oRes.CurrentStock : (oRes.AvailableStock != null ? oRes.AvailableStock : 0))) || 0;
+            if (nUnitQty <= 0 && !oRes.IsSerialManaged) {
+                nUnitQty = 1;
+            }
+
+            var nCurrentScanned = this.scannedQty(oData);
+            if (nRequired > 0 && nCurrentScanned >= nRequired) {
                 return { ok: false, state: "Warning", text: "Quantity exceeded: " + nRequired + " already covered by the scanned unit(s) for this line." };
             }
+            if (nRequired > 0 && (nCurrentScanned + nUnitQty) > (nRequired + 1e-9)) {
+                var nRemaining = Math.round((nRequired - nCurrentScanned) * 1000) / 1000;
+                return { ok: false, state: "Error", text: "Over-issue blocked: Storage Unit " + sKey + " quantity (" + nUnitQty + ") would exceed required quantity (" + nRequired + "). Remaining needed: " + nRemaining + "." };
+            }
+
             // One goods issue line posts one batch: a unit from another batch cannot be mixed in.
-            var sUnitBatch = String(oRes.DeterminedBatch || "").trim().toUpperCase();
+            var sUnitBatch = String(oRes.DeterminedBatch || oRes.Batch || "").trim().toUpperCase();
             var sLineBatch = String(oData.batch || "").trim().toUpperCase();
             if (sUnitBatch && sLineBatch && sUnitBatch !== sLineBatch) {
                 return { ok: false, state: "Error", text: "Unit " + sKey + " is batch " + sUnitBatch + ", but this issue is for batch " + sLineBatch + "." };
             }
-            var nUnitQty = Number(oRes.SuStockQty != null ? oRes.SuStockQty : oRes.CurrentStock) || 0;
+
             aScanned.push({
-                key: sKey, barcode: sScan, material: sResMat, serial: sSerial, isSerial: !!oRes.IsSerialManaged,
-                qty: nUnitQty, unit: oRes.BaseUnit || "", batch: sUnitBatch
+                key: sKey,
+                storageUnit: sKey,
+                barcode: sScan,
+                material: sResMat || sExpectedMat,
+                plant: sResPlant || sExpectedPlant,
+                storageLocation: sResSLoc || sExpectedSLoc,
+                serial: sSerial,
+                isSerial: !!oRes.IsSerialManaged,
+                qty: nUnitQty,
+                unit: oRes.BaseUnit || oRes.Unit || oData.unit || "",
+                batch: sUnitBatch
             });
             oData.scannedUnits = aScanned;
             if (sUnitBatch && !sLineBatch) {
@@ -484,6 +593,13 @@
                 }
             }
 
+            var aStorageUnits = [];
+            if (oData.scanEnabled && Array.isArray(oData.scannedUnits)) {
+                aStorageUnits = oData.scannedUnits
+                    .filter(function (u) { return !u.isSerial && (u.storageUnit || u.barcode || u.key); })
+                    .map(function (u) { return String(u.storageUnit || u.barcode || u.key).trim(); });
+            }
+
             return {
                 MovementType: "261",
                 ReservationNo: sResv,
@@ -498,9 +614,8 @@
                 PostingDate: oData.postingDate,
                 DocumentDate: oData.documentDate,
                 HeaderText: oData.headerText ? String(oData.headerText).trim() : (sResv ? ("GI Resv " + sResv) : ("GI Order " + sOrder)),
-                SerialNumbers: aSerials
-                // GLAccount / CostCenter intentionally never sent: this movement type has no
-                // cost-center assignment and G/L account is not applicable.
+                SerialNumbers: aSerials,
+                StorageUnits: aStorageUnits
             };
         }
     };

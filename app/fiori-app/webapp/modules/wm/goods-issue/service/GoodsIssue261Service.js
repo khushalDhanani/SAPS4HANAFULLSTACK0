@@ -43,6 +43,7 @@ sap.ui.define([
             var sUnit = String(oPayload.Unit || "").trim().toUpperCase();
 
             var aSerials = Array.isArray(oPayload.SerialNumbers) ? oPayload.SerialNumbers : [];
+            var aStorageUnits = Array.isArray(oPayload.StorageUnits) ? oPayload.StorageUnits : [];
 
             // Isolated 261 action: send only Movement 261 fields (no MovementType / difference / cost center).
             var oBody = {
@@ -59,6 +60,10 @@ sap.ui.define([
                 DocumentDate: oPayload.DocumentDate || null,
                 SerialNumbers: aSerials
             };
+
+            if (aStorageUnits.length > 0) {
+                oBody.StorageUnits = aStorageUnits;
+            }
 
             return ODataClient.post(BASE_PATH_GI + "/postGoodsIssue261", oBody);
         },

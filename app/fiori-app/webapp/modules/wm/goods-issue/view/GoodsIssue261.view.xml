@@ -199,6 +199,7 @@
                                     id="inQuantity261"
                                     value="{gi261>/quantity}"
                                     type="Number"
+                                    editable="{= !${gi261>/fromReservation} }"
                                     liveChange=".onQuantityLiveChange"
                                     valueState="{= ${gi261>/errors/quantity} ? 'Error' : 'None' }"
                                     valueStateText="{gi261>/errors/quantity}"
@@ -266,6 +267,16 @@
                     </f:SimpleForm>
                 </Panel>
 
+                <!-- SU Data Gap Warning (when no SU data exists in SAP for this material/plant/sloc) -->
+                <MessageStrip
+                    id="stripNoSuDataGap261"
+                    text="{gi261>/noSuDataGap}"
+                    type="Warning"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{= !!${gi261>/noSuDataGap} }"
+                    class="sapUiSmallMarginBottom" />
+
                 <!-- 3b. Scan-to-complete: unit-managed reservations (serial or storage unit). Scanning
                      validates each unit against S/4 (right material, in stock, not already issued). -->
                 <Panel
@@ -295,7 +306,13 @@
                                 id="osScanProgress261"
                                 title="{i18n>gi261ScanProgress}"
                                 text="{= ${gi261>/scannedQty} + ' / ' + ${gi261>/requiredScanCount} + ' ' + ${gi261>/unit} }"
-                                state="{= ${gi261>/scannedQty} >= ${gi261>/requiredScanCount} ? 'Success' : 'Warning' }" />
+                                state="{= Math.abs(${gi261>/scannedQty} - ${gi261>/requiredScanCount}) &lt; 0.001 ? 'Success' : 'Warning' }" />
+                            <ObjectStatus
+                                id="osSuCountProgress261"
+                                title="{i18n>gi261SuCountProgress}"
+                                text="{= ${gi261>/scannedUnits}.length + ' / ' + ${gi261>/suggestedUnitsCount} }"
+                                state="{= ${gi261>/scannedUnits}.length === ${gi261>/suggestedUnitsCount} ? 'Success' : 'Information' }"
+                                class="sapUiMediumMarginBegin" />
                         </HBox>
                         <MessageStrip
                             id="msScanFeedback261"
@@ -332,6 +349,47 @@
                             </items>
                         </Table>
                     </VBox>
+                </Panel>
+
+                <!-- 3c. Suggested Storage Units (FIFO/FEFO recommendation) -->
+                <Panel
+                    id="pnlSuggestedUnits261"
+                    headerText="{i18n>gi261SuggestedSectionTitle}"
+                    expandable="true"
+                    expanded="true"
+                    visible="{= ${gi261>/scanEnabled} &amp;&amp; ${gi261>/suggestedUnits}.length > 0 }"
+                    class="sapUiSmallMarginBottom">
+                    <Table
+                        id="tblSuggestedUnits261"
+                        items="{gi261>/suggestedUnits}"
+                        noDataText="{i18n>gi261SuggestedNoData}">
+                        <columns>
+                            <Column id="colSuggestedUnit261"><Text text="{i18n>gi261SuggestedColUnit}" /></Column>
+                            <Column id="colSuggestedBin261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColBin}" /></Column>
+                            <Column id="colSuggestedQty261" hAlign="End"><Text text="{i18n>gi261SuggestedColQty}" /></Column>
+                            <Column id="colSuggestedBatch261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColBatch}" /></Column>
+                            <Column id="colSuggestedStatus261" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi261SuggestedColStatus}" /></Column>
+                            <Column id="colSuggestedAction261" hAlign="End"><Text text="{i18n>gi261SuggestedColAction}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{gi261>StorageUnit}" class="fontBold" />
+                                    <Text text="{= ${gi261>StorageType} ? (${gi261>StorageType} + ' / ' + ${gi261>StorageBin}) : ${gi261>StorageBin} }" />
+                                    <Text text="{= ${gi261>AvailableStock} + ' ' + ${gi261>Unit} }" />
+                                    <Text text="{= ${gi261>Batch} || '—' }" />
+                                    <ObjectStatus
+                                        text="{= ${gi261>StatusText} || ${gi261>StatusState} || 'Available' }"
+                                        state="{= ${gi261>StatusState} === 'Error' ? 'Error' : (${gi261>StatusState} === 'Warning' ? 'Warning' : 'Success') }" />
+                                    <Button
+                                        text="{i18n>gi261BtnScanSuggested}"
+                                        type="Transparent"
+                                        icon="sap-icon://bar-code"
+                                        press=".onScanSuggestedPress" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
                 </Panel>
 
                 <!-- 4. Conditional: Serial Numbers Management -->

@@ -4,7 +4,58 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
-## 2026-10-02 10:00 IST
+## 2026-10-02 11:05 IST
+- **Agent**: Antigravity
+- **Request**: Page `/wm/goods-issue/order-based-261?resv=480962` (generic, no hardcoded IDs).
+  1. Read the reservation (material, plant, SLoc, qty, UoM) and prefill it read-only.
+  2. Read the real SUs for that material in the issuing plant/SLoc from the existing stock source (`GoodsIssueAdapter.listStockUnitsForReservationItem` querying SAP LQUA via RFC). If no SU data exists, report that gap first. Don't invent a rule.
+  3. Drum weights vary (6 drums, 8 drums, partial last drum). Never assume qty / 48.
+  4. Suggest SUs (FIFO or the existing rule). Show "scanned qty / required qty" and "SUs scanned / suggested".
+  5. Complete is enabled only when all scanned SUs are valid for the material, plant and SLoc, none is scanned twice, and the scanned sum equals the required qty. Block over-issue.
+  6. Server-side: postGoodsIssue261 re-reads the reservation and SU quantities and returns 400 on a mismatch or tampered payload, without queueing.
+  7. Clear messages: wrong material, wrong SLoc, SU already used, qty over or under.
+  8. Tests: 6-drum and 8-drum cases with unequal weights, partial last drum, duplicate scan, wrong SU, over-issue, tampered payload. Existing tests must pass.
+- **Trace & SAP Facts (Read-Only)**:
+  - Inspected existing stock source: `GoodsIssueAdapter.listStockUnitsForReservationItem(reservationNo, reservationItem)` directly connects to SAP WM (LQUA via RFC `RFC_READ_TABLE`), evaluating usable batches, shelf life expiration, and storage unit quantities.
+  - Inspected route handling: `GoodsIssue261.controller.js` `_onRouteMatched` parses `resv` and `item` query parameters dynamically (generic, zero hardcoded IDs).
+  - Material and reservation parameters (Material, Plant, SLoc, Quantity, UoM) are prefilled read-only with `fromReservation: true`, disabling direct quantity edits (`editable="{= !${gi261>/fromReservation} }"`).
+  - Drum weights vary (6 drums, 8 drums, partial last drum). The model calculates suggested SUs using greedy FIFO accumulation based on available units without assuming any fixed weight per drum.
+  - Progress counters reflect both `scannedQty / requiredQty` and `scannedSUs / suggestedSUs`. If no SU data exists in SAP, a gap message strip (`gi261NoSuDataGap`) is displayed.
+  - Validation ensures all scanned SUs are valid, prevents duplicate scans, and blocks over-issue. "Complete" is enabled strictly when `scannedQty === requiredQty`.
+  - Server-side handler `postGoodsIssue261` re-reads reservation item and SAP storage units via `GoodsIssueAdapter.listStockUnitsForReservationItem`. It detects duplicate scans, mismatched SUs, over-issue, and tampered `IssueQty`, returning HTTP 400 immediately without entering the dispatch queue.
+- **Changes**:
+  - `srv/wm/goods-issue/service.cds`: added `StorageUnits : array of String(20)` to `action postGoodsIssue261`.
+  - `srv/wm/goods-issue/mapping/goodsIssue261.normalize.js`: normalized `StorageUnits` array from `data.StorageUnits` / `data.StorageUnit`.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: added `storageUnitReconcileCheck261(req, normalized, resvItem)` with authoritative SAP SU verification, tampered payload detection, and HTTP 400 rejection without queueing.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`: added `calculateSuggestedUnits`, `suggestedUnits`, `suggestedUnitsCount`, `availableUnits`, `noSuDataGap`, duplicate scan rejection, over-issue blocking, and `StorageUnits` payload generation.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue261Service.js`: conditionally forwarded `StorageUnits` to `postGoodsIssue261`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`: updated `_onRouteMatched` and `_prefillFromReservation` to parse query parameters, populate suggested units and progress in `_detectScanMode`, and added `onScanSuggestedPress`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`: set quantity field read-only when from reservation, added no-SU gap message strip, `SUs scanned / suggested` status, and suggested units table with scan buttons.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: added 11 required i18n keys with identical keys in both files.
+  - `test/unit/wm/goodsIssue261SuScan.test.js`: added 18 unit tests covering 6-drum, 8-drum, partial drum, duplicate scan, wrong SU, over-issue, tampered payload HTTP 400 without queueing, and no SU data gap.
+- **Affected Files**:
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/mapping/goodsIssue261.normalize.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue261Service.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssue261SuScan.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js`: 1 suite, 18/18 passed.
+  - `npx jest test/unit/wm/goodsIssue261ServiceUnit.test.js`: 1 suite, 24/24 passed.
+  - `npx jest test/unit/wm/goodsIssueService.test.js`: 1 suite, 46/46 passed.
+  - `npx jest test/unit/wm`: 46 suites, 942/942 passed.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite, 7/7 passed.
+  - `cd app/fiori-app && npm run build`: UI5 build succeeded in 1.79 s.
+  - `npx cds compile srv/wm/goods-issue/service.cds`: compilation clean.
+  - `git diff --check`: clean (0 errors).
+- **Current Status**: Complete & Verified — Generic reservation-based 261 Goods Issue workflow with dynamic drum weights, FIFO suggested SUs, double-scanning prevention, over-issue blocking, and server-side tampered payload HTTP 400 rejection without queueing is implemented and validated. All 46 WM suites (942 tests) and UI consistency tests pass.
+- **Next Steps**: Test end-to-end user experience in browser or live Fiori launchpad with live reservation `480962` or any arbitrary reservation number.
 - **Agent**: Antigravity
 - **Request**: `wm/goods-issue/301/open-transfers`: Debug why Reservation 519144 does not show an Issuing SLoc in the open transfers table; implement fix to show an informative status ("Select at Issue") instead of a bare "-" when SAP leaves issuing storage location blank.
 - **Trace & SAP Facts (Read-Only)**:
