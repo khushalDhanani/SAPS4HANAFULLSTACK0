@@ -5,6 +5,85 @@
 
 
 
+
+## 2026-10-02 13:10 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit).
+  1. Lock bootstrap: handle the unique-key violation on first INSERT of GoodsIssueSuLock by retrying as UPDATE. Confirm lock, claim insert and re-sum share one db.tx. Add a purge for stale lock rows. Test the concurrent first-claim case.
+  2. findPosted261ByMatdoc: also require document created after the claim's createdAt, quantity equal to the claim, and exclude reversed documents. Test: an earlier same-day posting must not prove a later attempt.
+  3. resolveClaimManual: on `posted`, verify the document in MATDOC (261, same reservation/item, not linked to another claim). On `not-posted`, set status released with reason/user/time instead of deleting. Add the same resolve action for NEEDS_ATTENTION queue items. Test each.
+  4. Release job keeps re-checking needs-attention claims and auto-resolves when the document appears. Test it.
+  5. Confirm plain 403 is definitive and 502/504/timeout/reset are not. Test it.
+  6. Run the full suite, report the total, update WORKSTATUS.md. Do not add other features.
+- **Architectural Confirmations & Details**:
+  - **Shared Transaction Guarantee**: In `acquireClaims`, `await this._runInTx(async (tx) => { ... })` executes:
+    1. Lock acquisition on `GoodsIssueSuLock` via `tx.run(INSERT ... catch ... UPDATE ...)`.
+    2. Claim rows insertion into `GoodsIssueIssuedStorageUnit` via `tx.run(INSERT ...)`.
+    3. Re-read of all active rows via `tx.run(SELECT ...)`.
+    4. Capacity check and conditional delete via `tx.run(DELETE ...)`.
+    All four database operations share the exact same `tx` instance under `READ COMMITTED`.
+  - **Lock Bootstrap**: On concurrent first-claim for an SU, Tx1's `INSERT` into `GoodsIssueSuLock` succeeds; concurrent Tx2 catches the unique-key constraint violation (`SQLITE_CONSTRAINT_UNIQUE` or DB duplicate key) and retries as `UPDATE GoodsIssueSuLock SET LockVersion = LockVersion + 1 WHERE StorageUnit = ?`, which blocks on the row lock until Tx1 commits.
+  - **Stale Lock Purge**: Added `purgeStaleLocks({ maxAgeMs })` method on `GoodsIssueIssuedSuStore`. Lock rows are purged if the SU has no active claims in `GoodsIssueIssuedStorageUnit` (`'claiming'`, `'issued'`, `'needs-attention'`) and `updatedAt` is older than cutoff (default: 24h). Automatically executed during `releaseByLquaDropOrReversal`.
+  - **MATDOC 261 Match Hardening**: In `findPosted261ByMatdoc`, candidate documents must:
+    1. Have creation timestamp (`CPUDT` + `CPUTM` or `createdAt`) $\ge$ claim `createdAt` (an earlier same-day posting does not prove a later attempt).
+    2. Have quantity (`MENGE`/`ERFMG`) exactly matching the claim quantity.
+    3. Not be reversed (`STORNO = 'X'`, `BWART = '262'`, or cancelled by `SMBLN`).
+    4. Yield exactly one match.
+  - **Manual Claim Resolution**:
+    - `resolveClaimManual(claimId, 'posted')`: queries MATDOC/MSEG to verify document exists, movement type is `261`, matches reservation/item, and is not already linked to another claim. Sets `Status: 'issued'`.
+    - `resolveClaimManual(claimId, 'not-posted')`: sets `Status: 'released'`, `ReleaseReason: 'MANUAL_NOT_POSTED by <user>'`, `ReleasedAt: <timestamp>`, `NeedsAttention: false`. The row is preserved in the database (never deleted) while freeing capacity.
+  - **Queue Item Manual Resolution**: Added `resolveQueueItemManual(queueId, action, options)` on `GoodsIssueQueueManager` and `GoodsIssueService`:
+    - `action === 'posted'`: verifies document in MATDOC and updates queue item `SyncStatus: 'POSTED_IN_SAP'`, promoting any related SU claims.
+    - `action === 'not-posted'`: updates queue item `SyncStatus: 'DISCARDED'`, releasing any related SU claims.
+  - **Needs-Attention Auto-Resolution**: The background release job (`releaseByLquaDropOrReversal`) continuously re-checks claims in `Status: 'needs-attention'` on each cycle. If the document appears in SAP via MATDOC fallback lookup, it automatically promotes the claim to `Status: 'issued'` and clears `NeedsAttention`.
+  - **Error Classification**:
+    - Plain `403` is definitive (`true`), allowing claim cleanup.
+    - `502`, `504`, timeout (`ETIMEDOUT`), and reset (`ECONNRESET`, socket hang up) are NOT definitive (`false`), keeping claiming rows intact.
+- **Changes**:
+  - `db/wm/goods-issue-issued-su.cds`: Added `updatedAt: Timestamp;` to `GoodsIssueSuLock`.
+  - `srv/wm/goods-issue/service.cds`: Exposed action `resolveQueueItemManual` on `GoodsIssueService`.
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`:
+    - Updated `isDefinitiveRejection`: explicit `false` for 502/504/timeout/reset; explicit `true` for 403.
+    - Updated `acquireClaims`: retry INSERT on unique key constraint as UPDATE; sets `updatedAt: nowIso`.
+    - Added `purgeStaleLocks`: purges lock rows for SUs without active claims older than cutoff.
+    - Updated `resolveClaimManual`: on `posted` verifies MATDOC 261; on `not-posted` sets status `released` instead of deleting.
+    - Updated `releaseByLquaDropOrReversal`: continuously re-checks `needs-attention` claims, auto-resolving when document appears; calls `purgeStaleLocks`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`:
+    - Enhanced `findPosted261ByMatdoc`: filters by creation timestamp >= claim createdAt, quantity match, and excludes reversals.
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+    - Forwarded all arguments in `findPosted261ByMatdoc(...args)`.
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`:
+    - Updated `buildRecord`: respects passed `QueueReference` if provided.
+    - Added `resolveQueueItemManual(queueId, action, options)`: supports `'posted'` and `'not-posted'` for queue items.
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+    - Updated `resolveClaimManual` handler to pass `adapter` and `user`.
+    - Wired `resolveQueueItemManual` action handler.
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`:
+    - Test 13: Unique-key bootstrap retry as UPDATE + stale lock purge test.
+    - Test 14: Confirmed plain 403 is definitive, 502/504/timeout/reset are not.
+    - Test 15: Tested earlier same-day posting exclusion, timestamp filtering, quantity match, and reversal exclusion in `findPosted261ByMatdoc`.
+    - Test 16: Tested MATDOC verification on `resolveClaimManual` ('posted'), status `released` on 'not-posted', `resolveQueueItemManual`, and release job auto-resolution of `needs-attention` claims.
+    - Test 17: Unknown-outcome queue items mark `NEEDS_ATTENTION`.
+- **Affected Files**:
+  - `db/wm/goods-issue-issued-su.cds`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `test/unit/wm/goodsIssueIssuedSu.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Passed cleanly (0 errors).
+  - `npx jest test/unit/wm/goodsIssueIssuedSu.test.js`: 1 suite, 36/36 passed (100%).
+  - `npx jest test/unit/wm`: 47 suites, 986/986 passed (100%).
+  - `npm test`: 134 suites, 2,204/2,204 passed (100%).
+  - Zero live SAP POST calls made.
+  - Zero git commits made.
+- **Current Status**: Complete & Verified. All 5 hardening requirements and test specifications implemented and passing. Total test suite passes (134 suites, 2,204 tests).
+- **Next Recommended Action**: Await user confirmation on `feature/CL01`.
+
 ## 2026-10-02 12:45 IST
 - **Agent**: Antigravity
 - **Request**: Branch feature/CL01 (No live POST, no commit).
