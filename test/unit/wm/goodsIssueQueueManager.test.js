@@ -237,8 +237,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(await manager.getAll()).toHaveLength(0);
     });
 
-    it('displays and replays legacy queue rows with GI-QUEUE- references', async () => {
-      const legacyRef = 'GI-QUEUE-142001-0001-7041';
+    it('displays and replays legacy queue rows with LegacyReference flag', async () => {
+      const legacyRef = 'PRE-UUID-142001-0001-7041';
       const queued = await manager.enqueue({
         QueueReference: legacyRef,
         ReservationNo: '142001',
@@ -302,8 +302,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(await manager.get(legacyRef)).toBeNull();
     });
 
-    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: 1 match -> needs-attention, no replay', async () => {
-      const legacyRef = 'GI-QUEUE-142001-0001-7042';
+    it('drainQueue checks MATDOC for legacy row: 1 match -> needs-attention, no replay', async () => {
+      const legacyRef = 'PRE-UUID-142001-0001-7042';
       await manager.enqueue({
         QueueReference: legacyRef,
         ReservationNo: '142001',
@@ -332,8 +332,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(item.LastSyncError).toContain('Document already found in SAP MATDOC (4900012345/2026)');
     });
 
-    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: ambiguous matches -> needs-attention, no replay', async () => {
-      const legacyRef = 'GI-QUEUE-142001-0001-7043';
+    it('drainQueue checks MATDOC for legacy row: ambiguous matches -> needs-attention, no replay', async () => {
+      const legacyRef = 'PRE-UUID-142001-0001-7043';
       await manager.enqueue({
         QueueReference: legacyRef,
         ReservationNo: '142001',
@@ -362,8 +362,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(item.LastSyncError).toContain('Ambiguous documents found in SAP MATDOC (2 matches)');
     });
 
-    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: 0 matches -> replay proceeds', async () => {
-      const legacyRef = 'GI-QUEUE-142001-0001-7044';
+    it('drainQueue checks MATDOC for legacy row: 0 matches -> replay proceeds', async () => {
+      const legacyRef = 'PRE-UUID-142001-0001-7044';
       await manager.enqueue({
         QueueReference: legacyRef,
         ReservationNo: '142001',
@@ -395,8 +395,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(item.SapMaterialDocument).toBe('4900099888');
     });
 
-    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: lookup error -> needs-attention, never replay', async () => {
-      const legacyRef = 'GI-QUEUE-142001-0001-7045';
+    it('drainQueue checks MATDOC for legacy row: lookup error -> needs-attention, never replay', async () => {
+      const legacyRef = 'PRE-UUID-142001-0001-7045';
       await manager.enqueue({
         QueueReference: legacyRef,
         ReservationNo: '142001',

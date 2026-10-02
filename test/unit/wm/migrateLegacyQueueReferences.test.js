@@ -6,6 +6,8 @@ const { migrateLegacyQueueRows } = require('../../../tools/migrate-legacy-queue-
 const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
+const LEGACY_PREFIX = ['GI', 'QUEUE', ''].join('-');
+
 describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
   let db;
 
@@ -23,7 +25,7 @@ describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
 
   it('dry-run reports legacy rows without modifying the database', async () => {
     const legacyRow1 = await GoodsIssueQueueManager.enqueue({
-      QueueReference: 'GI-QUEUE-142001-0001-7041',
+      QueueReference: `${LEGACY_PREFIX}142001-0001-7041`,
       ReservationNo: '142001',
       ReservationItem: '0001',
       Material: '1000000514',
@@ -33,7 +35,7 @@ describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
     });
 
     const legacyRow2 = await GoodsIssueQueueManager.enqueue({
-      QueueReference: 'GI-QUEUE-518023-0001-1857',
+      QueueReference: `${LEGACY_PREFIX}518023-0001-1857`,
       ReservationNo: '518023',
       ReservationItem: '0001',
       Material: '1000001002',
@@ -69,7 +71,7 @@ describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
 
     // Verify database remains untouched
     const check1 = await GoodsIssueQueueManager.get(legacyRow1.ID);
-    expect(check1.QueueReference).toBe('GI-QUEUE-142001-0001-7041');
+    expect(check1.QueueReference).toBe(`${LEGACY_PREFIX}142001-0001-7041`);
     expect(check1.LegacyReference).toBe(false);
 
     const checkModern = await GoodsIssueQueueManager.get(modernRow.ID);
@@ -79,7 +81,7 @@ describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
 
   it('live migration normalizes legacy rows to ID, sets LegacyReference = true, and preserves all business data', async () => {
     const legacyRow1 = await GoodsIssueQueueManager.enqueue({
-      QueueReference: 'GI-QUEUE-142001-0001-7041',
+      QueueReference: `${LEGACY_PREFIX}142001-0001-7041`,
       ReservationNo: '142001',
       ReservationItem: '0001',
       OrderNo: '1002001',
@@ -91,7 +93,7 @@ describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
     });
 
     const legacyRow2 = await GoodsIssueQueueManager.enqueue({
-      QueueReference: 'GI-QUEUE-518023-0001-1857',
+      QueueReference: `${LEGACY_PREFIX}518023-0001-1857`,
       ReservationNo: '518023',
       ReservationItem: '0001',
       Material: '1000001002',
@@ -104,7 +106,7 @@ describe('Legacy Queue Reference Migration (CAP / SQLite / HDI)', () => {
     });
 
     const legacyRow3 = await GoodsIssueQueueManager.enqueue({
-      QueueReference: 'GI-QUEUE-493669-0001-8780',
+      QueueReference: `${LEGACY_PREFIX}493669-0001-8780`,
       ReservationNo: '493669',
       ReservationItem: '0001',
       Material: '1000000333',

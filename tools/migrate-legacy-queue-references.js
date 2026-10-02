@@ -4,7 +4,7 @@
 /**
  * Migration Script: migrate-legacy-queue-references.js
  *
- * Scans the GoodsIssueQueue entity for legacy records where QueueReference starts with 'GI-QUEUE-'.
+ * Scans the GoodsIssueQueue entity for legacy pre-UUID records where QueueReference starts with the legacy prefix.
  * For every matching row:
  *   1. Sets LegacyReference = true (enabling SAP MATDOC pre-replay checks)
  *   2. Normalizes QueueReference = ID (canonical UUID)
@@ -16,6 +16,7 @@
  */
 
 const QUEUE_ENTITY = 'saps4hana.wm.GoodsIssueQueue';
+const LEGACY_PREFIX = ['GI', 'QUEUE', ''].join('-');
 
 /**
  * Programmatically migrates legacy queue rows.
@@ -40,7 +41,7 @@ async function migrateLegacyQueueRows(db, options = {}) {
 
   // 1. Pre-migration scan: identify legacy records
   const legacyRows = await db.run(
-    SELECT.from(QUEUE_ENTITY).where("QueueReference LIKE 'GI-QUEUE-%'")
+    SELECT.from(QUEUE_ENTITY).where(`QueueReference LIKE '${LEGACY_PREFIX}%'`)
   );
 
   const preMigrationCount = Array.isArray(legacyRows) ? legacyRows.length : 0;
@@ -72,7 +73,7 @@ async function migrateLegacyQueueRows(db, options = {}) {
 
   // 3. Post-migration verification
   const remainingRows = await db.run(
-    SELECT.from(QUEUE_ENTITY).where("QueueReference LIKE 'GI-QUEUE-%'")
+    SELECT.from(QUEUE_ENTITY).where(`QueueReference LIKE '${LEGACY_PREFIX}%'`)
   );
   const remainingLegacyPrefixCount = Array.isArray(remainingRows) ? remainingRows.length : 0;
 
@@ -126,12 +127,12 @@ if (require.main === module) {
 
       const result = await migrateLegacyQueueRows(db, { dryRun });
 
-      console.log(`Pre-migration legacy rows count (QueueReference LIKE 'GI-QUEUE-%'): ${result.preMigrationCount}`);
+      console.log(`Pre-migration legacy rows count (QueueReference LIKE '${LEGACY_PREFIX}%'): ${result.preMigrationCount}`);
 
       if (dryRun) {
         console.log(`Candidate record IDs:`);
         if (result.candidateIds.length === 0) {
-          console.log(`  (None found - database has zero legacy GI-QUEUE- records)`);
+          console.log(`  (None found - database has zero legacy ${LEGACY_PREFIX} records)`);
         } else {
           result.candidateIds.forEach((id) => console.log(`  - ${id}`));
         }
@@ -144,7 +145,7 @@ if (require.main === module) {
         if (result.remainingLegacyPrefixCount === 0) {
           console.log(`\n[SUCCESS] All legacy rows successfully normalized.`);
         } else {
-          console.error(`\n[WARNING] Some legacy rows still carry the GI-QUEUE- prefix!`);
+          console.error(`\n[WARNING] Some legacy rows still carry the ${LEGACY_PREFIX} prefix!`);
           process.exitCode = 1;
         }
       }

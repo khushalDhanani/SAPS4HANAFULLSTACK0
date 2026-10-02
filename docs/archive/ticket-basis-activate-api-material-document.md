@@ -61,7 +61,7 @@ Content-Type: application/xml
 
 This single service is the **sole technical dependency** blocking synchronous live material document posting across all Warehouse Management Goods Issue & Transfer modules. 
 
-Currently, all the following features are forced into the asynchronous Outbox Dispatch Queue (`GI-QUEUE-*`) because SAP Gateway rejects the HTTP POST:
+Currently, all the following features are forced into the asynchronous Outbox Dispatch Queue (internal queue UUID) because SAP Gateway rejects the HTTP POST:
 
 | # | Movement Type | Description | Workflow Status | Blocked Operation |
 |---|---|---|---|---|
