@@ -27,9 +27,7 @@ function normalizeGoodsIssue261Payload(data, context = {}) {
   const rawLastQty = data.LastStorageUnitQty != null ? data.LastStorageUnitQty : data.PartialStorageUnitQty;
   if (rawLastQty !== undefined && rawLastQty !== null && rawLastQty !== '') {
     const lq = Number(rawLastQty);
-    if (!isNaN(lq) && lq > 0) {
-      n.LastStorageUnitQty = Math.round(lq * 1000) / 1000;
-    }
+    n.LastStorageUnitQty = !isNaN(lq) ? Math.round(lq * 1000) / 1000 : rawLastQty;
   }
 
   return n;

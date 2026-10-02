@@ -198,11 +198,14 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     seen.add(cleanId);
   }
 
-  // Build lookup map of SAP stock units
+  // Build lookup map and authoritative SAP order index
   const validSuMap = new Map();
-  for (const su of sapStockUnits) {
-    validSuMap.set(String(su.StorageUnit).trim().toUpperCase(), su);
-  }
+  const sapOrderMap = new Map();
+  sapStockUnits.forEach((su, idx) => {
+    const suKey = String(su.StorageUnit).trim().toUpperCase();
+    validSuMap.set(suKey, su);
+    sapOrderMap.set(suKey, idx);
+  });
 
   // Authoritative open quantity from SAP reservation item (Requirement 2)
   let openQty = resvItem && (resvItem.OpenQty !== undefined && resvItem.OpenQty !== null)
@@ -219,10 +222,8 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     }
   }
 
-  // Verify all submitted SUs exist in SAP stock and have not been consumed
-  let precedingSum = 0;
+  // Verify all submitted SUs exist in SAP stock and have available stock > 0
   const numSUs = submittedSUs.length;
-
   for (let i = 0; i < numSUs; i++) {
     const cleanId = String(submittedSUs[i]).trim().toUpperCase();
     const sapSu = validSuMap.get(cleanId);
@@ -235,44 +236,108 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       req.error(400, `Storage Unit ${cleanId} has no available stock or was consumed in SAP. Goods Issue was NOT posted.`);
       return false;
     }
+  }
 
-    if (i < numSUs - 1) {
-      precedingSum += suAvailStock;
+  // Server chooses which SU takes the partial, never the client's order (Requirement 2).
+  // Order submitted SUs according to SAP's authoritative sequence (FEFO / FIFO / StorageUnit).
+  const targetTotal = (openQty !== null && openQty > 0) ? openQty : Math.round(Number(normalized.IssueQty) * 1000) / 1000;
+
+  const authoritativeSUs = [...submittedSUs].sort((a, b) => {
+    const keyA = String(a).trim().toUpperCase();
+    const keyB = String(b).trim().toUpperCase();
+    const idxA = sapOrderMap.has(keyA) ? sapOrderMap.get(keyA) : Number.MAX_SAFE_INTEGER;
+    const idxB = sapOrderMap.has(keyB) ? sapOrderMap.get(keyB) : Number.MAX_SAFE_INTEGER;
+    return idxA - idxB;
+  });
+
+  let runningSum = 0;
+  let precedingSum = 0;
+  let serverPartialSu = null;
+  let serverPartialQty = 0;
+
+  for (let i = 0; i < authoritativeSUs.length; i++) {
+    const suId = String(authoritativeSUs[i]).trim().toUpperCase();
+    const su = validSuMap.get(suId);
+    const avail = Number(su.AvailableStock != null ? su.AvailableStock : (su.CurrentStock != null ? su.CurrentStock : 0));
+    const needed = Math.round((targetTotal - runningSum) * 1000) / 1000;
+
+    if (needed <= 0) {
+      req.error(400, `Storage Unit ${suId} is in excess of required quantity (${targetTotal}). Goods Issue was NOT posted.`);
+      return false;
+    }
+
+    if (avail <= needed) {
+      precedingSum = runningSum;
+      runningSum = Math.round((runningSum + avail) * 1000) / 1000;
+    } else {
+      // avail > needed: this SU is chosen by the server to take the partial
+      serverPartialSu = su;
+      serverPartialQty = needed;
+      precedingSum = runningSum;
+      runningSum = Math.round((runningSum + needed) * 1000) / 1000;
+      if (i < authoritativeSUs.length - 1) {
+        const excessSu = String(authoritativeSUs[i + 1]).trim().toUpperCase();
+        req.error(400, `Storage Unit ${excessSu} is in excess of required quantity (${targetTotal}). Over-issue blocked. Goods Issue was NOT posted.`);
+        return false;
+      }
+      break;
     }
   }
 
-  // Handle the last Storage Unit: full issue or explicit/derived partial quantity capped at open qty (Requirement 1)
-  const lastCleanId = String(submittedSUs[numSUs - 1]).trim().toUpperCase();
-  const lastSapSu = validSuMap.get(lastCleanId);
-  const lastAvailStock = Number(lastSapSu.AvailableStock != null ? lastSapSu.AvailableStock : (lastSapSu.CurrentStock != null ? lastSapSu.CurrentStock : 0));
-
-  let lastSuQty = lastAvailStock;
   const explicitLastQty = normalized.LastStorageUnitQty != null ? Number(normalized.LastStorageUnitQty) : null;
 
-  if (explicitLastQty !== null) {
-    if (isNaN(explicitLastQty) || explicitLastQty <= 0) {
-      req.error(400, `Partial quantity for Storage Unit ${lastCleanId} must be greater than zero. Goods Issue was NOT posted.`);
+  if (serverPartialSu) {
+    const partialSuId = String(serverPartialSu.StorageUnit).trim().toUpperCase();
+    const fullStock = Number(serverPartialSu.AvailableStock != null ? serverPartialSu.AvailableStock : (serverPartialSu.CurrentStock != null ? serverPartialSu.CurrentStock : 0));
+
+    // Reject partial <= 0 or >= that SU's full stock (Requirement 2)
+    if (serverPartialQty <= 0) {
+      req.error(400, `Partial quantity (${serverPartialQty}) for Storage Unit ${partialSuId} must be greater than zero. Goods Issue was NOT posted.`);
       return false;
     }
-    if (explicitLastQty > lastAvailStock + 1e-9) {
-      req.error(400, `Partial quantity (${explicitLastQty}) exceeds available stock (${lastAvailStock}) of Storage Unit ${lastCleanId}. Goods Issue was NOT posted.`);
+    if (serverPartialQty >= fullStock) {
+      req.error(400, `Partial quantity (${serverPartialQty}) for Storage Unit ${partialSuId} cannot equal or exceed full stock (${fullStock}). Goods Issue was NOT posted.`);
       return false;
     }
-    if (openQty !== null && openQty > 0 && precedingSum + explicitLastQty > openQty + 1e-9) {
-      req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${lastCleanId} causes total (${precedingSum + explicitLastQty}) to exceed open reservation quantity (${openQty}). Partial above open qty rejected. Goods Issue was NOT posted.`);
+
+    // Tampered order check (Requirement 4): client's last SU in submittedSUs MUST be the server-chosen partial SU
+    const clientLastSuId = String(submittedSUs[numSUs - 1]).trim().toUpperCase();
+    if (clientLastSuId !== partialSuId) {
+      req.error(400, `Tampered StorageUnits order cannot move partial quantity to another Storage Unit. Server chooses ${partialSuId} for partial issue. Goods Issue was NOT posted.`);
       return false;
     }
-    lastSuQty = explicitLastQty;
-  } else if (numSUs === 1 && Number(normalized.IssueQty) < lastAvailStock) {
-    lastSuQty = Number(normalized.IssueQty);
-  } else if (Number(normalized.IssueQty) < precedingSum + lastAvailStock) {
-    const rem = Math.round((Number(normalized.IssueQty) - precedingSum) * 1000) / 1000;
-    if (rem > 0 && rem <= lastAvailStock) {
-      lastSuQty = rem;
+
+    if (explicitLastQty !== null) {
+      if (isNaN(explicitLastQty) || explicitLastQty <= 0) {
+        req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${partialSuId} must be greater than zero. Goods Issue was NOT posted.`);
+        return false;
+      }
+      if (explicitLastQty >= fullStock) {
+        req.error(400, `Partial quantity (${explicitLastQty}) cannot equal or exceed full stock (${fullStock}) of Storage Unit ${partialSuId}. Goods Issue was NOT posted.`);
+        return false;
+      }
+      if (openQty !== null && openQty > 0 && precedingSum + explicitLastQty > openQty + 1e-9) {
+        req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${partialSuId} causes total (${precedingSum + explicitLastQty}) to exceed open reservation quantity (${openQty}). Partial above open qty rejected. Goods Issue was NOT posted.`);
+        return false;
+      }
+      if (Math.abs(explicitLastQty - serverPartialQty) > 0.001) {
+        req.error(400, `Partial quantity (${explicitLastQty}) does not match server-calculated partial quantity (${serverPartialQty}) for Storage Unit ${partialSuId}. Goods Issue was NOT posted.`);
+        return false;
+      }
+    }
+  } else {
+    // No partial SU: all SUs must be full
+    if (explicitLastQty !== null) {
+      const clientLastSu = validSuMap.get(String(submittedSUs[numSUs - 1]).trim().toUpperCase());
+      const clientLastStock = clientLastSu ? Number(clientLastSu.AvailableStock || clientLastSu.CurrentStock || 0) : 0;
+      if (explicitLastQty < clientLastStock) {
+        req.error(400, `Partial quantity specified for Storage Unit ${submittedSUs[numSUs - 1]} but reservation requires full issue. Goods Issue was NOT posted.`);
+        return false;
+      }
     }
   }
 
-  const realSum = Math.round((precedingSum + lastSuQty) * 1000) / 1000;
+  const realSum = runningSum;
   const issueQty = Math.round(Number(normalized.IssueQty) * 1000) / 1000;
 
   // Tampered payload check: submitted IssueQty must equal real sum of SUs from SAP
@@ -310,13 +375,13 @@ async function postWithQueueFallback(req, normalized, postFn, onOutcome = async 
     await onOutcome('posted', { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
     return Object.assign({ Queued: false, QueueReference: '', SyncStatus: 'POSTED_IN_SAP' }, result);
   } catch (err) {
-    if (err.status === 400 || err.status === 422) {
+    if (err.status === 400 || err.status === 422 || /deficit|consumed|storage unit|insufficient stock/i.test(err.message || '')) {
       await onOutcome('rejected', { LastError: err.message });
       const message = err.message || 'Validation failed for Goods Issue';
       // Keep the original SAP text (e.g. closed posting period) available to the client.
       return Array.isArray(err.details) && err.details.length > 0
-        ? req.error({ code: err.code || String(err.status), status: err.status, message, details: err.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') })) })
-        : req.error(err.status, message);
+        ? req.error({ code: err.code || String(err.status || 400), status: err.status || 400, message, details: err.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') })) })
+        : req.error(err.status || 400, message);
     }
     // A plain 403 is an authorization/CSRF refusal, not an availability problem: it is surfaced below, not queued.
     if (err.status === 501 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {

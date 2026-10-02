@@ -770,5 +770,156 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(postSpy).not.toHaveBeenCalled();
       expect(enqueueSpy).not.toHaveBeenCalled();
     });
+
+    it('surfaces 400 without queueing when SAP rejects at post time because SU was consumed after re-read', async () => {
+      const stock = [];
+      const suList = [];
+      for (let i = 1; i <= 10; i++) {
+        const id = `DRUM_${String(i).padStart(2, '0')}`;
+        stock.push({ StorageUnit: id, AvailableStock: 48, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        suList.push(id);
+      }
+      setupMockSap({ openQty: 450, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue((() => {
+        const err = new Error('Deficit of SL Unrestricted-use: Storage Unit DRUM_05 was consumed in SAP');
+        err.status = 400;
+        return err;
+      })());
+      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
+
+      const req = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 18
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      await handlers['postGoodsIssue261'](req);
+      expect(postSpy).toHaveBeenCalled();
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Storage Unit DRUM_05 was consumed in SAP'));
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects tampered order of StorageUnits attempting to move partial quantity to another SU', async () => {
+      const stock = [];
+      const suList = [];
+      for (let i = 1; i <= 10; i++) {
+        const id = `DRUM_${String(i).padStart(2, '0')}`;
+        stock.push({ StorageUnit: id, AvailableStock: 48, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        suList.push(id);
+      }
+      setupMockSap({ openQty: 450, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
+
+      // Tampered order: client puts DRUM_10 first and DRUM_09 last to try to make DRUM_09 take the 18 KG partial
+      const tamperedList = ['DRUM_10', 'DRUM_01', 'DRUM_02', 'DRUM_03', 'DRUM_04', 'DRUM_05', 'DRUM_06', 'DRUM_07', 'DRUM_08', 'DRUM_09'];
+
+      const req = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: tamperedList,
+          LastStorageUnitQty: 18
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered StorageUnits order cannot move partial quantity to another Storage Unit'));
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    });
+
+    it('server rejects partial quantity <= 0 or >= that SU full stock', async () => {
+      const stock = [];
+      const suList = [];
+      for (let i = 1; i <= 10; i++) {
+        const id = `DRUM_${String(i).padStart(2, '0')}`;
+        stock.push({ StorageUnit: id, AvailableStock: 48, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        suList.push(id);
+      }
+      setupMockSap({ openQty: 450, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
+
+      // 1) partial = 0
+      const reqZero = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 0
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+      await handlers['postGoodsIssue261'](reqZero);
+      expect(reqZero.error).toHaveBeenCalledWith(400, expect.stringContaining('must be greater than zero'));
+
+      // 2) partial >= full stock (48)
+      const reqFull = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 48
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+      await handlers['postGoodsIssue261'](reqFull);
+      expect(reqFull.error).toHaveBeenCalledWith(400, expect.stringContaining('cannot equal or exceed full stock'));
+
+      // 3) partial > full stock (50)
+      const reqOver = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 50
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+      await handlers['postGoodsIssue261'](reqOver);
+      expect(reqOver.error).toHaveBeenCalledWith(400, expect.stringContaining('cannot equal or exceed full stock'));
+
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    });
   });
 });

@@ -4,6 +4,53 @@
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 
+## 2026-10-02 11:25 IST
+- **Agent**: Antigravity
+- **Request**: For 261 partial last SU (No live POST, no commit):
+  1. Show the exact SAP call path that reduces the quant (IM post vs WM transfer order) and whether the partial qty is sent to it. Report the gap before changing anything.
+  2. Server chooses which SU takes the partial, never the client's order. Reject partial <= 0 or >= that SU's full stock.
+  3. Test: SAP rejects at post time because the SU was consumed after the re-read -> surfaced 400, not queued.
+  4. Test: tampered order of StorageUnits cannot move the partial to another SU.
+  5. Run the full suite, report the total, update WORKSTATUS.md.
+- **Trace & SAP Facts (Read-Only)**:
+  - Exact SAP call path:
+    `postGoodsIssue261` -> `GoodsIssueAdapter.postGoodsIssue261(data)` -> `GoodsIssuePostingClient.post261(data)`.
+    - Tier 1 (Custom RAP V4): POST `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/.../postGoodsIssue` sending `{ IssueQty, Batch, DifferenceQty, DifferenceReason, DifferenceStorageType, FinalIssue }`.
+    - Tier 2 (Standard OData V2 Fallback): POST `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader` mapped via `GoodsIssue261Mapper.mapToMaterialDocumentPayload(data)` deep insert with `QuantityInEntryUnit: String(data.IssueQty)` and GoodsMovementCode `03`.
+  - IM Post vs WM Transfer Order & Quant Gap:
+    Both Tier 1 and Tier 2 are **IM (Inventory Management)** material document postings. In SAP LE-WM, an IM 261 posting creates an IM Material Document (`MBLNR`) and reduces stock only at the IM Plant/Storage Location level (`MARD`), creating an interim quant / Transfer Requirement (TR). It does **NOT** pick or reduce specific quants or Storage Units (`LENUM`) from warehouse bins in `LQUA`. A WM Transfer Order (`L_TO_CREATE_SINGLE` or `ZWM_TO_CREATE_FROM_TR` / `TrToAdapter`) is the actual SAP mechanism required to deduct specific quants/SUs from `LQUA`.
+  - Partial Qty Dispatch Gap:
+    The partial quantity (e.g. 18 KG) is validated in CAP domain logic (`storageUnitReconcileCheck261`) and merged into the aggregate `IssueQty` (450 KG). Only the total `IssueQty` is sent to SAP IM. The partial quantity itself is **NOT** sent as a separate field to SAP IM, and individual SU numbers (`StorageUnits: [...]`) are not dispatched to a WM Transfer Order in `postGoodsIssue261`.
+  - Server-Side Deterministic Partial SU Selection (Item 2 & 4):
+    Submitted SUs are sorted according to SAP's authoritative sequence (`sapOrderMap` from `sapStockUnits` FEFO/FIFO/StorageUnit order). The server deterministically identifies the single SU whose cumulative coverage fulfills the open reservation quantity. If a partial is required, the server validates `0 < partialQty < fullStock`. If the client's submitted order attempts to assign the partial to another SU (e.g. client's last SU differs from the server-chosen partial SU), the server detects tampering and rejects with HTTP 400 (`Tampered StorageUnits order cannot move partial quantity to another Storage Unit`).
+  - Post-Time Consumed SU Rejection (Item 3):
+    In `postWithQueueFallback`, errors from SAP at post time matching `/deficit|consumed|storage unit|insufficient stock/i` or status 400/422 are classified as `rejected`, surface as HTTP 400 via `req.error(400, ...)`, and are never queued.
+- **Changes**:
+  - `srv/wm/goods-issue/mapping/goodsIssue261.normalize.js`: preserved numeric `LastStorageUnitQty` even when zero/negative/invalid so server validator can inspect and reject it.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+    - Updated `storageUnitReconcileCheck261` to sort submitted SUs by SAP's authoritative sequence (`sapStockUnits` index), deterministically select the partial SU on the server, validate `0 < partialQty < fullStock`, and reject tampered client ordering with HTTP 400.
+    - Updated `postWithQueueFallback` error classification regex to guarantee that any SAP post-time stock deficit or consumed SU rejection is surfaced as HTTP 400 and never queued.
+  - `test/unit/wm/goodsIssue261SuScan.test.js`: added 3 new tests:
+    1. Surfaces 400 without queueing when SAP rejects at post time because SU was consumed after re-read.
+    2. Rejects tampered order of StorageUnits attempting to move partial quantity to another SU.
+    3. Server rejects partial quantity <= 0 or >= that SU full stock.
+- **Affected Files**:
+  - `srv/wm/goods-issue/mapping/goodsIssue261.normalize.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `test/unit/wm/goodsIssue261SuScan.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js`: 1 suite, 26/26 passed.
+  - `npx jest test/unit/wm`: 46 suites, 950/950 passed.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 1 suite, 7/7 passed.
+  - `npm test` (`jest --runInBand` full project suite): 133 suites, 2168/2168 passed (Full-suite pass count: 2168 passed, 0 failed).
+  - `cd app/fiori-app && npm run build`: UI5 build succeeded in 1.01 s with 0 errors.
+  - `git diff --check`: clean (0 errors).
+  - `git status`: 3 modified files (`goodsIssuePerType.handler.js`, `goodsIssue261.normalize.js`, `goodsIssue261SuScan.test.js`).
+- **Current Status**: Complete & Verified. Server-side deterministic partial SU selection enforced; tampered SU order rejected with HTTP 400 without queueing; post-time consumed SU errors surfaced as 400 without queueing; full project suite (133 suites, 2168 tests) 100% passing. No live POST executed, no git commit created.
+- **Next Steps**: Awaiting user instructions.
+
+
 ## 2026-10-02 11:15 IST
 - **Agent**: Antigravity
 - **Request**: For 261 SU scanning (No live POST, no commit):
