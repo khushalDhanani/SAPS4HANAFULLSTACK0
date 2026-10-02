@@ -10,7 +10,7 @@ const QUEUE_ENTITY = 'saps4hana.wm.GoodsIssueQueue';
 /** Statuses the re-check job still has to resolve against SAP. */
 const OPEN_STATUSES = ['sending', 'unconfirmed'];
 /** Statuses that end an attempt. */
-const FINAL_STATUSES = ['posted', 'rejected', 'not_posted'];
+const FINAL_STATUSES = ['posted', 'rejected', 'not_posted', 'needs-attention'];
 
 function envMs(name, fallback) {
   const n = Number(process.env[name]);
@@ -52,6 +52,9 @@ class GoodsIssueAttemptStore {
 
   /** Interval of the background re-check (GI_ATTEMPT_RECHECK_INTERVAL_MS, default 1 min; 0 disables it). */
   static recheckIntervalMs() { return envMs('GI_ATTEMPT_RECHECK_INTERVAL_MS', 60000); }
+
+  /** Maximum age for an unconfirmed attempt before marking needs-attention (GI_UNCONFIRMED_MAX_AGE_MS, default 30 min). */
+  static unconfirmedMaxAgeMs() { return envMs('GI_UNCONFIRMED_MAX_AGE_MS', 1800000); }
 
   /** Runs one query in its own root transaction (committed independently of the calling request). */
   _run(query) {
@@ -147,10 +150,11 @@ class GoodsIssueAttemptStore {
    * and clears unconfirmed flag on corresponding GoodsIssueIssuedStorageUnit claims.
    *
    * @param {Object} adapter - GoodsIssueAdapter or client
-   * @returns {Promise<{ Checked: number, Confirmed: number, StillUnconfirmed: number, Errors: number }>}
+   * @param {number} [now=Date.now()]
+   * @returns {Promise<{ Checked: number, Confirmed: number, StillUnconfirmed: number, MarkedNeedsAttention: number, Errors: number }>}
    */
-  async reconfirmUnconfirmed(adapter) {
-    const summary = { Checked: 0, Confirmed: 0, StillUnconfirmed: 0, Errors: 0 };
+  async reconfirmUnconfirmed(adapter, now = Date.now()) {
+    const summary = { Checked: 0, Confirmed: 0, StillUnconfirmed: 0, MarkedNeedsAttention: 0, Errors: 0 };
     if (!this.isAvailable()) return summary;
 
     let unconfirmedAttempts = [];
@@ -177,9 +181,12 @@ class GoodsIssueAttemptStore {
     }
 
     const suStore = require('./GoodsIssueIssuedSuStore');
+    const maxAge = GoodsIssueAttemptStore.unconfirmedMaxAgeMs();
 
     for (const attempt of unconfirmedAttempts) {
       summary.Checked++;
+      const age = now - new Date(attempt.createdAt || now).getTime();
+
       try {
         const verified = await readBack(attempt.MaterialDocument, attempt.MaterialDocYear);
         if (verified && verified.Confirmed) {
@@ -196,6 +203,12 @@ class GoodsIssueAttemptStore {
             );
           }
           summary.Confirmed++;
+        } else if (age >= maxAge) {
+          const finding = `Document unconfirmed after maximum age (${Math.round(age / 60000)} min); marked needs-attention`;
+          await this.setStatus(attempt.ReferenceDocument, 'needs-attention', {
+            LastError: finding
+          });
+          summary.MarkedNeedsAttention = (summary.MarkedNeedsAttention || 0) + 1;
         } else {
           summary.StillUnconfirmed++;
         }
@@ -207,7 +220,7 @@ class GoodsIssueAttemptStore {
 
     if (suStore && typeof suStore.reconfirmUnconfirmed === 'function') {
       try {
-        await suStore.reconfirmUnconfirmed(adapter);
+        await suStore.reconfirmUnconfirmed(adapter, now);
       } catch (suErr) {
         LOG.warn(`SU store reconfirmUnconfirmed error: ${suErr.message}`);
       }
@@ -219,7 +232,7 @@ class GoodsIssueAttemptStore {
   async recheck(adapter, now = Date.now()) {
     const summary = { Checked: 0, Posted: 0, NotPosted: 0, Requeued: 0, StillOpen: 0, Errors: 0 };
     if (!this.isAvailable()) return summary;
-    await this.reconfirmUnconfirmed(adapter).catch((err) => LOG.warn(`reconfirmUnconfirmed failed inside recheck: ${err.message}`));
+    await this.reconfirmUnconfirmed(adapter, now).catch((err) => LOG.warn(`reconfirmUnconfirmed failed inside recheck: ${err.message}`));
     const open = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } }));
     const ageOf = (a) => now - new Date(a.createdAt).getTime();
     const due = (Array.isArray(open) ? open : []).filter((a) => ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs());

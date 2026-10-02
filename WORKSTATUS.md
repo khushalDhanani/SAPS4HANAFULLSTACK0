@@ -6,6 +6,151 @@
 
 
 
+## 2026-10-02 15:10 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit).
+  1. Legacy guard (checkLegacyMatdocMatches): the time window must start BEFORE the original attempt, not at queue time. Use stored attempt time if present, else queue time minus (HTTP timeout + 5 min). Keep reservation, item, user, date, qty and reversal exclusion. Lookup error -> needs-attention, never replay. Test: document posted 10s before queue record is found; lookup error -> no replay.
+  2. Re-confirm job: retry schedule and maximum age; past it, mark needs-attention. Test it. Unconfirmed wording in UI must read as "posted, confirmation pending", not as an error.
+  3. Read-back timeout: pass an abort signal if client supports it, otherwise cap concurrent read-backs. Test it.
+  4. Confirm manual resolve action exists for NEEDS_ATTENTION queue items.
+  5. Put one complete list of schema changes to deploy into WORKSTATUS.md.
+  6. Do not commit. Propose commit plan by feature slice (classifier, 201 idempotency, 261 SU scan, issued-SU store/claims, queue, read-back), listing files per slice, and flag files that need `git add -p` because they mix features. Run full suite and report total.
+- **Architectural & Design Implementation**:
+  - **Legacy Guard Time Window & Safe Failure (Requirement 1)**:
+    - In `GoodsIssuePostingClient.checkLegacyMatdocMatches`: window start calculation updated: `storedAttemptTime ? new Date(storedAttemptTime).getTime() : (queueTimeMs - (httpTimeoutMs + 300000))`. Documents posted prior to queue insertion (e.g. 10 seconds before queue creation while SAP processed the post) are successfully matched.
+    - Preserved exact matching on reservation (`RSNUM`), item (`RSPOS`), user (`USNAM`), date (`BUDAT`/`CPUDT`), quantity (`MENGE`/`ERFMG`), and cancellation/reversal exclusions (`STORNO`, `SMBLN`, `XAUTO`, `BWART 262`).
+    - In `GoodsIssueQueueManager.drainQueue` and `goodsIssue.handler.js` (`retryQueuedGoodsIssue`): if `matdocChecker` throws an error (RFC disconnect, Gateway table lock), the transaction transitions to `SyncStatus: 'NEEDS_ATTENTION'` with error details in `LastSyncError`, and replay is skipped (never replays).
+  - **Re-confirm Job & Unconfirmed UI Messaging (Requirement 2)**:
+    - Added `unconfirmedMaxAgeMs` (default 30 min / 1,800,000 ms, `GI_UNCONFIRMED_MAX_AGE_MS`) to `GoodsIssueAttemptStore` and `GoodsIssueIssuedSuStore`.
+    - Added `'needs-attention'` to `FINAL_STATUSES`. In `GoodsIssueAttemptStore.reconfirmUnconfirmed(adapter, now)`: attempts older than max age transition to status `'needs-attention'`.
+    - In `GoodsIssueIssuedSuStore.reconfirmUnconfirmed(adapter, now)`: active unconfirmed SU claims older than max age transition to `'needs-attention'` (`NeedsAttention: true`).
+    - Standardized unconfirmed user-facing terminology: updated `GoodsIssuePostingClient` messages to `' (posted, confirmation pending)'`, `ConfirmationStatus` to `'POSTED_CONFIRMATION_PENDING'`, and fallback status to `'posted, confirmation pending'`.
+    - In `GoodsIssue261.controller.js`, `GoodsIssue201.controller.js`, and `GoodsIssueTransferBaseController.js`: unconfirmed results trigger `MessageBox.success` displaying `"posted, confirmation pending"`; they are never treated as errors. Added `giConfirmationPending` to `i18n.properties` and `i18n_en.properties`.
+  - **Read-Back Abort Signal & Concurrency Throttling (Requirement 3)**:
+    - In `BaseGoodsIssueClient._get`: options (including `signal`) are forwarded to `this.client.get`. If `options` is empty, calls 2-argument signature for full backward compatibility.
+    - In `GoodsIssuePostingClient.readBackDocument`: if client supports abort (`supportsAbort: true`), passes `controller.signal` to `client.abortSignal`.
+    - Introduced `maxConcurrentReadBacks` (default 5, `GI_MAX_CONCURRENT_READBACKS`) with FIFO semaphore (`_acquireReadBackSlot(signal)` / `_releaseReadBackSlot()`). If max concurrency is reached, subsequent read-back calls wait asynchronously until an active slot is released or the timeout aborts the request.
+  - **Manual Resolve Action Verification (Requirement 4)**:
+    - Verified `resolveQueueItemManual(queueId, action, materialDocument, materialDocYear, reason)` exists and is fully operational in `srv/wm/goods-issue/service.cds`, `srv/wm/goods-issue/handlers/goodsIssue.handler.js`, and `srv/wm/goods-issue/GoodsIssueQueueManager.js`.
+- **Master List of Schema Changes to Deploy (Requirement 5)**:
+  - **Table 1: `saps4hana.wm.GoodsIssueQueue`** (`db/wm/goods-issue-queue.cds`):
+    - `ID : UUID` (Key)
+    - `createdAt, createdBy, modifiedAt, modifiedBy : Managed`
+    - `QueueReference : String(40)` (UUID format, backward compatible with legacy `GI-QUEUE-*`)
+    - `ReservationNo : String(10)`, `ReservationItem : String(4)`, `OrderNo : String(12)`
+    - `Material : String(40)`, `MaterialDesc : String(80)`, `Plant : String(4)`, `StorageLocation : String(4)`
+    - `Batch : String(10)`, `ExpiryDate : Date`, `IssueQty : Decimal(13, 3)`, `Unit : String(10)`
+    - `DifferenceQty : Decimal(13, 3)`, `DifferenceReason : String(4)`, `DifferenceStorageType : String(3)`, `FinalIssue : Boolean`
+    - `MovementType : String(3) default '261'`
+    - `ReceivingPlant : String(4)`, `ReceivingStorageLocation : String(4)`
+    - `CostCenter : String(10)`, `GLAccount : String(10)`
+    - `SerialNumber : String(18)`, `StorageUnits : LargeString`
+    - `PostingDate : Date`, `DocumentDate : Date`
+    - `ReferenceDocument : String(16)` (Idempotency reference sent to SAP)
+    - `SyncStatus : String(30)` (`'QUEUED'`, `'SYNCING'`, `'POSTED_IN_SAP'`, `'FAILED'`, `'NEEDS_ATTENTION'`)
+    - `SyncAttempts : Integer default 0`, `LastSyncError : String(500)`
+    - `SapMaterialDocument : String(10)`, `SapMaterialDocYear : String(4)`
+    - `QueuedAt : Timestamp`, `SyncedAt : Timestamp`
+  - **Table 2: `saps4hana.wm.GoodsIssueIssuedStorageUnit`** (`db/wm/goods-issue-issued-su.cds`):
+    - `ID : UUID` (Key)
+    - `createdAt, createdBy, modifiedAt, modifiedBy : Managed`
+    - `MaterialDocument : String(10)`, `MaterialDocYear : String(4)`
+    - `ReservationNo : String(10)`, `ReservationItem : String(4)`, `ReferenceDocument : String(16)`
+    - `StorageUnit : String(20)`, `Material : String(40)`, `Plant : String(4)`, `StorageLocation : String(4)`
+    - `IssuedQty : Decimal(13, 3)`, `PreIssueStock : Decimal(13, 3)`
+    - `Status : String(20) default 'claiming'` (`'claiming'`, `'issued'`, `'released'`, `'needs-attention'`)
+    - `ReleasedAt : Timestamp`, `ReleaseReason : String(50)`
+    - `NeedsAttention : Boolean default false`
+    - `Confirmed : Boolean default true`
+    - `ManualResolveAction : String(20)`
+    - *Index*: `ClaimLookupIdx` on `(Material, Plant, StorageLocation, Status)`
+  - **Table 3: `saps4hana.wm.GoodsIssueSuLock`** (`db/wm/goods-issue-issued-su.cds`):
+    - `StorageUnit : String(20)` (Key)
+    - `LockVersion : Integer default 1`, `updatedAt : Timestamp`
+  - **Table 4: `saps4hana.wm.GoodsIssuePostingAttempt`** (`db/wm/goods-issue-attempt.cds`):
+    - `ID : UUID` (Key)
+    - `createdAt, createdBy, modifiedAt, modifiedBy : Managed`
+    - `ReferenceDocument : String(16)`
+    - `MovementType : String(3)`, `ReservationNo : String(10)`, `ReservationItem : String(4)`
+    - `Material : String(40)`, `Plant : String(4)`, `StorageLocation : String(4)`, `CostCenter : String(10)`
+    - `IssueQty : Decimal(13, 3)`, `Unit : String(10)`, `PostingUser : String(255)`, `PostingDate : Date`
+    - `Status : String(20)` (`'sending'`, `'posted'`, `'rejected'`, `'queued'`, `'unconfirmed'`, `'needs-attention'`, `'not_posted'`)
+    - `ResolvedAt : Timestamp`, `MaterialDocument : String(10)`, `MaterialDocYear : String(4)`, `LastError : String(500)`
+  - **CDS Service Views & Actions** (`srv/wm/goods-issue/service.cds`):
+    - Projections: `GoodsIssueService.GoodsIssueQueue`, `GoodsIssueService.GoodsIssueIssuedStorageUnit`
+    - Actions: `resolveClaimManual(claimId, action, materialDocument, materialDocYear)`
+    - Actions: `resolveQueueItemManual(queueId, action, materialDocument, materialDocYear, reason)`
+    - Types: `Confirmed : Boolean`, `ConfirmationStatus : String(30)`, `QueueId : String(36)` added to `GISubmitLineResult` and `GIPostResult`.
+- **Commit Plan by Feature Slice (Requirement 6)**:
+  - **Slice 1: Classifier (S/4 error mapping & classification)**:
+    - Files: `srv/integration/s4hana/wm/goods-issue/S4ErrorMapper.js`, `test/unit/wm/goodsIssueErrorClassification.test.js`
+    - Mixed files requiring `git add -p`:
+      - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js` (stage `_reclassifyPostingError`, `_isReversibleBusinessError`)
+      - `test/unit/wm/goodsIssuePerTypePostingClient.test.js` (stage error classification test cases)
+  - **Slice 2: 201 Idempotency (Pre-call attempt logging & recovery)**:
+    - Files: `db/wm/goods-issue-attempt.cds`, `test/unit/wm/goodsIssue201Controller.test.js`
+    - Mixed files requiring `git add -p`:
+      - `srv/wm/goods-issue/GoodsIssueAttemptStore.js` (stage `create`, `setStatus`, `getByReference`, `recheck`)
+      - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js` (stage `postGoodsIssue201` attempt recording)
+      - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js` (stage validation and route outcome handling)
+      - `test/unit/wm/goodsIssueAttempt.test.js` (stage 201 attempt logging and idempotency tests)
+  - **Slice 3: 261 SU Scan (Order GI SU scanning & partial issue)**:
+    - Files: `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `test/unit/wm/goodsIssue261Controller.test.js`
+    - Mixed files requiring `git add -p`:
+      - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js` (stage scan-to-complete and required field checks)
+      - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js` (stage 261 SU verification logic)
+  - **Slice 4: Issued-SU Store & Claims (IM-WM double allocation guard & lock)**:
+    - Files: `db/wm/goods-issue-issued-su.cds`, `test/unit/wm/goodsIssueIssuedSu.test.js`
+    - Mixed files requiring `git add -p`:
+      - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js` (stage `acquireClaims`, `promoteClaims`, `releaseByLquaDropOrReversal`, `resolveClaimManual`, `markNeedsAttention`)
+      - `srv/wm/goods-issue/handlers/goodsIssue.handler.js` (stage `resolveClaimManual` handler)
+      - `srv/wm/goods-issue/service.cds` (stage `GoodsIssueIssuedStorageUnit` entity and `resolveClaimManual` action)
+  - **Slice 5: Queue (CAP dispatch queue, UUID migration, legacy MATDOC guard)**:
+    - Files: `db/wm/goods-issue-queue.cds`, `test/integration/wm/goodsIssueQueue.test.js`, `test/unit/wm/goodsIssueQueueManager.test.js`
+    - Mixed files requiring `git add -p`:
+      - `srv/wm/goods-issue/GoodsIssueQueueManager.js` (stage queue management, pre-replay MATDOC check, and manual resolve)
+      - `srv/wm/goods-issue/handlers/goodsIssue.handler.js` (stage `retryQueuedGoodsIssue`, `resolveQueueItemManual`, `clearQueuedGoodsIssue`)
+      - `srv/wm/goods-issue/service.cds` (stage `GoodsIssueQueue` projection and `resolveQueueItemManual` action)
+  - **Slice 6: Read-back & Unconfirmed (Post-post verification, timeout, throttling & re-confirm)**:
+    - Files: `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`, `app/fiori-app/webapp/i18n/i18n.properties`, `app/fiori-app/webapp/i18n/i18n_en.properties`
+    - Mixed files requiring `git add -p`:
+      - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js` (stage `readBackDocument`, abort signal, `_acquireReadBackSlot`, `_releaseReadBackSlot`, confirmation pending messages)
+      - `srv/wm/goods-issue/GoodsIssueAttemptStore.js` (stage `reconfirmUnconfirmed`, `unconfirmedMaxAgeMs`)
+      - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js` (stage `reconfirmUnconfirmed`, unconfirmed max age check)
+      - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js` (stage "posted, confirmation pending" display)
+      - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js` (stage "posted, confirmation pending" display)
+      - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js` (stage "posted, confirmation pending" display)
+      - `test/unit/wm/goodsIssuePerTypePostingClient.test.js` (stage read-back timeout, abort signal, and concurrency cap tests)
+      - `test/unit/wm/goodsIssueAttempt.test.js` (stage re-confirm and max age tests)
+- **Affected Files in Current Working Directory**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`
+  - `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+  - `srv/wm/goods-issue/GoodsIssueAttemptStore.js`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `test/unit/wm/goodsIssueAttempt.test.js`
+  - `test/unit/wm/goodsIssuePerTypePostingClient.test.js`
+  - `test/unit/wm/goodsIssueQueueManager.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Passed cleanly (0 whitespace/formatting errors).
+  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: 17/17 passed (100%).
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js`: 22/22 passed (100%).
+  - `npx jest test/unit/wm/goodsIssuePerTypePostingClient.test.js`: 19/19 passed (100%).
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssue201Controller.test.js`: 86/86 passed (100%).
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: 63/63 passed (100%).
+  - `npm test`: 134 suites, 2,231/2,231 passed (100% green).
+  - Zero live SAP POST calls made.
+  - Zero git commits made.
+- **Current Status**: Complete & Verified. All 6 requirements satisfied and validated across the entire 134-suite test harness.
+- **Next Recommended Action**: Execute staging via the proposed slice-by-slice commit plan using `git add -p` on mixed files.
+
 ## 2026-10-02 14:25 IST
 - **Agent**: Antigravity
 - **Request**: Branch feature/CL01 (No live POST, no commit).

@@ -276,7 +276,7 @@ describe('unconfirmed documents and re-confirm job', () => {
       MaterialDocYear: '2026',
       Success: true,
       Confirmed: false,
-      ConfirmationStatus: 'NOT_YET_CONFIRMED'
+      ConfirmationStatus: 'POSTED_CONFIRMATION_PENDING'
     });
 
     const res = await handlers.postGoodsIssue261(req(suPayload));
@@ -298,7 +298,7 @@ describe('unconfirmed documents and re-confirm job', () => {
       MaterialDocYear: '2026',
       Success: true,
       Confirmed: false,
-      ConfirmationStatus: 'NOT_YET_CONFIRMED'
+      ConfirmationStatus: 'POSTED_CONFIRMATION_PENDING'
     });
     const res201 = await handlers.postGoodsIssue201(req(payload));
     expect(res201).toBeDefined();
@@ -370,5 +370,65 @@ describe('unconfirmed documents and re-confirm job', () => {
     const activeAfter = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
     const updatedSu = activeAfter.find((r) => r.StorageUnit === 'SU9902');
     expect(updatedSu.Confirmed).toBe(true);
+  });
+
+  test('reconfirmUnconfirmed marks attempt and SU claims needs-attention past maximum age', async () => {
+    // 1. Setup attempt in 'unconfirmed' status
+    const refDoc = 'GICONFIRM002';
+    await attempts.create({
+      ReferenceDocument: refDoc,
+      MovementType: '201',
+      Material: '1000000980',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      IssueQty: 1,
+      Unit: 'NOS'
+    });
+    await attempts.setStatus(refDoc, 'unconfirmed', {
+      MaterialDocument: '4900088888',
+      MaterialDocYear: '2026'
+    });
+
+    // 2. Setup SU claim with Confirmed: false
+    const claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
+      reservationNo: '0000142002',
+      reservationItem: '0001',
+      material: '1000000980',
+      plant: '1120',
+      storageLocation: 'HS01',
+      referenceDocument: refDoc,
+      items: [{ storageUnit: 'SU9903', issuedQty: 1, preIssueStock: 10 }]
+    });
+    await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
+      materialDocument: '4900088888',
+      materialDocYear: '2026',
+      confirmed: false
+    });
+
+    // 3. Mock adapter.readBackDocument to return unconfirmed (e.g. still commit lag or not found)
+    jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({
+      MaterialDocument: '4900088888',
+      MaterialDocYear: '2026',
+      Confirmed: false,
+      Status: 'posted, confirmation pending'
+    });
+
+    // 4. Run reconfirmUnconfirmed job past max age (e.g. 35 minutes later)
+    const maxAge = attempts.constructor.unconfirmedMaxAgeMs();
+    const pastMaxAgeTime = Date.now() + maxAge + 5000;
+    const summary = await attempts.reconfirmUnconfirmed(GoodsIssueAdapter, pastMaxAgeTime);
+    expect(summary.Checked).toBe(1);
+    expect(summary.MarkedNeedsAttention).toBe(1);
+
+    // 5. Verify attempt is now 'needs-attention'
+    const updatedAttempt = await attempts.getByReference(refDoc);
+    expect(updatedAttempt.Status).toBe('needs-attention');
+    expect(updatedAttempt.LastError).toContain('marked needs-attention');
+
+    // 6. Verify SU claim is also marked needs-attention
+    const activeAfter = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
+    const suClaim = activeAfter.find((r) => r.StorageUnit === 'SU9903');
+    expect(suClaim.Status).toBe('needs-attention');
+    expect(suClaim.NeedsAttention).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 const cds = require('@sap/cds');
+const LOG = cds.log('goods-issue-queue');
 const crypto = require('crypto');
 const GoodsIssueAttemptStore = require('./GoodsIssueAttemptStore');
 const GoodsIssueIssuedSuStore = require('./GoodsIssueIssuedSuStore');
@@ -368,10 +369,22 @@ class GoodsIssueQueueManager {
 
       if (isLegacy && matdocChecker) {
         let checkResult = null;
+        let checkError = null;
         try {
           checkResult = await matdocChecker(item);
         } catch (chkErr) {
           LOG.warn ? LOG.warn(`Pre-replay MATDOC check failed for legacy queue row ${item.QueueReference}: ${chkErr.message}`) : undefined;
+          checkError = chkErr;
+        }
+        if (checkError) {
+          const finding = `Pre-replay SAP MATDOC check error: ${checkError.message}; operator attention required before replay`;
+          await this.update(item.QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 0) + 1,
+            LastSyncError: finding,
+            SyncStatus: 'NEEDS_ATTENTION'
+          });
+          failedCount++;
+          continue;
         }
         if (checkResult && checkResult.count > 0) {
           const isAmbiguous = checkResult.count > 1;

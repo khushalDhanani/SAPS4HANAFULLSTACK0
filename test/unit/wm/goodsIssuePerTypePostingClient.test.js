@@ -93,7 +93,7 @@ test('postByMovementType routes 311 to post311 (not 301/261)', async () => {
 });
 
 describe('readBackDocument & commit-lag handling', () => {
-  test('returns SAP document marked "not yet confirmed" when readBackDocument finds nothing due to commit lag', async () => {
+  test('returns SAP document marked "posted, confirmation pending" when readBackDocument finds nothing due to commit lag', async () => {
     const client = new GoodsIssuePostingClient({});
     client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
     client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
@@ -102,18 +102,18 @@ describe('readBackDocument & commit-lag handling', () => {
       MaterialDocument: '4900099999',
       MaterialDocYear: '2026',
       Confirmed: false,
-      Status: 'not yet confirmed'
+      Status: 'posted, confirmation pending'
     });
 
     const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
     expect(res.Success).toBe(true);
     expect(res.MaterialDocument).toBe('4900099999');
     expect(res.Confirmed).toBe(false);
-    expect(res.ConfirmationStatus).toBe('NOT_YET_CONFIRMED');
-    expect(res.Message).toContain('(not yet confirmed)');
+    expect(res.ConfirmationStatus).toBe('POSTED_CONFIRMATION_PENDING');
+    expect(res.Message).toContain('(posted, confirmation pending)');
   });
 
-  test('returns SAP document marked "not yet confirmed" when readBackDocument errors', async () => {
+  test('returns SAP document marked "posted, confirmation pending" when readBackDocument errors', async () => {
     const client = new GoodsIssuePostingClient({});
     client.rfc = {
       readTable: jest.fn().mockRejectedValue(new Error('RFC connection reset during readback'))
@@ -125,7 +125,7 @@ describe('readBackDocument & commit-lag handling', () => {
       MaterialDocument: '4900099999',
       MaterialDocYear: '2026',
       Confirmed: false,
-      Status: 'not yet confirmed'
+      Status: 'posted, confirmation pending'
     });
   });
 
@@ -206,7 +206,7 @@ describe('readBackDocument & commit-lag handling', () => {
         MaterialDocument: '4900099999',
         MaterialDocYear: '2026',
         Confirmed: false,
-        Status: 'not yet confirmed'
+        Status: 'posted, confirmation pending'
       });
     } finally {
       clearTimeout(t1);
@@ -219,15 +219,15 @@ describe('readBackDocument & commit-lag handling', () => {
     client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
     client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
     client.readBackDocument = jest.fn().mockImplementation(async (doc, yr) => {
-      return { MaterialDocument: doc, MaterialDocYear: yr, Confirmed: false, Status: 'not yet confirmed' };
+      return { MaterialDocument: doc, MaterialDocYear: yr, Confirmed: false, Status: 'posted, confirmation pending' };
     });
 
     const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
     expect(res.Success).toBe(true);
     expect(res.MaterialDocument).toBe('4900099999');
     expect(res.Confirmed).toBe(false);
-    expect(res.ConfirmationStatus).toBe('NOT_YET_CONFIRMED');
-    expect(res.Message).toContain('(not yet confirmed)');
+    expect(res.ConfirmationStatus).toBe('POSTED_CONFIRMATION_PENDING');
+    expect(res.Message).toContain('(posted, confirmation pending)');
   });
 
   test('hanging readBackDocument in post261 returns unconfirmed document and never produces 504', async () => {
@@ -238,7 +238,7 @@ describe('readBackDocument & commit-lag handling', () => {
       MaterialDocument: '4900088888',
       MaterialDocYear: '2026',
       Confirmed: false,
-      Status: 'not yet confirmed'
+      Status: 'posted, confirmation pending'
     });
 
     const res = await client.post261({
@@ -254,8 +254,56 @@ describe('readBackDocument & commit-lag handling', () => {
     expect(res.Success).toBe(true);
     expect(res.MaterialDocument).toBe('4900088888');
     expect(res.Confirmed).toBe(false);
-    expect(res.ConfirmationStatus).toBe('NOT_YET_CONFIRMED');
-    expect(res.Message).toContain('(not yet confirmed)');
+    expect(res.ConfirmationStatus).toBe('POSTED_CONFIRMATION_PENDING');
+    expect(res.Message).toContain('(posted, confirmation pending)');
+  });
+
+  test('readBackDocument passes abort signal if client supports abort', async () => {
+    const mockHttpClient = {
+      supportsAbort: true,
+      abortSignal: null,
+      get: jest.fn().mockImplementation((path, opts) => {
+        expect(opts).toBeDefined();
+        expect(opts.signal).toBeDefined();
+        return Promise.resolve({ data: { d: { MaterialDocument: '4900011111', MaterialDocumentYear: '2026' } } });
+      })
+    };
+    const client = new GoodsIssuePostingClient({ client: mockHttpClient });
+    client.rfc = null; // force OData path
+
+    const res = await client.readBackDocument('4900011111', '2026');
+    expect(mockHttpClient.abortSignal).toBeDefined();
+    expect(res.Confirmed).toBe(true);
+    expect(res.MaterialDocument).toBe('4900011111');
+  });
+
+  test('readBackDocument caps concurrent read-backs when maxConcurrentReadBacks is reached', async () => {
+    const client = new GoodsIssuePostingClient({ maxConcurrentReadBacks: 2 });
+    let concurrent = 0;
+    let maxObservedConcurrent = 0;
+
+    client.rfc = {
+      readTable: jest.fn(async () => {
+        concurrent++;
+        maxObservedConcurrent = Math.max(maxObservedConcurrent, concurrent);
+        await new Promise((r) => setTimeout(r, 20));
+        concurrent--;
+        return [{ MBLNR: '4900000001', MJAHR: '2026' }];
+      })
+    };
+
+    const promises = [
+      client.readBackDocument('4900000001', '2026'),
+      client.readBackDocument('4900000002', '2026'),
+      client.readBackDocument('4900000003', '2026'),
+      client.readBackDocument('4900000004', '2026'),
+      client.readBackDocument('4900000005', '2026')
+    ];
+
+    const results = await Promise.all(promises);
+    expect(results).toHaveLength(5);
+    expect(maxObservedConcurrent).toBeLessThanOrEqual(2);
+    results.forEach((r) => expect(r.Confirmed).toBe(true));
   });
 });
 

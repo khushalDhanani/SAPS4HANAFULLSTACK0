@@ -299,10 +299,21 @@ class GoodsIssueHandler {
         : null;
       if (isLegacy && matdocChecker) {
         let checkResult = null;
+        let checkError = null;
         try {
           checkResult = await matdocChecker(item);
         } catch (chkErr) {
           LOG.warn(`Pre-replay MATDOC check failed for legacy queue row ${QueueReference}: ${chkErr.message}`);
+          checkError = chkErr;
+        }
+        if (checkError) {
+          const finding = `Pre-replay SAP MATDOC check error: ${checkError.message}; operator attention required before replay`;
+          await GoodsIssueQueueManager.update(QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 0) + 1,
+            LastSyncError: finding,
+            SyncStatus: 'NEEDS_ATTENTION'
+          });
+          return req.error(409, `Queued transaction ${QueueReference} cannot be retried: ${finding}`);
         }
         if (checkResult && checkResult.count > 0) {
           const isAmbiguous = checkResult.count > 1;

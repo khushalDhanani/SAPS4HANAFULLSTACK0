@@ -7,6 +7,7 @@ const { GoodsIssueQueueManager, QueueStoreUnavailableError } = queueSingleton;
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 
 function sapPostingUnavailable() {
   const err = new Error('SAP S/4HANA Backend Posting Capability Unavailable: posting service not activated');
@@ -262,6 +263,12 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
 
       // 3. Replay through retryQueuedGoodsIssue
       const handlers = fakeService();
+      jest.spyOn(GoodsIssueAdapter, 'checkLegacyMatdocMatches').mockResolvedValueOnce({
+        count: 0,
+        matches: [],
+        ambiguous: false,
+        match: null
+      });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValueOnce({
         MaterialDocument: '4900005678',
         MaterialDocYear: '2026',
@@ -381,6 +388,74 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       const item = await manager.get(legacyRef);
       expect(item.SyncStatus).toBe('POSTED_IN_SAP');
       expect(item.SapMaterialDocument).toBe('4900099888');
+    });
+
+    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: lookup error -> needs-attention, never replay', async () => {
+      const legacyRef = 'GI-QUEUE-142001-0001-7045';
+      await manager.enqueue({
+        QueueReference: legacyRef,
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        Material: '1000000514',
+        IssueQty: 10,
+        Unit: 'KG'
+      });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
+      jest.spyOn(GoodsIssueAdapter, 'checkLegacyMatdocMatches').mockRejectedValue(
+        new Error('SAP RFC Gateway table lock timeout')
+      );
+
+      const drainResult = await manager.drainQueue(GoodsIssueAdapter);
+      expect(drainResult.Attempted).toBe(1);
+      expect(drainResult.SyncedToSap).toBe(0);
+      expect(drainResult.Failed).toBe(1);
+      expect(postSpy).not.toHaveBeenCalled();
+
+      const item = await manager.get(legacyRef);
+      expect(item.SyncStatus).toBe('NEEDS_ATTENTION');
+      expect(item.LastSyncError).toContain('Pre-replay SAP MATDOC check error');
+      expect(item.LastSyncError).toContain('operator attention required before replay');
+    });
+
+    it('checkLegacyMatdocMatches: document posted 10 seconds before queue record is found in time window', async () => {
+      const client = new GoodsIssuePostingClient({});
+      const queueTime = new Date('2026-10-02T10:00:10Z');
+      const docTime = new Date('2026-10-02T10:00:00Z'); // 10 seconds before queue record
+
+      client.rfc = {
+        readTable: jest.fn().mockResolvedValue([
+          {
+            MBLNR: '4900011223',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '261',
+            RSNUM: '0000142001',
+            RSPOS: '0001',
+            USNAM: 'TESTUSER',
+            BUDAT: '20261002',
+            CPUDT: '20261002',
+            CPUTM: '100000',
+            MENGE: 10,
+            STORNO: '',
+            SMBLN: '',
+            createdAt: docTime.toISOString()
+          }
+        ])
+      };
+
+      const result = await client.checkLegacyMatdocMatches({
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        CreatedByUser: 'TESTUSER',
+        PostingDate: '2026-10-02',
+        IssueQty: 10,
+        QueuedAt: queueTime.toISOString()
+      });
+
+      expect(result.count).toBe(1);
+      expect(result.match).toBeDefined();
+      expect(result.match.MBLNR).toBe('4900011223');
     });
   });
 });

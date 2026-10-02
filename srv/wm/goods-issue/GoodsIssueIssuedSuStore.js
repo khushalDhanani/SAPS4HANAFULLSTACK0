@@ -54,6 +54,24 @@ class GoodsIssueIssuedSuStore {
   static staleClaimAgeMs() { return envMs('GI_CLAIMING_STALE_AGE_MS', 300000); }
   static needsAttentionAgeMs() { return envMs('GI_CLAIMING_NEEDS_ATTENTION_MS', 1800000); }
   static releaseIntervalMs() { return envMs('GI_SU_RELEASE_INTERVAL_MS', 60000); }
+  static unconfirmedMaxAgeMs() { return envMs('GI_UNCONFIRMED_MAX_AGE_MS', 1800000); }
+
+  async markNeedsAttention(id) {
+    if (!id) return;
+    const rec = this._memoryStore.get(id);
+    if (rec) {
+      rec.Status = 'needs-attention';
+      rec.NeedsAttention = true;
+      this._memoryStore.set(id, rec);
+    }
+    if (this.db) {
+      try {
+        await this._run(UPDATE(ISSUED_SU_ENTITY).set({ Status: 'needs-attention', NeedsAttention: true }).where({ ID: id }));
+      } catch (err) {
+        LOG.warn(`Failed to set needs-attention on SU claim ${id}: ${err.message}`);
+      }
+    }
+  }
 
   /**
    * Returns true when an error indicates that the request NEVER reached SAP
@@ -459,13 +477,14 @@ class GoodsIssueIssuedSuStore {
 
   /**
    * Retries read-back for any active issued storage units that are not yet confirmed,
-   * clearing the flag if SAP confirms persistence.
+   * clearing the flag if SAP confirms persistence or marking needs-attention past max age.
    *
    * @param {Object} adapter
-   * @returns {Promise<{ checked: number, confirmed: number }>}
+   * @param {number} [now=Date.now()]
+   * @returns {Promise<{ checked: number, confirmed: number, markedNeedsAttention: number }>}
    */
-  async reconfirmUnconfirmed(adapter) {
-    const summary = { checked: 0, confirmed: 0 };
+  async reconfirmUnconfirmed(adapter, now = Date.now()) {
+    const summary = { checked: 0, confirmed: 0, markedNeedsAttention: 0 };
     const readBack = (adapter && typeof adapter.readBackDocument === 'function')
       ? adapter.readBackDocument.bind(adapter)
       : (adapter && adapter.client && typeof adapter.client.readBackDocument === 'function')
@@ -476,6 +495,7 @@ class GoodsIssueIssuedSuStore {
 
     if (!readBack) return summary;
 
+    const maxAge = GoodsIssueIssuedSuStore.unconfirmedMaxAgeMs();
     const activeRows = await this.getActiveIssuedSUs();
     const unconfirmed = (Array.isArray(activeRows) ? activeRows : []).filter(
       (r) => r.Status === 'issued' && r.Confirmed === false && r.MaterialDocument
@@ -483,14 +503,22 @@ class GoodsIssueIssuedSuStore {
 
     for (const row of unconfirmed) {
       summary.checked++;
+      const age = now - new Date(row.createdAt || row.CreatedAt || now).getTime();
       try {
         const verified = await readBack(row.MaterialDocument, row.MaterialDocYear);
         if (verified && verified.Confirmed) {
           await this.clearUnconfirmedFlag(row.MaterialDocument, verified.MaterialDocYear || row.MaterialDocYear);
           summary.confirmed++;
+        } else if (age >= maxAge) {
+          await this.markNeedsAttention(row.ID);
+          summary.markedNeedsAttention++;
         }
       } catch (err) {
         LOG.warn(`SU reconfirm readback failed for doc ${row.MaterialDocument}: ${err.message}`);
+        if (age >= maxAge) {
+          await this.markNeedsAttention(row.ID);
+          summary.markedNeedsAttention++;
+        }
       }
     }
 

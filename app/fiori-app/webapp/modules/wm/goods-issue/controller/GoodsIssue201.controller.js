@@ -612,6 +612,9 @@ sap.ui.define([
                         res.MaterialDocument || "",
                         res.MaterialDocYear || ""
                     ]);
+                    if (res && (res.Confirmed === false || res.ConfirmationStatus === 'POSTED_CONFIRMATION_PENDING')) {
+                        sDocMsg += " (" + that.getText("giConfirmationPending") + ")";
+                    }
 
                     MessageBox.success(sDocMsg, {
                         title: that.getText("gi201PostSuccessTitle"),

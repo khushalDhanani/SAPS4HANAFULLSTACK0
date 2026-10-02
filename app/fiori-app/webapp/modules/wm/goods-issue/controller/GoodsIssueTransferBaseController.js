@@ -583,6 +583,9 @@ sap.ui.define([
                         res.MaterialDocument || "",
                         res.MaterialDocYear || ""
                     ]);
+                    if (res && (res.Confirmed === false || res.ConfirmationStatus === 'POSTED_CONFIRMATION_PENDING')) {
+                        sDocMsg += " (" + that._t("ConfirmationPending", null, "posted, confirmation pending") + ")";
+                    }
 
                     MessageBox.success(sDocMsg, {
                         title: that._t("PostSuccessTitle"),

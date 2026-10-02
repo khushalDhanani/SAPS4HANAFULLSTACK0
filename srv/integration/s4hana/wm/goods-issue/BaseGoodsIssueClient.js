@@ -75,14 +75,18 @@ class BaseGoodsIssueClient {
    * HTTP GET against an S/4HANA OData service.
    * Delegates to adapter if present so that Jest spies on adapter._get intercept.
    */
-  async _get(servicePath, queryParams = '') {
+  async _get(servicePath, queryParams = '', options = null) {
     if (this.adapter && typeof this.adapter._get === 'function') {
-      return this.adapter._get(servicePath, queryParams);
+      return (options && Object.keys(options).length > 0)
+        ? this.adapter._get(servicePath, queryParams, options)
+        : this.adapter._get(servicePath, queryParams);
     }
     try {
-      const { data } = await this.client.get(servicePath, { query: queryParams });
+      const getOpts = { query: queryParams, ...(options || {}) };
+      const { data } = await this.client.get(servicePath, getOpts);
       return data?.d?.results || data?.d || data?.value || [];
     } catch (err) {
+      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') throw err;
       if (err.code === DESTINATION_NOT_CONFIGURED) throw err;
       throw S4ErrorMapper.mapS4Error(err);
     }

@@ -34,6 +34,41 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
     this.rfc = options.rfc || (options.adapter && options.adapter.rfc) || new RfcClient();
     this.readBackTimeoutMs = options.readBackTimeoutMs || Number(process.env.GI_READBACK_TIMEOUT_MS) || 5000;
+    this.maxConcurrentReadBacks = options.maxConcurrentReadBacks || Number(process.env.GI_MAX_CONCURRENT_READBACKS) || 5;
+    this._activeReadBacks = 0;
+    this._readBackWaiters = [];
+  }
+
+  async _acquireReadBackSlot(signal) {
+    if (this._activeReadBacks < this.maxConcurrentReadBacks) {
+      this._activeReadBacks++;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject };
+      if (signal && typeof signal.addEventListener === 'function') {
+        const onAbort = () => {
+          const idx = this._readBackWaiters.indexOf(waiter);
+          if (idx >= 0) this._readBackWaiters.splice(idx, 1);
+          const err = new Error('Read-back slot acquisition aborted');
+          err.name = 'AbortError';
+          reject(err);
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        waiter.cleanup = () => signal.removeEventListener('abort', onAbort);
+      }
+      this._readBackWaiters.push(waiter);
+    });
+  }
+
+  _releaseReadBackSlot() {
+    this._activeReadBacks = Math.max(0, this._activeReadBacks - 1);
+    while (this._readBackWaiters.length > 0 && this._activeReadBacks < this.maxConcurrentReadBacks) {
+      const next = this._readBackWaiters.shift();
+      if (next.cleanup) next.cleanup();
+      this._activeReadBacks++;
+      next.resolve();
+    }
   }
 
   /**
@@ -164,12 +199,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       verified = await this.readBackDocument(rawMatDoc, rawMatYear);
     } catch (rbErr) {
       LOG.warn(`readBackDocument error in _submitMaterialDocument for ${rawMatDoc}: ${rbErr.message}`);
-      verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'not yet confirmed' };
+      verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'posted, confirmation pending' };
     }
     const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
     const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
     const isConfirmed = Boolean(verified?.Confirmed);
-    const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
+    const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
     return {
       ReservationNo: String(meta.reservationNo || ''),
       ReservationItem: String(meta.reservationItem || ''),
@@ -181,7 +216,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       DifferenceQty: 0,
       Success: true,
       Confirmed: isConfirmed,
-      ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+      ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
       Message: `${meta.label} ${meta.mvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`
     };
   }
@@ -219,8 +254,24 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       MaterialDocument: sDoc,
       MaterialDocYear: sYear,
       Confirmed: false,
-      Status: 'not yet confirmed'
+      Status: 'posted, confirmation pending'
     };
+
+    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const signal = options.signal || controller?.signal;
+    const clientRef = options.client || this.client;
+    if (clientRef && clientRef.supportsAbort) {
+      clientRef.abortSignal = signal;
+    }
+
+    let slotAcquired = false;
+    try {
+      await this._acquireReadBackSlot(signal);
+      slotAcquired = true;
+    } catch (acqErr) {
+      LOG.warn(`Could not acquire read-back slot: ${acqErr.message}`);
+      return unconfirmedFallback;
+    }
 
     const doReadBack = async () => {
       // 1. Primary: RFC readTable on MATDOC
@@ -287,7 +338,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         } else {
           docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json`;
         }
-        const res = await this._get(docPath, '$format=json');
+        const res = await this._get(docPath, '$format=json', { signal });
         const header = Array.isArray(res) ? res[0] : (res?.d || res);
         if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
           let confirmedYear = String(header.MaterialDocumentYear || '').trim();
@@ -315,6 +366,9 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       const timeoutPromise = new Promise((resolve) => {
         timer = setTimeout(() => {
           LOG.warn(`readBackDocument for ${sDoc}/${sYear} timed out after ${timeoutMs}ms; returning unconfirmed document`);
+          if (controller) {
+            try { controller.abort(); } catch (_) {}
+          }
           resolve(unconfirmedFallback);
         }, timeoutMs);
       });
@@ -331,6 +385,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       return unconfirmedFallback;
     } finally {
       if (timer) clearTimeout(timer);
+      if (slotAcquired) this._releaseReadBackSlot();
     }
   }
 
@@ -646,12 +701,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         verified = await this.readBackDocument(tier1MatDoc, tier1MatYear);
       } catch (rbErr) {
         LOG.warn(`readBackDocument error after RAP post: ${rbErr.message}`);
-        verified = { MaterialDocument: tier1MatDoc, MaterialDocYear: tier1MatYear, Confirmed: false, Status: 'not yet confirmed' };
+        verified = { MaterialDocument: tier1MatDoc, MaterialDocYear: tier1MatYear, Confirmed: false, Status: 'posted, confirmation pending' };
       }
       const matDoc = verified?.MaterialDocument || String(tier1MatDoc).trim();
       const matYear = verified?.MaterialDocYear || String(tier1MatYear).trim();
       const isConfirmed = Boolean(verified?.Confirmed);
-      const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
+      const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
       return {
         ReservationNo: sReserv,
         ReservationItem: sItem,
@@ -663,7 +718,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         DifferenceQty: 0,
         Success: true,
         Confirmed: isConfirmed,
-        ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+        ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
         Message: `Goods Issue 261 posted successfully in S/4HANA${confirmationText}.`
       };
     }
@@ -873,12 +928,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             verified = await this.readBackDocument(rawMatDoc, rawMatYear);
           } catch (rbErr) {
             LOG.warn(`readBackDocument error in post261Batch for ${rawMatDoc}: ${rbErr.message}`);
-            verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'not yet confirmed' };
+            verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'posted, confirmation pending' };
           }
           const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
           const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
           const isConfirmed = Boolean(verified?.Confirmed);
-          const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
+          const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
           const results = items.map(item => {
             const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
             const sItem = rawItem ? rawItem.padStart(4, '0') : '';
@@ -892,7 +947,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
               DifferenceQty: nDiffQty,
               Success: true,
               Confirmed: isConfirmed,
-              ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+              ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
               Message: `Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`
             };
           });
@@ -900,7 +955,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           return {
             AllPosted: true,
             Confirmed: isConfirmed,
-            ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+            ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
             Results: results,
             Messages: [`Batch Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (Material Document: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`]
           };
@@ -1077,8 +1132,19 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const sDate = item.PostingDate || item.DocumentDate || item.QueuedAt || item.createdAt;
     const dDay = sDate ? this._formatDate(sDate).replace(/-/g, '') : '';
     const expectedQty = item.IssueQty != null ? Number(item.IssueQty) : null;
-    const queueTime = item.QueuedAt || item.createdAt;
-    const queueTimeMs = queueTime ? new Date(queueTime).getTime() : null;
+    const storedAttemptTime = item.AttemptStartedAt || item.AttemptTime || item.AttemptCreatedAt || item.attemptStartedAt || item.attemptTime || item.attemptCreatedAt;
+    let windowStartMs = null;
+    if (storedAttemptTime) {
+      windowStartMs = new Date(storedAttemptTime).getTime();
+    } else {
+      const queueTime = item.QueuedAt || item.createdAt || item.queuedAt;
+      if (queueTime) {
+        const queueTimeMs = new Date(queueTime).getTime();
+        const httpTimeoutMs = Number(process.env.S4_HTTP_TIMEOUT_MS) || 30000;
+        const bufferMs = httpTimeoutMs + (5 * 60 * 1000); // HTTP timeout + 5 min
+        windowStartMs = queueTimeMs - bufferMs;
+      }
+    }
 
     const where = [
       `RSNUM = '${rsnum}'`,
@@ -1149,8 +1215,8 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         }
       }
 
-      // Timestamp filter: must be created at or after the queue time
-      if (queueTimeMs !== null && Number.isFinite(queueTimeMs)) {
+      // Timestamp filter: must be created within the window starting BEFORE the original attempt
+      if (windowStartMs !== null && Number.isFinite(windowStartMs)) {
         let docTimeMs = null;
         if (r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp) {
           docTimeMs = new Date(r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp).getTime();
@@ -1165,7 +1231,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           const ss = cputm.slice(4, 6);
           docTimeMs = new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}Z`).getTime();
         }
-        if (docTimeMs !== null && Number.isFinite(docTimeMs) && docTimeMs < queueTimeMs) {
+        if (docTimeMs !== null && Number.isFinite(docTimeMs) && docTimeMs < windowStartMs) {
           return false;
         }
       }
