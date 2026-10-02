@@ -43,35 +43,11 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
   }
 
   _getQueueManager() {
-    if (this.queueManager) return this.queueManager;
-    if (this.adapter && this.adapter.queueManager) return this.adapter.queueManager;
-    try {
-      return require('../../../../wm/goods-issue/GoodsIssueQueueManager');
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   async _getPendingQueueCounts() {
-    const counts = { '201': 0, '261': 0, '301': 0, '311': 0, total: 0 };
-    try {
-      const qm = this._getQueueManager();
-      if (qm && typeof qm.getAll === 'function') {
-        const items = await qm.getAll();
-        if (Array.isArray(items)) {
-          for (const item of items) {
-            const mvt = String(item.MovementType || '261').trim();
-            if (counts[mvt] !== undefined) {
-              counts[mvt]++;
-            }
-            counts.total++;
-          }
-        }
-      }
-    } catch (err) {
-      LOG.warn(`Could not read pending queue counts: ${err.message}`);
-    }
-    return counts;
+    return { '201': 0, '261': 0, '301': 0, '311': 0, total: 0 };
   }
 
   /**

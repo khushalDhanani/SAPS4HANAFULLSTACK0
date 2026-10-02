@@ -14,7 +14,6 @@ const GoodsIssue311Model = require(path.join(W, 'model/GoodsIssue311Model'));
 const GoodsIssue301Model = require(path.join(W, 'model/GoodsIssue301Model'));
 const GoodsIssueReservationsClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 
 describe('311 prefill from a reservation item', () => {
@@ -128,13 +127,12 @@ describe('server posts the reservation values, not the client values', () => {
   const req = (data) => ({ data, user: { id: 'TESTER' }, error: jest.fn() });
   const resv = { Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Batch: '', OpenQty: 2 };
   const body = { ReservationNo: '519367', ReservationItem: '0001', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', IssueQty: 2, Unit: 'NOS' };
-  let post, enqueue;
+  let post;
 
   beforeEach(() => {
     jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ ...resv });
     jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
     post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311').mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2026' });
-    enqueue = jest.spyOn(GoodsIssueQueueManager, 'enqueue').mockResolvedValue({ QueueReference: 'Q1' });
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -143,12 +141,11 @@ describe('server posts the reservation values, not the client values', () => {
     ['Plant', { Plant: '1130', ReceivingPlant: '1130' }],
     ['Storage Location', { StorageLocation: 'RD01' }],
     ['Receiving Storage Location', { ReceivingStorageLocation: 'MT01' }]
-  ])('311: tampered %s -> 400, not posted, not queued', async (label, tamper) => {
+  ])('311: tampered %s -> 400, not posted', async (label, tamper) => {
     const r = req({ ...body, ...tamper });
     await handlers.postGoodsIssue311(r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining(label));
     expect(post).not.toHaveBeenCalled();
-    expect(enqueue).not.toHaveBeenCalled();
   });
 
   test('311: values the client left out are taken from the reservation', async () => {
@@ -175,7 +172,6 @@ describe('server posts the reservation values, not the client values', () => {
     await handlers[action](r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('do not match reservation'));
     posts.forEach((p) => expect(p).not.toHaveBeenCalled());
-    expect(enqueue).not.toHaveBeenCalled();
   });
 
   test('301: serial-managed material with too few serials -> 400 before SAP', async () => {

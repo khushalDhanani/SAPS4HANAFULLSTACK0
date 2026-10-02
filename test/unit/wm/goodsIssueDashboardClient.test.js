@@ -197,25 +197,25 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
 
       const data = await client.getDashboardData({ days: 30, plant: '1120' });
 
-      // KPI Checks
+      // KPI Checks — OpenPendingCount reflects open reservations directly (queue eliminated)
       expect(data.Kpis.Mvt201.TotalCount).toBe(1);
-      expect(data.Kpis.Mvt201.OpenPendingCount).toBe(2); // 1 reservation + 1 queued
+      expect(data.Kpis.Mvt201.OpenPendingCount).toBe(1); // 1 reservation
       expect(data.Kpis.Mvt201.TodayPostingsCount).toBe(1);
 
       expect(data.Kpis.Mvt261.TotalCount).toBe(2);
-      expect(data.Kpis.Mvt261.OpenPendingCount).toBe(3); // 2 reservations + 1 queued
+      expect(data.Kpis.Mvt261.OpenPendingCount).toBe(2); // 2 reservations
       expect(data.Kpis.Mvt261.TodayPostingsCount).toBe(1);
 
       expect(data.Kpis.Mvt301.TotalCount).toBe(1);
-      expect(data.Kpis.Mvt301.OpenPendingCount).toBe(1); // 1 reservation + 0 queued
+      expect(data.Kpis.Mvt301.OpenPendingCount).toBe(1); // 1 reservation
       expect(data.Kpis.Mvt301.TodayPostingsCount).toBe(0);
 
       expect(data.Kpis.Mvt311.TotalCount).toBe(1);
-      expect(data.Kpis.Mvt311.OpenPendingCount).toBe(1); // 0 reservation + 1 queued
+      expect(data.Kpis.Mvt311.OpenPendingCount).toBe(0); // 0 reservations
       expect(data.Kpis.Mvt311.TodayPostingsCount).toBe(0);
 
       expect(data.Kpis.Overall.TotalCount).toBe(5);
-      expect(data.Kpis.Overall.OpenPendingCount).toBe(7);
+      expect(data.Kpis.Overall.OpenPendingCount).toBe(4); // 1 + 2 + 1 + 0 = 4
       expect(data.Kpis.Overall.TodayPostingsCount).toBe(2);
 
       // Distribution checks

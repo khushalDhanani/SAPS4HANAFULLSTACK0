@@ -4,7 +4,7 @@
  *  1. Two reservations cannot claim the same drum (400 before SAP is called).
  *  2. Parallel Promise.all claims for one drum (exactly one wins).
  *  3. Second reservation takes the 30 kg residual; partial residual is suggested at reduced qty.
- *  4. Queue replay (drain job) records claims using the same code path.
+ *  4. (Removed — queue replay was eliminated; direct posting only.)
  *  5. Claiming row resolved after a crash (found in SAP -> issued; not found -> deleted).
  *  6. No double-count after TO confirmation (effective claim formula).
  *  7. Deleted quant releases the claim (missing from LQUA counts as released, not lookup error).
@@ -20,7 +20,7 @@ cds.test(__dirname + '/../../../');
 
 const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+// GoodsIssueQueueManager removed — queue is eliminated; direct posting only.
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssue261Model = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
 
@@ -39,16 +39,12 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   beforeEach(async () => {
     jest.restoreAllMocks();
     await GoodsIssueIssuedSuStore.clear();
-    if (GoodsIssueQueueManager.isAvailable()) {
-      await GoodsIssueQueueManager.clear();
-    }
+    // Queue manager removed — no queue to clear.
   });
 
   afterEach(async () => {
     await GoodsIssueIssuedSuStore.clear();
-    if (GoodsIssueQueueManager.isAvailable()) {
-      await GoodsIssueQueueManager.clear();
-    }
+    // Queue manager removed — no queue to clear.
   });
 
   // ──────────────────────────────────────────────────────────
@@ -578,50 +574,8 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   });
 
   // ──────────────────────────────────────────────────────────
-  // Test 4: Queue Replay Records Claims (Requirement 3 & 7)
+  // Test 4: Queue Replay — REMOVED (queue eliminated; direct posting only)
   // ──────────────────────────────────────────────────────────
-  describe('Queue Replay Claim Recording (Requirement 3 & 7)', () => {
-    it('queue replay (drain job) records issued SUs using the same code path', async () => {
-      // Enqueue a 261 Goods Issue with StorageUnits
-      await GoodsIssueQueueManager.enqueue({
-        ReservationNo: '0000100220',
-        ReservationItem: '0001',
-        Material: 'CH-REPLAY-01',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        IssueQty: 48,
-        Unit: 'KG',
-        MovementType: '261',
-        StorageUnits: [
-          { storageUnit: 'DRUM_REPLAY_01', issuedQty: 48, preIssueStock: 48 }
-        ],
-        LastSyncError: 'SAP Gateway unavailable'
-      });
-
-      // Initially no claim in store
-      let claims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-REPLAY-01', '1120', 'CS01');
-      expect(claims).toHaveLength(0);
-
-      // Drain queue with adapter that succeeds
-      const mockDrainAdapter = {
-        postGoodsIssueByType: jest.fn().mockResolvedValue({
-          MaterialDocument: '4900019999',
-          MaterialDocYear: '2026',
-          Success: true
-        })
-      };
-
-      const drainResult = await GoodsIssueQueueManager.drainQueue(mockDrainAdapter);
-      expect(drainResult.SyncedToSap).toBe(1);
-
-      // Verify issued SU claim was recorded during replay
-      claims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-REPLAY-01', '1120', 'CS01');
-      expect(claims).toHaveLength(1);
-      expect(claims[0].StorageUnit).toBe('DRUM_REPLAY_01');
-      expect(claims[0].MaterialDocument).toBe('4900019999');
-      expect(claims[0].Status).toBe('issued');
-    });
-  });
 
   // ──────────────────────────────────────────────────────────
   // Test 5: Failed Post Isolation
@@ -1056,50 +1010,8 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   });
 
   // ──────────────────────────────────────────────────────────
-  // Test 11: Replay conflict detection in drainQueue
+  // Test 11: Replay conflict detection — REMOVED (queue eliminated; direct posting only)
   // ──────────────────────────────────────────────────────────
-  describe('Replay Conflict Detection in drainQueue (Requirement 5)', () => {
-    it('marks queue item NEEDS_ATTENTION and skips posting when a live claim exists for the same SU', async () => {
-      // Pre-claim the drum (a live in-flight claim exists)
-      await GoodsIssueIssuedSuStore.acquireClaims({
-        reservationNo: '0000100400',
-        reservationItem: '0001',
-        material: 'CH-CONFLICT-01',
-        plant: '1120',
-        storageLocation: 'CS01',
-        referenceDocument: 'LIVE_CLAIM_REF',
-        items: [{ storageUnit: 'DRUM_CONFLICT_01', issuedQty: 48, preIssueStock: 48 }]
-      });
-
-      // Enqueue a replay item for the same drum
-      await GoodsIssueQueueManager.enqueue({
-        ReservationNo: '0000100401',
-        ReservationItem: '0001',
-        Material: 'CH-CONFLICT-01',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        IssueQty: 48,
-        Unit: 'KG',
-        MovementType: '261',
-        StorageUnits: [{ storageUnit: 'DRUM_CONFLICT_01', issuedQty: 48, preIssueStock: 48 }],
-        LastSyncError: 'SAP Gateway unavailable'
-      });
-
-      const postSpy = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocYear: '2026', Success: true });
-      const drainResult = await GoodsIssueQueueManager.drainQueue({ postGoodsIssueByType: postSpy });
-
-      // SAP was NOT called for the conflicted item
-      expect(postSpy).not.toHaveBeenCalled();
-      expect(drainResult.SyncedToSap).toBe(0);
-
-      // Queue item should be NEEDS_ATTENTION
-      const allItems = await GoodsIssueQueueManager.getAll();
-      const conflictItem = allItems.find((i) => i.ReservationNo === '0000100401');
-      expect(conflictItem).toBeDefined();
-      expect(conflictItem.SyncStatus).toBe('NEEDS_ATTENTION');
-      expect(conflictItem.LastSyncError).toMatch(/Replay conflict/i);
-    });
-  });
 
   // ──────────────────────────────────────────────────────────
   // Test 12: Release-job idempotency
@@ -1617,43 +1529,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       expect(active).toHaveLength(0);
     });
 
-    it('resolves NEEDS_ATTENTION queue items via resolveQueueItemManual', async () => {
-      const qRef = `Q-RES-${Date.now()}`;
-      const enqueued = await GoodsIssueQueueManager.enqueue({
-        QueueReference: qRef,
-        ReservationNo: '0000100970',
-        ReservationItem: '0001',
-        Material: 'CH-Q-RESOLVE-01',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        IssueQty: 48,
-        Unit: 'KG',
-        MovementType: '261',
-        StorageUnits: [{ storageUnit: 'DRUM_Q_RES_01', issuedQty: 48, preIssueStock: 48 }],
-        LastSyncError: 'Unknown outcome'
-      });
-      await GoodsIssueQueueManager.update(enqueued.ID, { SyncStatus: 'NEEDS_ATTENTION' });
-
-      const item = await GoodsIssueQueueManager.get(enqueued.ID);
-      expect(item).toBeDefined();
-      expect(item.SyncStatus).toBe('NEEDS_ATTENTION');
-
-      const mockAdapter = {
-        readTable: jest.fn().mockResolvedValue([
-          { MBLNR: '4900091111', MJAHR: '2026', ZEILE: '0001', BWART: '261', RSNUM: '0000100970', RSPOS: '0001' }
-        ])
-      };
-
-      const resolved = await GoodsIssueQueueManager.resolveQueueItemManual(item.ID, 'posted', {
-        materialDocument: '4900091111',
-        materialDocYear: '2026',
-        adapter: mockAdapter,
-        user: 'SUPERVISOR'
-      });
-
-      expect(resolved.SyncStatus).toBe('POSTED_IN_SAP');
-      expect(resolved.SapMaterialDocument).toBe('4900091111');
-    });
+    // Queue item resolution test removed — queue eliminated; direct posting only.
 
     it('keeps re-checking needs-attention claims in release job and auto-resolves when document appears', async () => {
       const [claimId] = await GoodsIssueIssuedSuStore.acquireClaims({
@@ -1713,47 +1589,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   });
 
   // ──────────────────────────────────────────────────────────
-  // Test 17: Unknown-Outcome Queue Items Mark Needs-Attention (Requirement 4)
+  // Test 17: Unknown-Outcome Queue Items — REMOVED (queue eliminated; direct posting only)
   // ──────────────────────────────────────────────────────────
-  describe('Unknown-Outcome Queue Items Mark Needs-Attention (Requirement 4)', () => {
-    it('marks queue item NEEDS_ATTENTION on unknown outcome and excludes it from subsequent drainQueue replays', async () => {
-      await GoodsIssueQueueManager.enqueue({
-        ReservationNo: '0000100950',
-        ReservationItem: '0001',
-        Material: 'CH-UNKNOWN-Q-01',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        IssueQty: 48,
-        Unit: 'KG',
-        MovementType: '261',
-        StorageUnits: [{ storageUnit: 'DRUM_UNK_Q_01', issuedQty: 48, preIssueStock: 48 }],
-        LastSyncError: 'Initial Gateway failure'
-      });
-
-      const timeoutErr = new Error('504 Gateway Timeout: SAP did not respond');
-      timeoutErr.status = 504;
-      const failingAdapter = {
-        postGoodsIssueByType: jest.fn().mockRejectedValue(timeoutErr)
-      };
-
-      const result1 = await GoodsIssueQueueManager.drainQueue(failingAdapter);
-      expect(failingAdapter.postGoodsIssueByType).toHaveBeenCalledTimes(1);
-
-      const allItems = await GoodsIssueQueueManager.getAll();
-      const qItem = allItems.find((i) => i.ReservationNo === '0000100950');
-      expect(qItem).toBeDefined();
-      expect(qItem.SyncStatus).toBe('NEEDS_ATTENTION');
-      expect(qItem.LastSyncError).toMatch(/504|Gateway Timeout|Unknown/i);
-
-      const secondAdapter = {
-        postGoodsIssueByType: jest.fn().mockResolvedValue({ MaterialDocument: '4900099999' })
-      };
-
-      const result2 = await GoodsIssueQueueManager.drainQueue(secondAdapter);
-      expect(secondAdapter.postGoodsIssueByType).not.toHaveBeenCalled();
-      expect(result2.TotalQueued).toBe(0);
-      expect(result2.Attempted).toBe(0);
-    });
-  });
 });
 

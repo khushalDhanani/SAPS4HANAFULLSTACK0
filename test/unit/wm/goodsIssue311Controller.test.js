@@ -666,20 +666,10 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             expect(mockMessageBox.success).toHaveBeenCalledWith('gi311PostSuccessMsg', expect.objectContaining({ title: 'gi311PostSuccessTitle' }));
         });
 
-        it('shows MessageBox.warning and keeps hasPosted false on a queued result', async () => {
-            mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
-            mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ Queued: true, Message: 'Recorded in dispatch queue' });
+        // Queue tests removed — dispatch queue eliminated; direct posting only.
+        // The controller now shows MessageBox.error (not warning) when no MaterialDocument is returned.
 
-            controller.onPostGoodsIssue();
-            await flush();
-
-            const oModel = controller.getView().getModel('gi311');
-            expect(oModel.getProperty('/hasPosted')).toBe(false);
-            expect(mockMessageBox.warning).toHaveBeenCalledWith('Recorded in dispatch queue', expect.objectContaining({ title: 'giPostQueuedTitle' }));
-            expect(mockMessageBox.success).not.toHaveBeenCalled();
-        });
-
-        it('treats a missing MaterialDocument as queued (warning, not success)', async () => {
+        it('treats a missing MaterialDocument as an error, not success', async () => {
             mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
             mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ Message: 'No document number returned' });
 
@@ -688,7 +678,7 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
 
             const oModel = controller.getView().getModel('gi311');
             expect(oModel.getProperty('/hasPosted')).toBe(false);
-            expect(mockMessageBox.warning).toHaveBeenCalled();
+            expect(mockMessageBox.error).toHaveBeenCalled();
             expect(mockMessageBox.success).not.toHaveBeenCalled();
         });
 
@@ -725,27 +715,6 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
                 }
             });
             expect(mockMessageBox.success).not.toHaveBeenCalled();
-        });
-
-        it('onPostGoodsIssue with fromReservation:true and queued result returns to wmGoodsIssue311Pending with queue ref', async () => {
-            mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
-            mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ Queued: true, QueueId: 'Q-311-001' });
-
-            const oModel = controller.getView().getModel('gi311');
-            oModel.setProperty('/fromReservation', true);
-            oModel.setProperty('/reservationNo', '519367');
-            oModel.setProperty('/reservationItem', '0010');
-
-            controller.onPostGoodsIssue();
-            await flush();
-
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending', {
-                '?query': {
-                    resv: '519367',
-                    item: '0010',
-                    queued: 'Q-311-001'
-                }
-            });
         });
     });
 

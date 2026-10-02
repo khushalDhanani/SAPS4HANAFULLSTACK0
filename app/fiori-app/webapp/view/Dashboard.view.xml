@@ -581,12 +581,6 @@
                                         <Title text="{i18n>tabEWMHeading}" level="H3" titleStyle="H4" />
                                         <Text text="{i18n>tabEWMSubheading}" class="textMuted" />
                                     </VBox>
-                                    <Button
-                                        id="btnDashboardQueueTray"
-                                        text="{i18n>wmGIQueueTrayBtn}"
-                                        icon="sap-icon://inbox"
-                                        type="Transparent"
-                                        press=".onOpenQueueTray" />
                                 </HBox>
 
                                 <MessageStrip

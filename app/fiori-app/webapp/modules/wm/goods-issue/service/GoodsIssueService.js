@@ -8,10 +8,8 @@ sap.ui.define([
 
     /**
      * GoodsIssueService (shared)
-     * Now only the Goods Issue Dashboard KPIs and the dispatch-queue summary use this shared service;
-     * each movement type (201/261/301/311) has its own dedicated service. The former
-     * reservation / stock / queue-mutation / stock-unit helper methods (and the OData V4 list-binding
-     * shims) were removed as dead code after the per-type split.
+     * Provides Goods Issue Dashboard KPIs; each movement type (201/261/301/311)
+     * has its own dedicated service. All goods issue transactions post directly to S/4HANA.
      */
     var GoodsIssueService = {
         /**
@@ -28,17 +26,6 @@ sap.ui.define([
          */
         getModel: function () {
             return _oModel;
-        },
-
-        /**
-         * Dispatch-queue summary for the dashboard.
-         * @returns {Promise<Object>}
-         */
-        getQueueSummary: function () {
-            return ODataClient.get(BASE_PATH + "/getQueueSummary()")
-                .then(function (oData) {
-                    return oData || { QueuedCount: 0, Items: [] };
-                });
         },
 
         /**
@@ -66,32 +53,6 @@ sap.ui.define([
             return ODataClient.get(sQuery).then(function (oData) {
                 return oData || null;
             });
-        },
-
-        /**
-         * Retry a queued goods issue transaction against live SAP by internal queue ID.
-         * @param {string} sId - CAP UUID of the queue item
-         * @returns {Promise<Object>}
-         */
-        retryQueuedGoodsIssue: function (sId) {
-            return ODataClient.post(BASE_PATH + "/retryQueuedGoodsIssue", { ID: sId });
-        },
-
-        /**
-         * Remove an item from the dispatch queue by internal queue ID.
-         * @param {string} sId - CAP UUID of the queue item
-         * @returns {Promise<boolean>}
-         */
-        clearQueuedGoodsIssue: function (sId) {
-            return ODataClient.post(BASE_PATH + "/clearQueuedGoodsIssue", { ID: sId });
-        },
-
-        /**
-         * Replay all pending queued goods issue transactions against live SAP.
-         * @returns {Promise<Object>}
-         */
-        drainQueue: function () {
-            return ODataClient.post(BASE_PATH + "/drainQueue", {});
         }
     };
 

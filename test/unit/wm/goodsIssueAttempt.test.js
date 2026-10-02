@@ -8,7 +8,6 @@ cds.test(__dirname + '/../../../');
 
 const attempts = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const { ATTEMPT_ENTITY } = attempts;
-const queue = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
@@ -35,7 +34,6 @@ describe('Goods Issue 201 posting attempts', () => {
 
   beforeEach(async () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
-    await queue.clear();
     jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
   });
   afterEach(() => jest.restoreAllMocks());
@@ -56,27 +54,17 @@ describe('Goods Issue 201 posting attempts', () => {
     });
 
     test.each([
-      ['rejected', Object.assign(new Error('Cost center does not exist'), { status: 400 })],
-      ['rejected', Object.assign(new Error('HTTP 403 Forbidden'), { status: 403 })],
-      ['unconfirmed', Object.assign(new Error('may still appear'), { status: 504, code: 'GI_POSTING_UNCONFIRMED' })],
-      ['unconfirmed', Object.assign(new Error('outcome unknown'), { status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' })]
-    ])('ends as %s for %p and is not queued', async (status, err) => {
+      ['never_reached (503)', Object.assign(new Error('service offline'), { status: 503 }), 503, 'rejected', /service unreachable/i],
+      ['never_reached (501)', Object.assign(new Error('posting capability unavailable'), { status: 501 }), 503, 'rejected', /service unreachable or posting capability unavailable/i],
+      ['rejected_by_sap (400)', Object.assign(new Error('Cost center does not exist'), { status: 400 }), 400, 'rejected', /Cost center does not exist/],
+      ['auth_error (403)', Object.assign(new Error('HTTP 403 Forbidden'), { status: 403 }), 403, 'rejected', /SU53/],
+      ['unknown_outcome (504)', Object.assign(new Error('may still appear'), { status: 504, code: 'GI_POSTING_UNCONFIRMED' }), 504, 'unconfirmed', /unconfirmed/i]
+    ])('classifies error %s properly to HTTP %i and attempt status %s', async (_label, err, expectedStatus, expectedAttemptStatus, msgPattern) => {
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(err);
       const r = req(payload);
       await handlers.postGoodsIssue201(r);
-      expect(r.error).toHaveBeenCalled();
-      expect((await allAttempts())[0].Status).toBe(status);
-      expect(await queue.getAll()).toHaveLength(0);
-    });
-
-    test('ends as queued and the queue record takes the reference of the attempt', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error('SAP S/4HANA Backend Posting Capability Unavailable'), { status: 501 }));
-      const res = await handlers.postGoodsIssue201(req(payload));
-      const [row] = await allAttempts();
-      const [queued] = await queue.getAll();
-      expect(res.Queued).toBe(true);
-      expect(row.Status).toBe('queued');
-      expect(queued.ReferenceDocument).toBe(row.ReferenceDocument);
+      expect(r.error).toHaveBeenCalledWith(expectedStatus, expect.stringMatching(msgPattern));
+      expect((await allAttempts())[0].Status).toBe(expectedAttemptStatus);
     });
 
     test('a pre-check rejection ends as rejected without calling SAP', async () => {
@@ -122,7 +110,7 @@ describe('Goods Issue 201 posting attempts', () => {
 
       await attempts.recheck(GoodsIssueAdapter, Date.now() + 14 * MIN);
       expect(await statusOf('GILOST00001')).toBe('unconfirmed');
-      expect(await attempts.recheck(GoodsIssueAdapter, Date.now() + 16 * MIN)).toMatchObject({ NotPosted: 1, Requeued: 0 });
+      expect(await attempts.recheck(GoodsIssueAdapter, Date.now() + 16 * MIN)).toMatchObject({ NotPosted: 1 });
       expect(await attempts.getByReference('GILOST00001')).toMatchObject({ Status: 'not_posted' });
     });
 
@@ -139,95 +127,6 @@ describe('Goods Issue 201 posting attempts', () => {
       const find = lookup();
       expect(await attempts.recheck(GoodsIssueAdapter, Date.now() + 60 * MIN)).toMatchObject({ Checked: 0 });
       expect(find).not.toHaveBeenCalled();
-    });
-
-    test('a queued item whose replay was unconfirmed: found -> queue record done; not found -> back to queued', async () => {
-      for (const ref of ['GIQFOUND001', 'GIQGONE0001']) {
-        await attempts.create({ ...base, ReferenceDocument: ref });
-        await attempts.setStatus(ref, 'unconfirmed');
-        await queue.enqueue({ ...base, ReferenceDocument: ref });
-      }
-      lookup().mockImplementation(async (ref) => (ref === 'GIQFOUND001' ? sapDoc : null));
-
-      expect(await attempts.recheck(GoodsIssueAdapter, Date.now() + 16 * MIN)).toMatchObject({ Posted: 1, NotPosted: 1, Requeued: 1 });
-      const records = await queue.getAll();
-      expect(records.find((r) => r.ReferenceDocument === 'GIQFOUND001')).toMatchObject({ SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '4900049865' });
-      expect(await statusOf('GIQGONE0001')).toBe('queued');
-      expect((await attempts.getByReference('GIQGONE0001')).LastError).toContain('not posted');
-    });
-  });
-
-  describe('queue replay respects the attempt', () => {
-    const queuedWithAttempt = async (ref, status) => {
-      await attempts.create({ ...base, ReferenceDocument: ref });
-      await attempts.setStatus(ref, status);
-      return queue.enqueue({ ...base, ReferenceDocument: ref });
-    };
-
-    test('drain skips attempts that are not queued and replays the queued one', async () => {
-      await queuedWithAttempt('GIUNCONF001', 'unconfirmed');
-      await queuedWithAttempt('GISENDING01', 'sending');
-      await queuedWithAttempt('GIQUEUED001', 'queued');
-      const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({ MaterialDocument: '4900055002', MaterialDocYear: '2026' });
-
-      const result = await queue.drainQueue(GoodsIssueAdapter);
-
-      expect(post).toHaveBeenCalledTimes(1);
-      expect(post.mock.calls[0][0].ReferenceDocument).toBe('GIQUEUED001');
-      expect(result).toMatchObject({ Attempted: 1, SyncedToSap: 1 });
-      expect(result.Message).toContain('2 item(s) were not replayed');
-      expect((await attempts.getByReference('GIQUEUED001')).Status).toBe('posted');
-      expect((await attempts.getByReference('GIUNCONF001')).Status).toBe('unconfirmed');
-    });
-
-    test('drain marks the queue record done without posting when the attempt is already posted', async () => {
-      const record = await queuedWithAttempt('GIPOSTED001', 'posted');
-      await attempts.setStatus('GIPOSTED001', 'posted', { MaterialDocument: '4900049865', MaterialDocYear: '2026' });
-      const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
-
-      await queue.drainQueue(GoodsIssueAdapter);
-
-      expect(post).not.toHaveBeenCalled();
-      expect(await queue.get(record.QueueReference)).toMatchObject({ SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '4900049865' });
-    });
-
-    test('replay does not post again when SAP already has the document for the reference', async () => {
-      const record = await queuedWithAttempt('GIEXISTS001', 'queued');
-      const sapPost = jest.spyOn(GoodsIssueAdapter, '_post');
-      jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([{ ...sapDoc, to_MaterialDocumentItem: { results: [{ GoodsMovementType: '201' }] } }]);
-
-      await queue.drainQueue(GoodsIssueAdapter);
-
-      expect(sapPost).not.toHaveBeenCalled();
-      expect(await queue.get(record.QueueReference)).toMatchObject({ SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '4900049865' });
-      expect((await attempts.getByReference('GIEXISTS001')).Status).toBe('posted');
-    });
-
-    test('an unconfirmed replay moves the attempt to unconfirmed so the next drain skips it', async () => {
-      await queuedWithAttempt('GITIMEOUT01', 'queued');
-      const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockRejectedValue(Object.assign(new Error('may still appear'), { status: 504, code: 'GI_POSTING_UNCONFIRMED' }));
-
-      await queue.drainQueue(GoodsIssueAdapter);
-      await queue.drainQueue(GoodsIssueAdapter);
-
-      expect(post).toHaveBeenCalledTimes(1);
-      expect((await attempts.getByReference('GITIMEOUT01')).Status).toBe('unconfirmed');
-    });
-
-    test('single retry refuses a record whose attempt is not queued', async () => {
-      const record = await queuedWithAttempt('GIRETRY0001', 'unconfirmed');
-      const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
-      const r = req({ ID: record.ID });
-      await handlers.retryQueuedGoodsIssue(r);
-      expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining("'unconfirmed'"));
-      expect(post).not.toHaveBeenCalled();
-    });
-
-    test('records without a reference (older rows, 261/301/311) replay as before', async () => {
-      await queue.enqueue({ ...base, MovementType: '261', ReservationNo: '518660', ReservationItem: '0001' });
-      const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({ MaterialDocument: '4900055003', MaterialDocYear: '2026' });
-      expect(await queue.drainQueue(GoodsIssueAdapter)).toMatchObject({ Attempted: 1, SyncedToSap: 1 });
-      expect(post).toHaveBeenCalledTimes(1);
     });
   });
 });

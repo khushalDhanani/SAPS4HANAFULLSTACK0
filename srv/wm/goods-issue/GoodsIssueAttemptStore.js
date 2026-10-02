@@ -3,9 +3,8 @@ const LOG = require('../../common/logger')('goods-issue-attempts');
 
 const { INSERT, SELECT, UPDATE } = cds.ql;
 
-/** Persisted entities (db/wm/goods-issue-attempt.cds, db/wm/goods-issue-queue.cds). */
+/** Persisted entities (db/wm/goods-issue-attempt.cds). */
 const ATTEMPT_ENTITY = 'saps4hana.wm.GoodsIssuePostingAttempt';
-const QUEUE_ENTITY = 'saps4hana.wm.GoodsIssueQueue';
 
 /** Statuses the re-check job still has to resolve against SAP. */
 const OPEN_STATUSES = ['sending', 'unconfirmed'];
@@ -122,18 +121,6 @@ class GoodsIssueAttemptStore {
     await this._run(UPDATE(ATTEMPT_ENTITY).set(updates).where({ ReferenceDocument: String(referenceDocument).trim() }));
   }
 
-  /**
-   * Queue-replay guard. A queue record that carries a reference may be replayed only while its
-   * attempt is `queued`; records without a reference or without an attempt (older rows, movement
-   * types that send no reference) replay as before.
-   *
-   * @param {Object} queueItem
-   * @returns {Promise<{ replay: boolean, attempt: Object|null }>}
-   */
-  async replayGuard(queueItem) {
-    const attempt = await this.getByReference(queueItem && queueItem.ReferenceDocument);
-    return { replay: !attempt || attempt.Status === 'queued', attempt };
-  }
 
   /**
    * Background re-check: resolves attempts left in `sending` (process died mid-call) or
@@ -230,7 +217,7 @@ class GoodsIssueAttemptStore {
   }
 
   async recheck(adapter, now = Date.now()) {
-    const summary = { Checked: 0, Posted: 0, NotPosted: 0, Requeued: 0, StillOpen: 0, Errors: 0 };
+    const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0 };
     if (!this.isAvailable()) return summary;
     await this.reconfirmUnconfirmed(adapter, now).catch((err) => LOG.warn(`reconfirmUnconfirmed failed inside recheck: ${err.message}`));
     const open = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } }));
@@ -249,28 +236,14 @@ class GoodsIssueAttemptStore {
         summary.Errors++;
         continue;
       }
-      const queueRecord = await this._run(SELECT.one.from(QUEUE_ENTITY).where({ ReferenceDocument: ref }));
 
       if (doc) {
         await this.setStatus(ref, 'posted', { MaterialDocument: doc.MaterialDocument, MaterialDocYear: doc.MaterialDocumentYear, LastError: '' });
-        if (queueRecord) {
-          await this._run(UPDATE(QUEUE_ENTITY).set({
-            SyncStatus: 'POSTED_IN_SAP',
-            SapMaterialDocument: doc.MaterialDocument,
-            SapMaterialDocYear: doc.MaterialDocumentYear,
-            SyncedAt: new Date(now).toISOString()
-          }).where({ ID: queueRecord.ID }));
-        }
         summary.Posted++;
       } else if (ageOf(attempt) >= GoodsIssueAttemptStore.notPostedAgeMs()) {
         const finding = `No material document with reference ${ref} exists in S/4HANA ${Math.round(ageOf(attempt) / 60000)} min after the attempt: not posted.`;
         await this.setStatus(ref, 'not_posted', { LastError: finding });
         summary.NotPosted++;
-        if (queueRecord) {
-          // A queued item is replayed again (the replay looks the reference up first).
-          await this.setStatus(ref, 'queued', { LastError: `${finding} Returned to the dispatch queue.` });
-          summary.Requeued++;
-        }
       } else {
         summary.StillOpen++;
       }

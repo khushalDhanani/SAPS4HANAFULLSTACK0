@@ -172,23 +172,7 @@ describe('GoodsIssue311Pending Controller Unit Tests', () => {
             expect(model.getProperty('/resultText')).toContain('4900005678');
             expect(model.getProperty('/resultText')).toContain('0000000301');
         });
-
-        it('should show queued Warning result when transfer was queued without material document', async () => {
-            mockService.fetchOpenReservations.mockResolvedValue([
-                { ReservationNo: '0000000301', Material: 'MAT-1' }
-            ]);
-
-            await controller._onRouteMatched(makeRouteEvent({
-                resv: '0000000301', queued: 'Q-311-99'
-            }));
-            await flush();
-
-            const model = controller.getModel('gi311p');
-            expect(model.getProperty('/items')).toHaveLength(0);
-            expect(model.getProperty('/resultState')).toBe('Warning');
-            expect(model.getProperty('/resultText')).toContain('Q-311-99');
-            expect(model.getProperty('/resultText')).toContain('0000000301');
-        });
+        // Queue tests removed — dispatch queue eliminated; direct posting only.
 
         it('should surface backend errors and clear items', async () => {
             mockService.fetchOpenReservations.mockRejectedValue(new Error('Gateway transfer service error'));

@@ -8,7 +8,6 @@ const M311 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue3
 const GoodsIssueStockUnitClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient');
 const GoodsIssueReservationsClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 
 const item = (p) => p.to_MaterialDocumentItem.results[0];
@@ -106,14 +105,13 @@ describe('postGoodsIssue311 handler - serial count', () => {
   PerTypeGoodsIssueHandler.init({ on: (event, handler) => { handlers[event] = handler; } });
   const req = (data) => ({ data, user: { id: 'TESTER' }, error: jest.fn() });
   const body = { ReservationNo: '519367', ReservationItem: '0001', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'RD01', IssueQty: 2, Unit: 'NOS' };
-  let post, enqueue, serialManaged;
+  let post, serialManaged;
 
   beforeEach(() => {
     jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', OpenQty: 2 });
     jest.spyOn(GoodsIssueAdapter, 'validateSerialStatus').mockResolvedValue({ valid: true });
     serialManaged = jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(true);
     post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311').mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2026' });
-    enqueue = jest.spyOn(GoodsIssueQueueManager, 'enqueue').mockResolvedValue({ QueueReference: 'Q1' });
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -125,12 +123,11 @@ describe('postGoodsIssue311 handler - serial count', () => {
     expect(post.mock.calls[0][0].SerialNumbers).toEqual(['110', '111']);
   });
 
-  test.each([['too few', ['110']], ['none', []]])('serial-managed with %s serials -> 400 before SAP, not queued', async (_label, serials) => {
+  test.each([['too few', ['110']], ['none', []]])('serial-managed with %s serials -> 400 before SAP', async (_label, serials) => {
     const r = req({ ...body, SerialNumbers: serials });
     await handlers.postGoodsIssue311(r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('serial-managed'));
     expect(post).not.toHaveBeenCalled();
-    expect(enqueue).not.toHaveBeenCalled();
   });
 
   test('non-serial item is posted unchanged without serials', async () => {

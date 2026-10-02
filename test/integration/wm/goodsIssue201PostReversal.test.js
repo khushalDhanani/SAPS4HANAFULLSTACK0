@@ -65,9 +65,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     expect(postRes.data).toMatchObject({
       Success: true,
       MaterialDocument: '4900055001',
-      MaterialDocYear: '2026',
-      SyncStatus: 'POSTED_IN_SAP',
-      Queued: false
+      MaterialDocYear: '2026'
     });
 
     // Verify the isolated 201 adapter method received the normalized 201 payload.

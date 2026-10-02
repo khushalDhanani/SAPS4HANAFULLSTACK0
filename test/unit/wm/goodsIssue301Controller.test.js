@@ -631,20 +631,10 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
             expect(mockMessageBox.success).toHaveBeenCalledWith('gi301PostSuccessMsg', expect.objectContaining({ title: 'gi301PostSuccessTitle' }));
         });
 
-        it('shows MessageBox.warning and keeps hasPosted false on a queued result', async () => {
-            mockGoodsIssue301Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
-            mockGoodsIssue301Service.postGoodsIssue.mockResolvedValueOnce({ Queued: true, Message: 'Recorded in dispatch queue' });
+        // Queue tests removed — dispatch queue eliminated; direct posting only.
+        // The controller now shows MessageBox.error (not warning) when no MaterialDocument is returned.
 
-            controller.onPostGoodsIssue();
-            await flush();
-
-            const oModel = controller.getView().getModel('gi301');
-            expect(oModel.getProperty('/hasPosted')).toBe(false);
-            expect(mockMessageBox.warning).toHaveBeenCalledWith('Recorded in dispatch queue', expect.objectContaining({ title: 'giPostQueuedTitle' }));
-            expect(mockMessageBox.success).not.toHaveBeenCalled();
-        });
-
-        it('treats a missing MaterialDocument as queued (warning, not success)', async () => {
+        it('treats a missing MaterialDocument as an error, not success', async () => {
             mockGoodsIssue301Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
             mockGoodsIssue301Service.postGoodsIssue.mockResolvedValueOnce({ Message: 'No document number returned' });
 
@@ -653,7 +643,7 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
 
             const oModel = controller.getView().getModel('gi301');
             expect(oModel.getProperty('/hasPosted')).toBe(false);
-            expect(mockMessageBox.warning).toHaveBeenCalled();
+            expect(mockMessageBox.error).toHaveBeenCalled();
             expect(mockMessageBox.success).not.toHaveBeenCalled();
         });
 

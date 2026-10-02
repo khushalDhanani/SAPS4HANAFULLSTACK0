@@ -364,7 +364,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     expect(req.error).not.toHaveBeenCalled();
     expect(res).toBeDefined();
     expect(res.MaterialDocument).toBe('4900012345');
-    expect(res.Queued).toBe(false);
+    expect(res.Queued).toBeUndefined();
   });
 
   it('posts 8-drum case with unequal weights', async () => {
@@ -542,7 +542,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
   });
 
   describe('Requirement 4 Tests: 450 kg with 48 kg drums, partial above open qty, consumed SU, no queueing', () => {
-    const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 
     it('handles 450 kg with 48 kg drums (9 full + 18 partial) in UI suggestion and scan model', () => {
       // 10 drums of 48 KG each
@@ -663,7 +662,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(req.error).not.toHaveBeenCalled();
       expect(res).toBeDefined();
       expect(res.MaterialDocument).toBe('4900099999');
-      expect(res.Queued).toBe(false);
+      expect(res.Queued).toBeUndefined();
       expect(postSpy).toHaveBeenCalled();
     });
 
@@ -678,7 +677,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       setupMockSap({ openQty: 450, stockUnits: stock });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
-      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
       // 9 full drums = 432. Partial submitted = 25 -> Total = 457 > 450 open qty
       const req = {
@@ -700,7 +698,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Partial above open qty rejected'));
       expect(postSpy).not.toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
     it('rejects when an SU was consumed between suggest and post without queueing', async () => {
@@ -720,7 +717,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       setupMockSap({ openQty: 450, stockUnits: stock });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
-      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
       const req = {
         data: {
@@ -741,7 +737,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('has no available stock or was consumed in SAP'));
       expect(postSpy).not.toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
     it('confirms no queueing on any 400 error', async () => {
@@ -752,7 +747,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       setupMockSap({ openQty: 48, stockUnits: stock });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
-      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
       // Tampered payload: real SUs sum to 48, but client submits IssueQty: 40
       const req = {
@@ -774,7 +768,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered payload detected'));
       expect(postSpy).not.toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
     it('surfaces 400 without queueing when SAP rejects at post time because SU was consumed after re-read', async () => {
@@ -792,7 +785,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
         err.status = 400;
         return err;
       })());
-      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
       const req = {
         data: {
@@ -813,7 +805,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       await handlers['postGoodsIssue261'](req);
       expect(postSpy).toHaveBeenCalled();
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Storage Unit DRUM_05 was consumed in SAP'));
-      expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
     it('accepts any valid SU set whose sum equals open qty: server picks which SU takes the partial regardless of drum order', async () => {
@@ -830,7 +821,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
         MaterialDocument: '4900099999',
         MaterialDocYear: '2026'
       });
-      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
       // 1) Different valid drum order (reversed): client lists DRUM_10 first and DRUM_01 last
       const reversedList = [...suList].reverse();
@@ -856,7 +846,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(resReversed).toBeDefined();
       expect(resReversed.MaterialDocument).toBe('4900099999');
       expect(postSpy).toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
 
       // 2) Different valid drum order (shuffled / arbitrary scan sequence)
       await GoodsIssueIssuedSuStore.clear();
@@ -884,7 +873,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(resShuffled).toBeDefined();
       expect(resShuffled.MaterialDocument).toBe('4900099999');
       expect(postSpy).toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
     });
 
     it('server rejects partial quantity <= 0 or >= that SU full stock', async () => {
@@ -898,7 +886,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       setupMockSap({ openQty: 450, stockUnits: stock });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
-      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
 
       // 1) partial = 0
       const reqZero = {
@@ -958,7 +945,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(reqOver.error).toHaveBeenCalledWith(400, expect.stringContaining('cannot equal or exceed full stock'));
 
       expect(postSpy).not.toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
     });
   });
 });

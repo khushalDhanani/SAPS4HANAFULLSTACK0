@@ -111,8 +111,7 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
     ) returns GRPostResult;
 }
 
-// These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:
-// no database table is generated for them (only saps4hana.wm.GoodsIssueQueue is persisted).
+// These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data.
 annotate GoodsReceiptService.OpenInboundDeliveries with @cds.persistence.skip;
 annotate GoodsReceiptService.MaterialStorageLocations with @cds.persistence.skip;
 annotate GoodsReceiptService.MaterialBatches with @cds.persistence.skip;

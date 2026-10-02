@@ -1,6 +1,5 @@
 namespace saps4hana.wm;
 
-using { saps4hana.wm.GoodsIssueQueue as DBGoodsIssueQueue } from '../../../db/wm/goods-issue-queue';
 using { saps4hana.wm.GoodsIssueIssuedStorageUnit as DBGoodsIssueIssuedStorageUnit } from '../../../db/wm/goods-issue-issued-su';
 // Posting-attempt log (written before S/4HANA is called); internal, not exposed as an entity.
 using from '../../../db/wm/goods-issue-attempt';
@@ -16,12 +15,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         FactorToBase : Decimal(13, 3);
         IsBaseUnit   : Boolean;
     };
-
-    // Dispatch queue records persisted in the CAP database. Read-only over OData: every change goes
-    // through postGoodsIssue / retryQueuedGoodsIssue / clearQueuedGoodsIssue.
-    @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
-    entity GoodsIssueQueue as projection on DBGoodsIssueQueue excluding { QueueReference };
 
     // Issued Storage Units tracking held until TO confirmation (LQUA stock drop) or doc reversal
     @readonly
@@ -120,9 +113,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Success           : Boolean;
         Confirmed         : Boolean;
         ConfirmationStatus: String(30);
-        Queued            : Boolean;
-        QueueReference    : String(40);
-        QueueId           : String(36);
     };
 
     type GISubmitBatchResult {
@@ -147,10 +137,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Confirmed         : Boolean;
         ConfirmationStatus: String(30);
         Message           : String(500);
-        Queued            : Boolean;
-        QueueReference    : String(40);
-        QueueId           : String(36);
-        SyncStatus        : String(30);
     };
 
     type GIReversalResult {
@@ -223,60 +209,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DefaultStorageLocationName : String(60);
     };
 
-    type QueueItem {
-        ID                    : UUID;
-        ReservationNo         : String(10);
-        ReservationItem       : String(4);
-        OrderNo               : String(12);
-        Material              : String(40);
-        MaterialDesc          : String(80);
-        Plant                 : String(4);
-        StorageLocation       : String(4);
-        Batch                 : String(10);
-        ExpiryDate            : Date;
-        IssueQty              : Decimal(13, 3);
-        Unit                  : String(10);
-        DifferenceQty         : Decimal(13, 3);
-        DifferenceReason      : String(4);
-        DifferenceStorageType : String(3);
-        FinalIssue            : Boolean;
-        CostCenter            : String(10);
-        GLAccount             : String(10);
-        SerialNumber          : String(18);
-        PostingDate           : Date;
-        DocumentDate          : Date;
-        SyncStatus            : String(30);
-        SyncAttempts          : Integer;
-        LastSyncError         : String(500);
-        SapMaterialDocument   : String(10);
-        SapMaterialDocYear    : String(4);
-        QueuedAt              : Timestamp;
-        SyncedAt              : Timestamp;
-    };
-
-    type QueueSummary {
-        QueuedCount    : Integer;
-        TotalCount     : Integer;
-        // False when no database is bound to this deployment: nothing can be queued or listed.
-        StoreAvailable : Boolean;
-        Items          : array of QueueItem;
-    };
-
-    type QueueDrainResult {
-        TotalQueued     : Integer;
-        Attempted       : Integer;
-        SyncedToSap     : Integer;
-        Failed          : Integer;
-        RemainingQueued : Integer;
-        Message         : String(500);
-        Items           : array of QueueItem;
-    };
-
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function resolveIdentifier(barcode: String(40)) returns GoodsIssueResolution;
-
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
-    function getQueueSummary() returns QueueSummary;
 
     // ── Isolated per-movement-type posting actions (Phase 1). Each accepts only its type's fields. ──
 
@@ -374,30 +308,16 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Items         : array of GISubmitItem
     ) returns GISubmitBatchResult;
 
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
-    action retryQueuedGoodsIssue(
-        ID : UUID
-    ) returns GIPostResult;
-
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
-    action clearQueuedGoodsIssue(
-        ID : UUID
-    ) returns Boolean;
-
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
-    action drainQueue() returns QueueDrainResult;
-
     type PostingAttemptRecheckResult {
         Checked   : Integer;
         Posted    : Integer;
         NotPosted : Integer;
-        Requeued  : Integer;
         StillOpen : Integer;
         Errors    : Integer;
     }
 
     // Looks up posting attempts left in `sending` / `unconfirmed` in S/4HANA by their reference.
-    // Also runs on a timer (GI_ATTEMPT_RECHECK_INTERVAL_MS) and before every drainQueue.
+    // Also runs on a background timer (GI_ATTEMPT_RECHECK_INTERVAL_MS).
     @(requires: ['WarehouseManager', 'Admin'])
     action recheckPostingAttempts() returns PostingAttemptRecheckResult;
 
@@ -651,19 +571,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         materialDocument : String(10),
         materialDocYear  : String(4)
     ) returns GoodsIssueIssuedStorageUnit;
-
-    @(requires: ['WarehouseManager', 'Admin'])
-    action resolveQueueItemManual(
-        queueId          : UUID,
-        action           : String(20), // 'posted' | 'not-posted'
-        materialDocument : String(10),
-        materialDocYear  : String(4),
-        reason           : String(100)
-    ) returns GoodsIssueQueue;
 }
 
 // These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:
-// no database table is generated for them (only saps4hana.wm.GoodsIssueQueue is persisted).
 annotate GoodsIssueService.GIItems with @cds.persistence.skip;
 annotate GoodsIssueService.MaterialBatches with @cds.persistence.skip;
 annotate GoodsIssueService.OpenReservations with @cds.persistence.skip;

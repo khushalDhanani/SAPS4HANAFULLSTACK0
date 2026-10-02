@@ -668,29 +668,22 @@ sap.ui.define([
                 .then(function (res) {
                     that._oModel.setProperty("/busy", false);
 
+                    if (!res || !res.MaterialDocument) {
+                        that._oModel.setProperty("/hasPosted", false);
+                        var sMsg = (res && res.Message) || "Goods Issue was not posted in SAP S/4HANA.";
+                        MessageBox.error(sMsg);
+                        return;
+                    }
+
                     // Workflow outcome: return to Open Reservations list carrying completion result
                     if (that._oModel.getProperty("/fromReservation")) {
                         var oOutcome = {
                             resv: that._oModel.getProperty("/reservationNo"),
-                            item: that._oModel.getProperty("/reservationItem")
+                            item: that._oModel.getProperty("/reservationItem"),
+                            doc: res.MaterialDocument,
+                            year: res.MaterialDocYear || ""
                         };
-                        if (res && res.MaterialDocument) {
-                            oOutcome.doc = res.MaterialDocument;
-                            oOutcome.year = res.MaterialDocYear || "";
-                        } else {
-                            oOutcome.queued = (res && (res.QueueId || res.ID)) || "";
-                        }
                         that.getRouter().navTo("wmGoodsIssue261Pending", { "?query": oOutcome });
-                        return;
-                    }
-
-                    if (res && (res.Queued === true || !res.MaterialDocument)) {
-                        that._oModel.setProperty("/hasPosted", false);
-                        var sQueueId = (res && (res.QueueId || res.ID)) || "";
-                        var sMsg = res.Message || that.getText("giPostQueuedMsg", [sQueueId]);
-                        MessageBox.warning(sMsg, {
-                            title: that.getText("giPostQueuedTitle")
-                        });
                         return;
                     }
 

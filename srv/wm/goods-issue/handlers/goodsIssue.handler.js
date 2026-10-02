@@ -1,11 +1,11 @@
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
 const { extractFilterParam, applyPaging } = require('../../../common/filterUtils');
 const { validateReversalPayload } = require('../validation/goodsIssue.validation');
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
 const GoodsIssueIssuedSuStore = require('../GoodsIssueIssuedSuStore');
+const { classifyPostingError } = require('./goodsIssuePerType.handler');
 
 const _extractFilterParam = extractFilterParam;
 // Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
@@ -73,13 +73,6 @@ class GoodsIssueHandler {
       }
     });
 
-    // READ GoodsIssueQueue: dispatch queue records from the CAP database (generic handler); empty when no
-    // database is bound to this deployment.
-    srv.on('READ', 'GoodsIssueQueue', async (req, next) => {
-      if (!GoodsIssueQueueManager.isAvailable()) return [];
-      return typeof next === 'function' ? next() : GoodsIssueQueueManager.getAll();
-    });
-
     // READ GoodsIssueIssuedStorageUnit: active/released issued SUs held pending TO confirmation
     srv.on('READ', 'GoodsIssueIssuedStorageUnit', async (req, next) => {
       if (GoodsIssueIssuedSuStore.db) return typeof next === 'function' ? next() : [];
@@ -103,31 +96,6 @@ class GoodsIssueHandler {
       } catch (err) {
         return req.error(err.status || 400, err.message);
       }
-    });
-
-    // ACTION: resolveQueueItemManual: Operator action to resolve a NEEDS_ATTENTION queue item ('posted' | 'not-posted')
-    srv.on('resolveQueueItemManual', async (req) => {
-      const { queueId, action, materialDocument, materialDocYear, reason } = req.data || {};
-      if (!queueId || !action) {
-        return req.error(400, 'queueId and action ("posted" or "not-posted") are required');
-      }
-      try {
-        const resolved = await GoodsIssueQueueManager.resolveQueueItemManual(queueId, action, {
-          materialDocument,
-          materialDocYear,
-          reason,
-          adapter: GoodsIssueAdapter,
-          user: req.user ? req.user.id : 'OPERATOR'
-        });
-        return resolved;
-      } catch (err) {
-        return req.error(err.status || 400, err.message);
-      }
-    });
-
-    // FUNCTION: getQueueSummary: pending count, items and whether a queue store is bound at all
-    srv.on('getQueueSummary', async () => {
-      return GoodsIssueQueueManager.getSummary();
     });
 
     // FUNCTION: resolveIdentifier (Multi-tier scan resolution for Goods Issue)
@@ -185,7 +153,7 @@ class GoodsIssueHandler {
       }
     });
 
-    // ACTION: submitGoodsIssueRequest (Batch scan-then-submit multi-line posting with Dispatch Queue fallback)
+    // ACTION: submitGoodsIssueRequest (Batch scan-then-submit multi-line direct posting)
     srv.on('submitGoodsIssueRequest', async (req) => {
       const { ReservationNo, OrderNo, Items } = req.data;
 
@@ -205,209 +173,9 @@ class GoodsIssueHandler {
         );
         return batchResult;
       } catch (err) {
-        if (err.status === 400) {
-          return req.error(400, err.message || 'Batch Goods Issue submission failed');
-        }
-
-        // If backend posting capability is unavailable (501 / 404), route all items to Dispatch Queue.
-        // A plain 403 is an authorization/CSRF refusal and is surfaced, not queued.
-        if (err.status === 501 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
-          const lineResults = [];
-          for (const it of Items) {
-            try {
-              const qRecord = await GoodsIssueQueueManager.enqueue({
-                ReservationNo,
-                ReservationItem: it.ReservationItem,
-                OrderNo,
-                Material: it.Material,
-                IssueQty: Number(it.IssueQty) || 0,
-                Unit: it.Unit || it.EntryUnit || it.BaseUnit || '',
-                Batch: it.Batch,
-                DifferenceQty: Number(it.DifferenceQty) || 0,
-                DifferenceReason: it.DifferenceReason,
-                DifferenceStorageType: it.DifferenceStorageType || '',
-                FinalIssue: it.FinalIssue,
-                LastSyncError: err.message
-              });
-              lineResults.push({
-                ReservationItem: String(it.ReservationItem).padStart(4, '0'),
-                MaterialDocument: '',
-                MaterialDocYear: '',
-                TransferOrder: '',
-                DifferenceCleared: false,
-                DifferenceQty: Number(it.DifferenceQty) || 0,
-                Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${qRecord.ID}`,
-                Success: false,
-                Queued: true,
-                QueueReference: qRecord.ID,
-                QueueId: qRecord.ID
-              });
-            } catch (qErr) {
-              lineResults.push({
-                ReservationItem: String(it.ReservationItem).padStart(4, '0'),
-                MaterialDocument: '',
-                MaterialDocYear: '',
-                TransferOrder: '',
-                DifferenceCleared: false,
-                DifferenceQty: 0,
-                Message: `Queue error: ${qErr.message}`,
-                Success: false,
-                Queued: false,
-                QueueReference: '',
-                QueueId: ''
-              });
-            }
-          }
-          return {
-            AllPosted: false,
-            Results: lineResults,
-            Messages: [`Batch recorded in dispatch queue: Not posted to SAP. Waiting in queue. (${err.message})`]
-          };
-        }
-
-        return req.error(err.status || 400, err.message || 'Batch Goods Issue submission failed');
+        const classified = classifyPostingError(err);
+        return req.error(classified.status, classified.message);
       }
-    });
-
-    // ACTION: retryQueuedGoodsIssue (Retry posting a queued item against live SAP)
-    srv.on('retryQueuedGoodsIssue', async (req) => {
-      const queueId = req.data.ID || req.data.QueueId || req.data.QueueReference;
-      if (!queueId) {
-        return req.error(400, 'Queue ID parameter is required');
-      }
-
-      if (!GoodsIssueQueueManager.isAvailable()) {
-        return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
-      }
-
-      const item = await GoodsIssueQueueManager.get(queueId);
-      if (!item) {
-        return req.error(404, `Queued transaction ${queueId} not found`);
-      }
-
-      // Same guard as the bulk drain: only an attempt in `queued` status may be replayed.
-      const guard = await GoodsIssueAttemptStore.replayGuard(item);
-      if (!guard.replay) {
-        return req.error(409, `Queued transaction ${queueId} cannot be retried: its last posting attempt is '${guard.attempt.Status}' (reference ${item.ReferenceDocument}) and is being confirmed in SAP.`);
-      }
-      const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
-
-      try {
-        // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
-        const result = await GoodsIssueAdapter.postGoodsIssueByType(item);
-
-        // Update queue item
-        await GoodsIssueQueueManager.update(queueId, {
-          SyncStatus: 'POSTED_IN_SAP',
-          SapMaterialDocument: result.MaterialDocument || '',
-          SapMaterialDocYear: result.MaterialDocYear || '',
-          SyncedAt: new Date().toISOString()
-        });
-        await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
-
-        // Record issued SUs on retry success too
-        if (result.MaterialDocument && item.StorageUnits) {
-          try {
-            const suStore = require('../GoodsIssueIssuedSuStore');
-            let parsedItems = [];
-            try {
-              const parsed = JSON.parse(item.StorageUnits);
-              parsedItems = Array.isArray(parsed) ? parsed : [];
-            } catch (_) {
-              parsedItems = [item.StorageUnits];
-            }
-            const suAllocations = parsedItems.map((su) => {
-              if (typeof su === 'string') {
-                return { storageUnit: su, issuedQty: item.IssueQty, preIssueStock: item.IssueQty };
-              }
-              return {
-                storageUnit: su.storageUnit || su.StorageUnit,
-                issuedQty: su.issuedQty != null ? su.issuedQty : (su.IssuedQty || item.IssueQty),
-                preIssueStock: su.preIssueStock != null ? su.preIssueStock : (su.PreIssueStock || item.IssueQty)
-              };
-            }).filter((s) => Boolean(s.storageUnit));
-
-            if (suAllocations.length > 0) {
-              await suStore.recordIssuedSUs({
-                materialDocument: result.MaterialDocument,
-                materialDocYear: result.MaterialDocYear || '',
-                reservationNo: item.ReservationNo,
-                reservationItem: item.ReservationItem,
-                referenceDocument: item.ReferenceDocument,
-                material: item.Material,
-                plant: item.Plant,
-                storageLocation: item.StorageLocation,
-                items: suAllocations
-              });
-            }
-          } catch (suErr) {
-            // Keep retry result successful
-          }
-        }
-
-        return Object.assign({
-          Success: true,
-          Queued: false,
-          QueueReference: item.ID,
-          QueueId: item.ID,
-          SyncStatus: 'POSTED_IN_SAP'
-        }, result);
-      } catch (err) {
-        // Record retry attempt
-        await GoodsIssueQueueManager.update(queueId, {
-          SyncAttempts: (item.SyncAttempts || 1) + 1,
-          LastSyncError: err.message || 'Posting rejected by Gateway'
-        });
-        if (GoodsIssueQueueManager.UNCONFIRMED_CODES && GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(err.code)) {
-          await settle('unconfirmed', { LastError: err.message });
-        }
-
-        return {
-          ReservationNo: item.ReservationNo,
-          ReservationItem: item.ReservationItem,
-          MaterialDocument: '',
-          MaterialDocYear: '',
-          TransferOrder: '',
-          DifferenceCleared: false,
-          DifferenceQty: item.DifferenceQty || 0,
-          Success: false,
-          Queued: true,
-          QueueReference: item.ID,
-          QueueId: item.ID,
-          SyncStatus: 'FAILED',
-          Message: `SAP Gateway retry rejected: ${err.message}. Queue ID (internal, not an SAP document): ${item.ID}`
-        };
-      }
-    });
-
-    // ACTION: clearQueuedGoodsIssue (Remove item from dispatch queue)
-    srv.on('clearQueuedGoodsIssue', async (req) => {
-      const queueId = req.data.ID || req.data.QueueId || req.data.QueueReference;
-      if (!queueId) {
-        return req.error(400, 'Queue ID parameter is required');
-      }
-      if (!GoodsIssueQueueManager.isAvailable()) {
-        return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
-      }
-      return GoodsIssueQueueManager.remove(queueId);
-    });
-
-    // ACTION: drainQueue (Batch retry all pending queued transactions against S/4HANA)
-    srv.on('drainQueue', async () => {
-      if (!GoodsIssueQueueManager.isAvailable()) {
-        return {
-          TotalQueued: 0,
-          Attempted: 0,
-          SyncedToSap: 0,
-          Failed: 0,
-          RemainingQueued: 0,
-          Message: 'Goods Issue dispatch queue is not available: no database is bound to this deployment',
-          Items: []
-        };
-      }
-      // Resolve attempts SAP has answered in the meantime before deciding what may be replayed.
-      await GoodsIssueAttemptStore.recheck(GoodsIssueAdapter);
-      return GoodsIssueQueueManager.drainQueue(GoodsIssueAdapter);
     });
 
     // ACTION: recheckPostingAttempts (resolve `sending` / `unconfirmed` attempts against S/4HANA)

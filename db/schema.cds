@@ -12,10 +12,8 @@
  *
  * Consequently, no business documents are stored locally.
  *
- * ADDENDUM (2026-09-14, see ADR-0001): the only application-owned state is the Goods Issue
- * dispatch queue (db/wm/goods-issue-queue.cds), persisted in the HDI container 'saps4hana-db'
- * on Cloud Foundry and in the in-memory SQLite database of @cap-js/sqlite for local development
- * and tests. It holds transactions S/4HANA has not yet accepted and never claims SAP persistence.
+ * NOTE: All Goods Issue transactions post directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
+ * No dispatch queue is persisted; S/4HANA remains the authoritative system of record.
  */
 
 namespace saps4hana.fullstack;

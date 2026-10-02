@@ -32,9 +32,7 @@ sap.ui.define([
                 .then(function (aItems) {
                     var aList = Array.isArray(aItems) ? aItems : [];
                     var oDone = that._completedOutcome;
-                    if (oDone && oDone.resv) {
-                        // Clear the just-completed reservation from the list (a posted one drops off
-                        // SAP on its own; a queued one is still open in SAP but locally cleared here).
+                    if (oDone && oDone.resv && oDone.doc) {
                         aList = aList.filter(function (r) { return String(r.ReservationNo) !== String(oDone.resv); });
                         that._showCompletionResult(oDone);
                         that._completedOutcome = null; // one-shot
@@ -51,16 +49,12 @@ sap.ui.define([
         },
 
         /**
-         * Show the outcome of a completed reservation: the SAP Material Document number when posted,
-         * or the honest queue reference while the S/4HANA Gateway service is inactive.
+         * Show the outcome of a completed reservation: the SAP Material Document number when posted.
          */
         _showCompletionResult: function (oDone) {
-            if (oDone.doc) {
+            if (oDone && oDone.doc) {
                 this._oModel.setProperty("/resultState", "Success");
                 this._oModel.setProperty("/resultText", this.getText("gi201OpenResvCompletedPosted", [oDone.resv, oDone.doc, oDone.year || ""]));
-            } else {
-                this._oModel.setProperty("/resultState", "Warning");
-                this._oModel.setProperty("/resultText", this.getText("gi201OpenResvCompletedQueued", [oDone.resv, oDone.queued || ""]));
             }
         },
 

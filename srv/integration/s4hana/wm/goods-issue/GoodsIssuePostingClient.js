@@ -465,7 +465,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         }
         if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '201', 'Goods Issue to Cost Center');
       }
-      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 201, and no material document with reference ${data.ReferenceDocument} is visible yet after ${delays.length} check(s). The posting may still appear. It was NOT queued; check again in a few minutes or in MB51 (reference ${data.ReferenceDocument}) before posting again.`);
+      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 201, and no material document with reference ${data.ReferenceDocument} is visible yet after ${delays.length} check(s). The posting may still appear in SAP. Outcome is unconfirmed (reference ${data.ReferenceDocument}); do not post again.`);
       unconfirmed.status = 504;
       unconfirmed.code = 'GI_POSTING_UNCONFIRMED';
       throw unconfirmed;
@@ -1055,7 +1055,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       return authErr;
     }
 
-    const unknownErr = new Error(`SAP S/4HANA did not confirm the outcome of the ${operationName} (${mapped.message}). The goods issue may or may not have been posted, so it was NOT queued for automatic retry. Check the material documents in SAP (MB51) before posting again.`);
+    const unknownErr = new Error(`SAP S/4HANA did not confirm the outcome of the ${operationName} (${mapped.message}). The goods issue may or may not have been posted. Outcome is unconfirmed; do not post again.`);
     unknownErr.status = 504;
     unknownErr.code = 'GI_POSTING_OUTCOME_UNKNOWN';
     return unknownErr;

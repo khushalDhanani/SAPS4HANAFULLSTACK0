@@ -183,7 +183,7 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
         ).catch((e) => e);
       expect(err.status).toBe(504);
       expect(err.code).toBe('GI_POSTING_OUTCOME_UNKNOWN');
-      expect(err.message).toContain('NOT queued');
+      expect(err.message).toContain('do not post again');
       expect(err.message).not.toContain('Unavailable');
     });
 
@@ -248,7 +248,7 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
         const err = await new GoodsIssuePostingClient({ adapter: mock }).post201(data).catch((e) => e);
         expect(err).toMatchObject({ status: 504, code: 'GI_POSTING_UNCONFIRMED' });
         expect(err.message).toContain('may still appear');
-        expect(err.message).toContain('before posting again');
+        expect(err.message).toContain('do not post again');
         expect(err.message).not.toMatch(/can be posted again|NOT posted/);
         expect(err.message).not.toContain('Unavailable');
         expect(mock._get).toHaveBeenCalledTimes(2);

@@ -81,29 +81,10 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    * @returns {Object|null}
    */
   _getQueueManager() {
-    if (this.queueManager) return this.queueManager;
-    if (this.adapter && this.adapter.queueManager) return this.adapter.queueManager;
-    try {
-      return require('../../../../wm/goods-issue/GoodsIssueQueueManager');
-    } catch {
-      return null;
-    }
+    return null;
   }
 
-  /**
-   * Helper to retrieve map of pending queued items.
-   * @param {string} [reservationNo]
-   * @returns {Promise<Map<string, { queuedQty: number, finalIssue: boolean }>>}
-   */
-  async _getPendingQueueMap(reservationNo) {
-    try {
-      const qm = this._getQueueManager();
-      if (qm && typeof qm.getPendingQueueMap === 'function') {
-        return await qm.getPendingQueueMap(reservationNo);
-      }
-    } catch (err) {
-      LOG.warn(`Could not read pending queue map in stock unit client: ${err.message}`);
-    }
+  async _getPendingQueueMap() {
     return new Map();
   }
 

@@ -616,7 +616,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       spy.mockRestore();
     });
 
-    it('should enqueue transaction to Dispatch Queue when SAP posting service is unavailable (Outbox Queue pattern)', async () => {
+    it('should surface direct 503 error when SAP posting service is unreachable', async () => {
       const req = {
         data: {
           ReservationNo: '18025',
@@ -624,80 +624,18 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           Material: '1000000514',
           IssueQty: 50.0,
           Unit: 'KG',
-          Batch: 'IN25072562' // Valid batch
+          Batch: 'IN25072562'
         },
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
-      const result = await handlers['postGoodsIssue261'](req);
-      expect(result).toBeDefined();
-      expect(result.Success).toBe(false); // Queued != posted in SAP -> not a success (AGENTS.md rule 6)
-      expect(result.Queued).toBe(true);
-      expect(result.QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
-      expect(result.MaterialDocument).toBe(''); // Strictly no fake document number per AGENTS.md
-      expect(result.MaterialDocYear).toBe('');
-      expect(result.Message).toContain('Not posted to SAP. Waiting in queue');
-      expect(result.Message).toContain('Queue ID (internal, not an SAP document)');
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));
     });
 
-    it('should query queue items and return queue summary', async () => {
-      const summary = await handlers['getQueueSummary']({});
-      expect(summary).toBeDefined();
-      expect(summary.QueuedCount).toBeGreaterThanOrEqual(1);
-      expect(Array.isArray(summary.Items)).toBe(true);
-    });
-
-    it('should handle retryQueuedGoodsIssue against S/4HANA', async () => {
-      const summary = await handlers['getQueueSummary']({});
-      const item = summary.Items[0];
-      expect(item).toBeDefined();
-
-      const retryReq = {
-        data: { ID: item.ID },
-        error: jest.fn()
-      };
-
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockRejectedValue(sapPostingUnavailable());
-      const retryRes = await handlers['retryQueuedGoodsIssue'](retryReq);
-      expect(retryRes).toBeDefined();
-      expect(retryRes.QueueId).toBe(item.ID);
-    });
-
-    it('should enqueue transaction with full context fields to Dispatch Queue', async () => {
-      const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
-      const req = {
-        data: {
-          ReservationNo: '18025',
-          ReservationItem: '0001',
-          OrderNo: '1000040',
-          Material: '1000000204',
-          MaterialDesc: 'High-Grade Solvent',
-          Plant: '1120',
-          StorageLocation: 'CS01',
-          IssueQty: 100.0,
-          Unit: 'KG',
-          Batch: 'BATCH-01'
-        },
-        error: jest.fn((code, msg) => ({ code, message: msg }))
-      };
-
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 100000 });
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
-      const result = await handlers['postGoodsIssue261'](req);
-      expect(result.Queued).toBe(true);
-      expect(result.QueueReference).toBeDefined();
-
-      const record = await GoodsIssueQueueManager.get(result.QueueReference);
-      expect(record).toBeDefined();
-      expect(record.OrderNo).toBe('1000040');
-      expect(record.MaterialDesc).toBe('High-Grade Solvent');
-      expect(record.Plant).toBe('1120');
-      expect(record.StorageLocation).toBe('CS01');
-    });
-
-    it('should fallback to Dispatch Queue on batch submitGoodsIssueRequest when posting is unavailable', async () => {
+    it('should report failure directly on batch submitGoodsIssueRequest without queueing', async () => {
       const req = {
         data: {
           ReservationNo: '18025',
@@ -712,62 +650,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
       jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['submitGoodsIssueRequest'](req);
-      expect(result).toBeDefined();
-      expect(result.AllPosted).toBe(false);
-      expect(result.Results.length).toBe(2);
-      expect(result.Results[0].Message).toContain('Not posted to SAP. Waiting in queue');
-      expect(result.Results[0].Message).toContain('Queue ID (internal, not an SAP document)');
-      expect(result.Results[0].Success).toBe(false);
-      expect(result.Results[0].Queued).toBe(true);
-      expect(result.Results[0].DifferenceCleared).toBe(false);
-      expect(result.Results[0].DifferenceQty).toBe(5);
-      expect(result.Results[0].QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
-      expect(result.Results[1].Message).toContain('Not posted to SAP. Waiting in queue');
-      expect(result.Results[1].Message).toContain('Queue ID (internal, not an SAP document)');
-      expect(result.Results[1].Success).toBe(false);
-      expect(result.Results[1].Queued).toBe(true);
-      expect(result.Results[1].DifferenceCleared).toBe(false);
-    });
-
-    it('should handle drainQueue action reporting synced vs failed counts', async () => {
-      const drainResult = await handlers['drainQueue']({});
-      expect(drainResult).toBeDefined();
-      expect(typeof drainResult.TotalQueued).toBe('number');
-      expect(typeof drainResult.Attempted).toBe('number');
-      expect(typeof drainResult.SyncedToSap).toBe('number');
-      expect(typeof drainResult.Failed).toBe('number');
-      expect(Array.isArray(drainResult.Items)).toBe(true);
-    });
-
-    it('should update queue item to POSTED_IN_SAP when adapter successfully posts in drainQueue', async () => {
-      const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
-      const testRecord = await GoodsIssueQueueManager.enqueue({
-        ReservationNo: '99999',
-        ReservationItem: '0001',
-        Material: 'TEST-MAT',
-        IssueQty: 10,
-        Unit: 'EA',
-        Batch: 'VALID-B1'
-      });
-
-      const mockAdapter = {
-        postGoodsIssueByType: jest.fn().mockResolvedValue({
-          MaterialDocument: '4900009999',
-          MaterialDocYear: '2026',
-          Success: true
-        })
-      };
-
-      const drainRes = await GoodsIssueQueueManager.drainQueue(mockAdapter);
-      expect(drainRes.SyncedToSap).toBeGreaterThanOrEqual(1);
-
-      const updated = await GoodsIssueQueueManager.get(testRecord.QueueReference);
-      expect(updated.SyncStatus).toBe('POSTED_IN_SAP');
-      expect(updated.SapMaterialDocument).toBe('4900009999');
-      expect(updated.SapMaterialDocYear).toBe('2026');
-
-      // Cleanup
-      await GoodsIssueQueueManager.remove(testRecord.QueueReference);
+      expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));
+      expect(result).toEqual({ code: 503, message: expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable') });
     });
   });
 
@@ -1127,13 +1011,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(FrontendGoodsIssueService.getModel()).toBe(mockModel);
       FrontendGoodsIssueService.setModel(null);
       expect(FrontendGoodsIssueService.getModel()).toBeNull();
-    });
-
-    it('fetches queue summary via ODataClient.get', async () => {
-      mockODataClient.get.mockResolvedValueOnce({ QueuedCount: 2, Items: [{}, {}] });
-      const res = await FrontendGoodsIssueService.getQueueSummary();
-      expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/goods-issue/getQueueSummary()');
-      expect(res.QueuedCount).toBe(2);
     });
 
     it('fetches dashboard data with day/plant/movementType query params', async () => {

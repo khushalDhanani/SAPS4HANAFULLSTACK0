@@ -7,7 +7,6 @@
  */
 
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
 const GoodsIssueIssuedSuStore = require('../GoodsIssueIssuedSuStore');
 const { normalizeGoodsIssue201Payload } = require('../mapping/goodsIssue201.normalize');
@@ -390,97 +389,133 @@ function isDefinitiveRejection(err) {
     return GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
   }
   const s = err && (err.status || err.statusCode);
-  if (s === 400 || s === 409 || s === 422) return true;
+  if (s === 400 || s === 409 || s === 422 || s === 403) return true;
   if (/deficit|consumed|storage unit|insufficient stock/i.test(err && err.message || '')) return true;
   return false;
 }
 
 /**
- * Posts via the type's isolated adapter method; on capability-unavailable, records the dispatch queue.
- * `onOutcome(status, fields)` (optional) is told how the attempt ended: posted / queued /
- * unconfirmed / rejected.
- * Returns the result augmented with `_definitiveRejection: boolean` so callers can decide
- * whether to delete (definitive) or keep (unknown) claiming rows.
+ * Classifies an error from posting directly to SAP S/4HANA into one of 4 non-queue categories:
+ * 1. never_reached: 404, 503, 403 with /IWFND/MED/170, connection refused, DNS resolution failure.
+ *    -> HTTP 503, "The posting was not made and can be tried again." Definitive failure (claims deleted).
+ * 2. auth_error: Plain HTTP 403 (no /IWFND/MED/170).
+ *    -> HTTP 403, pointing to SU53. Definitive failure (claims deleted).
+ * 3. unknown_outcome: Timeout, connection reset, socket hang up, 502/504, or UNCONFIRMED_CODES.
+ *    -> HTTP 504/500, unconfirmed outcome; do NOT tell the user to post again. Claims kept for recheck.
+ * 4. rejected_by_sap: 400, 409, 422, sap-message business error.
+ *    -> Original HTTP status (default 400), showing the real SAP message. Definitive failure (claims deleted).
  */
-async function postWithQueueFallback(req, normalized, postFn, onOutcome = async () => {}) {
+function classifyPostingError(err) {
+  const status = Number(err?.status || err?.statusCode || err?.response?.status || 0);
+  const code = String(err?.code || err?.cause?.code || '').toUpperCase();
+  const msg = String(err?.message || '');
+  const details = Array.isArray(err?.details) ? err.details : [];
+  const hasMed170 = msg.includes('/IWFND/MED/170') ||
+    details.some((d) => String(d?.code || d?.message || '').includes('/IWFND/MED/170'));
+
+  // 1. Never reached SAP (404, 503, 501, 403 with /IWFND/MED/170, connection refused, DNS, capability unavailable)
+  const isConnRefused = code === 'ECONNREFUSED' || /ECONNREFUSED|connection refused/i.test(msg);
+  const isDns = ['ENOTFOUND', 'EAI_AGAIN'].includes(code) || /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(msg);
+  const isCapabilityUnavailable = status === 501 || /capability unavailable|service unavailable/i.test(msg);
+  if (status === 404 || status === 503 || isCapabilityUnavailable || (status === 403 && hasMed170) || isConnRefused || isDns) {
+    const detailMsg = msg ? ` (${msg})` : '';
+    return {
+      category: 'never_reached',
+      status: 503,
+      message: `SAP S/4HANA service unreachable or posting capability unavailable${detailMsg}. The posting was not made and can be tried again.`,
+      definitive: true,
+      details
+    };
+  }
+
+  // 2. Plain 403 (authorization error pointing to SU53)
+  if (status === 403) {
+    const detailMsg = msg ? ` (${msg})` : '';
+    return {
+      category: 'auth_error',
+      status: 403,
+      message: `Authorization failed for SAP Goods Issue posting${detailMsg}. Please check your SAP authorizations in transaction SU53.`,
+      definitive: true,
+      details
+    };
+  }
+
+  // 3. Unknown outcome (timeout, reset, socket hang up, 502/504, 2xx without document)
+  const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(code) || /timeout|timed? ?out/i.test(msg);
+  const isReset = code === 'ECONNRESET' || /connection reset|socket hang up/i.test(msg);
+  const isUnknownCode = UNCONFIRMED_CODES.includes(err?.code);
+  if (status === 502 || status === 504 || isTimeout || isReset || isUnknownCode) {
+    const unconfirmedMsg = msg && /unconfirmed/i.test(msg)
+      ? msg
+      : `Posting outcome unconfirmed in SAP S/4HANA${msg ? ` (${msg})` : ''}. The system is verifying document creation. Please do not post again.`;
+    return {
+      category: 'unknown_outcome',
+      status: status || 504,
+      message: unconfirmedMsg,
+      definitive: false,
+      details
+    };
+  }
+
+  // 4. Rejected by SAP (400, 409, 422, sap-message error)
+  return {
+    category: 'rejected_by_sap',
+    status: status || 400,
+    message: msg || 'Validation failed for Goods Issue in SAP S/4HANA',
+    definitive: true,
+    details
+  };
+}
+
+/**
+ * Posts directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
+ * No queue, no stored transaction for later replay.
+ *
+ * Settle status:
+ *   - 'posted': confirmed document returned from SAP.
+ *   - 'rejected': definitive rejection or unreachable before SAP (claims deleted).
+ *   - 'unconfirmed': unknown outcome (claims kept for recheck).
+ *
+ * @param {Object} req - CAP request
+ * @param {Object} normalized - Normalized payload
+ * @param {Function} postFn - Adapter posting method
+ * @param {Function} [onOutcome] - Outcome callback (status, fields)
+ * @returns {Promise<Object>}
+ */
+async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
   try {
     const result = await postFn(normalized);
-    const isConfirmed = result?.Confirmed !== false;
+    const hasDoc = Boolean(result && result.MaterialDocument);
+    const isConfirmed = hasDoc && result?.Confirmed !== false;
     const outcomeStatus = isConfirmed ? 'posted' : 'unconfirmed';
-    await onOutcome(outcomeStatus, { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
-    return Object.assign({ Queued: false, QueueReference: '', QueueId: '', SyncStatus: 'POSTED_IN_SAP', _definitiveRejection: false }, result);
+
+    await onOutcome(outcomeStatus, {
+      MaterialDocument: result?.MaterialDocument || '',
+      MaterialDocYear: result?.MaterialDocYear || ''
+    });
+
+    const res = Object.assign({ _definitiveRejection: false }, result);
+    delete res.Queued;
+    delete res.QueueReference;
+    delete res.QueueId;
+    delete res.SyncStatus;
+    return res;
   } catch (err) {
-    if (isDefinitiveRejection(err)) {
-      await onOutcome('rejected', { LastError: err.message });
-      const message = err.message || 'Validation failed for Goods Issue';
-      const errResult = Array.isArray(err.details) && err.details.length > 0
-        ? req.error({ code: err.code || String(err.status || 400), status: err.status || 400, message, details: err.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') })) })
-        : req.error(err.status || 400, message);
-      const ret = (errResult && typeof errResult === 'object') ? errResult : { _definitiveRejection: true, isError: true };
-      ret._definitiveRejection = true;
-      return ret;
-    }
-    // A plain 403 is an authorization/CSRF refusal, not an availability problem: it is surfaced below, not queued.
-    if (err.status === 501 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
-      let queueRecord;
-      try {
-        queueRecord = await GoodsIssueQueueManager.enqueue({
-          ReservationNo: normalized.ReservationNo,
-          ReservationItem: normalized.ReservationItem,
-          OrderNo: normalized.OrderNo,
-          Material: normalized.Material,
-          MaterialDesc: normalized.MaterialDesc,
-          Plant: normalized.Plant,
-          StorageLocation: normalized.StorageLocation,
-          IssueQty: normalized.IssueQty,
-          Unit: normalized.Unit,
-          Batch: normalized.Batch,
-          DifferenceQty: normalized.DifferenceQty,
-          DifferenceReason: normalized.DifferenceReason,
-          DifferenceStorageType: normalized.DifferenceStorageType,
-          FinalIssue: normalized.FinalIssue,
-          MovementType: normalized.MovementType,
-          ReceivingPlant: normalized.ReceivingPlant,
-          ReceivingStorageLocation: normalized.ReceivingStorageLocation,
-          CostCenter: normalized.CostCenter,
-          GLAccount: normalized.GLAccount,
-          PostingDate: normalized.PostingDate,
-          DocumentDate: normalized.DocumentDate,
-          SerialNumber: normalized.SerialNumber,
-          ReferenceDocument: normalized.ReferenceDocument,
-          StorageUnits: normalized._allocatedSuItems || normalized.StorageUnits,
-          LastSyncError: err.message
-        });
-      } catch (queueErr) {
-        await onOutcome('rejected', { LastError: `${err.message} Not recorded in the dispatch queue: ${queueErr.message}` });
-        return req.error(err.status || 503, `${err.message || 'Failed to post Goods Issue in S/4HANA'} The transaction could not be recorded in the dispatch queue either: ${queueErr.message}`);
-      }
-      await onOutcome('queued', { LastError: err.message });
-      return {
-        ReservationNo: String(normalized.ReservationNo || ''),
-        ReservationItem: String(normalized.ReservationItem || ''),
-        MaterialDocument: '',
-        MaterialDocYear: '',
-        TransferOrder: '',
-        DifferenceCleared: false,
-        DifferenceQty: Number(normalized.DifferenceQty) || 0,
-        SerialNumber: normalized.SerialNumber,
-        SerialNumbers: normalized.SerialNumbers,
-        // Queued != posted: SAP did NOT persist the document, so this is not a success (AGENTS.md rule 6).
-        Success: false,
-        Queued: true,
-        QueueReference: queueRecord.ID,
-        QueueId: queueRecord.ID,
-        SyncStatus: 'QUEUED',
-        _definitiveRejection: false, // outcome is unknown until replay
-        Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${queueRecord.ID}`
-      };
-    }
-    await onOutcome(UNCONFIRMED_CODES.includes(err.code) ? 'unconfirmed' : 'rejected', { LastError: err.message });
-    // Unknown outcome (timeout, 504, reset, etc.) — _definitiveRejection = false
-    const unknownResult = req.error(err.status || 400, err.message || 'Failed to post Goods Issue in S/4HANA');
-    const ret = (unknownResult && typeof unknownResult === 'object') ? unknownResult : { _definitiveRejection: false, isError: true };
-    ret._definitiveRejection = false;
+    const classified = classifyPostingError(err);
+    const outcomeStatus = classified.definitive ? 'rejected' : 'unconfirmed';
+    await onOutcome(outcomeStatus, { LastError: classified.message });
+
+    const errResult = Array.isArray(classified.details) && classified.details.length > 0
+      ? req.error({
+          code: err.code || String(classified.status),
+          status: classified.status,
+          message: classified.message,
+          details: classified.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') }))
+        })
+      : req.error(classified.status, classified.message);
+
+    const ret = (errResult && typeof errResult === 'object') ? errResult : { _definitiveRejection: classified.definitive, isError: true };
+    ret._definitiveRejection = classified.definitive;
     return ret;
   }
 }
@@ -508,13 +543,14 @@ const PerTypeGoodsIssueHandler = {
         await settle('rejected', { LastError: 'Rejected by the stock or serial pre-check; not sent to SAP.' });
         return;
       }
-      return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), settle);
+      return postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), settle);
     });
 
     srv.on('postGoodsIssue261', async (req) => {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
+      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
       const resvItem = await reservationReconcileCheck(req, normalized);
       if (!resvItem) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
@@ -540,7 +576,7 @@ const PerTypeGoodsIssueHandler = {
 
       let res;
       try {
-        res = await postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
+        res = await postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
       } catch (err) {
         if (claimIds.length > 0) {
           const isDef = GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
@@ -549,7 +585,7 @@ const PerTypeGoodsIssueHandler = {
         throw err;
       }
 
-      if (res && res.MaterialDocument && res.Queued !== true) {
+      if (res && res.MaterialDocument) {
         // Promote claiming rows to issued on success (unconfirmed documents still promote SU claims to issued)
         if (claimIds.length > 0) {
           try {
@@ -561,11 +597,6 @@ const PerTypeGoodsIssueHandler = {
           } catch (suErr) {
             LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
           }
-        }
-      } else if (res && res.Queued === true) {
-        // Queued: outcome unknown until replay — keep 'claiming' rows for release-job resolution
-        if (claimIds.length > 0) {
-          await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: false });
         }
       } else {
         // Delete claiming rows ONLY on explicit definitive rejection; unknown outcomes default to keep
@@ -581,6 +612,7 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
+      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
       const resvItem = await reservationReconcileCheck(req, normalized);
       if (!resvItem) return;
       // A plant-to-plant transfer needs a destination: from the request, or from the reservation.
@@ -589,19 +621,23 @@ const PerTypeGoodsIssueHandler = {
       }
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
-      return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
+      return postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
     });
 
     srv.on('postGoodsIssue311', async (req) => {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
+      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
       if (!(await reservationReconcileCheck(req, normalized, { receiving: true }))) return;
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
-      return postWithQueueFallback(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
+      return postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
     });
   }
 };
+
+PerTypeGoodsIssueHandler.classifyPostingError = classifyPostingError;
+PerTypeGoodsIssueHandler.postDirect = postDirect;
 
 module.exports = PerTypeGoodsIssueHandler;

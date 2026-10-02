@@ -618,14 +618,6 @@ class GoodsIssueAdapter {
   async getDashboardData(options) {
     return this.dashboard.getDashboardData(options);
   }
-
-  /**
-   * Drain the Goods Issue dispatch queue against SAP S/4HANA
-   */
-  async drainQueue() {
-    const GoodsIssueQueueManager = require('../../../wm/goods-issue/GoodsIssueQueueManager');
-    return GoodsIssueQueueManager.drainQueue(this);
-  }
 }
 
 module.exports = new GoodsIssueAdapter();

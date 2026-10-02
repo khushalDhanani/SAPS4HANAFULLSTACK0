@@ -161,19 +161,7 @@ describe('GoodsIssue201Pending Controller Unit Tests', () => {
             expect(model.getProperty('/resultState')).toBe('Success');
             expect(model.getProperty('/resultText')).toContain('4900001234');
         });
-
-        it('should show queued (Warning) result when no material document was posted', async () => {
-            mockService.fetchPendingReservations.mockResolvedValue([{ ReservationNo: '0000000101' }]);
-
-            await controller._onRouteMatched(makeRouteEvent({
-                resv: '0000000101', queued: 'Q-77'
-            })); await flush();
-
-            const model = controller.getModel('gi201p');
-            expect(model.getProperty('/items')).toHaveLength(0);
-            expect(model.getProperty('/resultState')).toBe('Warning');
-            expect(model.getProperty('/resultText')).toContain('Q-77');
-        });
+        // Queue tests removed — dispatch queue eliminated; direct posting only.
 
         it('should surface backend errors and clear the list', async () => {
             mockService.fetchPendingReservations.mockRejectedValue(new Error('Backend offline'));
