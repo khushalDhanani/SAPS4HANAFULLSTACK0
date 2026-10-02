@@ -6,6 +6,67 @@
 
 
 
+## 2026-10-02 14:25 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit).
+  1. Read-back must have its own timeout and its own try/catch, outside `_reclassifyPostingError`. A hang or error must never produce 504/unknown outcome when SAP already returned a number. Test a hanging read-back.
+  2. Unconfirmed documents still promote the SU claim to issued and are stored on the attempt. Add a re-confirm job that retries read-back for unconfirmed documents and clears the flag. Test it.
+  3. Before the drain job replays any legacy GI-QUEUE- row, check MATDOC by reservation+item+user+date+qty, created after the queue time. Match or ambiguous -> needs-attention, no replay. Test it.
+  4. Reversal with an empty year: read the year from SAP by document number; if not found, block with a clear message. Test it.
+  5. Prefer MJAHR from SAP over a BUDAT-derived year. Test it.
+  6. Read-only live run of readBackDocument on 4900049932, 4900049865, 4900049866; report which tier answered and Confirmed true/false.
+  7. Run the full suite, report the total, update WORKSTATUS.md. No new features.
+- **Architectural & Design Implementation**:
+  - **Read-Back Timeout & Isolation (Requirement 1)**:
+    - Added configurable `readBackTimeoutMs` (default 5000ms) to `GoodsIssuePostingClient`.
+    - Wrapped `readBackDocument` in a dedicated `Promise.race` timeout returning `{ MaterialDocument: sDoc, MaterialDocYear: sYear, Confirmed: false, Status: 'not yet confirmed' }` upon timeout or error. It never throws.
+    - Isolated `readBackDocument` inside `post261`: after Tier 1 RAP returns a material document, read-back runs outside the Tier 1 try/catch with its own try/catch, completely preventing fallback to Tier 2 (`_submitMaterialDocument`) or `_reclassifyPostingError`.
+    - Isolated `readBackDocument` in `_submitMaterialDocument` and `post261Batch` in their own try/catch blocks. Even if read-back hangs or fails, the document number is returned marked as unconfirmed, never producing 504 or unknown outcome.
+  - **Unconfirmed Storage Units & Re-Confirm Job (Requirement 2)**:
+    - Added `Confirmed : Boolean default true;` to `GoodsIssueIssuedStorageUnit` in `db/wm/goods-issue-issued-su.cds`.
+    - Updated `GoodsIssueIssuedSuStore.promoteClaims` to accept `{ confirmed: boolean }` and persist `Confirmed: false` on unconfirmed postings.
+    - Added `GoodsIssueIssuedSuStore.clearUnconfirmedFlag(materialDocument, materialDocYear)` and `reconfirmUnconfirmed(adapter)`.
+    - Updated `GoodsIssueAttemptStore.reconfirmUnconfirmed(adapter)` and wired it into `recheck(adapter)`: queries `unconfirmed` attempts, calls `adapter.readBackDocument`, promotes confirmed attempts to `posted`, and clears unconfirmed flags on SU claims.
+  - **Legacy Queue MATDOC Guard (Requirement 3)**:
+    - Added `GoodsIssuePostingClient.checkLegacyMatdocMatches(item)` querying SAP `MATDOC` (with fallback to `MSEG`) for rows with matching `RSNUM`, `RSPOS`, `USNAM`, date, quantity, and created after queue time (`CPUDT + CPUTM >= queueTime`), excluding cancellations/reversals.
+    - Exposed `checkLegacyMatdocMatches` on `GoodsIssueAdapter`.
+    - In `GoodsIssueQueueManager.drainQueue` and `goodsIssue.handler.js` (`retryQueuedGoodsIssue`): before replaying any legacy `GI-QUEUE-` item, executes `checkLegacyMatdocMatches`. If 1 match or ambiguous (>1 matches) found, sets `SyncStatus = 'NEEDS_ATTENTION'` and skips replay.
+  - **Reversal with Empty Year Lookup (Requirement 4)**:
+    - In `GoodsIssuePostingClient.reverseGoodsIssue`: if `MaterialDocYear` is omitted or empty, queries `readBackDocument(materialDocument)`. If found in SAP, uses the confirmed year. If not found, throws a 400 error: `"Material document <doc> year could not be found in SAP; unable to determine document year for reversal."`
+    - In `goodsIssue.handler.js` (`reverseGoodsIssue` action): queries `GoodsIssueAdapter.readBackDocument` when `MaterialDocYear` is empty; if not found, responds with 400 error.
+  - **Authoritative MJAHR Priority (Requirement 5)**:
+    - In `GoodsIssuePostingClient.readBackDocument`: strictly inspects `docRow.MJAHR` first across `MATDOC`, `MKPF`, and OData `A_MaterialDocumentHeader`. Only if `MJAHR` is empty does it fall back to `BUDAT` or `PostingDate`. Local clock is never consulted.
+  - **Live S/4HANA DS4 220 Read-Only Query (Requirement 6)**:
+    - Executed live `readBackDocument` on real SAP documents without live POST or data modification:
+      - `4900049932`: Year `2026`, Confirmed: `true`, Tier: `MATDOC` (Tier 1 Universal Journal; 2 items confirmed: Line 1 Mvt 261 2600 KG Resv 521040/0004, Line 2 Mvt 261 1500 L Resv 521040/0006).
+      - `4900049865`: Year `2026`, Confirmed: `true`, Tier: `MATDOC` (Tier 1 Universal Journal; 1 item confirmed: Line 1 Mvt 201 1 NOS).
+      - `4900049866`: Year `2026`, Confirmed: `true`, Tier: `MATDOC` (Tier 1 Universal Journal; 1 item confirmed: Line 1 Mvt 202 1 NOS).
+- **Affected Files**:
+  - `db/wm/goods-issue-issued-su.cds`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+  - `srv/wm/goods-issue/GoodsIssueAttemptStore.js`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `test/unit/wm/goodsIssueAttempt.test.js`
+  - `test/unit/wm/goodsIssuePerTypePostingClient.test.js`
+  - `test/unit/wm/goodsIssueQueueManager.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Passed cleanly (0 errors).
+  - Live SAP Read-back: 3/3 queries succeeded via Tier 1 `MATDOC`, Confirmed: `true`.
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js`: 26/26 passed (100%).
+  - `npx jest test/integration/wm/goodsIssueQueue.test.js`: 5/5 passed (100%).
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js`: 21/21 passed (100%).
+  - `npx jest test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssueQueueManager.test.js`: 32/32 passed (100%).
+  - `npm test`: 134 suites, 2,226/2,226 passed (100% green).
+  - Zero live SAP POST calls made.
+  - Zero git commits made.
+- **Current Status**: Complete & Verified. All 7 requirements implemented and validated across full test suite.
+- **Next Recommended Action**: Review diff on `feature/CL01` with user.
+
 ## 2026-10-02 13:55 IST
 - **Agent**: Antigravity
 - **Request**: Branch feature/CL01 (No live POST, no commit).
@@ -8429,4 +8490,5 @@ The table below provides a strict, unambiguous separation between **Code Complet
     - Update 2026-10-01 10:44 IST: attempt log, re-check job, replay guard, unconfirmed result and closed-period message implemented and unit-tested (see the 10:44 entries). Open: real posting through the changed path, 261/301/311/batch reference (each needs its own live proof). Uncommitted.
 16. DEPLOYMENT PREREQUISITE: the HDI container must receive table `saps4hana.wm.GoodsIssuePostingAttempt` and column `GoodsIssueQueue.ReferenceDocument` before the 10:44 code goes live; otherwise every 201 posting returns 503. See the 10:44 deployment note.
 17. DEPLOYMENT PREREQUISITE (Issued SU Claims & Queue Replay): the HDI container must receive table `saps4hana.wm.GoodsIssueIssuedStorageUnit` (with index `ClaimLookupIdx` on `Material, Plant, StorageLocation, Status`), and column `GoodsIssueQueue.StorageUnits` (LargeString/NCLOB) before the 2026-10-02 12:10 code goes live. All 134 test suites (2,183 tests) pass (100% green).
+18. DEPLOYMENT PREREQUISITE (Unconfirmed Flag on Issued SUs): column `GoodsIssueIssuedStorageUnit.Confirmed` (`Boolean default true`) in `db/wm/goods-issue-issued-su.cds`. All 134 test suites (2,226 tests) pass (100% green).
 

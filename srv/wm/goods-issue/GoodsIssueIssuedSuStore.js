@@ -406,10 +406,11 @@ class GoodsIssueIssuedSuStore {
    * Atomic 2-Phase Claim: Step 2a (Promote on Success)
    * Promotes `claiming` rows to `issued` with the material document.
    */
-  async promoteClaims(claimIds = [], { materialDocument, materialDocYear = '' }) {
+  async promoteClaims(claimIds = [], { materialDocument, materialDocYear = '', confirmed = true }) {
     if (!Array.isArray(claimIds) || claimIds.length === 0 || !materialDocument) return;
     const sDoc = String(materialDocument).trim();
     const sYear = String(materialDocYear || '').trim();
+    const isConfirmed = confirmed !== false;
 
     for (const id of claimIds) {
       const rec = this._memoryStore.get(id);
@@ -417,6 +418,7 @@ class GoodsIssueIssuedSuStore {
         rec.Status = 'issued';
         rec.MaterialDocument = sDoc;
         rec.MaterialDocYear = sYear;
+        rec.Confirmed = isConfirmed;
         rec.NeedsAttention = false;
         this._memoryStore.set(id, rec);
       }
@@ -424,10 +426,75 @@ class GoodsIssueIssuedSuStore {
 
     if (this.db) {
       try {
-        await this._run(UPDATE(ISSUED_SU_ENTITY).set({ Status: 'issued', MaterialDocument: sDoc, MaterialDocYear: sYear, NeedsAttention: false }).where({ ID: { in: claimIds } }));
-        LOG.info(`Promoted ${claimIds.length} row(s) to 'issued' for MatDoc ${sDoc}/${sYear}`);
+        await this._run(UPDATE(ISSUED_SU_ENTITY).set({ Status: 'issued', MaterialDocument: sDoc, MaterialDocYear: sYear, Confirmed: isConfirmed, NeedsAttention: false }).where({ ID: { in: claimIds } }));
+        LOG.info(`Promoted ${claimIds.length} row(s) to 'issued' (confirmed=${isConfirmed}) for MatDoc ${sDoc}/${sYear}`);
       } catch (err) { LOG.warn('DB update failed to promote claiming rows:', err.message || err); }
     }
+  }
+
+  /**
+   * Clears the unconfirmed flag (Confirmed: false -> Confirmed: true) for the specified material document.
+   *
+   * @param {string} materialDocument
+   * @param {string} [materialDocYear]
+   */
+  async clearUnconfirmedFlag(materialDocument, materialDocYear = '') {
+    const sDoc = String(materialDocument || '').trim();
+    if (!sDoc) return;
+    for (const [id, rec] of this._memoryStore.entries()) {
+      if (rec.MaterialDocument === sDoc) {
+        rec.Confirmed = true;
+        this._memoryStore.set(id, rec);
+      }
+    }
+    if (this.db) {
+      try {
+        await this._run(UPDATE(ISSUED_SU_ENTITY).set({ Confirmed: true }).where({ MaterialDocument: sDoc }));
+        LOG.info(`Cleared unconfirmed flag for MaterialDocument ${sDoc}`);
+      } catch (err) {
+        LOG.warn(`DB update to clear unconfirmed flag failed for doc ${sDoc}: ${err.message}`);
+      }
+    }
+  }
+
+  /**
+   * Retries read-back for any active issued storage units that are not yet confirmed,
+   * clearing the flag if SAP confirms persistence.
+   *
+   * @param {Object} adapter
+   * @returns {Promise<{ checked: number, confirmed: number }>}
+   */
+  async reconfirmUnconfirmed(adapter) {
+    const summary = { checked: 0, confirmed: 0 };
+    const readBack = (adapter && typeof adapter.readBackDocument === 'function')
+      ? adapter.readBackDocument.bind(adapter)
+      : (adapter && adapter.client && typeof adapter.client.readBackDocument === 'function')
+        ? adapter.client.readBackDocument.bind(adapter.client)
+        : (adapter && adapter.posting && typeof adapter.posting.readBackDocument === 'function')
+          ? adapter.posting.readBackDocument.bind(adapter.posting)
+          : null;
+
+    if (!readBack) return summary;
+
+    const activeRows = await this.getActiveIssuedSUs();
+    const unconfirmed = (Array.isArray(activeRows) ? activeRows : []).filter(
+      (r) => r.Status === 'issued' && r.Confirmed === false && r.MaterialDocument
+    );
+
+    for (const row of unconfirmed) {
+      summary.checked++;
+      try {
+        const verified = await readBack(row.MaterialDocument, row.MaterialDocYear);
+        if (verified && verified.Confirmed) {
+          await this.clearUnconfirmedFlag(row.MaterialDocument, verified.MaterialDocYear || row.MaterialDocYear);
+          summary.confirmed++;
+        }
+      } catch (err) {
+        LOG.warn(`SU reconfirm readback failed for doc ${row.MaterialDocument}: ${err.message}`);
+      }
+    }
+
+    return summary;
   }
 
   /**

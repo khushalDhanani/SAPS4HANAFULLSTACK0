@@ -405,7 +405,9 @@ function isDefinitiveRejection(err) {
 async function postWithQueueFallback(req, normalized, postFn, onOutcome = async () => {}) {
   try {
     const result = await postFn(normalized);
-    await onOutcome('posted', { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
+    const isConfirmed = result?.Confirmed !== false;
+    const outcomeStatus = isConfirmed ? 'posted' : 'unconfirmed';
+    await onOutcome(outcomeStatus, { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
     return Object.assign({ Queued: false, QueueReference: '', QueueId: '', SyncStatus: 'POSTED_IN_SAP', _definitiveRejection: false }, result);
   } catch (err) {
     if (isDefinitiveRejection(err)) {
@@ -518,8 +520,6 @@ const PerTypeGoodsIssueHandler = {
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       if (!(await serialPreCheck(req, normalized))) return;
 
-      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
-
       // Make claims atomic (Requirement 2): write 'claiming' rows BEFORE the SAP call
       let claimIds = [];
       if (Array.isArray(normalized._allocatedSuItems) && normalized._allocatedSuItems.length > 0) {
@@ -550,12 +550,13 @@ const PerTypeGoodsIssueHandler = {
       }
 
       if (res && res.MaterialDocument && res.Queued !== true) {
-        // Promote claiming rows to issued on success
+        // Promote claiming rows to issued on success (unconfirmed documents still promote SU claims to issued)
         if (claimIds.length > 0) {
           try {
             await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
               materialDocument: res.MaterialDocument,
-              materialDocYear: res.MaterialDocYear || ''
+              materialDocYear: res.MaterialDocYear || '',
+              confirmed: res.Confirmed !== false
             });
           } catch (suErr) {
             LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);

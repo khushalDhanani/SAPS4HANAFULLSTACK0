@@ -12,6 +12,7 @@ const queue = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 
 const { SELECT, DELETE } = cds.ql;
 const MIN = 60000;
@@ -228,5 +229,146 @@ describe('Goods Issue 201 posting attempts', () => {
       expect(await queue.drainQueue(GoodsIssueAdapter)).toMatchObject({ Attempted: 1, SyncedToSap: 1 });
       expect(post).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('unconfirmed documents and re-confirm job', () => {
+  const handlers = fakeService();
+
+  beforeEach(async () => {
+    await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
+    await GoodsIssueIssuedSuStore.clear();
+  });
+
+  test('unconfirmed documents promote SU claim to issued and are stored on attempt as unconfirmed', async () => {
+    const suPayload = {
+      MovementType: '261',
+      ReservationNo: '0000142001',
+      ReservationItem: '0001',
+      Material: '1000000514',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      IssueQty: 10,
+      Unit: 'KG',
+      PostingDate: '2026-10-02',
+      StorageUnits: ['SU9901']
+    };
+
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      ReservationNo: '0000142001',
+      ReservationItem: '0001',
+      Material: '1000000514',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      RequirementQuantity: 10,
+      WithdrawnQuantity: 0,
+      BaseUnit: 'KG',
+      OpenQty: 10
+    });
+    jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
+      ReservationNo: '0000142001',
+      ReservationItem: '0001',
+      StockUnits: [{ StorageUnit: 'SU9901', AvailableStock: 50, Unit: 'KG' }]
+    });
+    jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+      MaterialDocument: '4900099999',
+      MaterialDocYear: '2026',
+      Success: true,
+      Confirmed: false,
+      ConfirmationStatus: 'NOT_YET_CONFIRMED'
+    });
+
+    const res = await handlers.postGoodsIssue261(req(suPayload));
+    expect(res).toBeDefined();
+    expect(res.MaterialDocument).toBe('4900099999');
+    expect(res.Confirmed).toBe(false);
+
+    // Verify SU claim was promoted to issued with Confirmed: false
+    const activeSUs = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
+    const suClaim = activeSUs.find((r) => r.StorageUnit === 'SU9901');
+    expect(suClaim).toBeDefined();
+    expect(suClaim.Status).toBe('issued');
+    expect(suClaim.MaterialDocument).toBe('4900099999');
+    expect(suClaim.Confirmed).toBe(false);
+
+    // Verify attempt is recorded with Status: 'unconfirmed' and document number on 201
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockResolvedValue({
+      MaterialDocument: '4900088888',
+      MaterialDocYear: '2026',
+      Success: true,
+      Confirmed: false,
+      ConfirmationStatus: 'NOT_YET_CONFIRMED'
+    });
+    const res201 = await handlers.postGoodsIssue201(req(payload));
+    expect(res201).toBeDefined();
+    expect(res201.Confirmed).toBe(false);
+
+    const [att] = await allAttempts();
+    expect(att).toBeDefined();
+    expect(att.Status).toBe('unconfirmed');
+    expect(att.MaterialDocument).toBe('4900088888');
+    expect(att.MaterialDocYear).toBe('2026');
+  });
+
+  test('reconfirmUnconfirmed retries read-back for unconfirmed documents and clears the flag', async () => {
+    // 1. Setup attempt in 'unconfirmed' status
+    const refDoc = 'GICONFIRM001';
+    await attempts.create({
+      ReferenceDocument: refDoc,
+      MovementType: '261',
+      ReservationNo: '0000142001',
+      ReservationItem: '0001',
+      Material: '1000000514',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      IssueQty: 10,
+      Unit: 'KG'
+    });
+    await attempts.setStatus(refDoc, 'unconfirmed', {
+      MaterialDocument: '4900099999',
+      MaterialDocYear: '2026'
+    });
+
+    // 2. Setup SU claim with Confirmed: false
+    const claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
+      reservationNo: '0000142001',
+      reservationItem: '0001',
+      material: '1000000514',
+      plant: '1120',
+      storageLocation: 'HS01',
+      referenceDocument: refDoc,
+      items: [{ storageUnit: 'SU9902', issuedQty: 10, preIssueStock: 50 }]
+    });
+    await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
+      materialDocument: '4900099999',
+      materialDocYear: '2026',
+      confirmed: false
+    });
+
+    const activeBefore = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
+    expect(activeBefore.find((r) => r.StorageUnit === 'SU9902').Confirmed).toBe(false);
+
+    // 3. Mock adapter.readBackDocument to confirm
+    jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({
+      MaterialDocument: '4900099999',
+      MaterialDocYear: '2026',
+      Confirmed: true,
+      Status: 'confirmed'
+    });
+
+    // 4. Run reconfirmUnconfirmed job
+    const summary = await attempts.reconfirmUnconfirmed(GoodsIssueAdapter);
+    expect(summary.Checked).toBe(1);
+    expect(summary.Confirmed).toBe(1);
+
+    // 5. Verify attempt is now 'posted'
+    const updatedAttempt = await attempts.getByReference(refDoc);
+    expect(updatedAttempt.Status).toBe('posted');
+
+    // 6. Verify SU claim has unconfirmed flag cleared (Confirmed: true)
+    const activeAfter = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
+    const updatedSu = activeAfter.find((r) => r.StorageUnit === 'SU9902');
+    expect(updatedSu.Confirmed).toBe(true);
   });
 });

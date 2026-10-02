@@ -141,9 +141,85 @@ class GoodsIssueAttemptStore {
    * @param {number} [now] - current time in ms (tests)
    * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, Requeued: number, StillOpen: number, Errors: number }>}
    */
+  /**
+   * Re-confirm job: retries read-back for unconfirmed documents and clears the flag.
+   * Promotes attempt status from 'unconfirmed' to 'posted' when SAP confirms the document,
+   * and clears unconfirmed flag on corresponding GoodsIssueIssuedStorageUnit claims.
+   *
+   * @param {Object} adapter - GoodsIssueAdapter or client
+   * @returns {Promise<{ Checked: number, Confirmed: number, StillUnconfirmed: number, Errors: number }>}
+   */
+  async reconfirmUnconfirmed(adapter) {
+    const summary = { Checked: 0, Confirmed: 0, StillUnconfirmed: 0, Errors: 0 };
+    if (!this.isAvailable()) return summary;
+
+    let unconfirmedAttempts = [];
+    try {
+      const rows = await this._run(
+        SELECT.from(ATTEMPT_ENTITY).where({ Status: 'unconfirmed' })
+      );
+      unconfirmedAttempts = (Array.isArray(rows) ? rows : []).filter((a) => Boolean(a.MaterialDocument));
+    } catch (err) {
+      LOG.warn(`Failed to fetch unconfirmed attempts: ${err.message}`);
+      return summary;
+    }
+
+    const client = adapter?.client || adapter?.posting || adapter;
+    const readBack = (client && typeof client.readBackDocument === 'function')
+      ? client.readBackDocument.bind(client)
+      : (adapter && typeof adapter.readBackDocument === 'function')
+        ? adapter.readBackDocument.bind(adapter)
+        : null;
+
+    if (!readBack) {
+      LOG.warn('No readBackDocument function available on adapter/client');
+      return summary;
+    }
+
+    const suStore = require('./GoodsIssueIssuedSuStore');
+
+    for (const attempt of unconfirmedAttempts) {
+      summary.Checked++;
+      try {
+        const verified = await readBack(attempt.MaterialDocument, attempt.MaterialDocYear);
+        if (verified && verified.Confirmed) {
+          const confYear = verified.MaterialDocYear || attempt.MaterialDocYear || '';
+          await this.setStatus(attempt.ReferenceDocument, 'posted', {
+            MaterialDocument: verified.MaterialDocument || attempt.MaterialDocument,
+            MaterialDocYear: confYear,
+            LastError: ''
+          });
+          if (suStore && typeof suStore.clearUnconfirmedFlag === 'function') {
+            await suStore.clearUnconfirmedFlag(
+              verified.MaterialDocument || attempt.MaterialDocument,
+              confYear
+            );
+          }
+          summary.Confirmed++;
+        } else {
+          summary.StillUnconfirmed++;
+        }
+      } catch (err) {
+        LOG.warn(`Re-confirm job failed for attempt ${attempt.ReferenceDocument} (${attempt.MaterialDocument}): ${err.message}`);
+        summary.Errors++;
+      }
+    }
+
+    if (suStore && typeof suStore.reconfirmUnconfirmed === 'function') {
+      try {
+        await suStore.reconfirmUnconfirmed(adapter);
+      } catch (suErr) {
+        LOG.warn(`SU store reconfirmUnconfirmed error: ${suErr.message}`);
+      }
+    }
+
+    return summary;
+  }
+
   async recheck(adapter, now = Date.now()) {
     const summary = { Checked: 0, Posted: 0, NotPosted: 0, Requeued: 0, StillOpen: 0, Errors: 0 };
     if (!this.isAvailable()) return summary;
+    await this.reconfirmUnconfirmed(adapter).catch((err) => LOG.warn(`reconfirmUnconfirmed failed inside recheck: ${err.message}`));
     const open = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } }));
     const ageOf = (a) => now - new Date(a.createdAt).getTime();
     const due = (Array.isArray(open) ? open : []).filter((a) => ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs());

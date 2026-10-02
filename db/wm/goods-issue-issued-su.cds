@@ -31,6 +31,7 @@ entity GoodsIssueIssuedStorageUnit : cuid, managed {
     // Set true when the claim has exceeded GI_CLAIMING_NEEDS_ATTENTION_MS without
     // conclusive SAP confirmation. Visible to operators via the Claims admin view.
     NeedsAttention   : Boolean default false;
+    Confirmed        : Boolean default true;
     // Operator-supplied resolution: 'posted' (→ issued) or 'not-posted' (→ deleted).
     ManualResolveAction : String(20);
 }

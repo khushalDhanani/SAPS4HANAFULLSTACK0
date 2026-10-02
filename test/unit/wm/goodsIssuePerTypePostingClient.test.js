@@ -171,4 +171,126 @@ describe('readBackDocument & commit-lag handling', () => {
     expect(result.Confirmed).toBe(true);
     expect(result.MaterialDocYear).toBe('2025'); // Derived from 20251115, not from the clock
   });
+
+  test('prefers MJAHR from SAP over a BUDAT-derived year', async () => {
+    const client = new GoodsIssuePostingClient({});
+    client.rfc = {
+      readTable: jest.fn(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '4900012345',
+            MJAHR: '2024',       // Authoritative SAP fiscal year
+            BUDAT: '20250102'     // Different calendar date
+          }];
+        }
+        return [];
+      })
+    };
+
+    const result = await client.readBackDocument('4900012345');
+    expect(result.Confirmed).toBe(true);
+    expect(result.MaterialDocYear).toBe('2024'); // Strictly prefers MJAHR over BUDAT
+  });
+
+  test('hanging readBackDocument times out and returns unconfirmed without throwing or 504', async () => {
+    let t1, t2;
+    const client = new GoodsIssuePostingClient({ readBackTimeoutMs: 50 });
+    client.rfc = {
+      readTable: jest.fn(() => new Promise((resolve) => { t1 = setTimeout(() => resolve([]), 500); }))
+    };
+    client._get = jest.fn(() => new Promise((resolve) => { t2 = setTimeout(() => resolve({}), 500); }));
+
+    try {
+      const result = await client.readBackDocument('4900099999', '2026', { timeoutMs: 50 });
+      expect(result).toMatchObject({
+        MaterialDocument: '4900099999',
+        MaterialDocYear: '2026',
+        Confirmed: false,
+        Status: 'not yet confirmed'
+      });
+    } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    }
+  });
+
+  test('hanging readBackDocument in post201 returns unconfirmed document and never produces 504', async () => {
+    const client = new GoodsIssuePostingClient({ readBackTimeoutMs: 50 });
+    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+    client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
+    client.readBackDocument = jest.fn().mockImplementation(async (doc, yr) => {
+      return { MaterialDocument: doc, MaterialDocYear: yr, Confirmed: false, Status: 'not yet confirmed' };
+    });
+
+    const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
+    expect(res.Success).toBe(true);
+    expect(res.MaterialDocument).toBe('4900099999');
+    expect(res.Confirmed).toBe(false);
+    expect(res.ConfirmationStatus).toBe('NOT_YET_CONFIRMED');
+    expect(res.Message).toContain('(not yet confirmed)');
+  });
+
+  test('hanging readBackDocument in post261 returns unconfirmed document and never produces 504', async () => {
+    const client = new GoodsIssuePostingClient({ readBackTimeoutMs: 50 });
+    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+    client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900088888', MaterialDocYear: '2026' });
+    client.readBackDocument = jest.fn().mockResolvedValue({
+      MaterialDocument: '4900088888',
+      MaterialDocYear: '2026',
+      Confirmed: false,
+      Status: 'not yet confirmed'
+    });
+
+    const res = await client.post261({
+      MovementType: '261',
+      ReservationNo: '0000142001',
+      ReservationItem: '0001',
+      Material: '1000000514',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      IssueQty: 10,
+      Unit: 'NOS'
+    });
+    expect(res.Success).toBe(true);
+    expect(res.MaterialDocument).toBe('4900088888');
+    expect(res.Confirmed).toBe(false);
+    expect(res.ConfirmationStatus).toBe('NOT_YET_CONFIRMED');
+    expect(res.Message).toContain('(not yet confirmed)');
+  });
+});
+
+describe('reverseGoodsIssue with empty year', () => {
+  test('looks up year from SAP by document number and completes reversal', async () => {
+    const client = new GoodsIssuePostingClient({});
+    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+    client.readBackDocument = jest.fn().mockResolvedValue({
+      MaterialDocument: '4900012345',
+      MaterialDocYear: '2026',
+      Confirmed: true
+    });
+    client._post = jest.fn().mockResolvedValue({
+      MaterialDocument: '4900099999',
+      MaterialDocumentYear: '2026'
+    });
+
+    const res = await client.reverseGoodsIssue('4900012345', '');
+    expect(client.readBackDocument).toHaveBeenCalledWith('4900012345');
+    expect(res.Success).toBe(true);
+    expect(res.OriginalMaterialDocument).toBe('4900012345');
+    expect(res.OriginalMaterialDocYear).toBe('2026');
+    expect(res.ReversalMaterialDocument).toBe('4900099999');
+  });
+
+  test('blocks with clear message when document is not found in SAP for empty year', async () => {
+    const client = new GoodsIssuePostingClient({});
+    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+    client.readBackDocument = jest.fn().mockResolvedValue({
+      MaterialDocument: '4900099999',
+      MaterialDocYear: '',
+      Confirmed: false
+    });
+
+    await expect(client.reverseGoodsIssue('4900099999', ''))
+      .rejects.toThrow('Material document 4900099999 was not found in SAP; unable to determine document year for reversal.');
+  });
 });

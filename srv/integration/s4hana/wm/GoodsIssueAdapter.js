@@ -551,6 +551,16 @@ class GoodsIssueAdapter {
     return this.posting.findPosted261ByMatdoc(...args);
   }
 
+  /** Read a material document back from SAP to confirm persistence. */
+  async readBackDocument(materialDocument, materialDocYear) {
+    return this.posting.readBackDocument(materialDocument, materialDocYear);
+  }
+
+  /** Pre-replay MATDOC check for legacy queue items. */
+  async checkLegacyMatdocMatches(item) {
+    return this.posting.checkLegacyMatdocMatches(item);
+  }
+
   /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 

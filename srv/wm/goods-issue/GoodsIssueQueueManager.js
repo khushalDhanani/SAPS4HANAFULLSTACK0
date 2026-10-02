@@ -356,6 +356,38 @@ class GoodsIssueQueueManager {
       }
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
 
+      // Legacy GI-QUEUE- row pre-replay MATDOC guard:
+      // Check MATDOC by reservation+item+user+date+qty, created after the queue time.
+      // Match or ambiguous -> needs-attention, no replay.
+      const isLegacy = typeof item.QueueReference === 'string' && item.QueueReference.startsWith('GI-QUEUE-');
+      const matdocChecker = (adapter && typeof adapter.checkLegacyMatdocMatches === 'function')
+        ? adapter.checkLegacyMatdocMatches.bind(adapter)
+        : (adapter && adapter.posting && typeof adapter.posting.checkLegacyMatdocMatches === 'function')
+          ? adapter.posting.checkLegacyMatdocMatches.bind(adapter.posting)
+          : null;
+
+      if (isLegacy && matdocChecker) {
+        let checkResult = null;
+        try {
+          checkResult = await matdocChecker(item);
+        } catch (chkErr) {
+          LOG.warn ? LOG.warn(`Pre-replay MATDOC check failed for legacy queue row ${item.QueueReference}: ${chkErr.message}`) : undefined;
+        }
+        if (checkResult && checkResult.count > 0) {
+          const isAmbiguous = checkResult.count > 1;
+          const finding = isAmbiguous
+            ? `Ambiguous documents found in SAP MATDOC (${checkResult.count} matches); operator attention required before replay`
+            : `Document already found in SAP MATDOC (${checkResult.match.MBLNR}/${checkResult.match.MJAHR || ''}); operator attention required before replay`;
+          await this.update(item.QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 0) + 1,
+            LastSyncError: finding,
+            SyncStatus: 'NEEDS_ATTENTION'
+          });
+          failedCount++;
+          continue;
+        }
+      }
+
       try {
         // --- Parse StorageUnits for SU claim management ---
         let suAllocations = [];

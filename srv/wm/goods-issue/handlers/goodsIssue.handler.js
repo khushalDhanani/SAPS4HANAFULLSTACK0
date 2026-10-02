@@ -148,6 +148,22 @@ class GoodsIssueHandler {
 
     // ACTION: reverseGoodsIssue (Material Document Reversal via CancelHeader FunctionImport)
     srv.on('reverseGoodsIssue', async (req) => {
+      let matDoc = String(req.data?.MaterialDocument || '').trim();
+      let matYear = String(req.data?.MaterialDocYear || '').trim();
+
+      if (matDoc && !matYear) {
+        try {
+          const verified = await GoodsIssueAdapter.readBackDocument(matDoc);
+          if (verified && verified.MaterialDocYear && verified.Confirmed) {
+            req.data.MaterialDocYear = verified.MaterialDocYear;
+          } else {
+            return req.error(400, `Material document ${matDoc} year could not be found in SAP; cannot reverse without a valid document year.`);
+          }
+        } catch (readErr) {
+          return req.error(400, `Failed to look up material document ${matDoc} in SAP: ${readErr.message}`);
+        }
+      }
+
       const valResult = validateReversalPayload(req.data);
       if (!valResult.isValid) {
         return req.error(400, valResult.message);
@@ -275,6 +291,32 @@ class GoodsIssueHandler {
         return req.error(409, `Queued transaction ${QueueReference} cannot be retried: its last posting attempt is '${guard.attempt.Status}' (reference ${item.ReferenceDocument}) and is being confirmed in SAP.`);
       }
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
+
+      // Legacy GI-QUEUE- row pre-replay MATDOC guard:
+      const isLegacy = typeof item.QueueReference === 'string' && item.QueueReference.startsWith('GI-QUEUE-');
+      const matdocChecker = (GoodsIssueAdapter && typeof GoodsIssueAdapter.checkLegacyMatdocMatches === 'function')
+        ? GoodsIssueAdapter.checkLegacyMatdocMatches.bind(GoodsIssueAdapter)
+        : null;
+      if (isLegacy && matdocChecker) {
+        let checkResult = null;
+        try {
+          checkResult = await matdocChecker(item);
+        } catch (chkErr) {
+          LOG.warn(`Pre-replay MATDOC check failed for legacy queue row ${QueueReference}: ${chkErr.message}`);
+        }
+        if (checkResult && checkResult.count > 0) {
+          const isAmbiguous = checkResult.count > 1;
+          const finding = isAmbiguous
+            ? `Ambiguous documents found in SAP MATDOC (${checkResult.count} matches); operator attention required before replay`
+            : `Document already found in SAP MATDOC (${checkResult.match.MBLNR}/${checkResult.match.MJAHR || ''}); operator attention required before replay`;
+          await GoodsIssueQueueManager.update(QueueReference, {
+            SyncAttempts: (item.SyncAttempts || 0) + 1,
+            LastSyncError: finding,
+            SyncStatus: 'NEEDS_ATTENTION'
+          });
+          return req.error(409, `Queued transaction ${QueueReference} cannot be retried: ${finding}`);
+        }
+      }
 
       try {
         // Replay through the isolated per-type dispatcher (routes by the stored MovementType).

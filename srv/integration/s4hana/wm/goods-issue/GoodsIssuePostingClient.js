@@ -33,6 +33,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
     this.rfc = options.rfc || (options.adapter && options.adapter.rfc) || new RfcClient();
+    this.readBackTimeoutMs = options.readBackTimeoutMs || Number(process.env.GI_READBACK_TIMEOUT_MS) || 5000;
   }
 
   /**
@@ -158,7 +159,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     if (!rawMatDoc) {
       throw new Error(`SAP S/4HANA did not return a material document for movement ${meta.mvt} posting, and no sap-message error was present in the response.`);
     }
-    const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+    let verified;
+    try {
+      verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+    } catch (rbErr) {
+      LOG.warn(`readBackDocument error in _submitMaterialDocument for ${rawMatDoc}: ${rbErr.message}`);
+      verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'not yet confirmed' };
+    }
     const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
     const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
     const isConfirmed = Boolean(verified?.Confirmed);
@@ -188,111 +195,143 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * 3. Fallback 2 (Tier 3): OData GET API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader
    *
    * Commit-Lag & Error Contract:
-   * If SAP returned a document number but read-back returns nothing (e.g. Gateway commit lag)
-   * or throws an error, the document number is STILL returned marked as "not yet confirmed"
-   * (Confirmed: false, Status: 'not yet confirmed'). It NEVER reports failure and NEVER queues.
+   * If SAP returned a document number but read-back returns nothing (e.g. Gateway commit lag),
+   * times out, or throws an error, the document number is STILL returned marked as "not yet confirmed"
+   * (Confirmed: false, Status: 'not yet confirmed'). It NEVER reports failure, NEVER 504s, and NEVER queues.
    *
    * Year Contract:
    * MaterialDocYear is obtained from SAP MJAHR or derived from the SAP posting date (BUDAT).
-   * It is NEVER derived from the local system clock.
+   * MJAHR from SAP is strictly preferred over BUDAT-derived year. It is NEVER derived from the local clock.
    *
    * @param {string} matDoc - Material document number returned by SAP
    * @param {string} [matYear] - Material document year returned by SAP
-   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Confirmed: boolean, Status: string, Items?: Array }>}
+   * @param {Object} [options]
+   * @param {number} [options.timeoutMs]
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Confirmed: boolean, Status: string, Tier?: string, Items?: Array }>}
    */
-  async readBackDocument(matDoc, matYear) {
+  async readBackDocument(matDoc, matYear, options = {}) {
     const sDoc = String(matDoc || '').trim();
     const sYear = String(matYear || '').trim();
     if (!sDoc) return null;
 
-    // 1. Primary: RFC readTable on MATDOC
-    if (this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        const where = [`MBLNR = '${sDoc}'`];
-        if (sYear) where.push(`AND MJAHR = '${sYear}'`);
-        const rows = await this.rfc.readTable(
-          'MATDOC',
-          ['MBLNR', 'MJAHR', 'BUDAT', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'],
-          where,
-          10
-        );
-        if (Array.isArray(rows) && rows.length > 0) {
-          const docRow = rows[0];
-          let confirmedYear = String(docRow.MJAHR || '').trim();
-          if (!confirmedYear && docRow.BUDAT) {
-            confirmedYear = String(docRow.BUDAT).trim().slice(0, 4);
-          }
-          return {
-            MaterialDocument: String(docRow.MBLNR).trim(),
-            MaterialDocYear: confirmedYear || sYear,
-            Confirmed: true,
-            Status: 'confirmed',
-            Items: rows
-          };
-        }
-      } catch (err) {
-        LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF fallback...`);
-      }
-
-      // 2. Fallback 1: RFC readTable on MKPF
-      try {
-        const where = [`MBLNR = '${sDoc}'`];
-        if (sYear) where.push(`AND MJAHR = '${sYear}'`);
-        const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
-        if (Array.isArray(rows) && rows.length > 0) {
-          const mkpfRow = rows[0];
-          let confirmedYear = String(mkpfRow.MJAHR || '').trim();
-          if (!confirmedYear && mkpfRow.BUDAT) {
-            confirmedYear = String(mkpfRow.BUDAT).trim().slice(0, 4);
-          }
-          return {
-            MaterialDocument: String(mkpfRow.MBLNR).trim(),
-            MaterialDocYear: confirmedYear || sYear,
-            Confirmed: true,
-            Status: 'confirmed'
-          };
-        }
-      } catch (mkpfErr) {
-        LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}. Trying OData fallback...`);
-      }
-    }
-
-    // 3. Fallback 2: OData A_MaterialDocumentHeader GET
-    try {
-      let docPath;
-      if (sYear) {
-        docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(MaterialDocumentYear='${sYear}',MaterialDocument='${sDoc}')`;
-      } else {
-        docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json`;
-      }
-      const res = await this._get(docPath, '$format=json');
-      const header = Array.isArray(res) ? res[0] : (res?.d || res);
-      if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
-        let confirmedYear = String(header.MaterialDocumentYear || '').trim();
-        if (!confirmedYear && header.PostingDate) {
-          const m = String(header.PostingDate).match(/\d{4}/);
-          if (m) confirmedYear = m[0];
-        }
-        return {
-          MaterialDocument: String(header.MaterialDocument || sDoc).trim(),
-          MaterialDocYear: confirmedYear || sYear,
-          Confirmed: true,
-          Status: 'confirmed'
-        };
-      }
-    } catch (odataErr) {
-      LOG.warn(`OData readback for ${sDoc}/${sYear} failed: ${odataErr.message}`);
-    }
-
-    // When SAP returned a document number, but read-back returns nothing or errors
-    // (e.g. Gateway commit-lag): still return that document number, marked "not yet confirmed".
-    // Never report failure or queue.
-    return {
+    const timeoutMs = Number(options.timeoutMs || this.readBackTimeoutMs || 5000);
+    const unconfirmedFallback = {
       MaterialDocument: sDoc,
       MaterialDocYear: sYear,
       Confirmed: false,
       Status: 'not yet confirmed'
     };
+
+    const doReadBack = async () => {
+      // 1. Primary: RFC readTable on MATDOC
+      if (this.rfc && typeof this.rfc.readTable === 'function') {
+        try {
+          const where = [`MBLNR = '${sDoc}'`];
+          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+          const rows = await this.rfc.readTable(
+            'MATDOC',
+            ['MBLNR', 'MJAHR', 'BUDAT', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'],
+            where,
+            10
+          );
+          if (Array.isArray(rows) && rows.length > 0) {
+            const docRow = rows[0];
+            // Prefer MJAHR from SAP over BUDAT-derived year
+            let confirmedYear = String(docRow.MJAHR || '').trim();
+            if (!confirmedYear && docRow.BUDAT) {
+              confirmedYear = String(docRow.BUDAT).trim().slice(0, 4);
+            }
+            return {
+              MaterialDocument: String(docRow.MBLNR).trim(),
+              MaterialDocYear: confirmedYear || sYear,
+              Confirmed: true,
+              Status: 'confirmed',
+              Tier: 'MATDOC',
+              Items: rows
+            };
+          }
+        } catch (err) {
+          LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF fallback...`);
+        }
+
+        // 2. Fallback 1: RFC readTable on MKPF
+        try {
+          const where = [`MBLNR = '${sDoc}'`];
+          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+          const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
+          if (Array.isArray(rows) && rows.length > 0) {
+            const mkpfRow = rows[0];
+            // Prefer MJAHR from SAP over BUDAT-derived year
+            let confirmedYear = String(mkpfRow.MJAHR || '').trim();
+            if (!confirmedYear && mkpfRow.BUDAT) {
+              confirmedYear = String(mkpfRow.BUDAT).trim().slice(0, 4);
+            }
+            return {
+              MaterialDocument: String(mkpfRow.MBLNR).trim(),
+              MaterialDocYear: confirmedYear || sYear,
+              Confirmed: true,
+              Status: 'confirmed',
+              Tier: 'MKPF'
+            };
+          }
+        } catch (mkpfErr) {
+          LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}. Trying OData fallback...`);
+        }
+      }
+
+      // 3. Fallback 2: OData A_MaterialDocumentHeader GET
+      try {
+        let docPath;
+        if (sYear) {
+          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(MaterialDocumentYear='${sYear}',MaterialDocument='${sDoc}')`;
+        } else {
+          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json`;
+        }
+        const res = await this._get(docPath, '$format=json');
+        const header = Array.isArray(res) ? res[0] : (res?.d || res);
+        if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
+          let confirmedYear = String(header.MaterialDocumentYear || '').trim();
+          if (!confirmedYear && header.PostingDate) {
+            const m = String(header.PostingDate).match(/\d{4}/);
+            if (m) confirmedYear = m[0];
+          }
+          return {
+            MaterialDocument: String(header.MaterialDocument || sDoc).trim(),
+            MaterialDocYear: confirmedYear || sYear,
+            Confirmed: true,
+            Status: 'confirmed',
+            Tier: 'OData'
+          };
+        }
+      } catch (odataErr) {
+        LOG.warn(`OData readback for ${sDoc}/${sYear} failed: ${odataErr.message}`);
+      }
+
+      return unconfirmedFallback;
+    };
+
+    let timer;
+    try {
+      const timeoutPromise = new Promise((resolve) => {
+        timer = setTimeout(() => {
+          LOG.warn(`readBackDocument for ${sDoc}/${sYear} timed out after ${timeoutMs}ms; returning unconfirmed document`);
+          resolve(unconfirmedFallback);
+        }, timeoutMs);
+      });
+      const result = await Promise.race([
+        doReadBack().catch((err) => {
+          LOG.warn(`readBackDocument error for ${sDoc}/${sYear}: ${err.message}; returning unconfirmed document`);
+          return unconfirmedFallback;
+        }),
+        timeoutPromise
+      ]);
+      return result || unconfirmedFallback;
+    } catch (err) {
+      LOG.warn(`readBackDocument unexpected error for ${sDoc}/${sYear}: ${err.message}`);
+      return unconfirmedFallback;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /**
@@ -572,6 +611,10 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
 
     // Tier 1: custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4 (posts 261 only).
+    let tier1Response = null;
+    let tier1MatDoc = null;
+    let tier1MatYear = '';
+    let tier1Error = null;
     try {
       const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
       const response = await this._post(path, {
@@ -583,43 +626,56 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         FinalIssue: false
       });
       if (response && (response.MaterialDocument || response.MatDoc)) {
-        const rawMatDoc = response.MaterialDocument || response.MatDoc;
-        let rawMatYear = response.MaterialDocYear || '';
-        if (!rawMatYear && response.PostingDate) {
+        tier1Response = response;
+        tier1MatDoc = response.MaterialDocument || response.MatDoc;
+        tier1MatYear = response.MaterialDocYear || '';
+        if (!tier1MatYear && response.PostingDate) {
           const m = String(response.PostingDate).match(/\d{4}/);
-          if (m) rawMatYear = m[0];
+          if (m) tier1MatYear = m[0];
         }
-        const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
-        const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
-        const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
-        const isConfirmed = Boolean(verified?.Confirmed);
-        const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
-        return {
-          ReservationNo: sReserv,
-          ReservationItem: sItem,
-          OrderNo: sOrder,
-          MaterialDocument: matDoc,
-          MaterialDocYear: matYear,
-          TransferOrder: response.TransferOrder || response.ToNumber || '',
-          DifferenceCleared: false,
-          DifferenceQty: 0,
-          Success: true,
-          Confirmed: isConfirmed,
-          ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
-          Message: `Goods Issue 261 posted successfully in S/4HANA${confirmationText}.`
-        };
+      } else {
+        throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
       }
-      throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
     } catch (v4Err) {
-      // Tier 2: standard API_MATERIAL_DOCUMENT_SRV.
+      tier1Error = v4Err;
+    }
+
+    if (tier1MatDoc) {
+      let verified;
       try {
-        const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
-        return await this._submitMaterialDocument(payload, {
-          mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem, orderNo: sOrder
-        });
-      } catch (v2Err) {
-        throw this._reclassifyPostingError(v4Err, v2Err, 'single-item movement 261');
+        verified = await this.readBackDocument(tier1MatDoc, tier1MatYear);
+      } catch (rbErr) {
+        LOG.warn(`readBackDocument error after RAP post: ${rbErr.message}`);
+        verified = { MaterialDocument: tier1MatDoc, MaterialDocYear: tier1MatYear, Confirmed: false, Status: 'not yet confirmed' };
       }
+      const matDoc = verified?.MaterialDocument || String(tier1MatDoc).trim();
+      const matYear = verified?.MaterialDocYear || String(tier1MatYear).trim();
+      const isConfirmed = Boolean(verified?.Confirmed);
+      const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
+      return {
+        ReservationNo: sReserv,
+        ReservationItem: sItem,
+        OrderNo: sOrder,
+        MaterialDocument: matDoc,
+        MaterialDocYear: matYear,
+        TransferOrder: tier1Response.TransferOrder || tier1Response.ToNumber || '',
+        DifferenceCleared: false,
+        DifferenceQty: 0,
+        Success: true,
+        Confirmed: isConfirmed,
+        ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+        Message: `Goods Issue 261 posted successfully in S/4HANA${confirmationText}.`
+      };
+    }
+
+    // Tier 2: standard API_MATERIAL_DOCUMENT_SRV.
+    try {
+      const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
+      return await this._submitMaterialDocument(payload, {
+        mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem, orderNo: sOrder
+      });
+    } catch (v2Err) {
+      throw this._reclassifyPostingError(tier1Error, v2Err, 'single-item movement 261');
     }
   }
 
@@ -812,7 +868,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         }
 
         if (rawMatDoc) {
-          const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+          let verified;
+          try {
+            verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+          } catch (rbErr) {
+            LOG.warn(`readBackDocument error in post261Batch for ${rawMatDoc}: ${rbErr.message}`);
+            verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'not yet confirmed' };
+          }
           const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
           const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
           const isConfirmed = Boolean(verified?.Confirmed);
@@ -997,10 +1059,133 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * Pre-replay guard for legacy GI-QUEUE- rows:
+   * Checks MATDOC by reservation + item + user + date + qty, created at or after the queue time.
+   *
+   * @param {Object} item - Queue row
+   * @returns {Promise<{ count: number, matches: Array, ambiguous: boolean, match: Object|null }>}
+   */
+  async checkLegacyMatdocMatches(item) {
+    const sResv = item.ReservationNo || item.reservationNo;
+    const sItem = item.ReservationItem != null ? item.ReservationItem : item.reservationItem;
+    if (!sResv || sItem == null) return { count: 0, matches: [], ambiguous: false, match: null };
+
+    const rsnum = String(sResv).trim().padStart(10, '0');
+    const rspos = String(sItem).trim().padStart(4, '0');
+    const sUser = item.CreatedByUser || item.createdBy || item.USNAM || '';
+    const usnam = sUser ? String(sUser).trim().toUpperCase() : '';
+    const sDate = item.PostingDate || item.DocumentDate || item.QueuedAt || item.createdAt;
+    const dDay = sDate ? this._formatDate(sDate).replace(/-/g, '') : '';
+    const expectedQty = item.IssueQty != null ? Number(item.IssueQty) : null;
+    const queueTime = item.QueuedAt || item.createdAt;
+    const queueTimeMs = queueTime ? new Date(queueTime).getTime() : null;
+
+    const where = [
+      `RSNUM = '${rsnum}'`,
+      `AND RSPOS = '${rspos}'`,
+      `AND (BWART = '261' OR BWART = '262')`
+    ];
+    if (usnam) where.push(`AND USNAM = '${usnam}'`);
+    if (dDay) where.push(`AND (BUDAT = '${dDay}' OR CPUDT = '${dDay}')`);
+
+    const fields = [
+      'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
+      'CPUDT', 'CPUTM', 'MENGE', 'ERFMG', 'STORNO', 'SMBLN', 'SJAHR', 'XAUTO'
+    ];
+
+    let rows = [];
+    const readTable = (this.rfc && typeof this.rfc.readTable === 'function')
+      ? (t, f, w) => this.rfc.readTable(t, f, w)
+      : (this.adapter && typeof this.adapter.readTable === 'function')
+        ? (t, f, w) => this.adapter.readTable(t, f, w)
+        : null;
+
+    if (readTable) {
+      try {
+        rows = await readTable('MATDOC', fields, where);
+      } catch (matdocErr) {
+        LOG.warn(`MATDOC read failed for legacy queue check, trying MSEG: ${matdocErr.message}`);
+        try {
+          const msegFields = [
+            'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
+            'CPUDT', 'CPUTM', 'MENGE', 'ERFMG', 'SMBLN', 'SJAHR'
+          ];
+          const msegWhere = [
+            `RSNUM = '${rsnum}'`,
+            `AND RSPOS = '${rspos}'`,
+            `AND (BWART = '261' OR BWART = '262')`
+          ];
+          rows = await readTable('MSEG', msegFields, msegWhere);
+        } catch (msegErr) {
+          LOG.warn(`MSEG read also failed for legacy queue check: ${msegErr.message}`);
+          throw matdocErr;
+        }
+      }
+    }
+
+    const allRows = Array.isArray(rows) ? rows : [];
+
+    // Track cancelled or reversal documents
+    const reversedDocKeys = new Set();
+    for (const r of allRows) {
+      if (r.STORNO === 'X' || r.STORNO === true || r.XAUTO === 'X' || r.Reversed === true || r.Cancelled === true) {
+        reversedDocKeys.add(`${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`);
+      }
+      if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') {
+        reversedDocKeys.add(`${String(r.SMBLN).trim()}-${String(r.SJAHR || r.MJAHR || '').trim()}`);
+      }
+    }
+
+    const matches = allRows.filter((r) => {
+      const docKey = `${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`;
+      if (reversedDocKeys.has(docKey)) return false;
+      if (r.BWART === '262') return false;
+
+      // Quantity filter: must match queue item's quantity
+      if (expectedQty !== null && Number.isFinite(expectedQty)) {
+        const candQty = Number(r.MENGE != null ? r.MENGE : (r.ERFMG != null ? r.ERFMG : r.Quantity));
+        if (Number.isFinite(candQty) && Math.abs(candQty - expectedQty) > 0.001) {
+          return false;
+        }
+      }
+
+      // Timestamp filter: must be created at or after the queue time
+      if (queueTimeMs !== null && Number.isFinite(queueTimeMs)) {
+        let docTimeMs = null;
+        if (r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp) {
+          docTimeMs = new Date(r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp).getTime();
+        } else if (r.CPUDT) {
+          const cpudt = String(r.CPUDT).trim();
+          const cputm = String(r.CPUTM || '000000').trim().padStart(6, '0');
+          const y = cpudt.slice(0, 4);
+          const m = cpudt.slice(4, 6);
+          const d = cpudt.slice(6, 8);
+          const hh = cputm.slice(0, 2);
+          const mm = cputm.slice(2, 4);
+          const ss = cputm.slice(4, 6);
+          docTimeMs = new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}Z`).getTime();
+        }
+        if (docTimeMs !== null && Number.isFinite(docTimeMs) && docTimeMs < queueTimeMs) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return {
+      count: matches.length,
+      matches,
+      ambiguous: matches.length > 1,
+      match: matches.length === 1 ? matches[0] : null
+    };
+  }
+
+  /**
    * Reverse an existing Material Document in SAP S/4HANA via CancelHeader FunctionImport.
    *
    * @param {string} materialDocument - 10-digit SAP material document
-   * @param {string} materialDocYear - 4-digit fiscal year
+   * @param {string} [materialDocYear] - 4-digit fiscal year (looked up in SAP if omitted)
    * @param {string} [postingDate] - Optional posting date (YYYY-MM-DD)
    * @param {string} [documentDate] - Optional document date (YYYY-MM-DD)
    * @param {string} [reversalReason] - Optional reason code
@@ -1008,11 +1193,26 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    */
   async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
     const sDoc = String(materialDocument || '').trim();
-    const sYear = String(materialDocYear || '').trim();
-    if (!sDoc || !sYear) {
-      const err = new Error('MaterialDocument and MaterialDocYear are required for reversal');
+    let sYear = String(materialDocYear || '').trim();
+    if (!sDoc) {
+      const err = new Error('MaterialDocument is required for reversal');
       err.status = 400;
       throw err;
+    }
+    if (!sYear) {
+      let verified;
+      try {
+        verified = await this.readBackDocument(sDoc);
+      } catch (readErr) {
+        LOG.warn(`Reversal year lookup failed for ${sDoc}: ${readErr.message}`);
+      }
+      if (verified && verified.MaterialDocYear && verified.Confirmed) {
+        sYear = verified.MaterialDocYear;
+      } else {
+        const err = new Error(`Material document ${sDoc} was not found in SAP; unable to determine document year for reversal.`);
+        err.status = 400;
+        throw err;
+      }
     }
 
     const dest = await this._getDestination();

@@ -292,5 +292,95 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(await handlers['clearQueuedGoodsIssue']({ data: { QueueReference: legacyRef }, error: jest.fn() })).toBe(true);
       expect(await manager.get(legacyRef)).toBeNull();
     });
+
+    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: 1 match -> needs-attention, no replay', async () => {
+      const legacyRef = 'GI-QUEUE-142001-0001-7042';
+      await manager.enqueue({
+        QueueReference: legacyRef,
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        Material: '1000000514',
+        IssueQty: 10,
+        Unit: 'KG'
+      });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
+      jest.spyOn(GoodsIssueAdapter, 'checkLegacyMatdocMatches').mockResolvedValue({
+        count: 1,
+        ambiguous: false,
+        match: { MBLNR: '4900012345', MJAHR: '2026' }
+      });
+
+      const drainResult = await manager.drainQueue(GoodsIssueAdapter);
+      expect(drainResult.Attempted).toBe(1);
+      expect(drainResult.SyncedToSap).toBe(0);
+      expect(drainResult.Failed).toBe(1);
+      expect(postSpy).not.toHaveBeenCalled();
+
+      const item = await manager.get(legacyRef);
+      expect(item.SyncStatus).toBe('NEEDS_ATTENTION');
+      expect(item.LastSyncError).toContain('Document already found in SAP MATDOC (4900012345/2026)');
+    });
+
+    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: ambiguous matches -> needs-attention, no replay', async () => {
+      const legacyRef = 'GI-QUEUE-142001-0001-7043';
+      await manager.enqueue({
+        QueueReference: legacyRef,
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        Material: '1000000514',
+        IssueQty: 10,
+        Unit: 'KG'
+      });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
+      jest.spyOn(GoodsIssueAdapter, 'checkLegacyMatdocMatches').mockResolvedValue({
+        count: 2,
+        ambiguous: true,
+        match: null
+      });
+
+      const drainResult = await manager.drainQueue(GoodsIssueAdapter);
+      expect(drainResult.Attempted).toBe(1);
+      expect(drainResult.SyncedToSap).toBe(0);
+      expect(drainResult.Failed).toBe(1);
+      expect(postSpy).not.toHaveBeenCalled();
+
+      const item = await manager.get(legacyRef);
+      expect(item.SyncStatus).toBe('NEEDS_ATTENTION');
+      expect(item.LastSyncError).toContain('Ambiguous documents found in SAP MATDOC (2 matches)');
+    });
+
+    it('drainQueue checks MATDOC for legacy GI-QUEUE- row: 0 matches -> replay proceeds', async () => {
+      const legacyRef = 'GI-QUEUE-142001-0001-7044';
+      await manager.enqueue({
+        QueueReference: legacyRef,
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        Material: '1000000514',
+        IssueQty: 10,
+        Unit: 'KG'
+      });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({
+        MaterialDocument: '4900099888',
+        MaterialDocYear: '2026',
+        Success: true
+      });
+      jest.spyOn(GoodsIssueAdapter, 'checkLegacyMatdocMatches').mockResolvedValue({
+        count: 0,
+        ambiguous: false,
+        match: null
+      });
+
+      const drainResult = await manager.drainQueue(GoodsIssueAdapter);
+      expect(drainResult.Attempted).toBe(1);
+      expect(drainResult.SyncedToSap).toBe(1);
+      expect(postSpy).toHaveBeenCalledTimes(1);
+
+      const item = await manager.get(legacyRef);
+      expect(item.SyncStatus).toBe('POSTED_IN_SAP');
+      expect(item.SapMaterialDocument).toBe('4900099888');
+    });
   });
 });
