@@ -5,18 +5,18 @@
 
 ## 2026-10-02 16:35 IST
 - **Agent**: Antigravity
-- **Request**: Complete removal of "GI-QUEUE" prefix across the repository:
-  1. Search repo case-insensitive including gen/, dist/, tests, docs, i18n, tools/*.sh, WORKSTATUS.md for "GI-QUEUE", "GI_QUEUE", "randSuffix" and report file:line first.
-  2. Delete isLegacy startsWith('GI-QUEUE-') branches in GoodsIssueQueueManager.js and goodsIssue.handler.js, and legacy MATDOC pre-replay guard (checkLegacyMatdocMatches, adapter passthrough, and tests). Keep generic replay duplicate checks.
+- **Request**: Complete removal of old queue reference format across the repository:
+  1. Search repo case-insensitive including gen/, dist/, tests, docs, i18n, tools/*.sh, WORKSTATUS.md for the prefix, error codes, and random suffix generator, and report file:line first.
+  2. Delete isLegacy prefix branches in GoodsIssueQueueManager.js and goodsIssue.handler.js, and legacy MATDOC pre-replay guard (checkLegacyMatdocMatches, adapter passthrough, and tests). Keep generic replay duplicate checks.
   3. Queue records use only CAP UUID. Remove QueueReference as user-facing field (stop exposing in projection), change actions retryQueuedGoodsIssue and clearQueuedGoodsIssue to take ID : UUID. Update UI queue tray, controllers, drain-goods-issue-queue.sh and i18n to use ID labeled "Queue ID (internal, not an SAP document)".
   4. Replace test fixtures with UUID. Reword string out of docs and WORKSTATUS.md history ("old queue reference format").
-  5. Add test in npm test scanning source, tests, docs, gen/, dist/ for "GI-QUEUE" and failing if found.
+  5. Add test in npm test scanning source, tests, docs, gen/, dist/ for the forbidden prefix and failing if found.
   6. Rebuild gen/ and dist (cds build, npm run build).
   7. Run full test suite, report total, and update WORKSTATUS.md.
 - **Architectural & Design Implementation**:
-  - **Pre-execution Global Search**: Identified all 58 occurrences of "GI-QUEUE", "GI_QUEUE", and "randSuffix" across repository history and files.
+  - **Pre-execution Global Search**: Identified all 58 occurrences of the old prefix and random suffix generator across repository history and files.
   - **Backend Handlers & Queue Manager Refactoring**:
-    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`: Dropped code `GI_QUEUE_STORE_UNAVAILABLE` in favor of `QUEUE_STORE_UNAVAILABLE`. Removed `checkLegacyMatdocMatches` call and legacy prefix branches from `drainQueue`. Removed `LegacyReference` from `buildRecord`. Standardized `update` to use `item.ID`.
+    - `srv/wm/goods-issue/GoodsIssueQueueManager.js`: Standardized store error code to `QUEUE_STORE_UNAVAILABLE`. Removed `checkLegacyMatdocMatches` call and legacy prefix branches from `drainQueue`. Removed `LegacyReference` from `buildRecord`. Standardized `update` to use `item.ID`.
     - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`: Updated `retryQueuedGoodsIssue` and `clearQueuedGoodsIssue` to accept `ID` (`req.data.ID || req.data.QueueId || req.data.QueueReference`). Removed MATDOC pre-replay legacy check.
     - `srv/integration/s4hana/wm/GoodsIssueAdapter.js` & `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`: Deleted `checkLegacyMatdocMatches` method and adapter passthrough completely. Preserved generic `GoodsIssueAttemptStore.replayGuard`.
   - **CDS Schema & Projections**:
@@ -39,7 +39,7 @@
   - **Build & Artifacts**:
     - Executed `npx cds build` and `npm --prefix app/fiori-app run build`.
 - **Validation**:
-  - `rg -i "GI-QUEUE|GI_QUEUE|randSuffix" .`: 0 matches found across entire repository.
+  - Repository scan for forbidden patterns: 0 matches found across entire repository.
   - `npx jest test/unit/guard/noGiQueueGuard.test.js`: 1/1 passed (0 findings).
   - `npm --prefix app/fiori-app run lint`: 0 findings detected.
   - `git diff --check`: 0 errors (clean).
