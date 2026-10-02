@@ -300,8 +300,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         PostingDate     : Date,
         DocumentDate    : Date,
         SerialNumbers   : array of String(18),
-        SerialNumber    : String(18),
-        StorageUnits    : array of String(20)
+        SerialNumber       : String(18),
+        StorageUnits       : array of String(20),
+        LastStorageUnitQty : Decimal(13, 3)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

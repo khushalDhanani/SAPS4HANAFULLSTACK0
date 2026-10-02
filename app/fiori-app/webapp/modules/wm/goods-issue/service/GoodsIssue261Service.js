@@ -64,6 +64,9 @@ sap.ui.define([
             if (aStorageUnits.length > 0) {
                 oBody.StorageUnits = aStorageUnits;
             }
+            if (oPayload.LastStorageUnitQty != null && !isNaN(Number(oPayload.LastStorageUnitQty))) {
+                oBody.LastStorageUnitQty = Number(oPayload.LastStorageUnitQty);
+            }
 
             return ODataClient.post(BASE_PATH_GI + "/postGoodsIssue261", oBody);
         },

@@ -230,14 +230,14 @@ describe('GoodsIssue261Model: SU Scanning & Drum Weight Calculations', () => {
       expect(data.scannedUnits).toHaveLength(0);
     });
 
-    it('blocks over-issue when scan would exceed required quantity', () => {
+    it('caps last SU at remaining open qty and blocks subsequent scans as over-issue', () => {
       const data = makeBaseData(480);
       // Already scanned 400 KG
       data.scannedUnits = [
         { key: 'S1', storageUnit: 'S1', barcode: 'S1', material: '1000000264', plant: '1110', storageLocation: 'CS01', qty: 400, isSerial: false }
       ];
 
-      // Scanning 100 KG drum would result in 500 > 480
+      // Scanning 100 KG drum when only 80 KG is needed: caps at 80 KG (partial last drum)
       const res = GoodsIssue261Model.applyScanResolution(data, {
         SuExists: true,
         Material: '1000000264',
@@ -245,12 +245,30 @@ describe('GoodsIssue261Model: SU Scanning & Drum Weight Calculations', () => {
         StorageLocation: 'CS01',
         SuStockQty: 100,
         DeterminedBatch: 'IN26000905'
-      }, 'SU_OVER');
+      }, 'SU_PARTIAL');
 
-      expect(res.ok).toBe(false);
-      expect(res.state).toBe('Error');
-      expect(res.text).toContain('Over-issue blocked: Storage Unit SU_OVER quantity (100) would exceed required quantity (480). Remaining needed: 80.');
-      expect(data.scannedUnits).toHaveLength(1);
+      expect(res.ok).toBe(true);
+      expect(res.state).toBe('Success');
+      expect(res.text).toContain('partial 80 of 100');
+      expect(data.scannedUnits).toHaveLength(2);
+      expect(GoodsIssue261Model.scannedQty(data)).toBe(480);
+      expect(data.scannedUnits[1].isPartial).toBe(true);
+      expect(data.scannedUnits[1].qty).toBe(80);
+
+      // Now requirement is met: scanning another drum is blocked
+      const resOver = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        SuStockQty: 50,
+        DeterminedBatch: 'IN26000905'
+      }, 'SU_EXTRA');
+
+      expect(resOver.ok).toBe(false);
+      expect(resOver.state).toBe('Warning');
+      expect(resOver.text).toContain('Quantity exceeded: 480 already covered');
+      expect(data.scannedUnits).toHaveLength(2);
     });
 
     it('validate blocks completion when scanned sum is under required quantity', () => {
@@ -515,5 +533,242 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     await handlers['postGoodsIssue261'](req);
     expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('No Storage Units exist in SAP'));
     expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  describe('Requirement 4 Tests: 450 kg with 48 kg drums, partial above open qty, consumed SU, no queueing', () => {
+    const GoodsIssueQueueManager = require('../../../srv/wm/goods-issue/GoodsIssueQueueManager');
+
+    it('handles 450 kg with 48 kg drums (9 full + 18 partial) in UI suggestion and scan model', () => {
+      // 10 drums of 48 KG each
+      const availableDrums = [];
+      for (let i = 1; i <= 10; i++) {
+        availableDrums.push({
+          StorageUnit: `DRUM_${String(i).padStart(2, '0')}`,
+          AvailableStock: 48,
+          Unit: 'KG',
+          Batch: 'B2601'
+        });
+      }
+
+      // calculateSuggestedUnits: should suggest 10 drums (9 full + 1 partial of 18 KG)
+      const suggested = GoodsIssue261Model.calculateSuggestedUnits(availableDrums, 450);
+      expect(suggested).toHaveLength(10);
+      expect(suggested[8].SuggestedQty).toBe(48);
+      expect(suggested[8].IsPartial).toBe(false);
+      expect(suggested[9].SuggestedQty).toBe(18);
+      expect(suggested[9].IsPartial).toBe(true);
+      const totalSuggested = suggested.reduce((sum, d) => sum + d.SuggestedQty, 0);
+      expect(totalSuggested).toBe(450);
+
+      // UI scan: scan 9 full drums + 1 partial drum
+      const data = GoodsIssue261Model.getInitialData();
+      data.reservationNo = '480962';
+      data.reservationItem = '0001';
+      data.material = '1000000264';
+      data.plant = '1110';
+      data.storageLocation = 'CS01';
+      data.quantity = 450;
+      data.openQty = 450;
+      data.unit = 'KG';
+      data.scanEnabled = true;
+      data.requiredScanCount = 450;
+      data.batch = 'B2601';
+      data.isBatchManaged = true;
+      data.fromReservation = true;
+
+      // Scan first 9 drums (48 KG each)
+      for (let i = 0; i < 9; i++) {
+        const suId = availableDrums[i].StorageUnit;
+        const res = GoodsIssue261Model.applyScanResolution(data, {
+          SuExists: true,
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          SuStockQty: 48,
+          BaseUnit: 'KG',
+          DeterminedBatch: 'B2601'
+        }, suId);
+        expect(res.ok).toBe(true);
+        expect(res.state).toBe('Success');
+      }
+      expect(GoodsIssue261Model.scannedQty(data)).toBe(432); // 9 x 48
+
+      // Scan 10th drum (48 KG): capped at remaining open qty (18 KG)
+      const resLast = GoodsIssue261Model.applyScanResolution(data, {
+        SuExists: true,
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        SuStockQty: 48,
+        BaseUnit: 'KG',
+        DeterminedBatch: 'B2601'
+      }, availableDrums[9].StorageUnit);
+
+      expect(resLast.ok).toBe(true);
+      expect(resLast.text).toContain('partial 18 of 48');
+      expect(GoodsIssue261Model.scannedQty(data)).toBe(450);
+      expect(data.scannedUnits).toHaveLength(10);
+      expect(data.scannedUnits[9].isPartial).toBe(true);
+      expect(data.scannedUnits[9].qty).toBe(18);
+
+      // Validate enables completion
+      const val = GoodsIssue261Model.validate(data);
+      expect(val.isValid).toBe(true);
+
+      // Payload includes 10 StorageUnits and explicit LastStorageUnitQty = 18
+      const payload = GoodsIssue261Model.toBackendPayload(data);
+      expect(payload.StorageUnits).toHaveLength(10);
+      expect(payload.LastStorageUnitQty).toBe(18);
+      expect(payload.IssueQty).toBe(450);
+    });
+
+    it('posts 450 kg with 48 kg drums (9 full + 18 partial) server-side against SAP reservation', async () => {
+      const stock = [];
+      const suList = [];
+      for (let i = 1; i <= 10; i++) {
+        const id = `DRUM_${String(i).padStart(2, '0')}`;
+        stock.push({ StorageUnit: id, AvailableStock: 48, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        suList.push(id);
+      }
+      setupMockSap({ openQty: 450, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+        MaterialDocument: '4900099999',
+        MaterialDocYear: '2026'
+      });
+
+      const req = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 18
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      const res = await handlers['postGoodsIssue261'](req);
+      expect(req.error).not.toHaveBeenCalled();
+      expect(res).toBeDefined();
+      expect(res.MaterialDocument).toBe('4900099999');
+      expect(res.Queued).toBe(false);
+      expect(postSpy).toHaveBeenCalled();
+    });
+
+    it('rejects partial above open qty without queueing', async () => {
+      const stock = [];
+      const suList = [];
+      for (let i = 1; i <= 10; i++) {
+        const id = `DRUM_${String(i).padStart(2, '0')}`;
+        stock.push({ StorageUnit: id, AvailableStock: 48, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        suList.push(id);
+      }
+      setupMockSap({ openQty: 450, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
+
+      // 9 full drums = 432. Partial submitted = 25 -> Total = 457 > 450 open qty
+      const req = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450, // matches reservation openQty, but last SU partial qty pushes real sum to 457
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 25
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Partial above open qty rejected'));
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects when an SU was consumed between suggest and post without queueing', async () => {
+      // 10 drums suggested, but DRUM_05 was consumed in SAP before posting (not in SAP stock or AvailableStock = 0)
+      const stock = [];
+      const suList = [];
+      for (let i = 1; i <= 10; i++) {
+        const id = `DRUM_${String(i).padStart(2, '0')}`;
+        if (i === 5) {
+          // DRUM_05 has 0 available stock in SAP
+          stock.push({ StorageUnit: id, AvailableStock: 0, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        } else {
+          stock.push({ StorageUnit: id, AvailableStock: 48, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' });
+        }
+        suList.push(id);
+      }
+      setupMockSap({ openQty: 450, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
+
+      const req = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 450,
+          Unit: 'KG',
+          StorageUnits: suList,
+          LastStorageUnitQty: 18
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('has no available stock or was consumed in SAP'));
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    });
+
+    it('confirms no queueing on any 400 error', async () => {
+      const stock = [
+        { StorageUnit: 'SU01', AvailableStock: 24, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+        { StorageUnit: 'SU02', AvailableStock: 24, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' }
+      ];
+      setupMockSap({ openQty: 48, stockUnits: stock });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const enqueueSpy = jest.spyOn(GoodsIssueQueueManager, 'enqueue');
+
+      // Tampered payload: real SUs sum to 48, but client submits IssueQty: 40
+      const req = {
+        data: {
+          ReservationNo: '480962',
+          ReservationItem: '0001',
+          Material: '1000000264',
+          Plant: '1110',
+          StorageLocation: 'CS01',
+          IssueQty: 40, // Tampered: real sum is 48
+          Unit: 'KG',
+          StorageUnits: ['SU01', 'SU02'],
+          LastStorageUnitQty: 24
+        },
+        user: { id: 'TESTUSER' },
+        error: jest.fn()
+      };
+
+      await handlers['postGoodsIssue261'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered payload detected'));
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(enqueueSpy).not.toHaveBeenCalled();
+    });
   });
 });

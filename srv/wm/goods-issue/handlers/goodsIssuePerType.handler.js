@@ -204,24 +204,75 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     validSuMap.set(String(su.StorageUnit).trim().toUpperCase(), su);
   }
 
-  // Verify each submitted SU against SAP stock
-  let realSum = 0;
-  for (const suId of submittedSUs) {
-    const cleanId = String(suId).trim().toUpperCase();
-    const sapSu = validSuMap.get(cleanId);
-    if (!sapSu) {
-      req.error(400, `Storage Unit ${cleanId} is not valid for material ${normalized.Material} in plant ${normalized.Plant} storage location ${normalized.StorageLocation}. Goods Issue was NOT posted.`);
-      return false;
+  // Authoritative open quantity from SAP reservation item (Requirement 2)
+  let openQty = resvItem && (resvItem.OpenQty !== undefined && resvItem.OpenQty !== null)
+    ? Math.round(Number(resvItem.OpenQty) * 1000) / 1000
+    : null;
+  if (openQty === null && typeof GoodsIssueAdapter.getReservationItemAuthoritative === 'function') {
+    try {
+      const freshResv = await GoodsIssueAdapter.getReservationItemAuthoritative(sResv, sItem);
+      if (freshResv && freshResv.OpenQty != null) {
+        openQty = Math.round(Number(freshResv.OpenQty) * 1000) / 1000;
+      }
+    } catch (e) {
+      LOG.warn(`Could not re-verify reservation open quantity for ${sResv} item ${sItem}:`, e.message || e);
     }
-    const suQty = Number(sapSu.AvailableStock != null ? sapSu.AvailableStock : (sapSu.CurrentStock != null ? sapSu.CurrentStock : 0));
-    if (suQty <= 0) {
-      req.error(400, `Storage Unit ${cleanId} has no available stock in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-    realSum += suQty;
   }
 
-  realSum = Math.round(realSum * 1000) / 1000;
+  // Verify all submitted SUs exist in SAP stock and have not been consumed
+  let precedingSum = 0;
+  const numSUs = submittedSUs.length;
+
+  for (let i = 0; i < numSUs; i++) {
+    const cleanId = String(submittedSUs[i]).trim().toUpperCase();
+    const sapSu = validSuMap.get(cleanId);
+    if (!sapSu) {
+      req.error(400, `Storage Unit ${cleanId} is not valid for material ${normalized.Material} or was consumed in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    const suAvailStock = Number(sapSu.AvailableStock != null ? sapSu.AvailableStock : (sapSu.CurrentStock != null ? sapSu.CurrentStock : 0));
+    if (suAvailStock <= 0) {
+      req.error(400, `Storage Unit ${cleanId} has no available stock or was consumed in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+
+    if (i < numSUs - 1) {
+      precedingSum += suAvailStock;
+    }
+  }
+
+  // Handle the last Storage Unit: full issue or explicit/derived partial quantity capped at open qty (Requirement 1)
+  const lastCleanId = String(submittedSUs[numSUs - 1]).trim().toUpperCase();
+  const lastSapSu = validSuMap.get(lastCleanId);
+  const lastAvailStock = Number(lastSapSu.AvailableStock != null ? lastSapSu.AvailableStock : (lastSapSu.CurrentStock != null ? lastSapSu.CurrentStock : 0));
+
+  let lastSuQty = lastAvailStock;
+  const explicitLastQty = normalized.LastStorageUnitQty != null ? Number(normalized.LastStorageUnitQty) : null;
+
+  if (explicitLastQty !== null) {
+    if (isNaN(explicitLastQty) || explicitLastQty <= 0) {
+      req.error(400, `Partial quantity for Storage Unit ${lastCleanId} must be greater than zero. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (explicitLastQty > lastAvailStock + 1e-9) {
+      req.error(400, `Partial quantity (${explicitLastQty}) exceeds available stock (${lastAvailStock}) of Storage Unit ${lastCleanId}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (openQty !== null && openQty > 0 && precedingSum + explicitLastQty > openQty + 1e-9) {
+      req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${lastCleanId} causes total (${precedingSum + explicitLastQty}) to exceed open reservation quantity (${openQty}). Partial above open qty rejected. Goods Issue was NOT posted.`);
+      return false;
+    }
+    lastSuQty = explicitLastQty;
+  } else if (numSUs === 1 && Number(normalized.IssueQty) < lastAvailStock) {
+    lastSuQty = Number(normalized.IssueQty);
+  } else if (Number(normalized.IssueQty) < precedingSum + lastAvailStock) {
+    const rem = Math.round((Number(normalized.IssueQty) - precedingSum) * 1000) / 1000;
+    if (rem > 0 && rem <= lastAvailStock) {
+      lastSuQty = rem;
+    }
+  }
+
+  const realSum = Math.round((precedingSum + lastSuQty) * 1000) / 1000;
   const issueQty = Math.round(Number(normalized.IssueQty) * 1000) / 1000;
 
   // Tampered payload check: submitted IssueQty must equal real sum of SUs from SAP
@@ -230,11 +281,7 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     return false;
   }
 
-  // Reservation open quantity checks
-  const openQty = resvItem && (resvItem.OpenQty !== undefined && resvItem.OpenQty !== null)
-    ? Math.round(Number(resvItem.OpenQty) * 1000) / 1000
-    : null;
-
+  // Reservation open quantity comparison from live SAP (Requirement 2)
   if (openQty !== null && openQty > 0) {
     if (realSum > openQty + 1e-9) {
       req.error(400, `Storage Units total quantity (${realSum}) exceeds open reservation quantity (${openQty}). Over-issue blocked. Goods Issue was NOT posted.`);

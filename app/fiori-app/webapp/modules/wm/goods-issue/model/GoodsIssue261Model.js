@@ -464,8 +464,17 @@
                 var su = aAvailableUnits[i];
                 var nQty = Number(su.AvailableStock != null ? su.AvailableStock : (su.CurrentStock != null ? su.CurrentStock : (su.SuStockQty != null ? su.SuStockQty : su.qty))) || 0;
                 if (nQty <= 0) continue;
-                aSuggested.push(su);
-                nAccumulated += nQty;
+                var nRemainingNeeded = Math.round((nRequiredQty - nAccumulated) * 1000) / 1000;
+                if (nRemainingNeeded <= 0) break;
+
+                var isPartial = nQty > nRemainingNeeded;
+                var nSuggestedQty = isPartial ? nRemainingNeeded : nQty;
+
+                aSuggested.push(Object.assign({}, su, {
+                    SuggestedQty: nSuggestedQty,
+                    IsPartial: isPartial
+                }));
+                nAccumulated += nSuggestedQty;
                 if (nAccumulated >= nRequiredQty - 1e-9) {
                     break;
                 }
@@ -477,6 +486,7 @@
          * Apply a resolveStockUnit result for ONE scan against the current line. Auto-detects serial
          * vs storage unit, gives clear pass/fail feedback (matched / wrong material / already issued /
          * duplicate / quantity exceeded) and, on a match, appends to scannedUnits. Never a silent fill.
+         * Supports explicit partial quantity on the last SU capped at remaining open quantity.
          * @param {Object} oData model data
          * @param {Object} oRes StockUnitResolution from resolveStockUnit
          * @param {string} sBarcode the raw scanned barcode
@@ -517,12 +527,19 @@
             }
 
             var nCurrentScanned = this.scannedQty(oData);
-            if (nRequired > 0 && nCurrentScanned >= nRequired) {
+            if (nRequired > 0 && nCurrentScanned >= nRequired - 1e-9) {
                 return { ok: false, state: "Warning", text: "Quantity exceeded: " + nRequired + " already covered by the scanned unit(s) for this line." };
             }
+
+            var nIssuedQty = nUnitQty;
+            var bIsPartial = false;
             if (nRequired > 0 && (nCurrentScanned + nUnitQty) > (nRequired + 1e-9)) {
+                if (oRes.IsSerialManaged) {
+                    return { ok: false, state: "Error", text: "Over-issue blocked: serial unit cannot be partially issued." };
+                }
                 var nRemaining = Math.round((nRequired - nCurrentScanned) * 1000) / 1000;
-                return { ok: false, state: "Error", text: "Over-issue blocked: Storage Unit " + sKey + " quantity (" + nUnitQty + ") would exceed required quantity (" + nRequired + "). Remaining needed: " + nRemaining + "." };
+                nIssuedQty = nRemaining;
+                bIsPartial = true;
             }
 
             // One goods issue line posts one batch: a unit from another batch cannot be mixed in.
@@ -541,7 +558,9 @@
                 storageLocation: sResSLoc || sExpectedSLoc,
                 serial: sSerial,
                 isSerial: !!oRes.IsSerialManaged,
-                qty: nUnitQty,
+                qty: nIssuedQty,
+                availableStock: nUnitQty,
+                isPartial: bIsPartial,
                 unit: oRes.BaseUnit || oRes.Unit || oData.unit || "",
                 batch: sUnitBatch
             });
@@ -551,7 +570,8 @@
                 oData.isBatchManaged = true;
             }
             var sLabel = sSerial ? ("serial " + sSerial) : ("unit " + sKey);
-            return { ok: true, state: "Success", text: "Matched " + sLabel + " (" + this.scannedQty(oData) + " of " + nRequired + ")." };
+            var sPartialNote = bIsPartial ? (" (partial " + nIssuedQty + " of " + nUnitQty + ")") : "";
+            return { ok: true, state: "Success", text: "Matched " + sLabel + sPartialNote + " (" + this.scannedQty(oData) + " of " + nRequired + ")." };
         },
 
         /**
@@ -594,13 +614,18 @@
             }
 
             var aStorageUnits = [];
+            var nLastSuQty = null;
             if (oData.scanEnabled && Array.isArray(oData.scannedUnits)) {
                 aStorageUnits = oData.scannedUnits
                     .filter(function (u) { return !u.isSerial && (u.storageUnit || u.barcode || u.key); })
                     .map(function (u) { return String(u.storageUnit || u.barcode || u.key).trim(); });
+                var lastUnit = oData.scannedUnits[oData.scannedUnits.length - 1];
+                if (lastUnit && !lastUnit.isSerial && lastUnit.isPartial && lastUnit.qty > 0) {
+                    nLastSuQty = lastUnit.qty;
+                }
             }
 
-            return {
+            var oPayload = {
                 MovementType: "261",
                 ReservationNo: sResv,
                 ReservationItem: sItem,
@@ -617,6 +642,12 @@
                 SerialNumbers: aSerials,
                 StorageUnits: aStorageUnits
             };
+
+            if (nLastSuQty != null) {
+                oPayload.LastStorageUnitQty = nLastSuQty;
+            }
+
+            return oPayload;
         }
     };
 
