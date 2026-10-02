@@ -411,8 +411,8 @@ sap.ui.define([
                 oDialog.bindAggregation("items", "/MaterialVH", oItemTemplate);
                 oDialog.open();
             } else {
-                var sMat = that._oModel.getProperty("/material") || "8500000035";
-                GoodsIssue261Service.fetchMaterialDetails(sMat, that._oModel.getProperty("/plant") || "1120")
+                var sMat = that._oModel.getProperty("/material") || "";
+                GoodsIssue261Service.fetchMaterialDetails(sMat, that._oModel.getProperty("/plant") || "")
                     .then(function (oInfo) {
                         var aList = oInfo ? [oInfo] : [];
                         var oListModel = new JSONModel(aList);
@@ -664,9 +664,9 @@ sap.ui.define([
                         };
                         if (res && res.MaterialDocument) {
                             oOutcome.doc = res.MaterialDocument;
-                            oOutcome.year = res.MaterialDocYear || new Date().getFullYear().toString();
+                            oOutcome.year = res.MaterialDocYear || "";
                         } else {
-                            oOutcome.queued = (res && res.QueueReference) || "1";
+                            oOutcome.queued = (res && (res.QueueId || res.QueueReference)) || "";
                         }
                         that.getRouter().navTo("wmGoodsIssue261Pending", { "?query": oOutcome });
                         return;
@@ -674,7 +674,9 @@ sap.ui.define([
 
                     if (res && (res.Queued === true || !res.MaterialDocument)) {
                         that._oModel.setProperty("/hasPosted", false);
-                        MessageBox.warning(res.Message || that.getText("giPostQueuedMsg"), {
+                        var sQueueId = (res && (res.QueueId || res.QueueReference)) || "";
+                        var sMsg = res.Message || that.getText("giPostQueuedMsg", [sQueueId]);
+                        MessageBox.warning(sMsg, {
                             title: that.getText("giPostQueuedTitle")
                         });
                         return;
@@ -682,10 +684,10 @@ sap.ui.define([
 
                     that._oModel.setProperty("/hasPosted", true);
                     that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
-                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || new Date().getFullYear().toString());
+                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || "");
 
                     var sDocMsg = that.getText("gi261PostSuccessMsg", [
-                        res.MaterialDocument || "Document",
+                        res.MaterialDocument || "",
                         res.MaterialDocYear || ""
                     ]);
 

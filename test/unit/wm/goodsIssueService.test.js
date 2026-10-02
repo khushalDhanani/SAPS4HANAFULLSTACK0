@@ -635,9 +635,11 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result).toBeDefined();
       expect(result.Success).toBe(false); // Queued != posted in SAP -> not a success (AGENTS.md rule 6)
       expect(result.Queued).toBe(true);
-      expect(result.SyncStatus).toBe('QUEUED');
-      expect(result.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
+      expect(result.QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
       expect(result.MaterialDocument).toBe(''); // Strictly no fake document number per AGENTS.md
+      expect(result.MaterialDocYear).toBe('');
+      expect(result.Message).toContain('Not posted to SAP. Waiting in queue');
+      expect(result.Message).toContain('Queue ID (internal, not an SAP document)');
     });
 
     it('should query queue items and return queue summary', async () => {
@@ -713,13 +715,15 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result).toBeDefined();
       expect(result.AllPosted).toBe(false);
       expect(result.Results.length).toBe(2);
-      expect(result.Results[0].Message).toContain('Queued in dispatch queue');
+      expect(result.Results[0].Message).toContain('Not posted to SAP. Waiting in queue');
+      expect(result.Results[0].Message).toContain('Queue ID (internal, not an SAP document)');
       expect(result.Results[0].Success).toBe(false);
       expect(result.Results[0].Queued).toBe(true);
       expect(result.Results[0].DifferenceCleared).toBe(false);
       expect(result.Results[0].DifferenceQty).toBe(5);
-      expect(result.Results[0].QueueReference).toBeDefined();
-      expect(result.Results[1].Message).toContain('Queued in dispatch queue');
+      expect(result.Results[0].QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(result.Results[1].Message).toContain('Not posted to SAP. Waiting in queue');
+      expect(result.Results[1].Message).toContain('Queue ID (internal, not an SAP document)');
       expect(result.Results[1].Success).toBe(false);
       expect(result.Results[1].Queued).toBe(true);
       expect(result.Results[1].DifferenceCleared).toBe(false);

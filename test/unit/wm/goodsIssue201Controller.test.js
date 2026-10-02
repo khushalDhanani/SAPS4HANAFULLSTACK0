@@ -475,6 +475,47 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
         });
 
+        it('should display "Not posted to SAP. Waiting in queue" with Queue ID in warning dialog when queued', async () => {
+            makeValid();
+            const queueId = '550e8400-e29b-41d4-a716-446655440000';
+            const queuedMsg = `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${queueId}`;
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                Queued: true,
+                QueueReference: queueId,
+                QueueId: queueId,
+                MaterialDocument: '',
+                Message: queuedMsg
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                queuedMsg,
+                expect.objectContaining({ title: 'giPostQueuedTitle' })
+            );
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
+            expect(controller._oModel.getProperty('/postedDocument')).toBe('');
+        });
+
+        it('shows only the SAP-returned material document and year without defaults on successful post', async () => {
+            makeValid();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                Success: true,
+                MaterialDocument: '4900049932',
+                MaterialDocYear: '2026'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(true);
+            expect(controller._oModel.getProperty('/postedDocument')).toBe('4900049932');
+            expect(controller._oModel.getProperty('/postedYear')).toBe('2026');
+            expect(mockMessageBox.success).toHaveBeenCalledWith(
+                'gi201PostSuccessMsg',
+                expect.any(Object)
+            );
+            expect(mockMessageBox.warning).not.toHaveBeenCalled();
+        });
+
         it('should treat an empty MaterialDocument result as a warning, NOT a success', async () => {
             makeValid();
             mockService.postGoodsIssue.mockResolvedValueOnce({});

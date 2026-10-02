@@ -97,7 +97,7 @@ describe('postGoodsIssue201 queue fallback (only a posting that never reached SA
     jest.spyOn(GoodsIssueAttemptStore, 'create').mockResolvedValue({});
     setStatus = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockResolvedValue();
     jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
-    enqueue = jest.spyOn(GoodsIssueQueueManager, 'enqueue').mockResolvedValue({ QueueReference: 'GI-QUEUE-UNPLANNED-0000-1234' });
+    enqueue = jest.spyOn(GoodsIssueQueueManager, 'enqueue').mockResolvedValue({ ID: '00000000-0000-0000-0000-000000000001', QueueReference: '00000000-0000-0000-0000-000000000001' });
   });
   afterEach(() => jest.restoreAllMocks());
 

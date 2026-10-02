@@ -36,8 +36,10 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
             ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG', Batch: ''
         });
         expect(status).toBe(200);
-        expect(data).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
-        expect(data.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
+        expect(data).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '', MaterialDocYear: '' });
+        expect(data.QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
+        expect(data.Message).toContain('Not posted to SAP. Waiting in queue');
+        expect(data.Message).toContain('Queue ID (internal, not an SAP document)');
 
         const list = await GET(`${BASE}/GoodsIssueQueue?$filter=QueueReference eq '${data.QueueReference}'&$select=QueueReference,ReservationNo,SyncStatus,IssueQty`);
         expect(list.status).toBe(200);
@@ -55,7 +57,7 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
     });
 
     it('rejects direct writes to the queue entity set', async () => {
-        const res = await axios.post(`${BASE}/GoodsIssueQueue`, { QueueReference: 'GI-QUEUE-FAKE', ReservationNo: '1', ReservationItem: '0001' }, { validateStatus: () => true });
+        const res = await axios.post(`${BASE}/GoodsIssueQueue`, { QueueReference: '00000000-0000-0000-0000-000000000001', ReservationNo: '1', ReservationItem: '0001' }, { validateStatus: () => true });
         expect([403, 405]).toContain(res.status);
         expect(await queue.getAll()).toHaveLength(0);
     });

@@ -50,7 +50,7 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       const detached = new GoodsIssueQueueManager({ db: null });
       expect(detached.isAvailable()).toBe(false);
       await expect(detached.getAll()).resolves.toEqual([]);
-      await expect(detached.get('GI-QUEUE-X')).resolves.toBeNull();
+      await expect(detached.get('non-existent-uuid')).resolves.toBeNull();
       await expect(detached.getSummary()).resolves.toEqual({ QueuedCount: 0, TotalCount: 0, Items: [], StoreAvailable: false });
       await expect(detached.enqueue({ ReservationNo: '1', ReservationItem: '1' })).rejects.toBeInstanceOf(QueueStoreUnavailableError);
       await expect(detached.update('x', {})).rejects.toBeInstanceOf(QueueStoreUnavailableError);
@@ -70,7 +70,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
           Unit: 'KG',
           FinalIssue: true
         });
-        expect(record.QueueReference).toMatch(new RegExp(`^GI-QUEUE-RTS${i}-000${i}-\\d{4}$`));
+        expect(record.QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
+        expect(record.QueueReference).toBe(record.ID);
         expect(record.SyncStatus).toBe('QUEUED');
         expect(record.SyncAttempts).toBe(1);
       }
@@ -164,9 +165,10 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
 
       const result = await handlers['postGoodsIssue261'](request());
 
-      expect(result).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '' });
-      expect(result.QueueReference).toMatch(/^GI-QUEUE-18025-0003-\d{4}$/);
-      expect(result.Message).not.toMatch(/safely/i);
+      expect(result).toMatchObject({ Success: false, Queued: true, SyncStatus: 'QUEUED', MaterialDocument: '', MaterialDocYear: '' });
+      expect(result.QueueReference).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(result.Message).toContain('Not posted to SAP. Waiting in queue');
+      expect(result.Message).toContain('Queue ID (internal, not an SAP document)');
       await expect(manager.get(result.QueueReference)).resolves.toMatchObject({ ReservationNo: '18025', SyncStatus: 'QUEUED' });
 
       const summary = await handlers['getQueueSummary']({});
@@ -196,11 +198,11 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       jest.spyOn(queueSingleton, 'isAvailable').mockReturnValue(false);
       const handlers = fakeService();
 
-      const retryReq = { data: { QueueReference: 'GI-QUEUE-1-0001-1234' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
+      const retryReq = { data: { QueueReference: '00000000-0000-0000-0000-000000000001' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
       await handlers['retryQueuedGoodsIssue'](retryReq);
       expect(retryReq.error).toHaveBeenCalledWith(503, expect.stringContaining('no database is bound'));
 
-      const clearReq = { data: { QueueReference: 'GI-QUEUE-1-0001-1234' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
+      const clearReq = { data: { QueueReference: '00000000-0000-0000-0000-000000000001' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
       await handlers['clearQueuedGoodsIssue'](clearReq);
       expect(clearReq.error).toHaveBeenCalledWith(503, expect.stringContaining('no database is bound'));
 

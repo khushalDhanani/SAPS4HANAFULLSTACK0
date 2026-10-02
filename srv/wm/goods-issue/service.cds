@@ -120,6 +120,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Success           : Boolean;
         Queued            : Boolean;
         QueueReference    : String(40);
+        QueueId           : String(36);
     };
 
     type GISubmitBatchResult {
@@ -142,6 +143,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Message           : String(500);
         Queued            : Boolean;
         QueueReference    : String(40);
+        QueueId           : String(36);
         SyncStatus        : String(30);
     };
 

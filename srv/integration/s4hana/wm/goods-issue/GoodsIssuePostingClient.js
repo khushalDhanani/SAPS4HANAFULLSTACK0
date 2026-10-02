@@ -147,11 +147,14 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
     const v2Res = await this._post(v2Path, v2Payload);
     GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
-    const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
-    const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
-    if (!matDoc) {
+    const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
+    const rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
+    if (!rawMatDoc) {
       throw new Error(`SAP S/4HANA did not return a material document for movement ${meta.mvt} posting, and no sap-message error was present in the response.`);
     }
+    const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+    const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
+    const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
     return {
       ReservationNo: String(meta.reservationNo || ''),
       ReservationItem: String(meta.reservationItem || ''),
@@ -164,6 +167,67 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       Success: true,
       Message: `${meta.label} ${meta.mvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
     };
+  }
+
+  /**
+   * Reads a material document back from SAP (MATDOC with fallback to MKPF or OData)
+   * to confirm persistence and verify authoritative values.
+   *
+   * @param {string} matDoc - Material document number
+   * @param {string} [matYear] - Material document year
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Items?: Array }>}
+   */
+  async readBackDocument(matDoc, matYear) {
+    const sDoc = String(matDoc || '').trim();
+    const sYear = String(matYear || '').trim();
+    if (!sDoc) return null;
+
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const where = [`MBLNR = '${sDoc}'`];
+        if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+        const rows = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'], where, 10);
+        if (Array.isArray(rows) && rows.length > 0) {
+          return {
+            MaterialDocument: String(rows[0].MBLNR).trim(),
+            MaterialDocYear: String(rows[0].MJAHR).trim(),
+            Items: rows
+          };
+        }
+      } catch (err) {
+        LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF...`);
+        try {
+          const where = [`MBLNR = '${sDoc}'`];
+          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+          const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
+          if (Array.isArray(rows) && rows.length > 0) {
+            return {
+              MaterialDocument: String(rows[0].MBLNR).trim(),
+              MaterialDocYear: String(rows[0].MJAHR).trim()
+            };
+          }
+        } catch (mkpfErr) {
+          LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}`);
+        }
+      }
+    }
+
+    try {
+      const yearClause = sYear ? `MaterialDocumentYear='${sYear}',` : '';
+      const docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(${yearClause}MaterialDocument='${sDoc}')`;
+      const res = await this._get(docPath, '$format=json');
+      const header = res?.d || res;
+      if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
+        return {
+          MaterialDocument: String(header.MaterialDocument || sDoc).trim(),
+          MaterialDocYear: String(header.MaterialDocumentYear || sYear).trim()
+        };
+      }
+    } catch (odataErr) {
+      LOG.warn(`OData readback for ${sDoc}/${sYear} failed: ${odataErr.message}`);
+    }
+
+    return { MaterialDocument: sDoc, MaterialDocYear: sYear };
   }
 
   /**
@@ -454,12 +518,17 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         FinalIssue: false
       });
       if (response && (response.MaterialDocument || response.MatDoc)) {
+        const rawMatDoc = response.MaterialDocument || response.MatDoc;
+        const rawMatYear = response.MaterialDocYear || '';
+        const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+        const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
+        const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
         return {
           ReservationNo: sReserv,
           ReservationItem: sItem,
           OrderNo: sOrder,
-          MaterialDocument: response.MaterialDocument || response.MatDoc,
-          MaterialDocYear: response.MaterialDocYear || String(new Date().getFullYear()),
+          MaterialDocument: matDoc,
+          MaterialDocYear: matYear,
           TransferOrder: response.TransferOrder || response.ToNumber || '',
           DifferenceCleared: false,
           DifferenceQty: 0,
@@ -661,10 +730,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
         const v2Res = await this._post(v2Path, v2Payload);
         GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
-        const matDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
-        const matYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || String(new Date().getFullYear());
+        const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
+        const rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
 
-        if (matDoc) {
+        if (rawMatDoc) {
+          const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+          const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
+          const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
           const results = items.map(item => {
             const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
             const sItem = rawItem ? rawItem.padStart(4, '0') : '';

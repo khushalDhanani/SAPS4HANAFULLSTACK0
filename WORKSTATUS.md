@@ -6,6 +6,67 @@
 
 
 
+## 2026-10-02 13:30 IST
+- **Agent**: Antigravity
+- **Request**: Eliminate `GI-QUEUE-...` invented document numbers and enforce genuine SAP document verification:
+  1. Grep report first: every occurrence of `GI-QUEUE-` (handlers, queue manager, mapper, UI, i18n, tests, docs) and any other invented placeholder/sample numbers.
+  2. Rule: Any document number, material document, year, reservation, SU, TO, or TR shown to users must come from an SAP response or an SAP read. Nothing generated, guessed, or defaulted.
+  3. Queued items must not look like posted ones: return and show "Not posted to SAP. Waiting in queue" with internal queue ID (CAP UUID) labeled "Queue ID (internal, not an SAP document)". Remove `GI-QUEUE-` prefix and any usage as `MaterialDocument`.
+  4. Keep `MaterialDocument` and `MaterialDocYear` empty until SAP returns them. After successful post, read back from SAP (`MATDOC`/`MKPF`) and show confirmed values.
+  5. Live read-only verification on DS4 client 220: confirm number, year, and fields against MATDOC for real posted 201 and 261 documents.
+  6. Tests: queued response has no `MaterialDocument` and no fake numbers; UI shows queued warning text; successful post shows only SAP-returned numbers. Update all tests asserting `GI-QUEUE-`.
+  7. Run full test suite, report total, update `WORKSTATUS.md`.
+- **Architectural & Design Implementation**:
+  - **Internal Queue ID Isolation**: In `GoodsIssueQueueManager.buildRecord`, removed prefix generation `GI-QUEUE-${Date.now()}-${random}`. Queue record now uses its canonical internal UUID (`data.id`) for `QueueReference` when not explicitly supplied. Added `QueueId : String(36);` to `GISubmitLineResult` and `GIPostResult` in `srv/wm/goods-issue/service.cds`.
+  - **Honest Queued Messaging**: On queued fallback, `goodsIssuePerType.handler.js` and `goodsIssue.handler.js` return `Success: false`, `Queued: true`, `MaterialDocument: ''`, `MaterialDocYear: ''`, `QueueReference: queueRecord.ID`, `QueueId: queueRecord.ID`, and `Message: "Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): <UUID>"`.
+  - **Post-Post Verification from SAP**: In `GoodsIssuePostingClient.js`, implemented `readBackDocument(matDoc, matYear)`:
+    - Primary check: RFC `readTable` on `MATDOC` by `MBLNR` and `MJAHR`.
+    - Fallback check: RFC `readTable` on `MKPF`.
+    - Secondary fallback: OData GET `/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(...)`.
+    - Single line, batch, and Tier-1 RAP flows in `GoodsIssuePostingClient` now verify the document exists in SAP and fetch genuine `MaterialDocYear` directly from SAP, eliminating `new Date().getFullYear()` guessing.
+  - **Frontend UI Purification**:
+    - In `GoodsIssue201.controller.js`, `GoodsIssue261.controller.js`, and `GoodsIssueTransferBaseController.js`, removed `new Date().getFullYear()` default year fallback. `res.MaterialDocYear` remains empty if not returned from SAP.
+    - Removed hardcoded fallback material `"8500000035"` and plant `"1120"` from `GoodsIssue261.controller.js`.
+    - Queued responses show a dedicated warning dialog informing the user: "Not posted to SAP. Waiting in queue" with "Queue ID (internal, not an SAP document)".
+    - `QueueTrayDialog.fragment.xml` updated column header and identifier label to display `Queue ID (internal, not an SAP document)`.
+    - Updated `i18n.properties` and `i18n_en.properties` with honest labels.
+  - **Live S/4HANA DS4 220 Read-Only Verification**:
+    - Movement 261 real posted document: `4900049932` / Year `2026`, Item `0001`, Material `000000001000000520`, Plant `1120`, SLoc `PT01`, Batch `IN26000611`, Qty `2600.000 KG`, Reservation `0000521040` / `0004`, Order `000001002785`, User `RIYA`, CPU Date `20261002`, CPU Time `121424`.
+    - Movement 201 real posted document: `4900049685` / Year `2026`, Item `0001`, Material `000000001000000980`, Plant `1130`, SLoc `CS01`, Batch `IN26001017`, Qty `379.000 KG`, Cost Center `1011202902`, User `CHIRAGJOSHI`, CPU Date `20260911`, CPU Time `132915`.
+- **Affected Files**:
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/QueueTrayDialog.fragment.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssueQueueManager.test.js`
+  - `test/unit/wm/goodsIssuePhase5Routing.test.js`
+  - `test/unit/wm/goodsIssueService.test.js`
+  - `test/integration/wm/goodsIssueQueue.test.js`
+  - `test/unit/wm/goodsIssue201Controller.test.js`
+  - `test/unit/wm/goodsIssue261Controller.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Passed cleanly (0 errors).
+  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: Passed.
+  - `npx jest test/unit/wm/goodsIssuePhase5Routing.test.js`: Passed.
+  - `npx jest test/unit/wm/goodsIssueService.test.js`: Passed (46/46).
+  - `npx jest test/integration/wm/goodsIssueQueue.test.js`: Passed.
+  - `npx jest test/unit/wm/goodsIssue201Controller.test.js`: Passed (44/44).
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js`: Passed (40/40).
+  - `npm test`: 134 suites passed, 2,208 / 2,208 tests passed (100%).
+  - Live SAP DS4 220 read-only verification: RFC table queries executed successfully against `MATDOC` and `MKPF`.
+  - Zero live SAP POST calls made.
+  - Zero git commits made.
+- **Current Status**: Complete & Verified. All 7 requirements implemented, tested, and validated.
+- **Next Recommended Action**: Review diff on `feature/CL01` with user.
+
 ## 2026-10-02 13:10 IST
 - **Agent**: Antigravity
 - **Request**: Branch feature/CL01 (No live POST, no commit).

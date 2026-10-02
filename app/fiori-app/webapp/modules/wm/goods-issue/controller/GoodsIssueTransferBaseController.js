@@ -553,9 +553,9 @@ sap.ui.define([
                         };
                         if (res && res.MaterialDocument) {
                             oOutcome.doc = res.MaterialDocument;
-                            oOutcome.year = res.MaterialDocYear || new Date().getFullYear().toString();
+                            oOutcome.year = res.MaterialDocYear || "";
                         } else {
-                            oOutcome.queued = (res && res.QueueReference) || "1";
+                            oOutcome.queued = (res && (res.QueueId || res.QueueReference)) || "";
                         }
                         that.getRouter().navTo(cfg.pendingRoute, { "?query": oOutcome });
                         return;
@@ -567,7 +567,9 @@ sap.ui.define([
                     // offer reversal for a document that does not exist in SAP.
                     if (res && (res.Queued === true || !res.MaterialDocument)) {
                         that._oModel.setProperty("/hasPosted", false);
-                        MessageBox.warning(res.Message || that.getText("giPostQueuedMsg"), {
+                        var sQueueId = (res && (res.QueueId || res.QueueReference)) || "";
+                        var sMsg = res.Message || that.getText("giPostQueuedMsg", [sQueueId]);
+                        MessageBox.warning(sMsg, {
                             title: that.getText("giPostQueuedTitle")
                         });
                         return;
@@ -575,10 +577,10 @@ sap.ui.define([
 
                     that._oModel.setProperty("/hasPosted", true);
                     that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
-                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || new Date().getFullYear().toString());
+                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || "");
 
                     var sDocMsg = that._t("PostSuccessMsg", [
-                        res.MaterialDocument || "Document",
+                        res.MaterialDocument || "",
                         res.MaterialDocYear || ""
                     ]);
 

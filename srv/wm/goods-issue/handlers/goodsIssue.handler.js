@@ -220,10 +220,11 @@ class GoodsIssueHandler {
                 TransferOrder: '',
                 DifferenceCleared: false,
                 DifferenceQty: Number(it.DifferenceQty) || 0,
-                Message: `Queued in dispatch queue (${qRecord.QueueReference})`,
+                Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${qRecord.ID || qRecord.QueueReference}`,
                 Success: false,
                 Queued: true,
-                QueueReference: qRecord.QueueReference
+                QueueReference: qRecord.ID || qRecord.QueueReference,
+                QueueId: qRecord.ID || qRecord.QueueReference
               });
             } catch (qErr) {
               lineResults.push({
@@ -236,14 +237,15 @@ class GoodsIssueHandler {
                 Message: `Queue error: ${qErr.message}`,
                 Success: false,
                 Queued: false,
-                QueueReference: ''
+                QueueReference: '',
+                QueueId: ''
               });
             }
           }
           return {
             AllPosted: false,
             Results: lineResults,
-            Messages: [`Batch safely recorded in local Dispatch Queue: ${err.message}`]
+            Messages: [`Batch recorded in dispatch queue: Not posted to SAP. Waiting in queue. (${err.message})`]
           };
         }
 
@@ -331,6 +333,7 @@ class GoodsIssueHandler {
           Success: true,
           Queued: false,
           QueueReference: item.QueueReference,
+          QueueId: item.ID || item.QueueReference,
           SyncStatus: 'POSTED_IN_SAP'
         }, result);
       } catch (err) {
@@ -354,8 +357,9 @@ class GoodsIssueHandler {
           Success: false,
           Queued: true,
           QueueReference: item.QueueReference,
+          QueueId: item.ID || item.QueueReference,
           SyncStatus: 'FAILED',
-          Message: `SAP Gateway retry rejected: ${err.message}`
+          Message: `SAP Gateway retry rejected: ${err.message}. Queue ID (internal, not an SAP document): ${item.ID || item.QueueReference}`
         };
       }
     });

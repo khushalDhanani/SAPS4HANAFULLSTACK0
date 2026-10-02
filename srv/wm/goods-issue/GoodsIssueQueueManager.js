@@ -96,11 +96,11 @@ class GoodsIssueQueueManager {
   static buildRecord(data) {
     const sReserv = String(data.ReservationNo || '').trim();
     const sItem = String(data.ReservationItem || '').trim().padStart(4, '0');
-    const randSuffix = Math.floor(1000 + Math.random() * 9000);
+    const id = data.ID || crypto.randomUUID();
 
     return {
-      ID: crypto.randomUUID(),
-      QueueReference: String(data.QueueReference || `GI-QUEUE-${sReserv || 'UNPLANNED'}-${sItem || '0000'}-${randSuffix}`),
+      ID: id,
+      QueueReference: String(data.QueueReference || id),
       ReservationNo: sReserv,
       ReservationItem: sItem,
       OrderNo: String(data.OrderNo || '').trim(),

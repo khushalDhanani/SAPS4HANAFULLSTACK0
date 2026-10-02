@@ -406,7 +406,7 @@ async function postWithQueueFallback(req, normalized, postFn, onOutcome = async 
   try {
     const result = await postFn(normalized);
     await onOutcome('posted', { MaterialDocument: result && result.MaterialDocument, MaterialDocYear: result && result.MaterialDocYear });
-    return Object.assign({ Queued: false, QueueReference: '', SyncStatus: 'POSTED_IN_SAP', _definitiveRejection: false }, result);
+    return Object.assign({ Queued: false, QueueReference: '', QueueId: '', SyncStatus: 'POSTED_IN_SAP', _definitiveRejection: false }, result);
   } catch (err) {
     if (isDefinitiveRejection(err)) {
       await onOutcome('rejected', { LastError: err.message });
@@ -465,13 +465,13 @@ async function postWithQueueFallback(req, normalized, postFn, onOutcome = async 
         SerialNumber: normalized.SerialNumber,
         SerialNumbers: normalized.SerialNumbers,
         // Queued != posted: SAP did NOT persist the document, so this is not a success (AGENTS.md rule 6).
-        // Matches the legacy handler's honest queued result (goodsIssue.handler.js).
         Success: false,
         Queued: true,
-        QueueReference: queueRecord.QueueReference,
+        QueueReference: queueRecord.ID || queueRecord.QueueReference,
+        QueueId: queueRecord.ID || queueRecord.QueueReference,
         SyncStatus: 'QUEUED',
         _definitiveRejection: false, // outcome is unknown until replay
-        Message: `Transaction recorded in the dispatch queue (${queueRecord.QueueReference}), not yet posted in SAP. Pending SAP S/4HANA Gateway service activation.`
+        Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${queueRecord.ID || queueRecord.QueueReference}`
       };
     }
     await onOutcome(UNCONFIRMED_CODES.includes(err.code) ? 'unconfirmed' : 'rejected', { LastError: err.message });

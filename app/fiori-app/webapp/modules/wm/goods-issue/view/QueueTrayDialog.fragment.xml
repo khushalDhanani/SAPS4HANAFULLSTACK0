@@ -63,7 +63,8 @@
                             <cells>
                                 <VBox>
                                     <ObjectIdentifier
-                                        title="{giQueue>QueueReference}" />
+                                        title="{= ${giQueue>QueueReference} || ${giQueue>ID} }"
+                                        text="{i18n>wmGIQueueInternalIdLabel}" />
                                     <Text
                                         text="{giQueue>QueuedAt}"
                                         class="sapUiTinyMarginTop sapThemeLightText" />
