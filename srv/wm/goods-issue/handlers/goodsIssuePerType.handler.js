@@ -469,11 +469,11 @@ async function postWithQueueFallback(req, normalized, postFn, onOutcome = async 
         // Queued != posted: SAP did NOT persist the document, so this is not a success (AGENTS.md rule 6).
         Success: false,
         Queued: true,
-        QueueReference: queueRecord.ID || queueRecord.QueueReference,
-        QueueId: queueRecord.ID || queueRecord.QueueReference,
+        QueueReference: queueRecord.ID,
+        QueueId: queueRecord.ID,
         SyncStatus: 'QUEUED',
         _definitiveRejection: false, // outcome is unknown until replay
-        Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${queueRecord.ID || queueRecord.QueueReference}`
+        Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${queueRecord.ID}`
       };
     }
     await onOutcome(UNCONFIRMED_CODES.includes(err.code) ? 'unconfirmed' : 'rejected', { LastError: err.message });

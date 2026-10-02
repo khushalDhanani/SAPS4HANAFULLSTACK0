@@ -236,11 +236,11 @@ class GoodsIssueHandler {
                 TransferOrder: '',
                 DifferenceCleared: false,
                 DifferenceQty: Number(it.DifferenceQty) || 0,
-                Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${qRecord.ID || qRecord.QueueReference}`,
+                Message: `Not posted to SAP. Waiting in queue. Queue ID (internal, not an SAP document): ${qRecord.ID}`,
                 Success: false,
                 Queued: true,
-                QueueReference: qRecord.ID || qRecord.QueueReference,
-                QueueId: qRecord.ID || qRecord.QueueReference
+                QueueReference: qRecord.ID,
+                QueueId: qRecord.ID
               });
             } catch (qErr) {
               lineResults.push({
@@ -292,8 +292,8 @@ class GoodsIssueHandler {
       }
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
 
-      // Legacy GI-QUEUE- row pre-replay MATDOC guard:
-      const isLegacy = typeof item.QueueReference === 'string' && item.QueueReference.startsWith('GI-QUEUE-');
+      // Legacy row pre-replay MATDOC guard (enabled via LegacyReference schema flag):
+      const isLegacy = Boolean(item.LegacyReference);
       const matdocChecker = (GoodsIssueAdapter && typeof GoodsIssueAdapter.checkLegacyMatdocMatches === 'function')
         ? GoodsIssueAdapter.checkLegacyMatdocMatches.bind(GoodsIssueAdapter)
         : null;
@@ -386,7 +386,7 @@ class GoodsIssueHandler {
           Success: true,
           Queued: false,
           QueueReference: item.QueueReference,
-          QueueId: item.ID || item.QueueReference,
+          QueueId: item.ID,
           SyncStatus: 'POSTED_IN_SAP'
         }, result);
       } catch (err) {
@@ -410,9 +410,9 @@ class GoodsIssueHandler {
           Success: false,
           Queued: true,
           QueueReference: item.QueueReference,
-          QueueId: item.ID || item.QueueReference,
+          QueueId: item.ID,
           SyncStatus: 'FAILED',
-          Message: `SAP Gateway retry rejected: ${err.message}. Queue ID (internal, not an SAP document): ${item.ID || item.QueueReference}`
+          Message: `SAP Gateway retry rejected: ${err.message}. Queue ID (internal, not an SAP document): ${item.ID}`
         };
       }
     });

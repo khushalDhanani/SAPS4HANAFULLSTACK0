@@ -63,7 +63,7 @@
                             <cells>
                                 <VBox>
                                     <ObjectIdentifier
-                                        title="{= ${giQueue>QueueReference} || ${giQueue>ID} }"
+                                        title="{giQueue>ID}"
                                         text="{i18n>wmGIQueueInternalIdLabel}" />
                                     <Text
                                         text="{giQueue>QueuedAt}"

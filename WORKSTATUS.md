@@ -6,6 +6,110 @@
 
 
 
+## 2026-10-02 15:48 IST
+- **Agent**: Antigravity
+- **Request**: Display. UI and messages show only 'Queue ID (internal, not an SAP document)' with the UUID, or the SAP-returned material document and year once posted. Rename the QueueReference label/column in the UI and the tray. Remove QueueReference fallbacks that exist only for the old format.
+- **Architectural & Design Implementation**:
+  - **Queue Tray View (`app/fiori-app/webapp/modules/wm/goods-issue/view/QueueTrayDialog.fragment.xml`)**:
+    - Replaced composite fallback binding `{= ${giQueue>QueueReference} || ${giQueue>ID} }` directly with `{giQueue>ID}`.
+    - Verified column header binding `{i18n>wmGIQueueColRef}` and object identifier text `{i18n>wmGIQueueInternalIdLabel}` show `Queue ID (internal, not an SAP document)`.
+    - Preserved SAP material document display (`Doc ${giQueue>SapMaterialDocument}`) when status is posted.
+  - **UI Controllers (`GoodsIssue201.controller.js`, `GoodsIssue261.controller.js`, `GoodsIssueTransferBaseController.js`)**:
+    - Replaced `res.QueueId || res.QueueReference` fallback with canonical `res.QueueId || res.ID`.
+    - Ensured warning dialogs and pending route navigation queries use canonical internal Queue ID.
+  - **Action Handlers (`srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `goodsIssue.handler.js`)**:
+    - Replaced legacy `queueRecord.ID || queueRecord.QueueReference` fallback with `queueRecord.ID`.
+    - Standardized return payloads to provide `QueueId: item.ID` and `Message: ... Queue ID (internal, not an SAP document): ${item.ID}`.
+  - **Build & Distribution**:
+    - Ran `npx cds build` and `cd app/fiori-app && npm run build` to update compiled dist and preload bundles.
+  - **Test Suite Updates (`test/unit/wm/goodsIssue311Controller.test.js`)**:
+    - Aligned mock fixture in `goodsIssue311Controller.test.js` to return `QueueId: 'Q-311-001'` instead of obsolete `QueueReference`.
+- **Validation**:
+  - `npx cds build`: passed cleanly (5.3s).
+  - `cd app/fiori-app && npm run build`: passed cleanly (1.19s).
+  - `cd app/fiori-app && npm run lint`: 0 findings detected.
+  - `npx jest test/unit/wm/goodsIssue201Controller.test.js test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssue311Controller.test.js test/unit/wm/goodsIssueQueueManager.test.js`: 161/161 tests passed.
+  - `npm test`: 135/135 test suites passed, 2,234/2,234 tests green (132.3s).
+  - `git diff --check`: clean (0 errors).
+- **Next Recommended Action**: Await user confirmation / final review of the 4-step plan completion.
+
+## 2026-10-02 15:33 IST
+- **Agent**: Antigravity
+- **Request**: Migration for existing rows (deployed HANA/HDI and any persisted DB):
+  - For each GoodsIssueQueue row with QueueReference LIKE 'GI-QUEUE-%': set LegacyReference = true, set QueueReference = ID (the UUID), and keep the old value in a short note field only if it is needed for audit; otherwise drop it.
+  - Report counts before and after. No row may lose its SyncStatus or data.
+  - Provide it as a CAP/HDI migration artifact and document it in WORKSTATUS.md.
+  Do not run it against a deployed database; only produce and test it locally.
+- **Architectural & Design Implementation**:
+  - **SAP HANA HDI SQL Artifact (`db/migrations/20261002_migrate_legacy_queue_references.sql`)**:
+    - Created idempotent transactional SQL script for SAP HANA Cloud HDI container deployment.
+    - Pre-checks `COUNT(*)` where `QUEUEREFERENCE LIKE 'GI-QUEUE-%'`.
+    - Updates `LEGACYREFERENCE = TRUE` and `QUEUEREFERENCE = ID` atomically.
+    - Verifies post-migration counts (0 legacy prefix rows remaining, and counts canonical rows where `LEGACYREFERENCE = TRUE AND QUEUEREFERENCE = ID`).
+  - **CAP Node.js Migration Tool (`tools/migrate-legacy-queue-references.js`)**:
+    - Built programmatic migration module exporting `migrateLegacyQueueRows(db, options)`.
+    - Supports CLI execution with `--dry-run` (default / read-only candidate audit) and `--execute`.
+    - Runs atomic transaction (`db.tx`) iterating matching candidate rows, updating `LegacyReference: true` and `QueueReference: row.ID`.
+    - Automatically discovers and binds `cds.model` and `cds.db`.
+    - Strictly preserves `SyncStatus`, `LastSyncError`, and all business payload fields.
+  - **Automated Test Suite (`test/unit/wm/migrateLegacyQueueReferences.test.js`)**:
+    - Tests `--dry-run` reporting without DB mutation.
+    - Tests live migration with mixed row states (`QUEUED`, `FAILED`, `NEEDS_ATTENTION`), asserting:
+      - All legacy rows normalized to `QueueReference === ID`.
+      - `LegacyReference === true` set on all migrated rows.
+      - Modern UUID rows remain untouched (`LegacyReference === false`).
+      - All business data, quantities, and `SyncStatus` preserved.
+      - Post-migration `drainQueue` invokes `checkLegacyMatdocMatches` specifically for migrated rows via `LegacyReference: true`.
+- **Validation**:
+  - `node tools/migrate-legacy-queue-references.js --dry-run` passed: 0 legacy rows in clean local database.
+  - `npx jest test/unit/wm/migrateLegacyQueueReferences.test.js` passed: 2/2 tests green.
+  - `npm test`: 135/135 test suites passed, 2,234/2,234 tests passed (94.7s).
+  - `cd app/fiori-app && npm run lint`: 0 findings detected.
+  - `git diff --check`: clean.
+- **Production Guard**:
+  - Migration artifacts are tested locally only and NOT executed against deployed databases.
+
+## 2026-10-02 15:26 IST
+- **Agent**: Antigravity
+- **Request**: Remove prefix dependency. The isLegacy check (startsWith('GI-QUEUE-')) in GoodsIssueQueueManager.js and goodsIssue.handler.js must go. Replace it with a schema flag, e.g. LegacyReference (Boolean) or a MigratedAt timestamp, set by the migration below. Every pre-UUID row gets the MATDOC pre-replay guard through that flag.
+- **Architectural & Design Implementation**:
+  - **Schema flag (`db/wm/goods-issue-queue.cds`)**: Added `LegacyReference : Boolean default false;` to `saps4hana.wm.GoodsIssueQueue` to explicitly track pre-UUID legacy rows requiring SAP MATDOC pre-replay reconciliation.
+  - **Queue Manager (`GoodsIssueQueueManager.js`)**:
+    - Updated `buildRecord`: persists `LegacyReference: Boolean(data.LegacyReference)`, defaulting to `false` for newly enqueued records.
+    - Updated `drainQueue`: replaced prefix check `item.QueueReference.startsWith('GI-QUEUE-')` with `const isLegacy = Boolean(item.LegacyReference);`.
+  - **Action Handler (`goodsIssue.handler.js`)**:
+    - In `retryQueuedGoodsIssue`: replaced prefix check `item.QueueReference.startsWith('GI-QUEUE-')` with `const isLegacy = Boolean(item.LegacyReference);`.
+  - **Posting Client Documentation (`GoodsIssuePostingClient.js`)**:
+    - Updated JSDoc for `checkLegacyMatdocMatches` to document guard invocation via `LegacyReference` flag.
+  - **Unit Tests (`test/unit/wm/goodsIssueQueueManager.test.js`)**:
+    - Updated all 5 legacy pre-replay tests to pass `LegacyReference: true` and assert guard execution based on the schema flag.
+    - Added an explicit test `drainQueue skips legacy MATDOC check when LegacyReference is false` verifying that standard records bypass the legacy MATDOC check and proceed directly.
+- **Validation**:
+  - `npx cds build`: clean compile of updated CDS schema into `gen/`.
+  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: 18/18 tests passed.
+  - `npm test`: 134/134 suites passed, 2,232/2,232 tests passed (69.6s).
+  - `cd app/fiori-app && npm run lint`: 0 findings detected.
+  - `git diff --check`: clean.
+- **Next recommended action**: Proceed to Step 3 (Migration script / data maintenance to flag historical pre-UUID rows and normalize identifiers).
+
+## 2026-10-02 15:20 IST
+- **Agent**: Antigravity
+- **Request**: Goal: remove "GI-QUEUE-" completely from the project and replace it with proper SAP-sourced or clearly internal identifiers.
+  Step 1: Remove the generator. Source and gen/ must have no code that builds a "GI-QUEUE-..." value or a randSuffix reference. Rebuild gen/ (cds build) and the UI5 dist so no stale copy remains. Delete stale gen/ and dist output first.
+- **Architectural & Design Implementation**:
+  - Purged stale generated outputs: completely deleted `gen/` and `app/fiori-app/dist/`.
+  - Audited `srv/wm/goods-issue/GoodsIssueQueueManager.js`: verified `buildRecord` exclusively generates canonical internal UUIDs (`crypto.randomUUID()`) for `ID` and assigns `QueueReference: String(data.QueueReference || id)` without any `GI-QUEUE-` generation or `randSuffix` reference.
+  - Rebuilt CAP artifacts via `npx cds build`: confirmed `gen/srv/srv/wm/goods-issue/GoodsIssueQueueManager.js` matches source without `randSuffix` or `GI-QUEUE-` generator.
+  - Rebuilt UI5 distribution artifacts via `npm run build` in `app/fiori-app`: confirmed `app/fiori-app/dist/Component-preload.js` and fragment views match current sources with internal queue ID labeling.
+  - Verified with global ripgrep: 0 occurrences of `randSuffix` anywhere in the repository, and 0 generator occurrences of `GI-QUEUE-` in `srv/`, `gen/`, or `app/fiori-app/dist/`.
+- **Validation**:
+  - `rg -in --no-ignore "randSuffix" .` -> 0 matches.
+  - `rg -in "GI-QUEUE-" gen/ app/fiori-app/dist/` -> 0 generator matches.
+  - `npm test`: 134/134 test suites passed, 2,231/2,231 tests passed.
+  - `cd app/fiori-app && npm run lint`: 0 findings detected.
+  - `git diff --check`: clean.
+- **Next recommended action**: Proceed to Phase 2 of the approved plan: update UI fragment/controller bindings and backend handlers to standardize on canonical internal Queue IDs (`ID` / `QueueId`).
+
 ## 2026-10-02 15:10 IST
 - **Agent**: Antigravity
 - **Request**: Branch feature/CL01 (No live POST, no commit).

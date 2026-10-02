@@ -1114,7 +1114,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /**
-   * Pre-replay guard for legacy GI-QUEUE- rows:
+   * Pre-replay guard for legacy queue rows (LegacyReference flag):
    * Checks MATDOC by reservation + item + user + date + qty, created at or after the queue time.
    *
    * @param {Object} item - Queue row

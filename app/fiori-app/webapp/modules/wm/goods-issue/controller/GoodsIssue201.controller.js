@@ -584,7 +584,7 @@ sap.ui.define([
                             oOutcome.doc = res.MaterialDocument;
                             oOutcome.year = res.MaterialDocYear || "";
                         } else {
-                            oOutcome.queued = (res && (res.QueueId || res.QueueReference)) || "";
+                            oOutcome.queued = (res && (res.QueueId || res.ID)) || "";
                         }
                         that.getRouter().navTo("wmGoodsIssue201Pending", { "?query": oOutcome });
                         return;
@@ -596,7 +596,7 @@ sap.ui.define([
                     // offer reversal for a document that does not exist in SAP.
                     if (res && (res.Queued === true || !res.MaterialDocument)) {
                         that._oModel.setProperty("/hasPosted", false);
-                        var sQueueId = (res && (res.QueueId || res.QueueReference)) || "";
+                        var sQueueId = (res && (res.QueueId || res.ID)) || "";
                         var sMsg = res.Message || that.getText("giPostQueuedMsg", [sQueueId]);
                         MessageBox.warning(sMsg, {
                             title: that.getText("giPostQueuedTitle")

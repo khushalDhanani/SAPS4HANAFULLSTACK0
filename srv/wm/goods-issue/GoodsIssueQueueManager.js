@@ -135,7 +135,8 @@ class GoodsIssueQueueManager {
       SapMaterialDocument: '',
       SapMaterialDocYear: '',
       QueuedAt: new Date().toISOString(),
-      SyncedAt: null
+      SyncedAt: null,
+      LegacyReference: Boolean(data.LegacyReference)
     };
   }
 
@@ -357,10 +358,10 @@ class GoodsIssueQueueManager {
       }
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
 
-      // Legacy GI-QUEUE- row pre-replay MATDOC guard:
+      // Legacy row pre-replay MATDOC guard (enabled via LegacyReference schema flag):
       // Check MATDOC by reservation+item+user+date+qty, created after the queue time.
       // Match or ambiguous -> needs-attention, no replay.
-      const isLegacy = typeof item.QueueReference === 'string' && item.QueueReference.startsWith('GI-QUEUE-');
+      const isLegacy = Boolean(item.LegacyReference);
       const matdocChecker = (adapter && typeof adapter.checkLegacyMatdocMatches === 'function')
         ? adapter.checkLegacyMatdocMatches.bind(adapter)
         : (adapter && adapter.posting && typeof adapter.posting.checkLegacyMatdocMatches === 'function')

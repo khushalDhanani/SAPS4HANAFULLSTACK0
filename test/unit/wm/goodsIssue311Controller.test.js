@@ -729,7 +729,7 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
 
         it('onPostGoodsIssue with fromReservation:true and queued result returns to wmGoodsIssue311Pending with queue ref', async () => {
             mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
-            mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ Queued: true, QueueReference: 'Q-311-001' });
+            mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ Queued: true, QueueId: 'Q-311-001' });
 
             const oModel = controller.getView().getModel('gi311');
             oModel.setProperty('/fromReservation', true);

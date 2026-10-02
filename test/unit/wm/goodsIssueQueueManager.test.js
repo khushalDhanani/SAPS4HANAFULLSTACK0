@@ -245,9 +245,11 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
         ReservationItem: '0001',
         Material: '1000000514',
         IssueQty: 10,
-        Unit: 'KG'
+        Unit: 'KG',
+        LegacyReference: true
       });
       expect(queued.QueueReference).toBe(legacyRef);
+      expect(queued.LegacyReference).toBe(true);
 
       // 1. Verify display in getAll / getSummary for QueueTray
       const all = await manager.getAll();
@@ -308,7 +310,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
         ReservationItem: '0001',
         Material: '1000000514',
         IssueQty: 10,
-        Unit: 'KG'
+        Unit: 'KG',
+        LegacyReference: true
       });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
@@ -337,7 +340,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
         ReservationItem: '0001',
         Material: '1000000514',
         IssueQty: 10,
-        Unit: 'KG'
+        Unit: 'KG',
+        LegacyReference: true
       });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
@@ -366,7 +370,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
         ReservationItem: '0001',
         Material: '1000000514',
         IssueQty: 10,
-        Unit: 'KG'
+        Unit: 'KG',
+        LegacyReference: true
       });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({
@@ -398,7 +403,8 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
         ReservationItem: '0001',
         Material: '1000000514',
         IssueQty: 10,
-        Unit: 'KG'
+        Unit: 'KG',
+        LegacyReference: true
       });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
@@ -416,6 +422,33 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(item.SyncStatus).toBe('NEEDS_ATTENTION');
       expect(item.LastSyncError).toContain('Pre-replay SAP MATDOC check error');
       expect(item.LastSyncError).toContain('operator attention required before replay');
+    });
+
+    it('drainQueue skips legacy MATDOC check when LegacyReference is false', async () => {
+      const standardRef = '00000000-0000-0000-0000-000000000099';
+      await manager.enqueue({
+        ID: standardRef,
+        QueueReference: standardRef,
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        Material: '1000000514',
+        IssueQty: 10,
+        Unit: 'KG',
+        LegacyReference: false
+      });
+
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({
+        MaterialDocument: '4900099999',
+        MaterialDocYear: '2026',
+        Success: true
+      });
+      const matdocSpy = jest.spyOn(GoodsIssueAdapter, 'checkLegacyMatdocMatches');
+
+      const drainResult = await manager.drainQueue(GoodsIssueAdapter);
+      expect(drainResult.Attempted).toBe(1);
+      expect(drainResult.SyncedToSap).toBe(1);
+      expect(matdocSpy).not.toHaveBeenCalled();
+      expect(postSpy).toHaveBeenCalledTimes(1);
     });
 
     it('checkLegacyMatdocMatches: document posted 10 seconds before queue record is found in time window', async () => {
