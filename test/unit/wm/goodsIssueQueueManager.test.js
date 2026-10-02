@@ -235,5 +235,62 @@ describe('GoodsIssueQueueManager (CAP database store)', () => {
       expect(await handlers['clearQueuedGoodsIssue']({ data: { QueueReference: queued.QueueReference }, error: jest.fn() })).toBe(true);
       expect(await manager.getAll()).toHaveLength(0);
     });
+
+    it('displays and replays legacy queue rows with GI-QUEUE- references', async () => {
+      const legacyRef = 'GI-QUEUE-142001-0001-7041';
+      const queued = await manager.enqueue({
+        QueueReference: legacyRef,
+        ReservationNo: '142001',
+        ReservationItem: '0001',
+        Material: '1000000514',
+        IssueQty: 10,
+        Unit: 'KG'
+      });
+      expect(queued.QueueReference).toBe(legacyRef);
+
+      // 1. Verify display in getAll / getSummary for QueueTray
+      const all = await manager.getAll();
+      const legacyRow = all.find((r) => r.QueueReference === legacyRef);
+      expect(legacyRow).toBeDefined();
+      expect(legacyRow.QueueReference).toBe(legacyRef);
+      expect(legacyRow.ReservationNo).toBe('142001');
+
+      // 2. Verify lookup by legacy QueueReference
+      const fetched = await manager.get(legacyRef);
+      expect(fetched).not.toBeNull();
+      expect(fetched.ID).toBe(queued.ID);
+
+      // 3. Replay through retryQueuedGoodsIssue
+      const handlers = fakeService();
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValueOnce({
+        MaterialDocument: '4900005678',
+        MaterialDocYear: '2026',
+        Success: true
+      });
+
+      const replayResult = await handlers['retryQueuedGoodsIssue']({
+        data: { QueueReference: legacyRef },
+        error: jest.fn()
+      });
+
+      expect(replayResult).toMatchObject({
+        Success: true,
+        Queued: false,
+        SyncStatus: 'POSTED_IN_SAP',
+        MaterialDocument: '4900005678',
+        QueueReference: legacyRef
+      });
+
+      const updated = await manager.get(legacyRef);
+      expect(updated).toMatchObject({
+        SyncStatus: 'POSTED_IN_SAP',
+        SapMaterialDocument: '4900005678',
+        SapMaterialDocYear: '2026'
+      });
+
+      // 4. Clear legacy item
+      expect(await handlers['clearQueuedGoodsIssue']({ data: { QueueReference: legacyRef }, error: jest.fn() })).toBe(true);
+      expect(await manager.get(legacyRef)).toBeNull();
+    });
   });
 });

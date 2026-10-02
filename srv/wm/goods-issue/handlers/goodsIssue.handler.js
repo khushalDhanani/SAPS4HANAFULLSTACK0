@@ -284,7 +284,7 @@ class GoodsIssueHandler {
         await GoodsIssueQueueManager.update(QueueReference, {
           SyncStatus: 'POSTED_IN_SAP',
           SapMaterialDocument: result.MaterialDocument || '',
-          SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+          SapMaterialDocYear: result.MaterialDocYear || '',
           SyncedAt: new Date().toISOString()
         });
         await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
@@ -314,7 +314,7 @@ class GoodsIssueHandler {
             if (suAllocations.length > 0) {
               await suStore.recordIssuedSUs({
                 materialDocument: result.MaterialDocument,
-                materialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+                materialDocYear: result.MaterialDocYear || '',
                 reservationNo: item.ReservationNo,
                 reservationItem: item.ReservationItem,
                 referenceDocument: item.ReferenceDocument,

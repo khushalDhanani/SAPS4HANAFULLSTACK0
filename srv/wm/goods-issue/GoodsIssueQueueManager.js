@@ -435,7 +435,7 @@ class GoodsIssueQueueManager {
           await this.update(item.QueueReference, {
             SyncStatus: 'POSTED_IN_SAP',
             SapMaterialDocument: result.MaterialDocument,
-            SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+            SapMaterialDocYear: result.MaterialDocYear || '',
             SyncedAt: new Date().toISOString()
           });
           await settle('posted', { MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocYear });
@@ -444,14 +444,14 @@ class GoodsIssueQueueManager {
           if (replayClaimIds.length > 0) {
             await GoodsIssueIssuedSuStore.promoteClaims(replayClaimIds, {
               materialDocument: result.MaterialDocument,
-              materialDocYear: result.MaterialDocYear || String(new Date().getFullYear())
+              materialDocYear: result.MaterialDocYear || ''
             });
           } else if (suAllocations.length > 0) {
             // Fallback: acquireClaims was skipped (e.g. no-DB); record directly
             try {
               await GoodsIssueIssuedSuStore.recordIssuedSUs({
                 materialDocument: result.MaterialDocument,
-                materialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
+                materialDocYear: result.MaterialDocYear || '',
                 reservationNo: item.ReservationNo,
                 reservationItem: item.ReservationItem,
                 referenceDocument: item.ReferenceDocument,
@@ -561,7 +561,7 @@ class GoodsIssueQueueManager {
 
     if (act === 'posted') {
       const matDoc = String(options.materialDocument || item.SapMaterialDocument || '').trim();
-      const matYear = String(options.materialDocYear || item.SapMaterialDocYear || new Date().getFullYear()).trim();
+      const matYear = String(options.materialDocYear || item.SapMaterialDocYear || '').trim();
       if (!matDoc) {
         const err = new Error('materialDocument is required for action "posted"');
         err.status = 400;

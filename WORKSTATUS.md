@@ -6,6 +6,68 @@
 
 
 
+## 2026-10-02 13:55 IST
+- **Agent**: Antigravity
+- **Request**: Branch feature/CL01 (No live POST, no commit).
+  1. Define behaviour when readBackDocument returns nothing or errors right after SAP returned a document number: still return that number, mark it "not yet confirmed", never report failure or queue. Test it, including the commit-lag case.
+  2. MaterialDocYear must come from the SAP response; if absent, derive it from the document's posting date read from SAP, never from the clock. Test it.
+  3. Confirm read-back queries MATDOC first on S/4HANA and report the fallback order.
+  4. 261 controller: if material/plant are missing, show a clear error and block the action. Test it.
+  5. Grep for anything that assumes a non-empty MaterialDocument for queued items, or parses the old GI-QUEUE- prefix, including exports and the queue tray. Report file:line, then fix.
+  6. Check old queue rows with GI-QUEUE- values still display and replay. Test it.
+  7. Run the full suite, report the total, update WORKSTATUS.md. No new features.
+- **Architectural & Design Implementation**:
+  - **Commit-Lag & Read-Back Behavior (Requirement 1)**:
+    - In `GoodsIssuePostingClient.readBackDocument`, if SAP returns a document number (e.g. `4900099999`), but read-back returns no rows (commit lag in SAP Gateway before database replication finishes) or encounters transient RFC/network errors:
+      - The client still returns that document number: `{ MaterialDocument: sDoc, MaterialDocYear: sYear, Confirmed: false, Status: 'not yet confirmed' }`.
+      - Callers (`_submitMaterialDocument`, batch submit, `post261`) return `Success: true`, `Queued: false`, `Confirmed: false`, `ConfirmationStatus: 'NOT_YET_CONFIRMED'`, and append `' (not yet confirmed)'` to user-facing messages.
+      - Never reports failure and never routes to the dispatch queue.
+  - **Authoritative Year Derivation (Requirement 2)**:
+    - Removed all local system clock defaults (`new Date().getFullYear()`) from `GoodsIssuePostingClient.js`, `GoodsIssueIssuedSuStore.js`, `GoodsIssueQueueManager.js`, `goodsIssue.handler.js`, `goodsIssuePerType.handler.js`, `goodsIssue.mapper.js`, `GoodsIssue201.controller.js`, `GoodsIssue261.controller.js`, and `GoodsIssueTransferBaseController.js`.
+    - If `MaterialDocumentYear` is missing from the SAP response payload, it is derived from the SAP posting date (`BUDAT` in `MATDOC`/`MKPF` or `PostingDate` in OData), never from the clock. If both are absent, it remains empty (`''`).
+  - **Read-Back Query Sequence on S/4HANA (Requirement 3)**:
+    - **Tier 1 (Primary)**: RFC `readTable` on SAP S/4HANA Universal Table **`MATDOC`** by `MBLNR` and `MJAHR`, reading `MBLNR`, `MJAHR`, `BUDAT`, `ZEILE`, `BWART`, `MATNR`, `WERKS`, `LGORT`, `CHARG`, `MENGE`, `MEINS`, `RSNUM`, `RSPOS`.
+    - **Tier 2 (Fallback 1)**: RFC `readTable` on Material Document Header Table **`MKPF`** by `MBLNR` and `MJAHR`, reading `MBLNR`, `MJAHR`, `BLDAT`, `BUDAT`, `CPUDT`, `CPUTM`.
+    - **Tier 3 (Fallback 2)**: HTTP GET on OData service **`API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`**.
+  - **261 Controller Validation (Requirement 4)**:
+    - In `GoodsIssue261.controller.onPostGoodsIssue`, added explicit preconditions checking that `material` and `plant` are populated. If missing, displays `MessageBox.error` (`gi261MaterialRequired` / `gi261PlantRequired`) and blocks the submission.
+  - **Audit of Queued `MaterialDocument` and `GI-QUEUE-` (Requirement 5)**:
+    - Grepped entire codebase for `GI-QUEUE`, `QueueReference`, `MaterialDocument`, `SapMaterialDocument`, and export utilities.
+    - Verified zero active runtime code parses `GI-QUEUE-` prefix.
+    - Verified all queued responses maintain `MaterialDocument: ''` without masking or crashing downstream consumers.
+  - **Backward Compatibility for Legacy Queue Records (Requirement 6)**:
+    - Legacy queue records with `QueueReference: 'GI-QUEUE-...'` continue to display in `QueueTrayDialog` using `{= ${giQueue>QueueReference} || ${giQueue>ID} }` labeled "Queue ID (internal, not an SAP document)".
+    - `GoodsIssueQueueManager.get(queueRefOrId)` matches on either `QueueReference` or technical `ID`.
+    - `retryQueuedGoodsIssue` accepts legacy `GI-QUEUE-...` references, executes live SAP replay, transitions `SyncStatus: 'POSTED_IN_SAP'`, and persists `SapMaterialDocument`.
+- **Affected Files**:
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`
+  - `srv/wm/goods-issue/service.cds`
+  - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+  - `srv/wm/goods-issue/GoodsIssueQueueManager.js`
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/wm/goods-issue/mapping/goodsIssue.mapper.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue201.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/goodsIssue261Controller.test.js`
+  - `test/unit/wm/goodsIssuePerTypePostingClient.test.js`
+  - `test/unit/wm/goodsIssueQueueManager.test.js`
+  - `WORKSTATUS.md`
+- **Executed Commands & Results**:
+  - `git diff --check`: Passed cleanly (0 errors).
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js`: 45/45 passed (100%).
+  - `npx jest test/unit/wm/goodsIssuePerTypePostingClient.test.js`: 11/11 passed (100%).
+  - `npx jest test/unit/wm/goodsIssueQueueManager.test.js`: 12/12 passed (100%).
+  - `npx jest test/unit/wm`: 47 suites, 997/997 passed (100%).
+  - `npm test`: 134 suites, 2,215/2,215 passed (100%).
+  - Zero live SAP POST calls made.
+  - Zero git commits made.
+- **Current Status**: Complete & Verified. All 7 requirements implemented and validated across full test suite.
+- **Next Recommended Action**: Review diff on `feature/CL01` with user.
+
 ## 2026-10-02 13:30 IST
 - **Agent**: Antigravity
 - **Request**: Eliminate `GI-QUEUE-...` invented document numbers and enforce genuine SAP document verification:

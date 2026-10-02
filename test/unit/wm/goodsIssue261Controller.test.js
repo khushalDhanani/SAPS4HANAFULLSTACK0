@@ -458,6 +458,26 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(mockService.postGoodsIssue).not.toHaveBeenCalled();
         });
 
+        it('blocks posting and shows clear error when material is missing', async () => {
+            makeValidPlanned();
+            controller._oModel.setProperty('/material', '');
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi261MaterialRequired');
+            expect(mockService.postGoodsIssue).not.toHaveBeenCalled();
+            expect(controller._oModel.getProperty('/busy')).toBe(false);
+        });
+
+        it('blocks posting and shows clear error when plant is missing', async () => {
+            makeValidPlanned();
+            controller._oModel.setProperty('/plant', '');
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi261PlantRequired');
+            expect(mockService.postGoodsIssue).not.toHaveBeenCalled();
+            expect(controller._oModel.getProperty('/busy')).toBe(false);
+        });
+
         it('should post and show MessageBox.success with the SAP material document', async () => {
             makeValidPlanned();
             mockService.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900004321', MaterialDocYear: '2025' });

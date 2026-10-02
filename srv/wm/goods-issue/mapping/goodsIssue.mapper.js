@@ -120,7 +120,7 @@ function normalizeReversalPayload(data, context = {}) {
 
   const rawDoc = String(data.MaterialDocument || '').trim();
   const materialDocument = /^\d+$/.test(rawDoc) ? rawDoc.padStart(10, '0') : rawDoc;
-  const materialDocYear = String(data.MaterialDocYear || new Date().getFullYear()).trim();
+  const materialDocYear = String(data.MaterialDocYear || '').trim();
   const postingDate = toIsoDateString(data.PostingDate);
   const documentDate = toIsoDateString(data.DocumentDate || data.PostingDate);
   const reversalReason = data.ReversalReason ? String(data.ReversalReason).trim() : '';

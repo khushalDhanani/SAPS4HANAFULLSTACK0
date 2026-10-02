@@ -616,7 +616,7 @@ sap.ui.define([
 
         onReverseGoodsIssue: function () {
             var sDoc = this._oModel.getProperty("/postedDocument");
-            var sYear = this._oModel.getProperty("/postedYear") || new Date().getFullYear().toString();
+            var sYear = this._oModel.getProperty("/postedYear") || "";
             var sPostingDate = this._oModel.getProperty("/postingDate");
 
             if (!sDoc) {

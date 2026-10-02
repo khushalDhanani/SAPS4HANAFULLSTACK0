@@ -409,7 +409,7 @@ class GoodsIssueIssuedSuStore {
   async promoteClaims(claimIds = [], { materialDocument, materialDocYear = '' }) {
     if (!Array.isArray(claimIds) || claimIds.length === 0 || !materialDocument) return;
     const sDoc = String(materialDocument).trim();
-    const sYear = String(materialDocYear || new Date().getFullYear()).trim();
+    const sYear = String(materialDocYear || '').trim();
 
     for (const id of claimIds) {
       const rec = this._memoryStore.get(id);
@@ -470,7 +470,7 @@ class GoodsIssueIssuedSuStore {
     const rows = items.map((item) => ({
       ID: (cds.utils && cds.utils.uuid) ? cds.utils.uuid() : `SU-CLAIM-${Date.now()}-${Math.random()}`,
       MaterialDocument: String(materialDocument || '').trim(),
-      MaterialDocYear: String(materialDocYear || new Date().getFullYear()).trim(),
+      MaterialDocYear: String(materialDocYear || '').trim(),
       ReservationNo: String(reservationNo || '').trim(),
       ReservationItem: String(reservationItem || '').trim(),
       ReferenceDocument: String(referenceDocument || '').trim(),
@@ -645,7 +645,7 @@ class GoodsIssueIssuedSuStore {
 
     if (act === 'posted') {
       const matDoc = String(options.materialDocument || existing.MaterialDocument || '').trim();
-      const matYear = String(options.materialDocYear || existing.MaterialDocYear || new Date().getFullYear()).trim();
+      const matYear = String(options.materialDocYear || existing.MaterialDocYear || '').trim();
       if (!matDoc) {
         const err = new Error('materialDocument is required for action "posted"');
         err.status = 400;
@@ -930,7 +930,10 @@ class GoodsIssueIssuedSuStore {
 
             if (!shouldRelease && row.MaterialDocument) {
               try {
-                const msegWhere = [`SMBLN = '${row.MaterialDocument}'`, `AND SJAHR = '${row.MaterialDocYear || new Date().getFullYear()}'`];
+                const msegWhere = [`SMBLN = '${row.MaterialDocument}'`];
+                if (row.MaterialDocYear) {
+                  msegWhere.push(`AND SJAHR = '${row.MaterialDocYear}'`);
+                }
                 const msegRows = await readTable('MSEG', ['MBLNR', 'BWART'], msegWhere);
                 if (Array.isArray(msegRows) && msegRows.length > 0) { shouldRelease = true; releaseReason = 'MATERIAL_DOCUMENT_REVERSED'; }
               } catch (msegErr) { LOG.warn(`MSEG reversal lookup error for MatDoc ${row.MaterialDocument}: ${msegErr.message}`); }

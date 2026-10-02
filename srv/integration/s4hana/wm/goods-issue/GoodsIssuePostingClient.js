@@ -143,18 +143,26 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
+  /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
   async _submitMaterialDocument(v2Payload, meta) {
     const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
     const v2Res = await this._post(v2Path, v2Payload);
     GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
     const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
-    const rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
+    let rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
+    if (!rawMatYear && (v2Res.PostingDate || v2Res.d?.PostingDate)) {
+      const pd = v2Res.PostingDate || v2Res.d?.PostingDate;
+      const m = String(pd).match(/\d{4}/);
+      if (m) rawMatYear = m[0];
+    }
     if (!rawMatDoc) {
       throw new Error(`SAP S/4HANA did not return a material document for movement ${meta.mvt} posting, and no sap-message error was present in the response.`);
     }
     const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
     const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
     const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
+    const isConfirmed = Boolean(verified?.Confirmed);
+    const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
     return {
       ReservationNo: String(meta.reservationNo || ''),
       ReservationItem: String(meta.reservationItem || ''),
@@ -165,69 +173,126 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       DifferenceCleared: false,
       DifferenceQty: 0,
       Success: true,
-      Message: `${meta.label} ${meta.mvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
+      Confirmed: isConfirmed,
+      ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+      Message: `${meta.label} ${meta.mvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`
     };
   }
 
   /**
-   * Reads a material document back from SAP (MATDOC with fallback to MKPF or OData)
-   * to confirm persistence and verify authoritative values.
+   * Reads a material document back from SAP to confirm persistence and verify authoritative values.
    *
-   * @param {string} matDoc - Material document number
-   * @param {string} [matYear] - Material document year
-   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Items?: Array }>}
+   * Fallback Sequence on SAP S/4HANA:
+   * 1. Primary (Tier 1): RFC readTable on SAP S/4HANA universal journal/doc table 'MATDOC'
+   * 2. Fallback 1 (Tier 2): RFC readTable on material document header table 'MKPF'
+   * 3. Fallback 2 (Tier 3): OData GET API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader
+   *
+   * Commit-Lag & Error Contract:
+   * If SAP returned a document number but read-back returns nothing (e.g. Gateway commit lag)
+   * or throws an error, the document number is STILL returned marked as "not yet confirmed"
+   * (Confirmed: false, Status: 'not yet confirmed'). It NEVER reports failure and NEVER queues.
+   *
+   * Year Contract:
+   * MaterialDocYear is obtained from SAP MJAHR or derived from the SAP posting date (BUDAT).
+   * It is NEVER derived from the local system clock.
+   *
+   * @param {string} matDoc - Material document number returned by SAP
+   * @param {string} [matYear] - Material document year returned by SAP
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Confirmed: boolean, Status: string, Items?: Array }>}
    */
   async readBackDocument(matDoc, matYear) {
     const sDoc = String(matDoc || '').trim();
     const sYear = String(matYear || '').trim();
     if (!sDoc) return null;
 
+    // 1. Primary: RFC readTable on MATDOC
     if (this.rfc && typeof this.rfc.readTable === 'function') {
       try {
         const where = [`MBLNR = '${sDoc}'`];
         if (sYear) where.push(`AND MJAHR = '${sYear}'`);
-        const rows = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'], where, 10);
+        const rows = await this.rfc.readTable(
+          'MATDOC',
+          ['MBLNR', 'MJAHR', 'BUDAT', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'],
+          where,
+          10
+        );
         if (Array.isArray(rows) && rows.length > 0) {
+          const docRow = rows[0];
+          let confirmedYear = String(docRow.MJAHR || '').trim();
+          if (!confirmedYear && docRow.BUDAT) {
+            confirmedYear = String(docRow.BUDAT).trim().slice(0, 4);
+          }
           return {
-            MaterialDocument: String(rows[0].MBLNR).trim(),
-            MaterialDocYear: String(rows[0].MJAHR).trim(),
+            MaterialDocument: String(docRow.MBLNR).trim(),
+            MaterialDocYear: confirmedYear || sYear,
+            Confirmed: true,
+            Status: 'confirmed',
             Items: rows
           };
         }
       } catch (err) {
-        LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF...`);
-        try {
-          const where = [`MBLNR = '${sDoc}'`];
-          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
-          const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
-          if (Array.isArray(rows) && rows.length > 0) {
-            return {
-              MaterialDocument: String(rows[0].MBLNR).trim(),
-              MaterialDocYear: String(rows[0].MJAHR).trim()
-            };
+        LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF fallback...`);
+      }
+
+      // 2. Fallback 1: RFC readTable on MKPF
+      try {
+        const where = [`MBLNR = '${sDoc}'`];
+        if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+        const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
+        if (Array.isArray(rows) && rows.length > 0) {
+          const mkpfRow = rows[0];
+          let confirmedYear = String(mkpfRow.MJAHR || '').trim();
+          if (!confirmedYear && mkpfRow.BUDAT) {
+            confirmedYear = String(mkpfRow.BUDAT).trim().slice(0, 4);
           }
-        } catch (mkpfErr) {
-          LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}`);
+          return {
+            MaterialDocument: String(mkpfRow.MBLNR).trim(),
+            MaterialDocYear: confirmedYear || sYear,
+            Confirmed: true,
+            Status: 'confirmed'
+          };
         }
+      } catch (mkpfErr) {
+        LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}. Trying OData fallback...`);
       }
     }
 
+    // 3. Fallback 2: OData A_MaterialDocumentHeader GET
     try {
-      const yearClause = sYear ? `MaterialDocumentYear='${sYear}',` : '';
-      const docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(${yearClause}MaterialDocument='${sDoc}')`;
+      let docPath;
+      if (sYear) {
+        docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(MaterialDocumentYear='${sYear}',MaterialDocument='${sDoc}')`;
+      } else {
+        docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json`;
+      }
       const res = await this._get(docPath, '$format=json');
-      const header = res?.d || res;
+      const header = Array.isArray(res) ? res[0] : (res?.d || res);
       if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
+        let confirmedYear = String(header.MaterialDocumentYear || '').trim();
+        if (!confirmedYear && header.PostingDate) {
+          const m = String(header.PostingDate).match(/\d{4}/);
+          if (m) confirmedYear = m[0];
+        }
         return {
           MaterialDocument: String(header.MaterialDocument || sDoc).trim(),
-          MaterialDocYear: String(header.MaterialDocumentYear || sYear).trim()
+          MaterialDocYear: confirmedYear || sYear,
+          Confirmed: true,
+          Status: 'confirmed'
         };
       }
     } catch (odataErr) {
       LOG.warn(`OData readback for ${sDoc}/${sYear} failed: ${odataErr.message}`);
     }
 
-    return { MaterialDocument: sDoc, MaterialDocYear: sYear };
+    // When SAP returned a document number, but read-back returns nothing or errors
+    // (e.g. Gateway commit-lag): still return that document number, marked "not yet confirmed".
+    // Never report failure or queue.
+    return {
+      MaterialDocument: sDoc,
+      MaterialDocYear: sYear,
+      Confirmed: false,
+      Status: 'not yet confirmed'
+    };
   }
 
   /**
@@ -468,7 +533,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       const match = matches[0];
       return {
         MaterialDocument: String(match.MBLNR).trim(),
-        MaterialDocYear: String(match.MJAHR || match.MBLNR_YEAR || new Date().getFullYear()).trim()
+        MaterialDocYear: String(match.MJAHR || match.MBLNR_YEAR || (match.BUDAT ? match.BUDAT.slice(0, 4) : '')).trim()
       };
     }
 
@@ -519,10 +584,16 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       });
       if (response && (response.MaterialDocument || response.MatDoc)) {
         const rawMatDoc = response.MaterialDocument || response.MatDoc;
-        const rawMatYear = response.MaterialDocYear || '';
+        let rawMatYear = response.MaterialDocYear || '';
+        if (!rawMatYear && response.PostingDate) {
+          const m = String(response.PostingDate).match(/\d{4}/);
+          if (m) rawMatYear = m[0];
+        }
         const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
         const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
         const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
+        const isConfirmed = Boolean(verified?.Confirmed);
+        const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
         return {
           ReservationNo: sReserv,
           ReservationItem: sItem,
@@ -533,7 +604,9 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           DifferenceCleared: false,
           DifferenceQty: 0,
           Success: true,
-          Message: 'Goods Issue 261 posted successfully in S/4HANA.'
+          Confirmed: isConfirmed,
+          ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+          Message: `Goods Issue 261 posted successfully in S/4HANA${confirmationText}.`
         };
       }
       throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
@@ -731,12 +804,19 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         const v2Res = await this._post(v2Path, v2Payload);
         GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
         const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
-        const rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
+        let rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
+        if (!rawMatYear && (v2Res.PostingDate || v2Res.d?.PostingDate)) {
+          const pd = v2Res.PostingDate || v2Res.d?.PostingDate;
+          const m = String(pd).match(/\d{4}/);
+          if (m) rawMatYear = m[0];
+        }
 
         if (rawMatDoc) {
           const verified = await this.readBackDocument(rawMatDoc, rawMatYear);
           const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
           const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
+          const isConfirmed = Boolean(verified?.Confirmed);
+          const confirmationText = isConfirmed ? '' : ' (not yet confirmed)';
           const results = items.map(item => {
             const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
             const sItem = rawItem ? rawItem.padStart(4, '0') : '';
@@ -749,14 +829,18 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
               DifferenceCleared: nDiffQty > 0,
               DifferenceQty: nDiffQty,
               Success: true,
-              Message: `Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}/${matYear}).`
+              Confirmed: isConfirmed,
+              ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
+              Message: `Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`
             };
           });
 
           return {
             AllPosted: true,
+            Confirmed: isConfirmed,
+            ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'NOT_YET_CONFIRMED',
             Results: results,
-            Messages: [`Batch Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (Material Document: ${matDoc}/${matYear}).`]
+            Messages: [`Batch Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (Material Document: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`]
           };
         }
         // Same rule as single-item posting: never resolve without either a genuine material

@@ -91,3 +91,84 @@ test('postByMovementType routes 311 to post311 (not 301/261)', async () => {
   expect(client.post261).not.toHaveBeenCalled();
   expect(res.mvt).toBe('311');
 });
+
+describe('readBackDocument & commit-lag handling', () => {
+  test('returns SAP document marked "not yet confirmed" when readBackDocument finds nothing due to commit lag', async () => {
+    const client = new GoodsIssuePostingClient({});
+    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+    client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
+    // Simulate commit-lag: MATDOC and MKPF return no rows, OData returns no rows
+    client.readBackDocument = jest.fn().mockResolvedValue({
+      MaterialDocument: '4900099999',
+      MaterialDocYear: '2026',
+      Confirmed: false,
+      Status: 'not yet confirmed'
+    });
+
+    const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
+    expect(res.Success).toBe(true);
+    expect(res.MaterialDocument).toBe('4900099999');
+    expect(res.Confirmed).toBe(false);
+    expect(res.ConfirmationStatus).toBe('NOT_YET_CONFIRMED');
+    expect(res.Message).toContain('(not yet confirmed)');
+  });
+
+  test('returns SAP document marked "not yet confirmed" when readBackDocument errors', async () => {
+    const client = new GoodsIssuePostingClient({});
+    client.rfc = {
+      readTable: jest.fn().mockRejectedValue(new Error('RFC connection reset during readback'))
+    };
+    client._get = jest.fn().mockRejectedValue(new Error('OData readback 503 gateway'));
+
+    const result = await client.readBackDocument('4900099999', '2026');
+    expect(result).toEqual({
+      MaterialDocument: '4900099999',
+      MaterialDocYear: '2026',
+      Confirmed: false,
+      Status: 'not yet confirmed'
+    });
+  });
+
+  test('readBackDocument queries MATDOC first, then MKPF, then OData in fallback order', async () => {
+    const callOrder = [];
+    const client = new GoodsIssuePostingClient({});
+    client.rfc = {
+      readTable: jest.fn(async (table) => {
+        callOrder.push(`RFC:${table}`);
+        if (table === 'MATDOC') throw new Error('MATDOC table busy');
+        if (table === 'MKPF') throw new Error('MKPF table lock');
+        return [];
+      })
+    };
+    client._get = jest.fn(async (path) => {
+      callOrder.push('ODATA:A_MaterialDocumentHeader');
+      return { MaterialDocument: '4900077777', MaterialDocumentYear: '2026' };
+    });
+
+    const result = await client.readBackDocument('4900077777');
+    expect(callOrder).toEqual(['RFC:MATDOC', 'RFC:MKPF', 'ODATA:A_MaterialDocumentHeader']);
+    expect(result.Confirmed).toBe(true);
+    expect(result.MaterialDocument).toBe('4900077777');
+    expect(result.MaterialDocYear).toBe('2026');
+  });
+
+  test('MaterialDocYear derived from SAP BUDAT / PostingDate, never from the clock', async () => {
+    const client = new GoodsIssuePostingClient({});
+    client.rfc = {
+      readTable: jest.fn(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '4900055555',
+            MJAHR: '', // No year in MJAHR
+            BUDAT: '20251115' // SAP posting date: Nov 15 2025
+          }];
+        }
+        return [];
+      })
+    };
+
+    const result = await client.readBackDocument('4900055555');
+    expect(result.Confirmed).toBe(true);
+    expect(result.MaterialDocYear).toBe('2025'); // Derived from 20251115, not from the clock
+  });
+});

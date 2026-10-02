@@ -118,15 +118,19 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DifferenceQty     : Decimal(13, 3);
         Message           : String(255);
         Success           : Boolean;
+        Confirmed         : Boolean;
+        ConfirmationStatus: String(30);
         Queued            : Boolean;
         QueueReference    : String(40);
         QueueId           : String(36);
     };
 
     type GISubmitBatchResult {
-        AllPosted : Boolean;
-        Results   : array of GISubmitLineResult;
-        Messages  : array of String;
+        AllPosted          : Boolean;
+        Confirmed          : Boolean;
+        ConfirmationStatus : String(30);
+        Results            : array of GISubmitLineResult;
+        Messages           : array of String;
     };
 
     type GIPostResult {
@@ -140,6 +144,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         SerialNumber      : String(18);
         SerialNumbers     : array of String(18);
         Success           : Boolean;
+        Confirmed         : Boolean;
+        ConfirmationStatus: String(30);
         Message           : String(500);
         Queued            : Boolean;
         QueueReference    : String(40);

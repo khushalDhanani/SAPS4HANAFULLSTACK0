@@ -555,7 +555,7 @@ const PerTypeGoodsIssueHandler = {
           try {
             await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
               materialDocument: res.MaterialDocument,
-              materialDocYear: res.MaterialDocYear || new Date().getFullYear()
+              materialDocYear: res.MaterialDocYear || ''
             });
           } catch (suErr) {
             LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
