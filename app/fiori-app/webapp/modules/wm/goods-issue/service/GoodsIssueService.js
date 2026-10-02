@@ -66,6 +66,32 @@ sap.ui.define([
             return ODataClient.get(sQuery).then(function (oData) {
                 return oData || null;
             });
+        },
+
+        /**
+         * Retry a queued goods issue transaction against live SAP by internal queue ID.
+         * @param {string} sId - CAP UUID of the queue item
+         * @returns {Promise<Object>}
+         */
+        retryQueuedGoodsIssue: function (sId) {
+            return ODataClient.post(BASE_PATH + "/retryQueuedGoodsIssue", { ID: sId });
+        },
+
+        /**
+         * Remove an item from the dispatch queue by internal queue ID.
+         * @param {string} sId - CAP UUID of the queue item
+         * @returns {Promise<boolean>}
+         */
+        clearQueuedGoodsIssue: function (sId) {
+            return ODataClient.post(BASE_PATH + "/clearQueuedGoodsIssue", { ID: sId });
+        },
+
+        /**
+         * Replay all pending queued goods issue transactions against live SAP.
+         * @returns {Promise<Object>}
+         */
+        drainQueue: function () {
+            return ODataClient.post(BASE_PATH + "/drainQueue", {});
         }
     };
 

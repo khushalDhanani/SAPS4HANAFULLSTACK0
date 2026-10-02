@@ -217,7 +217,7 @@ describe('Goods Issue 201 posting attempts', () => {
     test('single retry refuses a record whose attempt is not queued', async () => {
       const record = await queuedWithAttempt('GIRETRY0001', 'unconfirmed');
       const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType');
-      const r = req({ QueueReference: record.QueueReference });
+      const r = req({ ID: record.ID });
       await handlers.retryQueuedGoodsIssue(r);
       expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining("'unconfirmed'"));
       expect(post).not.toHaveBeenCalled();

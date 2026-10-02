@@ -532,6 +532,64 @@ sap.ui.define([
                 });
         },
 
+        onRetryQueueItem: function (oEvent) {
+            var oContext = oEvent.getSource().getBindingContext("giQueue");
+            var oItem = oContext ? oContext.getObject() : null;
+            var that = this;
+            if (!oItem || !oItem.ID) {
+                return;
+            }
+            MessageToast.show("Retrying queue item...");
+            GoodsIssueService.retryQueuedGoodsIssue(oItem.ID)
+                .then(function (oResult) {
+                    if (oResult && oResult.Success && oResult.MaterialDocument) {
+                        MessageToast.show("Posted to SAP: Document " + oResult.MaterialDocument);
+                    } else if (oResult && oResult.Message) {
+                        MessageToast.show(oResult.Message);
+                    }
+                    that.onRefreshQueueTray();
+                })
+                .catch(function (oErr) {
+                    MessageToast.show("Retry failed: " + (oErr.message || "Unknown error"));
+                    that.onRefreshQueueTray();
+                });
+        },
+
+        onClearQueueItem: function (oEvent) {
+            var oContext = oEvent.getSource().getBindingContext("giQueue");
+            var oItem = oContext ? oContext.getObject() : null;
+            var that = this;
+            if (!oItem || !oItem.ID) {
+                return;
+            }
+            GoodsIssueService.clearQueuedGoodsIssue(oItem.ID)
+                .then(function () {
+                    MessageToast.show("Queue item cleared");
+                    that.onRefreshQueueTray();
+                })
+                .catch(function (oErr) {
+                    MessageToast.show("Failed to clear item: " + (oErr.message || "Unknown error"));
+                });
+        },
+
+        onSyncAllQueued: function () {
+            var that = this;
+            MessageToast.show("Synchronizing all queued items...");
+            GoodsIssueService.drainQueue()
+                .then(function (oResult) {
+                    if (oResult && oResult.Message) {
+                        MessageToast.show(oResult.Message);
+                    } else {
+                        MessageToast.show("Queue synchronization completed");
+                    }
+                    that.onRefreshQueueTray();
+                })
+                .catch(function (oErr) {
+                    MessageToast.show("Sync failed: " + (oErr.message || "Unknown error"));
+                    that.onRefreshQueueTray();
+                });
+        },
+
         onExit: function () {
             if (this._oAuthBinding) {
                 this._oAuthBinding.detachChange(this._onAuthChanged, this);

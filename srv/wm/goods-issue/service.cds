@@ -21,7 +21,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     // through postGoodsIssue / retryQueuedGoodsIssue / clearQueuedGoodsIssue.
     @readonly
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
-    entity GoodsIssueQueue as projection on DBGoodsIssueQueue;
+    entity GoodsIssueQueue as projection on DBGoodsIssueQueue excluding { QueueReference };
 
     // Issued Storage Units tracking held until TO confirmation (LQUA stock drop) or doc reversal
     @readonly
@@ -225,7 +225,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     type QueueItem {
         ID                    : UUID;
-        QueueReference        : String(40);
         ReservationNo         : String(10);
         ReservationItem       : String(4);
         OrderNo               : String(12);
@@ -377,12 +376,12 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action retryQueuedGoodsIssue(
-        QueueReference : String(40)
+        ID : UUID
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action clearQueuedGoodsIssue(
-        QueueReference : String(40)
+        ID : UUID
     ) returns Boolean;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

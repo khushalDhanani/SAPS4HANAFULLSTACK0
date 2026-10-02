@@ -655,14 +655,14 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(item).toBeDefined();
 
       const retryReq = {
-        data: { QueueReference: item.QueueReference },
+        data: { ID: item.ID },
         error: jest.fn()
       };
 
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockRejectedValue(sapPostingUnavailable());
       const retryRes = await handlers['retryQueuedGoodsIssue'](retryReq);
       expect(retryRes).toBeDefined();
-      expect(retryRes.QueueReference).toBe(item.QueueReference);
+      expect(retryRes.QueueId).toBe(item.ID);
     });
 
     it('should enqueue transaction with full context fields to Dispatch Queue', async () => {

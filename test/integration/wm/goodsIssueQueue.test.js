@@ -41,10 +41,10 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
         expect(data.Message).toContain('Not posted to SAP. Waiting in queue');
         expect(data.Message).toContain('Queue ID (internal, not an SAP document)');
 
-        const list = await GET(`${BASE}/GoodsIssueQueue?$filter=QueueReference eq '${data.QueueReference}'&$select=QueueReference,ReservationNo,SyncStatus,IssueQty`);
+        const list = await GET(`${BASE}/GoodsIssueQueue?$filter=ID eq ${data.QueueId}&$select=ID,ReservationNo,SyncStatus,IssueQty`);
         expect(list.status).toBe(200);
         expect(list.data.value).toHaveLength(1);
-        expect(list.data.value[0]).toMatchObject({ QueueReference: data.QueueReference, ReservationNo: '18025', SyncStatus: 'QUEUED' });
+        expect(list.data.value[0]).toMatchObject({ ID: data.QueueId, ReservationNo: '18025', SyncStatus: 'QUEUED' });
         // OData V4 serialises Edm.Decimal as a string
         expect(Number(list.data.value[0].IssueQty)).toBe(50);
 
@@ -53,11 +53,11 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
 
         const summary = await GET(`${BASE}/getQueueSummary()`);
         expect(summary.data).toMatchObject({ QueuedCount: 1, TotalCount: 1, StoreAvailable: true });
-        expect(summary.data.Items[0].QueueReference).toBe(data.QueueReference);
+        expect(summary.data.Items[0].ID).toBe(data.QueueId);
     });
 
     it('rejects direct writes to the queue entity set', async () => {
-        const res = await axios.post(`${BASE}/GoodsIssueQueue`, { QueueReference: '00000000-0000-0000-0000-000000000001', ReservationNo: '1', ReservationItem: '0001' }, { validateStatus: () => true });
+        const res = await axios.post(`${BASE}/GoodsIssueQueue`, { ID: '00000000-0000-0000-0000-000000000001', ReservationNo: '1', ReservationItem: '0001' }, { validateStatus: () => true });
         expect([403, 405]).toContain(res.status);
         expect(await queue.getAll()).toHaveLength(0);
     });
@@ -66,12 +66,12 @@ describe('Integration: Goods Issue dispatch queue in the CAP database', () => {
         const record = await queue.enqueue({ ReservationNo: '18025', ReservationItem: '0003', Material: '1000000514', IssueQty: 50, Unit: 'KG', MovementType: '261' });
         jest.spyOn(GoodsIssueAdapter, 'postGoodsIssueByType').mockResolvedValue({ MaterialDocument: '4900001234', MaterialDocYear: '2026', Success: true });
 
-        const retry = await POST(`${BASE}/retryQueuedGoodsIssue`, { QueueReference: record.QueueReference });
+        const retry = await POST(`${BASE}/retryQueuedGoodsIssue`, { ID: record.ID });
         expect(retry.status).toBe(200);
         expect(retry.data).toMatchObject({ Success: true, Queued: false, SyncStatus: 'POSTED_IN_SAP', MaterialDocument: '4900001234' });
         expect(await queue.get(record.ID)).toMatchObject({ SyncStatus: 'POSTED_IN_SAP', SapMaterialDocument: '4900001234' });
 
-        const cleared = await POST(`${BASE}/clearQueuedGoodsIssue`, { QueueReference: record.QueueReference });
+        const cleared = await POST(`${BASE}/clearQueuedGoodsIssue`, { ID: record.ID });
         expect(cleared.status).toBe(200);
         expect(cleared.data.value).toBe(true);
         expect(await queue.getAll()).toHaveLength(0);

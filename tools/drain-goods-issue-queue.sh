@@ -60,7 +60,7 @@ async function run() {
     console.log('Successfully posted items:');
     const posted = result.Items.filter(i => i.SyncStatus === 'POSTED_IN_SAP');
     for (const item of posted) {
-      console.log('  ' + item.QueueReference + ' -> MaterialDocument: ' + item.SapMaterialDocument + ' (' + item.SapMaterialDocYear + ')');
+      console.log('  Queue ID (internal, not an SAP document): ' + item.ID + ' -> MaterialDocument: ' + item.SapMaterialDocument + ' (' + item.SapMaterialDocYear + ')');
     }
   }
 
@@ -68,7 +68,7 @@ async function run() {
     console.log('Remaining pending items:');
     const pending = result.Items.filter(i => i.SyncStatus === 'FAILED' || i.SyncStatus === 'QUEUED');
     for (const item of pending) {
-      console.log('  ' + item.QueueReference + ' -> Status: ' + item.SyncStatus + ' | Error: ' + item.LastSyncError);
+      console.log('  Queue ID (internal, not an SAP document): ' + item.ID + ' -> Status: ' + item.SyncStatus + ' | Error: ' + item.LastSyncError);
     }
   }
 }

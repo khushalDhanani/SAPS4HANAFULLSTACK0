@@ -38,5 +38,4 @@ entity GoodsIssueQueue : cuid, managed {
     SapMaterialDocYear    : String(4);
     QueuedAt              : Timestamp;
     SyncedAt              : Timestamp;
-    LegacyReference       : Boolean default false; // Flag indicating pre-UUID row requiring SAP MATDOC pre-replay guard
 }

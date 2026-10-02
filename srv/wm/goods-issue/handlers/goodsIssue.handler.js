@@ -271,70 +271,33 @@ class GoodsIssueHandler {
 
     // ACTION: retryQueuedGoodsIssue (Retry posting a queued item against live SAP)
     srv.on('retryQueuedGoodsIssue', async (req) => {
-      const { QueueReference } = req.data;
-      if (!QueueReference) {
-        return req.error(400, 'QueueReference parameter is required');
+      const queueId = req.data.ID || req.data.QueueId || req.data.QueueReference;
+      if (!queueId) {
+        return req.error(400, 'Queue ID parameter is required');
       }
 
       if (!GoodsIssueQueueManager.isAvailable()) {
         return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
       }
 
-      const item = await GoodsIssueQueueManager.get(QueueReference);
+      const item = await GoodsIssueQueueManager.get(queueId);
       if (!item) {
-        return req.error(404, `Queued transaction ${QueueReference} not found`);
+        return req.error(404, `Queued transaction ${queueId} not found`);
       }
 
       // Same guard as the bulk drain: only an attempt in `queued` status may be replayed.
       const guard = await GoodsIssueAttemptStore.replayGuard(item);
       if (!guard.replay) {
-        return req.error(409, `Queued transaction ${QueueReference} cannot be retried: its last posting attempt is '${guard.attempt.Status}' (reference ${item.ReferenceDocument}) and is being confirmed in SAP.`);
+        return req.error(409, `Queued transaction ${queueId} cannot be retried: its last posting attempt is '${guard.attempt.Status}' (reference ${item.ReferenceDocument}) and is being confirmed in SAP.`);
       }
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
-
-      // Legacy row pre-replay MATDOC guard (enabled via LegacyReference schema flag):
-      const isLegacy = Boolean(item.LegacyReference);
-      const matdocChecker = (GoodsIssueAdapter && typeof GoodsIssueAdapter.checkLegacyMatdocMatches === 'function')
-        ? GoodsIssueAdapter.checkLegacyMatdocMatches.bind(GoodsIssueAdapter)
-        : null;
-      if (isLegacy && matdocChecker) {
-        let checkResult = null;
-        let checkError = null;
-        try {
-          checkResult = await matdocChecker(item);
-        } catch (chkErr) {
-          LOG.warn(`Pre-replay MATDOC check failed for legacy queue row ${QueueReference}: ${chkErr.message}`);
-          checkError = chkErr;
-        }
-        if (checkError) {
-          const finding = `Pre-replay SAP MATDOC check error: ${checkError.message}; operator attention required before replay`;
-          await GoodsIssueQueueManager.update(QueueReference, {
-            SyncAttempts: (item.SyncAttempts || 0) + 1,
-            LastSyncError: finding,
-            SyncStatus: 'NEEDS_ATTENTION'
-          });
-          return req.error(409, `Queued transaction ${QueueReference} cannot be retried: ${finding}`);
-        }
-        if (checkResult && checkResult.count > 0) {
-          const isAmbiguous = checkResult.count > 1;
-          const finding = isAmbiguous
-            ? `Ambiguous documents found in SAP MATDOC (${checkResult.count} matches); operator attention required before replay`
-            : `Document already found in SAP MATDOC (${checkResult.match.MBLNR}/${checkResult.match.MJAHR || ''}); operator attention required before replay`;
-          await GoodsIssueQueueManager.update(QueueReference, {
-            SyncAttempts: (item.SyncAttempts || 0) + 1,
-            LastSyncError: finding,
-            SyncStatus: 'NEEDS_ATTENTION'
-          });
-          return req.error(409, `Queued transaction ${QueueReference} cannot be retried: ${finding}`);
-        }
-      }
 
       try {
         // Replay through the isolated per-type dispatcher (routes by the stored MovementType).
         const result = await GoodsIssueAdapter.postGoodsIssueByType(item);
 
         // Update queue item
-        await GoodsIssueQueueManager.update(QueueReference, {
+        await GoodsIssueQueueManager.update(queueId, {
           SyncStatus: 'POSTED_IN_SAP',
           SapMaterialDocument: result.MaterialDocument || '',
           SapMaterialDocYear: result.MaterialDocYear || '',
@@ -385,17 +348,17 @@ class GoodsIssueHandler {
         return Object.assign({
           Success: true,
           Queued: false,
-          QueueReference: item.QueueReference,
+          QueueReference: item.ID,
           QueueId: item.ID,
           SyncStatus: 'POSTED_IN_SAP'
         }, result);
       } catch (err) {
         // Record retry attempt
-        await GoodsIssueQueueManager.update(QueueReference, {
+        await GoodsIssueQueueManager.update(queueId, {
           SyncAttempts: (item.SyncAttempts || 1) + 1,
           LastSyncError: err.message || 'Posting rejected by Gateway'
         });
-        if (GoodsIssueQueueManager.GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(err.code)) {
+        if (GoodsIssueQueueManager.UNCONFIRMED_CODES && GoodsIssueQueueManager.UNCONFIRMED_CODES.includes(err.code)) {
           await settle('unconfirmed', { LastError: err.message });
         }
 
@@ -409,7 +372,7 @@ class GoodsIssueHandler {
           DifferenceQty: item.DifferenceQty || 0,
           Success: false,
           Queued: true,
-          QueueReference: item.QueueReference,
+          QueueReference: item.ID,
           QueueId: item.ID,
           SyncStatus: 'FAILED',
           Message: `SAP Gateway retry rejected: ${err.message}. Queue ID (internal, not an SAP document): ${item.ID}`
@@ -419,14 +382,14 @@ class GoodsIssueHandler {
 
     // ACTION: clearQueuedGoodsIssue (Remove item from dispatch queue)
     srv.on('clearQueuedGoodsIssue', async (req) => {
-      const { QueueReference } = req.data;
-      if (!QueueReference) {
-        return req.error(400, 'QueueReference parameter is required');
+      const queueId = req.data.ID || req.data.QueueId || req.data.QueueReference;
+      if (!queueId) {
+        return req.error(400, 'Queue ID parameter is required');
       }
       if (!GoodsIssueQueueManager.isAvailable()) {
         return req.error(503, 'Goods Issue dispatch queue is not available: no database is bound to this deployment');
       }
-      return GoodsIssueQueueManager.remove(QueueReference);
+      return GoodsIssueQueueManager.remove(queueId);
     });
 
     // ACTION: drainQueue (Batch retry all pending queued transactions against S/4HANA)

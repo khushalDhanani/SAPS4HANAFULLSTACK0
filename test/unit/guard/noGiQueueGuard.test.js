@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-describe('Repository Guard: No GI-QUEUE references', () => {
+describe('Repository Guard: No forbidden queue prefix references', () => {
   const ROOT_DIR = path.resolve(__dirname, '../../..');
 
   // Dynamically constructed so this test file never matches the forbidden literal
@@ -63,7 +63,7 @@ describe('Repository Guard: No GI-QUEUE references', () => {
     return fileList;
   }
 
-  it('scans source, tests, docs, gen/ and the UI5 dist and asserts 0 occurrences of GI-QUEUE', () => {
+  it('scans source, tests, docs, gen/ and the UI5 dist and asserts 0 occurrences of forbidden queue prefix', () => {
     const selfPath = path.resolve(__filename);
     const findings = [];
     let totalFilesScanned = 0;

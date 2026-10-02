@@ -22,7 +22,7 @@ class QueueStoreUnavailableError extends Error {
     super('Goods Issue dispatch queue is not available: no database is bound to this deployment, so the transaction was NOT recorded.');
     this.name = 'QueueStoreUnavailableError';
     this.status = 503;
-    this.code = 'GI_QUEUE_STORE_UNAVAILABLE';
+    this.code = 'QUEUE_STORE_UNAVAILABLE';
   }
 }
 
@@ -135,8 +135,7 @@ class GoodsIssueQueueManager {
       SapMaterialDocument: '',
       SapMaterialDocYear: '',
       QueuedAt: new Date().toISOString(),
-      SyncedAt: null,
-      LegacyReference: Boolean(data.LegacyReference)
+      SyncedAt: null
     };
   }
 
@@ -344,7 +343,7 @@ class GoodsIssueQueueManager {
       const guard = await GoodsIssueAttemptStore.replayGuard(item);
       if (!guard.replay) {
         if (guard.attempt.Status === 'posted') {
-          await this.update(item.QueueReference, {
+          await this.update(item.ID, {
             SyncStatus: 'POSTED_IN_SAP',
             SapMaterialDocument: guard.attempt.MaterialDocument,
             SapMaterialDocYear: guard.attempt.MaterialDocYear,
@@ -357,50 +356,6 @@ class GoodsIssueQueueManager {
         continue;
       }
       const settle = (status, fields) => (guard.attempt ? GoodsIssueAttemptStore.setStatus(item.ReferenceDocument, status, fields) : Promise.resolve());
-
-      // Legacy row pre-replay MATDOC guard (enabled via LegacyReference schema flag):
-      // Check MATDOC by reservation+item+user+date+qty, created after the queue time.
-      // Match or ambiguous -> needs-attention, no replay.
-      const isLegacy = Boolean(item.LegacyReference);
-      const matdocChecker = (adapter && typeof adapter.checkLegacyMatdocMatches === 'function')
-        ? adapter.checkLegacyMatdocMatches.bind(adapter)
-        : (adapter && adapter.posting && typeof adapter.posting.checkLegacyMatdocMatches === 'function')
-          ? adapter.posting.checkLegacyMatdocMatches.bind(adapter.posting)
-          : null;
-
-      if (isLegacy && matdocChecker) {
-        let checkResult = null;
-        let checkError = null;
-        try {
-          checkResult = await matdocChecker(item);
-        } catch (chkErr) {
-          LOG.warn ? LOG.warn(`Pre-replay MATDOC check failed for legacy queue row ${item.QueueReference}: ${chkErr.message}`) : undefined;
-          checkError = chkErr;
-        }
-        if (checkError) {
-          const finding = `Pre-replay SAP MATDOC check error: ${checkError.message}; operator attention required before replay`;
-          await this.update(item.QueueReference, {
-            SyncAttempts: (item.SyncAttempts || 0) + 1,
-            LastSyncError: finding,
-            SyncStatus: 'NEEDS_ATTENTION'
-          });
-          failedCount++;
-          continue;
-        }
-        if (checkResult && checkResult.count > 0) {
-          const isAmbiguous = checkResult.count > 1;
-          const finding = isAmbiguous
-            ? `Ambiguous documents found in SAP MATDOC (${checkResult.count} matches); operator attention required before replay`
-            : `Document already found in SAP MATDOC (${checkResult.match.MBLNR}/${checkResult.match.MJAHR || ''}); operator attention required before replay`;
-          await this.update(item.QueueReference, {
-            SyncAttempts: (item.SyncAttempts || 0) + 1,
-            LastSyncError: finding,
-            SyncStatus: 'NEEDS_ATTENTION'
-          });
-          failedCount++;
-          continue;
-        }
-      }
 
       try {
         // --- Parse StorageUnits for SU claim management ---
@@ -436,7 +391,7 @@ class GoodsIssueQueueManager {
           } catch (claimErr) {
             if (claimErr.status === 400) {
               // Another live claim exists for this SU: mark needs-attention and skip posting
-              await this.update(item.QueueReference, {
+              await this.update(item.ID, {
                 SyncAttempts: (item.SyncAttempts || 1) + 1,
                 LastSyncError: `Replay conflict: ${claimErr.message}`,
                 SyncStatus: 'NEEDS_ATTENTION'
@@ -445,7 +400,7 @@ class GoodsIssueQueueManager {
               continue;
             }
             // Non-conflict error: log and continue to attempt posting anyway
-            LOG.warn ? LOG.warn(`SU claim acquire failed for queue item ${item.QueueReference}: ${claimErr.message}`) : undefined;
+            LOG.warn ? LOG.warn(`SU claim acquire failed for queue item ${item.ID}: ${claimErr.message}`) : undefined;
           }
         }
 
@@ -465,7 +420,7 @@ class GoodsIssueQueueManager {
           // Unknown-outcome queue items must NOT be replayable: mark them NEEDS_ATTENTION.
           // Definitive rejections (400/409/422 or never-reached) can be marked FAILED.
           const syncStatus = isUnknown ? 'NEEDS_ATTENTION' : 'FAILED';
-          await this.update(item.QueueReference, {
+          await this.update(item.ID, {
             SyncAttempts: (item.SyncAttempts || 1) + 1,
             LastSyncError: String(postErr.message || (isUnknown ? 'Unknown posting outcome; operator attention required' : 'Posting rejected by SAP Gateway')).slice(0, 500),
             SyncStatus: syncStatus
@@ -478,7 +433,7 @@ class GoodsIssueQueueManager {
         }
 
         if (result && result.MaterialDocument) {
-          await this.update(item.QueueReference, {
+          await this.update(item.ID, {
             SyncStatus: 'POSTED_IN_SAP',
             SapMaterialDocument: result.MaterialDocument,
             SapMaterialDocYear: result.MaterialDocYear || '',
@@ -515,7 +470,7 @@ class GoodsIssueQueueManager {
           if (replayClaimIds.length > 0) {
             await GoodsIssueIssuedSuStore.deleteClaims(replayClaimIds, { definitive: false });
           }
-          await this.update(item.QueueReference, {
+          await this.update(item.ID, {
             SyncAttempts: (item.SyncAttempts || 1) + 1,
             LastSyncError: (result && result.Message) || 'Posting completed without material document; operator attention required',
             SyncStatus: 'NEEDS_ATTENTION'
@@ -525,7 +480,7 @@ class GoodsIssueQueueManager {
       } catch (outerErr) {
         // Unexpected error for this queue item: log and mark as failed
         try {
-          await this.update(item.QueueReference, {
+          await this.update(item.ID, {
             SyncAttempts: (item.SyncAttempts || 1) + 1,
             LastSyncError: String(outerErr.message || 'Unexpected error during queue drain').slice(0, 500),
             SyncStatus: 'FAILED'
@@ -683,7 +638,7 @@ class GoodsIssueQueueManager {
         }
       }
 
-      await this.update(item.QueueReference, {
+      await this.update(item.ID, {
         SyncStatus: 'POSTED_IN_SAP',
         SapMaterialDocument: matDoc,
         SapMaterialDocYear: matYear,
@@ -715,7 +670,7 @@ class GoodsIssueQueueManager {
     } else {
       // 'not-posted': mark DISCARDED and release SU claims
       const reason = options.reason || `MANUALLY_RESOLVED_NOT_POSTED by ${user}`;
-      await this.update(item.QueueReference, {
+      await this.update(item.ID, {
         SyncStatus: 'DISCARDED',
         SyncedAt: nowIso,
         LastSyncError: reason
