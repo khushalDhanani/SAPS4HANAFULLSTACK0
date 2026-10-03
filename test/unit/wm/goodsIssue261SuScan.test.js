@@ -364,7 +364,6 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     expect(req.error).not.toHaveBeenCalled();
     expect(res).toBeDefined();
     expect(res.MaterialDocument).toBe('4900012345');
-    expect(res.Queued).toBeUndefined();
   });
 
   it('posts 8-drum case with unequal weights', async () => {
@@ -662,11 +661,10 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(req.error).not.toHaveBeenCalled();
       expect(res).toBeDefined();
       expect(res.MaterialDocument).toBe('4900099999');
-      expect(res.Queued).toBeUndefined();
       expect(postSpy).toHaveBeenCalled();
     });
 
-    it('rejects partial above open qty without queueing', async () => {
+    it('rejects partial above open qty', async () => {
       const stock = [];
       const suList = [];
       for (let i = 1; i <= 10; i++) {

@@ -20,7 +20,7 @@ function envMs(name, fallback) {
  * GoodsIssueAttemptStore
  * Log of Goods Issue posting attempts. A row is written with status `sending` BEFORE S/4HANA is
  * called, carrying the same ReferenceDocument that goes into the material document header, and is
- * moved to posted / rejected / queued / unconfirmed afterwards. If the process dies mid-call the row
+ * moved to posted / rejected / unconfirmed afterwards. If the process dies mid-call the row
  * stays `sending`, and recheck() resolves it later by looking the reference up in SAP.
  *
  * Every write runs in its own committed transaction, never in the transaction of the calling
@@ -33,6 +33,7 @@ class GoodsIssueAttemptStore {
    */
   constructor(options = {}) {
     this._dbProvider = options.db !== undefined ? () => options.db : () => cds.db;
+    this._memoryStore = new Map();
   }
 
   get db() {
@@ -40,7 +41,11 @@ class GoodsIssueAttemptStore {
   }
 
   isAvailable() {
-    return Boolean(this.db);
+    return Boolean(this.db) || this._memoryStore.size >= 0;
+  }
+
+  clearMemoryStore() {
+    this._memoryStore.clear();
   }
 
   /** Age after which a `sending` / `unconfirmed` attempt is re-checked (GI_ATTEMPT_RECHECK_AGE_MS, default 3 min). */
@@ -91,10 +96,14 @@ class GoodsIssueAttemptStore {
       ResolvedAt: null,
       MaterialDocument: '',
       MaterialDocYear: '',
-      LastError: ''
+      LastError: '',
+      createdAt: new Date().toISOString()
     };
     if (!row.ReferenceDocument) throw new Error('ReferenceDocument is required to record a posting attempt');
-    await this._run(INSERT.into(ATTEMPT_ENTITY).entries(row));
+    this._memoryStore.set(row.ReferenceDocument, { ...row });
+    if (this.db) {
+      await this._run(INSERT.into(ATTEMPT_ENTITY).entries(row));
+    }
     return row;
   }
 
@@ -102,23 +111,116 @@ class GoodsIssueAttemptStore {
   async getByReference(referenceDocument) {
     const ref = String(referenceDocument || '').trim();
     if (!this.isAvailable() || !ref) return null;
-    const row = await this._run(SELECT.one.from(ATTEMPT_ENTITY).where({ ReferenceDocument: ref }));
-    return row || null;
+    if (this.db) {
+      const row = await this._run(SELECT.one.from(ATTEMPT_ENTITY).where({ ReferenceDocument: ref }));
+      if (row) return row;
+    }
+    return this._memoryStore.get(ref) || null;
   }
 
   /**
    * Moves an attempt to a new status.
    *
    * @param {string} referenceDocument
-   * @param {string} status - sending | posted | rejected | queued | unconfirmed | not_posted
+   * @param {string} status - sending | posted | rejected | unconfirmed | not_posted
    * @param {{ MaterialDocument?: string, MaterialDocYear?: string, LastError?: string }} [fields]
    */
   async setStatus(referenceDocument, status, fields = {}) {
+    const ref = String(referenceDocument).trim();
     const updates = { Status: status, ResolvedAt: FINAL_STATUSES.includes(status) ? new Date().toISOString() : null };
     if (fields.MaterialDocument !== undefined) updates.MaterialDocument = String(fields.MaterialDocument || '');
     if (fields.MaterialDocYear !== undefined) updates.MaterialDocYear = String(fields.MaterialDocYear || '');
     if (fields.LastError !== undefined) updates.LastError = String(fields.LastError || '').slice(0, 500);
-    await this._run(UPDATE(ATTEMPT_ENTITY).set(updates).where({ ReferenceDocument: String(referenceDocument).trim() }));
+
+    const mem = this._memoryStore.get(ref);
+    if (mem) {
+      Object.assign(mem, updates);
+    }
+    if (this.db) {
+      await this._run(UPDATE(ATTEMPT_ENTITY).set(updates).where({ ReferenceDocument: ref }));
+    }
+  }
+
+  /**
+   * Checks whether there is an active (sending or unconfirmed) attempt for a reservation item.
+   *
+   * @param {string} reservationNo
+   * @param {string} [reservationItem]
+   * @returns {Promise<boolean>}
+   */
+  async hasOpenAttemptForReservation(reservationNo, reservationItem) {
+    const sRes = String(reservationNo || '').trim();
+    if (!sRes) return false;
+    const cleanRes = sRes.replace(/^0+/, '');
+    const cleanItem = reservationItem !== undefined && reservationItem !== null ? String(reservationItem).trim().replace(/^0+/, '') : '';
+
+    if (!this.isAvailable()) return false;
+
+    for (const attempt of this._memoryStore.values()) {
+      if (OPEN_STATUSES.includes(attempt.Status)) {
+        const aRes = String(attempt.ReservationNo || '').trim().replace(/^0+/, '');
+        if (cleanItem) {
+          const aItem = String(attempt.ReservationItem || '').trim().replace(/^0+/, '');
+          if (aRes === cleanRes && aItem === cleanItem) return true;
+        } else if (aRes === cleanRes) {
+          return true;
+        }
+      }
+    }
+
+    if (!this.db) return false;
+
+    try {
+      const rows = await this._run(
+        SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } })
+      );
+      if (!Array.isArray(rows) || rows.length === 0) return false;
+      return rows.some((attempt) => {
+        const aRes = String(attempt.ReservationNo || '').trim().replace(/^0+/, '');
+        if (cleanItem) {
+          const aItem = String(attempt.ReservationItem || '').trim().replace(/^0+/, '');
+          return aRes === cleanRes && aItem === cleanItem;
+        }
+        return aRes === cleanRes;
+      });
+    } catch (err) {
+      LOG.warn('Query failed for open attempts by reservation:', err.message || err);
+      return false;
+    }
+  }
+
+  /**
+   * Returns a Set of cleaned reservation numbers that currently have open (sending or unconfirmed) attempts.
+   *
+   * @returns {Promise<Set<string>>}
+   */
+  async getOpenAttemptReservations() {
+    const resvSet = new Set();
+    if (!this.isAvailable()) return resvSet;
+
+    for (const attempt of this._memoryStore.values()) {
+      if (OPEN_STATUSES.includes(attempt.Status) && attempt.ReservationNo) {
+        resvSet.add(String(attempt.ReservationNo).trim().replace(/^0+/, ''));
+      }
+    }
+
+    if (!this.db) return resvSet;
+
+    try {
+      const rows = await this._run(
+        SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } })
+      );
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (r.ReservationNo) {
+            resvSet.add(String(r.ReservationNo).trim().replace(/^0+/, ''));
+          }
+        }
+      }
+    } catch (err) {
+      LOG.warn('Query failed for open attempt reservations:', err.message || err);
+    }
+    return resvSet;
   }
 
 
@@ -129,7 +231,7 @@ class GoodsIssueAttemptStore {
    *
    * @param {Object} adapter - GoodsIssueAdapter (findPostedGoodsIssueByReference)
    * @param {number} [now] - current time in ms (tests)
-   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, Requeued: number, StillOpen: number, Errors: number }>}
+   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, StillOpen: number, Errors: number }>}
    */
   /**
    * Re-confirm job: retries read-back for unconfirmed documents and clears the flag.
@@ -145,14 +247,18 @@ class GoodsIssueAttemptStore {
     if (!this.isAvailable()) return summary;
 
     let unconfirmedAttempts = [];
-    try {
-      const rows = await this._run(
-        SELECT.from(ATTEMPT_ENTITY).where({ Status: 'unconfirmed' })
-      );
-      unconfirmedAttempts = (Array.isArray(rows) ? rows : []).filter((a) => Boolean(a.MaterialDocument));
-    } catch (err) {
-      LOG.warn(`Failed to fetch unconfirmed attempts: ${err.message}`);
-      return summary;
+    if (this.db) {
+      try {
+        const rows = await this._run(
+          SELECT.from(ATTEMPT_ENTITY).where({ Status: 'unconfirmed' })
+        );
+        unconfirmedAttempts = (Array.isArray(rows) ? rows : []).filter((a) => Boolean(a.MaterialDocument));
+      } catch (err) {
+        LOG.warn(`Failed to fetch unconfirmed attempts: ${err.message}`);
+        return summary;
+      }
+    } else {
+      unconfirmedAttempts = Array.from(this._memoryStore.values()).filter((a) => a.Status === 'unconfirmed' && Boolean(a.MaterialDocument));
     }
 
     const client = adapter?.client || adapter?.posting || adapter;
@@ -220,7 +326,12 @@ class GoodsIssueAttemptStore {
     const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0 };
     if (!this.isAvailable()) return summary;
     await this.reconfirmUnconfirmed(adapter, now).catch((err) => LOG.warn(`reconfirmUnconfirmed failed inside recheck: ${err.message}`));
-    const open = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } }));
+    let open = [];
+    if (this.db) {
+      open = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES } }));
+    } else {
+      open = Array.from(this._memoryStore.values()).filter((a) => OPEN_STATUSES.includes(a.Status));
+    }
     const ageOf = (a) => now - new Date(a.createdAt).getTime();
     const due = (Array.isArray(open) ? open : []).filter((a) => ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs());
 

@@ -31,7 +31,6 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
     let mockRfc;
     let mockClient;
     let mockReservationsClient;
-    let mockQueueManager;
 
     beforeEach(() => {
         mockRfc = {
@@ -43,14 +42,10 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         mockReservationsClient = {
             getOpenReservations: jest.fn().mockResolvedValue([])
         };
-        mockQueueManager = {
-            getAll: jest.fn().mockResolvedValue([])
-        };
         client = new GoodsIssueDashboardClient({
             rfc: mockRfc,
             client: mockClient,
-            reservationsClient: mockReservationsClient,
-            queueManager: mockQueueManager
+            reservationsClient: mockReservationsClient
         });
     });
 

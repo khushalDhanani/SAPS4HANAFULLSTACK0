@@ -36,15 +36,14 @@ class GoodsIssueAdapter {
     this.client = options.client || new S4HttpClient();
     this.destinationName = this.client.destinationName;
 
-    this.queueManager = options.queueManager || null;
     this.issuedSuStore = options.issuedSuStore || null;
 
     // Instantiate domain clients
     this.batches = new GoodsIssueBatchesClient({ adapter: this, client: this.client });
-    this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager });
-    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, queueManager: this.queueManager, issuedSuStore: this.issuedSuStore });
+    this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches });
+    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, issuedSuStore: this.issuedSuStore });
     this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches });
-    this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, queueManager: this.queueManager, rfc: options.rfc });
+    this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, rfc: options.rfc });
   }
 
   /**
@@ -557,7 +556,7 @@ class GoodsIssueAdapter {
   }
 
 
-  /** Router for the internal queue-replay path only (dispatches a stored MovementType). */
+  /** Router that dispatches a posting by MovementType. */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 
   /**

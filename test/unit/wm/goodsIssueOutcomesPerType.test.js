@@ -66,7 +66,7 @@ describe('User-Facing Posting Outcome Messages Per Movement Type (201, 261, 301,
         expect(classified.status).toBe(403);
         expect(classified.message).toContain('SU53');
         expect(classified.message).toContain(name);
-        expect(classified.message).toContain('NOT posted and NOT queued');
+        expect(classified.message).toContain('NOT posted');
       });
 
       // -------------------------------------------------------------

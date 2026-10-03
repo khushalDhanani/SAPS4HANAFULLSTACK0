@@ -140,7 +140,7 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
           { movementType: '201', costCenter: '4110' }
         ).catch((e) => e);
       expect(err.status).toBe(403);
-      expect(err.message).toContain('NOT posted and NOT queued');
+      expect(err.message).toContain('NOT posted');
       expect(err.message).not.toContain('Unavailable');
     });
 

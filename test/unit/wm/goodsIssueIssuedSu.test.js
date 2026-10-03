@@ -4,7 +4,6 @@
  *  1. Two reservations cannot claim the same drum (400 before SAP is called).
  *  2. Parallel Promise.all claims for one drum (exactly one wins).
  *  3. Second reservation takes the 30 kg residual; partial residual is suggested at reduced qty.
- *  4. (Removed — queue replay was eliminated; direct posting only.)
  *  5. Claiming row resolved after a crash (found in SAP -> issued; not found -> deleted).
  *  6. No double-count after TO confirmation (effective claim formula).
  *  7. Deleted quant releases the claim (missing from LQUA counts as released, not lookup error).
@@ -20,7 +19,6 @@ cds.test(__dirname + '/../../../');
 
 const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-// GoodsIssueQueueManager removed — queue is eliminated; direct posting only.
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssue261Model = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
 
@@ -39,12 +37,10 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   beforeEach(async () => {
     jest.restoreAllMocks();
     await GoodsIssueIssuedSuStore.clear();
-    // Queue manager removed — no queue to clear.
   });
 
   afterEach(async () => {
     await GoodsIssueIssuedSuStore.clear();
-    // Queue manager removed — no queue to clear.
   });
 
   // ──────────────────────────────────────────────────────────
@@ -574,10 +570,6 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   });
 
   // ──────────────────────────────────────────────────────────
-  // Test 4: Queue Replay — REMOVED (queue eliminated; direct posting only)
-  // ──────────────────────────────────────────────────────────
-
-  // ──────────────────────────────────────────────────────────
   // Test 5: Failed Post Isolation
   // ──────────────────────────────────────────────────────────
   describe('Failed Post Isolation (Requirement 2 & 7)', () => {
@@ -1008,10 +1000,6 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         });
     });
   });
-
-  // ──────────────────────────────────────────────────────────
-  // Test 11: Replay conflict detection — REMOVED (queue eliminated; direct posting only)
-  // ──────────────────────────────────────────────────────────
 
   // ──────────────────────────────────────────────────────────
   // Test 12: Release-job idempotency
@@ -1529,8 +1517,6 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       expect(active).toHaveLength(0);
     });
 
-    // Queue item resolution test removed — queue eliminated; direct posting only.
-
     it('keeps re-checking needs-attention claims in release job and auto-resolves when document appears', async () => {
       const [claimId] = await GoodsIssueIssuedSuStore.acquireClaims({
         reservationNo: '0000100980',
@@ -1587,9 +1573,5 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       expect(active[0].MaterialDocument).toBe('4900099888');
     });
   });
-
-  // ──────────────────────────────────────────────────────────
-  // Test 17: Unknown-Outcome Queue Items — REMOVED (queue eliminated; direct posting only)
-  // ──────────────────────────────────────────────────────────
 });
 

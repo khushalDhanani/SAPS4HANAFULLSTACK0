@@ -203,11 +203,16 @@ describe('unconfirmed documents and re-confirm job', () => {
     expect(res201).toBeDefined();
     expect(res201.Confirmed).toBe(false);
 
-    const [att] = await allAttempts();
-    expect(att).toBeDefined();
-    expect(att.Status).toBe('unconfirmed');
-    expect(att.MaterialDocument).toBe('4900088888');
-    expect(att.MaterialDocYear).toBe('2026');
+    const attList = await allAttempts();
+    const att261 = attList.find((a) => a.MovementType === '261');
+    const att201 = attList.find((a) => a.MovementType === '201');
+    expect(att261).toBeDefined();
+    expect(att261.Status).toBe('unconfirmed');
+    expect(att261.MaterialDocument).toBe('4900099999');
+    expect(att201).toBeDefined();
+    expect(att201.Status).toBe('unconfirmed');
+    expect(att201.MaterialDocument).toBe('4900088888');
+    expect(att201.MaterialDocYear).toBe('2026');
   });
 
   test('reconfirmUnconfirmed retries read-back for unconfirmed documents and clears the flag', async () => {

@@ -54,7 +54,7 @@
                 <items>
                     <ColumnListItem type="Navigation" press=".onOpenReservation">
                         <cells>
-                            <ObjectIdentifier title="{gi201p>ReservationNo}" text="{gi201p>MovementTypeName}" />
+                            <ObjectIdentifier title="{gi201p>ReservationNo}" text="{= ${gi201p>StatusText} ? (${gi201p>MovementTypeName} + ' • ' + ${gi201p>StatusText}) : ${gi201p>MovementTypeName} }" />
                             <VBox>
                                 <Text text="{gi201p>SampleMaterial}" />
                                 <Text text="{gi201p>SampleMaterialDesc}" class="sapUiTinyMarginTop" />

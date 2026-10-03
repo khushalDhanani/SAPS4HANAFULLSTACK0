@@ -12,6 +12,7 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
   ];
 
   const TARGET_SCAN_AREAS = [
+    { name: 'repo root (root files & WORKSTATUS.md)', path: '.', shallow: true, required: true },
     { name: 'source (srv)', path: 'srv', required: true },
     { name: 'source (app webapp)', path: 'app/fiori-app/webapp', required: true },
     { name: 'source (db)', path: 'db', required: true },
@@ -42,7 +43,7 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
     return TEXT_FILE_EXTENSIONS.has(ext);
   }
 
-  function collectFiles(dirPath, fileList = []) {
+  function collectFiles(dirPath, fileList = [], shallow = false) {
     if (!fs.existsSync(dirPath)) {
       return fileList;
     }
@@ -58,7 +59,9 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
 
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        collectFiles(fullPath, fileList);
+        if (!shallow) {
+          collectFiles(fullPath, fileList, false);
+        }
       } else if (entry.isFile() && isTextFile(fullPath)) {
         fileList.push(fullPath);
       }
@@ -66,10 +69,11 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
     return fileList;
   }
 
-  it('scans source, tests, docs, gen/ and the UI5 dist and asserts 0 occurrences of forbidden patterns (GI-QUEUE, ZAPI_MATERIAL_DOCUM, randSuffix)', () => {
+  it('scans repo root, WORKSTATUS.md, source, tests, docs, gen/ and the UI5 dist and asserts 0 occurrences of forbidden patterns (GI-QUEUE, ZAPI_MATERIAL_DOCUM, randSuffix)', () => {
     const selfPath = path.resolve(__filename);
     const findings = [];
     let totalFilesScanned = 0;
+    const scannedRelativePaths = new Set();
 
     for (const area of TARGET_SCAN_AREAS) {
       const areaFullPath = path.join(ROOT_DIR, area.path);
@@ -80,7 +84,7 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
         continue;
       }
 
-      const files = collectFiles(areaFullPath);
+      const files = collectFiles(areaFullPath, [], Boolean(area.shallow));
       if (area.required && files.length === 0) {
         throw new Error(`No scannable text files found in required area: ${area.path}`);
       }
@@ -90,6 +94,8 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
           continue; // Ignore guard test file itself
         }
 
+        const relPath = path.relative(ROOT_DIR, filePath);
+        scannedRelativePaths.add(relPath);
         totalFilesScanned++;
         const content = fs.readFileSync(filePath, 'utf8');
         for (const pattern of FORBIDDEN_PATTERNS) {
@@ -111,8 +117,10 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
       }
     }
 
-    // Ensure our scanner actually visited files across the repo
+    // Ensure our scanner actually visited files across the repo including root files
     expect(totalFilesScanned).toBeGreaterThan(50);
+    expect(scannedRelativePaths.has('WORKSTATUS.md')).toBe(true);
+    expect(scannedRelativePaths.has('README.md')).toBe(true);
 
     if (findings.length > 0) {
       const errorReport = findings

@@ -56,7 +56,7 @@
                 <items>
                     <ColumnListItem type="Navigation" press=".onOpenReservation">
                         <cells>
-                            <ObjectIdentifier title="{gi261p>ReservationNo}" text="{gi261p>MovementTypeName}" />
+                            <ObjectIdentifier title="{gi261p>ReservationNo}" text="{= ${gi261p>StatusText} ? (${gi261p>MovementTypeName} + ' • ' + ${gi261p>StatusText}) : ${gi261p>MovementTypeName} }" />
                             <Text text="{= ${gi261p>OrderNo} ? ${gi261p>OrderNo} : '-' }" />
                             <VBox>
                                 <Text text="{gi261p>SampleMaterial}" />

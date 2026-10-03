@@ -38,16 +38,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     super(options);
     this.rfc = options.rfc || new RfcClient();
     this.reservationsClient = options.reservationsClient || (this.adapter && this.adapter.reservations) || null;
-    this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
     this._cache = new Map();
-  }
-
-  _getQueueManager() {
-    return null;
-  }
-
-  async _getPendingQueueCounts() {
-    return { '201': 0, '261': 0, '301': 0, '311': 0, total: 0 };
   }
 
   /**
@@ -193,13 +184,11 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
       }
     }
 
-    // 2. Fetch pending queue items
-    const queueCounts = await this._getPendingQueueCounts();
-
-    const openPending201 = (r201 ? r201.length : 0) + queueCounts['201'];
-    const openPending261 = (r261 ? r261.length : 0) + queueCounts['261'];
-    const openPending301 = (r301 ? r301.length : 0) + queueCounts['301'];
-    const openPending311 = (r311 ? r311.length : 0) + queueCounts['311'];
+    // 2. Open pending reservation counts
+    const openPending201 = r201 ? r201.length : 0;
+    const openPending261 = r261 ? r261.length : 0;
+    const openPending301 = r301 ? r301.length : 0;
+    const openPending311 = r311 ? r311.length : 0;
     const openPendingOverall = openPending201 + openPending261 + openPending301 + openPending311;
 
     // 3. All-time total counts. Prefer the SAP-side OData $count (returns only the number, no row

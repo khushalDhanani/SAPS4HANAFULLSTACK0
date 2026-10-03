@@ -268,6 +268,53 @@ class GoodsIssueIssuedSuStore {
   }
 
   /**
+   * Checks whether there is an active 'claiming' status row for a given reservation item.
+   *
+   * @param {string} reservationNo
+   * @param {string} [reservationItem]
+   * @returns {Promise<boolean>}
+   */
+  async hasActiveClaimForReservation(reservationNo, reservationItem) {
+    const sRes = String(reservationNo || '').trim();
+    if (!sRes) return false;
+    const cleanRes = sRes.replace(/^0+/, '');
+    const cleanItem = reservationItem !== undefined && reservationItem !== null ? String(reservationItem).trim().replace(/^0+/, '') : '';
+
+    for (const claim of this._memoryStore.values()) {
+      if (claim.Status === 'claiming') {
+        const cRes = String(claim.ReservationNo || '').trim().replace(/^0+/, '');
+        if (cleanItem) {
+          const cItem = String(claim.ReservationItem || '').trim().replace(/^0+/, '');
+          if (cRes === cleanRes && cItem === cleanItem) return true;
+        } else if (cRes === cleanRes) {
+          return true;
+        }
+      }
+    }
+
+    if (this.db) {
+      try {
+        const rows = await this._run(
+          SELECT.from(ISSUED_SU_ENTITY).where({ Status: 'claiming' })
+        );
+        if (Array.isArray(rows)) {
+          return rows.some((claim) => {
+            const cRes = String(claim.ReservationNo || '').trim().replace(/^0+/, '');
+            if (cleanItem) {
+              const cItem = String(claim.ReservationItem || '').trim().replace(/^0+/, '');
+              return cRes === cleanRes && cItem === cleanItem;
+            }
+            return cRes === cleanRes;
+          });
+        }
+      } catch (err) {
+        LOG.warn('DB query failed for active claims by reservation:', err.message || err);
+      }
+    }
+    return false;
+  }
+
+  /**
    * Atomic 2-Phase Claim: Step 1 (Acquire)
    *
    * Multi-instance safe DB-level check under READ COMMITTED:

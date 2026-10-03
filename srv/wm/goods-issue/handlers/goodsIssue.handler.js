@@ -49,6 +49,30 @@ class GoodsIssueHandler {
           const sOrderClean = orderNo.replace(/^0+/, '');
           reservations = reservations.filter(r => r.OrderNo === orderNo || r.OrderNo === sOrderClean);
         }
+
+        // Enrich reservations with unconfirmed attempt status
+        if (Array.isArray(reservations) && GoodsIssueAttemptStore && typeof GoodsIssueAttemptStore.getOpenAttemptReservations === 'function') {
+          try {
+            const openResvs = await GoodsIssueAttemptStore.getOpenAttemptReservations();
+            if (openResvs && openResvs.size > 0) {
+              for (const r of reservations) {
+                const cleanNo = String(r.ReservationNo || '').trim().replace(/^0+/, '');
+                if (openResvs.has(cleanNo)) {
+                  r.Status = 'pending confirmation';
+                  r.StatusText = 'pending confirmation';
+                  r.StatusState = 'Warning';
+                  r.PendingConfirmation = true;
+                  if (r.DisplayText && !r.DisplayText.includes('pending confirmation')) {
+                    r.DisplayText += ' (pending confirmation)';
+                  }
+                }
+              }
+            }
+          } catch (attErr) {
+            LOG.warn('Could not enrich open reservations with attempt status:', attErr.message || attErr);
+          }
+        }
+
         return applyPaging(reservations, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read open reservations from S/4HANA');

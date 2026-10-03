@@ -996,7 +996,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       } catch (err) {
         // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
         expect(err.status).toBe(403);
-        expect(err.message).toContain('NOT posted and NOT queued');
+        expect(err.message).toContain('NOT posted');
         expect(err.message).toContain('SU53');
         expect(err.message).not.toContain('Unavailable');
       }
@@ -1031,7 +1031,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       } catch (err) {
         // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
         expect(err.status).toBe(403);
-        expect(err.message).toContain('NOT posted and NOT queued');
+        expect(err.message).toContain('NOT posted');
         expect(err.message).toContain('SU53');
         expect(err.message).not.toContain('Unavailable');
       }

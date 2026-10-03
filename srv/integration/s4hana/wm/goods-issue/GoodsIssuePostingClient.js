@@ -765,15 +765,14 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /**
-   * Router used only by the internal queue-replay path (retry/drain), which reads a stored
-   * MovementType off a queued record and dispatches it to the matching isolated method above.
+   * Router that reads a MovementType off a payload and dispatches it to the matching isolated method above.
    * This is routing, not movement-type business logic.
    */
   async postByMovementType(data) {
     const mvt = String(data.MovementType || '261').trim();
     switch (mvt) {
       case '201': {
-        // Replay: never post a queued record whose reference already exists in SAP.
+        // Never post if reference already exists in SAP.
         const prior = data.ReferenceDocument ? await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate) : null;
         if (prior) return GoodsIssuePostingClient._resultFromReference(prior, data, '201', 'Goods Issue to Cost Center');
         return this.post201(data);
@@ -997,15 +996,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * Classifies a Tier 2 (API_MATERIAL_DOCUMENT_SRV) failure into one of three outcomes:
    *
    * 1. Rejected by SAP (400/401/409/422/..., or a business message recognised by S4ErrorMapper):
-   *    surfaced to the caller as-is, never queued.
+   *    surfaced to the caller as-is.
    * 2. Never reached the posting (service not activated/registered, connection refused, DNS failure,
-   *    HTTP 503): wrapped into the diagnostic "capability unavailable" 501 error, which the handlers
-   *    route to the dispatch queue. Replaying it later cannot create a duplicate.
+   *    HTTP 503): wrapped into the diagnostic "capability unavailable" 501 error.
    * 3. Unknown outcome (timeout, connection reset, proxy 502/504, or a 2xx response without a
-   *    material document): SAP may have posted. Surfaced as 504 GI_POSTING_OUTCOME_UNKNOWN and never
-   *    queued, because an automatic replay could post the goods issue twice.
+   *    material document): SAP may have posted. Surfaced as 504 GI_POSTING_OUTCOME_UNKNOWN.
    *
-   * A plain HTTP 403 (no /IWFND/MED/170) is an authorization or CSRF refusal: surfaced, not queued.
+   * A plain HTTP 403 (no /IWFND/MED/170) is an authorization or CSRF refusal: surfaced directly.
    *
    * @private
    */
@@ -1049,7 +1046,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
 
     if (explicitStatus === 403) {
-      const authErr = new Error(`${mapped.message} SAP refused the ${operationName} (authorization or CSRF token). It was NOT posted and NOT queued; check SU53 for the destination user (S_SERVICE, M_MSEG_BWA, M_MSEG_WWA).`);
+      const authErr = new Error(`${mapped.message} SAP refused the ${operationName} (authorization or CSRF token). It was NOT posted; check SU53 for the destination user (S_SERVICE, M_MSEG_BWA, M_MSEG_WWA).`);
       authErr.status = 403;
       authErr.code = mapped.code;
       return authErr;

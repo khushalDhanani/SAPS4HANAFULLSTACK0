@@ -56,7 +56,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
-    this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
     this.issuedSuStore = options.issuedSuStore || (this.adapter && this.adapter.issuedSuStore) || null;
     this._huModelCache = null;
     this.rfc = options.rfc || new RfcClient();
@@ -74,18 +73,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     } catch {
       return null;
     }
-  }
-
-  /**
-   * Resolve the queue manager instance if available.
-   * @returns {Object|null}
-   */
-  _getQueueManager() {
-    return null;
-  }
-
-  async _getPendingQueueMap() {
-    return new Map();
   }
 
   /**
@@ -607,8 +594,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
 
 
   /**
-   * Read one open reservation item (UI_RESERVATION_ITM_MNG_V2) and compute its open quantity
-   * net of quantities already queued for dispatch.
+   * Read one open reservation item (UI_RESERVATION_ITM_MNG_V2) and compute its open quantity.
    */
   async _readOpenReservationItem(reservationNo, reservationItem) {
     const sResv = String(reservationNo).trim();
@@ -901,24 +887,17 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     // STEP 1: Load reservation item to get expected values (Reservation-First)
     const { sResv, sItem, resvItem } = await this._readOpenReservationItem(reservationNo, reservationItem);
 
-    const sResClean = sResv.replace(/^0+/, '');
-    const sItemClean = sItem.replace(/^0+/, '');
-    const pendingQueueMap = await this._getPendingQueueMap(sResClean);
-    const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
-    const queuedQty = qEntry ? qEntry.queuedQty : 0;
-    const isFinalQueued = qEntry ? qEntry.finalIssue : false;
-
     const resvMaterial = resvItem.Product || '';
     const resvPlant = resvItem.Plant || '';
     const resvSLoc = resvItem.StorageLocation || '';
     const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit || 0);
     const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0);
-    const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
+    const openQty = Math.max(0, reqQty - wdnQty);
     const resvUnit = resvItem.BaseUnit || resvItem.ResvnItemComponentUnit || resvItem.EntryUnit || resvItem.UnitOfMeasure || '';
 
     if (openQty <= 0) {
       const err = new Error(
-        `Reservation ${reservationNo} item ${reservationItem} has no open quantity remaining (already fully issued or queued in dispatch).`
+        `Reservation ${reservationNo} item ${reservationItem} has no open quantity remaining (already fully issued).`
       );
       err.status = 400;
       throw err;

@@ -472,6 +472,34 @@ function classifyPostingError(err) {
 }
 
 /**
+ * Checks whether the reservation item currently has an unconfirmed or sending attempt,
+ * or an active SU claim. Rejects duplicate submissions while unconfirmed.
+ *
+ * @param {Object} req - CAP request
+ * @param {Object} normalized - Normalized payload
+ * @returns {Promise<boolean>}
+ */
+async function checkPendingConfirmation(req, normalized) {
+  const sResv = String(normalized.ReservationNo || '').trim();
+  const sItem = String(normalized.ReservationItem || '').trim();
+  if (!sResv) return true;
+
+  const hasAttempt = GoodsIssueAttemptStore && typeof GoodsIssueAttemptStore.hasOpenAttemptForReservation === 'function'
+    ? await GoodsIssueAttemptStore.hasOpenAttemptForReservation(sResv, sItem)
+    : false;
+
+  const hasClaim = GoodsIssueIssuedSuStore && typeof GoodsIssueIssuedSuStore.hasActiveClaimForReservation === 'function'
+    ? await GoodsIssueIssuedSuStore.hasActiveClaimForReservation(sResv, sItem)
+    : false;
+
+  if (hasAttempt || hasClaim) {
+    req.error(409, `Reservation ${sResv} item ${sItem} has a Goods Issue posting attempt pending confirmation, do not post again until the outcome is verified in SAP.`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Posts directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
  * No queue, no stored transaction for later replay.
  *
@@ -499,10 +527,6 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
     });
 
     const res = Object.assign({ _definitiveRejection: false }, result);
-    delete res.Queued;
-    delete res.QueueReference;
-    delete res.QueueId;
-    delete res.SyncStatus;
     return res;
   } catch (err) {
     const classified = classifyPostingError(err);
@@ -524,6 +548,91 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
   }
 }
 
+/**
+ * Executes a Goods Issue posting with atomic attempt tracking and 2-phase SU claims.
+ *
+ * @param {Object} req
+ * @param {Object} normalized
+ * @param {Function} postFn
+ * @param {Function|null} [preCheckFn]
+ * @returns {Promise<Object>}
+ */
+async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
+  normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
+  try {
+    await GoodsIssueAttemptStore.create(normalized);
+  } catch (attemptErr) {
+    LOG.error('Posting attempt could not be recorded; posting blocked:', attemptErr.message || attemptErr);
+    return req.error(503, `Goods Issue was NOT sent to SAP: the posting attempt could not be recorded (${attemptErr.message || 'database unavailable'}).`);
+  }
+  const settle = (status, fields) => GoodsIssueAttemptStore.setStatus(normalized.ReferenceDocument, status, fields)
+    .catch((e) => LOG.error(`Posting attempt ${normalized.ReferenceDocument} could not be set to ${status}; the re-check job will resolve it:`, e.message || e));
+
+  if (typeof preCheckFn === 'function') {
+    const preOk = await preCheckFn();
+    if (!preOk) {
+      await settle('rejected', { LastError: 'Rejected by pre-check; not sent to SAP.' });
+      return;
+    }
+  }
+
+  // Atomic SU claims: acquire 'claiming' rows BEFORE the SAP call
+  let claimIds = [];
+  const suItemsToClaim = Array.isArray(normalized._allocatedSuItems) && normalized._allocatedSuItems.length > 0
+    ? normalized._allocatedSuItems
+    : (Array.isArray(normalized.StorageUnits) && normalized.StorageUnits.length > 0
+      ? normalized.StorageUnits.map(su => typeof su === 'string' ? { storageUnit: su, issuedQty: normalized.IssueQty, preIssueStock: normalized.IssueQty } : su)
+      : []);
+
+  if (suItemsToClaim.length > 0) {
+    try {
+      claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
+        reservationNo: normalized.ReservationNo,
+        reservationItem: normalized.ReservationItem,
+        material: normalized.Material,
+        plant: normalized.Plant,
+        storageLocation: normalized.StorageLocation,
+        referenceDocument: normalized.ReferenceDocument,
+        items: suItemsToClaim
+      });
+    } catch (claimErr) {
+      await settle('rejected', { LastError: claimErr.message });
+      return req.error(claimErr.status || 400, claimErr.message);
+    }
+  }
+
+  let res;
+  try {
+    res = await postDirect(req, normalized, postFn, settle);
+  } catch (err) {
+    if (claimIds.length > 0) {
+      const isDef = GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
+      await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: isDef });
+    }
+    throw err;
+  }
+
+  if (res && res.MaterialDocument) {
+    if (claimIds.length > 0) {
+      try {
+        await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
+          materialDocument: res.MaterialDocument,
+          materialDocYear: res.MaterialDocYear || '',
+          confirmed: res.Confirmed !== false
+        });
+      } catch (suErr) {
+        LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
+      }
+    }
+  } else {
+    const definitive = Boolean(res && res._definitiveRejection === true);
+    if (claimIds.length > 0) {
+      await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive });
+    }
+  }
+  return res;
+}
+
 const PerTypeGoodsIssueHandler = {
   init(srv) {
     srv.on('postGoodsIssue201', async (req) => {
@@ -531,112 +640,51 @@ const PerTypeGoodsIssueHandler = {
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
       if (!(await reservationReconcileCheck(req, normalized))) return;
-      // The attempt is persisted (own committed transaction) BEFORE anything is sent to SAP, with the
-      // reference that goes into the document header. No attempt row -> no posting.
-      normalized.ReferenceDocument = newPostingReference();
-      try {
-        await GoodsIssueAttemptStore.create(normalized);
-      } catch (attemptErr) {
-        LOG.error('Posting attempt could not be recorded; posting blocked:', attemptErr.message || attemptErr);
-        return req.error(503, `Goods Issue was NOT sent to SAP: the posting attempt could not be recorded (${attemptErr.message || 'database unavailable'}).`);
-      }
-      const settle = (status, fields) => GoodsIssueAttemptStore.setStatus(normalized.ReferenceDocument, status, fields)
-        .catch((e) => LOG.error(`Posting attempt ${normalized.ReferenceDocument} could not be set to ${status}; the re-check job will resolve it:`, e.message || e));
+      if (!(await checkPendingConfirmation(req, normalized))) return;
 
-      if (!(await stockPreCheck201(req, normalized)) || !(await serialPreCheck(req, normalized))) {
-        await settle('rejected', { LastError: 'Rejected by the stock or serial pre-check; not sent to SAP.' });
-        return;
-      }
-      return postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), settle);
+      const preCheck = async () => (await stockPreCheck201(req, normalized)) && (await serialPreCheck(req, normalized));
+      return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), preCheck);
     });
 
     srv.on('postGoodsIssue261', async (req) => {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
-      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
       const resvItem = await reservationReconcileCheck(req, normalized);
       if (!resvItem) return;
+      if (!(await checkPendingConfirmation(req, normalized))) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       if (!(await serialPreCheck(req, normalized))) return;
 
-      // Make claims atomic (Requirement 2): write 'claiming' rows BEFORE the SAP call
-      let claimIds = [];
-      if (Array.isArray(normalized._allocatedSuItems) && normalized._allocatedSuItems.length > 0) {
-        try {
-          claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
-            reservationNo: normalized.ReservationNo,
-            reservationItem: normalized.ReservationItem,
-            material: normalized.Material,
-            plant: normalized.Plant,
-            storageLocation: normalized.StorageLocation,
-            referenceDocument: normalized.ReferenceDocument,
-            items: normalized._allocatedSuItems
-          });
-        } catch (claimErr) {
-          return req.error(claimErr.status || 400, claimErr.message);
-        }
-      }
-
-      let res;
-      try {
-        res = await postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
-      } catch (err) {
-        if (claimIds.length > 0) {
-          const isDef = GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
-          await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: isDef });
-        }
-        throw err;
-      }
-
-      if (res && res.MaterialDocument) {
-        // Promote claiming rows to issued on success (unconfirmed documents still promote SU claims to issued)
-        if (claimIds.length > 0) {
-          try {
-            await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
-              materialDocument: res.MaterialDocument,
-              materialDocYear: res.MaterialDocYear || '',
-              confirmed: res.Confirmed !== false
-            });
-          } catch (suErr) {
-            LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
-          }
-        }
-      } else {
-        // Delete claiming rows ONLY on explicit definitive rejection; unknown outcomes default to keep
-        const definitive = Boolean(res && res._definitiveRejection === true);
-        if (claimIds.length > 0) {
-          await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive });
-        }
-      }
-      return res;
+      return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
     });
 
     srv.on('postGoodsIssue301', async (req) => {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
-      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
       const resvItem = await reservationReconcileCheck(req, normalized);
       if (!resvItem) return;
-      // A plant-to-plant transfer needs a destination: from the request, or from the reservation.
+      if (!(await checkPendingConfirmation(req, normalized))) return;
       if (!normalized.ReceivingPlant && !resvItem.ReceivingPlant) {
         return req.error(400, `ReceivingPlant is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving plant. Goods Issue was NOT posted.`);
       }
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
-      return postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
+
+      return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue301(d));
     });
 
     srv.on('postGoodsIssue311', async (req) => {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
-      normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
       if (!(await reservationReconcileCheck(req, normalized, { receiving: true }))) return;
+      if (!(await checkPendingConfirmation(req, normalized))) return;
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
-      return postDirect(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
+
+      return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue311(d));
     });
   }
 };

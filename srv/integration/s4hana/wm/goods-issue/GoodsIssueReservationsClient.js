@@ -16,19 +16,6 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
-    this.queueManager = options.queueManager || (this.adapter && this.adapter.queueManager) || null;
-  }
-
-  /**
-   * Resolve the queue manager instance if available.
-   * @returns {Object|null}
-   */
-  _getQueueManager() {
-    return null;
-  }
-
-  async _getPendingQueueMap() {
-    return new Map();
   }
 
   /**
@@ -141,7 +128,6 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     }
 
     try {
-      const pendingQueueMap = await this._getPendingQueueMap(sResv);
       let skip = 0;
       const allResults = [];
       let isTruncated = false;
@@ -178,16 +164,10 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           const sRes = r.Reservation || '';
           if (!sRes) continue;
 
-          const sResClean = sRes.replace(/^0+/, '');
-          const sItemClean = String(r.ReservationItem || '').trim().replace(/^0+/, '');
-          const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
-          const queuedQty = qEntry ? qEntry.queuedQty : 0;
-          const isFinalQueued = qEntry ? qEntry.finalIssue : false;
-
-          // Derive OpenQty — deduct SAP withdrawn qty AND local queued qty
+          // Derive OpenQty — deduct SAP withdrawn qty
           const reqQty = Number(r.ResvnItmRequiredQtyInBaseUnit) || 0;
           const wdnQty = Number(r.ResvnItmWithdrawnQtyInBaseUnit) || 0;
-          const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
+          const openQty = Math.max(0, reqQty - wdnQty);
           if (openQty <= 0) continue;
 
           if (!resvMap.has(sRes)) {
@@ -322,8 +302,6 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     const results = await this._get('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem', `$filter=${encodeURIComponent(fullFilter)}&$format=json`);
 
     if (Array.isArray(results) && results.length > 0) {
-      const pendingQueueMap = await this._getPendingQueueMap(rawReserv);
-
       // In SAP S/4HANA, CostCenter and the receiving plant / storage location of a transfer are
       // stored at the reservation header level (UI_RESERVATION_HDR_MNG_V2), not on the item.
       let sHeaderCostCenter = '';
@@ -384,15 +362,9 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
       };
 
       const mappedItems = await Promise.all(results.map(async (r) => {
-        const sResClean = String(r.Reservation || '').trim().replace(/^0+/, '');
-        const sItemClean = String(r.ReservationItem || '').trim().replace(/^0+/, '');
-        const qEntry = pendingQueueMap.get(`${sResClean}:${sItemClean}`);
-        const queuedQty = qEntry ? qEntry.queuedQty : 0;
-        const isFinalQueued = qEntry ? qEntry.finalIssue : false;
-
         const reqQty = Number(r.ResvnItmRequiredQtyInBaseUnit || 0);
         const wdnQty = Number(r.ResvnItmWithdrawnQtyInBaseUnit || 0);
-        const openQty = isFinalQueued ? 0 : Math.max(0, reqQty - wdnQty - queuedQty);
+        const openQty = Math.max(0, reqQty - wdnQty);
 
         // Fetch live packaging units (MARM)
         let packagingUnits = await getPackagingUnitsFn(r.Product);
@@ -459,7 +431,6 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           Unit: baseUnit,
           RequiredQty: reqQty,
           WithdrawnQty: wdnQty,
-          QueuedQty: queuedQty,
           OpenQty: openQty,
           MovementType: r.GoodsMovementType || '',
           MovementTypeName: r.GoodsMovementTypeName || '',

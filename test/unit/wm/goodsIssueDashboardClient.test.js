@@ -17,7 +17,6 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
   let mockRfc;
   let mockClient;
   let mockReservationsClient;
-  let mockQueueManager;
   let client;
 
   beforeEach(() => {
@@ -31,15 +30,11 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
     mockReservationsClient = {
       getOpenReservations: jest.fn()
     };
-    mockQueueManager = {
-      getAll: jest.fn().mockResolvedValue([])
-    };
 
     client = new GoodsIssueDashboardClient({
       rfc: mockRfc,
       client: mockClient,
-      reservationsClient: mockReservationsClient,
-      queueManager: mockQueueManager
+      reservationsClient: mockReservationsClient
     });
   });
 
@@ -112,12 +107,6 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
           if (type === '301') return Promise.resolve([{ ReservationNo: 'R3' }]);
           return Promise.resolve([]);
         });
-
-      mockQueueManager.getAll.mockResolvedValue([
-        { MovementType: '201', ItemId: 'Q0' },
-        { MovementType: '261', ItemId: 'Q1' },
-        { MovementType: '311', ItemId: 'Q2' }
-      ]);
 
       // All-time counts now come from the SAP-side OData $count (per movement type).
       mockClient.getText.mockImplementation(countByType({ '201': 1, '261': 2, '301': 1, '311': 1 }));
@@ -197,7 +186,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
 
       const data = await client.getDashboardData({ days: 30, plant: '1120' });
 
-      // KPI Checks — OpenPendingCount reflects open reservations directly (queue eliminated)
+      // KPI Checks — OpenPendingCount reflects open reservations directly
       expect(data.Kpis.Mvt201.TotalCount).toBe(1);
       expect(data.Kpis.Mvt201.OpenPendingCount).toBe(1); // 1 reservation
       expect(data.Kpis.Mvt201.TodayPostingsCount).toBe(1);
@@ -243,7 +232,6 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
 
     it('falls back to MSEG when MATDOC table read throws an error', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
-      mockQueueManager.getAll.mockResolvedValue([]);
       // OData $count unavailable -> the all-time count falls back to the RFC MATDOC/MSEG row-count path.
       mockClient.getText.mockRejectedValue(new Error('OData $count not available'));
 
