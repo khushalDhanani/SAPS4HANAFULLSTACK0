@@ -1,6 +1,67 @@
 
 # Changes Log
 
+## 2026-10-03 10:06 UTC — Injecting a shared RFC client into goods issue clients
+- **Agent**: Codex
+- **Request**: Fix the missing RFC client that produced the transfer-requirement 502 shown by the user.
+- **Plan**: Give `GoodsIssueAdapter` one default or injected `RfcClient`, pass the same instance to staging, stock-unit, posting, and dashboard clients, and assert staging/stock-unit identity.
+- **Current Status**: RFC client wiring is fixed and controlled tests pass. The same read-only transfer-requirement lookup now reaches SAP, but SAP rejects reads of TBPE and TBPK with RFC error `ID:DA Type:E Number:131`; transfer requirement status is therefore still unverified in this runtime.
+- **Files Changed**: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`; `test/unit/wm/goodsIssueStagingPhase6.test.js`; `WORKSTATUS.md`.
+- **Reason**: The default adapter constructed the staging client with `rfc: undefined`, while the stock-unit client independently constructed an RFC client. The missing staging client triggered the exact error before attempting SAP RFC access.
+- **Validation**: Passed — focused staging/stock-unit tests (3 suites / 35 tests); full `npx jest test/unit/wm --runInBand --silent` (56 suites / 1,119 tests); targeted ESLint; `npx cds compile srv >/dev/null`; `git diff --check`. A read-only live `findTransferRequirement('480960','1')` confirmed shared RFC wiring but SAP returned errors for TBPE and TBPK; no transfer was reported.
+- **Errors / Warnings / Blockers**: Runtime needs SAP NW RFC SDK/configuration and SAP authorization for the relevant tables. This change corrects the null-client wiring and adds no credentials or authorization bypass. The SAP RFC error number 131 was not independently mapped to a specific authorization/configuration cause.
+- **Next Steps**: Verify the deployed runtime loads this adapter change, then obtain authorized TBPE/TBPK reads or an approved SAP API for reservation transfer requirements and repeat the read-only check. Do not treat transfer status as verified until then.
+
+## 2026-10-03 10:04 UTC — In Progress: wiring the RFC client into staging
+- **Agent**: Codex
+- **Request**: Diagnose the two `SAP RFC table access is unavailable; reservation transfer requirement cannot be verified` responses supplied from the 261 UI flow.
+- **Plan**: Inject one `RfcClient` through `GoodsIssueAdapter` into staging and stock-unit clients; add a regression that verifies shared RFC wiring. Run focused staging/stock-unit tests, lint, CDS compile, and diff validation. Do not change SAP data or posting behavior.
+- **Current Status**: Resolved in code — the singleton adapter now shares one RFC client with staging and stock-unit clients. Remaining SAP TBPE/TBPK access failure is recorded in the 10:06 UTC entry.
+- **Files Changed**: Planned: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`; `test/unit/wm/goodsIssueStagingPhase6.test.js`; `WORKSTATUS.md`.
+- **Reason**: The stock-unit client and staging client must use the same RFC transport; currently stock-unit reads instantiate a client independently while staging receives none.
+- **Validation**: Passed — see exact focused/full WM, lint, CDS compile, diff-check, and read-only RFC results in the 10:06 UTC entry.
+- **Errors / Warnings / Blockers**: SAP rejected the transfer-requirement table reads; no transfer conclusion can be drawn until authorized reads work.
+- **Next Steps**: Resolve the runtime's SAP RFC access and verify the transfer-requirement read as described in the 10:06 UTC entry.
+
+## 2026-10-03 09:55 UTC — Preparing the UI Network response check
+- **Agent**: Codex
+- **Request**: Check whether reservation 480960 appears in the actual `OpenReservations` response used by the picker.
+- **Plan**: Inspect available in-app browser controls and the exact UI request/binding. If there is no attached browser session, provide the request and dynamic binding details for the user to verify in DevTools.
+- **Current Status**: SAP/backend data and aggregation include 480960, but the actual browser Network response was not observable in this session because no browser-control tool/session is available.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: The remaining distinction is CAP HTTP response versus the dynamically created picker contents.
+- **Validation / Inspection**: Confirmed the controller calls `GoodsIssue261Service.fetchOpenReservations()` at line 629. Expected request path: `/odata/v4/goods-issue/OpenReservations?$filter=MovementType%20eq%20'261'`. `GoodsIssue261.view.xml` contains no static reservation list binding; the `SelectDialog` is built in the controller and bound with `oDialog.bindAggregation("items", "/", oItemTemplate)` at line 633. Backend aggregation previously returned reservation 480960 with six items.
+- **Errors / Warnings / Blockers**: The in-app browser and DevTools Network panel are not exposed to this session; cannot confirm the actual browser response body or whether the UI displays the reservation.
+- **Next Steps**: User should open the picker and inspect the `OpenReservations` response body for `ReservationNo: "480960"`. If present, investigate the dialog binding/rendering; if absent, provide the full request URL and selected/user plant.
+
+## 2026-10-03 09:53 UTC — Verifying the CAP reservation aggregation against SAP
+- **Agent**: Codex
+- **Request**: Check whether reservation 480960 survives the actual read-only backend filter/grouping path and capture the new before/after quantity counts.
+- **Plan**: Call `GoodsIssueAdapter.getOpenReservations` with movement type 261, no plant/order restriction, and the 20,000 item ceiling; report only aggregate counts and the matching reservation summary.
+- **Current Status**: SAP and the application reservation client both return reservation 480960 with six eligible 261 items. The scan read 454 raw items, retained 380 positive-open items, dropped 74 zero-open items, and did not hit the cap. The exact screen-level omission is not reproduced. UI sends no plant or order filter; adding a required scope entails changing the reservation-picker flow because it opens before either value is known.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: Establish whether the server-side filtering/grouping path or the 20,000 cap removes the target reservation.
+- **Validation / SAP Read**: `GoodsIssueAdapter.getOpenReservations('261', '', {maxItems: 20000, fetchUserDetails: false})` completed through the configured destination. Logger output: 454 raw SAP items, 380 with positive open quantity, 74 with zero open quantity. Result: `isTruncated=false`; reservation 480960 found with `ItemCount=6`, plant 1110, order 1002599, movement type 261.
+- **Errors / Warnings / Blockers**: The Cloud SDK warned that no destination service binding is available; the local configured destination succeeded. No SAP write was performed. The UI has no plant/order value before opening the reservation value-help dialog, so “always send Plant or OrderNo” requires a UI flow decision; the list currently makes one unscoped but small (454 item) SAP read.
+- **Next Steps**: Decide whether the reservation picker must require a plant or order before loading. Separately reproduce the reported UI symptom; current SAP data, filter, and backend aggregation all include this reservation.
+
+## 2026-10-03 09:51 UTC — Live read-only verification of 261 reservation 480960
+- **Agent**: Codex
+- **Request**: Perform the requested live metadata and reservation checks, compare the result with RESB, and check whether the 261 UI supplies plant/order filters.
+- **Plan**: Use the configured S/4 destination for GET-only OData reads; use the repository RFC client for a read-only `RFC_READ_TABLE` of RESB; inspect the UI request call sites. Do not post or modify SAP data.
+- **Current Status**: Superseded by the 09:53 UTC aggregation result: the application reservation client also includes reservation 480960 (six 261 items) and the raw scan is only 454 items, below the cap. Exact Fiori runtime symptom remains unreproduced.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: Distinguish a SAP service/data issue from an application list issue and validate the list-scan volume before deployment.
+- **Validation / SAP Reads**:
+  - GET `/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/$metadata`: HTTP 200. Metadata maps `ReservationDocumentItem` to `ReservationDocumentItemType`; `GoodsMovementType` exists. The property has no `sap:filterable="false"` attribute. The cached catalog snapshot names technical service `UI_RESERVATION_ITM_MNG_V2` and registration ID `ZUI_RESERVATION_ITM_MNG_V2_0001`; the SAP GUI transaction `/IWFND/MAINT_SERVICE` itself was not opened.
+  - GET `ReservationDocumentItem?$filter=Reservation eq '0000480960'`: HTTP 200, 7 rows. Items 1–3 and 5–7 are movement type 261; item 4 is 531. All seven have final-issued/deletion flags false, withdrawn quantity 0, required quantity positive, plant 1110, order 1002599.
+  - GET with `Reservation eq '0000480960' and GoodsMovementType eq '261'`: HTTP 200, 6 rows, all movement type 261. This directly confirms the movement-type filter works on this reservation.
+  - Read-only `RFC_READ_TABLE` of RESB for RSNUM 0000480960: 7 rows. RSPOS 0001, 0002, 0003, 0005, 0006, 0007 have BWART 261; RSPOS 0004 has BWART 531. All KZEAR and XLOEK are blank, ENMNG is 0, BDMNG is positive, and WERKS is 1110. Values match the OData rows.
+  - Read-only OData inline count with `ReservationItemIsFinallyIssued eq false`, `ReservationItmIsMarkedForDeltn eq false`, and `GoodsMovementType eq '261'`: HTTP 200, count 454. The current list size does not reach the 20,000 cap.
+  - UI inspection: `GoodsIssue261.controller.js` calls `fetchOpenReservations()` without arguments; the UI service sends only `MovementType eq '261'`. Plant and OrderNo are not sent for that list read.
+- **Errors / Warnings / Blockers**: Initial sandbox GET failed with `EPERM`; the approved escalated read-only GETs succeeded. Cloud SDK logged that no destination service binding is available, but the configured local destination worked. No SAP POST/write was performed. The app's actual UI session/log output was not captured, so the exact screen-level drop point is not proven. `/IWFND/MAINT_SERVICE` was not accessed directly; live metadata at the exact endpoint succeeded.
+- **Next Steps**: Decide whether to require a Plant or OrderNo before opening the picker, then reproduce the reported screen behavior. SAP source data and the backend aggregation currently include the target reservation.
+
 ## 2026-10-03 15:34 IST — Final validation for bounded 261 reservation reads
 - **Agent**: Codex
 - **Request**: Complete the review-driven guardrail and diagnostics update without claiming the live reservation symptom is proven fixed.
@@ -16,8 +77,8 @@
   - `npm --prefix app/fiori-app run lint`: passed; no UI5 findings.
   - `npm --prefix app/fiori-app run build`: passed.
   - `git diff --check`: passed.
-- **Errors / Warnings / Blockers**: Jest printed destination-binding warnings; UI5 lint/build printed non-fatal update-check access warnings. An initial run failed because the sandbox blocked CAP's local server bind; escalated reruns passed. No authoritative metadata snapshot or live SAP `$metadata` response is available for `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`, so `GoodsMovementType` filterability remains unverified. No read of reservation `0000480960` or RESB was performed; the original symptom's exact cause remains unknown.
-- **Next Steps**: With authorized read-only SAP access, inspect this service's `$metadata`, run the direct reservation OData query, compare `BWART`, `KZEAR`, `XLOEK`, `BDMNG`, `ENMNG`, and `WERKS` in RESB, then compare app logs' raw/positive-open counts. Do not describe the symptom as fixed until those results establish the row's drop point.
+- **Errors / Warnings / Blockers**: Jest printed destination-binding warnings; UI5 lint/build printed non-fatal update-check access warnings. An initial run failed because the sandbox blocked CAP's local server bind; escalated reruns passed. SAP reads are now recorded in the 09:51 UTC entry. The exact app screen-level drop point and the UI's missing Plant/OrderNo filter remain outstanding.
+- **Next Steps**: Address whether the reservation list must require Plant or OrderNo before every list fetch, then reproduce the app behavior and inspect its row-count logs. See the 09:51 UTC entry for verified SAP metadata, reservation, and RESB results.
 
 ## 2026-10-03 15:29 IST — Restoring header-enrichment call expectation
 - **Agent**: Codex

@@ -463,6 +463,12 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
   });
 
   describe('GoodsIssueAdapter integration', () => {
+    it('shares its configured RFC client with staging and stock-unit clients', () => {
+      expect(GoodsIssueAdapter.rfc).toBeDefined();
+      expect(GoodsIssueAdapter.stagingClient.rfc).toBe(GoodsIssueAdapter.rfc);
+      expect(GoodsIssueAdapter.stockUnits.rfc).toBe(GoodsIssueAdapter.rfc);
+    });
+
     it('exposes checkStagingForReservation on GoodsIssueAdapter', async () => {
       const origClient = GoodsIssueAdapter.stagingClient;
       try {

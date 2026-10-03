@@ -1,6 +1,7 @@
 const LOG = require('../logger')('goods-issue-adapter');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../S4HttpClient');
+const { RfcClient } = require('../RfcClient');
 const s4Config = require('../s4Config');
 const { enrichBatchStatus } = require('../../../common/batchUtils');
 const { formatDateToYMD } = require('../../../common/dateUtils');
@@ -36,16 +37,17 @@ class GoodsIssueAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.destinationName = this.client.destinationName;
+    this.rfc = options.rfc || new RfcClient();
 
     this.issuedSuStore = options.issuedSuStore || null;
 
     // Instantiate domain clients
-    this.stagingClient = new GoodsIssuePhase6StagingClient({ adapter: this, client: this.client, rfc: options.rfc });
+    this.stagingClient = new GoodsIssuePhase6StagingClient({ adapter: this, client: this.client, rfc: this.rfc });
     this.batches = new GoodsIssueBatchesClient({ adapter: this, client: this.client });
     this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches });
-    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, issuedSuStore: this.issuedSuStore, stagingClient: this.stagingClient });
-    this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches });
-    this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, rfc: options.rfc });
+    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, issuedSuStore: this.issuedSuStore, stagingClient: this.stagingClient, rfc: this.rfc });
+    this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches, rfc: this.rfc });
+    this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, rfc: this.rfc });
   }
 
   /**
