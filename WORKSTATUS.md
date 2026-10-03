@@ -1,6 +1,47 @@
 
 # Changes Log
 
+## 2026-10-03 13:52 IST — Database-backed audit persistence regressions
+- **Agent**: Copilot
+- **Change**: Added a CAP SQLite-backed lifecycle test proving snapshot fields are persisted on the `claiming` row before promotion and remain linked to the SAP material document after promotion. Added a fail-closed handler test proving an audit persistence error releases claims and prevents SAP posting.
+- **Files Changed**: `test/unit/wm/goodsIssueIssuedSu.test.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `WORKSTATUS.md`.
+- **Reason**: The first focused Chunk 16 tests verified memory-mode behavior; the acceptance requires durable evidence in the configured database and no SAP post if evidence cannot be saved.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssuePerTypeMapper.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssueStockUnitList.test.js --runInBand --silent`: passed, 4 suites / 89 tests, including SQLite-backed claim snapshot persistence and fail-closed posting on evidence-store failure.
+  - Final `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,079 tests.
+  - `npx cds compile srv >/dev/null`: passed.
+  - Targeted ESLint: 0 errors / 7 unused-variable warnings.
+  - `git diff --check`: passed.
+  - Final diff reviewed; final `git diff --check` passed and `git status --short` confirmed only the Chunk 16 files are modified/untracked.
+- **Errors / Warnings / Blockers**: No live SAP interactions. Jest reported missing test-environment destination bindings while SAP-facing paths were mocked. Live SAP metadata confirmation remains unresolved.
+- **Next Steps**: Verify deployed RAP/API `$metadata` and backend implementation with SAP before asserting whether the SAP posting contract requires SU/HU identifiers or changing the aggregate posting payload.
+
+## 2026-10-03 13:50 IST — Audit store method placement correction
+- **Agent**: Copilot
+- **Change**: The initial focused run found a JavaScript parse error because `updateClaimEvidence` had been inserted inside `acquireClaims`; moved the method to the class scope. No behavior change intended.
+- **Files Changed**: `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`, `WORKSTATUS.md`.
+- **Reason**: Make the evidence-persistence API a valid callable store method rather than a nested declaration.
+- **Validation**: Initial focused Jest and targeted ESLint failed at the parse error (`Missing semicolon` / unexpected method syntax at line 466). After moving the method to class scope, focused tests passed (4 suites / 87 tests before later regressions were added), targeted ESLint had 0 errors, and the full WM suite passed.
+- **Errors / Warnings / Blockers**: No tests or SAP posts ran successfully before correction. No live SAP calls.
+- **Next Steps**: Continue final review; latest validation results are recorded in the 13:52 entry.
+
+## 2026-10-03 13:49 IST — Chunk 16 SU/HU audit contract
+- **Agent**: Copilot
+- **Request**: Decide and document the authoritative SU/HU contract for Movement 261 and persist the validated allocation as evidence if the current SAP posting contract does not carry SU/HU identifiers.
+- **Plan**: Keep current SAP posting mappings unchanged because the wired RAP action and standard material-document mapper send aggregate movement data without SU/HU fields; do not guess an unsupported SAP property. Define CAP `StorageUnits` as candidate IDs, server allocation as authoritative, and enrich the persisted per-SU claim with the final pre-post SAP batch/warehouse/type/bin snapshot, allocation, stock, attempt reference and resulting material document. Document that repository code is not live SAP metadata proof. Test mapper omission and audit persistence.
+- **Current Status**: Chunk 16 application contract and audit persistence are implemented and validated. CAP accepts `StorageUnits` as candidate IDs; the server owns the allocation and stores final SAP snapshot fields before posting, linked to the posting reference and SAP document. Do not add SU/HU to SAP payload absent a verified backend contract. SAP `$metadata`/ABAP confirmation that the deployed RAP/API does not require these identifiers remains unavailable, and aggregate SAP posting does not prove SAP-side SU consumption attribution.
+- **Files Changed**: `db/wm/goods-issue-issued-su.cds`, `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `test/unit/wm/goodsIssuePerTypeMapper.test.js`, `test/unit/wm/goodsIssueIssuedSu.test.js`, `docs/decisions/261-su-audit-contract.md`, `WORKSTATUS.md`.
+- **Reason**: The CAP request identifies scanned SUs but the SAP post payload does not; existing claim records linked SU quantity to posting reference/document but omitted batch and WM physical location fields needed for a more complete audit snapshot.
+- **Validation**:
+  - Initial focused `npx jest ...` failed because of the method-placement syntax error documented at 13:50; the method was moved to class scope.
+  - Corrected focused tests before the DB lifecycle test was added: 4 suites / 87 tests passed; latest focused run: 4 suites / 89 tests passed.
+  - First full WM suite before the final two regressions: 54 suites / 1,077 tests passed; latest full WM suite: 54 suites / 1,079 tests passed.
+  - `npx cds compile srv >/dev/null`: passed.
+  - Targeted ESLint after correction and added DB test: 0 errors / 7 unused-variable warnings.
+  - `git diff --check` passed.
+- **Errors / Warnings / Blockers**: No live SAP metadata read or goods movement was performed. Jest emitted missing-destination-binding warnings; SAP calls were mocked. Do not represent current repository code as conclusive proof of deployed SAP backend requirements; aggregate SAP posting does not prove exact SU consumption.
+- **Next Steps**: Review final diff/worktree and retain SAP metadata/backend confirmation as an explicit follow-up before asserting whether SAP requires SU/HU.
+
 ## 2026-10-03 13:41 IST — Final-review batch and open-quantity revalidation
 - **Agent**: Copilot
 - **Change**: Full WM validation passed for the first Chunk 15 implementation. Final review identified one stale-input edge case: if the reservation's fixed batch changed after allocation, comparing only the freshly listed SU to the new reservation batch could permit the 261 adapter to receive the earlier normalized batch. Added an explicit comparison between the fresh reservation batch and the batch already normalized for posting, plus regression coverage for reservation batch/open-quantity changes.

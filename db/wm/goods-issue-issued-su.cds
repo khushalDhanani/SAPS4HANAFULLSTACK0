@@ -20,8 +20,14 @@ entity GoodsIssueIssuedStorageUnit : cuid, managed {
     Material         : String(40);
     Plant            : String(4);
     StorageLocation  : String(4);
+    Batch            : String(20);
+    Warehouse        : String(3);
+    StorageType      : String(3);
+    StorageBin       : String(20);
+    MultipleBatches  : Boolean default false;
     IssuedQty        : Decimal(13, 3);
     PreIssueStock    : Decimal(13, 3);
+    EvidenceCapturedAt : Timestamp;
     // 'claiming' | 'issued' | 'released' | 'needs-attention'
     // 'needs-attention': stale claiming row that exceeded the manual-resolve threshold;
     //   operator must call resolveClaimManual(id, 'posted'|'not-posted') to clear.

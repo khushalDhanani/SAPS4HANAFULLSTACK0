@@ -353,8 +353,14 @@ class GoodsIssueIssuedSuStore {
         Material: String(material || '').trim().toUpperCase(),
         Plant: String(plant || '').trim().toUpperCase(),
         StorageLocation: String(storageLocation || '').trim().toUpperCase(),
+        Batch: String(item.batch || item.Batch || '').trim().toUpperCase(),
+        Warehouse: String(item.warehouse || item.Warehouse || '').trim().toUpperCase(),
+        StorageType: String(item.storageType || item.StorageType || '').trim().toUpperCase(),
+        StorageBin: String(item.storageBin || item.StorageBin || '').trim().toUpperCase(),
+        MultipleBatches: item.multipleBatches === true || item.MultipleBatches === true,
         IssuedQty: Math.round(Number(item.issuedQty != null ? item.issuedQty : item.IssuedQty || 0) * 1000) / 1000,
         PreIssueStock: Math.round(Number(item.preIssueStock != null ? item.preIssueStock : item.PreIssueStock || 0) * 1000) / 1000,
+        EvidenceCapturedAt: null,
         Status: 'claiming',
         createdAt: nowIso, CreatedAt: nowIso, ReleasedAt: null, ReleaseReason: '',
         NeedsAttention: false, ManualResolveAction: ''
@@ -464,6 +470,73 @@ class GoodsIssueIssuedSuStore {
       return ownIds;
     } finally {
       this._keyLock.release(suKeys);
+    }
+  }
+
+  /**
+   * Persists the last SAP-verified physical-stock snapshot before the material-document call.
+   * Each allocation remains linked to its posting attempt and is promoted with the SAP document.
+   */
+  async updateClaimEvidence(referenceDocument, items = []) {
+    const reference = String(referenceDocument || '').trim();
+    if (!reference || !Array.isArray(items) || items.length === 0) return;
+
+    const values = items.map((item) => ({
+      storageUnit: String(item.storageUnit || item.StorageUnit || '').trim().toUpperCase(),
+      Batch: String(item.batch || item.Batch || '').trim().toUpperCase(),
+      Warehouse: String(item.warehouse || item.Warehouse || '').trim().toUpperCase(),
+      StorageType: String(item.storageType || item.StorageType || '').trim().toUpperCase(),
+      StorageBin: String(item.storageBin || item.StorageBin || '').trim().toUpperCase(),
+      MultipleBatches: item.multipleBatches === true || item.MultipleBatches === true,
+      EvidenceCapturedAt: new Date().toISOString()
+    }));
+    if (values.some((item) => !item.storageUnit)) {
+      throw new Error('Every SU audit allocation must identify a Storage Unit.');
+    }
+
+    if (this.db) {
+      const claims = await this._run(
+        SELECT.from(ISSUED_SU_ENTITY).where({ ReferenceDocument: reference, Status: 'claiming' })
+      );
+      const claimBySu = new Map((Array.isArray(claims) ? claims : []).map((claim) => [String(claim.StorageUnit || '').trim().toUpperCase(), claim]));
+      for (const value of values) {
+        const claim = claimBySu.get(value.storageUnit);
+        if (!claim) {
+          throw new Error(`Claim for Storage Unit ${value.storageUnit} is missing before audit evidence could be persisted.`);
+        }
+        await this._run(
+          UPDATE(ISSUED_SU_ENTITY)
+            .set({
+              Batch: value.Batch,
+              Warehouse: value.Warehouse,
+              StorageType: value.StorageType,
+              StorageBin: value.StorageBin,
+              MultipleBatches: value.MultipleBatches,
+              EvidenceCapturedAt: value.EvidenceCapturedAt
+            })
+            .where({ ID: claim.ID, ReferenceDocument: reference, Status: 'claiming' })
+        );
+      }
+    }
+
+    for (const value of values) {
+      const claim = Array.from(this._memoryStore.values()).find((row) =>
+        row.ReferenceDocument === reference &&
+        row.Status === 'claiming' &&
+        String(row.StorageUnit || '').trim().toUpperCase() === value.storageUnit
+      );
+      if (claim) {
+        Object.assign(claim, {
+          Batch: value.Batch,
+          Warehouse: value.Warehouse,
+          StorageType: value.StorageType,
+          StorageBin: value.StorageBin,
+          MultipleBatches: value.MultipleBatches,
+          EvidenceCapturedAt: value.EvidenceCapturedAt
+        });
+      } else if (!this.db) {
+        throw new Error(`Claim for Storage Unit ${value.storageUnit} is missing before audit evidence could be persisted.`);
+      }
     }
   }
 
@@ -620,8 +693,14 @@ class GoodsIssueIssuedSuStore {
       Material: String(material || '').trim().toUpperCase(),
       Plant: String(plant || '').trim().toUpperCase(),
       StorageLocation: String(storageLocation || '').trim().toUpperCase(),
+      Batch: String(item.batch || item.Batch || '').trim().toUpperCase(),
+      Warehouse: String(item.warehouse || item.Warehouse || '').trim().toUpperCase(),
+      StorageType: String(item.storageType || item.StorageType || '').trim().toUpperCase(),
+      StorageBin: String(item.storageBin || item.StorageBin || '').trim().toUpperCase(),
+      MultipleBatches: item.multipleBatches === true || item.MultipleBatches === true,
       IssuedQty: Math.round(Number(item.issuedQty != null ? item.issuedQty : item.IssuedQty || 0) * 1000) / 1000,
       PreIssueStock: Math.round(Number(item.preIssueStock != null ? item.preIssueStock : item.PreIssueStock || 0) * 1000) / 1000,
+      EvidenceCapturedAt: item.evidenceCapturedAt || item.EvidenceCapturedAt || null,
       Status: 'issued',
       createdAt: nowIso, CreatedAt: nowIso, ReleasedAt: null, ReleaseReason: '',
       NeedsAttention: false, ManualResolveAction: ''

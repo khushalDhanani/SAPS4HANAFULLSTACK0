@@ -381,6 +381,35 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     expect(req.error).not.toHaveBeenCalled();
   });
 
+  it('does not post if final SU audit evidence cannot be persisted', async () => {
+    setupMockSap({
+      openQty: 100,
+      stockUnits: [{ StorageUnit: 'SU100', AvailableStock: 100 }]
+    });
+    jest.spyOn(GoodsIssueIssuedSuStore, 'updateClaimEvidence').mockRejectedValue(new Error('audit store unavailable'));
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 70,
+        Unit: 'KG',
+        StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn((status, message) => ({ status, message }))
+    };
+
+    const result = await handlers['postGoodsIssue261'](req);
+    expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('audit evidence could not be persisted'));
+    expect(post).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+    expect(await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01')).toHaveLength(0);
+  });
+
   it.each([
     ['the SU disappeared', () => ({ StockUnits: [] })],
     ['the usable quantity shrank', (unit) => ({ StockUnits: [{ ...unit, AvailableStock: 69 }] })],
@@ -547,7 +576,20 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
 
     const claims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01');
     expect(claims).toHaveLength(1);
-    expect(claims[0]).toMatchObject({ StorageUnit: 'SU100', IssuedQty: 70, PreIssueStock: 100, Status: 'issued' });
+    expect(claims[0]).toMatchObject({
+      StorageUnit: 'SU100',
+      IssuedQty: 70,
+      PreIssueStock: 100,
+      Batch: 'IN26000905',
+      Warehouse: 'W01',
+      StorageType: 'IP1',
+      StorageBin: '0000001001',
+      MultipleBatches: false,
+      Status: 'issued',
+      MaterialDocument: '4900012370'
+    });
+    expect(claims[0].ReferenceDocument).toBeTruthy();
+    expect(claims[0].EvidenceCapturedAt).toEqual(expect.any(String));
   });
 
   it('allocates 30 and 40 from two SAP storage units for a 70-unit issue', async () => {

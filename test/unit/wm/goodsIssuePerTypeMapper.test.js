@@ -34,6 +34,19 @@ describe('261 mapper', () => {
     expect(item(p).CostCenter).toBeUndefined();
     expect(item(p).IssuingOrReceivingPlant).toBeUndefined();
   });
+  test('does not send server/client SU identifiers or allocation as SAP item properties', () => {
+    const suPayload = M261.mapToMaterialDocumentPayload({
+      ...base,
+      Material: '1000001002',
+      ReservationNo: '518023',
+      ReservationItem: '0001',
+      StorageUnits: ['SU-001'],
+      _allocatedSuItems: [{ storageUnit: 'SU-001', issuedQty: 1 }]
+    });
+    expect(JSON.stringify(suPayload)).not.toContain('SU-001');
+    expect(item(suPayload).StorageUnit).toBeUndefined();
+    expect(item(suPayload).HandlingUnit).toBeUndefined();
+  });
 });
 
 describe.each([

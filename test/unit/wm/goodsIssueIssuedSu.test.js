@@ -45,6 +45,50 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
     await GoodsIssueIssuedSuStore.clear();
   });
 
+  it('persists the final SAP SU snapshot on the posting claim before it is promoted', async () => {
+    const ids = await GoodsIssueIssuedSuStore.acquireClaims({
+      reservationNo: '0000100201',
+      reservationItem: '0001',
+      referenceDocument: 'GI-AUDIT-0001',
+      material: 'CH-AUDIT-01',
+      plant: '1120',
+      storageLocation: 'CS01',
+      items: [{ storageUnit: 'SU-AUDIT-01', issuedQty: 7.5, preIssueStock: 12 }]
+    });
+
+    await GoodsIssueIssuedSuStore.updateClaimEvidence('GI-AUDIT-0001', [{
+      storageUnit: 'SU-AUDIT-01',
+      batch: 'BATCH-01',
+      warehouse: 'W01',
+      storageType: 'IP1',
+      storageBin: '0000001234',
+      multipleBatches: false
+    }]);
+
+    let [claim] = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-AUDIT-01', '1120', 'CS01');
+    expect(claim).toMatchObject({
+      ReferenceDocument: 'GI-AUDIT-0001',
+      StorageUnit: 'SU-AUDIT-01',
+      IssuedQty: 7.5,
+      PreIssueStock: 12,
+      Batch: 'BATCH-01',
+      Warehouse: 'W01',
+      StorageType: 'IP1',
+      StorageBin: '0000001234',
+      MultipleBatches: false,
+      Status: 'claiming'
+    });
+    expect(claim.EvidenceCapturedAt).toBeTruthy();
+
+    await GoodsIssueIssuedSuStore.promoteClaims(ids, {
+      materialDocument: '4900012345',
+      materialDocYear: '2026'
+    });
+    [claim] = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-AUDIT-01', '1120', 'CS01');
+    expect(claim).toMatchObject({ Status: 'issued', MaterialDocument: '4900012345', MaterialDocYear: '2026' });
+    expect(claim.EvidenceCapturedAt).toBeTruthy();
+  });
+
   // ──────────────────────────────────────────────────────────
   // Test 1: Two reservations cannot claim the same drum
   // ──────────────────────────────────────────────────────────

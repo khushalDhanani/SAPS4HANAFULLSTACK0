@@ -473,7 +473,12 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       allocatedSuItems.push({
         storageUnit: suId,
         issuedQty: avail,
-        preIssueStock: fullStock
+        preIssueStock: fullStock,
+        batch: su.Batch || '',
+        warehouse: su.Warehouse || '',
+        storageType: su.StorageType || '',
+        storageBin: su.StorageBin || '',
+        multipleBatches: su.MultipleBatches === true
       });
     } else {
       // avail > needed: this SU is chosen by the server to take the partial
@@ -484,7 +489,12 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       allocatedSuItems.push({
         storageUnit: suId,
         issuedQty: needed,
-        preIssueStock: fullStock
+        preIssueStock: fullStock,
+        batch: su.Batch || '',
+        warehouse: su.Warehouse || '',
+        storageType: su.StorageType || '',
+        storageBin: su.StorageBin || '',
+        multipleBatches: su.MultipleBatches === true
       });
       break;
     }
@@ -658,6 +668,13 @@ async function storageUnitFinalReconcileCheck261(req, normalized) {
       req.error(409, `Storage Unit ${storageUnit} batch assignment changed or is ambiguous in SAP. Goods Issue was NOT posted.`);
       return false;
     }
+    if (!sameCode(allocation.batch, current.Batch) ||
+        (allocation.warehouse && !sameCode(allocation.warehouse, current.Warehouse)) ||
+        (allocation.storageType && !sameCode(allocation.storageType, current.StorageType)) ||
+        (allocation.storageBin && !sameCode(allocation.storageBin, current.StorageBin))) {
+      req.error(409, `Storage Unit ${storageUnit} physical stock identity changed before posting. Goods Issue was NOT posted.`);
+      return false;
+    }
     if (current.StatusState === 'Error') {
       req.error(409, `Storage Unit ${storageUnit} batch is no longer issuable in SAP. Goods Issue was NOT posted.`);
       return false;
@@ -673,6 +690,21 @@ async function storageUnitFinalReconcileCheck261(req, normalized) {
       req.error(409, `Storage Unit ${storageUnit} warehouse changed in SAP. Goods Issue was NOT posted.`);
       return false;
     }
+
+    Object.assign(allocation, {
+      batch: current.Batch || '',
+      warehouse: current.Warehouse || '',
+      storageType: current.StorageType || '',
+      storageBin: current.StorageBin || '',
+      multipleBatches: current.MultipleBatches === true
+    });
+  }
+  try {
+    await GoodsIssueIssuedSuStore.updateClaimEvidence(normalized.ReferenceDocument, allocatedItems);
+  } catch (err) {
+    LOG.error(`Could not persist final SU audit evidence for posting ${normalized.ReferenceDocument}:`, err.message || err);
+    req.error(503, `Goods Issue was NOT sent to SAP: final Storage Unit audit evidence could not be persisted (${err.message || 'store unavailable'}).`);
+    return false;
   }
   return true;
 }
