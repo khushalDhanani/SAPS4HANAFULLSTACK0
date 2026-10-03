@@ -461,10 +461,19 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Plant           : String(4);
         StorageLocation : String(4);
         Batch           : String(10);
-        Warehouse       : String(20);
-        StockUnits      : array of StockUnitListItem;
-        ExcludedCount   : Integer;
-        Message         : String(500);
+        Warehouse               : String(20);
+        StockUnits              : array of StockUnitListItem;
+        ExcludedCount           : Integer;
+        Message                 : String(500);
+        StagedQty               : Decimal(13, 3);
+        RequiredQty             : Decimal(13, 3);
+        PlannedUnconfirmedQty   : Decimal(13, 3);
+        TargetStorageType       : String(3);
+        TargetStorageBin        : String(10);
+        TransferRequirement     : String(10);
+        StagingResolutionSource : String(20);
+        IsStagingRequired       : Boolean;
+        IsFullyStaged           : Boolean;
     };
 
     // Storage Units valid for exactly one reservation line (material/plant/sloc/batch, issuable stock only).

@@ -10,7 +10,11 @@ const wmKey = (v) => {
   return WM_KEY_RE.test(s) ? s : '';
 };
 const WM_QUANT_FIELDS = ['LGNUM', 'LENUM', 'LQNUM', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BESTQ', 'SOBKZ',
-  'VERME', 'MEINS', 'LGTYP', 'LGPLA', 'SKZUA', 'SKZSA', 'SKZSI', 'WDATU'];
+  'VERME', 'EINME', 'MEINS', 'LGTYP', 'LGPLA', 'SKZUA', 'SKZSA', 'SKZSI', 'WDATU'];
+
+// General storage type exclusion lists (Requirement 4)
+const EXCLUDED_STORAGE_TYPES = ['OH1', 'QC1', 'RJ1'];
+const EXCLUDED_STORAGE_TYPE_PREFIXES = ['9', 'QC', 'RJ'];
 const wmAlphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const wmSapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
 /** RFC_READ_TABLE quantity -> number (last separator is the decimal point). */
@@ -623,8 +627,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   }
 
   /**
-   * All WM quants of material/plant/sloc in ANY warehouse. The warehouse is taken from the stock itself:
-   * T320 is not reliable here (live: 1120/HS01 -> W01 in T320, but its quants sit in W13).
+   * All WM quants of material/plant/sloc in ANY warehouse. The warehouse is taken from the stock itself.
    */
   async _wmQuants(material, plant, sloc) {
     const m = wmKey(material);
@@ -634,21 +637,38 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const where = [`MATNR = '${matnr}'`, `AND WERKS = '${w}'`];
     if (wmKey(sloc)) where.push(`AND LGORT = '${wmKey(sloc)}'`);
     const rows = await this.rfc.readTable('LQUA', WM_QUANT_FIELDS, where);
-    return rows.map((q) => ({ ...q, VERME: wmNum(q.VERME) }));
+    return rows.map((q) => ({ ...q, VERME: wmNum(q.VERME), EINME: wmNum(q.EINME) }));
   }
 
   /**
    * Why a quant cannot be issued for this reservation line ('' = issuable).
    * Rules: positive available stock, unrestricted (BESTQ blank), no special stock, no removal/inventory
    * block, reservation batch (if fixed) must match, and the batch must be usable (unexpired, unrestricted).
+   * Requirement 4: Config list exclusions (OH1, EN1, QC/RJ types, other orders' staging bins).
    */
-  _wmQuantRejection(q, resvBatch, usableBatchMap) {
+  _wmQuantRejection(q, resvBatch, usableBatchMap, ctx = {}) {
     if (!(q.VERME > 0)) return 'no available stock';
-    if (/^9/.test(q.LGTYP || '')) return `interim storage type ${q.LGTYP}`;
+    if (EXCLUDED_STORAGE_TYPES.includes(q.LGTYP)) return `storage type ${q.LGTYP} is excluded`;
+    if (EXCLUDED_STORAGE_TYPE_PREFIXES.some((p) => (q.LGTYP || '').startsWith(p))) {
+      return `interim/excluded storage type ${q.LGTYP}`;
+    }
     if (q.BESTQ) return `stock category ${q.BESTQ} (not unrestricted)`;
     if (q.SOBKZ) return `special stock ${q.SOBKZ}`;
     if (q.SKZUA || q.SKZSA) return 'blocked for stock removal';
     if (q.SKZSI) return 'blocked for inventory';
+
+    // Exclude other orders' dynamic staging bins (Requirement 4)
+    const isStagingType = /^(IP\d|PR\d)/i.test(q.LGTYP || '') || (ctx.targetType && q.LGTYP === ctx.targetType);
+    const isOrderBin = /^\d{10}$/.test(q.LGPLA || '');
+    if (isStagingType && isOrderBin) {
+      const allowedOrder = ctx.currentOrder ? String(ctx.currentOrder).trim().padStart(10, '0') : '';
+      const allowedBin = ctx.targetBin ? String(ctx.targetBin).trim().padStart(10, '0') : '';
+      const binPadded = String(q.LGPLA || '').trim().padStart(10, '0');
+      if (allowedOrder && binPadded !== allowedOrder && (!allowedBin || binPadded !== allowedBin)) {
+        return `staged for another order (${q.LGPLA})`;
+      }
+    }
+
     if (resvBatch && q.CHARG !== resvBatch) return `batch ${q.CHARG || '(none)'} differs from reservation batch ${resvBatch}`;
     if (q.CHARG && usableBatchMap) {
       const b = usableBatchMap.get(q.CHARG.toUpperCase());
@@ -656,6 +676,138 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       if (b.StatusState === 'Error') return `batch ${q.CHARG} is expired`;
     }
     return '';
+  }
+
+  /**
+   * Check if plant + storage location is WM-managed via T320.
+   * Requirement 1: item is WM-managed when T320 has an entry for plant+SLoc.
+   */
+  async _detectWmManaged(plant, sloc) {
+    if (!plant || !sloc || !this.rfc || typeof this.rfc.readTable !== 'function') {
+      return { isWm: false, warehouse: '' };
+    }
+    try {
+      const p = wmKey(plant);
+      const l = wmKey(sloc);
+      const rows = await this.rfc.readTable('T320', ['WERKS', 'LGORT', 'LGNUM'], [`WERKS = '${p}'`, `AND LGORT = '${l}'`], 1);
+      if (Array.isArray(rows) && rows.length > 0 && rows[0].LGNUM) {
+        return { isWm: true, warehouse: String(rows[0].LGNUM).trim() };
+      }
+    } catch (err) {
+      LOG.warn(`T320 check failed for ${plant}/${sloc}:`, err.message || err);
+    }
+    return { isWm: false, warehouse: '' };
+  }
+
+  /**
+   * Resolves staging requirements for a WM reservation item (RESB, TR, PKHD, Order fallback).
+   * Requirement 2: Read target type and bin from TR item (LTBK/LTBP) or control cycle (PKHD).
+   * Order-number bin rule used only as fallback. Never hardcode IP1 or the bin.
+   */
+  async _resolveStagingRequirement(reservationNo, reservationItem, plant, sloc, material, orderNo = '', warehouse = '') {
+    const sResv = String(reservationNo).trim();
+    const sItem = String(reservationItem).trim().padStart(4, '0');
+    const resvPadded = sResv.padStart(10, '0');
+
+    let resbRow = null;
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const rows = await this.rfc.readTable(
+          'RESB',
+          ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'AUFNR', 'LGTYP', 'PRVBE'],
+          [`RSNUM = '${resvPadded}'`, `AND RSPOS = '${sItem}'`],
+          1
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          resbRow = rows[0];
+        }
+      } catch (err) {
+        LOG.warn(`RESB read failed for reservation ${sResv} item ${sItem}:`, err.message || err);
+      }
+    }
+
+    const resbLgtyp = resbRow && resbRow.LGTYP ? String(resbRow.LGTYP).trim() : '';
+    if (!resbLgtyp) {
+      return { isStagingRequired: false };
+    }
+
+    const order = (resbRow && resbRow.AUFNR ? String(resbRow.AUFNR).trim() : '') || String(orderNo || '').trim();
+    const orderPadded = order ? order.padStart(10, '0') : '';
+    const prvbe = resbRow && resbRow.PRVBE ? String(resbRow.PRVBE).trim() : '';
+    const bdmng = resbRow ? wmNum(resbRow.BDMNG) : 0;
+    const enmng = resbRow ? wmNum(resbRow.ENMNG) : 0;
+    const reqQty = Math.max(0, bdmng - enmng);
+    const uom = (resbRow && resbRow.MEINS ? String(resbRow.MEINS).trim() : '') || 'KG';
+
+    let targetType = resbLgtyp;
+    let targetBin = '';
+    let tbnum = '';
+    let stagingSource = '';
+
+    // Step A: Check TR item (LTBK / LTBP)
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const trWhere = [];
+        if (warehouse) {
+          trWhere.push(`LGNUM = '${wmKey(warehouse)}'`);
+        }
+        if (orderPadded) {
+          trWhere.push(`${trWhere.length ? 'AND ' : ''}BENUM = '${orderPadded}'`);
+        }
+        const ltbkRows = await this.rfc.readTable('LTBK', ['TBNUM', 'LGNUM', 'BWLVS', 'BENUM', 'BETYP', 'NLTYP', 'NLPLA'], trWhere, 5);
+        if (Array.isArray(ltbkRows) && ltbkRows.length > 0) {
+          const mvt319 = ltbkRows.find((r) => r.BWLVS === '319') || ltbkRows[0];
+          tbnum = String(mvt319.TBNUM || '').trim();
+          if (mvt319.NLTYP && mvt319.NLPLA) {
+            targetType = String(mvt319.NLTYP).trim();
+            targetBin = String(mvt319.NLPLA).trim();
+            stagingSource = 'TR';
+          }
+        }
+      } catch (err) {
+        LOG.warn(`LTBK read failed for order ${order}:`, err.message || err);
+      }
+    }
+
+    // Step B: Check Control Cycle (PKHD)
+    if (!targetBin && this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const pkhdWhere = [`WERKS = '${wmKey(plant)}'`];
+        if (prvbe) pkhdWhere.push(`AND PRVBE = '${wmKey(prvbe)}'`);
+        const pkhdRows = await this.rfc.readTable('PKHD', ['MATNR', 'WERKS', 'PRVBE', 'LGNUM', 'LGTYP', 'LGPLA', 'BERKZ', 'NKDYN'], pkhdWhere, 1);
+        if (Array.isArray(pkhdRows) && pkhdRows.length > 0) {
+          const pk = pkhdRows[0];
+          if (pk.LGTYP) targetType = String(pk.LGTYP).trim();
+          if (pk.LGPLA) {
+            targetBin = String(pk.LGPLA).trim();
+            stagingSource = 'PKHD';
+          } else if (pk.NKDYN === 'X' && (pk.BERKZ === '1' || pk.BERKZ === '2' || pk.BERKZ === '3' || pk.BERKZ === '4')) {
+            targetBin = orderPadded;
+            stagingSource = 'PKHD';
+          }
+        }
+      } catch (err) {
+        LOG.warn(`PKHD read failed for plant ${plant} supply area ${prvbe}:`, err.message || err);
+      }
+    }
+
+    // Step C: Fallback Order-number bin rule
+    if (!targetBin && orderPadded) {
+      targetBin = orderPadded;
+      stagingSource = 'FALLBACK_ORDER';
+    }
+
+    return {
+      isStagingRequired: true,
+      targetType,
+      targetBin,
+      tbnum,
+      stagingSource,
+      order,
+      orderPadded,
+      requiredQty: reqQty,
+      uom
+    };
   }
 
   /** Group issuable quants per Storage Unit (FEFO, then oldest GR date). */
@@ -752,12 +904,45 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       })()
     ]);
 
-    const suQuants = quants.filter((q) => q.LENUM);
-    const issuable = suQuants.filter((q) => !this._wmQuantRejection(q, resvBatch, usableMap));
+    const warehouses = [...new Set(quants.map((q) => q.LGNUM).filter(Boolean))];
+    const wmInfo = warehouses.length > 0
+      ? { isWm: true, warehouse: warehouses[0] }
+      : await this._detectWmManaged(plant, sloc);
+    let staging = { isStagingRequired: false };
+    if (wmInfo.isWm) {
+      staging = await this._resolveStagingRequirement(sResv, sItem, plant, sloc, material, resvItem.OrderID || resvItem.OrderNo, wmInfo.warehouse);
+    }
+
+    // Requirement 3: If staging is required, staged stock = LQUA rows in that type+bin with VERME > 0,
+    // no BESTQ, no SOBKZ, no SKZUA/SKZSA/SKZSI. Ignore EINME. Suggest and validate SUs from staged stock only.
+    let eligibleQuants = quants;
+    let stagedQty = 0;
+    let plannedUnconfirmedQty = 0;
+    const requiredQty = staging.requiredQty != null && staging.requiredQty > 0
+      ? staging.requiredQty
+      : (resvItem.ResvnItmRequiredQtyInBaseUnit != null
+        ? Math.max(0, Number(resvItem.ResvnItmRequiredQtyInBaseUnit) - Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0))
+        : (Number(resvItem.OpenQty) || 0));
+    const uom = staging.uom || resvItem.BaseUnit || 'KG';
+
+    if (staging.isStagingRequired && staging.targetType && staging.targetBin) {
+      const typeBinQuants = quants.filter((q) => q.LGTYP === staging.targetType && q.LGPLA === staging.targetBin);
+      const stagedQuants = typeBinQuants.filter((q) => q.VERME > 0 && !q.BESTQ && !q.SOBKZ && !q.SKZUA && !q.SKZSA && !q.SKZSI);
+      stagedQty = Math.round(stagedQuants.reduce((sum, q) => sum + (Number(q.VERME) || 0), 0) * 1000) / 1000;
+      plannedUnconfirmedQty = Math.round(typeBinQuants.reduce((sum, q) => sum + (Number(q.EINME) || 0), 0) * 1000) / 1000;
+
+      // Suggest SUs from staged stock ONLY
+      eligibleQuants = stagedQuants;
+    }
+
+    const suQuants = eligibleQuants.filter((q) => q.LENUM);
+    const issuable = suQuants.filter((q) => !this._wmQuantRejection(q, resvBatch, usableMap, {
+      targetType: staging.targetType,
+      targetBin: staging.targetBin,
+      currentOrder: staging.order
+    }));
     const rawStockUnits = this._wmGroupStockUnits(issuable, usableMap);
 
-    // Effective claim at read time = max(0, claimed - (preIssueStock - currentStock)),
-    // so a confirmed TO is not double-counted (Requirement 5).
     let excludedUnconfirmedCount = 0;
     const stockUnits = [];
 
@@ -781,11 +966,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       if (totalEffectiveClaim > 0) {
         const netStock = Math.round((currentStock - totalEffectiveClaim) * 1000) / 1000;
         if (netStock <= 0) {
-          // Drop SUs at 0
           excludedUnconfirmedCount++;
           continue;
         }
-        // Show reduced qty for partials
         su.AvailableStock = netStock;
         su.PreIssueStock = currentStock;
         su.IssuedPendingToQty = totalEffectiveClaim;
@@ -795,13 +978,24 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     }
 
     const shown = new Set(stockUnits.map((s) => s.StorageUnit));
-    const excludedCount = new Set(suQuants.filter((q) => !shown.has(wmAlphaOut(q.LENUM))).map((q) => q.LENUM)).size;
-    const warehouses = [...new Set(quants.map((q) => q.LGNUM).filter(Boolean))];
+    const allCandidateSu = quants.filter((q) => q.LENUM);
+    const excludedCount = new Set(allCandidateSu.filter((q) => !shown.has(wmAlphaOut(q.LENUM))).map((q) => q.LENUM)).size;
 
     let message = '';
-    if (!stockUnits.length) {
-      // Issuable stock that is NOT on a Storage Unit (bin stock) — say so instead of a bare "nothing found".
-      const loose = quants.filter((q) => !q.LENUM && !this._wmQuantRejection(q, resvBatch, usableMap));
+    const isFullyStaged = !staging.isStagingRequired || stagedQty >= requiredQty;
+
+    // Requirement 5: If staged qty < required: block Complete, and return 400 before calling SAP with:
+    // "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
+    // Show planned-but-unconfirmed quantity (EINME) separately as "TO created, not confirmed".
+    if (staging.isStagingRequired && stagedQty < requiredQty) {
+      let shortfall = `Only ${stagedQty} of ${requiredQty} ${uom} staged in ${staging.targetType}/${staging.targetBin}.`;
+      if (plannedUnconfirmedQty > 0) {
+        shortfall += ` (${plannedUnconfirmedQty} ${uom} TO created, not confirmed).`;
+      }
+      shortfall += ` Transfer requirement ${staging.tbnum || ''} needs a confirmed transfer order (LT04/LT12) first.`;
+      message = shortfall.trim();
+    } else if (!stockUnits.length) {
+      const loose = quants.filter((q) => !q.LENUM && !this._wmQuantRejection(q, resvBatch, usableMap, { targetType: staging.targetType, targetBin: staging.targetBin, currentOrder: staging.order }));
       const where = `material ${material} in plant ${plant} / storage location ${sloc}` + (resvBatch ? ` / batch ${resvBatch}` : '');
       if (excludedUnconfirmedCount > 0) {
         message = `All matching Storage Units for ${where} are currently pending Transfer Order confirmation.`;
@@ -818,12 +1012,91 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
 
     return {
       ...base,
-      Warehouse: warehouses.join(','),
+      Warehouse: wmInfo.warehouse || warehouses.join(','),
       StockUnits: stockUnits,
       ExcludedCount: excludedCount,
       ExcludedUnconfirmedCount: excludedUnconfirmedCount,
-      Message: message
+      Message: message,
+      StagedQty: stagedQty,
+      RequiredQty: requiredQty,
+      PlannedUnconfirmedQty: plannedUnconfirmedQty,
+      TargetStorageType: staging.targetType || '',
+      TargetStorageBin: staging.targetBin || '',
+      TransferRequirement: staging.tbnum || '',
+      StagingResolutionSource: staging.stagingSource || '',
+      IsStagingRequired: !!staging.isStagingRequired,
+      IsFullyStaged: isFullyStaged
     };
+  }
+
+  /**
+   * Check staging for a reservation (single item or all open items).
+   * Requirement 5: If staged qty < required: block Complete, and return 400 before calling SAP with:
+   * "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
+   * Show planned-but-unconfirmed quantity (EINME) separately as "TO created, not confirmed".
+   * Multiple items in one reservation: check each.
+   */
+  async checkStagingForReservation(reservationNo, reservationItem = null) {
+    const sResv = String(reservationNo || '').trim();
+    if (!sResv) return { isStaged: true };
+
+    const resvPadded = sResv.padStart(10, '0');
+    let itemsToCheck = [];
+
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const where = [`RSNUM = '${resvPadded}'`, `AND XLOEK = ''`, `AND KZEAR = ''`];
+        if (reservationItem) {
+          where.push(`AND RSPOS = '${String(reservationItem).trim().padStart(4, '0')}'`);
+        }
+        const resbRows = await this.rfc.readTable(
+          'RESB',
+          ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'AUFNR', 'LGTYP', 'PRVBE'],
+          where,
+          50
+        );
+        if (Array.isArray(resbRows) && resbRows.length > 0) {
+          itemsToCheck = resbRows;
+        }
+      } catch (err) {
+        LOG.warn(`RESB check failed for reservation ${sResv}:`, err.message || err);
+      }
+    }
+
+    if (itemsToCheck.length === 0) {
+      if (!reservationItem) return { isStaged: true };
+      try {
+        const suResult = await this.listStockUnitsForReservationItem(sResv, reservationItem);
+        if (suResult && suResult.IsStagingRequired && !suResult.IsFullyStaged) {
+          return { isStaged: false, error: suResult.Message, details: suResult };
+        }
+      } catch (e) {
+        LOG.warn(`listStockUnitsForReservationItem fallback check failed:`, e.message || e);
+      }
+      return { isStaged: true };
+    }
+
+    for (const item of itemsToCheck) {
+      const plant = String(item.WERKS || '').trim();
+      const sloc = String(item.LGORT || '').trim();
+      const lgtyp = String(item.LGTYP || '').trim();
+      if (!lgtyp) continue; // non-staging item
+
+      const wmInfo = await this._detectWmManaged(plant, sloc);
+      if (!wmInfo.isWm) continue; // non-WM item
+
+      const suResult = await this.listStockUnitsForReservationItem(sResv, item.RSPOS);
+      if (suResult && suResult.IsStagingRequired && !suResult.IsFullyStaged) {
+        return {
+          isStaged: false,
+          error: suResult.Message,
+          details: suResult,
+          failedItem: item.RSPOS
+        };
+      }
+    }
+
+    return { isStaged: true };
   }
 
   /**
@@ -838,7 +1111,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     let quants = [];
     try {
       const rows = await this.rfc.readTable('LQUA', WM_QUANT_FIELDS, [`LENUM = '${lenumIn}'`]);
-      quants = rows.map((q) => ({ ...q, VERME: wmNum(q.VERME) }));
+      quants = rows.map((q) => ({ ...q, VERME: wmNum(q.VERME), EINME: wmNum(q.EINME) }));
     } catch (err) {
       LOG.warn(`WM SU lookup skipped (LQUA read failed): ${err.message}`);
       return null;
@@ -857,9 +1130,27 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       err.status = 409;
       throw err;
     }
-    const issuable = sameLine.filter((q) => !this._wmQuantRejection(q, ctx.resvBatch, usableMap));
+
+    // Validate staging type and bin (Requirement 3: Suggest and validate SUs from staged stock only)
+    if (ctx.isStagingRequired && ctx.targetType && ctx.targetBin) {
+      const stagedQuant = sameLine.find((q) => q.LGTYP === ctx.targetType && q.LGPLA === ctx.targetBin);
+      if (!stagedQuant) {
+        const q0 = sameLine[0];
+        const err = new Error(
+          `Storage Unit ${suLabel} is located in ${q0.LGTYP}/${q0.LGPLA}, but reservation item requires staged stock in ${ctx.targetType}/${ctx.targetBin}. Goods Issue is blocked.`
+        );
+        err.status = 409;
+        throw err;
+      }
+    }
+
+    const issuable = sameLine.filter((q) => !this._wmQuantRejection(q, ctx.resvBatch, usableMap, {
+      targetType: ctx.targetType,
+      targetBin: ctx.targetBin,
+      currentOrder: ctx.order
+    }));
     if (!issuable.length) {
-      const err = new Error(`Storage Unit ${suLabel} cannot be issued: ${this._wmQuantRejection(sameLine[0], ctx.resvBatch, usableMap)}.`);
+      const err = new Error(`Storage Unit ${suLabel} cannot be issued: ${this._wmQuantRejection(sameLine[0], ctx.resvBatch, usableMap, { targetType: ctx.targetType, targetBin: ctx.targetBin, currentOrder: ctx.order })}.`);
       err.status = 409;
       throw err;
     }
@@ -1105,9 +1396,18 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     // ──────────────────────────────────────────────────────────
     // STEP 3C: Classic WM Storage Unit (LQUA.LENUM) — the SU type used in warehouse W01.
     // ──────────────────────────────────────────────────────────
+    let stagingInfo = { isStagingRequired: false };
+    const wmManaged = await this._detectWmManaged(resvPlant, resvSLoc);
+    if (wmManaged.isWm) {
+      stagingInfo = await this._resolveStagingRequirement(sResv, sItem, resvPlant, resvSLoc, resvMaterial, resvItem.OrderID || resvItem.OrderNo, wmManaged.warehouse);
+    }
     const wm = await this._resolveWmStockUnit(sSu, {
       sResv, sItem, material: resvMaterial, plant: resvPlant, sloc: resvSLoc,
-      resvBatch: String(resvItem.Batch || '').trim().toUpperCase(), usableBatches
+      resvBatch: String(resvItem.Batch || '').trim().toUpperCase(), usableBatches,
+      isStagingRequired: stagingInfo.isStagingRequired,
+      targetType: stagingInfo.targetType,
+      targetBin: stagingInfo.targetBin,
+      order: stagingInfo.order
     });
     if (wm) {
       const { su } = wm;

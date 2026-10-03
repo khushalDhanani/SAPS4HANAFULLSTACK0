@@ -127,6 +127,18 @@ sap.ui.define([
             oModel.setProperty("/excludedUnconfirmedCount", 0);
             oModel.setProperty("/lastScanState", "None");
             oModel.setProperty("/lastScanText", "");
+            oModel.setProperty("/isStagingRequired", false);
+            oModel.setProperty("/targetStorageType", "");
+            oModel.setProperty("/targetStorageBin", "");
+            oModel.setProperty("/stagedQty", 0);
+            oModel.setProperty("/requiredStagingQty", 0);
+            oModel.setProperty("/plannedUnconfirmedQty", 0);
+            oModel.setProperty("/stagingStatusBadge", "");
+            oModel.setProperty("/stagingStatusState", "None");
+            oModel.setProperty("/stagingWarning", "");
+            oModel.setProperty("/transferRequirement", "");
+            oModel.setProperty("/canCompleteStaging", true);
+            oModel.setProperty("/plannedUnconfirmedNote", "");
             if (!sResv || !sItem) {
                 return;
             }
@@ -140,6 +152,51 @@ sap.ui.define([
                         oModel.setProperty("/excludedUnconfirmedNote", sExcludedNote);
                     } else {
                         oModel.setProperty("/excludedUnconfirmedNote", "");
+                    }
+
+                    var bStagingRequired = Boolean(oData && oData.IsStagingRequired);
+                    var nStagedQty = (oData && Number(oData.StagedQty)) || 0;
+                    var nRequiredQty = (oData && Number(oData.RequiredQty)) || (nOpenQty > 0 ? nOpenQty : 0);
+                    var nPlannedUnconfirmedQty = (oData && Number(oData.PlannedUnconfirmedQty)) || 0;
+                    var sTargetType = (oData && oData.TargetStorageType) || "";
+                    var sTargetBin = (oData && oData.TargetStorageBin) || "";
+                    var sTbnum = (oData && oData.TransferRequirement) || "";
+                    var bIsFullyStaged = Boolean(oData && oData.IsFullyStaged);
+
+                    var sStagingStatus = "Not Staged";
+                    var sStagingState = "Error";
+                    if (bIsFullyStaged || (!bStagingRequired && nStagedQty >= nRequiredQty)) {
+                        sStagingStatus = "Staged";
+                        sStagingState = "Success";
+                    } else if (nStagedQty > 0) {
+                        sStagingStatus = "Partially Staged";
+                        sStagingState = "Warning";
+                    }
+
+                    var sStagingWarning = "";
+                    var bCanComplete = true;
+                    if (bStagingRequired && !bIsFullyStaged) {
+                        bCanComplete = false;
+                        var sUom = oModel.getProperty("/unit") || "PC";
+                        var sBinLocation = sTargetType ? sTargetType + "/" + sTargetBin : sTargetBin;
+                        sStagingWarning = "Only " + nStagedQty + " of " + nRequiredQty + " " + sUom + " staged in " + sBinLocation + ". Transfer requirement " + (sTbnum || "N/A") + " needs a confirmed transfer order (LT04/LT12) first.";
+                    }
+
+                    oModel.setProperty("/isStagingRequired", bStagingRequired);
+                    oModel.setProperty("/targetStorageType", sTargetType);
+                    oModel.setProperty("/targetStorageBin", sTargetBin);
+                    oModel.setProperty("/stagedQty", nStagedQty);
+                    oModel.setProperty("/requiredStagingQty", nRequiredQty);
+                    oModel.setProperty("/plannedUnconfirmedQty", nPlannedUnconfirmedQty);
+                    oModel.setProperty("/stagingStatusBadge", sStagingStatus);
+                    oModel.setProperty("/stagingStatusState", sStagingState);
+                    oModel.setProperty("/stagingWarning", sStagingWarning);
+                    oModel.setProperty("/transferRequirement", sTbnum);
+                    oModel.setProperty("/canCompleteStaging", bCanComplete);
+                    if (nPlannedUnconfirmedQty > 0) {
+                        oModel.setProperty("/plannedUnconfirmedNote", nPlannedUnconfirmedQty + " " + (oModel.getProperty("/unit") || "PC") + " (TO created, not confirmed)");
+                    } else {
+                        oModel.setProperty("/plannedUnconfirmedNote", "");
                     }
 
                     if (aUnits.length > 0) {
@@ -651,6 +708,11 @@ sap.ui.define([
             }
             if (!sPlant) {
                 MessageBox.error(this.getText("gi261PlantRequired"));
+                return;
+            }
+
+            if (oData && oData.isStagingRequired && !oData.canCompleteStaging) {
+                MessageBox.error(oData.stagingWarning || "Staged stock is insufficient for Goods Issue.");
                 return;
             }
 

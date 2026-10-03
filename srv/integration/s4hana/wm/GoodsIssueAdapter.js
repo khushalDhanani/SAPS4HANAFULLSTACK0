@@ -10,7 +10,8 @@ const {
   GoodsIssueBatchesClient,
   GoodsIssueStockUnitClient,
   GoodsIssuePostingClient,
-  GoodsIssueDashboardClient
+  GoodsIssueDashboardClient,
+  GoodsIssuePhase6StagingClient
 } = require('./goods-issue');
 
 /**
@@ -39,9 +40,10 @@ class GoodsIssueAdapter {
     this.issuedSuStore = options.issuedSuStore || null;
 
     // Instantiate domain clients
+    this.stagingClient = new GoodsIssuePhase6StagingClient({ adapter: this, client: this.client, rfc: options.rfc });
     this.batches = new GoodsIssueBatchesClient({ adapter: this, client: this.client });
     this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches });
-    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, issuedSuStore: this.issuedSuStore });
+    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, issuedSuStore: this.issuedSuStore, stagingClient: this.stagingClient });
     this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches });
     this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, rfc: options.rfc });
   }
@@ -518,6 +520,17 @@ class GoodsIssueAdapter {
   /** Storage Units valid for one reservation line (classic WM LQUA). */
   async listStockUnitsForReservationItem(reservationNo, reservationItem) {
     return this.stockUnits.listStockUnitsForReservationItem(reservationNo, reservationItem);
+  }
+
+  /** Check WM staging for reservation before posting */
+  async checkStagingForReservation(reservationNo, reservationItem) {
+    if (this.stagingClient && typeof this.stagingClient.getStagingForReservation === 'function') {
+      return this.stagingClient.getStagingForReservation(reservationNo, reservationItem);
+    }
+    if (this.stockUnits && typeof this.stockUnits.checkStagingForReservation === 'function') {
+      return this.stockUnits.checkStagingForReservation(reservationNo, reservationItem);
+    }
+    return { isStaged: true };
   }
 
   /**

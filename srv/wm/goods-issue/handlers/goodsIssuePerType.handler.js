@@ -499,6 +499,22 @@ async function checkPendingConfirmation(req, normalized) {
   return true;
 }
 
+async function stagingCheck(req, normalized) {
+  const sResv = String(normalized?.ReservationNo || '').trim();
+  const sItem = String(normalized?.ReservationItem || '').trim();
+  if (!sResv || !sItem) return true;
+  try {
+    const staging = await GoodsIssueAdapter.checkStagingForReservation(sResv, sItem);
+    if (staging && !staging.isStaged) {
+      req.error(400, staging.error || 'Staged stock is insufficient for goods issue.');
+      return false;
+    }
+  } catch (err) {
+    LOG.warn(`stagingCheck failed for reservation ${sResv} item ${sItem}:`, err.message || err);
+  }
+  return true;
+}
+
 /**
  * Posts directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
  * No queue, no stored transaction for later replay.
@@ -653,6 +669,7 @@ const PerTypeGoodsIssueHandler = {
       const resvItem = await reservationReconcileCheck(req, normalized);
       if (!resvItem) return;
       if (!(await checkPendingConfirmation(req, normalized))) return;
+      if (!(await stagingCheck(req, normalized))) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       if (!(await serialPreCheck(req, normalized))) return;
 

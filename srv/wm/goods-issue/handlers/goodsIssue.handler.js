@@ -189,6 +189,17 @@ class GoodsIssueHandler {
         return req.error(400, 'At least one item must be specified for submission');
       }
 
+      if (ReservationNo) {
+        try {
+          const staging = await GoodsIssueAdapter.checkStagingForReservation(ReservationNo);
+          if (staging && !staging.isStaged) {
+            return req.error(400, staging.error || 'Staged stock is insufficient for Goods Issue.');
+          }
+        } catch (err) {
+          LOG.warn(`submitGoodsIssueRequest staging check failed: ${err.message || err}`);
+        }
+      }
+
       try {
         const batchResult = await GoodsIssueAdapter.submitGoodsIssueRequest(
           ReservationNo,
