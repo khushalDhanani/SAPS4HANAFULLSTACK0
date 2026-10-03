@@ -1,6 +1,41 @@
 
 # Changes Log
 
+## 2026-10-03 13:12 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 12 — ensure WM `EINME` planned/unconfirmed quantity cannot count as issuable staging stock.
+- **Plan**: Inspect the staging quantity aggregation and tests. Keep `VERME` as the sole available quantity source and `EINME` diagnostic-only; add a targeted regression where planned quantity would cover the shortfall but confirmed quantity does not. Run the staging tests, relevant direct 261 gate test, lint, and diff validation. No live SAP posting.
+- **Current Status**: In Progress — source currently accumulates `VERME` into `stagedQty` and separately reports `EINME` as planned/unconfirmed; add an acceptance-level test proving `EINME` cannot satisfy required quantity.
+- **Files Changed**: `WORKSTATUS.md` for this plan entry.
+- **Reason**: A 261 issue must not pass staging validation based on transfer-order planned quantity that has not been confirmed.
+- **Validation**: Pending regression test and checks.
+- **Errors / Warnings / Blockers**: No live SAP POST planned. Chunk 11 process-specific WM target confirmation remains unresolved.
+- **Next Steps**: Add the `VERME`/`EINME` acceptance regression, run targeted tests and checks, then record the results and status.
+
+## 2026-10-03 13:13 IST
+- **Agent**: Copilot
+- **Change**: Added a regression where `VERME=4`, `EINME=20`, and the required issue quantity is 10; the assertion requires rejection based on 4 available units while reporting 20 planned/unconfirmed.
+- **Files Changed**: `test/unit/wm/goodsIssueStagingPhase6.test.js`, `WORKSTATUS.md`.
+- **Reason**: Lock the actual 261 acceptance behavior so future aggregation changes cannot count `EINME` toward available stock.
+- **Validation**: Focused test and lint pending.
+- **Errors / Warnings / Blockers**: No live SAP POST. Chunk 11 process-specific WM target confirmation remains unresolved.
+- **Next Steps**: Run the targeted staging suite and direct staging-validation regression, then record the verified result.
+
+## 2026-10-03 13:14 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 12 — verify `VERME` versus `EINME` availability semantics.
+- **Change**: The staging implementation already accumulates confirmed `VERME` into available `stagedQty` and records `EINME` separately as `plannedUnconfirmedQty`; no runtime implementation change was needed. Added the missing acceptance regression proving a row with 4 `VERME`, 20 `EINME`, and a required quantity of 10 remains unstaged and reports planned/unconfirmed quantity only as diagnostic information.
+- **Current Status**: Chunk 12 complete — `EINME` cannot satisfy the server-side 261 staging availability check. Chunk 11 remains in progress/blocked on SAP process confirmation of blank `RESB.LGTYP` semantics and live reservation-specific staging-target precedence.
+- **Files Changed**: `test/unit/wm/goodsIssueStagingPhase6.test.js`, `WORKSTATUS.md`.
+- **Reason**: Prevent a regression from treating planned/unconfirmed transfer quantity as confirmed issuable stock.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssue261StagingValidation.test.js --runInBand --silent`: passed, 2 suites / 19 tests.
+  - ESLint on `GoodsIssuePhase6StagingClient.js` and `goodsIssueStagingPhase6.test.js`: passed with no reported errors or warnings.
+  - `git diff --check`: passed.
+  - Source check confirmed `plannedUnconfirmedQty += wmNum(row.EINME)` and `stagedQty += wmNum(row.VERME)` are separate.
+- **Errors / Warnings / Blockers**: No live SAP POST or live reservation read was performed. Existing Chunk 11 SAP WM process confirmation remains outstanding.
+- **Next Steps**: No additional code change is required for Chunk 12. Continue with Chunk 11’s read-only SAP/process-owner confirmation before relying on the staging gate for production 261 postings.
+
 ## 2026-10-03 13:10 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 11 — authoritative WM staging validation across direct and multi-line posting paths.
