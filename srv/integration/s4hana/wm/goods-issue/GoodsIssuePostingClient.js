@@ -155,11 +155,37 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /** @private Batch SLED hard-stop + destination resolution. Transport only. */
-  async _preflightPosting(data) {
+  async _preflightPosting(data, { strictBatchValidation = false } = {}) {
     const effectiveBatch = data.Batch ? String(data.Batch).trim() : '';
     if (effectiveBatch) {
       let valResult = { valid: true };
-      if (this.adapter && typeof this.adapter.validateBatch === 'function') {
+      if (strictBatchValidation) {
+        const hasPostingContext = Boolean(data.Plant && data.StorageLocation);
+        const validator = hasPostingContext
+          ? (this.adapter && typeof this.adapter.validateBatchForPosting === 'function'
+            ? this.adapter.validateBatchForPosting.bind(this.adapter)
+            : (this.batchesClient && typeof this.batchesClient.validateBatchForPosting === 'function'
+              ? this.batchesClient.validateBatchForPosting.bind(this.batchesClient)
+              : null))
+          : (this.adapter && typeof this.adapter.validateBatch === 'function'
+            ? this.adapter.validateBatch.bind(this.adapter)
+            : (this.batchesClient && typeof this.batchesClient.validateBatch === 'function'
+              ? this.batchesClient.validateBatch.bind(this.batchesClient)
+              : null));
+        if (!validator) {
+          const err = new Error(`SAP batch/SLED validation is unavailable for batch ${effectiveBatch}. Posting blocked.`);
+          err.status = 500;
+          throw err;
+        }
+        valResult = hasPostingContext
+          ? await validator(data.Material, data.Plant, data.StorageLocation, effectiveBatch, data.IssueQty, data.Unit)
+          : await validator(data.Material, effectiveBatch, data.Plant);
+        if (!valResult || valResult.valid !== true) {
+          const err = new Error(valResult?.reason || `Batch ${effectiveBatch} is not valid for posting.`);
+          err.status = valResult?.status || 422;
+          throw err;
+        }
+      } else if (this.adapter && typeof this.adapter.validateBatch === 'function') {
         valResult = await this.adapter.validateBatch(data.Material, effectiveBatch);
       } else if (this.batchesClient && typeof this.batchesClient.validateBatch === 'function') {
         valResult = await this.batchesClient.validateBatch(data.Material, effectiveBatch);
@@ -654,7 +680,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       throw err;
     }
     this._assertPostable(data);
-    await this._preflightPosting(data);
+    await this._preflightPosting(data, { strictBatchValidation: true });
 
     // Unplanned (no reservation, but order is provided): bypass Tier 1 reservation-keyed RAP service
     // and route directly to Tier 2 standard API_MATERIAL_DOCUMENT_SRV.

@@ -1,6 +1,24 @@
 
 # Changes Log
 
+## 2026-10-03 11:39 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 4 — Expiry / SLED Validation.
+- **Plan**: Preserve committed Chunk 2/3 behavior. Close the lower-level 261 posting-client gap: its generic preflight currently calls only `validateBatch`, although the CAP handler calls the stricter SAP-backed posting validator. Make strict batch/SLED validation mandatory for every supplied batch before a 261 SAP POST, keep non-261 posting behavior unchanged, and add tests proving expired/non-issuable SAP results block the post.
+- **Current Status**: Complete — 261 posting-client preflight now requires SAP-backed SLED/batch validation before posting a supplied batch; it uses the strict plant/storage-location/quantity validator when full posting context is present and the SAP batch/SLED validator for legacy requests without that context.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `test/unit/wm/goodsIssuePerTypePostingClient.test.js`, `test/unit/wm/goodsIssue261BatchValidation.test.js`, `WORKSTATUS.md`.
+- **Reason**: Direct calls into `GoodsIssuePostingClient.post261` could use only the generic SLED validator even when full plant/storage-location context was available, bypassing the CAP handler's stricter stock/SLED check.
+- **Validation**:
+  - Initial targeted run `npx jest test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssue261BatchValidation.test.js test/unit/wm/goodsIssueClients.test.js --runInBand`: failed with 5 fixture compatibility failures; revised fallback now handles legacy calls that do not supply plant/storage-location context.
+  - Rerun of the same targeted command: passed, 3 suites / 93 tests.
+  - `npx jest test/unit/wm --runInBand`: passed, 52 suites / 1,031 tests.
+  - `npx eslint srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssue261BatchValidation.test.js`: passed with 0 errors and 3 unused-variable warnings (`documentDate`, `reversalReason`, `path`).
+  - `npx cds compile srv`: passed.
+  - `git diff --check` and `git diff --cached --check`: passed; rerun after this final work-log update.
+  - Controlled tests verified an expired SAP batch-master `ShelfLifeExpirationDate` is rejected even when unrestricted stock is positive, and that a failed strict SLED result prevents `post261` from issuing any SAP POST.
+- **Errors / Warnings / Blockers**: The initial targeted test failure was resolved as documented above. ESLint reports 3 unused-variable warnings (`documentDate`, `reversalReason`, `path`); no lint errors. No live SAP posting was performed. Existing read-only SAP evidence for `LO_BM_BATCH_SRV/I_Batch` and its `ShelfLifeExpirationDate` contract is recorded in Chunk 3 above; this chunk's expiry tests used controlled SAP response fixtures.
+- **Next Steps**: Ready for user review or the next independently scoped Goods Issue chunk; no live SAP write is part of this validation-only change.
+
 ## 2026-10-03 11:05 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 3 — Batch Validation.

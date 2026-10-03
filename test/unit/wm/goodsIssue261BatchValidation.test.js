@@ -250,6 +250,35 @@ describe('SAP batch stock validation for posting', () => {
       .rejects.toMatchObject({ status: 502, message: expect.stringContaining('cannot verify conversion') });
   });
 
+  test('rejects an expired SAP batch-master SLED date even when unrestricted stock is positive', async () => {
+    const adapter = {
+      _get: jest.fn((path) => {
+        if (path.includes('I_Batch')) {
+          return Promise.resolve([{
+            Batch: 'EXPIRED01',
+            ShelfLifeExpirationDate: '/Date(1577836800000)/',
+            Plant: '1120'
+          }]);
+        }
+        if (path.includes('MaterialMultiStockByDates')) {
+          return Promise.resolve([{
+            Batch: 'EXPIRED01',
+            CurrentStock: '25',
+            BaseUnit: 'KG',
+            StorageLocation: 'CS01'
+          }]);
+        }
+        return Promise.resolve([]);
+      }),
+      _enrichBatchStatus: (date) => GoodsIssueAdapter._enrichBatchStatus(date),
+      _formatDate: (date) => GoodsIssueAdapter._formatDate(date)
+    };
+    const client = new GoodsIssueBatchesClient({ adapter });
+
+    await expect(client.validateBatchForPosting('1000000204', '1120', 'CS01', 'EXPIRED01', 1, 'KG'))
+      .resolves.toMatchObject({ valid: false, status: 422, reason: expect.stringContaining('expired') });
+  });
+
   test('does not count special stock or stock segments as available batch stock', async () => {
     const adapter = {
       _get: jest.fn((path) => {

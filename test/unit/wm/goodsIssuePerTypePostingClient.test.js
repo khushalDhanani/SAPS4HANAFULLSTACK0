@@ -57,6 +57,43 @@ test('post261 → falls back to standard API when RAP yields no document', async
   expect(calls[1].body.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
 });
 
+test('post261 → rejects an expired batch before any SAP POST', async () => {
+  const adapter = {
+    validateBatch: jest.fn().mockResolvedValue({ valid: true }),
+    validateBatchForPosting: jest.fn().mockResolvedValue({
+      valid: false,
+      status: 422,
+      reason: 'Batch EXPIRED01 has expired. Posting blocked.'
+    })
+  };
+  const client = new GoodsIssuePostingClient({ adapter });
+  client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+  client._post = jest.fn();
+
+  await expect(client.post261({
+    ...base,
+    MovementType: '261',
+    Material: '1000001002',
+    ReservationNo: '518023',
+    ReservationItem: '0001',
+    Batch: 'EXPIRED01'
+  })).rejects.toMatchObject({
+    status: 422,
+    message: expect.stringContaining('has expired')
+  });
+
+  expect(adapter.validateBatchForPosting).toHaveBeenCalledWith(
+    '1000001002',
+    '1130',
+    'CS02',
+    'EXPIRED01',
+    1,
+    'KG'
+  );
+  expect(adapter.validateBatch).not.toHaveBeenCalled();
+  expect(client._post).not.toHaveBeenCalled();
+});
+
 test.each([['301', '04'], ['311', '04']])('post%s → standard API with receiving, movement %s', async (type, gm) => {
   const { client, calls } = makeClient();
   // Feed 201/261 exclusive fields too, to prove they never leak into a transfer payload.
