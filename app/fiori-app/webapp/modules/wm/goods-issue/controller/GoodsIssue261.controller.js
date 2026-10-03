@@ -201,6 +201,7 @@ sap.ui.define([
             oModel.setProperty("/targetStorageType", "");
             oModel.setProperty("/targetStorageBin", "");
             oModel.setProperty("/stagedQty", 0);
+            oModel.setProperty("/stagedQtyDisplay", "");
             oModel.setProperty("/requiredStagingQty", 0);
             oModel.setProperty("/plannedUnconfirmedQty", 0);
             oModel.setProperty("/stagingStatusBadge", "");
@@ -225,9 +226,10 @@ sap.ui.define([
                     }
 
                     var bStagingRequired = Boolean(oData && oData.IsStagingRequired);
-                    var nStagedQty = (oData && Number(oData.StagedQty)) || 0;
+                    var bStagingUnknown = Boolean(oData && oData.StagingStatus === "UNKNOWN");
+                    var nStagedQty = bStagingUnknown ? null : ((oData && Number(oData.StagedQty)) || 0);
                     var nRequiredQty = (oData && Number(oData.RequiredQty)) || (nOpenQty > 0 ? nOpenQty : 0);
-                    var nPlannedUnconfirmedQty = (oData && Number(oData.PlannedUnconfirmedQty)) || 0;
+                    var nPlannedUnconfirmedQty = bStagingUnknown ? null : ((oData && Number(oData.PlannedUnconfirmedQty)) || 0);
                     var sTargetType = (oData && oData.TargetStorageType) || "";
                     var sTargetBin = (oData && oData.TargetStorageBin) || "";
                     var sTbnum = (oData && oData.TransferRequirement) || "";
@@ -235,19 +237,21 @@ sap.ui.define([
                     var sWarehouse = (oData && oData.Warehouse) || "";
                     var bIsFullyStaged = Boolean(oData && oData.IsFullyStaged);
 
-                    var sStagingStatus = "Not Staged";
-                    var sStagingState = "Error";
-                    if (bIsFullyStaged || (!bStagingRequired && nStagedQty >= nRequiredQty)) {
+                    var sStagingStatus = bStagingUnknown ? that.getText("gi261StagingUnknown") : "Not Staged";
+                    var sStagingState = bStagingUnknown ? "Information" : "Error";
+                    if (!bStagingUnknown && (bIsFullyStaged || (!bStagingRequired && nStagedQty >= nRequiredQty))) {
                         sStagingStatus = "Staged";
                         sStagingState = "Success";
-                    } else if (nStagedQty > 0) {
+                    } else if (!bStagingUnknown && nStagedQty > 0) {
                         sStagingStatus = "Partially Staged";
                         sStagingState = "Warning";
                     }
 
                     var sStagingWarning = "";
-                    var bCanComplete = true;
-                    if (bStagingRequired && !bIsFullyStaged) {
+                    var bCanComplete = !bStagingUnknown;
+                    if (bStagingUnknown) {
+                        sStagingWarning = (oData && oData.Message) || that.getText("gi261StagingDestinationUnknown");
+                    } else if (bStagingRequired && !bIsFullyStaged) {
                         bCanComplete = false;
                         var sUom = oModel.getProperty("/unit") || "PC";
                         var sBinLocation = (sWarehouse ? sWarehouse + "/" : "") + (sTargetType ? sTargetType + "/" + sTargetBin : sTargetBin);
@@ -265,9 +269,11 @@ sap.ui.define([
                     }
 
                     oModel.setProperty("/isStagingRequired", bStagingRequired);
+                    oModel.setProperty("/stagingStatus", bStagingUnknown ? "UNKNOWN" : (oData && oData.StagingStatus) || "");
                     oModel.setProperty("/targetStorageType", sTargetType);
                     oModel.setProperty("/targetStorageBin", sTargetBin);
                     oModel.setProperty("/stagedQty", nStagedQty);
+                    oModel.setProperty("/stagedQtyDisplay", bStagingUnknown ? that.getText("gi261StagingUnknown") : (nStagedQty + " / " + nRequiredQty + " " + (oModel.getProperty("/unit") || "PC")));
                     oModel.setProperty("/requiredStagingQty", nRequiredQty);
                     oModel.setProperty("/plannedUnconfirmedQty", nPlannedUnconfirmedQty);
                     oModel.setProperty("/stagingStatusBadge", sStagingStatus);

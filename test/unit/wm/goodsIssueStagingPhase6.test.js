@@ -100,6 +100,20 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.targetBin).toBe('STAGE-01');
     });
 
+    it('returns UNKNOWN without staged quantity when the LQUA read fails', async () => {
+      const rfc = mockRfc({ LQUA: () => { throw new Error('SAP RFC error AD 718'); } });
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc });
+      const res = await client.checkStaging({
+        material: '1000000867', plant: '1000', sloc: '1100', warehouse: 'W01',
+        targetType: 'IP1', targetBin: 'SAP-BIN', requiredQty: 40, uom: 'KG'
+      });
+
+      expect(res).toMatchObject({ isVerified: false, isStaged: false, stagingStatus: 'UNKNOWN' });
+      expect(res.error).toContain('LQUA read failed: SAP RFC error AD 718');
+      expect(res).not.toHaveProperty('stagedQty');
+      expect(res).not.toHaveProperty('plannedUnconfirmedQty');
+    });
+
     it('blocks and returns requirement 5 error message when staged qty < required qty', async () => {
       const rfc = mockRfc({
         LQUA: [
@@ -271,7 +285,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res).toMatchObject({ isVerified: true, isStaged: true, requiredQty: 4, uom: 'KG' });
     });
 
-    it('derives the dynamic staging bin only from the matching SAP control-cycle flags', async () => {
+    it('returns UNKNOWN for a dynamic target rather than deriving it from order number', async () => {
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
         rfc: mockRfc({
@@ -287,13 +301,15 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       )).resolves.toMatchObject({
         isWm: true,
         targetType: '100',
-        targetBin: '0000001001',
+        targetBin: '',
+        status: 'UNKNOWN',
         stagingSource: 'PKHD_DYNAMIC_BIN',
-        warehouse: 'W01'
+        warehouse: 'W01',
+        error: 'Cannot verify staging: transfer destination not readable (DA 131).'
       });
     });
 
-    it('normalizes a 12-character SAP order number to the 10-character WM dynamic bin', async () => {
+    it('returns UNKNOWN instead of deriving a dynamic bin from a 12-character SAP order number', async () => {
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
         rfc: mockRfc({
@@ -306,31 +322,65 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
 
       await expect(client.findStagingTarget(
         '1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '000001002599', 'IP1'
-      )).resolves.toMatchObject({ targetBin: '0001002599', stagingSource: 'PKHD_DYNAMIC_BIN' });
+      )).resolves.toMatchObject({
+        status: 'UNKNOWN', targetBin: '', stagingSource: 'PKHD_DYNAMIC_BIN',
+        error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+      });
     });
 
-    it('keeps a 10-digit order number as a 10-character dynamic bin', async () => {
+    it('returns UNKNOWN instead of deriving a dynamic bin from a 10-digit order number', async () => {
       const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
         PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X' }]
       }) });
       await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '1234567890', 'IP1'))
-        .resolves.toMatchObject({ targetBin: '1234567890', stagingSource: 'PKHD_DYNAMIC_BIN' });
+        .resolves.toMatchObject({
+          status: 'UNKNOWN', targetBin: '', stagingSource: 'PKHD_DYNAMIC_BIN',
+          error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+        });
     });
 
-    it('does not derive a dynamic bin from a nonnumeric order number', async () => {
+    it('returns UNKNOWN for a dynamic-bin reservation with a nonnumeric order number', async () => {
       const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
         PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X' }]
       }) });
       await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', 'ORDER-99', 'IP1'))
-        .resolves.toMatchObject({ stagingSource: 'PKHD_UNRESOLVED', targetBin: '' });
+        .resolves.toMatchObject({
+          status: 'UNKNOWN', stagingSource: 'PKHD_DYNAMIC_BIN', targetBin: '',
+          error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+        });
     });
 
-    it('does not truncate an order number with more than 10 significant digits', async () => {
+    it('returns UNKNOWN for a dynamic-bin reservation with an overlong order number', async () => {
       const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
         PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X' }]
       }) });
       await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '123456789012', 'IP1'))
-        .resolves.toMatchObject({ stagingSource: 'PKHD_UNRESOLVED', targetBin: '' });
+        .resolves.toMatchObject({
+          status: 'UNKNOWN', stagingSource: 'PKHD_DYNAMIC_BIN', targetBin: '',
+          error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+        });
+    });
+
+    it('does not read LQUA or report zero staged when a dynamic target is unknown', async () => {
+      const rfc = mockRfc({
+        T320: [{ LGNUM: 'W01', WERKS: '1000', LGORT: '1100' }],
+        PKHD: [{
+          MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01',
+          LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X'
+        }]
+      });
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc });
+      const result = await client.checkStaging({
+        material: '1000000867', plant: '1000', sloc: '1100', warehouse: 'W01',
+        requiredQty: 10, uom: 'KG', resNo: '519366', resItem: '1', orderNo: '000001002599'
+      });
+
+      expect(result).toMatchObject({
+        isVerified: false, isStaged: false, stagingStatus: 'UNKNOWN',
+        targetBin: '', error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+      });
+      expect(result).not.toHaveProperty('stagedQty');
+      expect(rfc.readTable.mock.calls.some(([table]) => table === 'LQUA')).toBe(false);
     });
 
     it('uses an explicit bin unchanged for another storage type with a different bin length', async () => {

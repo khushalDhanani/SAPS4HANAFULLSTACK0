@@ -16,12 +16,6 @@ const WM_QUANT_FIELDS = ['LGNUM', 'LENUM', 'LQNUM', 'MATNR', 'WERKS', 'LGORT', '
 const EXCLUDED_STORAGE_TYPES = ['OH1', 'QC1', 'RJ1'];
 const EXCLUDED_STORAGE_TYPE_PREFIXES = ['9', 'QC', 'RJ'];
 const wmAlphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
-const wmOrderBin = (v) => {
-  const order = String(v ?? '').trim();
-  if (!/^\d+$/.test(order)) return '';
-  const significantDigits = order.replace(/^0+/, '') || '0';
-  return significantDigits.length <= 10 ? significantDigits.padStart(10, '0') : '';
-};
 const wmSapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
 /** RFC_READ_TABLE quantity -> number (last separator is the decimal point). */
 function wmNum(v) {
@@ -680,14 +674,13 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     if (q.SKZUA || q.SKZSA) return 'blocked for stock removal';
     if (q.SKZSI) return 'blocked for inventory';
 
-    // Exclude other orders' dynamic staging bins (Requirement 4)
+    // Exclude other dynamic staging bins only when SAP supplied a verified target bin.
     const isStagingType = /^(IP\d|PR\d)/i.test(q.LGTYP || '') || (ctx.targetType && q.LGTYP === ctx.targetType);
     const isOrderBin = /^\d{10}$/.test(q.LGPLA || '');
-    if (isStagingType && isOrderBin) {
-      const allowedOrder = wmOrderBin(ctx.currentOrder);
+    if (isStagingType && isOrderBin && ctx.targetBin) {
       const allowedBin = String(ctx.targetBin || '').trim();
       const bin = String(q.LGPLA || '').trim();
-      if (allowedOrder && bin !== allowedOrder && (!allowedBin || bin !== allowedBin)) {
+      if (bin !== allowedBin) {
         return `staged for another order (${q.LGPLA})`;
       }
     }
@@ -707,7 +700,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    */
   async _detectWmManaged(plant, sloc) {
     if (!plant || !sloc || !this.rfc || typeof this.rfc.readTable !== 'function') {
-      return { isWm: false, warehouse: '' };
+      return { isWm: false, warehouse: '', status: 'UNKNOWN', error: 'T320 read unavailable' };
     }
     try {
       const p = wmKey(plant);
@@ -718,6 +711,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       }
     } catch (err) {
       LOG.warn(`T320 check failed for ${plant}/${sloc}:`, err.message || err);
+      return { isWm: false, warehouse: '', status: 'UNKNOWN', error: `T320 read failed: ${err.message || err}` };
     }
     return { isWm: false, warehouse: '' };
   }
@@ -768,7 +762,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     }
 
     const order = String(resbRow.AUFNR || orderNo || '').trim();
-    const orderPadded = order ? wmOrderBin(order) : '';
     const reqQty = Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG));
     const uom = String(resbRow.MEINS || '').trim() || 'KG';
     const sapMaterial = String(resbRow.MATNR || '').replace(/^0+/, '') || material;
@@ -795,6 +788,21 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       );
       stagingSource = target.stagingSource;
     }
+    if (target.status === 'UNKNOWN') {
+      return {
+        isStagingRequired: true,
+        stagingStatus: 'UNKNOWN',
+        targetType: target.targetType || resbLgtyp,
+        targetBin: '',
+        warehouse: String(warehouse || '').trim(),
+        tbnum: transfer.tbnum || '',
+        transferRequirementStatus: transfer.status || 'UNKNOWN',
+        stagingSource: target.stagingSource || stagingSource,
+        requiredQty: reqQty,
+        uom,
+        error: target.error || 'Cannot verify staging: transfer destination not readable (DA 131).'
+      };
+    }
     if (!target.targetType || !target.targetBin) {
       const err = new Error(target.error || `SAP staging target could not be resolved for reservation ${sResv} item ${sItem}.`);
       err.status = 502;
@@ -810,7 +818,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       transferRequirementStatus: transfer.status || 'UNKNOWN',
       stagingSource,
       order,
-      orderPadded,
       requiredQty: reqQty,
       uom
     };
@@ -890,11 +897,11 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       return { ...base, Warehouse: '', StockUnits: [], ExcludedCount: 0, Message: `Reservation item has no storage location; Storage Units cannot be determined.` };
     }
 
+    let quantReadError = null;
     const [quants, usableMap, activeClaims] = await Promise.all([
       this._wmQuants(material, plant, sloc).catch((err) => {
-        const e = new Error(`Could not read WM stock (LQUA) for material ${material}: ${err.message}`);
-        e.status = err.status || 502;
-        throw e;
+        quantReadError = err;
+        return [];
       }),
       this._usableBatchMap(material, plant, sloc),
       (async () => {
@@ -914,13 +921,69 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       })()
     ]);
 
+    if (quantReadError) {
+      return {
+        ...base,
+        Warehouse: '',
+        StockUnits: [],
+        ExcludedCount: 0,
+        Message: `Cannot verify staging: LQUA read failed: ${quantReadError.message || quantReadError}`,
+        StagingStatus: 'UNKNOWN',
+        IsStagingRequired: true,
+        IsFullyStaged: false
+      };
+    }
+
     const warehouses = [...new Set(quants.map((q) => q.LGNUM).filter(Boolean))];
     const wmInfo = warehouses.length > 0
       ? { isWm: true, warehouse: warehouses[0] }
       : await this._detectWmManaged(plant, sloc);
+    if (wmInfo.status === 'UNKNOWN') {
+      return {
+        ...base,
+        Warehouse: '',
+        StockUnits: [],
+        ExcludedCount: 0,
+        Message: `Cannot verify staging: ${wmInfo.error}`,
+        StagingStatus: 'UNKNOWN',
+        IsStagingRequired: true,
+        IsFullyStaged: false
+      };
+    }
     let staging = { isStagingRequired: false };
     if (wmInfo.isWm) {
-      staging = await this._resolveStagingRequirement(sResv, sItem, plant, sloc, material, resvItem.OrderID || resvItem.OrderNo, wmInfo.warehouse);
+      try {
+        staging = await this._resolveStagingRequirement(sResv, sItem, plant, sloc, material, resvItem.OrderID || resvItem.OrderNo, wmInfo.warehouse);
+      } catch (err) {
+        return {
+          ...base,
+          Warehouse: wmInfo.warehouse,
+          StockUnits: [],
+          ExcludedCount: 0,
+          Message: `Cannot verify staging: ${err.message || err}`,
+          StagingStatus: 'UNKNOWN',
+          IsStagingRequired: true,
+          IsFullyStaged: false
+        };
+      }
+    }
+    if (staging.stagingStatus === 'UNKNOWN') {
+      return {
+        ...base,
+        Warehouse: staging.warehouse || wmInfo.warehouse,
+        StockUnits: [],
+        ExcludedCount: 0,
+        Message: staging.error || 'Cannot verify staging: transfer destination not readable (DA 131).',
+        RequiredQty: staging.requiredQty,
+        TargetStorageType: staging.targetType || '',
+        TargetStorageBin: '',
+        TransferRequirement: staging.tbnum || '',
+        TransferRequirementStatus: staging.transferRequirementStatus || 'UNKNOWN',
+        StagingResolutionSource: staging.stagingSource || '',
+        StagingStatus: 'UNKNOWN',
+        IsStagingRequired: true,
+        IsFullyStaged: false
+      };
     }
 
     // Requirement 3: If staging is required, staged stock = LQUA rows in that type+bin with VERME > 0,
@@ -993,6 +1056,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
 
     let message = '';
     const isFullyStaged = !staging.isStagingRequired || stagedQty >= requiredQty;
+    const stagingStatus = !staging.isStagingRequired || isFullyStaged
+      ? 'OK'
+      : (plannedUnconfirmedQty > 0 ? 'IN_TRANSFER' : 'NOT_STAGED');
 
     // Requirement 5: If staged qty < required: block Complete, and return 400 before calling SAP with:
     // "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
@@ -1042,6 +1108,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       TransferRequirement: staging.tbnum || '',
       TransferRequirementStatus: staging.transferRequirementStatus || 'UNKNOWN',
       StagingResolutionSource: staging.stagingSource || '',
+      StagingStatus: stagingStatus,
       IsStagingRequired: !!staging.isStagingRequired,
       IsFullyStaged: isFullyStaged
     };
@@ -1418,6 +1485,11 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const wmManaged = await this._detectWmManaged(resvPlant, resvSLoc);
     if (wmManaged.isWm) {
       stagingInfo = await this._resolveStagingRequirement(sResv, sItem, resvPlant, resvSLoc, resvMaterial, resvItem.OrderID || resvItem.OrderNo, wmManaged.warehouse);
+    }
+    if (stagingInfo.stagingStatus === 'UNKNOWN') {
+      const err = new Error(stagingInfo.error || 'Cannot verify staging: transfer destination not readable (DA 131).');
+      err.status = 502;
+      throw err;
     }
     const wm = await this._resolveWmStockUnit(sSu, {
       sResv, sItem, material: resvMaterial, plant: resvPlant, sloc: resvSLoc,

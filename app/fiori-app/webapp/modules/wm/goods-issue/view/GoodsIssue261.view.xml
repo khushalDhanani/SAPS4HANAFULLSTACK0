@@ -335,7 +335,7 @@
                             <ObjectStatus
                                 id="osStagedQty261"
                                 title="{i18n>gi261StagedInBin}"
-                                text="{= ${gi261>/stagedQty} + ' / ' + ${gi261>/requiredStagingQty} + ' ' + ${gi261>/unit} }"
+                                text="{gi261>/stagedQtyDisplay}"
                                 state="{gi261>/stagingStatusState}"
                                 class="sapUiMediumMarginEnd" />
                             <ObjectStatus

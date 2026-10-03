@@ -5,12 +5,7 @@ function clean(v) {
   return String(v || '').trim();
 }
 
-function dynamicOrderBin(value) {
-  const order = clean(value);
-  if (!/^\d+$/.test(order)) return '';
-  const significantDigits = order.replace(/^0+/, '') || '0';
-  return significantDigits.length <= 10 ? significantDigits.padStart(10, '0') : '';
-}
+const UNKNOWN_DYNAMIC_BIN_MESSAGE = 'Cannot verify staging: transfer destination not readable (DA 131).';
 
 function wmAlphaIn(v) {
   const s = clean(v);
@@ -37,7 +32,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
   /**
    * Resolve target staging bin and storage type for a material / plant / sloc / warehouse.
    */
-  async findStagingTarget(material, plant, sloc, warehouse = '', psa = '', orderNo = '', targetType = '') {
+  async findStagingTarget(material, plant, sloc, warehouse = '', psa = '', _orderNo = '', targetType = '') {
     const sMat = clean(material);
     const sPlant = clean(plant);
     const sSloc = clean(sloc);
@@ -83,20 +78,14 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     const candidates = targetType && specificRows.some((row) => clean(row.LGTYP) === clean(targetType))
       ? specificRows.filter((row) => clean(row.LGTYP) === clean(targetType))
       : specificRows;
+    const dynamicRows = candidates.filter((row) =>
+      clean(row.LGTYP) && !clean(row.LGPLA) && clean(row.NKDYN).toUpperCase() === 'X'
+    );
     const targets = candidates.map((row) => {
       const configuredType = clean(row.LGTYP);
       const configuredBin = clean(row.LGPLA);
       if (configuredType && configuredBin) {
         return { targetType: configuredType, targetBin: configuredBin, stagingSource: 'PKHD_CONTROL_CYCLE', psa: clean(row.PRVBE) };
-      }
-      const orderBin = dynamicOrderBin(orderNo);
-      if (configuredType && clean(row.NKDYN).toUpperCase() === 'X' && ['1', '2', '3', '4'].includes(clean(row.BERKZ)) && orderBin) {
-        return {
-          targetType: configuredType,
-          targetBin: orderBin,
-          stagingSource: 'PKHD_DYNAMIC_BIN',
-          psa: clean(row.PRVBE)
-        };
       }
       return null;
     }).filter(Boolean);
@@ -105,6 +94,18 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       [`${target.targetType}|${target.targetBin}`, target]
     )).values()];
     if (uniqueTargets.length !== 1) {
+      if (uniqueTargets.length === 0 && dynamicRows.length > 0) {
+        const dynamicTypes = [...new Set(dynamicRows.map((row) => clean(row.LGTYP)))];
+        return {
+          isWm: true,
+          targetType: dynamicTypes.length === 1 ? dynamicTypes[0] : '',
+          targetBin: '',
+          status: 'UNKNOWN',
+          stagingSource: 'PKHD_DYNAMIC_BIN',
+          warehouse: sLgnum,
+          error: UNKNOWN_DYNAMIC_BIN_MESSAGE
+        };
+      }
       return {
         isWm: true,
         targetType: '',
@@ -226,7 +227,21 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     let transferRequirementStatus = sTbnum ? 'FOUND' : 'UNKNOWN';
 
     if (!sType || !sBin) {
-      const target = await this.findStagingTarget(sMat, sPlant, sSloc, sLgnum, psa, orderNo, sType);
+      let target;
+      try {
+        target = await this.findStagingTarget(sMat, sPlant, sSloc, sLgnum, psa, orderNo, sType);
+      } catch (err) {
+        return {
+          isVerified: false,
+          isStaged: false,
+          isStagingRequired: true,
+          stagingStatus: 'UNKNOWN',
+          targetType: sType,
+          targetBin: '',
+          warehouse: sLgnum,
+          error: `Cannot verify staging: SAP staging target read failed: ${err.message || err}`
+        };
+      }
       if (!target.isWm) {
         return {
           isVerified: true,
@@ -240,6 +255,18 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       sType = target.targetType;
       sBin = target.targetBin;
       sLgnum = target.warehouse;
+      if (target.status === 'UNKNOWN') {
+        return {
+          isVerified: false,
+          isStaged: false,
+          isStagingRequired: true,
+          stagingStatus: 'UNKNOWN',
+          targetType: sType,
+          targetBin: '',
+          warehouse: sLgnum,
+          error: target.error || UNKNOWN_DYNAMIC_BIN_MESSAGE
+        };
+      }
       if (!sType || !sBin) {
         return {
           isVerified: false,
@@ -272,11 +299,25 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       `AND WERKS = '${sPlant}'`,
       `AND LGORT = '${sSloc}'`
     ];
-    const lquaRows = await this.rfc.readTable(
-      'LQUA',
-      ['LGNUM', 'LGTYP', 'LGPLA', 'MATNR', 'WERKS', 'LGORT', 'VERME', 'EINME', 'MEINS', 'BESTQ', 'SOBKZ', 'SKZUA', 'SKZSA', 'SKZSI'],
-      where, 500
-    );
+    let lquaRows;
+    try {
+      lquaRows = await this.rfc.readTable(
+        'LQUA',
+        ['LGNUM', 'LGTYP', 'LGPLA', 'MATNR', 'WERKS', 'LGORT', 'VERME', 'EINME', 'MEINS', 'BESTQ', 'SOBKZ', 'SKZUA', 'SKZSA', 'SKZSI'],
+        where, 500
+      );
+    } catch (err) {
+      return {
+        isVerified: false,
+        isStaged: false,
+        isStagingRequired: true,
+        stagingStatus: 'UNKNOWN',
+        targetType: sType,
+        targetBin: sBin,
+        warehouse: sLgnum,
+        error: `Cannot verify staging: LQUA read failed: ${err.message || err}`
+      };
+    }
     for (const row of lquaRows || []) {
       if (
         clean(row.LGNUM) !== sLgnum || clean(row.LGTYP) !== sType || clean(row.LGPLA) !== sBin ||
@@ -324,6 +365,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       isStaged,
       isFullyStaged,
       isStagingRequired: true,
+      stagingStatus: isFullyStaged ? 'OK' : (plannedUnconfirmedQty > 0 ? 'IN_TRANSFER' : 'NOT_STAGED'),
       stagedQty,
       requiredQty: reqQty,
       plannedUnconfirmedQty,
@@ -477,6 +519,19 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         itemData.Psa, itemData.OrderNo, itemData.TargetType
       );
     if (!target.targetType || !target.targetBin) {
+      if (target.status === 'UNKNOWN') {
+        return {
+          isVerified: false,
+          isStaged: false,
+          isStagingRequired: true,
+          stagingStatus: 'UNKNOWN',
+          targetType: target.targetType || '',
+          targetBin: '',
+          warehouse,
+          transferRequirementStatus: transfer.status || 'UNKNOWN',
+          error: target.error || UNKNOWN_DYNAMIC_BIN_MESSAGE
+        };
+      }
       throw stagingError(target.error || `SAP staging target could not be resolved for reservation ${sResv} item ${sItem}.`);
     }
     return this.checkStaging({

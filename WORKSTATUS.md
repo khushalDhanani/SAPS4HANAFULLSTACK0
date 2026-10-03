@@ -1,6 +1,83 @@
 
 # Changes Log
 
+## 2026-10-03 11:45 UTC — In Progress: return UNKNOWN when staging reads fail
+- **Agent**: Codex
+- **Request**: Keep populated `PKHD-LGPLA` as the SAP target; classify plant 521608 as `NOT_WM_MANAGED` only if warehouse confirms IM-only; ensure SAP read failures return `UNKNOWN`, never zero.
+- **Plan**: Preserve direct SAP `PKHD-LGPLA` handling; convert failed `LQUA` staging reads and stock-unit quant reads into explicit `UNKNOWN` responses with no numeric staged quantity; add focused regressions; defer the no-T320 classification until warehouse confirmation arrives.
+- **Current Status**: Implemented and validated. Failed LQUA reads now produce `UNKNOWN` without staged quantities in Phase 6 and stock-unit list responses. A failed T320 read or staging-target resolution no longer falls through to a not-WM/zero-style result. Populated `PKHD-LGPLA` handling is unchanged and remains direct. `NOT_WM_MANAGED` for plant 521608 remains gated on warehouse confirmation.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, `test/unit/wm/goodsIssueStockUnitList.test.js`, and `WORKSTATUS.md`.
+- **Reason**: Failed SAP reads cannot be represented as empty result sets or zero staged stock; staging certainty must remain explicit.
+- **Validation**: Passed — `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssueStockUnitList.test.js --runInBand --silent` (2 suites / 43 tests); targeted ESLint (0 errors, 1 existing unused `checkErr` warning at `GoodsIssueStockUnitClient.js:629`); `git diff --check`.
+- **Errors / Warnings / Blockers**: Warehouse confirmation for 521608 as IM-only is pending. SAP reads of LTBP/LTAP remain AD 718 as recorded at 11:18 UTC; no live read is repeated in this change. No SAP system behavior was verified during this code change.
+- **Next Steps**: Obtain warehouse confirmation for plant 521608. Once confirmed, return `NOT_WM_MANAGED` for its verified no-T320 condition and skip staging; if not confirmed, retain current behavior. Then re-run the focused WM tests.
+
+## 2026-10-03 11:34 UTC — In Progress: expose UNKNOWN staging state to CAP and Fiori
+- **Agent**: Codex
+- **Request**: Show `UNKNOWN` and “Cannot verify staging: transfer destination not readable (DA 131).” for dynamic-bin reservation items.
+- **Plan**: Add a distinct StagingStatus field to the StockUnitList CAP response, render the unknown state/message in the 261 view, avoid displaying an unknown staged quantity as zero, and add controller/i18n regressions.
+- **Current Status**: CDS contract, controller, view, translations and tests are changed and validated. Dynamic-bin reservations now return `StagingStatus: UNKNOWN`, no derived destination or staged quantity, and the requested DA 131 message; posting/complete flows remain blocked for those reservations.
+- **Files Changed**: `srv/wm/goods-issue/service.cds`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`, both 261 i18n property bundles, `test/unit/wm/goodsIssue261Controller.test.js`, `test/unit/wm/goodsIssue261I18n.test.js`, and `WORKSTATUS.md`.
+- **Reason**: TransferRequirementStatus alone cannot represent staging-target certainty; the UI previously defaulted an absent staged quantity to zero and called it Not Staged.
+- **Validation**: Passed — focused Phase 6/stock-unit/controller/i18n suites (4 suites / 106 tests); full WM suite `npx jest test/unit/wm --runInBand --silent` (56 suites / 1,132 tests); `npx cds compile srv >/dev/null`; UI5 lint; UI5 build; targeted ESLint (0 errors); and `git diff --check`.
+- **Errors / Warnings / Blockers**: An initial focused Phase 6 run failed 2 legacy expectations; both were updated to assert UNKNOWN/no bin and the rerun passed. Full WM suite emitted existing missing-destination-binding warnings and Node's SQLite experimental warning. UI5 lint/build emitted non-fatal update-check permission warnings. ESLint reported one existing unused caught variable `checkErr` at `GoodsIssueStockUnitClient.js:629`. SAP item-level `LTBP`/`LTAP` reads remain blocked with AD 718 as recorded in the 11:18 UTC entry; no live SAP check was repeated for this code change.
+- **Next Steps**: Keep dynamic-bin reservations fail-closed until Basis provides a supported readable transfer destination. After that read path is verified, replace the temporary UNKNOWN response with the SAP-returned destination and add live-read evidence across reservation variants.
+
+## 2026-10-03 11:33 UTC — In Progress: remove stock-unit AUFNR bin derivation
+- **Agent**: Codex
+- **Request**: Remove the duplicate order-derived bin path and return UNKNOWN when the dynamic staging target is unreadable.
+- **Plan**: Delete the stock-unit bin normalizer and all current-order-derived bin comparisons; propagate target UNKNOWN as an explicit result with the exact message, without reporting staged quantities or returning eligible Storage Units; add a focused regression.
+- **Current Status**: Stock-unit resolver and regression are changed and the focused server suites pass. API schema/UI status handling is pending.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `test/unit/wm/goodsIssueStockUnitList.test.js`, and `WORKSTATUS.md`.
+- **Reason**: The stock-unit path must not independently manufacture or compare a target bin from AUFNR, and must not make unknown staging look like zero stock.
+- **Validation**: Passed — `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssueStockUnitList.test.js --runInBand --silent` (2 suites / 41 tests).
+- **Errors / Warnings / Blockers**: No test errors. UI currently needs the new explicit status field to avoid displaying unknown staging as zero.
+- **Next Steps**: Add `StagingStatus` to the CAP StockUnitList contract and display UNKNOWN/exact message in the 261 UI, then run focused controller and CDS validation.
+
+## 2026-10-03 11:31 UTC — In Progress: Phase 6 dynamic target fails closed
+- **Agent**: Codex
+- **Request**: Return UNKNOWN and the exact DA 131 message for dynamic-bin reservations; remove order-derived bin behavior.
+- **Plan**: Remove AUFNR-to-bin construction from the staging resolver, recognize dynamic PKHD rows without a configured destination as UNKNOWN, stop before LQUA, and update focused regression cases.
+- **Current Status**: Phase 6 resolver now returns UNKNOWN without an AUFNR-derived bin for dynamic PKHD targets; its focused suite passes. Stock-unit list/scan propagation, API contract, and UI display are still pending.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, and `WORKSTATUS.md`.
+- **Reason**: A dynamic-bin flag without a readable target must not produce a bin from AUFNR or be evaluated as zero staged.
+- **Validation**: Initial `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js --runInBand --silent` run failed (24/26); after the expectation correction, the same command passed (1 suite / 26 tests).
+- **Errors / Warnings / Blockers**: The initial assertion failure is resolved. Stock-unit propagation and UI contract validation remain pending.
+- **Next Steps**: Run the focused Phase 6 suite, record its result, then remove the duplicate stock-unit order-bin helper and propagate UNKNOWN through stock-unit/API/UI paths.
+
+## 2026-10-03 11:32 UTC — In Progress: align Phase 6 regressions with UNKNOWN response
+- **Agent**: Codex
+- **Request**: Correct test expectations exposed by the Phase 6 fail-closed resolver change.
+- **Plan**: Replace the remaining legacy derived-bin assertion with UNKNOWN/no-bin expectations and assert that staged quantity is omitted for an unknown destination; rerun the focused suite.
+- **Current Status**: Test correction passes.
+- **Files Changed**: `test/unit/wm/goodsIssueStagingPhase6.test.js` and `WORKSTATUS.md`.
+- **Reason**: The original assertion encoded the unsafe AUFNR-derived behavior; the unknown destination must not carry a quantity value.
+- **Validation**: Passed — `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js --runInBand --silent` (1 suite / 26 tests).
+- **Errors / Warnings / Blockers**: The initial legacy-bin assertion failed before correction; resolved by updating the expectation to UNKNOWN/no bin.
+- **Next Steps**: Remove the duplicate stock-unit order-bin helper and propagate UNKNOWN through stock-unit/API/UI paths.
+
+## 2026-10-03 11:18 UTC — Partially unblock 261 TR/TO reads; item-level read remains blocked
+- **Agent**: Codex
+- **Request**: Start the fix path by unblocking TR/TO reads for the RFC user and verify SAP object names before any later resolver implementation.
+- **Plan**: Inspect installed messaging connector availability; use SAP DDIC metadata to verify candidate table names/fields; test reservation-to-TR and TR-to-TO reads without writes; identify the remaining read-path failure for Basis/WM.
+- **Current Status**: SAP confirms active DDIC tables `LTBK`, `LTBP`, `LTAK`, and `LTAP`; `TBPE` and `TBPK` do not exist in this system. Read-only `RFC_READ_TABLE` by RESB number works on LTBK and returns TR destination fields `NLTYP/NLPLA`; reads by TBNUM work on LTAK and return TO headers. The four WM sample app candidates match LTBK-NLPLA and their RESB staging type matches an associated LTBK-NLTYP. Item-level LTBP and LTAP queries remain blocked with AD 718. No resolver code was changed. Basis/WM still needs to provide a supported item-level read path (prefer a narrowly scoped remote-enabled function/API) and clarify read authorization/AD 718.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: Direct live reads exposed the specific nonexistent table names behind DA 131 and a working header-level TR/TO path, while item-level data required to prove TO item linkage/confirmation remains unavailable.
+- **Validation / SAP Read**: DD02L verified active table entries for LTBK/LTBP/LTAK/LTAP and no entries for TBPE/TBPK. DD03L verified fields: LTBK includes RSNUM/TBNUM/NLTYP/NLPLA/STATU/BWLVS; LTBP includes TBNUM/TBPOS/RSNUM/RSPOS/TANUM; LTAK includes TANUM/TBNUM/RSNUM/KQUIT; LTAP includes TANUM/TBNUM/TBPOS/RSNUM/RSPOS/NLTYP/NLPLA/KZQUI/PQUIT. T100 live reads verified DA 131 text “Table & does not exist in the database” and AD 718 text “Table & does not contain data”. LTBK/LTAK reads: 521608/0001 no LTBK row; 521169/0001 -> TR 0001000738, destination 2FL/0001002790, TO 0001037159; 521128/0002 -> TRs 0001001747 (2FL/0001002797) and 0001001746 (1FL/0001002797), with LTAK headers; 521120/0005 -> TRs 0001001752 (1FL/0001002798) and 0001001753 (GFL/0001002798), with LTAK headers; 480960/0001 -> TRs 0001001144 and 0001001143, both destination IP1/0001002599, one LTAK header on 0001001143. Raw STATU/KQUIT values were not interpreted. LTBP queries by reservation/item and TBNUM, and LTAP queries by reservation/item and associated TANUM, returned AD 718. No SAP writes were performed. No connected Slack or Outlook connector was available; a connection suggestion was presented. `git diff --check` passed after this entry.
+- **Errors / Warnings / Blockers**: `RFC_READ_TABLE` on LTBP and LTAP still returns AD 718 even for TR/TO numbers with LTBK/LTAK headers. Whether this indicates no item rows, an RFC/table authorization restriction, or another system-specific condition is not verified. RFC username and SU53/ST01 evidence/missing authorization object remain not verified. The RFC function/API name and contract for a supported solution remain not verified.
+- **Next Steps**: Send the Basis/WM request (draft available in the assistant response) for a released API or narrow RFC that returns reservation item → TR item → TO item, destination storage type/bin, and explicitly defined status. Ask Basis to identify the RFC user, reproduce AD 718, and provide SU53/ST01 evidence. Then verify all reservation samples through that read path before proceeding to resolver/state changes.
+
+## 2026-10-03 11:14 UTC — Blocked: 261 staging resolver investigation across reservations
+- **Agent**: Codex
+- **Request**: Verify five open 261 reservations across plants, order shapes and storage types against SAP RESB, TR/TO destinations and LQUA before changing the staging-bin resolver; report DA 131 and AD 718 evidence.
+- **Plan**: Read repository status and current staging implementation; perform read-only SAP reads for open reservations, RESB, T320, PKHD and LQUA; complete the required five-row authoritative expected-bin comparison before implementing any code change.
+- **Current Status**: Investigation is incomplete and resolver changes are blocked by missing SAP evidence. Five reservations were read, but no authoritative expected bins could be established because every TBPE/TBPK lookup returned DA 131. PKHD rows indicate dynamic-bin configuration, but do not prove the generated destination. The five-row mismatch table is therefore not complete; no application code was changed.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: The requested order prohibits fixing the resolver before the comparison table is complete. Guessing expected bins from AUFNR or matching LQUA stock to the app's candidate would repeat the defect.
+- **Validation / SAP Read**: Read-only `getOpenReservations('261')` returned 454 raw rows, 380 with positive open quantity. Read-only RFC_READ_TABLE verified RESB items: 521608/0001 (plant 1110, no T320 mapping), 521169/0001 (1120, 2FL), 521128/0002 (1130, 2FL), 521120/0005 (1130, GFL), and 480960/0001 (1110, IP1). T320/PKHD and candidate-bin LQUA reads succeeded for WM rows; PKHD candidate bins were derived by current code from 12-character AUFNR field values with significant lengths 7. TBPE and TBPK each failed for all five reads with SAP `ID:DA Type:E Number:131`. Candidate LQUA: 521169 had 1500 KG VERME at the candidate; 521128 and 521120 had no matching quant; 480960 had 0 KG VERME and 378 KG EINME at the candidate. These LQUA results do not independently prove the intended destination. `git status --short` was clean before this WORKSTATUS update. `git diff --check` passed after the WORKSTATUS entry; no application tests were run because no application code was changed and implementation is blocked pending the required SAP evidence.
+- **Errors / Warnings / Blockers**: `DA 131` returned for RFC_READ_TABLE access to TBPE and TBPK; SAP substitution text reported earlier for DA 131 is “Table & does not exist in the database,” but the substituted table and root cause remain unknown. Prior work log records an LTAP read with `AD 718` (“Table & does not contain data”); failing FM invocation, exact table request, and substituted table are not verified in this session. RFC technical username, SU53/ST01 evidence, and missing authorization object are not available here and remain not verified. No linked TR/TO could be confirmed. No SAP transaction was executed.
+- **Next Steps**: SAP WM/Basis must provide an authorized read path or a released API that returns reservation item → TR → open/confirmed TO destination (type/bin), and identify the DA 131 / AD 718 failing FM/table plus RFC user and SU53/ST01 authorization evidence. Then rerun the five-reservation RESB/TR/TO/LQUA comparison; only after the table is complete may the resolver and four-state response be changed and covered by the requested cases.
+
 ## 2026-10-03 11:04 UTC — In Progress: clarify in-transfer staging and harden bin normalization
 - **Agent**: Codex
 - **Request**: Add the requested bin-normalization regressions, make `EINME` visible as in-transfer versus confirmed quantity, and check for the target TO by read-only RFC.

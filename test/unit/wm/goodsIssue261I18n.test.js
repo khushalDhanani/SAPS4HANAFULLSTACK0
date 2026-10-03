@@ -71,6 +71,8 @@ describe('Movement 261 i18n completeness', () => {
       'gi261SelectReservationItem',
       'gi261ValidationErrorsSummary',
       'gi261StagingInsufficient',
+      'gi261StagingUnknown',
+      'gi261StagingDestinationUnknown',
       'gi261QueuedMsg',
       'gi261UnknownMsg',
       'gi261PostSuccessMsg',

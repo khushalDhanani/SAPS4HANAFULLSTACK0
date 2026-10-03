@@ -45,7 +45,7 @@ function makeClient({
 }
 
 describe('GoodsIssueStockUnitClient – Storage Units for one reservation line', () => {
-  it('recognizes the normalized 10-character dynamic bin for a 12-character SAP order', () => {
+  it('uses only an SAP-supplied bin when classifying dynamic staging stock', () => {
     const { client } = makeClient();
     const ownOrderBin = q({ LGTYP: 'IP1', LGPLA: '0001002599', VERME: 378 });
     const otherOrderBin = q({ LGTYP: 'IP1', LGPLA: '0001002999', VERME: 378 });
@@ -54,8 +54,61 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
       targetType: 'IP1', targetBin: '0001002599', currentOrder: '000001002599'
     })).toBe('');
     expect(client._wmQuantRejection(otherOrderBin, '', null, {
-      targetType: 'IP1', targetBin: '0001002599', currentOrder: '000001002599'
+      targetType: 'IP1', targetBin: '0001002599'
     })).toContain('staged for another order');
+    expect(client._wmQuantRejection(otherOrderBin, '', null, {
+      targetType: 'IP1', targetBin: '', currentOrder: '000001002599'
+    })).toBe('');
+  });
+
+  it('returns UNKNOWN and no staged quantity when SAP has not supplied a dynamic destination', async () => {
+    const stagingClient = {
+      findTransferRequirement: jest.fn().mockResolvedValue({ tbnum: '', status: 'UNKNOWN' }),
+      findStagingTarget: jest.fn().mockResolvedValue({
+        isWm: true,
+        targetType: 'IP1',
+        targetBin: '',
+        status: 'UNKNOWN',
+        stagingSource: 'PKHD_DYNAMIC_BIN',
+        error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+      })
+    };
+    const lqua = [q({ LGTYP: 'IP1', LGPLA: '0001002599', VERME: 378, EINME: 0 })];
+    const { client } = makeClient({
+      resb: {
+        RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100',
+        BDMNG: '5000', ENMNG: '0', MEINS: 'KG', AUFNR: '000001002599', LGTYP: 'IP1', PRVBE: 'PSA1'
+      },
+      lqua,
+      stagingClient
+    });
+
+    const result = await client.listStockUnitsForReservationItem('519366', '1');
+
+    expect(result).toMatchObject({
+      StagingStatus: 'UNKNOWN',
+      IsStagingRequired: true,
+      IsFullyStaged: false,
+      TargetStorageType: 'IP1',
+      TargetStorageBin: '',
+      StockUnits: [],
+      Message: 'Cannot verify staging: transfer destination not readable (DA 131).'
+    });
+    expect(result).not.toHaveProperty('StagedQty');
+    expect(result).not.toHaveProperty('PlannedUnconfirmedQty');
+  });
+
+  it('returns UNKNOWN with no staged quantity when LQUA cannot be read', async () => {
+    const { client } = makeClient({ lqua: () => { throw new Error('SAP RFC error AD 718'); } });
+
+    const result = await client.listStockUnitsForReservationItem('519366', '1');
+
+    expect(result).toMatchObject({
+      StagingStatus: 'UNKNOWN', IsStagingRequired: true, IsFullyStaged: false,
+      StockUnits: [], Message: 'Cannot verify staging: LQUA read failed: SAP RFC error AD 718'
+    });
+    expect(result).not.toHaveProperty('StagedQty');
+    expect(result).not.toHaveProperty('PlannedUnconfirmedQty');
   });
 
   it('queries LQUA by the line material/plant/sloc in any warehouse (no T320 dependency)', async () => {

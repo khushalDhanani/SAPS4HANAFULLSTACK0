@@ -197,6 +197,28 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
     });
 
     describe('Route matching & reset', () => {
+        it('shows UNKNOWN and the SAP destination error without displaying staged quantity as zero', async () => {
+            mockService.fetchStockUnitsForItem.mockResolvedValueOnce({
+                StockUnits: [],
+                StagingStatus: 'UNKNOWN',
+                IsStagingRequired: true,
+                IsFullyStaged: false,
+                Message: 'Cannot verify staging: transfer destination not readable (DA 131).'
+            });
+
+            controller._detectScanMode('519366', '0001', 5);
+            await flush();
+
+            expect(controller._oModel.getProperty('/stagingStatus')).toBe('UNKNOWN');
+            expect(controller._oModel.getProperty('/stagingStatusBadge')).toBe('gi261StagingUnknown');
+            expect(controller._oModel.getProperty('/stagingStatusState')).toBe('Information');
+            expect(controller._oModel.getProperty('/stagingWarning'))
+                .toBe('Cannot verify staging: transfer destination not readable (DA 131).');
+            expect(controller._oModel.getProperty('/stagedQty')).toBeNull();
+            expect(controller._oModel.getProperty('/stagedQtyDisplay')).toBe('gi261StagingUnknown');
+            expect(controller._oModel.getProperty('/canCompleteStaging')).toBe(false);
+        });
+
         it('_onRouteMatched without a resv query should reset and not prefill', () => {
             controller._onRouteMatched({ getParameter: () => ({}) });
             expect(mockService.fetchReservationItems).not.toHaveBeenCalled();

@@ -474,6 +474,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         TransferRequirement       : String(10);
         TransferRequirementStatus : String(12);
         StagingResolutionSource : String(20);
+        StagingStatus           : String(16);
         IsStagingRequired       : Boolean;
         IsFullyStaged           : Boolean;
     };
