@@ -1,6 +1,22 @@
 
 # Changes Log
 
+## 2026-10-03 11:01 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 2 — Material / Plant / Storage Location Validation.
+- **Plan**: The current handler already reads the authoritative SAP reservation item before a planned 261 post, rejects supplied material/plant/storage-location values that conflict with SAP, and replaces those values with SAP's values before posting. Add focused regression tests only; do not alter the posting flow or SAP transaction contract. Validate the new tests, relevant CAP compilation/lint, and the final diff.
+- **Current Status**: Complete — planned 261 requests already reconcile Material / Plant / Storage Location against SAP and post the reservation's values; dedicated regression tests now verify all three mismatch rejections and SAP-authoritative fallback values.
+- **Files Changed**: `test/unit/wm/goodsIssue261OverIssue.test.js`, `WORKSTATUS.md`.
+- **Reason**: Chunk 1 coverage exercised open-quantity safeguards but did not directly demonstrate context mismatch rejection or that posting uses SAP reservation context.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261OverIssue.test.js --runInBand`: passed, 1 suite / 12 tests.
+  - `npx jest test/unit/wm/goodsIssue261 --runInBand`: passed, 8 suites / 155 tests.
+  - `npx eslint test/unit/wm/goodsIssue261OverIssue.test.js`: passed.
+  - `npx cds compile srv`: passed.
+  - `git diff --check`: passed after the final work-log update.
+- **Errors / Warnings / Blockers**: Tests passed. Test output included environment warnings that a Destination service binding is unavailable and a simulated OData readback URI failed in an existing unplanned 261 unit test; no live SAP request was made because this change only adds controlled unit coverage.
+- **Next Steps**: Continue with the next independently scoped Goods Issue chunk or user review; no live SAP validation is required for this unit-test-only change.
+
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
 ## 2026-10-03 11:00 IST
@@ -8977,4 +8993,4 @@ The table below provides a strict, unambiguous separation between **Code Complet
 16. DEPLOYMENT PREREQUISITE: the HDI container must receive table `saps4hana.wm.GoodsIssuePostingAttempt` and column `GoodsIssueQueue.ReferenceDocument` before the 10:44 code goes live; otherwise every 201 posting returns 503. See the 10:44 deployment note.
 17. DEPLOYMENT PREREQUISITE (Issued SU Claims & Queue Replay): the HDI container must receive table `saps4hana.wm.GoodsIssueIssuedStorageUnit` (with index `ClaimLookupIdx` on `Material, Plant, StorageLocation, Status`), and column `GoodsIssueQueue.StorageUnits` (LargeString/NCLOB) before the 2026-10-02 12:10 code goes live. All 134 test suites (2,183 tests) pass (100% green).
 18. DEPLOYMENT PREREQUISITE (Unconfirmed Flag on Issued SUs): column `GoodsIssueIssuedStorageUnit.Confirmed` (`Boolean default true`) in `db/wm/goods-issue-issued-su.cds`. All 134 test suites (2,226 tests) pass (100% green).
-
+19. Movement 261 Chunk 2 (Material / Plant / Storage Location Validation): SAP-authoritative reconciliation was already implemented in the planned-post handler. Dedicated regression coverage now proves mismatched values are rejected before posting and missing client values are sourced from SAP; 155 movement-261 unit tests pass. No live SAP call was needed.

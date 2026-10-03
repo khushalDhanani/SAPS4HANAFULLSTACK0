@@ -1,7 +1,7 @@
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
-describe('Chunk 1 — Reservation Open Quantity / Over-Issue Validation (Movement 261)', () => {
+describe('Chunks 1–2 — Reservation Quantity and Context Validation (Movement 261)', () => {
   const handlers = {};
   PerTypeGoodsIssueHandler.init({
     on: (event, handler) => {
@@ -136,6 +136,78 @@ describe('Chunk 1 — Reservation Open Quantity / Over-Issue Validation (Movemen
       MaterialDocument: '4900001234',
       MaterialDocYear: '2026'
     });
+  });
+
+  test.each([
+    ['Material', '1000000999'],
+    ['Plant', '1130'],
+    ['StorageLocation', 'HS01']
+  ])('Rejects a submitted %s that conflicts with the SAP reservation item', async (field, value) => {
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      Material: '1000000204',
+      Plant: '1120',
+      StorageLocation: 'CS01',
+      RequiredQty: 100,
+      WithdrawnQty: 60,
+      OpenQty: 40,
+      ReservationItemIsFinallyIssued: false,
+      ReservationItmIsMarkedForDeltn: false
+    });
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+    const req = makeReq({
+      ReservationNo: '18025',
+      ReservationItem: '0001',
+      Material: '1000000204',
+      Plant: '1120',
+      StorageLocation: 'CS01',
+      [field]: value,
+      IssueQty: 10,
+      Unit: 'KG'
+    });
+
+    await handlers['postGoodsIssue261'](req);
+
+    expect(req.error).toHaveBeenCalledWith(
+      400,
+      expect.stringContaining(`${field === 'StorageLocation' ? 'Storage Location' : field} (submitted ${value}, reservation`)
+    );
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  test('Uses SAP reservation material, plant, and storage location when the client omits them', async () => {
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      Material: '1000000204',
+      Plant: '1120',
+      StorageLocation: 'CS01',
+      Batch: 'BATCH01',
+      RequiredQty: 100,
+      WithdrawnQty: 60,
+      OpenQty: 40,
+      ReservationItemIsFinallyIssued: false,
+      ReservationItmIsMarkedForDeltn: false
+    });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+      MaterialDocument: '4900001234',
+      MaterialDocYear: '2026',
+      Confirmed: true
+    });
+    const req = makeReq({
+      ReservationNo: '18025',
+      ReservationItem: '0001',
+      IssueQty: 10,
+      Unit: 'KG'
+    });
+
+    await handlers['postGoodsIssue261'](req);
+
+    expect(req.error).not.toHaveBeenCalled();
+    expect(postSpy).toHaveBeenCalledWith(expect.objectContaining({
+      Material: '1000000204',
+      Plant: '1120',
+      StorageLocation: 'CS01',
+      Batch: 'BATCH01'
+    }));
   });
 
   test('Zero remaining open quantity: SAP RequiredQty equals WithdrawnQty -> rejects with validation error', async () => {
