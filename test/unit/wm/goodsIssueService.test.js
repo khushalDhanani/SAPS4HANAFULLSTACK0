@@ -98,6 +98,91 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('At least one item must be specified'));
     });
 
+    it('re-reads SAP open quantity and permits an explicitly requested partial final closeout supported by SAP', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+        RequiredQty: 100,
+        WithdrawnQty: 60,
+        OpenQty: 40,
+        ReservationItemIsFinallyIssued: false,
+        ReservationItmIsMarkedForDeltn: false
+      });
+      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockResolvedValue({
+        AllPosted: true,
+        Results: [{ ReservationItem: '0001', Success: true }]
+      });
+      const req = {
+        data: {
+          ReservationNo: '18025',
+          OrderNo: '1000040',
+          Items: [{ ReservationItem: '0001', IssueQty: 20, FinalIssue: true }]
+        },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+
+      const result = await handlers['submitGoodsIssueRequest'](req);
+
+      expect(GoodsIssueAdapter.getReservationItemAuthoritative).toHaveBeenCalledWith('18025', '0001');
+      expect(submitSpy).toHaveBeenCalledWith('18025', '1000040', req.data.Items);
+      expect(result.AllPosted).toBe(true);
+      expect(req.error).not.toHaveBeenCalled();
+    });
+
+    it('rejects a final-issue request that exceeds SAP current open quantity before posting', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+        RequiredQty: 100,
+        WithdrawnQty: 60,
+        OpenQty: 40,
+        ReservationItemIsFinallyIssued: false,
+        ReservationItmIsMarkedForDeltn: false
+      });
+      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest');
+      const req = {
+        data: {
+          ReservationNo: '18025',
+          Items: [{ ReservationItem: '0001', IssueQty: 41, FinalIssue: true }]
+        },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+
+      await handlers['submitGoodsIssueRequest'](req);
+
+      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('exceeds current SAP open reservation quantity 40'));
+      expect(submitSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects FinalIssue without a reservation and fails closed when SAP quantity cannot be read', async () => {
+      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest');
+      const orderOnlyReq = {
+        data: {
+          OrderNo: '1000040',
+          Items: [{ ReservationItem: '0001', IssueQty: 20, FinalIssue: true }]
+        },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+
+      await handlers['submitGoodsIssueRequest'](orderOnlyReq);
+
+      expect(orderOnlyReq.error).toHaveBeenCalledWith(400, expect.stringContaining('only be requested for a SAP reservation item'));
+      expect(submitSpy).not.toHaveBeenCalled();
+
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockRejectedValue(
+        Object.assign(new Error('SAP reservation read failed'), { status: 503 })
+      );
+      const unreadableReq = {
+        data: {
+          ReservationNo: '18025',
+          Items: [{ ReservationItem: '0001', IssueQty: 20, FinalIssue: true }]
+        },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+
+      await handlers['submitGoodsIssueRequest'](unreadableReq);
+
+      expect(unreadableReq.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP could not verify current reservation quantity'));
+      expect(submitSpy).not.toHaveBeenCalled();
+    });
+
     it('should reject READ:MaterialBatches when Material parameter is missing', async () => {
       const req = {
         data: {},
@@ -203,6 +288,13 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
     it('should abort batch submission and execute compensating rollback when an item has an expired batch', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(mockBatchesRM4520);
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+        RequiredQty: 100,
+        WithdrawnQty: 0,
+        OpenQty: 100,
+        ReservationItemIsFinallyIssued: false,
+        ReservationItmIsMarkedForDeltn: false
+      });
 
       const req = {
         data: {
@@ -660,6 +752,13 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+        RequiredQty: 1000,
+        WithdrawnQty: 0,
+        OpenQty: 1000,
+        ReservationItemIsFinallyIssued: false,
+        ReservationItmIsMarkedForDeltn: false
+      });
       jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['submitGoodsIssueRequest'](req);
       expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));

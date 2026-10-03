@@ -1,6 +1,25 @@
 
 # Changes Log
 
+## 2026-10-03 11:46 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 5 — Final Issue Validation.
+- **Plan**: Validate `submitGoodsIssueRequest` inputs server-side; for reservation-bound batch submissions, re-read each SAP reservation item, use SAP's current OpenQty/status, and reject invalid or over-open IssueQty before posting. The existing SAP-facing ABAP specification explicitly supports intentional partial closeout by setting `NO_MORE_GR` after the SAP open-quantity guard; retain this supported behavior. If a final-closeout RAP call fails, do not use the saved standard material-document fallback because its metadata has no final-issue field and fallback would silently drop the closeout request. Add focused handler/client tests; validate test suites, lint, CAP compile, and diffs.
+- **SAP Contract Evidence**: `docs/wm_goods_issue_abap_spec.md` defines `iv_final_issue TYPE kzear`, re-reads RESB required/withdrawn quantity, rejects issue quantity above open quantity, and sets `BAPI2017_GM_ITEM_CREATE-NO_MORE_GR = 'X'` when final issue is requested. The saved `srv/external/API_MATERIAL_DOCUMENT_SRV.xml` does not expose a final-issue property, so the V2 fallback cannot be assumed to preserve this behavior. No live posting will be performed.
+- **Current Status**: Complete — reservation-bound batch submissions re-read SAP required/withdrawn quantities, reject closed/unverifiable/over-issue lines, and preserve the documented SAP partial-final-closeout behavior; final-closeout requests cannot fall back through an API path that would discard the flag.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssue.handler.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `test/unit/wm/goodsIssueService.test.js`, `test/unit/wm/goodsIssuePerTypePostingClient.test.js`, `WORKSTATUS.md`.
+- **Reason**: `submitGoodsIssueRequest` accepts `GISubmitItem.FinalIssue` but the CAP handler currently does not reread reservation state or bound each line's requested quantity against current SAP OpenQty before invoking the posting adapter.
+- **Validation**:
+  - The first targeted run exposed one pre-existing handler fixture without a mock for the newly required SAP reservation read; fixture updated with explicit current open quantities.
+  - A subsequent targeted run exposed a call-recorder issue in the new no-fallback test; fixed the test spy and reran successfully.
+  - `npx jest test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssue261OverIssue.test.js --runInBand --silent`: passed, 3 suites / 76 tests.
+  - `npx eslint srv/wm/goods-issue/handlers/goodsIssue.handler.js srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssuePerTypePostingClient.test.js`: passed with 0 errors and 3 unused-variable warnings (`documentDate`, `reversalReason`, `path`).
+  - `npx cds compile srv`: passed.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 52 suites / 1,035 tests.
+  - `git diff --check` and `git diff --cached --check`: rerun after this work-log update.
+- **Errors / Warnings / Blockers**: Earlier targeted failures are captured above and fixed. Test output includes local Destination-binding warnings and a SQLite experimental warning; tests pass. ESLint reports 3 unused-variable warnings (`documentDate`, `reversalReason`, `path`). The VS Code `runTests` helper did not discover the repository's Jest files, so Jest CLI was used directly. No live final-issue post/readback was performed.
+- **Next Steps**: Review the final code diff, rerun both diff whitespace checks, and await user review or the next scoped Goods Issue chunk.
+
 ## 2026-10-03 11:39 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 4 — Expiry / SLED Validation.

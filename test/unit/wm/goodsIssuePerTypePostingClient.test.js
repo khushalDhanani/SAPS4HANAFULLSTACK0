@@ -94,6 +94,27 @@ test('post261 → rejects an expired batch before any SAP POST', async () => {
   expect(client._post).not.toHaveBeenCalled();
 });
 
+test('submitGoodsIssueRequest → does not fall back to an API that would drop FinalIssue', async () => {
+  const { client, calls } = makeClient();
+  const rapError = Object.assign(new Error('RAP final-issue action unavailable'), { status: 503 });
+  client._post = jest.fn(async (path, body) => {
+    calls.push({ path, body });
+    throw rapError;
+  });
+
+  await expect(client.submitGoodsIssueRequest('518023', '', [{
+    ReservationItem: '0001',
+    Material: '1000001002',
+    IssueQty: 20,
+    Unit: 'KG',
+    FinalIssue: true
+  }])).rejects.toBe(rapError);
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0].path).toContain('submitRequest');
+  expect(calls[0].body.Items[0].FinalIssue).toBe(true);
+});
+
 test.each([['301', '04'], ['311', '04']])('post%s → standard API with receiving, movement %s', async (type, gm) => {
   const { client, calls } = makeClient();
   // Feed 201/261 exclusive fields too, to prove they never leak into a transfer payload.

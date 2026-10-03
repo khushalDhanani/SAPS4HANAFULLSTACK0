@@ -12,6 +12,79 @@ const _extractFilterParam = extractFilterParam;
 const GI_MOVEMENT_TYPE = '261';
 const LIST_MOVEMENT_TYPES = ['201', '261', '301', '311'];
 
+async function validateSubmitReservationQuantities(req, reservationNo, items) {
+  const sReservationNo = String(reservationNo || '').trim();
+
+  for (const item of items) {
+    if (item.FinalIssue != null && typeof item.FinalIssue !== 'boolean') {
+      req.error(400, `FinalIssue must be a Boolean for reservation item ${item.ReservationItem || '(unknown)'}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (!sReservationNo) {
+      if (item.FinalIssue === true) {
+        req.error(400, 'FinalIssue can only be requested for a SAP reservation item. Goods Issue was NOT posted.');
+        return false;
+      }
+      continue;
+    }
+
+    const sReservationItem = String(item.ReservationItem || '').trim();
+    if (!sReservationItem) {
+      req.error(400, 'ReservationItem is required for every item submitted with ReservationNo. Goods Issue was NOT posted.');
+      return false;
+    }
+    const issueQty = Number(item.IssueQty);
+    if (!Number.isFinite(issueQty) || issueQty <= 0) {
+      req.error(400, `Issue quantity must be a positive decimal number for reservation item ${sReservationItem}. Goods Issue was NOT posted.`);
+      return false;
+    }
+
+    let reservationItem;
+    try {
+      if (typeof GoodsIssueAdapter.getReservationItemAuthoritative !== 'function') {
+        req.error(500, 'SAP reservation quantity verification is unavailable. Goods Issue was NOT posted.');
+        return false;
+      }
+      reservationItem = await GoodsIssueAdapter.getReservationItemAuthoritative(sReservationNo, sReservationItem);
+    } catch (err) {
+      LOG.error(`SAP reservation quantity verification failed for ${sReservationNo}/${sReservationItem}: ${err.message || err}`);
+      req.error(err.status === 404 ? 422 : (err.status || 502), `SAP could not verify current reservation quantity for ${sReservationNo} item ${sReservationItem}: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
+      return false;
+    }
+
+    const requiredQty = Number(reservationItem && reservationItem.RequiredQty);
+    const withdrawnQty = Number(reservationItem && reservationItem.WithdrawnQty);
+    const isClosed = Boolean(
+      reservationItem && (
+        reservationItem.ReservationItemIsFinallyIssued
+        || reservationItem.ReservationItmIsMarkedForDeltn
+        || reservationItem.IsFinallyIssued
+        || reservationItem.IsDeleted
+      )
+    );
+    const openQty = isClosed
+      ? 0
+      : (Number.isFinite(requiredQty) && Number.isFinite(withdrawnQty)
+        ? Math.max(0, requiredQty - withdrawnQty)
+        : Number(reservationItem && reservationItem.OpenQty));
+
+    if (!Number.isFinite(openQty)) {
+      req.error(502, `SAP returned an unverifiable open quantity for reservation ${sReservationNo} item ${sReservationItem}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (openQty <= 0) {
+      req.error(422, `Reservation ${sReservationNo} item ${sReservationItem} has no open quantity remaining. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (issueQty > openQty + 1e-9) {
+      req.error(422, `Issue quantity ${issueQty} exceeds current SAP open reservation quantity ${openQty} for reservation ${sReservationNo} item ${sReservationItem}. Goods Issue was NOT posted.`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 class GoodsIssueHandler {
   static init(srv) {
     // READ GIItems: query open items by Order or Reservation number
@@ -188,6 +261,8 @@ class GoodsIssueHandler {
       if (!Array.isArray(Items) || Items.length === 0) {
         return req.error(400, 'At least one item must be specified for submission');
       }
+
+      if (!(await validateSubmitReservationQuantities(req, ReservationNo, Items))) return;
 
       if (ReservationNo) {
         try {
@@ -376,4 +451,3 @@ class GoodsIssueHandler {
 }
 
 module.exports = GoodsIssueHandler;
-

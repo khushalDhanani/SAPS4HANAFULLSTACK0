@@ -889,6 +889,9 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // Same rule as single-item posting: an unrecognized 2xx must reach Tier 2.
       throw new Error(`RAP submitRequest returned an unrecognized response shape: ${JSON.stringify(response || null).slice(0, 300)}`);
     } catch (v4Err) {
+      if (items.some((item) => item.FinalIssue === true)) {
+        throw v4Err;
+      }
       // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV with multi-line deep insert
       try {
         const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
