@@ -1,6 +1,21 @@
 
 # Changes Log
 
+## 2026-10-03 14:23 IST — Chunk 19 validating reservation-driven 261 prefill
+- **Agent**: Copilot
+- **Request**: Treat `?resv=` as a lookup hint; load current SAP reservation data, select an exact eligible 261 item, and use refreshed SAP quantity/material/location/status before posting.
+- **Plan**: Filter reservation rows by normalized reservation number, movement type 261, and positive finite SAP open quantity; honor an explicit item hint only when that exact row is eligible, and show a picker rather than choosing arbitrarily when multiple rows qualify. Reuse the fresh server-side reservation read to fail closed unless the selected 261 item is still a 261 item. Add controller, adapter, and handler regressions; run focused tests, lint, CAP compile, and diff checks. No live SAP write will be performed.
+- **Current Status**: Complete — URL reservation/item parameters are lookup hints only. Prefill now filters to SAP-returned rows matching the reservation, movement type 261, and positive finite open quantity; an invalid explicit item is rejected, and multiple eligible items require user selection. Form quantity, material, plant, storage location, unit, order, and item are populated from the SAP row. The final 261 reservation read now requires SAP movement type data and blocks a returned non-261 item before posting.
+- **Files Changed**: `WORKSTATUS.md`; `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`; `srv/integration/s4hana/wm/GoodsIssueAdapter.js`; `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`; `test/unit/wm/goodsIssue261Controller.test.js`; `test/unit/wm/goodsIssueResvPrefill.test.js`; `test/unit/wm/goodsIssue261BatchValidation.test.js`.
+- **Reason**: A URL reservation/item must not silently select an unrelated item or authorize a stale/non-261 line for a 261 posting.
+- **Validation**:
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,105 tests.
+  - `npx eslint --no-ignore --global sap app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js srv/integration/s4hana/wm/GoodsIssueAdapter.js srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssueResvPrefill.test.js test/unit/wm/goodsIssue261BatchValidation.test.js`: exited successfully with zero errors and one existing `no-unused-vars` warning for `isDefinitiveRejection` in `goodsIssuePerType.handler.js:737`.
+  - `npx cds compile srv >/dev/null`: passed.
+  - `git diff --check`: passed; final worktree contains only the seven files listed above.
+- **Errors / Warnings / Blockers**: An initial focused run exposed old UI fixtures without required reservation/movement fields; those fixtures were updated. An initial full-WM run exposed 58 test failures because mocked reservation reads lacked movement type; the integration adapter now explicitly fails closed when SAP omits it, while handler tests can model previously established mocks, and the final full WM suite passes. Jest emitted the existing missing destination-binding and Node SQLite experimental warnings. No live SAP request or write was performed; SAP behavior was verified through source contracts and controlled tests only.
+- **Next Steps**: Chunk 19 is complete. Continue with the next separately scoped 261 hardening chunk; perform live SAP validation only in an authorized SAP environment when required by that chunk.
+
 ## 2026-10-03 14:18 IST — Chunk 18 guarding the final 261 Post action
 - **Agent**: Copilot
 - **Request**: Disable the final Post button immediately during submission, prevent double-click/re-entry, and re-enable only after a definitive outcome or controlled recovery state.

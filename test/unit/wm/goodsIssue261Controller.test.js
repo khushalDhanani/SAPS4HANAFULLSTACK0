@@ -218,7 +218,7 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
                 {
                     ReservationNo: '0000123456', ReservationItem: '0001', OrderNo: '600001',
                     Material: '1000000045', MaterialDesc: 'Test Mat', Plant: '3000',
-                    StorageLocation: 'RM01', OpenQty: 4, Unit: 'KG'
+                    StorageLocation: 'RM01', OpenQty: 4, Unit: 'KG', MovementType: '261'
                 }
             ]);
             mockService.fetchMaterialDetails.mockResolvedValueOnce({ materialName: 'Test Mat', unit: 'KG', isBatchManaged: false });
@@ -235,6 +235,69 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(m.getProperty('/openQty')).toBe(4);
             // The reservation item's own plant must win over the (blank) form plant.
             expect(mockService.fetchMaterialDetails).toHaveBeenCalledWith('1000000045', '3000');
+        });
+
+        it('should reject an explicit item hint instead of substituting another eligible item', async () => {
+            mockService.fetchReservationItems.mockResolvedValueOnce([
+                {
+                    ReservationNo: '123456', ReservationItem: '0002', Material: 'OTHER',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 4, MovementType: '261'
+                }
+            ]);
+
+            await controller._prefillFromReservation('0000123456', '0001');
+
+            expect(mockMessageBox.error).toHaveBeenCalledWith('gi261PrefillNoOpenItem');
+            expect(controller._oModel.getProperty('/reservationItem')).toBe('');
+            expect(controller._oModel.getProperty('/material')).toBe('');
+            expect(mockService.fetchMaterialDetails).not.toHaveBeenCalled();
+        });
+
+        it('should select only a matching open 261 row from SAP reservation results', async () => {
+            mockService.fetchReservationItems.mockResolvedValueOnce([
+                {
+                    ReservationNo: '999999', ReservationItem: '0001', Material: 'UNRELATED',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 5, MovementType: '261'
+                },
+                {
+                    ReservationNo: '0000123456', ReservationItem: '0002', Material: '201-MATERIAL',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 5, MovementType: '201'
+                },
+                {
+                    ReservationNo: '0000123456', ReservationItem: '0003', Material: 'CLOSED',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 0, MovementType: '261'
+                },
+                {
+                    ReservationNo: '0000123456', ReservationItem: '0004', Material: '1000000045',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 4, Unit: 'KG', MovementType: '261'
+                }
+            ]);
+
+            await controller._prefillFromReservation('0000123456');
+
+            expect(controller._oModel.getProperty('/reservationItem')).toBe('0004');
+            expect(controller._oModel.getProperty('/material')).toBe('1000000045');
+            expect(controller._oModel.getProperty('/quantity')).toBe(4);
+        });
+
+        it('should ask for a specific item when multiple open 261 items exist', async () => {
+            mockService.fetchReservationItems.mockResolvedValueOnce([
+                {
+                    ReservationNo: '0000123456', ReservationItem: '0001', Material: 'MAT-1',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 4, MovementType: '261'
+                },
+                {
+                    ReservationNo: '0000123456', ReservationItem: '0002', Material: 'MAT-2',
+                    Plant: '3000', StorageLocation: 'RM01', OpenQty: 8, MovementType: '261'
+                }
+            ]);
+
+            await controller._prefillFromReservation('0000123456');
+
+            expect(lastSelectDialog).toBeDefined();
+            expect(controller._oModel.getProperty('/reservationItem')).toBe('');
+            expect(controller._oModel.getProperty('/reservationNo')).toBe('0000123456');
+            expect(controller._aResolvedItems).toHaveLength(2);
         });
 
         it('should show MessageBox.error when reservation fetch fails', async () => {
@@ -333,7 +396,7 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
 
         it('_loadReservationItems should auto-apply the single item onto the model', async () => {
             mockService.fetchReservationItems.mockResolvedValueOnce([
-                { ReservationItem: '1', Material: '1000000045', MaterialDesc: 'Mat', Plant: '1120', StorageLocation: 'HS01', Unit: 'EA', OrderNo: '600001', OpenQty: 3 }
+                { ReservationNo: '0000123456', ReservationItem: '1', Material: '1000000045', MaterialDesc: 'Mat', Plant: '1120', StorageLocation: 'HS01', Unit: 'EA', OrderNo: '600001', OpenQty: 3, MovementType: '261' }
             ]);
             await controller._loadReservationItems('0000123456');
             const m = controller._oModel;
@@ -346,8 +409,8 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
 
         it('_loadReservationItems should open the item picker when several items are returned', async () => {
             mockService.fetchReservationItems.mockResolvedValueOnce([
-                { ReservationItem: '1', Material: 'A' },
-                { ReservationItem: '2', Material: 'B' }
+                { ReservationNo: '0000123456', ReservationItem: '1', Material: 'A', OpenQty: 1, MovementType: '261' },
+                { ReservationNo: '0000123456', ReservationItem: '2', Material: 'B', OpenQty: 1, MovementType: '261' }
             ]);
             await controller._loadReservationItems('0000123456');
             expect(lastSelectDialog).not.toBeNull();

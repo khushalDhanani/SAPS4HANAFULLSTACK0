@@ -8,6 +8,7 @@ const reservationItem = (overrides = {}) => ({
   Material: '1000000204',
   Plant: '1120',
   StorageLocation: 'CS01',
+  MovementType: '261',
   Batch: '',
   Unit: 'KG',
   RequiredQty: 100,
@@ -70,6 +71,20 @@ describe('Movement 261 SAP batch validation', () => {
       expect.stringContaining('is batch-managed in plant 1120; Batch is required')
     );
     expect(validateSpy).not.toHaveBeenCalled();
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  test('rejects a reservation SAP identifies as a non-261 movement item', async () => {
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative')
+      .mockResolvedValue(reservationItem({ MovementType: '201' }));
+    const batchSpy = jest.spyOn(GoodsIssueAdapter, 'isBatchManaged');
+    const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+    const req = makeReq(payload());
+
+    await handlers.postGoodsIssue261(req);
+
+    expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('not an open Movement Type 261 item'));
+    expect(batchSpy).not.toHaveBeenCalled();
     expect(postSpy).not.toHaveBeenCalled();
   });
 

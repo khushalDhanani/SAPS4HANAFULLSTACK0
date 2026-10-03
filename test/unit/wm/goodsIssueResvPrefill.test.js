@@ -115,8 +115,17 @@ describe('reservation items carry the receiving plant / storage location of the 
     jest.spyOn(GoodsIssueAdapter.stockUnits, '_readOpenReservationItem').mockResolvedValue({ resvItem: item });
     jest.spyOn(GoodsIssueAdapter.reservations, '_get').mockResolvedValue([header]);
     await expect(GoodsIssueAdapter.getReservationItemAuthoritative('519367', '0001')).resolves.toMatchObject({
-      Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', OpenQty: 2
+      Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', MovementType: '311', OpenQty: 2
     });
+    jest.restoreAllMocks();
+  });
+
+  test('authoritative reservation read fails closed when SAP omits movement type', async () => {
+    jest.spyOn(GoodsIssueAdapter.stockUnits, '_readOpenReservationItem').mockResolvedValue({
+      resvItem: { ...item, GoodsMovementType: undefined }
+    });
+    await expect(GoodsIssueAdapter.getReservationItemAuthoritative('519367', '0001'))
+      .rejects.toMatchObject({ status: 502 });
     jest.restoreAllMocks();
   });
 });
@@ -125,7 +134,7 @@ describe('server posts the reservation values, not the client values', () => {
   const handlers = {};
   PerTypeGoodsIssueHandler.init({ on: (event, handler) => { handlers[event] = handler; } });
   const req = (data) => ({ data, user: { id: 'TESTER' }, error: jest.fn() });
-  const resv = { Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Batch: '', OpenQty: 2 };
+  const resv = { Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Batch: '', MovementType: '261', OpenQty: 2 };
   const body = { ReservationNo: '519367', ReservationItem: '0001', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', IssueQty: 2, Unit: 'NOS' };
   let post;
 

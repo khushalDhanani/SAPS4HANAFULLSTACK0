@@ -188,7 +188,7 @@ async function stockPreCheck201(req, normalized) {
  * ones, so what is posted never comes from the client. With `receiving` (311) the receiving plant /
  * storage location of the reservation header are reconciled and applied the same way.
  */
-async function reservationReconcileCheck(req, normalized, { receiving = false, batch = false } = {}) {
+async function reservationReconcileCheck(req, normalized, { receiving = false, batch = false, expectedMovementType = '' } = {}) {
   const sResv = String(normalized.ReservationNo || '').trim();
   const sItem = String(normalized.ReservationItem || '').trim();
   if (!sResv || !sItem) return true; // no reservation to reconcile against (unplanned path)
@@ -203,6 +203,11 @@ async function reservationReconcileCheck(req, normalized, { receiving = false, b
   } catch (resErr) {
     // 404 (not open / not found) or 502 (read failure) -> block; never post against an unverifiable reservation.
     req.error(resErr.status || 502, resErr.message || `Reservation ${sResv} item ${sItem} could not be verified before posting; Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  if (expectedMovementType && item.MovementType && String(item.MovementType).trim() !== expectedMovementType) {
+    req.error(422, `Reservation ${sResv} item ${sItem} is not an open Movement Type ${expectedMovementType} item in SAP. Goods Issue was NOT posted.`);
     return false;
   }
 
@@ -1074,7 +1079,7 @@ const PerTypeGoodsIssueHandler = {
       } catch (err) {
         return req.error(err.status || 503, `Goods Issue idempotency could not be verified; posting was not sent to SAP: ${err.message || 'attempt store unavailable'}.`);
       }
-      const resvItem = await reservationReconcileCheck(req, normalized, { batch: true });
+      const resvItem = await reservationReconcileCheck(req, normalized, { batch: true, expectedMovementType: '261' });
       if (!resvItem) return;
       if (!(await checkPendingConfirmation(req, normalized))) return normalized._existingAttemptResult;
       if (!(await batchPreCheck261(req, normalized, resvItem))) return;

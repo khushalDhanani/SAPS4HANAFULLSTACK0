@@ -54,6 +54,30 @@ sap.ui.define([
         return "FAILED";
     }
 
+    function normalizeSapIdentifier(value) {
+        var sValue = value == null ? "" : String(value).trim();
+        return sValue.replace(/^0+/, "") || (sValue ? "0" : "");
+    }
+
+    function isSapTrue(value) {
+        return value === true || String(value).trim().toLowerCase() === "true";
+    }
+
+    function eligible261ReservationItems(aItems, sReservationNo) {
+        var sExpectedReservation = normalizeSapIdentifier(sReservationNo);
+        return (Array.isArray(aItems) ? aItems : []).filter(function (oItem) {
+            var nOpenQty = Number(oItem && oItem.OpenQty);
+            return oItem &&
+                normalizeSapIdentifier(oItem.ReservationNo) === sExpectedReservation &&
+                String(oItem.MovementType || "").trim() === "261" &&
+                Number.isFinite(nOpenQty) && nOpenQty > 0 &&
+                !isSapTrue(oItem.ReservationItemIsFinallyIssued) &&
+                !isSapTrue(oItem.ReservationItmIsMarkedForDeltn) &&
+                !isSapTrue(oItem.IsFinallyIssued) &&
+                !isSapTrue(oItem.IsDeleted);
+        });
+    }
+
     return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue261", {
 
         onInit: function () {
@@ -93,42 +117,34 @@ sap.ui.define([
             var that = this;
             var oModel = this._oModel;
             oModel.setProperty("/busy", true);
-            GoodsIssue261Service.fetchReservationItems(sResv)
+            return GoodsIssue261Service.fetchReservationItems(sResv)
                 .then(function (aItems) {
-                    var oItem;
+                    var aEligibleItems = eligible261ReservationItems(aItems, sResv);
+                    that._aResolvedItems = aEligibleItems;
+                    var oItem = null;
                     if (sItemParam) {
-                        oItem = (aItems || []).find(function (i) {
-                            return String(i.ReservationItem).trim() === String(sItemParam).trim() ||
-                                   String(i.ReservationItem).replace(/^0+/, "") === String(sItemParam).replace(/^0+/, "");
-                        });
-                    }
-                    if (!oItem) {
-                        oItem = (aItems || []).find(function (i) { return Number(i.OpenQty) > 0; }) || (aItems || [])[0];
+                        var sExpectedItem = normalizeSapIdentifier(sItemParam);
+                        oItem = aEligibleItems.find(function (oCandidate) {
+                            return normalizeSapIdentifier(oCandidate.ReservationItem) === sExpectedItem;
+                        }) || null;
+                        if (!oItem) {
+                            MessageBox.error(that.getText("gi261PrefillNoOpenItem", [sResv]));
+                            return;
+                        }
+                    } else if (aEligibleItems.length === 1) {
+                        oItem = aEligibleItems[0];
+                    } else if (aEligibleItems.length > 1) {
+                        oModel.setProperty("/fromReservation", true);
+                        oModel.setProperty("/reservationNo", sResv);
+                        that._openReservationItemPicker();
+                        return;
                     }
                     if (!oItem) {
                         MessageBox.error(that.getText("gi261PrefillNoOpenItem", [sResv]));
                         return;
                     }
                     oModel.setProperty("/fromReservation", true);
-                    oModel.setProperty("/reservationNo", oItem.ReservationNo || sResv);
-                    oModel.setProperty("/reservationItem", oItem.ReservationItem || "");
-                    oModel.setProperty("/orderNo", oItem.OrderNo || "");
-                    oModel.setProperty("/material", oItem.Material || "");
-                    oModel.setProperty("/materialName", oItem.MaterialDesc || "");
-                    oModel.setProperty("/plant", oItem.Plant || "");
-                    oModel.setProperty("/storageLocation", oItem.StorageLocation || "");
-                    var nOpen = Number(oItem.OpenQty);
-                    if (!isNaN(nOpen) && nOpen > 0) {
-                        oModel.setProperty("/quantity", nOpen);
-                        oModel.setProperty("/openQty", nOpen);
-                    }
-                    if (oItem.Unit) {
-                        oModel.setProperty("/unit", oItem.Unit);
-                    }
-                    that._loadMaterialInfo(oItem.Material || "", oItem.Plant || "");
-                    // Detect unit/serial vs non-serial workflow
-                    that._detectScanMode(oItem.ReservationNo || sResv, oItem.ReservationItem || "", nOpen || 0);
-                    that._validateLive();
+                    that._applyReservationPrefill(oItem, sResv);
                 })
                 .catch(function (err) {
                     MessageBox.error((err && err.message) || that.getText("gi261PrefillError"));
@@ -136,6 +152,29 @@ sap.ui.define([
                 .finally(function () {
                     oModel.setProperty("/busy", false);
                 });
+        },
+
+        _applyReservationPrefill: function (oItem, sReservationNo) {
+            var oModel = this._oModel;
+            var sResv = oItem.ReservationNo || sReservationNo;
+            var sItem = oItem.ReservationItem == null ? "" : String(oItem.ReservationItem).trim().padStart(4, "0");
+            var nOpen = Number(oItem.OpenQty);
+
+            oModel.setProperty("/reservationNo", sResv);
+            oModel.setProperty("/reservationItem", sItem);
+            oModel.setProperty("/orderNo", oItem.OrderNo || "");
+            oModel.setProperty("/material", oItem.Material || "");
+            oModel.setProperty("/materialName", oItem.MaterialDesc || "");
+            oModel.setProperty("/plant", oItem.Plant || "");
+            oModel.setProperty("/storageLocation", oItem.StorageLocation || "");
+            oModel.setProperty("/quantity", nOpen);
+            oModel.setProperty("/openQty", nOpen);
+            if (oItem.Unit) {
+                oModel.setProperty("/unit", oItem.Unit);
+            }
+            this._loadMaterialInfo(oItem.Material || "", oItem.Plant || "");
+            this._detectScanMode(sResv, sItem, nOpen);
+            this._validateLive();
         },
 
         /**
@@ -605,10 +644,9 @@ sap.ui.define([
 
             return GoodsIssue261Service.fetchReservationItems(sReservationNo)
                 .then(function (aItems) {
-                    that._aResolvedItems = aItems || [];
+                    that._aResolvedItems = eligible261ReservationItems(aItems, sReservationNo);
                     if (that._aResolvedItems.length === 1) {
-                        GoodsIssue261Model.applyReservationItem(that._oModel.getData(), that._aResolvedItems[0]);
-                        that._oModel.refresh(true);
+                        that._applyReservationPrefill(that._aResolvedItems[0], sReservationNo);
                     } else if (that._aResolvedItems.length > 1) {
                         that._openReservationItemPicker();
                     } else {
@@ -634,9 +672,7 @@ sap.ui.define([
                         var oCtx = oSelectedItem.getBindingContext();
                         var oRow = oCtx ? oCtx.getObject() : null;
                         if (oRow) {
-                            GoodsIssue261Model.applyReservationItem(that._oModel.getData(), oRow);
-                            that._oModel.refresh(true);
-                            that._validateLive();
+                            that._applyReservationPrefill(oRow, that._oModel.getProperty("/reservationNo"));
                         }
                     }
                 }

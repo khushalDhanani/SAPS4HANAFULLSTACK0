@@ -472,6 +472,12 @@ class GoodsIssueAdapter {
    */
   async getReservationItemAuthoritative(reservationNo, reservationItem) {
     const { resvItem } = await this.stockUnits._readOpenReservationItem(reservationNo, reservationItem);
+    const movementType = String(resvItem.GoodsMovementType || resvItem.MovementType || '').trim();
+    if (!movementType) {
+      const err = new Error(`SAP returned no movement type for reservation ${reservationNo} item ${reservationItem}.`);
+      err.status = 502;
+      throw err;
+    }
     const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit != null ? resvItem.ResvnItmRequiredQtyInBaseUnit : (resvItem.RequiredQty || 0));
     const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit != null ? resvItem.ResvnItmWithdrawnQtyInBaseUnit : (resvItem.WithdrawnQty || 0));
     const isFinal = Boolean(resvItem.ReservationItemIsFinallyIssued || resvItem.IsFinallyIssued || resvItem.FinalIssue);
@@ -496,6 +502,7 @@ class GoodsIssueAdapter {
       ReceivingStorageLocation: String(recv.ReceivingStorageLocation || '').trim(),
       Batch: String(resvItem.Batch || '').trim(),
       Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || resvItem.Unit || '').trim(),
+      MovementType: movementType,
       RequiredQty: reqQty,
       WithdrawnQty: wdnQty,
       OpenQty: openQty,
