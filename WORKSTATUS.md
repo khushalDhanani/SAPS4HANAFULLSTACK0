@@ -1,6 +1,22 @@
 
 # Changes Log
 
+## 2026-10-03 14:41 IST — Enabling generic direct-path 261 deep links
+- **Agent**: Copilot
+- **Request**: Support the direct pathname deep link for any reservation, not only a specific reservation/query value.
+- **Plan**: Add an approuter rewrite for the 261 direct path to the deployed HTML5 app shell and normalize its arbitrary query string into the existing UI5 hash route before UI5 bootstrap. Preserve existing hash navigation. Add regression coverage for route ordering/configuration and multiple reservation values; run focused Jest, UI5 lint/build, MTA validation, and diff checks. No SAP request/write or deployment will be performed.
+- **Current Status**: Complete — direct requests to `/wm/goods-issue/order-based-261?resv=<any reservation>` are routed to the deployed `saps4hanafiori` shell. A CSP-safe pre-bootstrap script rewrites the browser URL to the equivalent UI5 hash route and preserves query parameters. Existing hash-route navigation and unrelated paths are unchanged.
+- **Files Changed**: `WORKSTATUS.md`; `app/router/xs-app.json`; `app/fiori-app/webapp/index.html`; `app/fiori-app/webapp/deepLink.js`; `test/unit/wm/fiori261DeepLink.test.js`.
+- **Reason**: Direct path links must reach the UI5 shell and become the route format consumed by the existing reservation-prefill handler, independent of the `resv` query value.
+- **Validation**:
+  - `npx jest test/unit/wm/fiori261DeepLink.test.js test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssue261I18n.test.js --runInBand --silent`: passed, 3 suites / 68 tests.
+  - `npm --prefix app/fiori-app run lint`: passed; UI5 linter reported no findings.
+  - `npm --prefix app/fiori-app run build`: passed; built output contains `deepLink.js` and `index.html`.
+  - `npm run validate:mta`: passed.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: An initial test detected that the first route regex did not match the root pathname; corrected the rule and tested matching/rewrite. UI lint identified an inline-script CSP warning in an intermediate implementation; moved the normalizer to an external script and final lint is clean. Actual deployed HTML5 Application Repository/approuter behavior was not exercised because no deployed runtime was available.
+- **Next Steps**: Chunk 20 direct-path fix is complete. Deploy through the configured approuter and verify the generic direct URL with representative reservation IDs in the target environment.
+
 ## 2026-10-03 14:34 IST — Chunk 20 auditing Movement 261 localization
 - **Agent**: Copilot
 - **Request**: Extract all i18n keys used by the 261 view/controller, verify the active language bundles, remove raw/missing UI text, and test the 261 flow in supported languages.
