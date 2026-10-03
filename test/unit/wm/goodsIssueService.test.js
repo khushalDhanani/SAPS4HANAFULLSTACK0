@@ -106,7 +106,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         ReservationItemIsFinallyIssued: false,
         ReservationItmIsMarkedForDeltn: false
       });
-      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
       const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockResolvedValue({
         AllPosted: true,
         Results: [{ ReservationItem: '0001', Success: true }]
@@ -124,8 +124,46 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
       expect(GoodsIssueAdapter.getReservationItemAuthoritative).toHaveBeenCalledWith('18025', '0001');
       expect(submitSpy).toHaveBeenCalledWith('18025', '1000040', req.data.Items);
+      expect(GoodsIssueAdapter.checkStagingForReservation).toHaveBeenCalledWith(
+        '18025', '0001', { issueQty: 20, issueUnit: undefined }
+      );
       expect(result.AllPosted).toBe(true);
       expect(req.error).not.toHaveBeenCalled();
+    });
+
+    it('blocks the batch 261 action when any reservation item staging check is unverified', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+        RequiredQty: 100,
+        WithdrawnQty: 0,
+        OpenQty: 100,
+        ReservationItemIsFinallyIssued: false,
+        ReservationItmIsMarkedForDeltn: false
+      });
+      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation')
+        .mockResolvedValueOnce({ isVerified: true, isStaged: true })
+        .mockResolvedValueOnce({ isVerified: false, isStaged: false, error: 'SAP staging target unresolved.' });
+      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest');
+      const req = {
+        data: {
+          ReservationNo: '18025',
+          Items: [
+            { ReservationItem: '0001', IssueQty: 10, Unit: 'KG' },
+            { ReservationItem: '0002', IssueQty: 20, Unit: 'KG' }
+          ]
+        },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+
+      await handlers['submitGoodsIssueRequest'](req);
+
+      expect(GoodsIssueAdapter.checkStagingForReservation).toHaveBeenNthCalledWith(
+        1, '18025', '0001', { issueQty: 10, issueUnit: 'KG' }
+      );
+      expect(GoodsIssueAdapter.checkStagingForReservation).toHaveBeenNthCalledWith(
+        2, '18025', '0002', { issueQty: 20, issueUnit: 'KG' }
+      );
+      expect(req.error).toHaveBeenCalledWith(502, 'SAP staging target unresolved.');
+      expect(submitSpy).not.toHaveBeenCalled();
     });
 
     it('rejects a final-issue request that exceeds SAP current open quantity before posting', async () => {
@@ -288,6 +326,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
     it('should abort batch submission and execute compensating rollback when an item has an expired batch', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(mockBatchesRM4520);
+      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
         RequiredQty: 100,
         WithdrawnQty: 0,
@@ -734,6 +773,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       };
 
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
+      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       await handlers['postGoodsIssue261'](req);
       expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));
@@ -759,6 +799,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         ReservationItemIsFinallyIssued: false,
         ReservationItmIsMarkedForDeltn: false
       });
+      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
       jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockRejectedValue(sapPostingUnavailable());
       const result = await handlers['submitGoodsIssueRequest'](req);
       expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));

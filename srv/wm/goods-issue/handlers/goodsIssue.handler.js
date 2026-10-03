@@ -265,13 +265,26 @@ class GoodsIssueHandler {
       if (!(await validateSubmitReservationQuantities(req, ReservationNo, Items))) return;
 
       if (ReservationNo) {
-        try {
-          const staging = await GoodsIssueAdapter.checkStagingForReservation(ReservationNo);
-          if (staging && !staging.isStaged) {
-            return req.error(400, staging.error || 'Staged stock is insufficient for Goods Issue.');
+        for (const item of Items) {
+          const reservationItem = String(item.ReservationItem || '').trim();
+          if (!reservationItem) {
+            return req.error(400, 'ReservationItem is required to verify WM staging before Goods Issue.');
           }
-        } catch (err) {
-          LOG.warn(`submitGoodsIssueRequest staging check failed: ${err.message || err}`);
+          try {
+            const staging = await GoodsIssueAdapter.checkStagingForReservation(ReservationNo, reservationItem, {
+              issueQty: item.IssueQty,
+              issueUnit: item.Unit
+            });
+            if (!staging || staging.isVerified !== true) {
+              return req.error(502, staging?.error || `SAP WM staging could not be verified for reservation ${ReservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+            }
+            if (!staging.isStaged) {
+              return req.error(422, staging.error || `Available SAP staging stock is insufficient for reservation ${ReservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+            }
+          } catch (err) {
+            LOG.error(`submitGoodsIssueRequest staging check failed for reservation ${ReservationNo} item ${reservationItem}; blocking 261 posting:`, err.message || err);
+            return req.error(err.status || 502, `${err.message || 'SAP WM staging could not be verified'}. Goods Issue was NOT posted.`);
+          }
         }
       }
 

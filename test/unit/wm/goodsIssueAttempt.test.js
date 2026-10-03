@@ -167,6 +167,7 @@ describe('unconfirmed documents and re-confirm job', () => {
       BaseUnit: 'KG',
       OpenQty: 10
     });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
     jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
       ReservationNo: '0000142001',
       ReservationItem: '0001',
@@ -373,7 +374,7 @@ describe('Movement 261 idempotent posting attempts', () => {
     await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue(reservationItem);
     jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting').mockResolvedValue({ valid: true });
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
     jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
   });
   afterEach(() => jest.restoreAllMocks());

@@ -115,6 +115,7 @@ describe('Chunks 1–3 — Reservation, Context, and Batch Validation (Movement 
       ReservationItemIsFinallyIssued: false,
       ReservationItmIsMarkedForDeltn: false
     });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
 
     const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
       MaterialDocument: '4900001234',
@@ -190,7 +191,7 @@ describe('Chunks 1–3 — Reservation, Context, and Batch Validation (Movement 
       ReservationItemIsFinallyIssued: false,
       ReservationItmIsMarkedForDeltn: false
     });
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
     const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
       MaterialDocument: '4900001234',
       MaterialDocYear: '2026',

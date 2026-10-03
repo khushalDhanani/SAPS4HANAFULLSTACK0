@@ -38,6 +38,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
     jest.restoreAllMocks();
     await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
   });
 
   afterEach(async () => {

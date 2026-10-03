@@ -536,14 +536,16 @@ class GoodsIssueAdapter {
   }
 
   /** Check WM staging for reservation before posting */
-  async checkStagingForReservation(reservationNo, reservationItem) {
+  async checkStagingForReservation(reservationNo, reservationItem, options = {}) {
     if (this.stagingClient && typeof this.stagingClient.getStagingForReservation === 'function') {
-      return this.stagingClient.getStagingForReservation(reservationNo, reservationItem);
+      return this.stagingClient.getStagingForReservation(reservationNo, reservationItem, options);
     }
     if (this.stockUnits && typeof this.stockUnits.checkStagingForReservation === 'function') {
       return this.stockUnits.checkStagingForReservation(reservationNo, reservationItem);
     }
-    return { isStaged: true };
+    const err = new Error('SAP WM staging verification is unavailable.');
+    err.status = 503;
+    throw err;
   }
 
   /**

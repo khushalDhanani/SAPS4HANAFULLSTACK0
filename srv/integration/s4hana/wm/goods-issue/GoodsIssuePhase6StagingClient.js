@@ -17,6 +17,10 @@ function wmNum(v) {
   return parseFloat(s) || 0;
 }
 
+function stagingError(message, status = 502) {
+  return Object.assign(new Error(message), { status });
+}
+
 class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
@@ -26,96 +30,99 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
   /**
    * Resolve target staging bin and storage type for a material / plant / sloc / warehouse.
    */
-  async findStagingTarget(material, plant, sloc, warehouse = '') {
+  async findStagingTarget(material, plant, sloc, warehouse = '', psa = '', orderNo = '', targetType = '') {
     const sMat = clean(material);
     const sPlant = clean(plant);
     const sSloc = clean(sloc);
     let sLgnum = clean(warehouse);
 
-    if (!sLgnum && this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        const t320 = await this.rfc.readTable('T320', ['LGNUM'], [`WERKS = '${sPlant}'`, `AND LGORT = '${sSloc}'`], 1);
-        if (t320 && t320[0] && t320[0].LGNUM) {
-          sLgnum = clean(t320[0].LGNUM);
-        }
-      } catch (err) {
-        LOG.warn(`T320 lookup failed in findStagingTarget: ${err.message || err}`);
-      }
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') {
+      throw stagingError('SAP RFC table access is unavailable; the WM staging target cannot be verified.');
+    }
+    if (!sLgnum) {
+      const t320 = await this.rfc.readTable(
+        'T320', ['WERKS', 'LGORT', 'LGNUM'],
+        [`WERKS = '${sPlant}'`, `AND LGORT = '${sSloc}'`], 2
+      );
+      if (t320.length > 1) throw stagingError(`SAP returned ambiguous WM warehouse mappings for ${sPlant}/${sSloc}.`);
+      sLgnum = clean(t320[0]?.LGNUM);
+    }
+    if (!sLgnum) {
+      return { isWm: false, targetType: '', targetBin: '', stagingSource: 'T320_NO_WM_MAPPING', warehouse: '' };
     }
 
-    // 1. Control Cycle (PKHD)
-    if (this.rfc && typeof this.rfc.readTable === 'function' && sMat) {
-      try {
-        const matnrIn = wmAlphaIn(sMat);
-        const where = [`WERKS = '${sPlant}'`];
-        if (sLgnum) where.push(`AND LGNUM = '${sLgnum}'`);
-        where.push(`AND ( MATNR = '${matnrIn}' OR MATNR = '${sMat}' OR MATNR = '' )`);
-
-        const pkhdRows = await this.rfc.readTable('PKHD', ['PRVBE', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA'], where, 10);
-        if (Array.isArray(pkhdRows) && pkhdRows.length > 0) {
-          const match = pkhdRows.find((r) => r.LGTYP && r.LGPLA) || pkhdRows[0];
-          if (match && (match.LGTYP || match.LGPLA)) {
-            return {
-              targetType: clean(match.LGTYP) || '100',
-              targetBin: clean(match.LGPLA) || 'STAGE-BIN',
-              stagingSource: 'PKHD_CONTROL_CYCLE',
-              psa: clean(match.PRVBE),
-              warehouse: clean(match.LGNUM) || sLgnum
-            };
-          }
-        }
-      } catch (err) {
-        LOG.warn(`PKHD lookup failed in findStagingTarget: ${err.message || err}`);
-      }
+    const matnrIn = wmAlphaIn(sMat);
+    const where = [`WERKS = '${sPlant}'`, `AND LGNUM = '${sLgnum}'`];
+    if (psa) where.push(`AND PRVBE = '${psa}'`);
+    let pkhdRows = sMat
+      ? await this.rfc.readTable(
+        'PKHD', ['MATNR', 'PRVBE', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA', 'BERKZ', 'NKDYN'],
+        [...where, `AND MATNR = '${matnrIn}'`], 100
+      )
+      : [];
+    if (!pkhdRows.length) {
+      pkhdRows = await this.rfc.readTable(
+      'PKHD', ['MATNR', 'PRVBE', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA', 'BERKZ', 'NKDYN'],
+        [...where, "AND MATNR = ''"], 100
+      );
     }
-
-    // 2. MLGN (Material Data for Warehouse)
-    if (this.rfc && typeof this.rfc.readTable === 'function' && sMat && sLgnum) {
-      try {
-        const matnrIn = wmAlphaIn(sMat);
-        const mlgnRows = await this.rfc.readTable('MLGN', ['LGNUM', 'LVSMS', 'LGBKZ'], [`MATNR = '${matnrIn}'`, `AND LGNUM = '${sLgnum}'`], 1);
-        if (mlgnRows && mlgnRows[0]) {
-          const lvsms = clean(mlgnRows[0].LVSMS);
-          if (lvsms) {
-            return {
-              targetType: '100',
-              targetBin: `STAGE-${lvsms}`,
-              stagingSource: 'MLGN_STAGING_INDICATOR',
-              warehouse: sLgnum
-            };
-          }
-        }
-      } catch (err) {
-        LOG.warn(`MLGN lookup failed: ${err.message || err}`);
+    const plantRows = pkhdRows.filter((row) =>
+      clean(row.WERKS) === sPlant &&
+      clean(row.LGNUM) === sLgnum &&
+      (!psa || clean(row.PRVBE) === psa)
+    );
+    const materialRows = plantRows.filter((row) => clean(row.MATNR) === matnrIn);
+    const specificRows = materialRows.length ? materialRows : plantRows.filter((row) => !clean(row.MATNR));
+    const candidates = targetType && specificRows.some((row) => clean(row.LGTYP) === clean(targetType))
+      ? specificRows.filter((row) => clean(row.LGTYP) === clean(targetType))
+      : specificRows;
+    const targets = candidates.map((row) => {
+      const configuredType = clean(row.LGTYP);
+      const configuredBin = clean(row.LGPLA);
+      if (configuredType && configuredBin) {
+        return { targetType: configuredType, targetBin: configuredBin, stagingSource: 'PKHD_CONTROL_CYCLE', psa: clean(row.PRVBE) };
       }
-    }
+      if (configuredType && clean(row.NKDYN).toUpperCase() === 'X' && ['1', '2', '3', '4'].includes(clean(row.BERKZ)) && clean(orderNo)) {
+        return {
+          targetType: configuredType,
+          targetBin: clean(orderNo).padStart(10, '0'),
+          stagingSource: 'PKHD_DYNAMIC_BIN',
+          psa: clean(row.PRVBE)
+        };
+      }
+      return null;
+    }).filter(Boolean);
 
-    // 3. Fallback based on warehouse config
-    if (sLgnum) {
+    const uniqueTargets = [...new Map(targets.map((target) =>
+      [`${target.targetType}|${target.targetBin}`, target]
+    )).values()];
+    if (uniqueTargets.length !== 1) {
       return {
-        targetType: '100',
-        targetBin: 'STAGE-BIN',
-        stagingSource: 'DEFAULT_STAGING_CONFIG',
-        warehouse: sLgnum
+        isWm: true,
+        targetType: '',
+        targetBin: '',
+        stagingSource: 'PKHD_UNRESOLVED',
+        warehouse: sLgnum,
+        error: uniqueTargets.length
+          ? `SAP returned multiple staging targets for material ${sMat} at ${sPlant}/${sSloc}.`
+          : `SAP staging type/bin could not be resolved for material ${sMat} at ${sPlant}/${sSloc}${psa ? ` supply area ${psa}` : ''}.`
       };
     }
-
-    return {
-      targetType: '',
-      targetBin: '',
-      stagingSource: 'NONE',
-      warehouse: ''
-    };
+    return { isWm: true, ...uniqueTargets[0], warehouse: sLgnum };
   }
 
   /**
    * Find transfer requirement (TBNUM) associated with a reservation or reservation item.
    */
-  async findTransferRequirement(resNo, item = '', matnr = '', plant = '', lgnum = '') {
-    if (!this.rfc || typeof this.rfc.readTable !== 'function') return '';
+  async findTransferRequirement(resNo, item = '', _material = '', _plant = '', warehouse = '', includeTarget = false) {
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') {
+      throw stagingError('SAP RFC table access is unavailable; reservation transfer requirement cannot be verified.');
+    }
     const sRes = clean(resNo);
-    if (!sRes) return '';
+    if (!sRes) return includeTarget ? { tbnum: '' } : '';
     const resPadded = sRes.padStart(10, '0');
+    let tbnum = '';
+    let itemLinkedTransfer = false;
 
     try {
       const where = [`RSNUM = '${resPadded}'`];
@@ -123,24 +130,55 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         where.push(`AND RSPOS = '${clean(item).padStart(4, '0')}'`);
       }
       const tbpeRows = await this.rfc.readTable('TBPE', ['TBNUM', 'TBPOS', 'RSNUM', 'RSPOS'], where, 5);
-      if (tbpeRows && tbpeRows.length > 0 && tbpeRows[0].TBNUM) {
-        return clean(tbpeRows[0].TBNUM);
+      const itemLink = (tbpeRows || []).find((row) =>
+        clean(row.RSNUM) === resPadded
+        && (!clean(item) || clean(row.RSPOS) === clean(item).padStart(4, '0'))
+        && clean(row.TBNUM)
+      );
+      if (itemLink) {
+        tbnum = clean(itemLink.TBNUM);
+        itemLinkedTransfer = true;
       }
     } catch (e) {
       LOG.warn(`TBPE lookup failed for reservation ${sRes}: ${e.message || e}`);
     }
 
-    try {
-      const where = [`RSNUM = '${resPadded}'`];
-      const tbpkRows = await this.rfc.readTable('TBPK', ['TBNUM', 'LGNUM', 'RSNUM', 'STATUS'], where, 5);
-      if (tbpkRows && tbpkRows.length > 0 && tbpkRows[0].TBNUM) {
-        return clean(tbpkRows[0].TBNUM);
+    if (!tbnum) {
+      try {
+        const where = [`RSNUM = '${resPadded}'`];
+        const tbpkRows = await this.rfc.readTable('TBPK', ['TBNUM', 'LGNUM', 'RSNUM', 'STATUS'], where, 5);
+        if (tbpkRows && tbpkRows.length > 0 && tbpkRows[0].TBNUM) {
+          tbnum = clean(tbpkRows[0].TBNUM);
+        }
+      } catch (e) {
+        LOG.warn(`TBPK lookup failed for reservation ${sRes}: ${e.message || e}`);
       }
-    } catch (e) {
-      LOG.warn(`TBPK lookup failed for reservation ${sRes}: ${e.message || e}`);
     }
 
-    return '';
+    if (!tbnum) return includeTarget ? { tbnum: '' } : '';
+    if (!includeTarget) return tbnum;
+    if (!itemLinkedTransfer) return { tbnum };
+    try {
+      const ltbkRows = await this.rfc.readTable(
+        'LTBK', ['TBNUM', 'LGNUM', 'NLTYP', 'NLPLA'],
+        [`TBNUM = '${tbnum}'`], 5
+      );
+      const destinations = [...new Map(ltbkRows
+        .filter((row) => clean(row.TBNUM) === tbnum
+          && (!clean(warehouse) || clean(row.LGNUM) === clean(warehouse))
+          && clean(row.NLTYP) && clean(row.NLPLA))
+        .map((row) => [`${clean(row.NLTYP)}|${clean(row.NLPLA)}`, {
+          targetType: clean(row.NLTYP),
+          targetBin: clean(row.NLPLA)
+        }])).values()];
+      if (destinations.length > 1) {
+        throw stagingError(`SAP returned multiple transfer requirement staging targets for reservation ${sRes}.`);
+      }
+      return { tbnum, ...(destinations[0] || {}) };
+    } catch (err) {
+      if (err.status) throw err;
+      throw stagingError(`SAP transfer requirement ${tbnum} staging target could not be read: ${err.message || 'unexpected RFC read failure'}.`);
+    }
   }
 
   /**
@@ -156,6 +194,8 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     warehouse = '',
     targetType = '',
     targetBin = '',
+    psa = '',
+    orderNo = '',
     requiredQty = 0,
     uom = 'PC',
     tbnum = '',
@@ -173,20 +213,29 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     let sTbnum = clean(tbnum);
 
     if (!sType || !sBin) {
-      const target = await this.findStagingTarget(sMat, sPlant, sSloc, sLgnum);
+      const target = await this.findStagingTarget(sMat, sPlant, sSloc, sLgnum, psa, orderNo, sType);
+      if (!target.isWm) {
+        return {
+          isVerified: true,
+          isStaged: true,
+          isStagingRequired: false,
+          stagedQty: reqQty,
+          requiredQty: reqQty,
+          plannedUnconfirmedQty: 0
+        };
+      }
       sType = target.targetType;
       sBin = target.targetBin;
-      if (!sLgnum && target.warehouse) sLgnum = target.warehouse;
-    }
-
-    if (!sType || !sBin) {
-      return {
-        isStaged: true,
-        isStagingRequired: false,
-        stagedQty: reqQty,
-        requiredQty: reqQty,
-        plannedUnconfirmedQty: 0
-      };
+      sLgnum = target.warehouse;
+      if (!sType || !sBin) {
+        return {
+          isVerified: false,
+          isStaged: false,
+          isStagingRequired: true,
+          warehouse: sLgnum,
+          error: target.error || `SAP staging target could not be resolved for material ${sMat}.`
+        };
+      }
     }
 
     if (!sTbnum && resNo) {
@@ -196,26 +245,40 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     let stagedQty = 0;
     let plannedUnconfirmedQty = 0;
 
-    if (this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        const matnrIn = wmAlphaIn(sMat);
-        const where = [
-          `LGTYP = '${sType}'`,
-          `AND LGPLA = '${sBin}'`,
-          `AND ( MATNR = '${matnrIn}' OR MATNR = '${sMat}' )`
-        ];
-        if (sPlant) where.push(`AND WERKS = '${sPlant}'`);
-        if (sLgnum) where.push(`AND LGNUM = '${sLgnum}'`);
-
-        const lquaRows = await this.rfc.readTable('LQUA', ['LGNUM', 'LGTYP', 'LGPLA', 'VERME', 'EINME', 'MEINS'], where, 50);
-        if (Array.isArray(lquaRows)) {
-          for (const row of lquaRows) {
-            stagedQty += wmNum(row.VERME);
-            plannedUnconfirmedQty += wmNum(row.EINME);
-          }
-        }
-      } catch (err) {
-        LOG.warn(`LQUA staging check failed: ${err.message || err}`);
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') {
+      throw stagingError('SAP RFC table access is unavailable; staged stock cannot be verified.');
+    }
+    const matnrIn = wmAlphaIn(sMat);
+    const where = [
+      `LGNUM = '${sLgnum}'`,
+      `AND LGTYP = '${sType}'`,
+      `AND LGPLA = '${sBin}'`,
+      `AND MATNR = '${matnrIn}'`,
+      `AND WERKS = '${sPlant}'`,
+      `AND LGORT = '${sSloc}'`
+    ];
+    const lquaRows = await this.rfc.readTable(
+      'LQUA',
+      ['LGNUM', 'LGTYP', 'LGPLA', 'MATNR', 'WERKS', 'LGORT', 'VERME', 'EINME', 'MEINS', 'BESTQ', 'SOBKZ', 'SKZUA', 'SKZSA', 'SKZSI'],
+      where, 500
+    );
+    for (const row of lquaRows || []) {
+      if (
+        clean(row.LGNUM) !== sLgnum || clean(row.LGTYP) !== sType || clean(row.LGPLA) !== sBin ||
+        clean(row.MATNR).replace(/^0+/, '') !== sMat.replace(/^0+/, '') ||
+        clean(row.WERKS) !== sPlant || clean(row.LGORT) !== sSloc
+      ) {
+        throw stagingError('SAP returned a WM quant outside the requested staging target; staged stock cannot be verified.');
+      }
+      if (clean(row.MEINS).toUpperCase() !== clean(uom).toUpperCase()) {
+        throw stagingError(`SAP staged stock unit ${clean(row.MEINS) || '(blank)'} does not match reservation unit ${uom || '(blank)'}.`);
+      }
+      plannedUnconfirmedQty += wmNum(row.EINME);
+      if (
+        !clean(row.BESTQ) && !clean(row.SOBKZ) &&
+        !clean(row.SKZUA) && !clean(row.SKZSA) && !clean(row.SKZSI)
+      ) {
+        stagedQty += wmNum(row.VERME);
       }
     }
 
@@ -236,6 +299,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     }
 
     return {
+      isVerified: true,
       isStaged,
       isFullyStaged,
       isStagingRequired: true,
@@ -254,12 +318,13 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
   /**
    * Check staging for a specific reservation item end-to-end.
    */
-  async getStagingForReservation(reservationNo, reservationItem) {
+  async getStagingForReservation(reservationNo, reservationItem, { issueQty, issueUnit } = {}) {
     const sResv = clean(reservationNo);
     const sItem = clean(reservationItem);
-    if (!sResv || !sItem) return { isStaged: true, isStagingRequired: false };
+    if (!sResv || !sItem) throw stagingError('Reservation number and item are required to verify WM staging.', 400);
 
     let itemData = null;
+    let resbFound = false;
 
     if (this.rfc && typeof this.rfc.readTable === 'function') {
       try {
@@ -268,15 +333,17 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         const where = [`RSNUM = '${resvPadded}'`, `AND RSPOS = '${itemPadded}'`, `AND XLOEK = ''`, `AND KZEAR = ''`];
         const resbRows = await this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'AUFNR', 'LGTYP', 'PRVBE'], where, 1);
         if (resbRows && resbRows[0]) {
+          resbFound = true;
           itemData = {
-            Material: clean(resbRows[0].MATNR),
+            Material: clean(resbRows[0].MATNR).replace(/^0+/, ''),
             Plant: clean(resbRows[0].WERKS),
             StorageLocation: clean(resbRows[0].LGORT),
             RequiredQty: wmNum(resbRows[0].BDMNG),
             WithdrawnQty: wmNum(resbRows[0].ENMNG),
             BaseUnit: clean(resbRows[0].MEINS) || 'PC',
             TargetType: clean(resbRows[0].LGTYP),
-            Psa: clean(resbRows[0].PRVBE)
+            Psa: clean(resbRows[0].PRVBE),
+            OrderNo: clean(resbRows[0].AUFNR)
           };
         }
       } catch (err) {
@@ -305,17 +372,103 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     }
 
     if (!itemData) {
-      return { isStaged: true, isStagingRequired: false };
+      throw stagingError(`Reservation ${sResv} item ${sItem} could not be read from SAP to verify WM staging.`);
+    }
+
+    if (!itemData.Material || !itemData.Plant || !itemData.StorageLocation) {
+      throw stagingError(`SAP returned incomplete reservation context for ${sResv} item ${sItem}; WM staging cannot be verified.`);
+    }
+
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') {
+      throw stagingError('SAP RFC table access is unavailable; WM-managed storage cannot be verified.');
+    }
+    const mappings = await this.rfc.readTable(
+      'T320', ['WERKS', 'LGORT', 'LGNUM'],
+      [`WERKS = '${itemData.Plant}'`, `AND LGORT = '${itemData.StorageLocation}'`], 2
+    );
+    if (mappings.length > 1) {
+      throw stagingError(`SAP returned ambiguous WM warehouse mappings for ${itemData.Plant}/${itemData.StorageLocation}.`);
+    }
+    const warehouse = clean(mappings[0]?.LGNUM);
+    if (!warehouse) {
+      return {
+        isVerified: true,
+        isStaged: true,
+        isStagingRequired: false,
+        stagedQty: 0,
+        requiredQty: Number(issueQty ?? Math.max(0, itemData.RequiredQty - itemData.WithdrawnQty)),
+        plannedUnconfirmedQty: 0,
+        warehouse: ''
+      };
+    }
+
+    if (!resbFound) {
+      throw stagingError(`WM warehouse ${warehouse} is configured for ${itemData.Plant}/${itemData.StorageLocation}, but SAP RESB staging data for reservation ${sResv} item ${sItem} could not be verified.`);
+    }
+    if (!itemData.TargetType) {
+      throw stagingError(`SAP RESB has no staging type for WM-managed reservation ${sResv} item ${sItem}; staging requirement cannot be verified.`);
     }
 
     const netOpen = Math.max(0, itemData.RequiredQty - itemData.WithdrawnQty);
+    const requestedQty = issueQty == null ? netOpen : Number(issueQty);
+    if (!Number.isFinite(requestedQty) || requestedQty <= 0) {
+      throw stagingError(`Issue quantity ${issueQty} is invalid for WM staging verification.`, 400);
+    }
+    let requiredBaseQty = requestedQty;
+    const requestedUnit = clean(issueUnit || itemData.BaseUnit).toUpperCase();
+    const baseUnit = clean(itemData.BaseUnit).toUpperCase();
+    if (!baseUnit || !requestedUnit) {
+      throw stagingError(`SAP reservation unit could not be verified for ${sResv} item ${sItem}.`);
+    }
+    if (requestedUnit !== baseUnit) {
+      if (!this.adapter || typeof this.adapter.getMaterialPackagingUnits !== 'function') {
+        throw stagingError(`SAP unit conversion is unavailable from ${requestedUnit} to ${baseUnit} for material ${itemData.Material}.`);
+      }
+      const units = await this.adapter.getMaterialPackagingUnits(itemData.Material);
+      const entry = Array.isArray(units)
+        ? units.find((candidate) => clean(candidate.Unit).toUpperCase() === requestedUnit)
+        : null;
+      const base = Array.isArray(units)
+        ? units.find((candidate) => clean(candidate.Unit).toUpperCase() === baseUnit && candidate.IsBaseUnit)
+        : null;
+      const factor = Number(entry?.FactorToBase);
+      if (!entry || !base || !Number.isFinite(factor) || factor <= 0) {
+        throw stagingError(`SAP unit conversion from ${requestedUnit} to reservation base unit ${baseUnit} could not be verified for material ${itemData.Material}.`);
+      }
+      requiredBaseQty *= factor;
+    }
+    if (requiredBaseQty > netOpen + 1e-9) {
+      throw stagingError(`Requested staging quantity ${requiredBaseQty} ${baseUnit} exceeds SAP reservation open quantity ${netOpen} ${baseUnit}.`, 422);
+    }
+
+    const transfer = await this.findTransferRequirement(sResv, sItem, '', '', warehouse, true);
+    const target = transfer.targetType && transfer.targetBin
+      ? {
+        isWm: true,
+        targetType: transfer.targetType,
+        targetBin: transfer.targetBin,
+        stagingSource: 'TRANSFER_REQUIREMENT',
+        warehouse
+      }
+      : await this.findStagingTarget(
+        itemData.Material, itemData.Plant, itemData.StorageLocation, warehouse,
+        itemData.Psa, itemData.OrderNo, itemData.TargetType
+      );
+    if (!target.targetType || !target.targetBin) {
+      throw stagingError(target.error || `SAP staging target could not be resolved for reservation ${sResv} item ${sItem}.`);
+    }
     return this.checkStaging({
       material: itemData.Material,
       plant: itemData.Plant,
       sloc: itemData.StorageLocation,
-      targetType: itemData.TargetType || '',
-      requiredQty: netOpen,
-      uom: itemData.BaseUnit,
+      warehouse,
+      targetType: target.targetType,
+      targetBin: target.targetBin,
+      psa: itemData.Psa,
+      orderNo: itemData.OrderNo,
+      requiredQty: requiredBaseQty,
+      uom: baseUnit,
+      tbnum: transfer.tbnum,
       resNo: sResv,
       resItem: sItem
     });

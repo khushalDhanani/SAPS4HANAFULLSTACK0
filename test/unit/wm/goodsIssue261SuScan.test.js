@@ -301,6 +301,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
   beforeEach(async () => {
     GoodsIssueAttemptStore.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
   });
 
   afterEach(async () => {

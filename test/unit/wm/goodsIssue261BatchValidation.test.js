@@ -98,7 +98,7 @@ describe('Movement 261 SAP batch validation', () => {
     const managedSpy = jest.spyOn(GoodsIssueAdapter, 'isBatchManaged');
     const validateSpy = jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting')
       .mockResolvedValue({ valid: true });
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
     const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
       MaterialDocument: '4900001234',
       MaterialDocYear: '2026',
@@ -119,7 +119,7 @@ describe('Movement 261 SAP batch validation', () => {
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(true);
     const validateSpy = jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting')
       .mockResolvedValue({ valid: true, availableStock: 25, requiredBaseQty: 10, stockUnit: 'KG' });
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
     const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
       MaterialDocument: '4900001234',
       MaterialDocYear: '2026',

@@ -1,6 +1,47 @@
 
 # Changes Log
 
+## 2026-10-03 13:10 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 11 — authoritative WM staging validation across direct and multi-line posting paths.
+- **Plan**: Use SAP T320/RESB, item-linked transfer requirement destination data, and SAP-configured PKHD targets to resolve staging. Verify only usable LQUA stock at the exact target, convert the requested quantity to the reservation base unit, and fail closed when WM staging cannot be proven. Keep test fixtures for unrelated posting workflows explicit about successful staging.
+- **Change**: Removed fabricated staging bins and fail-open handling. The staging client now determines WM management from T320, reservation material/context and staging type from RESB, transfer destinations only from reservation-item-linked TBPE/LTBK data, and configured/dynamic targets from PKHD. It verifies unrestricted, non-special, non-blocked LQUA stock at the resolved target, converts request units using SAP packaging-unit data, and blocks unknown staging requirements or SAP read failures. A WM-mapped reservation with a blank RESB staging type now rejects rather than being treated as not requiring staging. Both direct 261 and multi-line 261 handlers block before posting when any item lacks verified, sufficient staging. Updated focused and legacy workflow test fixtures.
+- **Current Status**: In Progress / Blocked for production-complete signoff — implementation and controlled tests pass, but the SAP-specific business rule for WM-mapped RESB rows with blank LGTYP and the transfer-destination precedence for an actual reservation have not been confirmed against a live reservation/workflow. Blank LGTYP currently fails closed to avoid silently bypassing staging.
+- **Files Changed**: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `srv/wm/goods-issue/handlers/goodsIssue.handler.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssue261BatchValidation.test.js`, `test/unit/wm/goodsIssue261OverIssue.test.js`, `test/unit/wm/goodsIssue261SerialValidation.test.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsIssueIssuedSu.test.js`, `test/unit/wm/goodsIssuePendingConfirmationPerType.test.js`, `test/unit/wm/goodsIssueService.test.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, `test/unit/wm/goodsIssue261StagingValidation.test.js`, `WORKSTATUS.md`.
+- **Reason**: Every 261 route must validate staging from SAP-authoritative data; unresolved target, quantity, and SAP read failures must not allow a goods movement.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssue261StagingValidation.test.js test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssue261BatchValidation.test.js test/unit/wm/goodsIssue261OverIssue.test.js test/unit/wm/goodsIssue261SerialValidation.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent`: passed, 7 suites / 112 tests.
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js --runInBand --silent`: passed, 3 suites / 63 tests.
+  - `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssue261StagingValidation.test.js --runInBand --silent`: passed, 2 suites / 18 tests after making blank RESB staging type fail closed.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,062 tests.
+  - `npx cds compile srv`: passed.
+  - ESLint on changed implementation and test files: 0 errors; two unused-variable warnings (`isDefinitiveRejection` and `claimId`).
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: The first full WM run failed 17 tests in three suites because those tests did not stub the now-required staging verifier; explicit successful staging fixtures were added and the full rerun passed. Lint warnings remain as noted. Existing read-only discovery verified the sample T320 warehouse mapping, PKHD configuration, and relevant SAP table fields, but no reservation-specific live staging target/quantity was checked in this work session. No live SAP POST or document read-back was performed. Chunk 9 posting-date validation remains separately blocked on an RFC-enabled SAP wrapper.
+- **Next Steps**: Have the SAP WM/process owner confirm whether blank RESB.LGTYP can legitimately mean “no staging required” and whether item-linked LTBK NLTYP/NLPLA is the target that should take precedence. Then validate against a representative live reservation using read-only SAP calls; do not perform a goods-issue POST until this is confirmed.
+
+## 2026-10-03 13:00 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 11 — include the legacy multi-line 261 action in the staging gate.
+- **Plan**: The CAP service contract confirms `submitGoodsIssueRequest` is movement 261 only and posts multiple reservation items. Extend the staging validation to check each submitted reservation item with its own requested quantity/unit and stop posting if any item is unverified or under-staged. Add targeted tests for per-item checks and fail-closed errors.
+- **Current Status**: In Progress — the same action has a separate reservation-level staging call with no item key and currently catches/logs failures before continuing to SAP, so it would bypass the direct 261 staging guard.
+- **Files Changed**: `WORKSTATUS.md` only for this scope addition.
+- **Reason**: All entry points that can post 261 must enforce staging; the server must not retain a bypass in the batch-submit action.
+- **Validation**: Code changes and regression tests pending.
+- **Errors / Warnings / Blockers**: No SAP posting will be performed.
+- **Next Steps**: Iterate the bulk action's reservation item list, pass each intended quantity/unit to the same SAP staging adapter, fail closed before submit, then test direct and batch 261 paths.
+
+## 2026-10-03 12:57 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 11 — authoritative WM staging validation.
+- **Plan**: Harden `GoodsIssuePhase6StagingClient` and the direct 261 handler. Resolve WM management from SAP `T320`; use the authoritative reservation item (`RESB`, with OData only as item-data fallback), reservation supply area, and configured control-cycle/transfer data to resolve the staging type/bin; use configured dynamic-bin data only when SAP says it applies. Remove synthetic staging target defaults. Sum usable unrestricted `LQUA` quantity only at the exact warehouse/type/bin/material/plant/storage location, compare against the requested 261 quantity converted to the reservation base unit, and fail closed for unknown staging requirements/read errors. Add handler/client tests and run focused + WM tests, lint, compile, and diff checks. No live posting.
+- **Current Status**: In Progress — direct 261 currently invokes a staging check, but the wrapper suppresses read errors; the SAP client fabricates `STAGE-BIN`/`STAGE-${LVSMS}` defaults, treats unresolved staging as not required, and can sum stock without excluding blocked/special stock. Live read-only discovery verified T320 maps plant `1120` / storage location `CS01` to warehouse `W01`; live PKHD configuration for `1120/W01` includes dynamic bins (`NKDYN=X`, `BERKZ=1`) and configured types including `IP1`, `IP2`, `2FL`, and `GFL`. SAP DDIC reads confirmed relevant fields in T320, RESB, PKHD, LTBK/LTBP, and LQUA. No reservation-specific supply-area/bin was selected or posted.
+- **Files Changed**: `WORKSTATUS.md` only at planning stage.
+- **Reason**: A direct 261 request must not pass the WM gate because staging configuration or quantity reads failed, and cannot rely on assumed bins or unrestricted totals.
+- **Validation**: Read-only SAP DDIC/table discovery succeeded. Code changes and tests pending.
+- **Errors / Warnings / Blockers**: No live SAP POST performed. Exact reservation-specific staging target and current staged quantity require request-time SAP reads; there is no supplied live reservation item for a one-off end-to-end data confirmation.
+- **Next Steps**: Implement the SAP-derived fail-closed chain described above, add controlled regression tests for non-WM, verified staging success/shortage, unresolved target, and read failures, then run and record validation.
+
 ## 2026-10-03 12:52 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 10 — serial number validation closeout.

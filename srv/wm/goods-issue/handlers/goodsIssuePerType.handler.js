@@ -706,15 +706,24 @@ async function stagingCheck(req, normalized) {
   const sItem = String(normalized?.ReservationItem || '').trim();
   if (!sResv || !sItem) return true;
   try {
-    const staging = await GoodsIssueAdapter.checkStagingForReservation(sResv, sItem);
-    if (staging && !staging.isStaged) {
-      req.error(400, staging.error || 'Staged stock is insufficient for goods issue.');
+    const staging = await GoodsIssueAdapter.checkStagingForReservation(sResv, sItem, {
+      issueQty: normalized.IssueQty,
+      issueUnit: normalized.Unit
+    });
+    if (!staging || staging.isVerified !== true) {
+      req.error(502, staging?.error || `SAP WM staging requirement could not be verified for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
       return false;
     }
+    if (!staging.isStaged) {
+      req.error(422, staging.error || 'Available SAP staging stock is insufficient for goods issue.');
+      return false;
+    }
+    return true;
   } catch (err) {
-    LOG.warn(`stagingCheck failed for reservation ${sResv} item ${sItem}:`, err.message || err);
+    LOG.error(`SAP staging check failed for reservation ${sResv} item ${sItem}; blocking 261 posting:`, err.message || err);
+    req.error(err.status || 502, `${err.message || 'SAP WM staging could not be verified'}. Goods Issue was NOT posted.`);
+    return false;
   }
-  return true;
 }
 
 /**

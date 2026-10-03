@@ -42,7 +42,7 @@ describe('Movement 261 SAP serial validation', () => {
     GoodsIssueAttemptStore.clearMemoryStore();
     jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue(reservationItem);
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
     jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(true);
     jest.spyOn(GoodsIssueAdapter, 'validateSerialStatus').mockResolvedValue({ valid: true });
     jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({

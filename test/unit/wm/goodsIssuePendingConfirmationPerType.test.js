@@ -49,6 +49,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
     attempts.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
 
     // Default safe pre-check mocks
     if (typeof GoodsIssueAdapter.revalidateStockBeforePosting === 'function') {
