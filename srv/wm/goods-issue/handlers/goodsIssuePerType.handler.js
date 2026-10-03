@@ -350,12 +350,9 @@ async function serialCountCheck(req, normalized) {
  * Storage Unit reconciliation for Movement 261 reservation-based issue.
  * Re-reads the real SUs for the reservation item from SAP stock (listStockUnitsForReservationItem).
  * When SU data exists in SAP, validates:
- *  - Client supplied StorageUnits
- *  - No duplicate SUs
- *  - Each SU exists in SAP stock for that reservation item (matching material, plant, sloc)
- *  - Real sum of SU stock matches normalized.IssueQty (rejects tampered payloads with 400)
- *  - Real sum of SU stock does not exceed reservation open quantity (blocks over-issue with 400)
- *  - Real sum of SU stock matches reservation open quantity (complete issue with 400 on under/over)
+ *  - Client-scanned StorageUnits are unique and exist in the SAP reservation stock
+ *  - SAP stock for the scanned units covers normalized.IssueQty without exceeding open reservation quantity
+ *  - Server-owned per-SU allocations use full quantities where possible and a server-calculated partial for the last unit
  * Returns true to continue, or calls req.error(400, ...) and returns false (no queueing).
  */
 async function storageUnitReconcileCheck261(req, normalized, resvItem) {
@@ -416,6 +413,15 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       LOG.warn(`Could not re-verify reservation open quantity for ${sResv} item ${sItem}:`, e.message || e);
     }
   }
+  const issueQty = Math.round(Number(normalized.IssueQty) * 1000) / 1000;
+  if (!Number.isFinite(openQty) || openQty < 0) {
+    req.error(502, `SAP open reservation quantity could not be verified for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  if (!Number.isFinite(issueQty) || issueQty <= 0 || issueQty > openQty + 1e-9) {
+    req.error(422, `Requested issue quantity ${issueQty} is invalid or exceeds SAP open reservation quantity ${openQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
 
   // Verify all submitted SUs exist in SAP stock and have available stock > 0
   const numSUs = submittedSUs.length;
@@ -433,9 +439,8 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     }
   }
 
-  // Server chooses which SU takes the partial, never the client's order (Requirement 2).
-  // Order submitted SUs according to SAP's authoritative sequence (FEFO / FIFO / StorageUnit).
-  const targetTotal = (openQty !== null && openQty > 0) ? openQty : Math.round(Number(normalized.IssueQty) * 1000) / 1000;
+  // Allocate only the requested quantity; SAP stock and ordering determine each SU contribution.
+  const targetTotal = issueQty;
 
   const authoritativeSUs = [...submittedSUs].sort((a, b) => {
     const keyA = String(a).trim().toUpperCase();
@@ -459,8 +464,7 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
     const needed = Math.round((targetTotal - runningSum) * 1000) / 1000;
 
     if (needed <= 0) {
-      req.error(400, `Storage Unit ${suId} is in excess of required quantity (${targetTotal}). Goods Issue was NOT posted.`);
-      return false;
+      break;
     }
 
     if (avail <= needed) {
@@ -482,11 +486,6 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
         issuedQty: needed,
         preIssueStock: fullStock
       });
-      if (i < authoritativeSUs.length - 1) {
-        const excessSu = String(authoritativeSUs[i + 1]).trim().toUpperCase();
-        req.error(400, `Storage Unit ${excessSu} is in excess of required quantity (${targetTotal}). Over-issue blocked. Goods Issue was NOT posted.`);
-        return false;
-      }
       break;
     }
   }
@@ -507,7 +506,7 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       return false;
     }
 
-    // Server rule: accept any valid SU set whose sum equals open qty; server picks which SU takes the partial
+    // The optional client hint must agree with the server-calculated quantity; it never drives allocation.
     if (explicitLastQty !== null) {
       if (isNaN(explicitLastQty) || explicitLastQty <= 0) {
         req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${partialSuId} must be greater than zero. Goods Issue was NOT posted.`);
@@ -527,7 +526,7 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
       }
     }
   } else {
-    // No partial SU: all SUs must be full
+    // No partial SU was needed in the server allocation.
     if (explicitLastQty !== null) {
       const clientLastSu = validSuMap.get(String(submittedSUs[numSUs - 1]).trim().toUpperCase());
       const clientLastStock = clientLastSu ? Number(clientLastSu.AvailableStock || clientLastSu.CurrentStock || 0) : 0;
@@ -539,11 +538,9 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
   }
 
   const realSum = runningSum;
-  const issueQty = Math.round(Number(normalized.IssueQty) * 1000) / 1000;
-
-  // Tampered payload check: submitted IssueQty must equal real sum of SUs from SAP
+  // Server allocation must exactly cover the requested issue quantity from SAP stock.
   if (Math.abs(realSum - issueQty) > 0.001) {
-    req.error(400, `Submitted IssueQty (${issueQty}) does not match real sum of Storage Units (${realSum}). Tampered payload detected. Goods Issue was NOT posted.`);
+    req.error(400, `Requested IssueQty (${issueQty}) exceeds the scanned SAP Storage Unit stock allocated by the server (${realSum}). Goods Issue was NOT posted.`);
     return false;
   }
 
@@ -551,10 +548,6 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
   if (openQty !== null && openQty > 0) {
     if (realSum > openQty + 1e-9) {
       req.error(400, `Storage Units total quantity (${realSum}) exceeds open reservation quantity (${openQty}). Over-issue blocked. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (Math.abs(realSum - openQty) > 0.001) {
-      req.error(400, `Storage Units total quantity (${realSum}) does not match required reservation quantity (${openQty}). Scanned quantity is ${realSum < openQty ? 'under' : 'over'}. Goods Issue was NOT posted.`);
       return false;
     }
   }

@@ -344,10 +344,18 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
     });
 
     it('counts only unrestricted, non-special, unblocked staged stock', async () => {
+      const baseQuant = {
+        LGNUM: 'W01', LGTYP: '100', LGPLA: 'STAGE-01', MATNR: '000000001000000867',
+        WERKS: '1000', LGORT: '1100', VERME: '20', EINME: '0', MEINS: 'KG',
+        BESTQ: '', SOBKZ: '', SKZUA: '', SKZSA: '', SKZSI: ''
+      };
       const rows = [
-        { LGNUM: 'W01', LGTYP: '100', LGPLA: 'STAGE-01', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100', VERME: '6', EINME: '0', MEINS: 'KG', BESTQ: '', SOBKZ: '', SKZUA: '', SKZSA: '', SKZSI: '' },
-        { LGNUM: 'W01', LGTYP: '100', LGPLA: 'STAGE-01', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100', VERME: '20', EINME: '0', MEINS: 'KG', BESTQ: 'Q', SOBKZ: '', SKZUA: '', SKZSA: '', SKZSI: '' },
-        { LGNUM: 'W01', LGTYP: '100', LGPLA: 'STAGE-01', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100', VERME: '20', EINME: '0', MEINS: 'KG', BESTQ: '', SOBKZ: 'E', SKZUA: '', SKZSA: '', SKZSI: '' }
+        { ...baseQuant, VERME: '6' },
+        { ...baseQuant, BESTQ: 'Q' },
+        { ...baseQuant, SOBKZ: 'E' },
+        { ...baseQuant, SKZUA: 'X' },
+        { ...baseQuant, SKZSA: 'X' },
+        { ...baseQuant, SKZSI: 'X' }
       ];
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
@@ -361,6 +369,29 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.isVerified).toBe(true);
       expect(res.stagedQty).toBe(6);
       expect(res.isStaged).toBe(false);
+    });
+
+    it.each([
+      ['LGTYP', '200'],
+      ['LGPLA', 'OTHER-BIN']
+    ])('rejects an SAP quant returned outside the requested %s staging scope', async (field, value) => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          LQUA: [{
+            LGNUM: 'W01', LGTYP: field === 'LGTYP' ? value : '100',
+            LGPLA: field === 'LGPLA' ? value : 'STAGE-01',
+            MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100',
+            VERME: '100', EINME: '0', MEINS: 'KG',
+            BESTQ: '', SOBKZ: '', SKZUA: '', SKZSA: '', SKZSI: ''
+          }]
+        })
+      });
+
+      await expect(client.checkStaging({
+        material: '1000000867', plant: '1000', sloc: '1100', warehouse: 'W01',
+        targetType: '100', targetBin: 'STAGE-01', requiredQty: 10, uom: 'KG'
+      })).rejects.toThrow('outside the requested staging target');
     });
 
     it('does not treat planned EINME as available staging stock for 261', async () => {

@@ -1,6 +1,96 @@
 
 # Changes Log
 
+## 2026-10-03 13:17 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 14 — server-authoritative Storage Unit/drum partial allocation.
+- **Plan**: Trace the 261 CAP action, SAP SU stock listing, and posting-attempt claim flow. Preserve client-scanned SU identifiers as candidate stock units, but derive exact per-SU quantities exclusively from current SAP stock and the requested issue quantity; enforce SAP open quantity and claim only the server allocation. Add integration-style handler tests for one oversized drum and multiple drums summing to the issue. Run targeted SU/attempt tests, lint, compile, and diff validation. No live SAP post.
+- **Current Status**: In Progress — CAP already accepts scanned `StorageUnits`, and the handler already computes per-SU server claims, but the calculation currently targets the entire SAP reservation open quantity rather than the requested `IssueQty`; it also forces the allocated sum to equal reservation open quantity.
+- **Files Changed**: `WORKSTATUS.md` for this plan entry.
+- **Reason**: Partial issues should allocate the requested amount from SAP-verified scanned units, without accepting client-calculated drum quantities as authoritative or forcing an issue of the full reservation balance.
+- **Validation**: Pending focused tests and checks.
+- **Errors / Warnings / Blockers**: The current 261 OData posting contract posts aggregate quantity; local SU claims persist server allocation. This chunk will not alter SAP API fields or claim SAP material-document line-level SU attribution. No live post will be performed.
+- **Next Steps**: Make SAP `IssueQty` the allocation target while preserving reservation-open and concurrency limits; cover allocations of 70 from one 100-unit SU and 30+40 from two SUs, then test and record.
+
+## 2026-10-03 13:18 IST
+- **Agent**: Copilot
+- **Change**: Changed the direct 261 SU reconciliation to require a verified SAP open quantity, use requested `IssueQty` as the allocation target, stop allocating once covered, and allow partial quantity less than the full reservation open amount. Removed the old requirement that the selected SU quantities equal the entire open reservation balance. The existing optional client partial quantity remains only a consistency check against the server-computed allocation.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `WORKSTATUS.md`.
+- **Reason**: The previous code allocated `OpenQty` and rejected partial reservation issues, so the server could not support 70 units from one 100-unit drum while 100 units remained open.
+- **Validation**: Focused tests pending.
+- **Errors / Warnings / Blockers**: No SAP post. SU IDs remain scanned client candidates; exact claim quantities are calculated from current SAP stock. SAP goods movement still receives aggregate requested quantity; no live SAP line-level SU assignment capability was tested.
+- **Next Steps**: Add tests for server allocation `70 from 100` and `30+40 from two SUs`; run targeted SU regression and relevant validation.
+
+## 2026-10-03 13:20 IST
+- **Agent**: Copilot
+- **Change**: First focused run verified both new allocation scenarios, but two legacy assertions still expected the former “real SU sum equals client issue quantity” error text. Updated tests to assert the new server-allocation-shortfall message and the precise rejection of a client partial hint that equals full stock.
+- **Files Changed**: `test/unit/wm/goodsIssue261SuScan.test.js`, `WORKSTATUS.md`.
+- **Reason**: The quantity no longer has to equal all SAP stock present in scanned units; it must be fully coverable by authoritative allocation up to the requested amount.
+- **Validation**: Initial focused run: 1 suite failed / 2 passed; 2 tests failed, 76 passed. New one-SU and two-SU allocation cases passed. Rerun pending.
+- **Errors / Warnings / Blockers**: No SAP post. Legacy message expectations reflected superseded full-open/full-stock behavior.
+- **Next Steps**: Rerun focused SU, issued-store, and attempt tests; then run CAP compile and diff checks.
+
+## 2026-10-03 13:21 IST
+- **Agent**: Copilot
+- **Change**: Updated the two legacy assertions after the first test run to match server-owned allocation semantics; retained rejection for an explicitly supplied client partial quantity that disagrees with the server allocation.
+- **Files Changed**: `test/unit/wm/goodsIssue261SuScan.test.js`, `WORKSTATUS.md`.
+- **Reason**: Keep tests validating actual fail-closed conditions rather than requiring a full reservation quantity or client-provided SU quantity.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent`: passed, 3 suites / 78 tests.
+  - `npx cds compile srv`: passed.
+  - ESLint: zero errors; one existing `isDefinitiveRejection` unused-variable warning in `goodsIssuePerType.handler.js`.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: The first focused run had two outdated expected-message failures (76 passed, 2 failed); assertions were updated, and the focused rerun passed. No live SAP POST performed.
+- **Next Steps**: Run the complete WM suite and inspect the final implementation/test diff; record full results.
+
+## 2026-10-03 13:22 IST
+- **Agent**: Copilot
+- **Change**: Updated the SU reconciliation documentation to describe the requested-quantity allocation and clarify that the optional client partial-quantity field is checked only as a consistency hint; it does not drive allocation.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `WORKSTATUS.md`.
+- **Reason**: Keep implementation documentation aligned with the new behavior and remove the obsolete “must equal open quantity” description.
+- **Validation**: Documentation-only adjustment after full WM suite passed (54 suites / 1,067 tests); lint and diff check pending for final review.
+- **Errors / Warnings / Blockers**: Existing lint warning for `isDefinitiveRejection` remains. No SAP POST performed.
+- **Next Steps**: Run final lint and diff checks; record final status and exact remaining limitation around aggregate SAP posting versus local per-SU claim allocation.
+
+## 2026-10-03 13:22 IST — Chunk 14 validation
+- **Agent**: Copilot
+- **Current Status**: Chunk 14 implementation complete for server-side allocation and persisted SU claims. For a reservation with 100 open, an issue request for 70 allocates 70 from one SAP-verified 100-unit SU, or allocates 30+40 from two verified SUs. The server caps the allocation at requested issue quantity, uses SAP stock sequence, checks against current reservation open quantity and active SU claims, and persists only the quantities it allocated.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `WORKSTATUS.md`. Pre-existing uncommitted Chunk 13 changes in `test/unit/wm/goodsIssueStagingPhase6.test.js` remain untouched.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent`: passed, 3 suites / 78 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,067 tests.
+  - `npx cds compile srv`: passed.
+  - ESLint on handler and SU test: 0 errors; one existing unused-variable warning for `isDefinitiveRejection`.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: Initial focused run had two obsolete assertion failures; updated those expectations and all focused + full WM tests then passed. No live SAP post or read-back was performed. The SAP posting adapter receives aggregate `IssueQty`; this work establishes authoritative server-side SU allocation and claim persistence but does not prove the SAP material document itself is posted against those exact SU quantities. Chunk 13 order/reference attribution and Chunk 11 process-specific staging confirmations remain blocked.
+- **Next Steps**: Before claiming end-to-end SAP-level per-SU allocation, discover whether the active SAP posting API supports SU-specific quantity assignments and verify that contract from live metadata/implementation. Keep no-live-post status until that capability is proven. Continue the independent Chunk 11/13 read-only SAP evidence follow-up.
+
+## 2026-10-03 13:15 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 13 — explicitly exclude out-of-scope WM stock and validate SAP stock-category/assignment indicators.
+- **Plan**: Confirm the existing LQUA query and usable-quant filter. Add regression coverage proving exact LGTYP/LGPLA mismatch is rejected and every known BESTQ/SOBKZ/SKZUA/SKZSA/SKZSI indicator excludes that quant from usable quantity. Do not add unverified SAP fields. Record the unresolved order/reference attribution and obtain SAP DDIC evidence before extending the query. Run focused WM staging tests, lint, and diff validation. No SAP posting.
+- **Current Status**: In Progress / Blocked for full requested scope — known bin/type/material/plant/storage-location checks and blank-stock-indicator filtering already exist. Existing evidence does not identify the actual LQUA order/reference fields needed to prove a quant belongs to this reservation/order instead of another one.
+- **Files Changed**: `WORKSTATUS.md` for this plan entry.
+- **Reason**: Reject stock outside the SAP-resolved staging scope or in restricted, special, blocked, or otherwise non-issuable categories without inventing SAP schema fields.
+- **Validation**: Pending targeted regression and checks.
+- **Errors / Warnings / Blockers**: No live SAP DDIC access is available in this task context. No SAP goods-issue POST will be made. Order/reference attribution remains unverified.
+- **Next Steps**: Add regression tests for known SAP fields and exact type/bin; run and record validation. Obtain DDIC confirmation of LQUA/transfer-order reference fields before implementing or claiming reservation/order ownership filtering.
+
+## 2026-10-03 13:16 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 13 — WM stock exclusion rules.
+- **Change**: Confirmed runtime staging already requests and checks `LGTYP`, `LGPLA`, `BESTQ`, `SOBKZ`, `SKZUA`, `SKZSA`, and `SKZSI`; it only counts `VERME` when all five stock-category/block indicators are blank, and rejects returned quants outside the exact warehouse/type/bin/material/plant/storage-location scope. Expanded tests so each indicator is independently excluded and wrong `LGTYP`/`LGPLA` rows are rejected. No runtime behavior change was justified by the verified evidence.
+- **Current Status**: In Progress / Blocked for full Chunk 13 acceptance — known bin and stock-category exclusions are covered; stock ownership by order/reference is not established because the current SAP evidence does not identify verified LQUA assignment columns or a reservation-linked confirmed-quant reconciliation contract.
+- **Files Changed**: `test/unit/wm/goodsIssueStagingPhase6.test.js`, `WORKSTATUS.md`.
+- **Reason**: Prevent regression in established SAP quant exclusions without guessing at backend field names or treating unrelated order/reference stock as reservation-owned.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssue261StagingValidation.test.js --runInBand --silent`: passed, 2 suites / 21 tests.
+  - ESLint on `GoodsIssuePhase6StagingClient.js` and `goodsIssueStagingPhase6.test.js`: passed with no reported errors or warnings.
+  - `git diff --check`: passed.
+  - Final source review confirmed exact-target comparisons for `LGTYP`/`LGPLA` and blank-only eligibility checks for `BESTQ`, `SOBKZ`, `SKZUA`, `SKZSA`, and `SKZSI`.
+- **Errors / Warnings / Blockers**: No live SAP DDIC/table read or goods-issue POST was performed. Do not claim order/reference ownership filtering is complete: the SAP field names and appropriate link from quant to reservation/order must be verified in the actual system before adding a filter.
+- **Next Steps**: Obtain read-only SAP DDIC evidence for candidate LQUA assignment/reference fields and determine whether confirmed transfer-order item data (for example, the actual system’s verified TO item table/fields) is required to attribute staged quants to this reservation. Then add the SAP-backed filter and tests; until then, retain this chunk as blocked for full scope.
+
 ## 2026-10-03 13:12 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 12 — ensure WM `EINME` planned/unconfirmed quantity cannot count as issuable staging stock.

@@ -332,6 +332,81 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     });
   };
 
+  it('allocates the requested partial quantity from a larger SAP storage unit', async () => {
+    setupMockSap({
+      openQty: 100,
+      stockUnits: [{ StorageUnit: 'SU100', AvailableStock: 100, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' }]
+    });
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+      MaterialDocument: '4900012370',
+      MaterialDocYear: '2026'
+    });
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 70,
+        Unit: 'KG',
+        StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    const result = await handlers['postGoodsIssue261'](req);
+    expect(req.error).not.toHaveBeenCalled();
+    expect(result.MaterialDocument).toBe('4900012370');
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ IssueQty: 70 }));
+
+    const claims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01');
+    expect(claims).toHaveLength(1);
+    expect(claims[0]).toMatchObject({ StorageUnit: 'SU100', IssuedQty: 70, PreIssueStock: 100, Status: 'issued' });
+  });
+
+  it('allocates 30 and 40 from two SAP storage units for a 70-unit issue', async () => {
+    setupMockSap({
+      openQty: 100,
+      stockUnits: [
+        { StorageUnit: 'SU30', AvailableStock: 30, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
+        { StorageUnit: 'SU40', AvailableStock: 40, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' }
+      ]
+    });
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
+      MaterialDocument: '4900012371',
+      MaterialDocYear: '2026'
+    });
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 70,
+        Unit: 'KG',
+        StorageUnits: ['SU40', 'SU30']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    const result = await handlers['postGoodsIssue261'](req);
+    expect(req.error).not.toHaveBeenCalled();
+    expect(result.MaterialDocument).toBe('4900012371');
+
+    const claims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01');
+    expect(claims).toHaveLength(2);
+    expect(claims.map((claim) => [claim.StorageUnit, claim.IssuedQty]).sort()).toEqual([
+      ['SU30', 30],
+      ['SU40', 40]
+    ]);
+  });
+
   it('posts 6-drum case with unequal weights when SUs match SAP stock and sum equals required', async () => {
     const stock = [
       { StorageUnit: 'SU01', AvailableStock: 75, Material: '1000000264', Plant: '1110', StorageLocation: 'CS01' },
@@ -485,7 +560,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     };
 
     await handlers['postGoodsIssue261'](req);
-    expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered payload detected'));
+    expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('exceeds the scanned SAP Storage Unit stock allocated by the server'));
     expect(postSpy).not.toHaveBeenCalled();
   });
 
@@ -768,7 +843,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       };
 
       await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Tampered payload detected'));
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('cannot equal or exceed full stock'));
       expect(postSpy).not.toHaveBeenCalled();
     });
 
