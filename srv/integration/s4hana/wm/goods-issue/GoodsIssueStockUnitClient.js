@@ -61,6 +61,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
     this.issuedSuStore = options.issuedSuStore || (this.adapter && this.adapter.issuedSuStore) || null;
+    this.stagingClient = options.stagingClient || (this.adapter && this.adapter.stagingClient) || null;
     this._huModelCache = null;
     this.rfc = options.rfc || new RfcClient();
   }
@@ -716,108 +717,89 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   }
 
   /**
-   * Resolves staging requirements for a WM reservation item (RESB, TR, PKHD, Order fallback).
-   * Requirement 2: Read target type and bin from TR item (LTBK/LTBP) or control cycle (PKHD).
-   * Order-number bin rule used only as fallback. Never hardcode IP1 or the bin.
+   * Resolves staging requirements for a WM reservation item from SAP RESB, linked TR, and PKHD.
+   * Resolve the preview target through the same reservation-linked transfer/control-cycle
+   * path used by the final posting check.
    */
   async _resolveStagingRequirement(reservationNo, reservationItem, plant, sloc, material, orderNo = '', warehouse = '') {
     const sResv = String(reservationNo).trim();
     const sItem = String(reservationItem).trim().padStart(4, '0');
     const resvPadded = sResv.padStart(10, '0');
-
-    let resbRow = null;
-    if (this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        const rows = await this.rfc.readTable(
-          'RESB',
-          ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'AUFNR', 'LGTYP', 'PRVBE'],
-          [`RSNUM = '${resvPadded}'`, `AND RSPOS = '${sItem}'`],
-          1
-        );
-        if (Array.isArray(rows) && rows.length > 0) {
-          resbRow = rows[0];
-        }
-      } catch (err) {
-        LOG.warn(`RESB read failed for reservation ${sResv} item ${sItem}:`, err.message || err);
-      }
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') {
+      const err = new Error('SAP RFC table access is unavailable; reservation staging cannot be verified.');
+      err.status = 502;
+      throw err;
+    }
+    let resbRows;
+    try {
+      resbRows = await this.rfc.readTable(
+        'RESB',
+        ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'AUFNR', 'LGTYP', 'PRVBE'],
+        [`RSNUM = '${resvPadded}'`, `AND RSPOS = '${sItem}'`],
+        1
+      );
+    } catch (cause) {
+      const err = new Error(`SAP reservation staging data could not be read for ${sResv} item ${sItem}: ${cause.message || cause}`);
+      err.status = cause.status || 502;
+      throw err;
+    }
+    const resbRow = Array.isArray(resbRows) ? resbRows[0] : null;
+    if (!resbRow) {
+      const err = new Error(`SAP reservation staging data was not found for ${sResv} item ${sItem}.`);
+      err.status = 502;
+      throw err;
     }
 
-    const resbLgtyp = resbRow && resbRow.LGTYP ? String(resbRow.LGTYP).trim() : '';
-    if (!resbLgtyp) {
-      return { isStagingRequired: false };
+    const resbLgtyp = String(resbRow.LGTYP || '').trim();
+    if (!resbLgtyp) return { isStagingRequired: false };
+
+    if (!this.stagingClient
+      || typeof this.stagingClient.findTransferRequirement !== 'function'
+      || typeof this.stagingClient.findStagingTarget !== 'function') {
+      const err = new Error('SAP reservation-linked staging resolution is unavailable.');
+      err.status = 502;
+      throw err;
     }
 
-    const order = (resbRow && resbRow.AUFNR ? String(resbRow.AUFNR).trim() : '') || String(orderNo || '').trim();
+    const order = String(resbRow.AUFNR || orderNo || '').trim();
     const orderPadded = order ? order.padStart(10, '0') : '';
-    const prvbe = resbRow && resbRow.PRVBE ? String(resbRow.PRVBE).trim() : '';
-    const bdmng = resbRow ? wmNum(resbRow.BDMNG) : 0;
-    const enmng = resbRow ? wmNum(resbRow.ENMNG) : 0;
-    const reqQty = Math.max(0, bdmng - enmng);
-    const uom = (resbRow && resbRow.MEINS ? String(resbRow.MEINS).trim() : '') || 'KG';
+    const reqQty = Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG));
+    const uom = String(resbRow.MEINS || '').trim() || 'KG';
+    const sapMaterial = String(resbRow.MATNR || '').replace(/^0+/, '') || material;
+    const sapPlant = String(resbRow.WERKS || '').trim() || plant;
+    const sapSloc = String(resbRow.LGORT || '').trim() || sloc;
+    const transfer = await this.stagingClient.findTransferRequirement(
+      sResv, sItem, sapMaterial, sapPlant, warehouse, true
+    );
 
-    let targetType = resbLgtyp;
-    let targetBin = '';
-    let tbnum = '';
-    let stagingSource = '';
-
-    // Step A: Check TR item (LTBK / LTBP)
-    if (this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        const trWhere = [];
-        if (warehouse) {
-          trWhere.push(`LGNUM = '${wmKey(warehouse)}'`);
-        }
-        if (orderPadded) {
-          trWhere.push(`${trWhere.length ? 'AND ' : ''}BENUM = '${orderPadded}'`);
-        }
-        const ltbkRows = await this.rfc.readTable('LTBK', ['TBNUM', 'LGNUM', 'BWLVS', 'BENUM', 'BETYP', 'NLTYP', 'NLPLA'], trWhere, 5);
-        if (Array.isArray(ltbkRows) && ltbkRows.length > 0) {
-          const mvt319 = ltbkRows.find((r) => r.BWLVS === '319') || ltbkRows[0];
-          tbnum = String(mvt319.TBNUM || '').trim();
-          if (mvt319.NLTYP && mvt319.NLPLA) {
-            targetType = String(mvt319.NLTYP).trim();
-            targetBin = String(mvt319.NLPLA).trim();
-            stagingSource = 'TR';
-          }
-        }
-      } catch (err) {
-        LOG.warn(`LTBK read failed for order ${order}:`, err.message || err);
-      }
+    let target;
+    let stagingSource;
+    if (transfer.targetType && transfer.targetBin) {
+      target = { targetType: transfer.targetType, targetBin: transfer.targetBin };
+      stagingSource = 'TRANSFER_REQUIREMENT';
+    } else {
+      target = await this.stagingClient.findStagingTarget(
+        sapMaterial,
+        sapPlant,
+        sapSloc,
+        warehouse,
+        String(resbRow.PRVBE || '').trim(),
+        order,
+        resbLgtyp
+      );
+      stagingSource = target.stagingSource;
     }
-
-    // Step B: Check Control Cycle (PKHD)
-    if (!targetBin && this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        const pkhdWhere = [`WERKS = '${wmKey(plant)}'`];
-        if (prvbe) pkhdWhere.push(`AND PRVBE = '${wmKey(prvbe)}'`);
-        const pkhdRows = await this.rfc.readTable('PKHD', ['MATNR', 'WERKS', 'PRVBE', 'LGNUM', 'LGTYP', 'LGPLA', 'BERKZ', 'NKDYN'], pkhdWhere, 1);
-        if (Array.isArray(pkhdRows) && pkhdRows.length > 0) {
-          const pk = pkhdRows[0];
-          if (pk.LGTYP) targetType = String(pk.LGTYP).trim();
-          if (pk.LGPLA) {
-            targetBin = String(pk.LGPLA).trim();
-            stagingSource = 'PKHD';
-          } else if (pk.NKDYN === 'X' && (pk.BERKZ === '1' || pk.BERKZ === '2' || pk.BERKZ === '3' || pk.BERKZ === '4')) {
-            targetBin = orderPadded;
-            stagingSource = 'PKHD';
-          }
-        }
-      } catch (err) {
-        LOG.warn(`PKHD read failed for plant ${plant} supply area ${prvbe}:`, err.message || err);
-      }
-    }
-
-    // Step C: Fallback Order-number bin rule
-    if (!targetBin && orderPadded) {
-      targetBin = orderPadded;
-      stagingSource = 'FALLBACK_ORDER';
+    if (!target.targetType || !target.targetBin) {
+      const err = new Error(target.error || `SAP staging target could not be resolved for reservation ${sResv} item ${sItem}.`);
+      err.status = 502;
+      throw err;
     }
 
     return {
       isStagingRequired: true,
-      targetType,
-      targetBin,
-      tbnum,
+      targetType: target.targetType,
+      targetBin: target.targetBin,
+      tbnum: transfer.tbnum || '',
       stagingSource,
       order,
       orderPadded,

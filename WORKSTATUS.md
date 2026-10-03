@@ -1,6 +1,22 @@
 
 # Changes Log
 
+## 2026-10-03 14:46 IST — Aligning 261 staging preview with posting validation
+- **Agent**: Copilot
+- **Request**: Fix the reservation 480960 staging warning without weakening server-side confirmation checks.
+- **Plan**: Replace the stock-unit preview's order-only LTBK selection and order-number-bin fallback with the same read-only SAP target resolution used by final posting validation: exact reservation-item TBPE → linked LTBK destination, then SAP PKHD control-cycle resolution. Add a regression where another order transfer points to a different destination and verify that preview uses the exact reservation-linked target. Run focused staging/storage-unit tests, relevant lint/compile checks, and diff validation. No SAP posting or live-quantity claim.
+- **Current Status**: Complete in code and controlled tests — stock-unit preview now shares the exact reservation-item transfer lookup and SAP PKHD target fallback used by final posting validation. It no longer selects the first/319 order-linked LTBK header or invents an order-number-bin fallback. The live condition for reservation 480960 remains unverified.
+- **Files Changed**: `WORKSTATUS.md`; `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`; `test/unit/wm/goodsIssueStockUnitList.test.js`; `test/unit/wm/goodsIssueIssuedSu.test.js`.
+- **Reason**: Preview and posting must resolve the same SAP-confirmed staging destination; otherwise a valid staged quantity can be reported against the wrong bin.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueStockUnitList.test.js test/unit/wm/goodsIssueStagingPhase6.test.js test/unit/wm/goodsIssue261StagingValidation.test.js --runInBand --silent`: passed, 3 suites / 34 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 56 suites / 1,116 tests.
+  - `npx eslint srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js test/unit/wm/goodsIssueStockUnitList.test.js test/unit/wm/goodsIssueIssuedSu.test.js`: passed with 0 errors and 2 existing warnings (`checkErr` in `GoodsIssueStockUnitClient.js:629`; `claimId` in `goodsIssueIssuedSu.test.js:1591`).
+  - `npx cds compile srv >/dev/null`: passed.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: The first focused run found staging-client guard ordering in no-staging test fixtures; corrected it. The first full WM run then exposed three existing SU-reconciliation tests whose mocks omitted RESB; they now isolate their intended test scope by stubbing staging resolution. The final full WM run passed. Jest emitted existing missing-destination-binding/environment warnings. No live SAP TBPE/LTBK/PKHD/LQUA read or 261 posting was performed, so whether reservation 480960 currently has a confirmed TO and sufficient stock at the correctly resolved target is still unknown.
+- **Next Steps**: With authorized read-only SAP access, inspect reservation 480960's exact RESB/TBPE-linked LTBK destination and matching LQUA `VERME`/`EINME`; compare the UI warning with that current SAP target. Do not bypass the posting guard or treat this code regression as proof that the live reservation is staged.
+
 ## 2026-10-03 14:41 IST — Enabling generic direct-path 261 deep links
 - **Agent**: Copilot
 - **Request**: Support the direct pathname deep link for any reservation, not only a specific reservation/query value.

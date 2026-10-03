@@ -15,10 +15,21 @@ const BATCHES = [
   { Batch: 'IN25031994', ExpiryDate: '2027-01-01', StatusState: 'Warning', StatusText: 'EXPIRING SOON', DaysToExpiry: 90 }
 ];
 
-function makeClient({ resv = RESV_ITEM, lqua = [], batches = BATCHES, issuedSuStore = null } = {}) {
+function makeClient({
+  resv = RESV_ITEM,
+  resb = {
+    RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100',
+    BDMNG: '5000', ENMNG: '0', MEINS: 'KG', AUFNR: '1002749', LGTYP: '', PRVBE: ''
+  },
+  lqua = [],
+  batches = BATCHES,
+  issuedSuStore = null,
+  stagingClient = null
+} = {}) {
   const rfc = {
     readTable: jest.fn((table, fields, where) => {
       if (table === 'LQUA') return Promise.resolve(typeof lqua === 'function' ? lqua(where) : lqua);
+      if (table === 'RESB') return Promise.resolve(resb ? [resb] : []);
       return Promise.resolve([]);
     })
   };
@@ -30,7 +41,7 @@ function makeClient({ resv = RESV_ITEM, lqua = [], batches = BATCHES, issuedSuSt
     }),
     getMaterialBatches: jest.fn().mockResolvedValue(batches)
   };
-  return { client: new GoodsIssueStockUnitClient({ adapter, rfc, issuedSuStore }), rfc };
+  return { client: new GoodsIssueStockUnitClient({ adapter, rfc, issuedSuStore, stagingClient }), rfc };
 }
 
 describe('GoodsIssueStockUnitClient – Storage Units for one reservation line', () => {
@@ -41,6 +52,44 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
     const lqua = rfc.readTable.mock.calls.find((c) => c[0] === 'LQUA');
     expect(lqua[2]).toEqual(["MATNR = '000000001000000867'", "AND WERKS = '1000'", "AND LGORT = '1100'"]);
     lqua[2].forEach((line) => expect(line.length).toBeLessThanOrEqual(72));
+  });
+
+  it('uses the exact reservation-linked transfer target instead of an unrelated order transfer', async () => {
+    const stagingClient = {
+      findTransferRequirement: jest.fn().mockResolvedValue({
+        tbnum: '0000000789', targetType: 'IP1', targetBin: '000001002599'
+      }),
+      findStagingTarget: jest.fn()
+    };
+    const { client, rfc } = makeClient({
+      resb: {
+        RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100',
+        BDMNG: '480', ENMNG: '0', MEINS: 'KG', AUFNR: '1002749', LGTYP: 'IP1', PRVBE: 'PSA1'
+      },
+      stagingClient,
+      lqua: [
+        q({ LENUM: '00000000001000041635', LGTYP: 'IP1', LGPLA: '000001002599', VERME: '100.000' }),
+        q({ LENUM: '00000000001000041636', LGTYP: 'IP1', LGPLA: 'UNRELATED-BIN', VERME: '480.000' })
+      ]
+    });
+
+    const result = await client.listStockUnitsForReservationItem('519366', '1');
+
+    expect(stagingClient.findTransferRequirement).toHaveBeenCalledWith(
+      '519366', '0001', '1000000867', '1000', 'W01', true
+    );
+    expect(stagingClient.findStagingTarget).not.toHaveBeenCalled();
+    expect(rfc.readTable.mock.calls.some(([table]) => table === 'LTBK')).toBe(false);
+    expect(result).toMatchObject({
+      TargetStorageType: 'IP1',
+      TargetStorageBin: '000001002599',
+      TransferRequirement: '0000000789',
+      StagedQty: 100,
+      RequiredQty: 480,
+      IsFullyStaged: false
+    });
+    expect(result.Message).toContain('Only 100 of 480 KG staged in IP1/000001002599.');
+    expect(result.StockUnits.map((su) => su.StorageBin)).toEqual(['000001002599']);
   });
 
   it('live case 519366/0001: bin stock without SU in W13 -> no SUs, message names the bin stock', async () => {

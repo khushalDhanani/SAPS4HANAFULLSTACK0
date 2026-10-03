@@ -501,6 +501,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
           WDATU: '20260910'
         }
       ]);
+      jest.spyOn(stockUnitClient, '_resolveStagingRequirement').mockResolvedValue({ isStagingRequired: false });
       jest.spyOn(stockUnitClient, '_usableBatchMap').mockResolvedValue(new Map([
         ['BATCH_X', { Batch: 'BATCH_X', StatusState: 'Success' }]
       ]));
@@ -566,6 +567,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
           LGPLA: 'BIN-01'
         }
       ]);
+      jest.spyOn(stockUnitClient, '_resolveStagingRequirement').mockResolvedValue({ isStagingRequired: false });
       jest.spyOn(stockUnitClient, '_usableBatchMap').mockResolvedValue(new Map([
         ['BATCH_X', { Batch: 'BATCH_X', StatusState: 'Success' }]
       ]));
@@ -624,6 +626,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
           LGPLA: 'BIN-01'
         }
       ]);
+      jest.spyOn(stockUnitClient, '_resolveStagingRequirement').mockResolvedValue({ isStagingRequired: false });
       jest.spyOn(stockUnitClient, '_usableBatchMap').mockResolvedValue(new Map([
         ['BATCH_TO', { Batch: 'BATCH_TO', StatusState: 'Success' }]
       ]));
