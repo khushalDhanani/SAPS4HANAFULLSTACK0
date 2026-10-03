@@ -739,8 +739,8 @@ async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
   try {
     const claim = await GoodsIssueAttemptStore.createOrGet(normalized);
     if (!claim.created) return attemptResponse(claim.row);
-    normalized.ReferenceDocument = claim.row.ReferenceDocument;
-    normalized.RequestHash = claim.row.RequestHash;
+    if (claim.row?.ReferenceDocument) normalized.ReferenceDocument = claim.row.ReferenceDocument;
+    if (claim.row?.RequestHash !== undefined) normalized.RequestHash = claim.row.RequestHash;
   } catch (attemptErr) {
     LOG.error('Posting attempt could not be recorded; posting blocked:', attemptErr.message || attemptErr);
     return req.error(attemptErr.status || 503, `Goods Issue was NOT sent to SAP: the posting attempt could not be recorded (${attemptErr.message || 'database unavailable'}).`);

@@ -15,6 +15,7 @@
 const GoodsIssue261Model = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
+const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 
 describe('GoodsIssue261Model: SU Scanning & Drum Weight Calculations', () => {
@@ -298,11 +299,13 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
   });
 
   beforeEach(async () => {
+    GoodsIssueAttemptStore.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
   });
 
   afterEach(async () => {
     jest.restoreAllMocks();
+    GoodsIssueAttemptStore.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
   });
 

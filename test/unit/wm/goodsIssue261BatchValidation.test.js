@@ -1,6 +1,7 @@
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueBatchesClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient');
 const GoodsIssueStockUnitClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient');
+const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 
 const reservationItem = (overrides = {}) => ({
@@ -49,6 +50,10 @@ describe('Movement 261 SAP batch validation', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    GoodsIssueAttemptStore.clearMemoryStore();
   });
 
   test('requires a batch when SAP material master marks the material batch-managed', async () => {

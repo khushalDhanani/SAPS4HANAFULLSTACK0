@@ -44,6 +44,21 @@
 - **Errors / Warnings / Blockers**: No SAP POST was performed. Prior full-suite diagnostics exposed persistent mock history in the test fixture and were resolved by isolation; the focused test suite is now green.
 - **Next Steps**: Run the complete WM suite, lint, CDS compile/SQL uniqueness inspection, and diff checks.
 
+## 2026-10-03 12:48 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — full WM regression findings.
+- **Validation**: `npx jest test/unit/wm --runInBand --silent` failed: 48 suites / 1,027 tests passed; 4 suites / 11 tests failed. Findings: identical 261 retry tests in existing suites now correctly receive the saved `POSTING` result rather than a 409; several 261 handler tests are reusing in-memory attempts because their fixtures clear DB/SU state but not the new stable-key store; Movement 201 routing tests mock `create()` to return `{}`, so the new stored-key copy overwrote generated fields with `undefined`.
+- **Errors / Warnings / Blockers**: No SAP POST was performed. Fix required: copy claim key fields only when returned, clear in-memory attempts in affected test suites, and update the old 261 duplicate expectation to the new idempotent contract. The complete WM suite is not green yet.
+- **Next Steps**: Make the persistence-mock guard and isolate affected 261 fixtures; then rerun targeted failures before repeating full WM validation.
+
+## 2026-10-03 12:52 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — regression-fixture compatibility.
+- **Change**: Preserved generated 201 keys when legacy create mocks return no row; reset the in-memory posting-attempt map in 261 batch/SU/pending test suites; updated the 261 unknown-outcome retry test to require the persisted processing response instead of a 409.
+- **Validation**: `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssue261BatchValidation.test.js test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent` passed: 5 suites / 80 tests.
+- **Errors / Warnings / Blockers**: No SAP POST was performed. The four prior suite failures are fixed; full WM suite still needs rerun.
+- **Next Steps**: Repeat the complete WM suite after the targeted fixes.
+
 ## 2026-10-03 11:46 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 5 — Final Issue Validation.

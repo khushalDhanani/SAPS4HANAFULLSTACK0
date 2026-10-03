@@ -46,6 +46,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
   beforeEach(async () => {
     jest.restoreAllMocks();
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
+    attempts.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
 
@@ -61,6 +62,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
   afterEach(async () => {
     jest.restoreAllMocks();
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
+    attempts.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
   });
 
@@ -141,7 +143,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
       PostingDate: '2026-10-02'
     };
 
-    it('after 504 unknown outcome: SU claim stays claiming, and second post is rejected with "pending confirmation, do not post again"', async () => {
+    it('after 504 unknown outcome: SU claim stays claiming, and an identical retry returns the existing pending attempt', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
         ReservationNo: '261001',
         ReservationItem: '0001',
@@ -184,12 +186,9 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
 
       // Attempt 2: Duplicate post for the same reservation item MUST be rejected with 409
       const req2 = makeReq(payload261);
-      await handlers.postGoodsIssue261(req2);
-
-      expect(req2.error).toHaveBeenCalledWith(
-        409,
-        expect.stringMatching(/pending confirmation, do not post again/i)
-      );
+      const retry = await handlers.postGoodsIssue261(req2);
+      expect(req2.error).not.toHaveBeenCalled();
+      expect(retry).toMatchObject({ Success: false, ConfirmationStatus: 'POSTING' });
 
       // SAP post method was called exactly once
       expect(postSpy).toHaveBeenCalledTimes(1);
