@@ -1,6 +1,98 @@
 
 # Changes Log
 
+## 2026-10-03 12:52 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 10 — serial number validation closeout.
+- **Current Status**: Complete for controlled application behavior — 261 now checks the SAP serial profile, enforces exactly one serial per integer issue unit for serial-managed materials, and blocks posting unless each supplied serial is confirmed `AVAILABLE` by SAP-backed status resolution. Unknown, wrong-material, wrong-plant/storage-location, non-unrestricted, and unverifiable serial results block the post.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `test/unit/wm/goodsIssue261SerialValidation.test.js`, `test/unit/wm/goodsIssue201Posting.test.js`, `WORKSTATUS.md`.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261SerialValidation.test.js test/unit/wm/goodsIssue201Posting.test.js test/unit/wm/goodsIssue311Serial.test.js test/unit/wm/goodsIssue261BatchValidation.test.js --runInBand --silent`: passed, 4 suites / 83 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 53 suites / 1,049 tests.
+  - `npx cds compile srv`: passed.
+  - ESLint on the changed handler/client/tests: 0 errors; two pre-existing unused-variable warnings (`checkErr` in `GoodsIssueStockUnitClient.js`, `isDefinitiveRejection` in the handler).
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: The first focused test run had three assertion failures because existing message assertions no longer matched the unified `getSerialStatus` messages/Error property matching; assertions were updated, then the focused and full WM suites passed. Tests use controlled SAP fixtures; no live 261 SAP post or read-back was performed, and live serial-service/RFC availability was not exercised.
+- **Next Steps**: No further code changes required for Chunk 10. Preserve existing pending Chunk 8 changes and the separate Chunk 9 posting-date blocker; verify live SAP read-service permissions in the deployment environment before relying on the pre-post gate.
+
+## 2026-10-03 12:46 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 10 — serial-management/count/status enforcement.
+- **Change**: Added a fail-closed 261 check for the SAP serial profile and exactly one serial per integer issue unit; 261 now requires the SAP serial-status verifier whenever serials are submitted. Refactored `validateSerialStatus` to rely on the existing richer `getSerialStatus` source chain and reject all statuses other than `AVAILABLE`, with unrelated material/plant/location distinguished and unknown/unavailable serials blocked. Added focused tests for a valid post, missing/under-counted serials, profile-read failure, status rejection, and a missing status verifier.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `test/unit/wm/goodsIssue261SerialValidation.test.js`, `WORKSTATUS.md`.
+- **Reason**: The direct 261 handler previously lacked a SAP-profile-driven count check, and the serial status path could silently pass a clean empty status lookup or skip validation if the facade method was absent.
+- **Validation**: Focused Jest tests, ESLint, and `git diff --check` pending.
+- **Errors / Warnings / Blockers**: No SAP POST performed. Read-only status behavior is validated with controlled fixtures only; current serial-status service availability and RFC permissions are runtime prerequisites.
+- **Next Steps**: Run focused Chunk 10 handler and existing SAP serial-status tests; fix any failures and record exact results. Then run lint and diff checks, review the complete diff, and keep the work uncommitted.
+
+## 2026-10-03 12:43 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 10 — mandatory server-side serial validation.
+- **Plan**: Trace the 261 action's SAP-derived serial-management profile, count check, serial-status gate, and status lookup. Require SAP profile lookup and exact one-per-unit serial count for 261, fail closed if the serial validator is unavailable, and ensure the underlying validator rejects unrelated/unavailable serials. Add focused handler and SAP-client regression tests. Preserve pending Chunk 8 changes. Run focused tests, lint, and `git diff --check`; do not issue a live SAP posting.
+- **Current Status**: In Progress — 261 calls a status validator for supplied serials, but skips profile/count validation; the shared status helper can allow posting if the validation method is missing, and its current duplicated query logic does not reject a clean empty lookup for an unknown/unrelated serial. The status-client's `getSerialStatus` has a more complete SAP OData/EQUI/JEST status resolution that can be used as the authoritative check.
+- **Files Changed**: `WORKSTATUS.md` only at this planning stage.
+- **Reason**: Direct CAP calls must not bypass serial-number requirements or substitute an arbitrary/unverifiable serial for a serial-managed material.
+- **Validation**: Planning entry added. Implementation and tests pending.
+- **Errors / Warnings / Blockers**: No live SAP POST will be performed. SAP serial validation remains controlled by existing OData/RFC read sources.
+- **Next Steps**: Add the fail-closed 261 serial profile/count gate, require the SAP serial-status validator for the direct 261 path, reuse the strict serial status resolution and add regression tests; then record exact validation results.
+
+## 2026-10-03 12:36 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 9 — authorized read-only discovery of an SAP-backed posting-date and MM period check.
+- **Current Status**: Blocked — the configured SAP system has an active standard MM period-check function, but its function-directory mode is not RFC-enabled. The inspected RFC interface does not provide the SAP system date, and no usable remote period/date precheck contract was found.
+- **Discovery / Files Changed**: `WORKSTATUS.md` only. Read-only `DDIF_FIELDINFO_GET`, `RFC_READ_TABLE`, and `RFC_SYSTEM_INFO` calls confirmed the `T001W`/`T001K` plant-to-company mapping and `MARV` period fields; 30 plant/valuation-area entries mapped to four company codes, each with a `MARV` record. SAP function-directory/interface metadata identifies active `MM_PERIOD_CHECK` with `I_BUKRS` and `I_BUDAT`, period outputs, and invalid-period / missing-`MARV` exceptions, but `TFDIR-FMODE` is blank, so the existing RFC client cannot invoke it. `RFC_SYSTEM_INFO` exposes a timezone in its export structure but no system date. Read-only searches found no remote-enabled material-period check among the queried SAP functions.
+- **Reason**: A direct SAP period decision requires SAP's own MM period logic and date authority. Reading `MARV` alone does not establish the full posting rule; using a host clock or guessing the prior-period rule could allow an invalid date or reject a valid posting.
+- **Validation**: SAP metadata and table reads completed successfully without creating or changing SAP data. `git diff --check` passed after the work-status entry. No code tests were run because no application code changed.
+- **Errors / Warnings / Blockers**: No SAP post was attempted. The precheck cannot be implemented safely through the currently exposed RFC interface; an RFC-enabled wrapper or approved OData/API contract must expose the SAP date and invoke/check `MM_PERIOD_CHECK`.
+- **Next Steps**: Provide or expose an approved remote contract returning SAP's authoritative posting date and MM period-check result for the request's company code/date. Then implement the fail-closed 261 precheck and test open, closed, and unavailable outcomes, including retry/idempotency behavior.
+
+## 2026-10-03 12:31 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 9 — Posting Date / Posting Period.
+- **Current Status**: Blocked — the CAP handler accepts a client `PostingDate`; normalization defaults it to UTC today only when omitted. Current validation checks calendar validity and a limited future-date bound, but there is no SAP posting-period preflight. Closed-period errors are classified only after the SAP posting attempt.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: The requested pre-post period check depends on an authoritative SAP business date and the actual MM posting-period rule for the target valuation area. Existing code exposes no verified period-check API/operation; a historical SAP observation that October 2026 was closed is not a durable rule, and the generic RFC table reader alone does not prove correct period semantics.
+- **Validation**: `git diff --check` pending after this entry.
+- **Errors / Warnings / Blockers**: No SAP request or posting was performed. Need the approved SAP read-only interface/contract for authoritative business date and MM period-open status (or specific authorization to discover and validate one on the configured SAP system). Do not substitute FI period table checks or guess MARV previous-period rules.
+- **Next Steps**: Obtain the approved SAP period-check source and applicable plant/company-code scope; then implement a fail-closed server precheck, make the posting date server-authoritative, and test closed/open/unavailable check outcomes with controlled fixtures.
+
+## 2026-10-03 12:29 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 8 — Deterministic Posting Reference final validation.
+- **Current Status**: Blocked for full completion — the standard API 261 branches now send the persisted reference, and local attempt reconciliation reuses the stored value. The normal reservation-based path posts through RAP first; its saved metadata response says the service group is unpublished, and no reference parameter is established in the available action specification.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper.js`, `test/unit/wm/goodsIssuePerTypePostingClient.test.js`, `WORKSTATUS.md`.
+- **Reason**: Deterministic retry/reconciliation is ineffective if the posting transaction does not persist the same reference in SAP; do not assume an unsupported RAP action parameter.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent`: passed, 2 suites / 40 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 52 suites / 1,039 tests.
+  - `npx cds compile srv`: passed.
+  - `npx eslint srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper.js test/unit/wm/goodsIssuePerTypePostingClient.test.js`: passed with 0 errors and one existing unused-argument warning (`path`).
+  - Saved `API_MATERIAL_DOCUMENT_SRV.xml` metadata confirms `A_MaterialDocumentHeader.ReferenceDocument` is `Edm.String` with maximum length 16. `docs/wm-discovery/gi_v4_metadata.xml` contains an SAP error response, not RAP `$metadata`, reporting `ZUI_GI_ORDER_RSV_O4` is unpublished.
+  - `git diff --check`: passed after code changes; rerun after this documentation update.
+- **Errors / Warnings / Blockers**: No live SAP POST/read-back was performed. The standard OData header mapping is validated with controlled tests only. Reference support and behavior of the preferred RAP action remain unverified; the service group must be published and its current `$metadata`/backend behavior inspected before adding a field or claiming deterministic SAP-side reconciliation for that path. The existing RAP action implementation can succeed without the new standard-API mapper being used.
+- **Next Steps**: Obtain published RAP `$metadata` and backend confirmation whether the action can accept/persist a reference; if absent, coordinate SAP backend/API change. Then add the supported mapping and a controlled SAP post/read-back test for the RAP path.
+
+## 2026-10-03 12:24 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 8 — Deterministic Posting Reference.
+- **Plan**: Verify the attempt reference through the actual 261 SAP posting payload and recheck lookup. The handler already derives/persists a stable reference before SAP and recheck uses the attempt's saved value; the standard API 261 mapper does not currently place it in the SAP header. Add that mapping and focused client/reconciliation assertions only where the SAP metadata contract supports it. Do not invent a parameter for the preferred RAP action.
+- **Current Status**: In Progress — confirmed downstream gap: `GoodsIssue261Mapper` omits `data.ReferenceDocument`; stored standard OData metadata includes header `ReferenceDocument` (max length 16). Saved RAP metadata is an error stating `ZUI_GI_ORDER_RSV_O4` is not published, and the action spec does not establish a reference parameter.
+- **Files Changed**: Pending.
+- **Reason**: A locally persisted deterministic reference cannot support SAP reconciliation if the actual standard material-document request omits it.
+- **Validation**: Pending.
+- **Errors / Warnings / Blockers**: No SAP POST will be performed. Reference support for the RAP-first reservation path cannot be verified or safely changed without its published `$metadata`/backend contract; this remains a deployment/API prerequisite.
+- **Next Steps**: Pass the persisted reference into the standard API 261 header mapper, assert the payload and recheck reuse, run focused tests and compile/lint/diff checks, then report the RAP limitation.
+
+## 2026-10-03 12:25 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 8 — standard API reference propagation.
+- **Change**: `GoodsIssue261Mapper` now forwards `data.ReferenceDocument` to the SAP material-document header envelope. Added tests for reservation 261 fallback and unplanned standard-API 261 posting to verify the reference is present in the actual OData header payload.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper.js`, `test/unit/wm/goodsIssuePerTypePostingClient.test.js`, `WORKSTATUS.md`.
+- **Reason**: Before this change, the posting attempt's persisted reference was omitted by both standard API 261 branches, so downstream SAP reconciliation could not search by that reference.
+- **Validation**: `npx jest test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent` passed, 2 suites / 40 tests, including assertions for `ReferenceDocument` on both standard OData 261 branches and attempt recheck reusing the persisted value. `npx cds compile srv` passed. ESLint passed with 0 errors and one existing unused-argument warning (`path` in the posting-client test).
+- **Errors / Warnings / Blockers**: No SAP POST performed. This does not add reference support to the preferred RAP action; its SAP service contract is unavailable/unpublished in saved metadata.
+- **Next Steps**: Run the WM regression suite, verify diff cleanliness and review all changed lines. Keep the task blocked for the preferred RAP route until its published service contract and reference support are available.
+
 ## 2026-10-03 12:59 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 6 — Duplicate Posting / Idempotency closeout.

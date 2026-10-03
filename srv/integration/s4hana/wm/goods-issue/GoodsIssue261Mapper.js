@@ -32,7 +32,8 @@ function mapToMaterialDocumentPayload(data) {
     headerText,
     postingDate: data.PostingDate,
     documentDate: data.DocumentDate,
-    item
+    item,
+    referenceDocument: data.ReferenceDocument
   });
 }
 

@@ -80,13 +80,24 @@ async function getIdempotentAttempt(normalized) {
 }
 
 /** Serial-status pre-check (ESTO). Returns true to continue, or sends req.error and returns false. */
-async function serialPreCheck(req, normalized) {
+async function serialPreCheck(req, normalized, { required = false } = {}) {
   if (!(normalized.SerialNumbers && normalized.SerialNumbers.length > 0)) return true;
-  if (typeof GoodsIssueAdapter.validateSerialStatus !== 'function') return true;
+  if (typeof GoodsIssueAdapter.validateSerialStatus !== 'function') {
+    if (!required) return true;
+    req.error(503, `SAP serial status verification is unavailable for material ${normalized.Material}. Goods Issue was NOT posted.`);
+    return false;
+  }
   try {
-    await GoodsIssueAdapter.validateSerialStatus(
+    const result = await GoodsIssueAdapter.validateSerialStatus(
       normalized.Material, normalized.Plant, normalized.StorageLocation, normalized.SerialNumbers
     );
+    if (!result || result.valid !== true) {
+      req.error(
+        result?.status || 422,
+        result?.reason || `SAP did not confirm that every serial number is available for material ${normalized.Material}. Goods Issue was NOT posted.`
+      );
+      return false;
+    }
     return true;
   } catch (serErr) {
     if (serErr.status === 422 || serErr.status === 409) {
@@ -97,6 +108,36 @@ async function serialPreCheck(req, normalized) {
     req.error(serErr.status || 502, `Serial status pre-check could not be completed before posting: ${serErr.message || 'unexpected error'}. Goods Issue was NOT posted.`);
     return false;
   }
+}
+
+/** SAP-derived serial profile/count gate for direct Movement 261; returns true/false or null on error. */
+async function serialCountCheck261(req, normalized) {
+  if (typeof GoodsIssueAdapter.isSerialManaged !== 'function') {
+    req.error(503, `SAP serial-management verification is unavailable for material ${normalized.Material} at plant ${normalized.Plant}. Goods Issue was NOT posted.`);
+    return null;
+  }
+
+  let serialManaged;
+  try {
+    serialManaged = await GoodsIssueAdapter.isSerialManaged(normalized.Material, normalized.Plant);
+  } catch (err) {
+    LOG.error('SAP serial-management verification failed; blocking 261 posting:', err.message || err);
+    req.error(err.status || 502, `SAP serial-management requirement could not be verified for material ${normalized.Material} at plant ${normalized.Plant}: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
+    return null;
+  }
+  if (typeof serialManaged !== 'boolean') {
+    req.error(502, `SAP returned no valid serial-management status for material ${normalized.Material} at plant ${normalized.Plant}. Goods Issue was NOT posted.`);
+    return null;
+  }
+  if (!serialManaged) return false;
+
+  const quantity = Number(normalized.IssueQty);
+  const serialCount = Array.isArray(normalized.SerialNumbers) ? normalized.SerialNumbers.length : 0;
+  if (!Number.isInteger(quantity) || serialCount !== quantity) {
+    req.error(400, `Material ${normalized.Material} is serial-managed: ${serialCount} serial number(s) supplied for quantity ${quantity}. Supply exactly one valid serial number per unit. Goods Issue was NOT posted.`);
+    return null;
+  }
+  return true;
 }
 
 /** 201-only stock pre-check. Returns true to continue, or sends req.error and returns false. */
@@ -843,7 +884,9 @@ const PerTypeGoodsIssueHandler = {
       if (!(await batchPreCheck261(req, normalized, resvItem))) return;
       if (!(await stagingCheck(req, normalized))) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
-      if (!(await serialPreCheck(req, normalized))) return;
+      const serialManaged = await serialCountCheck261(req, normalized);
+      if (serialManaged === null) return;
+      if (!(await serialPreCheck(req, normalized, { required: true }))) return;
 
       return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
     });

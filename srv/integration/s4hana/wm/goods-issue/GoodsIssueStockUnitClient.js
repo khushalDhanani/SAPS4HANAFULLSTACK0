@@ -2101,6 +2101,20 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     }
 
     if (rec) {
+      const recordSerial = String(rec.SerialNumber || '').trim().toUpperCase();
+      const recordMaterial = String(rec.Material || '').trim().replace(/^0+/, '');
+      if (!recordSerial) {
+        return result('UNVERIFIED', `SAP returned a serial record without its serial number while verifying ${sSerial}.`, rec);
+      }
+      if (recordSerial !== sSerial) {
+        return result('UNVERIFIED', `SAP returned serial number ${recordSerial} while verifying ${sSerial}.`);
+      }
+      if (!recordMaterial) {
+        return result('UNVERIFIED', `SAP returned serial number ${sSerial} without its material.`, rec);
+      }
+      if (recordMaterial !== matClean) {
+        return result('OTHER_MATERIAL', `Serial number ${sSerial} belongs to material ${recordMaterial}, not to material ${matClean}.`, rec);
+      }
       const recPlant = String(rec.Plant || '').trim().toUpperCase();
       const recSLoc = String(rec.StorageLocation || '').trim().toUpperCase();
       const stockType = String(rec.InventoryStockType || '').trim();
@@ -2170,117 +2184,24 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       return { valid: true };
     }
 
-    const matClean = String(material || '').replace(/^0+/, '').trim();
-    const matPadded = String(material || '').trim().padStart(18, '0');
-    const targetPlant = String(plant || '').trim().toUpperCase();
-    const targetSLoc = String(storageLocation || '').trim().toUpperCase();
-
     for (const rawSerial of serialNumbers) {
       const sSerial = String(rawSerial || '').trim();
       if (!sSerial) continue;
-
-      let serialRecord = null;
-      // Track when a status source genuinely FAILS to read (vs. returns "not found"). A serial whose
-      // status cannot be verified must fail CLOSED (block posting), never fall through as valid.
-      let statusReadErrored = false;
+      let status;
       try {
-        const serialFilter = `SerialNumber eq '${encodeURIComponent(sSerial)}' and Material eq '${encodeURIComponent(matClean)}'`;
-        const rows = await this._get(
-          '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber',
-          `$filter=${encodeURIComponent(serialFilter)}&$format=json`
-        );
-        if (Array.isArray(rows) && rows.length > 0) {
-          serialRecord = rows[0];
-        }
-      } catch (odataErr) {
-        LOG.warn(`UI_MATERIALSERIALNUMBER query failed for serial ${sSerial}: ${odataErr.message}`);
-        statusReadErrored = true;
-      }
-
-      // Check RFC fallback if OData did not return
-      if (!serialRecord && this.rfc && typeof this.rfc.readTable === 'function') {
-        let equi = null;
-        try {
-          const equiRows = await this.rfc.readTable('EQUI', ['EQUNR', 'SERNR', 'MATNR', 'WERK', 'LAGER'], [
-            `SERNR = '${sSerial}'`,
-            `AND ( MATNR = '${matClean}' OR MATNR = '${matPadded}' )`
-          ]);
-          if (Array.isArray(equiRows) && equiRows.length > 0) {
-            equi = equiRows[0];
-          }
-        } catch (_rfcErr) {
-          statusReadErrored = true;
-        }
-        if (equi) {
-          let isEsto;
-          try {
-            const objnr = `IE${equi.EQUNR}`;
-            const jestRows = await this.rfc.readTable('JEST', ['OBJNR', 'STAT', 'INACT'], [
-              `OBJNR = '${objnr}'`,
-              `AND STAT = 'I0184'`,
-              `AND INACT = ''`
-            ]);
-            isEsto = Array.isArray(jestRows) && jestRows.length > 0;
-          } catch (_jestErr) {
-            // Fail CLOSED: the equipment exists but its stock status is unreadable, so we cannot
-            // confirm unrestricted stock. Block rather than assume in-stock.
-            const err = new Error(
-              `Serial Number "${sSerial}" stock status could not be verified in SAP (status read failed). Goods Issue is blocked.`
-            );
-            err.status = 502;
-            throw err;
-          }
-          serialRecord = {
-            Material: equi.MATNR,
-            SerialNumber: equi.SERNR,
-            Plant: equi.WERK || targetPlant,
-            StorageLocation: equi.LAGER || targetSLoc,
-            InventoryStockType: isEsto ? '01' : '02',
-            InventoryStockType_Text: isEsto ? 'Unrestricted-Use Stock' : 'Not in Stock (ESTO)'
-          };
-        }
-      }
-
-      // Fail CLOSED when the serial's status could not be read from any source (read error, not a
-      // clean "not found"). An unverifiable serial must not silently pass the pre-posting gate.
-      if (!serialRecord && statusReadErrored) {
-        const err = new Error(
-          `Serial Number "${sSerial}" could not be verified in SAP (serial master read failed). Goods Issue is blocked.`
-        );
-        err.status = 502;
+        status = await this.getSerialStatus(material, plant, storageLocation, sSerial);
+      } catch (statusErr) {
+        const err = new Error(`Serial Number "${sSerial}" could not be verified in SAP: ${statusErr.message || 'unexpected status read failure'}. Goods Issue is blocked.`);
+        err.status = statusErr.status || 502;
         throw err;
       }
 
-      if (serialRecord) {
-        const serPlant = (serialRecord.Plant || '').trim().toUpperCase();
-        const serSLoc = (serialRecord.StorageLocation || '').trim().toUpperCase();
-        const serStockType = (serialRecord.InventoryStockType || '').trim();
-
-        if (targetPlant && serPlant && serPlant !== targetPlant) {
-          const err = new Error(
-            `Serial Number "${sSerial}" is located in Plant ${serPlant}, but Goods Issue requires Plant ${targetPlant}. Goods Issue is blocked.`
-          );
-          err.status = 409;
-          throw err;
-        }
-
-        if (targetSLoc && serSLoc && serSLoc !== targetSLoc) {
-          const err = new Error(
-            `Serial Number "${sSerial}" is located in Storage Location ${serSLoc}, but Goods Issue requires Storage Location ${targetSLoc}. Goods Issue is blocked.`
-          );
-          err.status = 409;
-          throw err;
-        }
-
-        // Unrestricted-Use Stock Status (ESTO) Check
-        if (serStockType && serStockType !== '01') {
-          const statusText = serialRecord.InventoryStockType_Text || serStockType;
-          const err = new Error(
-            `Serial Number "${sSerial}" is already issued or not in unrestricted stock (Status: ${statusText}). Serial numbers for Goods Issue must have status In-Stock (ESTO). Goods Issue is blocked.`
-          );
-          err.status = 422;
-          throw err;
-        }
+      if (status.Status !== 'AVAILABLE') {
+        const err = new Error(status.Message || `Serial Number "${sSerial}" is not available for this Goods Issue.`);
+        err.status = status.Status === 'UNVERIFIED' ? 502
+          : ['OTHER_PLANT', 'OTHER_STORAGE_LOCATION', 'OTHER_MATERIAL'].includes(status.Status) ? 409
+            : 422;
+        throw err;
       }
     }
 

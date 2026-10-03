@@ -51,10 +51,31 @@ test('post261 → falls back to standard API when RAP yields no document', async
     if (path.includes('zui_gi_order_rsv_o4')) return {};
     return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
   });
-  const res = await client.post261({ ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001' });
+  const res = await client.post261({
+    ...base,
+    Material: '1000001002',
+    ReservationNo: '518023',
+    ReservationItem: '0001',
+    ReferenceDocument: 'GI261RETRY001'
+  });
   expect(res.MaterialDocument).toBe('4900088888');
   expect(calls[1].path).toContain('A_MaterialDocumentHeader');
+  expect(calls[1].body.ReferenceDocument).toBe('GI261RETRY001');
   expect(calls[1].body.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
+});
+
+test('unplanned post261 → sends its persisted reference on the standard API header', async () => {
+  const { client, calls } = makeClient();
+  await client.post261({
+    ...base,
+    Material: '1000001002',
+    OrderNo: '1000856',
+    ReferenceDocument: 'GI261UNPLAN01'
+  });
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0].path).toContain('API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
+  expect(calls[0].body.ReferenceDocument).toBe('GI261UNPLAN01');
 });
 
 test('post261 → rejects an expired batch before any SAP POST', async () => {

@@ -363,12 +363,9 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       };
 
       const suClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
-      await expect(
-        suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004'])
-      ).rejects.toMatchObject({
-        status: 422,
-        message: expect.stringContaining('already issued or not in unrestricted stock (Status: Quality Inspection)')
-      });
+      const validation = suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004']);
+      await expect(validation).rejects.toHaveProperty('status', 422);
+      await expect(validation).rejects.toThrow('not in unrestricted stock');
     });
 
     it('rejects with 409 when serial number belongs to a different plant or storage location', async () => {
@@ -385,12 +382,9 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       };
 
       const suClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
-      await expect(
-        suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004'])
-      ).rejects.toMatchObject({
-        status: 409,
-        message: expect.stringContaining('located in Plant 2200, but Goods Issue requires Plant 1120')
-      });
+      const validation = suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004']);
+      await expect(validation).rejects.toHaveProperty('status', 409);
+      await expect(validation).rejects.toThrow('plant 1120 is required');
     });
 
     it('fails CLOSED (502) when the serial status cannot be read at all (no silent pass)', async () => {
@@ -401,12 +395,55 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
       // ...and the RFC fallback returns nothing -> the serial's status is genuinely unverifiable.
       const mockRfc = { readTable: jest.fn().mockResolvedValue([]) };
       const suClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter, rfc: mockRfc });
-      await expect(
-        suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004'])
-      ).rejects.toMatchObject({
-        status: 502,
-        message: expect.stringContaining('could not be verified in SAP')
+      const validation = suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004']);
+      await expect(validation).rejects.toHaveProperty('status', 502);
+      await expect(validation).rejects.toThrow('could not be read');
+    });
+
+    it('rejects a serial SAP reports for a different material', async () => {
+      const mockAdapter = {
+        _get: jest.fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([{
+            SerialNumber: 'MACBOOK-004',
+            Material: 'DIFFERENT-MATERIAL',
+            Plant: '1120',
+            StorageLocation: 'HS01',
+            InventoryStockType: '01'
+          }])
+      };
+      const suClient = new GoodsIssueStockUnitClient({
+        adapter: mockAdapter,
+        rfc: { readTable: jest.fn().mockResolvedValue([]) }
       });
+      const validation = suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004']);
+      await expect(validation).rejects.toHaveProperty('status', 409);
+      await expect(validation).rejects.toThrow('belongs to material DIFFERENT-MATERIAL');
+    });
+
+    it('fails closed when SAP omits the material identity from a returned serial record', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([{
+          SerialNumber: 'MACBOOK-004',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          InventoryStockType: '01'
+        }])
+      };
+      const suClient = new GoodsIssueStockUnitClient({ adapter: mockAdapter });
+      const validation = suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['MACBOOK-004']);
+      await expect(validation).rejects.toHaveProperty('status', 502);
+      await expect(validation).rejects.toThrow('without its material');
+    });
+
+    it('rejects a serial number that is unknown to SAP', async () => {
+      const suClient = new GoodsIssueStockUnitClient({
+        adapter: { _get: jest.fn().mockResolvedValue([]) },
+        rfc: { readTable: jest.fn().mockResolvedValue([]) }
+      });
+      const validation = suClient.validateSerialStatus('8000009753', '1120', 'HS01', ['UNKNOWN-SERIAL']);
+      await expect(validation).rejects.toHaveProperty('status', 422);
+      await expect(validation).rejects.toThrow('does not exist in SAP');
     });
   });
 });
