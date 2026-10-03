@@ -996,12 +996,12 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
 
     // Requirement 5: If staged qty < required: block Complete, and return 400 before calling SAP with:
     // "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
-    // Show planned-but-unconfirmed quantity (EINME) separately as "TO created, not confirmed".
+    // Show planned/in-transfer quantity (EINME) separately from confirmed target-bin stock.
     if (staging.isStagingRequired && stagedQty < requiredQty) {
       const stagingLocation = [staging.warehouse || wmInfo.warehouse, `${staging.targetType}/${staging.targetBin}`].filter(Boolean).join('/');
       let shortfall = `Only ${stagedQty} of ${requiredQty} ${uom} staged in ${stagingLocation}.`;
       if (plannedUnconfirmedQty > 0) {
-        shortfall += ` (${plannedUnconfirmedQty} ${uom} TO created, not confirmed).`;
+        shortfall += ` ${plannedUnconfirmedQty} of ${requiredQty} ${uom} in transfer; ${stagedQty} ${uom} confirmed in the bin.`;
       }
       if (staging.transferRequirementStatus === 'FOUND' && staging.tbnum) {
         shortfall += ` Transfer requirement ${staging.tbnum} needs a confirmed transfer order (LT04/LT12).`;
@@ -1051,7 +1051,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    * Check staging for a reservation (single item or all open items).
    * Requirement 5: If staged qty < required: block Complete, and return 400 before calling SAP with:
    * "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
-   * Show planned-but-unconfirmed quantity (EINME) separately as "TO created, not confirmed".
+   * Show planned/in-transfer quantity (EINME) separately from confirmed target-bin stock.
    * Multiple items in one reservation: check each.
    */
   async checkStagingForReservation(reservationNo, reservationItem = null) {

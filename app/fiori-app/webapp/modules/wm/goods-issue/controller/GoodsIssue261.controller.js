@@ -252,6 +252,9 @@ sap.ui.define([
                         var sUom = oModel.getProperty("/unit") || "PC";
                         var sBinLocation = (sWarehouse ? sWarehouse + "/" : "") + (sTargetType ? sTargetType + "/" + sTargetBin : sTargetBin);
                         sStagingWarning = "Only " + nStagedQty + " of " + nRequiredQty + " " + sUom + " staged in " + sBinLocation + ".";
+                        if (nPlannedUnconfirmedQty > 0) {
+                            sStagingWarning += " " + nPlannedUnconfirmedQty + " of " + nRequiredQty + " " + sUom + " in transfer; " + nStagedQty + " " + sUom + " confirmed in the bin.";
+                        }
                         if (sTransferStatus === "FOUND" && sTbnum) {
                             sStagingWarning += " Transfer requirement " + sTbnum + " needs a confirmed transfer order (LT04/LT12).";
                         } else if (sTransferStatus === "UNKNOWN") {
@@ -273,7 +276,7 @@ sap.ui.define([
                     oModel.setProperty("/transferRequirement", sTbnum);
                     oModel.setProperty("/canCompleteStaging", bCanComplete);
                     if (nPlannedUnconfirmedQty > 0) {
-                        oModel.setProperty("/plannedUnconfirmedNote", nPlannedUnconfirmedQty + " " + (oModel.getProperty("/unit") || "PC") + " (TO created, not confirmed)");
+                        oModel.setProperty("/plannedUnconfirmedNote", nPlannedUnconfirmedQty + " " + (oModel.getProperty("/unit") || "PC") + " in transfer; not yet confirmed in the target bin");
                     } else {
                         oModel.setProperty("/plannedUnconfirmedNote", "");
                     }

@@ -146,11 +146,11 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.plannedUnconfirmedQty).toBe(25);
       expect(res.tbnum).toBe('0000000789');
       expect(res.error).toBe(
-        'Only 15 of 40 KG staged in W01/100/STAGE-01. (25 KG TO created, not confirmed). Transfer requirement 0000000789 needs a confirmed transfer order (LT04/LT12).'
+        'Only 15 of 40 KG staged in W01/100/STAGE-01. 25 of 40 KG in transfer; 15 KG confirmed in the bin. Transfer requirement 0000000789 needs a confirmed transfer order (LT04/LT12).'
       );
     });
 
-    it('reports plannedUnconfirmedQty (EINME) separately as TO created, not confirmed', async () => {
+    it('reports plannedUnconfirmedQty (EINME) separately from confirmed bin stock', async () => {
       const rfc = mockRfc({
         LQUA: [
           {
@@ -193,7 +193,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.stagedQty).toBe(0);
       expect(res.plannedUnconfirmedQty).toBe(40);
       expect(res.error).toContain('Only 0 of 40 KG staged in W01/100/STAGE-01');
-      expect(res.error).toContain('(40 KG TO created, not confirmed)');
+      expect(res.error).toContain('40 of 40 KG in transfer; 0 KG confirmed in the bin.');
       expect(res.error).toContain('Transfer requirement 0000000999 needs a confirmed transfer order (LT04/LT12).');
     });
   });
@@ -307,6 +307,38 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       await expect(client.findStagingTarget(
         '1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '000001002599', 'IP1'
       )).resolves.toMatchObject({ targetBin: '0001002599', stagingSource: 'PKHD_DYNAMIC_BIN' });
+    });
+
+    it('keeps a 10-digit order number as a 10-character dynamic bin', async () => {
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
+        PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X' }]
+      }) });
+      await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '1234567890', 'IP1'))
+        .resolves.toMatchObject({ targetBin: '1234567890', stagingSource: 'PKHD_DYNAMIC_BIN' });
+    });
+
+    it('does not derive a dynamic bin from a nonnumeric order number', async () => {
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
+        PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X' }]
+      }) });
+      await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', 'ORDER-99', 'IP1'))
+        .resolves.toMatchObject({ stagingSource: 'PKHD_UNRESOLVED', targetBin: '' });
+    });
+
+    it('does not truncate an order number with more than 10 significant digits', async () => {
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
+        PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X' }]
+      }) });
+      await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '123456789012', 'IP1'))
+        .resolves.toMatchObject({ stagingSource: 'PKHD_UNRESOLVED', targetBin: '' });
+    });
+
+    it('uses an explicit bin unchanged for another storage type with a different bin length', async () => {
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc({
+        PKHD: [{ MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01', LGTYP: 'R01', LGPLA: 'R-12', BERKZ: '1', NKDYN: 'X' }]
+      }) });
+      await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '000001002599', 'R01'))
+        .resolves.toMatchObject({ targetType: 'R01', targetBin: 'R-12', stagingSource: 'PKHD_CONTROL_CYCLE' });
     });
   });
 
@@ -434,7 +466,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
         requiredQty: 10,
         plannedUnconfirmedQty: 20
       });
-      expect(result.error).toContain('TO created, not confirmed');
+      expect(result.error).toContain('20 of 10 KG in transfer; 4 KG confirmed in the bin.');
     });
 
     it('includes warehouse and unknown transfer status when TR table reads fail', async () => {

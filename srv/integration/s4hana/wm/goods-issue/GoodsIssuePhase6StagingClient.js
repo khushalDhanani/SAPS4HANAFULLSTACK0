@@ -197,7 +197,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
    * Check staging completeness for a component.
    * Requirement 5: If staged qty < required: block Complete, and return 400 before calling SAP with:
    * "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
-   * Show planned-but-unconfirmed quantity (EINME) separately as "TO created, not confirmed".
+   * Show planned/in-transfer quantity (EINME) separately from confirmed target-bin stock.
    */
   async checkStaging({
     material,
@@ -308,7 +308,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       const binLocation = [sLgnum, sType ? `${sType}/${sBin}` : sBin].filter(Boolean).join('/');
       error = `Only ${stagedQty} of ${reqQty} ${uom} staged in ${binLocation}.`;
       if (plannedUnconfirmedQty > 0) {
-        error += ` (${plannedUnconfirmedQty} ${uom} TO created, not confirmed).`;
+        error += ` ${plannedUnconfirmedQty} of ${reqQty} ${uom} in transfer; ${stagedQty} ${uom} confirmed in the bin.`;
       }
       if (transferRequirementStatus === 'FOUND' && sTbnum) {
         error += ` Transfer requirement ${sTbnum} needs a confirmed transfer order (LT04/LT12).`;

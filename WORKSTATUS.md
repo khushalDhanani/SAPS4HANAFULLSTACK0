@@ -1,6 +1,17 @@
 
 # Changes Log
 
+## 2026-10-03 11:04 UTC — In Progress: clarify in-transfer staging and harden bin normalization
+- **Agent**: Codex
+- **Request**: Add the requested bin-normalization regressions, make `EINME` visible as in-transfer versus confirmed quantity, and check for the target TO by read-only RFC.
+- **Plan**: Extend dynamic-bin tests for 12-character (including >2 leading zeroes), 10-character, overlong significant digits, nonnumeric order, and explicit bins on another storage type. Update server/UI shortfall messages to show in-transfer and confirmed quantities. Rerun WM tests, lint/build/compile. Keep the order-type-specific bin convention caveat explicit.
+- **Current Status**: Code change and controlled validations complete. The 261 messages distinguish EINME in-transfer quantity from confirmed target-bin stock; dynamic-bin regressions cover 10/12-character numeric inputs, nonnumeric/overlong order IDs, and an explicit bin on a different storage type. The live LT22/TO relationship and the warehouse convention for deriving dynamic bins from AUFNR remain unverified.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, and `WORKSTATUS.md`.
+- **Reason**: Users need to distinguish unconfirmed transfer quantity from confirmed bin stock, and the 12-character order-to-bin mapping must fail safely when it cannot fit rather than truncate.
+- **Validation**: Passed — focused staging/stock-unit suites (2 suites / 39 tests); full WM suite `npx jest test/unit/wm --runInBand --silent` (56 suites / 1,129 tests); UI5 lint; UI5 build; `npx cds compile srv`; and `git diff --check`. ESLint on the changed files exited 0 with a warning that the UI controller is ignored by ESLint and the existing unused `checkErr` warning in `GoodsIssueStockUnitClient.js`. The WM suite emitted existing missing-destination-binding warnings; UI5 lint/build emitted non-fatal update-check warnings.
+- **Errors / Warnings / Blockers**: The read-only LTAP query for W10/IP1/bin `0001002599` returned SAP `AD 718`; LTAK headers alone cannot establish the destination-bin/reservation link. Prior TBPE/TBPK reads still returned `DA 131`. Therefore, the 378 KG EINME quant is not proven to belong to reservation 480960's TO. The order-to-bin convention also needs warehouse confirmation. No SAP transaction was executed.
+- **Next Steps**: Warehouse team: use LT22 to inspect open TOs targeting `0001002599`, confirm whether the 378 KG batch `IN26000905` TO is linked to reservation 480960, confirm the dynamic-bin convention for IP1 and other storage types, then stage/confirm the remaining required quantity. Recheck the app after confirmation; resolve RFC table access separately if verified TR status is still needed.
+
 ## 2026-10-03 10:57 UTC — Add missing English batch-picker key
 - **Agent**: Codex
 - **Request**: Resolve the WM suite failure discovered while validating the dynamic order-bin fix.
