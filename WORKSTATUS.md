@@ -1,6 +1,22 @@
 
 # Changes Log
 
+## 2026-10-03 14:34 IST — Chunk 20 auditing Movement 261 localization
+- **Agent**: Copilot
+- **Request**: Extract all i18n keys used by the 261 view/controller, verify the active language bundles, remove raw/missing UI text, and test the 261 flow in supported languages.
+- **Plan**: Identify configured resource bundles and supported locales; audit every view binding and controller `getText` reference; localize any hard-coded user-facing fallback; add automated bundle-coverage tests that reject missing, empty, or key-as-value translations. Validate with 261 controller/UI tests, UI lint/build, and diff checks.
+- **Current Status**: Complete — all 107 i18n keys referenced by the 261 view/controller exist with non-empty, resolved values in both the configured base and English bundles. Localized the controller-owned staging-insufficiency fallback. Added automated coverage for all referenced keys, user-facing raw literals, both bundles, and the operational-flow message set.
+- **Files Changed**: `WORKSTATUS.md`; `app/fiori-app/webapp/i18n/i18n.properties`; `app/fiori-app/webapp/i18n/i18n_en.properties`; `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`; `test/unit/wm/goodsIssue261I18n.test.js`.
+- **Reason**: The 261 production flow should not expose untranslated key names or controller-owned hard-coded English fallback text in supported resource bundles.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261I18n.test.js test/unit/wm/goodsIssue261Controller.test.js --runInBand --silent`: passed, 2 suites / 63 tests. Coverage verified all 107 discovered keys in both active bundles and the existing 261 controller flow tests passed.
+  - `npm --prefix app/fiori-app run lint`: passed; UI5 linter reported no findings.
+  - `npm --prefix app/fiori-app run build`: passed; UI5 application build succeeded.
+  - `npx eslint --no-ignore test/unit/wm/goodsIssue261I18n.test.js`: passed.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: The app configures `i18n.properties` as its base bundle and contains an `i18n_en.properties` language bundle; no other language bundles were found. An intermediate raw-text assertion initially flagged an intentionally blank table action-column header; the check now ignores empty attributes and continues to fail on visible literals. No raw user-facing view/controller literals remain (the `#` serial index header is a symbol). No live SAP or deployment validation was applicable.
+- **Next Steps**: Chunk 20 is complete. Re-run the added i18n regression whenever 261 UI keys or locale bundles change; add language bundles to the same check if new locales are introduced.
+
 ## 2026-10-03 14:23 IST — Chunk 19 validating reservation-driven 261 prefill
 - **Agent**: Copilot
 - **Request**: Treat `?resv=` as a lookup hint; load current SAP reservation data, select an exact eligible 261 item, and use refreshed SAP quantity/material/location/status before posting.

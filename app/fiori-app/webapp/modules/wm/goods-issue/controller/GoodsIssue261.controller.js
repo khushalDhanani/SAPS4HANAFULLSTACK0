@@ -784,7 +784,7 @@ sap.ui.define([
             }
 
             if (oData && oData.isStagingRequired && !oData.canCompleteStaging) {
-                MessageBox.error(oData.stagingWarning || "Staged stock is insufficient for Goods Issue.");
+                MessageBox.error(oData.stagingWarning || this.getText("gi261StagingInsufficient"));
                 return;
             }
 
