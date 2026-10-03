@@ -47,6 +47,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
     jest.restoreAllMocks();
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     await GoodsIssueIssuedSuStore.clear();
+    jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
 
     // Default safe pre-check mocks
     if (typeof GoodsIssueAdapter.revalidateStockBeforePosting === 'function') {

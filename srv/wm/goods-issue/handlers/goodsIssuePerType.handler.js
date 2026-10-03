@@ -79,7 +79,7 @@ async function stockPreCheck201(req, normalized) {
  * ones, so what is posted never comes from the client. With `receiving` (311) the receiving plant /
  * storage location of the reservation header are reconciled and applied the same way.
  */
-async function reservationReconcileCheck(req, normalized, { receiving = false } = {}) {
+async function reservationReconcileCheck(req, normalized, { receiving = false, batch = false } = {}) {
   const sResv = String(normalized.ReservationNo || '').trim();
   const sItem = String(normalized.ReservationItem || '').trim();
   if (!sResv || !sItem) return true; // no reservation to reconcile against (unplanned path)
@@ -108,6 +108,9 @@ async function reservationReconcileCheck(req, normalized, { receiving = false } 
   }
   if (normalized.StorageLocation && item.StorageLocation && norm(normalized.StorageLocation) !== norm(item.StorageLocation)) {
     mismatches.push(`Storage Location (submitted ${normalized.StorageLocation}, reservation ${item.StorageLocation})`);
+  }
+  if (batch && normalized.Batch && item.Batch && norm(normalized.Batch) !== norm(item.Batch)) {
+    mismatches.push(`Batch (submitted ${normalized.Batch}, reservation ${item.Batch})`);
   }
   if (receiving) {
     if (normalized.ReceivingPlant && item.ReceivingPlant && norm(normalized.ReceivingPlant) !== norm(item.ReceivingPlant)) {
@@ -162,6 +165,66 @@ async function reservationReconcileCheck(req, normalized, { receiving = false } 
   fromReservation.forEach((f) => { if (item[f]) normalized[f] = item[f]; });
   item.OpenQty = authoritativeOpenQty;
   return item;
+}
+
+/** SAP batch-management, reservation assignment, SLED, and storage-location stock pre-check for 261. */
+async function batchPreCheck261(req, normalized, resvItem) {
+  const assignedBatch = resvItem && typeof resvItem === 'object'
+    ? String(resvItem.Batch || '').trim()
+    : '';
+  const submittedBatch = String(normalized.Batch || '').trim();
+  const norm = (value) => String(value || '').trim().toUpperCase();
+
+  if (assignedBatch && submittedBatch && norm(assignedBatch) !== norm(submittedBatch)) {
+    req.error(400, `Submitted batch ${submittedBatch} does not match SAP reservation batch ${assignedBatch}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  if (assignedBatch) normalized.Batch = assignedBatch;
+
+  let batchManaged = Boolean(assignedBatch);
+  if (!batchManaged && !submittedBatch) {
+    if (typeof GoodsIssueAdapter.isBatchManaged !== 'function') {
+      req.error(500, `SAP batch-management verification is unavailable for material ${normalized.Material} at plant ${normalized.Plant}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    try {
+      batchManaged = await GoodsIssueAdapter.isBatchManaged(normalized.Material, normalized.Plant);
+    } catch (err) {
+      LOG.error('SAP batch-management verification failed; blocking 261 posting:', err.message || err);
+      req.error(err.status || 502, `SAP batch-management requirement could not be verified for material ${normalized.Material} at plant ${normalized.Plant}: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
+      return false;
+    }
+  }
+
+  if (batchManaged && !normalized.Batch) {
+    req.error(400, `Material ${normalized.Material} is batch-managed in plant ${normalized.Plant}; Batch is required. Goods Issue was NOT posted.`);
+    return false;
+  }
+  if (!normalized.Batch) return true;
+
+  if (typeof GoodsIssueAdapter.validateBatchForPosting !== 'function') {
+    req.error(500, `SAP batch and stock validation is unavailable for batch ${normalized.Batch}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  try {
+    const result = await GoodsIssueAdapter.validateBatchForPosting(
+      normalized.Material,
+      normalized.Plant,
+      normalized.StorageLocation,
+      normalized.Batch,
+      normalized.IssueQty,
+      normalized.Unit
+    );
+    if (!result || result.valid !== true) {
+      req.error(result?.status || 422, result?.reason || `SAP could not verify batch ${normalized.Batch} before posting. Goods Issue was NOT posted.`);
+      return false;
+    }
+  } catch (err) {
+    LOG.error('SAP batch stock verification failed; blocking 261 posting:', err.message || err);
+    req.error(err.status || 502, `${err.message || 'SAP batch stock could not be verified'}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -701,9 +764,10 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
-      const resvItem = await reservationReconcileCheck(req, normalized);
+      const resvItem = await reservationReconcileCheck(req, normalized, { batch: true });
       if (!resvItem) return;
       if (!(await checkPendingConfirmation(req, normalized))) return;
+      if (!(await batchPreCheck261(req, normalized, resvItem))) return;
       if (!(await stagingCheck(req, normalized))) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       if (!(await serialPreCheck(req, normalized))) return;

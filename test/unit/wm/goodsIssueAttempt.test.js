@@ -34,6 +34,7 @@ describe('Goods Issue 201 posting attempts', () => {
 
   beforeEach(async () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
+    jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
     jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
   });
   afterEach(() => jest.restoreAllMocks());
@@ -137,6 +138,7 @@ describe('unconfirmed documents and re-confirm job', () => {
   beforeEach(async () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     await GoodsIssueIssuedSuStore.clear();
+    jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
   });
 
   test('unconfirmed documents promote SU claim to issued and are stored on attempt as unconfirmed', async () => {

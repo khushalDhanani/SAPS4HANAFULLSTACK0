@@ -1,6 +1,28 @@
 
 # Changes Log
 
+## 2026-10-03 11:05 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 3 — Batch Validation.
+- **Plan**: Preserve the prior Chunk 2 changes. Add SAP-backed batch-management detection (material/plant master flags), require a batch for managed 261 materials, treat an SAP reservation batch as authoritative, and validate batch usability, SLED, plant/storage-location stock, and requested quantity before posting. Use RFC READ_TABLE only for `MARA-XCHPF` / `MARC-XCHPF`, and existing SAP OData read services for batch master, stock, and unit conversion. Fail closed when any required SAP verification is unavailable. Add focused tests for handler and integration-client boundaries; run targeted 261/batch suites, lint, CAP compile, and diff checks.
+- **SAP Discovery / Evidence (read-only)**:
+  - Read `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem` for reservation `18025`, item `0001`: SAP returned an open item with no batch assigned, open quantity `3500 KG`.
+  - Read SAP `MARC-XCHPF` and `MARA-XCHPF` for its material/plant: both returned `X` (batch-managed).
+  - Read `LO_BM_BATCH_SRV/I_Batch` and `MMIM_MULTIPLE_MATERIAL_SRV/MaterialMultiStockByDates`: 27 batch candidates; the selected sample had positive stock in the reservation storage location. Read-only existing `validateBatch` and `revalidateStockBeforePosting` confirmed master/SLED valid and 1 KG available (returned 1990 KG; SLED state was expiring soon, not expired).
+  - Read `MMIM_MATERIAL_DATA_SRV/MaterialHeaders/Material2Auoms`: 8 SAP units were returned, including the reservation base unit; the returned factors will be used only when comparing issue quantity to SAP stock.
+  - No SAP POST or document mutation was performed.
+- **Current Status**: Complete — direct planned 261 posting now enforces SAP batch-management requirements and validates the reservation batch or selected batch against SAP before any posting flow continues.
+- **Files Changed**: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssue261BatchValidation.test.js`, `test/unit/wm/goodsIssue261OverIssue.test.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsIssueIssuedSu.test.js`, `test/unit/wm/goodsIssuePendingConfirmationPerType.test.js`, `test/unit/wm/goodsIssueService.test.js`, `WORKSTATUS.md`.
+- **Reason**: Direct 261 posting did not invoke any batch validation; `Batch` format validation alone allows missing/foreign/expired/restricted/understocked batches, and no backend material batch-management flag was read.
+- **Validation**:
+  - `npx jest test/unit/wm --runInBand`: passed, 52 suites / 1,029 tests.
+  - `npx eslint srv/integration/s4hana/wm/GoodsIssueAdapter.js srv/integration/s4hana/wm/goods-issue/GoodsIssueBatchesClient.js srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js test/unit/wm/goodsIssue261BatchValidation.test.js test/unit/wm/goodsIssue261OverIssue.test.js test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssueService.test.js`: passed with 0 errors and 3 existing unused-variable warnings (`checkErr`, `isDefinitiveRejection`, `claimId`).
+  - `npx cds compile srv`: passed.
+  - `git diff --check` and `git diff --cached --check`: passed on the final worktree and staged diff.
+  - Live SAP read-only evidence above confirms batch-management flags, batch candidates/stock/SLED, and unit data. No SAP POST or document mutation was performed.
+- **Errors / Warnings / Blockers**: Read-only OData calls and unit-test initialization emitted Destination-binding warnings because no local Destination service binding is available, but the reads/tests completed. The test process also logged an existing simulated integration read failure; the full suite passed. No live posting test was performed.
+- **Next Steps**: Review the final worktree diff and, if accepted, proceed to the next independently scoped Goods Issue chunk; no live SAP write is part of this validation-only change.
+
 ## 2026-10-03 11:01 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 2 — Material / Plant / Storage Location Validation.

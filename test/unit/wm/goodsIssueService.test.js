@@ -25,6 +25,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
   beforeEach(() => {
     handlers = {};
+    jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting').mockResolvedValue({ valid: true });
     srv = {
       on: jest.fn((event, entityOrHandler, handler) => {
         const key = typeof entityOrHandler === 'string' ? `${event}:${entityOrHandler}` : event;
@@ -229,6 +231,11 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
     it('should block single-line goods issue when batch is expired', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(mockBatchesRM4520);
+      GoodsIssueAdapter.validateBatchForPosting.mockResolvedValue({
+        valid: false,
+        status: 422,
+        reason: 'Batch B240101 expired on 2026-01-15.'
+      });
       // Reservation reconciliation passes (matching item, open qty) so the flow reaches the batch check.
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'RM-4520', Plant: '', StorageLocation: '', OpenQty: 100000 });
 
@@ -245,7 +252,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       };
 
       await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-01-15'));
+      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('expired on 2026-01-15'));
     });
 
     it('should correctly enrich SLED status in adapter _enrichBatchStatus helper', () => {
@@ -492,6 +499,11 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
     it('should block goods issue when attempting to issue real expired batch ABCD1234', async () => {
       // Reservation reconciliation passes so the flow reaches the batch-expiry check.
+      GoodsIssueAdapter.validateBatchForPosting.mockResolvedValue({
+        valid: false,
+        status: 422,
+        reason: 'Batch ABCD1234 expired on 2026-06-24.'
+      });
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
       const req = {
         data: {
@@ -506,7 +518,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       };
 
       await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-06-24'));
+      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('expired on 2026-06-24'));
     });
 
     it('reconciles submitted values against the reservation: rejects (400) a Material mismatch before posting', async () => {

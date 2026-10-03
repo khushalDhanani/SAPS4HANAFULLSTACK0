@@ -109,7 +109,9 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
         stockReadOk = true;
         for (const row of stockRes) {
           const bId = row.Batch ? String(row.Batch).trim() : '';
-          if (bId) {
+          const specialStock = String(row.InventorySpecialStockType || '').trim();
+          const stockSegment = String(row.StockSegment || '').trim();
+          if (bId && !specialStock && !stockSegment) {
             const rowStock = row.CurrentStock !== undefined && row.CurrentStock !== null ? Number(row.CurrentStock) : null;
             const prev = batchStockMap.get(bId);
             if (!prev) {
@@ -268,6 +270,86 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
     }
 
     return { valid: true };
+  }
+
+  /**
+   * Validate one batch for a posting using SAP batch master, SLED, and stock scoped to the issuing
+   * plant/storage location. Unknown stock or an unavailable unit conversion is a verification
+   * failure, not permission to post.
+   */
+  async validateBatchForPosting(material, plant, storageLocation, batch, requiredQty, entryUnit) {
+    const sMat = String(material || '').trim();
+    const sPlant = String(plant || '').trim();
+    const sSLoc = String(storageLocation || '').trim();
+    const sBatch = String(batch || '').trim();
+    if (!sMat || !sPlant || !sSLoc || !sBatch) {
+      return { valid: false, status: 400, reason: 'Material, plant, storage location, and batch are required for batch validation.' };
+    }
+
+    const candidates = await this.getMaterialBatches(sMat, sPlant, sSLoc);
+    const batchItem = Array.isArray(candidates)
+      ? candidates.find((candidate) => String(candidate.Batch || '').trim().toUpperCase() === sBatch.toUpperCase())
+      : null;
+    if (!batchItem) {
+      return {
+        valid: false,
+        status: 422,
+        reason: `Batch ${sBatch} is not usable for material ${sMat} at plant ${sPlant}, storage location ${sSLoc}; it may be unknown, expired, deleted, or restricted in SAP.`
+      };
+    }
+
+    if (String(batchItem.StorageLocation || '').trim().toUpperCase() !== sSLoc.toUpperCase()) {
+      return { valid: false, status: 422, reason: `Batch ${sBatch} has no verified stock in storage location ${sSLoc}.` };
+    }
+    if (batchItem.StatusState === 'Error' || batchItem.StatusText === 'EXPIRED' || batchItem.IsSelectable === false) {
+      return { valid: false, status: 422, reason: `Batch ${sBatch} is expired, restricted, deleted, or has no usable stock in SAP.` };
+    }
+
+    const stock = Number(batchItem.AvailableStock);
+    if (batchItem.AvailableStock === null || batchItem.AvailableStock === undefined || !Number.isFinite(stock)) {
+      const err = new Error(`Current SAP stock for batch ${sBatch} in plant ${sPlant}, storage location ${sSLoc} could not be verified.`);
+      err.status = 502;
+      throw err;
+    }
+
+    const stockUnit = String(batchItem.Unit || '').trim().toUpperCase();
+    const unit = String(entryUnit || '').trim().toUpperCase();
+    let requiredBaseQty = Number(requiredQty);
+    if (!Number.isFinite(requiredBaseQty) || requiredBaseQty <= 0) {
+      return { valid: false, status: 400, reason: 'Issue quantity must be positive for batch stock validation.' };
+    }
+    if (unit !== stockUnit) {
+      let units;
+      try {
+        units = await this.getMaterialPackagingUnits(sMat);
+      } catch (err) {
+        const unitErr = new Error(`SAP unit conversion could not be read for material ${sMat}: ${err.message}`);
+        unitErr.status = err.status || 502;
+        throw unitErr;
+      }
+      const baseUnit = Array.isArray(units)
+        ? units.find((candidate) => candidate.IsBaseUnit && String(candidate.Unit || '').trim().toUpperCase() === stockUnit)
+        : null;
+      const entry = Array.isArray(units)
+        ? units.find((candidate) => String(candidate.Unit || '').trim().toUpperCase() === unit)
+        : null;
+      const factor = Number(entry && entry.FactorToBase);
+      if (!baseUnit || !entry || !Number.isFinite(factor) || factor <= 0) {
+        const err = new Error(`SAP cannot verify conversion from ${unit || '(blank)'} to batch stock unit ${stockUnit || '(unknown)'} for material ${sMat}.`);
+        err.status = 502;
+        throw err;
+      }
+      requiredBaseQty *= factor;
+    }
+
+    if (stock < requiredBaseQty) {
+      return {
+        valid: false,
+        status: 422,
+        reason: `Batch ${sBatch} has ${stock} ${stockUnit} available in storage location ${sSLoc}; ${requiredBaseQty} ${stockUnit} is required.`
+      };
+    }
+    return { valid: true, availableStock: stock, requiredBaseQty, stockUnit };
   }
 
   /**

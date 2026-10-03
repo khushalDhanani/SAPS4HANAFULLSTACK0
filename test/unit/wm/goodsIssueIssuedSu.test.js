@@ -37,6 +37,7 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   beforeEach(async () => {
     jest.restoreAllMocks();
     await GoodsIssueIssuedSuStore.clear();
+    jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
   });
 
   afterEach(async () => {
@@ -1574,4 +1575,3 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
     });
   });
 });
-

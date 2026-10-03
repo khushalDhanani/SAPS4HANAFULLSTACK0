@@ -2025,6 +2025,33 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * Whether SAP requires a batch for the material at the issuing plant.
+   * Reads the material-level and plant-level batch-management indicators; an unreadable or
+   * missing master record is not treated as an unmanaged material.
+   */
+  async isBatchManaged(material, plant) {
+    const m = wmKey(material);
+    const w = wmKey(plant);
+    if (!m || !w) {
+      const err = new Error('Material and plant are required to verify SAP batch management.');
+      err.status = 400;
+      throw err;
+    }
+    const matnr = /^\d+$/.test(m) ? m.padStart(18, '0') : m;
+    const [materialRows, plantRows] = await Promise.all([
+      this.rfc.readTable('MARA', ['XCHPF'], [`MATNR = '${matnr}'`]),
+      this.rfc.readTable('MARC', ['XCHPF'], [`MATNR = '${matnr}'`, `AND WERKS = '${w}'`])
+    ]);
+    if (materialRows.length === 0 || plantRows.length === 0) {
+      const err = new Error(`SAP batch-management indicator could not be read for material ${m} at plant ${w}.`);
+      err.status = 502;
+      throw err;
+    }
+    return materialRows.some((r) => String(r.XCHPF || '').trim().toUpperCase() === 'X')
+      || plantRows.some((r) => String(r.XCHPF || '').trim().toUpperCase() === 'X');
+  }
+
+  /**
    * Current SAP status of ONE serial number for a goods movement out of material / plant / storage
    * location. Never throws for a business outcome and never assumes: every result is what SAP
    * returned, or UNVERIFIED when SAP could not be read.

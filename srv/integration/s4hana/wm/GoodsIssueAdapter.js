@@ -451,6 +451,11 @@ class GoodsIssueAdapter {
     return this.batches.validateBatch(material, batch, plant);
   }
 
+  /** Validate a posting batch against SAP master, SLED, stock location, quantity, and unit. */
+  async validateBatchForPosting(material, plant, storageLocation, batch, requiredQty, entryUnit) {
+    return this.batches.validateBatchForPosting(material, plant, storageLocation, batch, requiredQty, entryUnit);
+  }
+
   /**
    * Revalidate SAP stock immediately before Goods Issue posting
    */
@@ -609,6 +614,11 @@ class GoodsIssueAdapter {
   /** Whether the material has a serial number profile in the plant (MARC-SERNP). */
   async isSerialManaged(material, plant) {
     return this.stockUnits.isSerialManaged(material, plant);
+  }
+
+  /** Whether SAP marks the material as batch-managed at material or plant level. */
+  async isBatchManaged(material, plant) {
+    return this.stockUnits.isBatchManaged(material, plant);
   }
 
   /**

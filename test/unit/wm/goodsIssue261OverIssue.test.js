@@ -1,7 +1,7 @@
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
-describe('Chunks 1–2 — Reservation Quantity and Context Validation (Movement 261)', () => {
+describe('Chunks 1–3 — Reservation, Context, and Batch Validation (Movement 261)', () => {
   const handlers = {};
   PerTypeGoodsIssueHandler.init({
     on: (event, handler) => {
@@ -17,6 +17,10 @@ describe('Chunks 1–2 — Reservation Quantity and Context Validation (Movement
       err.status = status;
       return err;
     })
+  });
+
+  beforeEach(() => {
+    jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting').mockResolvedValue({ valid: true });
   });
 
   afterEach(() => {
