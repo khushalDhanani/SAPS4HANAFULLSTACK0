@@ -471,7 +471,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         PlannedUnconfirmedQty   : Decimal(13, 3);
         TargetStorageType       : String(3);
         TargetStorageBin        : String(10);
-        TransferRequirement     : String(10);
+        TransferRequirement       : String(10);
+        TransferRequirementStatus : String(12);
         StagingResolutionSource : String(20);
         IsStagingRequired       : Boolean;
         IsFullyStaged           : Boolean;

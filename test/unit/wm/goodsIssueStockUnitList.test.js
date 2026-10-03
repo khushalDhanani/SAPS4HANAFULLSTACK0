@@ -57,7 +57,7 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
   it('uses the exact reservation-linked transfer target instead of an unrelated order transfer', async () => {
     const stagingClient = {
       findTransferRequirement: jest.fn().mockResolvedValue({
-        tbnum: '0000000789', targetType: 'IP1', targetBin: '000001002599'
+        tbnum: '0000000789', status: 'FOUND', targetType: 'IP1', targetBin: '000001002599'
       }),
       findStagingTarget: jest.fn()
     };
@@ -84,11 +84,13 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
       TargetStorageType: 'IP1',
       TargetStorageBin: '000001002599',
       TransferRequirement: '0000000789',
+      TransferRequirementStatus: 'FOUND',
       StagedQty: 100,
       RequiredQty: 480,
       IsFullyStaged: false
     });
-    expect(result.Message).toContain('Only 100 of 480 KG staged in IP1/000001002599.');
+    expect(result.Message).toContain('Only 100 of 480 KG staged in W01/IP1/000001002599.');
+    expect(result.Message).toContain('Transfer requirement 0000000789 needs a confirmed transfer order');
     expect(result.StockUnits.map((su) => su.StorageBin)).toEqual(['000001002599']);
   });
 

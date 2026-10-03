@@ -231,6 +231,8 @@ sap.ui.define([
                     var sTargetType = (oData && oData.TargetStorageType) || "";
                     var sTargetBin = (oData && oData.TargetStorageBin) || "";
                     var sTbnum = (oData && oData.TransferRequirement) || "";
+                    var sTransferStatus = (oData && oData.TransferRequirementStatus) || "UNKNOWN";
+                    var sWarehouse = (oData && oData.Warehouse) || "";
                     var bIsFullyStaged = Boolean(oData && oData.IsFullyStaged);
 
                     var sStagingStatus = "Not Staged";
@@ -248,8 +250,15 @@ sap.ui.define([
                     if (bStagingRequired && !bIsFullyStaged) {
                         bCanComplete = false;
                         var sUom = oModel.getProperty("/unit") || "PC";
-                        var sBinLocation = sTargetType ? sTargetType + "/" + sTargetBin : sTargetBin;
-                        sStagingWarning = "Only " + nStagedQty + " of " + nRequiredQty + " " + sUom + " staged in " + sBinLocation + ". Transfer requirement " + (sTbnum || "N/A") + " needs a confirmed transfer order (LT04/LT12) first.";
+                        var sBinLocation = (sWarehouse ? sWarehouse + "/" : "") + (sTargetType ? sTargetType + "/" + sTargetBin : sTargetBin);
+                        sStagingWarning = "Only " + nStagedQty + " of " + nRequiredQty + " " + sUom + " staged in " + sBinLocation + ".";
+                        if (sTransferStatus === "FOUND" && sTbnum) {
+                            sStagingWarning += " Transfer requirement " + sTbnum + " needs a confirmed transfer order (LT04/LT12).";
+                        } else if (sTransferStatus === "UNKNOWN") {
+                            sStagingWarning += " Transfer requirement status unknown; verify the transfer requirement and confirm its transfer order.";
+                        } else {
+                            sStagingWarning += " No reservation-linked transfer requirement was found; verify the warehouse requirement before proceeding.";
+                        }
                     }
 
                     oModel.setProperty("/isStagingRequired", bStagingRequired);

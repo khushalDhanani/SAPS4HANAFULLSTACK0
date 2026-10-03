@@ -146,7 +146,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.plannedUnconfirmedQty).toBe(25);
       expect(res.tbnum).toBe('0000000789');
       expect(res.error).toBe(
-        'Only 15 of 40 KG staged in 100/STAGE-01. (25 KG TO created, not confirmed). Transfer requirement 0000000789 needs a confirmed transfer order (LT04/LT12) first.'
+        'Only 15 of 40 KG staged in W01/100/STAGE-01. (25 KG TO created, not confirmed). Transfer requirement 0000000789 needs a confirmed transfer order (LT04/LT12).'
       );
     });
 
@@ -192,9 +192,9 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.isStaged).toBe(false);
       expect(res.stagedQty).toBe(0);
       expect(res.plannedUnconfirmedQty).toBe(40);
-      expect(res.error).toContain('Only 0 of 40 KG staged in 100/STAGE-01');
+      expect(res.error).toContain('Only 0 of 40 KG staged in W01/100/STAGE-01');
       expect(res.error).toContain('(40 KG TO created, not confirmed)');
-      expect(res.error).toContain('Transfer requirement 0000000999 needs a confirmed transfer order (LT04/LT12) first.');
+      expect(res.error).toContain('Transfer requirement 0000000999 needs a confirmed transfer order (LT04/LT12).');
     });
   });
 
@@ -421,6 +421,26 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(result.error).toContain('TO created, not confirmed');
     });
 
+    it('includes warehouse and unknown transfer status when TR table reads fail', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          TBPE: () => { throw new Error('Table unavailable'); },
+          TBPK: () => { throw new Error('Table unavailable'); },
+          LQUA: []
+        })
+      });
+      const result = await client.checkStaging({
+        material: '1000000867', plant: '1000', sloc: '1100', warehouse: 'W01',
+        targetType: 'IP1', targetBin: 'STAGE-01', requiredQty: 40, uom: 'KG',
+        resNo: '12345', resItem: '1'
+      });
+
+      expect(result.transferRequirementStatus).toBe('UNKNOWN');
+      expect(result.error).toContain('0 of 40 KG staged in W01/IP1/STAGE-01.');
+      expect(result.error).toContain('Transfer requirement status unknown');
+    });
+
     it('fails closed when staged stock is reported in a different unit', async () => {
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
@@ -456,9 +476,26 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       await expect(client.findTransferRequirement('12345', '1')).resolves.toBe('0000000789');
       await expect(client.findTransferRequirement('12345', '1', '', '', 'W01', true)).resolves.toEqual({
         tbnum: '0000000789',
+        status: 'FOUND',
         targetType: 'IP1',
         targetBin: 'STAGE-01'
       });
+    });
+
+    it('reports UNKNOWN when TBPE and TBPK reads fail, and NOT_FOUND when both reads succeed empty', async () => {
+      const failedClient = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          TBPE: () => { throw new Error('Table unavailable'); },
+          TBPK: () => { throw new Error('Table unavailable'); }
+        })
+      });
+      const emptyClient = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc() });
+
+      await expect(failedClient.findTransferRequirement('12345', '1', '', '', 'W01', true))
+        .resolves.toEqual({ tbnum: '', status: 'UNKNOWN' });
+      await expect(emptyClient.findTransferRequirement('12345', '1', '', '', 'W01', true))
+        .resolves.toEqual({ tbnum: '', status: 'NOT_FOUND' });
     });
   });
 

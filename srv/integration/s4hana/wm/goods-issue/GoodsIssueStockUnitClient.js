@@ -799,7 +799,9 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       isStagingRequired: true,
       targetType: target.targetType,
       targetBin: target.targetBin,
+      warehouse: String(warehouse || '').trim(),
       tbnum: transfer.tbnum || '',
+      transferRequirementStatus: transfer.status || 'UNKNOWN',
       stagingSource,
       order,
       orderPadded,
@@ -990,11 +992,18 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     // "Only X of Y UOM staged in <type>/<bin>. Transfer requirement <TBNUM> needs a confirmed transfer order (LT04/LT12) first."
     // Show planned-but-unconfirmed quantity (EINME) separately as "TO created, not confirmed".
     if (staging.isStagingRequired && stagedQty < requiredQty) {
-      let shortfall = `Only ${stagedQty} of ${requiredQty} ${uom} staged in ${staging.targetType}/${staging.targetBin}.`;
+      const stagingLocation = [staging.warehouse || wmInfo.warehouse, `${staging.targetType}/${staging.targetBin}`].filter(Boolean).join('/');
+      let shortfall = `Only ${stagedQty} of ${requiredQty} ${uom} staged in ${stagingLocation}.`;
       if (plannedUnconfirmedQty > 0) {
         shortfall += ` (${plannedUnconfirmedQty} ${uom} TO created, not confirmed).`;
       }
-      shortfall += ` Transfer requirement ${staging.tbnum || ''} needs a confirmed transfer order (LT04/LT12) first.`;
+      if (staging.transferRequirementStatus === 'FOUND' && staging.tbnum) {
+        shortfall += ` Transfer requirement ${staging.tbnum} needs a confirmed transfer order (LT04/LT12).`;
+      } else if (staging.transferRequirementStatus === 'UNKNOWN') {
+        shortfall += ' Transfer requirement status unknown; verify the transfer requirement and confirm its transfer order.';
+      } else {
+        shortfall += ' No reservation-linked transfer requirement was found; verify the warehouse requirement before proceeding.';
+      }
       message = shortfall.trim();
     } else if (!stockUnits.length) {
       const loose = quants.filter((q) => !q.LENUM && !this._wmQuantRejection(q, resvBatch, usableMap, { targetType: staging.targetType, targetBin: staging.targetBin, currentOrder: staging.order }));
@@ -1025,6 +1034,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       TargetStorageType: staging.targetType || '',
       TargetStorageBin: staging.targetBin || '',
       TransferRequirement: staging.tbnum || '',
+      TransferRequirementStatus: staging.transferRequirementStatus || 'UNKNOWN',
       StagingResolutionSource: staging.stagingSource || '',
       IsStagingRequired: !!staging.isStagingRequired,
       IsFullyStaged: isFullyStaged

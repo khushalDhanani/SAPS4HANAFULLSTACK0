@@ -1,6 +1,28 @@
 
 # Changes Log
 
+## 2026-10-03 10:27 UTC — Clarifying staging shortfall and TR lookup status
+- **Agent**: Codex
+- **Request**: Make a zero-staged response identify warehouse/type/bin, expose a transfer requirement when found, and report unknown when TBPE/TBPK reads fail; inspect SAP message DA 131.
+- **Plan**: Map TBPE/TBPK results to FOUND/NOT_FOUND/UNKNOWN, carry the state through the stock-unit API contract and 261 warning, include warehouse in the shortfall location, and add controlled regressions. Run focused tests, WM suite, ESLint, CDS compile, UI5 lint/build, and diff validation.
+- **Current Status**: Code change and controlled validation complete. Staging messages include warehouse/type/bin; transfer status is exposed as FOUND, NOT_FOUND, or UNKNOWN through the stock-unit response and the 261 warning. Reservation 480960 still has 0 of 480 KG staged at W10/IP1/000001002599; the live TR/TO state remains unknown.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `srv/wm/goods-issue/service.cds`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, `test/unit/wm/goodsIssueStockUnitList.test.js`, and `WORKSTATUS.md`.
+- **Reason**: The current endpoint turns TBPE/TBPK failures into an empty transfer number, which can be mistaken for a confirmed absence, and its shortfall message omits the warehouse.
+- **Validation / SAP Read**: Passed — focused staging/stock-unit Jest tests (2 suites / 33 tests); full `npx jest test/unit/wm --runInBand --silent` (56 suites / 1,121 tests); `npx eslint` on changed server/test files (0 errors); `npx cds compile srv >/dev/null`; `npm --prefix app/fiori-app run lint` (no findings); `npm --prefix app/fiori-app run build`; `git diff --check`. Read-only `RFC_READ_TABLE` of T100 for SPRSL=E, ARGB=DA, MSGNR=131 returned TEXT “Table & does not exist in the database”. No SAP writes were performed.
+- **Errors / Warnings / Blockers**: The first focused run exposed an outdated test expectation for the new warehouse-qualified message; the expectation was corrected and focused/full WM suites then passed. ESLint reports one pre-existing unused caught variable `checkErr` at GoodsIssueStockUnitClient.js:629. UI5 lint/build show non-fatal update-check permission warnings. Jest logs missing destination-binding warnings. DA 131 does not prove an authorization issue; SAP’s substituted table name is unknown. The returned 480960 item still has 0 of 480 KG staged at W10/IP1/000001002599.
+- **Next Steps**: Warehouse team should check LQUA and open TO/TR records as described in the user's warehouse procedure. Ask SAP support to identify the substituted table for DA 131 and verify the corresponding RFC table availability/authorization, then reload StockUnitList to obtain a verified TR status.
+
+## 2026-10-03 10:15 UTC — Interpreting the returned StockUnitList for reservation 480960
+- **Agent**: Codex
+- **Request**: Diagnose the latest StockUnitList, MaterialVH, and MaterialBatches responses for reservation 480960 item 0001.
+- **Plan**: Match response fields to the staging resolver and stock-unit filters; distinguish WM staging stock from material-batch stock.
+- **Current Status**: The endpoint returns staging data for the item. It resolved W10/IP1/dynamic order bin `000001002599`, but found 0 of 480 KG staged there. No eligible Storage Units are available for posting. `TransferRequirement` is blank, so the transfer requirement/TO link is not established; previous read-only RFC attempts reached SAP but TBPE/TBPK reads failed with RFC error 131.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Reason**: Identify the current blocker after the earlier missing-RFC-client 502 and prevent interpreting unrestricted material stock as staged WM stock.
+- **Validation / Inspection**: Confirmed `PKHD_DYNAMIC_BIN` is the control-cycle fallback; only unrestricted LQUA quantities in the exact target type/bin count toward `StagedQty`, and only SUs in that target are returned when staging is required. The supplied MaterialBatches rows report stock by material/batch at CS01 and are not evidence of stock in W10/IP1/000001002599.
+- **Errors / Warnings / Blockers**: No confirmed transfer requirement number is present in the response. The 19 `ExcludedCount` entries are SUs filtered out of the returned eligible list; the count alone does not establish that they are usable at the staging target. No SAP write was performed.
+- **Next Steps**: Verify or create/confirm the reservation-linked transfer order for RSNUM 0000480960 / item 0001 into W10, storage type IP1, bin 000001002599; confirm at least 480 KG of unrestricted stock there. Also restore/authorize the TBPE/TBPK read path so the response can return the actual transfer requirement number. Recheck StockUnitList afterward.
+
 ## 2026-10-03 10:06 UTC — Injecting a shared RFC client into goods issue clients
 - **Agent**: Codex
 - **Request**: Fix the missing RFC client that produced the transfer-requirement 502 shown by the user.

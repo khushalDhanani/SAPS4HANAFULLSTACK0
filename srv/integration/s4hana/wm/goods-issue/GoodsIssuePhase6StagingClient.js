@@ -119,10 +119,11 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       throw stagingError('SAP RFC table access is unavailable; reservation transfer requirement cannot be verified.');
     }
     const sRes = clean(resNo);
-    if (!sRes) return includeTarget ? { tbnum: '' } : '';
+    if (!sRes) return includeTarget ? { tbnum: '', status: 'UNKNOWN' } : '';
     const resPadded = sRes.padStart(10, '0');
     let tbnum = '';
     let itemLinkedTransfer = false;
+    let lookupFailed = false;
 
     try {
       const where = [`RSNUM = '${resPadded}'`];
@@ -140,6 +141,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         itemLinkedTransfer = true;
       }
     } catch (e) {
+      lookupFailed = true;
       LOG.warn(`TBPE lookup failed for reservation ${sRes}: ${e.message || e}`);
     }
 
@@ -151,13 +153,14 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
           tbnum = clean(tbpkRows[0].TBNUM);
         }
       } catch (e) {
+        lookupFailed = true;
         LOG.warn(`TBPK lookup failed for reservation ${sRes}: ${e.message || e}`);
       }
     }
 
-    if (!tbnum) return includeTarget ? { tbnum: '' } : '';
+    if (!tbnum) return includeTarget ? { tbnum: '', status: lookupFailed ? 'UNKNOWN' : 'NOT_FOUND' } : '';
     if (!includeTarget) return tbnum;
-    if (!itemLinkedTransfer) return { tbnum };
+    if (!itemLinkedTransfer) return { tbnum, status: lookupFailed ? 'UNKNOWN' : 'FOUND' };
     try {
       const ltbkRows = await this.rfc.readTable(
         'LTBK', ['TBNUM', 'LGNUM', 'NLTYP', 'NLPLA'],
@@ -174,10 +177,11 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       if (destinations.length > 1) {
         throw stagingError(`SAP returned multiple transfer requirement staging targets for reservation ${sRes}.`);
       }
-      return { tbnum, ...(destinations[0] || {}) };
+      return { tbnum, status: lookupFailed ? 'UNKNOWN' : 'FOUND', ...(destinations[0] || {}) };
     } catch (err) {
       if (err.status) throw err;
-      throw stagingError(`SAP transfer requirement ${tbnum} staging target could not be read: ${err.message || 'unexpected RFC read failure'}.`);
+      LOG.warn(`LTBK target lookup failed for transfer requirement ${tbnum}: ${err.message || err}`);
+      return { tbnum, status: 'UNKNOWN' };
     }
   }
 
@@ -211,6 +215,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     let sBin = clean(targetBin);
     let sLgnum = clean(warehouse);
     let sTbnum = clean(tbnum);
+    let transferRequirementStatus = sTbnum ? 'FOUND' : 'UNKNOWN';
 
     if (!sType || !sBin) {
       const target = await this.findStagingTarget(sMat, sPlant, sSloc, sLgnum, psa, orderNo, sType);
@@ -239,7 +244,9 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     }
 
     if (!sTbnum && resNo) {
-      sTbnum = await this.findTransferRequirement(resNo, resItem, sMat, sPlant, sLgnum);
+      const transfer = await this.findTransferRequirement(resNo, resItem, sMat, sPlant, sLgnum, true);
+      sTbnum = transfer.tbnum || '';
+      transferRequirementStatus = transfer.status || 'UNKNOWN';
     }
 
     let stagedQty = 0;
@@ -290,12 +297,18 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
 
     let error = '';
     if (!isFullyStaged) {
-      const binLocation = sType ? `${sType}/${sBin}` : sBin;
+      const binLocation = [sLgnum, sType ? `${sType}/${sBin}` : sBin].filter(Boolean).join('/');
       error = `Only ${stagedQty} of ${reqQty} ${uom} staged in ${binLocation}.`;
       if (plannedUnconfirmedQty > 0) {
         error += ` (${plannedUnconfirmedQty} ${uom} TO created, not confirmed).`;
       }
-      error += ` Transfer requirement ${sTbnum || 'N/A'} needs a confirmed transfer order (LT04/LT12) first.`;
+      if (transferRequirementStatus === 'FOUND' && sTbnum) {
+        error += ` Transfer requirement ${sTbnum} needs a confirmed transfer order (LT04/LT12).`;
+      } else if (transferRequirementStatus === 'UNKNOWN') {
+        error += ' Transfer requirement status unknown; verify the transfer requirement and confirm its transfer order.';
+      } else {
+        error += ' No reservation-linked transfer requirement was found; verify the warehouse requirement before proceeding.';
+      }
     }
 
     return {
@@ -310,6 +323,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       targetBin: sBin,
       warehouse: sLgnum,
       tbnum: sTbnum,
+      transferRequirementStatus,
       uom,
       error: error || undefined
     };
