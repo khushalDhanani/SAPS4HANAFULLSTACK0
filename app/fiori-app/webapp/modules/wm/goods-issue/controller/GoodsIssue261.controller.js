@@ -730,6 +730,11 @@ sap.ui.define([
 
         onPostGoodsIssue: function () {
             var oData = this._oModel ? this._oModel.getData() : {};
+            var sCurrentPostingStatus = String((oData && oData.postingStatus) || "").toUpperCase();
+            if ((oData && oData.busy) || sCurrentPostingStatus === "POSTED" ||
+                sCurrentPostingStatus === "QUEUED" || sCurrentPostingStatus === "UNKNOWN") {
+                return;
+            }
             var sMaterial = (oData && oData.material != null) ? String(oData.material).trim() : "";
             var sPlant = (oData && oData.plant != null) ? String(oData.plant).trim() : "";
 

@@ -1,6 +1,23 @@
 
 # Changes Log
 
+## 2026-10-03 14:18 IST — Chunk 18 guarding the final 261 Post action
+- **Agent**: Copilot
+- **Request**: Disable the final Post button immediately during submission, prevent double-click/re-entry, and re-enable only after a definitive outcome or controlled recovery state.
+- **Plan**: Bind the footer button to validity, not-busy, and non-pending outcome state; synchronously guard the controller against a second invocation; keep `POSTED`, `QUEUED`, and `UNKNOWN` blocked until form reset/reconciliation, while a definitive `FAILED` response can be retried. Test duplicate invocation and retry after definitive failure; run focused Jest, full WM suite if appropriate, UI lint, CAP compile, and diff check.
+- **Current Status**: Complete — the footer Post button is disabled while the request is in flight and after `POSTED`, `QUEUED`, or `UNKNOWN`; controller re-entry is synchronously guarded. A definitive `FAILED` outcome releases the UI guard and allows deliberate retry. Server-side idempotency remains authoritative and unchanged.
+- **Files Changed**: `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `test/unit/wm/goodsIssue261Controller.test.js`, `WORKSTATUS.md`.
+- **Reason**: The Post button was bound only to `/isValid`; the controller did not synchronously guard repeated invocation, so same-tick clicks could enter the submit action more than once.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js --runInBand --silent`: passed, 1 suite / 55 tests.
+  - `npx eslint --no-ignore --global sap app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js test/unit/wm/goodsIssue261Controller.test.js`: passed.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,100 tests.
+  - `xmllint --noout app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`: passed XML parsing; xmllint emitted the pre-existing namespace warning that `sap.m` is not an absolute XML namespace URI.
+  - `npx cds compile srv >/dev/null`: passed.
+  - Final diff reviewed; `git diff --check` passed.
+- **Errors / Warnings / Blockers**: Existing worktree contains Chunk 17 changes; these are preserved. Server-side idempotency remains authoritative and unchanged. Jest emitted missing destination-binding warnings and Node's SQLite experimental warning; XML validation emitted the existing `sap.m` namespace warning.
+- **Next Steps**: Keep server-side idempotency as the authoritative duplicate-post protection; the UI guard is only a secondary interaction safeguard.
+
 ## 2026-10-03 13:58 IST — Chunk 17 explicit Goods Issue posting outcomes
 - **Agent**: Copilot
 - **Request**: Expose `POSTED`, `QUEUED`, `FAILED`, and `UNKNOWN` as explicit 261 posting outcomes; do not equate generic `Success` with SAP document creation; make the UI display the state.

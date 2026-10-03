@@ -547,7 +547,7 @@
                     text="{= ${gi261>/fromReservation} ? ${i18n>gi261BtnComplete} : ${i18n>gi261BtnPost} }"
                     icon="{= ${gi261>/fromReservation} ? 'sap-icon://accept' : 'sap-icon://save' }"
                     type="Emphasized"
-                    enabled="{gi261>/isValid}"
+                    enabled="{= ${gi261>/isValid} &amp;&amp; !${gi261>/busy} &amp;&amp; ${gi261>/postingStatus} !== 'POSTED' &amp;&amp; ${gi261>/postingStatus} !== 'QUEUED' &amp;&amp; ${gi261>/postingStatus} !== 'UNKNOWN' }"
                     press=".onPostGoodsIssue" />
             </Toolbar>
         </footer>

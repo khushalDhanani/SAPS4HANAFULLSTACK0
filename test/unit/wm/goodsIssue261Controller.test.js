@@ -507,6 +507,67 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(mockMessageBox.warning).not.toHaveBeenCalled();
         });
 
+        it('should ignore a second Post invocation while the first request is in flight', async () => {
+            makeValidPlanned();
+            let resolvePost;
+            mockService.postGoodsIssue.mockReturnValueOnce(new Promise((resolve) => {
+                resolvePost = resolve;
+            }));
+
+            controller.onPostGoodsIssue();
+            expect(controller._oModel.getProperty('/busy')).toBe(true);
+            controller.onPostGoodsIssue();
+            expect(mockService.postGoodsIssue).toHaveBeenCalledTimes(1);
+
+            resolvePost({
+                PostingStatus: 'POSTED',
+                MaterialDocument: '4900004324',
+                MaterialDocYear: '2026',
+                Confirmed: true
+            });
+            await flush();
+            expect(controller._oModel.getProperty('/busy')).toBe(false);
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('POSTED');
+        });
+
+        it('should allow another Post only after a definitive FAILED response', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue
+                .mockResolvedValueOnce({ PostingStatus: 'FAILED', Success: false, Message: 'SAP rejected the request.' })
+                .mockResolvedValueOnce({
+                    PostingStatus: 'POSTED',
+                    Success: true,
+                    Confirmed: true,
+                    MaterialDocument: '4900004325',
+                    MaterialDocYear: '2026'
+                });
+
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('FAILED');
+            expect(controller._oModel.getProperty('/busy')).toBe(false);
+
+            controller.onPostGoodsIssue();
+            await flush();
+            expect(mockService.postGoodsIssue).toHaveBeenCalledTimes(2);
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('POSTED');
+        });
+
+        it.each(['POSTED', 'QUEUED', 'UNKNOWN'])('should guard controller re-entry after %s', async (postingStatus) => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: postingStatus,
+                Success: postingStatus === 'POSTED',
+                Confirmed: postingStatus === 'POSTED',
+                MaterialDocument: postingStatus === 'POSTED' ? '4900004326' : ''
+            });
+
+            controller.onPostGoodsIssue();
+            await flush();
+            controller.onPostGoodsIssue();
+            expect(mockService.postGoodsIssue).toHaveBeenCalledTimes(1);
+        });
+
         // Queue tests removed — dispatch queue eliminated; direct posting only.
         // The controller now shows MessageBox.error (not warning) when no MaterialDocument is returned.
 
