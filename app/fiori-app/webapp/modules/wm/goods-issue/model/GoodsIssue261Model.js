@@ -118,9 +118,11 @@
 
                 // Process & Execution States
                 busy: false,
+                postingStatus: "",
                 hasPosted: false,
                 postedDocument: "",
                 postedYear: "",
+                postingAttemptDocument: "",
                 reversalBusy: false,
                 hasReversed: false,
                 reversalDocument: "",

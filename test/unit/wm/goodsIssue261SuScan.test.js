@@ -12,11 +12,14 @@
  *  9. No SU data gap reporting
  */
 
+const cds = require('@sap/cds');
 const GoodsIssue261Model = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
+const { ATTEMPT_ENTITY } = GoodsIssueAttemptStore;
+const { DELETE } = cds.ql;
 
 describe('GoodsIssue261Model: SU Scanning & Drum Weight Calculations', () => {
 
@@ -299,6 +302,9 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
   });
 
   beforeEach(async () => {
+    if (GoodsIssueAttemptStore.db) {
+      await GoodsIssueAttemptStore.db.run(DELETE.from(ATTEMPT_ENTITY));
+    }
     GoodsIssueAttemptStore.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
@@ -306,6 +312,9 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
 
   afterEach(async () => {
     jest.restoreAllMocks();
+    if (GoodsIssueAttemptStore.db) {
+      await GoodsIssueAttemptStore.db.run(DELETE.from(ATTEMPT_ENTITY));
+    }
     GoodsIssueAttemptStore.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
   });
@@ -942,7 +951,8 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
         MaterialDocument: '4900099999',
-        MaterialDocYear: '2026'
+        MaterialDocYear: '2026',
+        Confirmed: true
       });
 
       const req = {
@@ -1106,7 +1116,11 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
 
       await handlers['postGoodsIssue261'](req);
       expect(postSpy).toHaveBeenCalled();
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Storage Unit DRUM_05 was consumed in SAP'));
+      expect(req.error).toHaveBeenCalledWith(expect.objectContaining({
+        code: 'GI_POSTING_FAILED',
+        status: 400,
+        message: expect.stringContaining('Storage Unit DRUM_05 was consumed in SAP')
+      }));
     });
 
     it('accepts any valid SU set whose sum equals open qty: server picks which SU takes the partial regardless of drum order', async () => {
@@ -1121,7 +1135,8 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
         MaterialDocument: '4900099999',
-        MaterialDocYear: '2026'
+        MaterialDocYear: '2026',
+        Confirmed: true
       });
 
       // 1) Different valid drum order (reversed): client lists DRUM_10 first and DRUM_01 last
@@ -1147,6 +1162,7 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       expect(reqReversed.error).not.toHaveBeenCalled();
       expect(resReversed).toBeDefined();
       expect(resReversed.MaterialDocument).toBe('4900099999');
+      expect(resReversed.PostingStatus).toBe('POSTED');
       expect(postSpy).toHaveBeenCalled();
 
       // 2) Different valid drum order (shuffled / arbitrary scan sequence)

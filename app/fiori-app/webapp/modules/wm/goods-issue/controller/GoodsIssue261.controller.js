@@ -23,6 +23,37 @@ sap.ui.define([
 ) {
     "use strict";
 
+    function resolvePostingStatus(oResult) {
+        if (!oResult || typeof oResult !== "object") {
+            return "FAILED";
+        }
+
+        var sStatus = String(oResult.PostingStatus || "").trim().toUpperCase();
+        if (sStatus === "POSTED") return oResult.MaterialDocument ? "POSTED" : "UNKNOWN";
+        if (sStatus === "QUEUED" || sStatus === "FAILED" || sStatus === "UNKNOWN") return sStatus;
+
+        var sConfirmation = String(oResult.ConfirmationStatus || "").trim().toUpperCase();
+        if (oResult.Queued === true || sConfirmation === "QUEUED") return "QUEUED";
+        if (oResult.MaterialDocument && (oResult.Confirmed === true || sConfirmation === "CONFIRMED")) return "POSTED";
+        if (oResult.MaterialDocument || oResult.Confirmed === false || oResult.Success === true ||
+            sConfirmation === "POSTING" || sConfirmation === "UNCONFIRMED" ||
+            sConfirmation === "POSTED_CONFIRMATION_PENDING") {
+            return "UNKNOWN";
+        }
+        return "FAILED";
+    }
+
+    function resolveErrorPostingStatus(oError) {
+        var oApiError = oError && oError.response && oError.response.data && oError.response.data.error;
+        var sCode = String((oApiError && oApiError.code) || (oError && oError.code) || "").toUpperCase();
+        var sMessage = String((oApiError && oApiError.message) || (oError && oError.message) || "");
+        if (sCode === "GI_POSTING_UNKNOWN" || sCode === "GI_POSTING_OUTCOME_UNKNOWN" ||
+            sCode === "GI_POSTING_UNCONFIRMED" || /outcome unconfirmed|do not post again|may have been posted/i.test(sMessage)) {
+            return "UNKNOWN";
+        }
+        return "FAILED";
+    }
+
     return BaseController.extend("saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue261", {
 
         onInit: function () {
@@ -729,13 +760,34 @@ sap.ui.define([
             GoodsIssue261Service.postGoodsIssue(oPayload)
                 .then(function (res) {
                     that._oModel.setProperty("/busy", false);
+                    var sPostingStatus = resolvePostingStatus(res);
+                    that._oModel.setProperty("/postingStatus", sPostingStatus);
+                    that._oModel.setProperty("/postingAttemptDocument",
+                        sPostingStatus === "UNKNOWN" && res ? (res.MaterialDocument || "") : "");
 
-                    if (!res || !res.MaterialDocument) {
+                    if (sPostingStatus !== "POSTED") {
                         that._oModel.setProperty("/hasPosted", false);
-                        var sMsg = (res && res.Message) || "Goods Issue was not posted in SAP S/4HANA.";
-                        MessageBox.error(sMsg);
+                        that._oModel.setProperty("/postedDocument", "");
+                        that._oModel.setProperty("/postedYear", "");
+                        if (sPostingStatus === "QUEUED") {
+                            MessageBox.information((res && res.Message) || that.getText("gi261QueuedMsg"), {
+                                title: that.getText("gi261QueuedTitle")
+                            });
+                        } else if (sPostingStatus === "UNKNOWN") {
+                            MessageBox.warning((res && res.Message) || that.getText("gi261UnknownMsg"), {
+                                title: that.getText("gi261UnknownTitle")
+                            });
+                        } else {
+                            MessageBox.error((res && res.Message) || that.getText("gi261PostGenericError"), {
+                                title: that.getText("gi261PostFailedTitle")
+                            });
+                        }
                         return;
                     }
+
+                    that._oModel.setProperty("/hasPosted", true);
+                    that._oModel.setProperty("/postedDocument", res.MaterialDocument);
+                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || "");
 
                     // Workflow outcome: return to Open Reservations list carrying completion result
                     if (that._oModel.getProperty("/fromReservation")) {
@@ -749,17 +801,10 @@ sap.ui.define([
                         return;
                     }
 
-                    that._oModel.setProperty("/hasPosted", true);
-                    that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
-                    that._oModel.setProperty("/postedYear", res.MaterialDocYear || "");
-
                     var sDocMsg = that.getText("gi261PostSuccessMsg", [
                         res.MaterialDocument || "",
                         res.MaterialDocYear || ""
                     ]);
-                    if (res && (res.Confirmed === false || res.ConfirmationStatus === 'POSTED_CONFIRMATION_PENDING')) {
-                        sDocMsg += " (" + that.getText("giConfirmationPending") + ")";
-                    }
 
                     MessageBox.success(sDocMsg, {
                         title: that.getText("gi261PostSuccessTitle"),
@@ -774,14 +819,21 @@ sap.ui.define([
                 })
                 .catch(function (err) {
                     that._oModel.setProperty("/busy", false);
+                    var sPostingStatus = resolveErrorPostingStatus(err);
+                    that._oModel.setProperty("/postingStatus", sPostingStatus);
+                    that._oModel.setProperty("/hasPosted", false);
+                    that._oModel.setProperty("/postedDocument", "");
+                    that._oModel.setProperty("/postedYear", "");
                     var sErrMsg = err.message || that.getText("gi261PostGenericError");
                     if (err.response && err.response.data && err.response.data.error) {
                         var oErr = err.response.data.error;
                         sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
                     }
-                    MessageBox.error(sErrMsg, {
-                        title: that.getText("gi261PostFailedTitle")
-                    });
+                    if (sPostingStatus === "UNKNOWN") {
+                        MessageBox.warning(sErrMsg, { title: that.getText("gi261UnknownTitle") });
+                    } else {
+                        MessageBox.error(sErrMsg, { title: that.getText("gi261PostFailedTitle") });
+                    }
                 });
         },
 

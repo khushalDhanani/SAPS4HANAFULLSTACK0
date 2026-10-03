@@ -776,7 +776,11 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
       jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
       await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));
+      expect(req.error).toHaveBeenCalledWith(expect.objectContaining({
+        code: 'GI_POSTING_FAILED',
+        status: 503,
+        message: expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable')
+      }));
     });
 
     it('should report failure directly on batch submitGoodsIssueRequest without queueing', async () => {

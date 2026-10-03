@@ -139,6 +139,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Success           : Boolean;
         Confirmed         : Boolean;
         ConfirmationStatus: String(30);
+        PostingStatus     : String(10);
         Message           : String(500);
     };
 

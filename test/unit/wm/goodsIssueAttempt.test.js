@@ -424,7 +424,8 @@ describe('Movement 261 idempotent posting attempts', () => {
       MaterialDocument: '4900099911',
       MaterialDocYear: '2026',
       Success: true,
-      ConfirmationStatus: 'CONFIRMED'
+      ConfirmationStatus: 'CONFIRMED',
+      PostingStatus: 'POSTED'
     });
     expect(postPayloads).toHaveLength(1);
     expect((await allAttempts()).filter((attempt) => attempt.MovementType === '261')).toHaveLength(1);
@@ -453,7 +454,12 @@ describe('Movement 261 idempotent posting attempts', () => {
     await started;
     const retry = await handlers.postGoodsIssue261(req({ ...request }));
 
-    expect(retry).toMatchObject({ Success: false, ConfirmationStatus: 'POSTING' });
+    expect(retry).toMatchObject({
+      Success: false,
+      Confirmed: false,
+      ConfirmationStatus: 'POSTING',
+      PostingStatus: 'UNKNOWN'
+    });
     expect(postPayloads).toHaveLength(1);
     releasePost();
     await firstPromise;
@@ -482,5 +488,91 @@ describe('Movement 261 idempotent posting attempts', () => {
     expect(postPayloads).toHaveLength(1);
     releasePost();
     await firstPromise;
+  });
+
+  test.each([
+    ['queued', 'QUEUED'],
+    ['sending', 'UNKNOWN'],
+    ['unconfirmed', 'UNKNOWN'],
+    ['rejected', 'FAILED'],
+    ['not_posted', 'FAILED'],
+    ['posted', 'POSTED']
+  ])('maps persisted attempt status %s to explicit PostingStatus %s', (attemptStatus, expectedStatus) => {
+    const result = PerTypeGoodsIssueHandler.attemptResponse({
+      Status: attemptStatus,
+      MaterialDocument: attemptStatus === 'queued' ? 'must-not-escape' : '4900000001',
+      MaterialDocYear: '2026',
+      LastError: 'SAP rejected the request'
+    });
+
+    expect(result.PostingStatus).toBe(expectedStatus);
+    expect(result.Success).toBe(expectedStatus === 'POSTED');
+    if (expectedStatus === 'QUEUED') {
+      expect(result.MaterialDocument).toBe('');
+      expect(result.Message).toMatch(/queued.*SAP has not yet created/i);
+    }
+  });
+
+  test('returns POSTED only when the 261 SAP material document is confirmed', async () => {
+    const result = await PerTypeGoodsIssueHandler.postDirect(
+      req({}),
+      { MovementType: '261' },
+      async () => ({ MaterialDocument: '4900000091', MaterialDocYear: '2026', Success: true, Confirmed: true })
+    );
+
+    expect(result).toMatchObject({
+      PostingStatus: 'POSTED',
+      Success: true,
+      Confirmed: true,
+      MaterialDocument: '4900000091'
+    });
+  });
+
+  test('returns UNKNOWN rather than Success when SAP returned a document but read-back is pending', async () => {
+    const result = await PerTypeGoodsIssueHandler.postDirect(
+      req({}),
+      { MovementType: '261' },
+      async () => ({ MaterialDocument: '4900000092', MaterialDocYear: '2026', Success: true, Confirmed: false })
+    );
+
+    expect(result).toMatchObject({
+      PostingStatus: 'UNKNOWN',
+      Success: false,
+      Confirmed: false,
+      MaterialDocument: '4900000092'
+    });
+    expect(result.Message).toMatch(/read-back confirmation is pending.*do not post again/i);
+  });
+
+  test('keeps existing non-261 Success semantics while adding the outcome field', async () => {
+    const result = await PerTypeGoodsIssueHandler.postDirect(
+      req({}),
+      { MovementType: '201' },
+      async () => ({ MaterialDocument: '4900000093', MaterialDocYear: '2026', Success: true, Confirmed: false })
+    );
+
+    expect(result).toMatchObject({
+      PostingStatus: 'UNKNOWN',
+      Success: true,
+      Confirmed: false,
+      MaterialDocument: '4900000093'
+    });
+  });
+
+  test.each([
+    [Object.assign(new Error('Deficit of stock'), { status: 422 }), 'GI_POSTING_FAILED'],
+    [Object.assign(new Error('timeout'), { status: 504 }), 'GI_POSTING_UNKNOWN']
+  ])('uses stable %s error status for a 261 SAP outcome', async (sapError, expectedCode) => {
+    const request = req({});
+    await PerTypeGoodsIssueHandler.postDirect(
+      request,
+      { MovementType: '261' },
+      async () => { throw sapError; }
+    );
+
+    expect(request.error).toHaveBeenCalledWith(expect.objectContaining({
+      code: expectedCode,
+      status: sapError.status
+    }));
   });
 });

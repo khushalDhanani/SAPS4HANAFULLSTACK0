@@ -1,6 +1,27 @@
 
 # Changes Log
 
+## 2026-10-03 13:58 IST — Chunk 17 explicit Goods Issue posting outcomes
+- **Agent**: Copilot
+- **Request**: Expose `POSTED`, `QUEUED`, `FAILED`, and `UNKNOWN` as explicit 261 posting outcomes; do not equate generic `Success` with SAP document creation; make the UI display the state.
+- **Plan**: Add `PostingStatus` to the CAP 261 result, map durable attempt and SAP outcomes to the four states, use stable error codes to distinguish definitive failures from unknown outcomes, and have the 261 UI display each state independently of `Success`. Do not add a queue/replay path: the current direct 261 handler has none, but accurately represent an already-persisted `queued` attempt if one is returned.
+- **Current Status**: Complete — Movement 261 exposes `PostingStatus` independently from `Success`; persisted attempt states and SAP outcomes map to `POSTED`, `QUEUED`, `FAILED`, or `UNKNOWN`. The 261 UI displays distinct success, informational, failure, and warning states and only enables posted-document actions after explicit confirmation.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `srv/wm/goods-issue/service.cds`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`, `app/fiori-app/webapp/i18n/i18n.properties`, `app/fiori-app/webapp/i18n/i18n_en.properties`, `docs/decisions/261-posting-outcome-status.md`, `test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsIssue261Controller.test.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `test/unit/wm/goodsIssueService.test.js`, `test/unit/wm/goodsIssueIssuedSu.test.js`, `WORKSTATUS.md`.
+- **Reason**: Attempt responses previously used `Success` and `ConfirmationStatus`; the UI treated any result with a material-document number as posted, including documents whose SAP read-back was still pending. A persisted `queued` attempt also had no canonical response state.
+- **Validation**:
+  - Initial focused runs exposed a misplaced nested Jest test, old assertions expecting the pre-status CAP error signature, and a SAP mock that omitted `Confirmed: true`; corrected the tests/fixture and reran.
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssue261SuScan.test.js --runInBand --silent`: passed, 3 suites / 114 tests.
+  - First full WM run: 52 suites / 1,091 tests passed; two assertions still expected the old CAP error signature or assumed the SU guard must win a posting race. Updated them to assert the stable error code and either valid no-double-post guard outcome.
+  - A subsequent full run exposed a numeric Jest matcher mistake in that concurrency assertion; corrected it. Full suite before final strict-confirmation refinement: 54 suites / 1,093 tests passed. The UI fallback was then tightened so a document number or `Success: true` without explicit confirmation is `UNKNOWN`.
+  - Final-refinement focused run: `npx jest test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssue261SuScan.test.js --runInBand --silent` passed, 3 suites / 116 tests.
+  - Final `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,095 tests.
+  - `npx eslint --no-ignore --global sap app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`: passed. The first `--no-ignore` invocation reported `sap` undefined because this CLI config does not define the UI5 global; reran with the global declared.
+  - Final targeted backend/test ESLint: 0 errors; two existing unused-variable warnings (`isDefinitiveRejection` in the handler and `claimId` in the SU test). The CDS file is ignored by ESLint configuration.
+  - `npx cds compile srv >/dev/null`: passed.
+  - Final `git diff --check`: passed. `git status --short` confirms only the listed Chunk 17 files are modified/untracked.
+- **Errors / Warnings / Blockers**: This direct handler does not implement deferred queue execution; it only reports `QUEUED` for an attempt already persisted as queued and creates no new queue. No live SAP post or metadata check was performed; SAP calls were mocked. Jest logs missing destination-binding warnings and Node reports SQLite as experimental. Targeted backend/test ESLint reports two existing unused-variable warnings (`isDefinitiveRejection` and `claimId`).
+- **Next Steps**: If deferred 261 queueing is introduced, add a durable queue/worker lifecycle before returning `QUEUED`; retain the invariant that only a read-back-confirmed SAP material document is `POSTED`.
+
 ## 2026-10-03 13:52 IST — Database-backed audit persistence regressions
 - **Agent**: Copilot
 - **Change**: Added a CAP SQLite-backed lifecycle test proving snapshot fields are persisted on the `claiming` row before promotion and remain linked to the SAP material document after promotion. Added a fail-closed handler test proving an audit persistence error releases claims and prevents SAP posting.

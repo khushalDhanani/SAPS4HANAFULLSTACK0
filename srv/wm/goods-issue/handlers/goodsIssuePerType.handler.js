@@ -50,21 +50,33 @@ function assign261IdempotencyKey(normalized) {
 
 function attemptResponse(attempt) {
   const status = String(attempt.Status || '').toLowerCase();
-  const posted = status === 'posted';
+  const postingStatus = status === 'posted'
+    ? 'POSTED'
+    : status === 'queued'
+      ? 'QUEUED'
+      : status === 'rejected' || status === 'not_posted'
+        ? 'FAILED'
+        : 'UNKNOWN';
+  const posted = postingStatus === 'POSTED';
   const processing = status === 'sending' || status === 'unconfirmed';
   return {
     ReservationNo: attempt.ReservationNo || '',
     ReservationItem: attempt.ReservationItem || '',
-    MaterialDocument: attempt.MaterialDocument || '',
+    MaterialDocument: status === 'queued' ? '' : (attempt.MaterialDocument || ''),
     MaterialDocYear: attempt.MaterialDocYear || '',
+    PostingStatus: postingStatus,
     Success: posted,
     Confirmed: posted,
     ConfirmationStatus: posted ? 'CONFIRMED' : (processing ? 'POSTING' : status.toUpperCase()),
     Message: posted
       ? `Goods Issue already posted in SAP (Material Document: ${attempt.MaterialDocument || ''}${attempt.MaterialDocYear ? `/${attempt.MaterialDocYear}` : ''}).`
-      : (processing
-        ? 'An identical Goods Issue request is already processing or awaiting SAP confirmation.'
-        : (attempt.LastError || `The identical Goods Issue request already ended with status ${status}.`))
+      : postingStatus === 'QUEUED'
+        ? 'Goods Issue request is safely queued. SAP has not yet created a material document.'
+        : postingStatus === 'UNKNOWN'
+          ? (attempt.MaterialDocument
+            ? `SAP returned material document ${attempt.MaterialDocument}${attempt.MaterialDocYear ? `/${attempt.MaterialDocYear}` : ''}, but posting confirmation is pending. Do not post again until verified.`
+            : 'The SAP posting outcome cannot currently be verified. Do not post again until the attempt is reconciled.')
+          : (attempt.LastError || `The identical Goods Issue request definitively ended without an SAP material document (status ${status}).`)
   };
 }
 
@@ -883,7 +895,9 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
   try {
     const result = await postFn(normalized);
     const hasDoc = Boolean(result && result.MaterialDocument);
-    const isConfirmed = hasDoc && result?.Confirmed !== false;
+    const isConfirmed = hasDoc && (normalized.MovementType === '261'
+      ? result?.Confirmed === true
+      : result?.Confirmed !== false);
     const outcomeStatus = isConfirmed ? 'posted' : 'unconfirmed';
 
     await onOutcome(outcomeStatus, {
@@ -891,14 +905,32 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
       MaterialDocYear: result?.MaterialDocYear || ''
     });
 
-    const res = Object.assign({ _definitiveRejection: false }, result);
+    const res = Object.assign({ _definitiveRejection: false }, result, {
+      PostingStatus: isConfirmed ? 'POSTED' : 'UNKNOWN'
+    });
+    if (normalized.MovementType === '261') {
+      res.Success = isConfirmed;
+      res.Confirmed = isConfirmed;
+      if (!isConfirmed) {
+        res.Message = hasDoc
+          ? `SAP returned material document ${result.MaterialDocument}${result.MaterialDocYear ? `/${result.MaterialDocYear}` : ''}, but read-back confirmation is pending. Posting status is UNKNOWN; do not post again until verified.`
+          : 'SAP did not confirm a material document. Posting status is UNKNOWN; do not post again until the attempt is reconciled.';
+      }
+    }
     return res;
   } catch (err) {
     const classified = classifyPostingError(err);
     const outcomeStatus = classified.definitive ? 'rejected' : 'unconfirmed';
     await onOutcome(outcomeStatus, { LastError: classified.message });
 
-    const errResult = Array.isArray(classified.details) && classified.details.length > 0
+    const errResult = normalized.MovementType === '261'
+      ? req.error({
+          code: classified.definitive ? 'GI_POSTING_FAILED' : 'GI_POSTING_UNKNOWN',
+          status: classified.status,
+          message: classified.message,
+          details: classified.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') }))
+        })
+      : Array.isArray(classified.details) && classified.details.length > 0
       ? req.error({
           code: err.code || String(classified.status),
           status: classified.status,
@@ -1093,5 +1125,6 @@ const PerTypeGoodsIssueHandler = {
 
 PerTypeGoodsIssueHandler.classifyPostingError = classifyPostingError;
 PerTypeGoodsIssueHandler.postDirect = postDirect;
+PerTypeGoodsIssueHandler.attemptResponse = attemptResponse;
 
 module.exports = PerTypeGoodsIssueHandler;

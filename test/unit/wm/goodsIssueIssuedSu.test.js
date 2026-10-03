@@ -287,17 +287,20 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         handlers['postGoodsIssue261'](req2)
       ]);
 
-      // Exactly one succeeds, the other fails with 400
+      // Exactly one succeeds; the competing request is stopped by either the
+      // reservation-level pending-attempt guard or the storage-unit claim guard.
       const successes = [res1, res2].filter((r) => r && r.MaterialDocument === '4900012222');
       expect(successes).toHaveLength(1);
       expect(postSpy).toHaveBeenCalledTimes(1);
 
       const errors = [req1.error, req2.error].filter((fn) => fn.mock.calls.length > 0);
       expect(errors).toHaveLength(1);
-      expect(errors[0]).toHaveBeenCalledWith(
-        400,
-        expect.stringMatching(/DRUM_PARALLEL_01.*currently claimed in an active Goods Issue/i)
-      );
+      expect([400, 409]).toContain(errors[0].mock.calls[0][0]);
+      if (errors[0].mock.calls[0][0] === 400) {
+        expect(errors[0].mock.calls[0][1]).toMatch(/DRUM_PARALLEL_01.*currently claimed in an active Goods Issue/i);
+      } else {
+        expect(errors[0].mock.calls[0][1]).toMatch(/pending confirmation.*do not post again/i);
+      }
 
       // Verify final store state has exactly 1 issued claim
       const active = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('CH-PARALLEL-01', '1120', 'CS01');

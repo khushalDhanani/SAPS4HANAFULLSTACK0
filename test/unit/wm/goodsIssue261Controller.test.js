@@ -65,7 +65,12 @@ const mockService = {
     resolveScanUnit: jest.fn().mockResolvedValue({ SuExists: true }),
     fetchDistinctOrders: jest.fn().mockResolvedValue([]),
     fetchOpenReservations: jest.fn().mockResolvedValue([]),
-    postGoodsIssue: jest.fn().mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2025' }),
+    postGoodsIssue: jest.fn().mockResolvedValue({
+        PostingStatus: 'POSTED',
+        MaterialDocument: '4900000001',
+        MaterialDocYear: '2025',
+        Confirmed: true
+    }),
     reverseGoodsIssue: jest.fn().mockResolvedValue({ ReversalMaterialDocument: '4900000002', ReversalMaterialDocYear: '2025' })
 };
 
@@ -170,7 +175,12 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
         mockService.resolveScanUnit.mockResolvedValue({ SuExists: true });
         mockService.fetchDistinctOrders.mockResolvedValue([]);
         mockService.fetchOpenReservations.mockResolvedValue([]);
-        mockService.postGoodsIssue.mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2025' });
+        mockService.postGoodsIssue.mockResolvedValue({
+            PostingStatus: 'POSTED',
+            MaterialDocument: '4900000001',
+            MaterialDocYear: '2025',
+            Confirmed: true
+        });
         mockService.reverseGoodsIssue.mockResolvedValue({ ReversalMaterialDocument: '4900000002', ReversalMaterialDocYear: '2025' });
         controller = new GoodsIssue261Controller();
         controller.onInit();
@@ -480,7 +490,12 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
 
         it('should post and show MessageBox.success with the SAP material document', async () => {
             makeValidPlanned();
-            mockService.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900004321', MaterialDocYear: '2025' });
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'POSTED',
+                MaterialDocument: '4900004321',
+                MaterialDocYear: '2025',
+                Confirmed: true
+            });
             controller.onPostGoodsIssue();
             await flush();
             expect(mockService.postGoodsIssue).toHaveBeenCalledWith(expect.objectContaining({
@@ -503,6 +518,99 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(mockMessageBox.error).toHaveBeenCalled();
             expect(mockMessageBox.success).not.toHaveBeenCalled();
             expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
+        });
+
+        it('should display QUEUED independently of Success and never treat it as posted', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'QUEUED',
+                Success: true,
+                MaterialDocument: '',
+                Message: 'Safely queued; no SAP document exists yet.'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('QUEUED');
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
+            expect(mockMessageBox.information).toHaveBeenCalledWith(
+                'Safely queued; no SAP document exists yet.',
+                { title: 'gi261QueuedTitle' }
+            );
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+        });
+
+        it('should display UNKNOWN for a returned but unconfirmed document without enabling reversal', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'UNKNOWN',
+                Success: true,
+                Confirmed: false,
+                MaterialDocument: '4900004322',
+                Message: 'Read-back confirmation is pending; do not post again.'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('UNKNOWN');
+            expect(controller._oModel.getProperty('/postingAttemptDocument')).toBe('4900004322');
+            expect(controller._oModel.getProperty('/postedDocument')).toBe('');
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                expect.stringContaining('do not post again'),
+                { title: 'gi261UnknownTitle' }
+            );
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+        });
+
+        it('should not infer POSTED from Success or a document number without confirmation', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                Success: true,
+                MaterialDocument: '4900004323'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('UNKNOWN');
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
+            expect(mockMessageBox.warning).toHaveBeenCalled();
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+        });
+
+        it('should display FAILED when the response explicitly reports a definitive failure', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'FAILED',
+                Success: false,
+                Message: 'SAP definitively rejected the posting.'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('FAILED');
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                'SAP definitively rejected the posting.',
+                { title: 'gi261PostFailedTitle' }
+            );
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+        });
+
+        it('should display UNKNOWN when the CAP error uses the stable unknown-outcome code', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockRejectedValueOnce({
+                message: 'The SAP outcome cannot currently be verified.',
+                response: { data: { error: { code: 'GI_POSTING_UNKNOWN', message: 'The SAP outcome cannot currently be verified.' } } }
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('UNKNOWN');
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                expect.stringContaining('cannot currently be verified'),
+                { title: 'gi261UnknownTitle' }
+            );
+            expect(mockMessageBox.error).not.toHaveBeenCalled();
         });
 
         it('should show MessageBox.error with the SAP message when posting is rejected', async () => {
@@ -538,15 +646,17 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             );
         });
 
-        it('should show MessageBox.error on unknown outcome warning that it may have posted and not to post again', async () => {
+        it('should show MessageBox.warning on unknown outcome and tell the user not to post again', async () => {
             makeValidPlanned();
             mockService.postGoodsIssue.mockRejectedValueOnce(new Error('Posting outcome unconfirmed in SAP S/4HANA (timeout). The goods issue may have been posted in SAP. Please do not post again.'));
             controller.onPostGoodsIssue();
             await flush();
-            expect(mockMessageBox.error).toHaveBeenCalledWith(
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('UNKNOWN');
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
                 expect.stringMatching(/may (have been posted|or may not have been posted).+do not post again/i),
                 expect.any(Object)
             );
+            expect(mockMessageBox.error).not.toHaveBeenCalled();
         });
 
         it('should post an UNPLANNED order-based issue when in unplanned mode', async () => {
@@ -558,7 +668,12 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             m.setProperty('/storageLocation', 'HS01');
             m.setProperty('/quantity', 2);
             m.setProperty('/unit', 'EA');
-            mockService.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900007777', MaterialDocYear: '2025' });
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'POSTED',
+                MaterialDocument: '4900007777',
+                MaterialDocYear: '2025',
+                Confirmed: true
+            });
             controller.onPostGoodsIssue();
             await flush();
             expect(mockService.postGoodsIssue).toHaveBeenCalledWith(expect.objectContaining({
@@ -570,7 +685,12 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
         it('should route back to the Pending list with the SAP document when completing a reservation', async () => {
             makeValidPlanned();
             controller._oModel.setProperty('/fromReservation', true);
-            mockService.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900008888', MaterialDocYear: '2025' });
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'POSTED',
+                MaterialDocument: '4900008888',
+                MaterialDocYear: '2025',
+                Confirmed: true
+            });
             controller.onPostGoodsIssue();
             await flush();
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending', {
