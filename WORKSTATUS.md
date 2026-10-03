@@ -3,6 +3,47 @@
 
 > **Historical changes**: entries from 2026-09-16 11:30 IST to 2026-09-19 18:12 IST are in [logs/2026-09-16-to-19-archive.md](logs/2026-09-16-to-19-archive.md); entries prior to 2026-09-16 12:00 IST are in [logs/2026-09-archive.md](logs/2026-09-archive.md). Nothing was deleted.
 
+## 2026-10-03 11:00 IST
+- **Agent**: Antigravity
+- **Request**:
+  - 261 Goods Issue Chunk 1 — Reservation Open Quantity / Over-Issue.
+  - Issue: The postGoodsIssue CAP handler validates only that IssueQty > 0. It does not visibly re-read the current SAP reservation quantity before posting. This means the client-provided quantity can become stale and an issue quantity greater than the actual remaining reservation quantity may reach the posting layer.
+  - Solution: Before every 261 posting, re-read the exact SAP reservation item using ReservationNo + ReservationItem. Calculate the authoritative open quantity from SAP (RequiredQty - WithdrawnQty, subject to the actual SAP status/flags). Reject the request when IssueQty > OpenQty. Never trust the UI's OpenQty as the final authority. Acceptance: if SAP open quantity is 40 and the client sends 41, return validation error and do not call the SAP posting API.
+- **Architectural & Design Implementation**:
+  - **Authoritative SAP Reservation Re-Read & Over-Issue Rejection (`srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`)**:
+    - Enhanced `reservationReconcileCheck`:
+      - Fails closed with HTTP 500 if `GoodsIssueAdapter.getReservationItemAuthoritative` is unavailable instead of silently returning `true`.
+      - Re-reads authoritative SAP reservation data using `ReservationNo` and `ReservationItem`.
+      - Computes authoritative open quantity directly from SAP master data: `Math.max(0, reqQty - wdnQty)` subject to SAP status flags (`ReservationItemIsFinallyIssued`, `ReservationItmIsMarkedForDeltn`).
+      - Completely ignores client/UI-provided `OpenQty`, ensuring server-side SAP authority.
+      - Rejects with HTTP 422 if reservation item is marked for deletion in SAP (`ReservationItmIsMarkedForDeltn`).
+      - Rejects with HTTP 422 if reservation item is marked as finally issued in SAP (`ReservationItemIsFinallyIssued`).
+      - Rejects with HTTP 422 if reservation item has 0 open quantity remaining.
+      - Rejects with HTTP 422 if `IssueQty > authoritativeOpenQty` before any attempt record or SAP posting API call is made.
+      - Enriches `item.OpenQty = authoritativeOpenQty` and updates normalized payload with master data from SAP.
+  - **Adapter & Stock Unit Client Enhancement (`GoodsIssueAdapter.js`, `GoodsIssueStockUnitClient.js`)**:
+    - Updated `GoodsIssueAdapter.getReservationItemAuthoritative` to parse `RequiredQty`, `WithdrawnQty`, and SAP flags (`ReservationItemIsFinallyIssued`, `ReservationItmIsMarkedForDeltn`, `IsFinallyIssued`, `IsDeleted`), calculating `OpenQty = (isFinal || isDeleted) ? 0 : Math.max(0, reqQty - wdnQty)`.
+    - Added fallback query to `_readOpenReservationItem` in `GoodsIssueStockUnitClient.js` to inspect items that may be finally issued or deleted in SAP, returning their actual SAP status flags rather than masking as missing.
+  - **Test Suite (`test/unit/wm/goodsIssue261OverIssue.test.js`)**:
+    - Added comprehensive unit test suite covering:
+      - Acceptance test: SAP open quantity 40, client sends 41 -> returns HTTP 422 validation error and does not call SAP posting API.
+      - Untrusted UI OpenQty: client passes OpenQty 100 in payload, SAP open quantity 40, client sends 41 -> rejected before posting.
+      - Valid issue: client sends 40 when SAP open quantity is 40 -> validation passes and calls SAP posting API.
+      - Zero remaining open quantity: SAP RequiredQty equals WithdrawnQty -> rejected with HTTP 422 without calling posting API.
+      - Finally issued reservation item -> rejected with HTTP 422 without calling posting API.
+      - Marked for deletion reservation item -> rejected with HTTP 422 without calling posting API.
+      - Unverifiable reservation (SAP 404 / 502) -> fails closed without calling posting API.
+- **Validation**:
+  - `git diff --check`: Exit 0 (clean diff, 0 formatting errors).
+  - `npx cds compile srv`: Exit 0 (CSN compilation succeeded).
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected.
+  - `npx jest test/unit/wm/goodsIssue261OverIssue.test.js`: 8/8 passed.
+  - `npx jest test/unit/wm/goodsIssueResvPrefill.test.js test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/guard/noGiQueueGuard.test.js`: 42/42 passed.
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js`: 63/63 passed.
+  - `npx jest --forceExit`: **138 passed, 138 total suites; 2,226 passed, 2,226 total tests (100% green)**.
+- **Current Status**: Complete. Chunk 1 is implemented, tested, and validated.
+- **Next Steps**: Ready for Chunk 2 implementation or user review.
+
 ## 2026-10-03 09:42 IST
 - **Agent**: Antigravity
 - **Request**:

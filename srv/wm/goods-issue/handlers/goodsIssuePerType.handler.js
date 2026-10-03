@@ -83,7 +83,10 @@ async function reservationReconcileCheck(req, normalized, { receiving = false } 
   const sResv = String(normalized.ReservationNo || '').trim();
   const sItem = String(normalized.ReservationItem || '').trim();
   if (!sResv || !sItem) return true; // no reservation to reconcile against (unplanned path)
-  if (typeof GoodsIssueAdapter.getReservationItemAuthoritative !== 'function') return true;
+  if (typeof GoodsIssueAdapter.getReservationItemAuthoritative !== 'function') {
+    req.error(500, `Reservation item verification service is unavailable for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
 
   let item;
   try {
@@ -119,13 +122,45 @@ async function reservationReconcileCheck(req, normalized, { receiving = false } 
     return false;
   }
 
-  const issueQty = Number(normalized.IssueQty);
-  if (!isNaN(issueQty) && issueQty > 0 && item.OpenQty > 0 && issueQty > item.OpenQty + 1e-9) {
-    req.error(422, `Issue quantity ${issueQty} exceeds the open reservation quantity ${item.OpenQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
-    return false;
+  const reqQty = Number(item.RequiredQty != null ? item.RequiredQty : (item.ResvnItmRequiredQtyInBaseUnit || 0));
+  const wdnQty = Number(item.WithdrawnQty != null ? item.WithdrawnQty : (item.ResvnItmWithdrawnQtyInBaseUnit || 0));
+  const isFinal = Boolean(item.ReservationItemIsFinallyIssued || item.IsFinallyIssued || item.FinalIssue);
+  const isDeleted = Boolean(item.ReservationItmIsMarkedForDeltn || item.IsDeleted);
+
+  // Authoritative open quantity calculated strictly from SAP:
+  // (RequiredQty - WithdrawnQty, subject to actual SAP status/flags). Never trust client/UI OpenQty.
+  let authoritativeOpenQty = 0;
+  if (!isFinal && !isDeleted) {
+    if (item.OpenQty !== undefined && item.OpenQty !== null) {
+      authoritativeOpenQty = Number(item.OpenQty);
+    } else {
+      authoritativeOpenQty = Math.max(0, reqQty - wdnQty);
+    }
   }
+
+  const issueQty = Number(normalized.IssueQty);
+  if (!isNaN(issueQty) && issueQty > 0) {
+    if (isDeleted) {
+      req.error(422, `Reservation ${sResv} item ${sItem} is marked for deletion in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (isFinal) {
+      req.error(422, `Reservation ${sResv} item ${sItem} is marked as finally issued in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (authoritativeOpenQty <= 0) {
+      req.error(422, `Reservation ${sResv} item ${sItem} has no open quantity remaining (open quantity is 0, required: ${reqQty}, withdrawn: ${wdnQty}). Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (issueQty > authoritativeOpenQty + 1e-9) {
+      req.error(422, `Issue quantity ${issueQty} exceeds the open reservation quantity ${authoritativeOpenQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+      return false;
+    }
+  }
+
   const fromReservation = ['Material', 'Plant', 'StorageLocation', 'Batch'].concat(receiving ? ['ReceivingPlant', 'ReceivingStorageLocation'] : []);
   fromReservation.forEach((f) => { if (item[f]) normalized[f] = item[f]; });
+  item.OpenQty = authoritativeOpenQty;
   return item;
 }
 

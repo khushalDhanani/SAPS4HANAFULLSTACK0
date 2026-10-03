@@ -612,7 +612,23 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
         `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
       );
-      if (Array.isArray(res) && res.length > 0) resvItem = res[0];
+      if (Array.isArray(res) && res.length > 0) {
+        resvItem = res[0];
+      } else {
+        // Fallback: check if the reservation item exists in SAP but carries final issue or deletion flags
+        try {
+          const statusFilter = `(Reservation eq '${resvClean}' or Reservation eq '${resvPadded}') and ReservationItem eq '${sItem}'`;
+          const allRes = await this._get(
+            '/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem',
+            `$filter=${encodeURIComponent(statusFilter)}&$top=1&$format=json`
+          );
+          if (Array.isArray(allRes) && allRes.length > 0) {
+            resvItem = allRes[0];
+          }
+        } catch (checkErr) {
+          // Ignore status fallback failure; error below handles missing item
+        }
+      }
     } catch (err) {
       const connErr = new Error(`SAP connection failure while reading reservation ${sResv} item ${sItem}: ${err.message}`);
       connErr.status = err.status || 502;

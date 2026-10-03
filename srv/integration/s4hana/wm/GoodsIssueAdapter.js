@@ -467,8 +467,12 @@ class GoodsIssueAdapter {
    */
   async getReservationItemAuthoritative(reservationNo, reservationItem) {
     const { resvItem } = await this.stockUnits._readOpenReservationItem(reservationNo, reservationItem);
-    const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit || 0);
-    const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit || 0);
+    const reqQty = Number(resvItem.ResvnItmRequiredQtyInBaseUnit != null ? resvItem.ResvnItmRequiredQtyInBaseUnit : (resvItem.RequiredQty || 0));
+    const wdnQty = Number(resvItem.ResvnItmWithdrawnQtyInBaseUnit != null ? resvItem.ResvnItmWithdrawnQtyInBaseUnit : (resvItem.WithdrawnQty || 0));
+    const isFinal = Boolean(resvItem.ReservationItemIsFinallyIssued || resvItem.IsFinallyIssued || resvItem.FinalIssue);
+    const isDeleted = Boolean(resvItem.ReservationItmIsMarkedForDeltn || resvItem.IsDeleted);
+    const openQty = (isFinal || isDeleted) ? 0 : Math.max(0, reqQty - wdnQty);
+
     // Transfers: the receiving side lives on the reservation header. Unreadable -> blank (not enforced).
     let recv = {};
     if (['301', '311'].includes(String(resvItem.GoodsMovementType || ''))) {
@@ -480,16 +484,20 @@ class GoodsIssueAdapter {
       }
     }
     return {
-      Material: String(resvItem.Product || '').trim(),
+      Material: String(resvItem.Product || resvItem.Material || '').trim(),
       Plant: String(resvItem.Plant || '').trim(),
       StorageLocation: String(resvItem.StorageLocation || '').trim(),
       ReceivingPlant: String(resvItem.IssuingOrReceivingPlant || resvItem.ReceivingPlant || recv.ReceivingPlant || '').trim(),
       ReceivingStorageLocation: String(recv.ReceivingStorageLocation || '').trim(),
       Batch: String(resvItem.Batch || '').trim(),
-      Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || '').trim(),
+      Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || resvItem.Unit || '').trim(),
       RequiredQty: reqQty,
       WithdrawnQty: wdnQty,
-      OpenQty: Math.max(0, reqQty - wdnQty)
+      OpenQty: openQty,
+      ReservationItemIsFinallyIssued: isFinal,
+      ReservationItmIsMarkedForDeltn: isDeleted,
+      IsFinallyIssued: isFinal,
+      IsDeleted: isDeleted
     };
   }
 
