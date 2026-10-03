@@ -4,6 +4,7 @@ const path = require('path');
 const appRoot = path.resolve(__dirname, '../../..');
 const xsAppPath = path.join(appRoot, 'app/router/xs-app.json');
 const indexPath = path.join(appRoot, 'app/fiori-app/webapp/index.html');
+const viewPath = path.join(appRoot, 'app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml');
 const normalizerPath = path.join(appRoot, 'app/fiori-app/webapp/deepLink.js');
 const directPath = '/wm/goods-issue/order-based-261';
 const normalizeDirect261Link = require(normalizerPath);
@@ -29,7 +30,7 @@ describe('Movement 261 direct-path deep links', () => {
     });
     expect(config.routes.indexOf(directRoute)).toBeLessThan(genericRouteIndex);
     expect(directPath.replace(new RegExp(directRoute.source), directRoute.target)).toBe('/saps4hanafiori/index.html');
-    expect(fs.readFileSync(indexPath, 'utf8')).toContain('<script src="/saps4hanafiori/deepLink.js"></script>');
+    expect(fs.readFileSync(indexPath, 'utf8')).toContain('<script src="./deepLink.js"></script>');
   });
 
   test.each([
@@ -51,5 +52,13 @@ describe('Movement 261 direct-path deep links', () => {
     expect(history.replaceState).not.toHaveBeenCalled();
     expect(unrelated.normalized).toBe(false);
     expect(unrelated.history.replaceState).not.toHaveBeenCalled();
+  });
+
+  test('does not assign unsupported custom icons to MessageStrip controls', () => {
+    const view = fs.readFileSync(viewPath, 'utf8');
+    const messageStripTags = view.match(/<MessageStrip\b[\s\S]*?>/g) || [];
+
+    expect(messageStripTags.length).toBeGreaterThan(0);
+    messageStripTags.forEach((tag) => expect(tag).not.toMatch(/\sicon=/));
   });
 });

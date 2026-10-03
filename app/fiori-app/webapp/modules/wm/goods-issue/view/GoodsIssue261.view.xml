@@ -293,7 +293,6 @@
                             id="stripPartialInstruction261"
                             text="{gi261>/partialInstruction}"
                             type="Information"
-                            icon="sap-icon://sys-help"
                             showIcon="true"
                             visible="{= !!${gi261>/partialInstruction} }"
                             class="sapUiTinyMarginBottom" />
@@ -303,7 +302,6 @@
                             id="stripExcludedUnconfirmed261"
                             text="{gi261>/excludedUnconfirmedNote}"
                             type="Warning"
-                            icon="sap-icon://alert"
                             showIcon="true"
                             visible="{= !!${gi261>/excludedUnconfirmedNote} }"
                             class="sapUiTinyMarginBottom" />
@@ -313,7 +311,6 @@
                             id="stripStagingWarning261"
                             text="{gi261>/stagingWarning}"
                             type="Error"
-                            icon="sap-icon://error"
                             showIcon="true"
                             visible="{= !!${gi261>/stagingWarning} }"
                             class="sapUiTinyMarginBottom" />
@@ -323,7 +320,6 @@
                             id="stripPlannedUnconfirmedNote261"
                             text="{gi261>/plannedUnconfirmedNote}"
                             type="Information"
-                            icon="sap-icon://pending"
                             showIcon="true"
                             visible="{= !!${gi261>/plannedUnconfirmedNote} }"
                             class="sapUiTinyMarginBottom" />
@@ -428,7 +424,6 @@
                             id="stripExcludedUnconfirmedSuggested261"
                             text="{gi261>/excludedUnconfirmedNote}"
                             type="Warning"
-                            icon="sap-icon://alert"
                             showIcon="true"
                             visible="{= !!${gi261>/excludedUnconfirmedNote} }"
                             class="sapUiTinyMarginBottom" />

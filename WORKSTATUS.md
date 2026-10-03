@@ -1,6 +1,17 @@
 
 # Changes Log
 
+## 2026-10-03 10:44 UTC — Fix local deep-link asset and MessageStrip settings
+- **Agent**: Codex
+- **Request**: Resolve the pasted browser errors: `deepLink.js` 404/MIME failure and invalid `icon` settings on MessageStrip controls.
+- **Plan**: Make the deep-link bootstrap script relative to the served app shell, remove unsupported `icon` properties from MessageStrip in the 261 view, add regressions for the relative asset and MessageStrip markup, then run focused Jest, UI5 lint/build, and diff validation.
+- **Current Status**: Fixed and validated in code. The deep-link script now resolves relative to whichever app shell URL serves `index.html`; unsupported MessageStrip `icon` settings have been removed while preserving `showIcon` and type-based icons.
+- **Files Changed**: `app/fiori-app/webapp/index.html`, `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`, `test/unit/wm/fiori261DeepLink.test.js`, and `WORKSTATUS.md`.
+- **Reason**: Relative asset resolution supports both the local app path and the deployed app shell; MessageStrip displays its standard type icon through `showIcon` and has no `icon` property.
+- **Validation**: Passed — `npx jest test/unit/wm/fiori261DeepLink.test.js --runInBand --silent` (1 suite / 6 tests); UI5 lint (no findings); UI5 build; `git diff --check`. Build output contains the app resources; the 404 was not rechecked against a running local server/browser session.
+- **Errors / Warnings / Blockers**: The pasted `Unchecked runtime.lastError` may be from a browser extension and is not mapped to application code. This change targets only the app-owned 404/MIME failure and UI5 XML errors.
+- **Next Steps**: Reload the local page and confirm the Network request now resolves under `/saps4hana-fiori-app/deepLink.js` (or the deployed app-shell prefix); confirm UI5 no longer logs the MessageStrip unknown-setting assertions. The browser-extension `runtime.lastError` remains unclassified.
+
 ## 2026-10-03 10:40 UTC — Clarify unknown TR/TO instruction
 - **Agent**: Codex
 - **Request**: Clarify the staging error shown for reservation 480960 when the transfer-requirement lookup status is unknown.
