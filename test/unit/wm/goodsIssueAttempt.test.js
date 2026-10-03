@@ -137,6 +137,7 @@ describe('unconfirmed documents and re-confirm job', () => {
 
   beforeEach(async () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
+    attempts.clearMemoryStore();
     await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
   });
@@ -336,5 +337,137 @@ describe('unconfirmed documents and re-confirm job', () => {
     const suClaim = activeAfter.find((r) => r.StorageUnit === 'SU9903');
     expect(suClaim.Status).toBe('needs-attention');
     expect(suClaim.NeedsAttention).toBe(true);
+  });
+});
+
+describe('Movement 261 idempotent posting attempts', () => {
+  const handlers = fakeService();
+  const request = {
+    ReservationNo: '0000142001',
+    ReservationItem: '0001',
+    Material: '1000000514',
+    Plant: '1120',
+    StorageLocation: 'HS01',
+    Batch: 'BATCH01',
+    IssueQty: 10,
+    Unit: 'KG',
+    PostingDate: '2026-10-03'
+  };
+  const reservationItem = {
+    ReservationNo: request.ReservationNo,
+    ReservationItem: request.ReservationItem,
+    Material: request.Material,
+    Plant: request.Plant,
+    StorageLocation: request.StorageLocation,
+    Batch: request.Batch,
+    RequiredQty: 100,
+    WithdrawnQty: 0,
+    BaseUnit: request.Unit,
+    OpenQty: 100
+  };
+
+  beforeEach(async () => {
+    jest.restoreAllMocks();
+    await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
+    attempts.clearMemoryStore();
+    await GoodsIssueIssuedSuStore.clear();
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue(reservationItem);
+    jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting').mockResolvedValue({ valid: true });
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test('an identical retry after posting returns the existing SAP document without reposting', async () => {
+    const postPayloads = [];
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
+      postPayloads.push({ ...data });
+      return {
+        MaterialDocument: '4900099911',
+        MaterialDocYear: '2026',
+        Success: true,
+        Confirmed: true,
+        ConfirmationStatus: 'CONFIRMED'
+      };
+    });
+
+    const firstReq = req({ ...request });
+    const first = await handlers.postGoodsIssue261(firstReq);
+    expect(postPayloads).toHaveLength(1);
+    const firstPostedPayload = postPayloads[0];
+    const storedAttempts = await allAttempts();
+    const persisted = storedAttempts.find((attempt) => attempt.ReferenceDocument === firstPostedPayload.ReferenceDocument);
+    const retry = await handlers.postGoodsIssue261(req({ ...request }));
+
+    expect(firstReq.error.mock.calls).toEqual([]);
+    expect(storedAttempts.map((attempt) => attempt.ReferenceDocument)).toEqual([firstPostedPayload.ReferenceDocument]);
+    expect(persisted).toMatchObject({
+      ReferenceDocument: firstPostedPayload.ReferenceDocument,
+      RequestHash: firstPostedPayload.RequestHash,
+      Status: 'posted'
+    });
+    expect(first).toMatchObject({ MaterialDocument: '4900099911', MaterialDocYear: '2026' });
+    expect(retry).toMatchObject({
+      MaterialDocument: '4900099911',
+      MaterialDocYear: '2026',
+      Success: true,
+      ConfirmationStatus: 'CONFIRMED'
+    });
+    expect(postPayloads).toHaveLength(1);
+    expect((await allAttempts()).filter((attempt) => attempt.MovementType === '261')).toHaveLength(1);
+  });
+
+  test('an identical retry during posting returns the existing pending attempt without reposting', async () => {
+    let signalStarted;
+    let releasePost;
+    const postPayloads = [];
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    const postGate = new Promise((resolve) => { releasePost = resolve; });
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
+      postPayloads.push({ ...data });
+      signalStarted();
+      await postGate;
+      return {
+        MaterialDocument: '4900099912',
+        MaterialDocYear: '2026',
+        Success: true,
+        Confirmed: true,
+        ConfirmationStatus: 'CONFIRMED'
+      };
+    });
+
+    const firstPromise = handlers.postGoodsIssue261(req({ ...request }));
+    await started;
+    const retry = await handlers.postGoodsIssue261(req({ ...request }));
+
+    expect(retry).toMatchObject({ Success: false, ConfirmationStatus: 'POSTING' });
+    expect(postPayloads).toHaveLength(1);
+    releasePost();
+    await firstPromise;
+    expect((await allAttempts()).filter((attempt) => attempt.MovementType === '261')).toHaveLength(1);
+  });
+
+  test('a different payload for an open reservation remains blocked', async () => {
+    let signalStarted;
+    let releasePost;
+    const postPayloads = [];
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    const postGate = new Promise((resolve) => { releasePost = resolve; });
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
+      postPayloads.push({ ...data });
+      signalStarted();
+      await postGate;
+      return { MaterialDocument: '4900099913', MaterialDocYear: '2026', Success: true, Confirmed: true };
+    });
+
+    const firstPromise = handlers.postGoodsIssue261(req({ ...request }));
+    await started;
+    const duplicateRequest = req({ ...request, IssueQty: 9 });
+    await handlers.postGoodsIssue261(duplicateRequest);
+
+    expect(duplicateRequest.error).toHaveBeenCalledWith(409, expect.stringContaining('has a Goods Issue posting attempt pending confirmation'));
+    expect(postPayloads).toHaveLength(1);
+    releasePost();
+    await firstPromise;
   });
 });

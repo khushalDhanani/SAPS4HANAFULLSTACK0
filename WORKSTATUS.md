@@ -1,6 +1,49 @@
 
 # Changes Log
 
+## 2026-10-03 12:10 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — Duplicate Posting / Idempotency.
+- **Plan**: Preserve completed Chunks 2–5. Extend the existing persistent GoodsIssuePostingAttempt lifecycle rather than introducing another store. For planned 261 requests, derive a stable key from canonical posting fields, persist its full fingerprint and SAP ReferenceDocument before posting, enforce database uniqueness, and on exact retries return the persisted attempt (including its SAP material document if posted) without making another SAP call. Keep other movement references random and keep unrelated requests for an open reservation blocked. Add tests for identical sequential retries, in-flight duplicates, and distinct payloads; run focused/full WM tests, lint, CAP compile, and diff checks.
+- **Current Status**: In Progress — stable 261 fingerprint lookup now runs before the reservation re-read so a posted retry returns the original SAP document even after SAP's open quantity has changed; database-backed create-or-get and acceptance tests are implemented but not yet validated.
+- **Files Changed**: `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `WORKSTATUS.md`.
+- **Reason**: The handler logs each attempt before SAP and blocks unrelated concurrent reservation posting, but random `ReferenceDocument` values mean an identical retry cannot find and return the prior attempt/document.
+- **Validation**: Pending. Added acceptance tests for identical posted retries (same SAP material document and one adapter post), identical in-flight retries (existing processing result and one adapter post), and a different payload blocked while the reservation has an open attempt.
+- **Errors / Warnings / Blockers**: No live SAP posting will be performed. Must validate CDS uniqueness, CAP persistence behavior, and all retry tests before claiming cross-process idempotency.
+- **Next Steps**: Run focused idempotency and attempt-store tests; resolve any failures before full WM, lint, CDS compile, and diff validation.
+
+## 2026-10-03 12:17 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — first focused validation.
+- **Change**: Moved the stable-key lookup ahead of reservation reconciliation to allow an exact retry to return its saved SAP result even after the reservation's open quantity changes; added posted, in-flight, and distinct-payload attempt tests.
+- **Validation**: `npx cds compile srv` passed. ESLint passed with 0 errors and one unused-variable warning (`isDefinitiveRejection`). The first focused attempt run failed because stale in-memory attempts were not cleared; after clearing both DB and memory state, the two concurrency tests pass, but the posted-identical-retry acceptance test exposes two adapter calls instead of one.
+- **Errors / Warnings / Blockers**: No SAP POST was performed. Acceptance criterion is not met yet; investigate why the second identical request does not reuse the posted row, including the exact key and persisted fingerprint.
+- **Next Steps**: Compare the two post-call idempotency keys and persisted attempt row, correct lookup/canonicalization, then rerun the complete attempt suite.
+
+## 2026-10-03 12:22 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — retry-key diagnostic refinement.
+- **Change**: Changed the acceptance test to snapshot the adapter payload at invocation time and compare it with the persisted attempt, avoiding mutable Jest call-argument references.
+- **Validation**: The immutable adapter-payload snapshot confirms the full suite makes two adapter calls: the first carries a random reference/hash and the second carries the expected stable reference/hash. The focused single-test run passes. This contradicts the handler source's stable-key path and requires tracing the actual handler callback used after preceding tests.
+- **Errors / Warnings / Blockers**: No SAP POST was performed. The posted-retry acceptance test still fails because full-suite execution sends a second SAP call; do not claim acceptance.
+- **Next Steps**: Ensure the outgoing SAP payload uses the reference and fingerprint returned by the persisted claim, then rerun the full suite and review the attempted/reference lifecycle.
+
+## 2026-10-03 12:25 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — durable-key posting invariant.
+- **Change**: After a newly created persistent claim, explicitly carry its persisted `ReferenceDocument` and `RequestHash` into the payload sent to the SAP adapter. This binds the SAP request to the exact durable attempt key and avoids posting with an unpersisted identifier.
+- **Validation**: Pending the focused attempt-store suite.
+- **Errors / Warnings / Blockers**: No SAP POST was performed. The previous full-suite attempt showed a persisted row and adapter payload with different identifiers, so the persisted-claim invariant is being enforced before SAP invocation.
+- **Next Steps**: Run the complete attempt-store suite; trace key assignment versus claim to determine why an adapter snapshot differs from the persisted attempt, then remove diagnostic logging and verify all duplicate cases.
+
+## 2026-10-03 12:40 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — correct test isolation after tracing.
+- **Change**: The apparent first-post reference mismatch came from a `GoodsIssueAdapter.postGoodsIssue261` spy left active by a preceding test group, so Jest's historical `mock.calls` included an earlier unrelated request. The new tests now restore leaked mocks before setup, use their own immutable post-payload captures for call counts, and no temporary trace logging remains in the handler. The persisted attempt reference/hash is also copied onto the normalized SAP request after claim creation.
+- **Validation**: `npx jest test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent` passed, 1 suite / 18 tests. The three new cases verify a posted retry returns the same SAP material document with one invocation, an in-flight retry returns `POSTING` with one invocation, and a different open-reservation payload remains blocked.
+- **Errors / Warnings / Blockers**: No SAP POST was performed. Prior full-suite diagnostics exposed persistent mock history in the test fixture and were resolved by isolation; the focused test suite is now green.
+- **Next Steps**: Run the complete WM suite, lint, CDS compile/SQL uniqueness inspection, and diff checks.
+
 ## 2026-10-03 11:46 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 5 — Final Issue Validation.

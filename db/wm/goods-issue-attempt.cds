@@ -7,8 +7,10 @@ using { cuid, managed } from '@sap/cds/common';
  * outcome is unknown (timeout, crash mid-call) can be re-checked in SAP by its ReferenceDocument.
  * Never a business document: SAP stays the system of record (ADR-0001).
  */
+@assert.unique: { referenceDocument: [ReferenceDocument] }
 entity GoodsIssuePostingAttempt : cuid, managed {
     ReferenceDocument : String(16);   // sent to SAP as the material document header ReferenceDocument
+    RequestHash       : String(64);
     MovementType      : String(3);
     ReservationNo     : String(10);
     ReservationItem   : String(4);

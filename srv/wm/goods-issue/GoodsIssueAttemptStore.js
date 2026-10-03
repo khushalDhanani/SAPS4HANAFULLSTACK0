@@ -81,6 +81,7 @@ class GoodsIssueAttemptStore {
     const row = {
       ID: cds.utils.uuid(),
       ReferenceDocument: String(data.ReferenceDocument || '').trim(),
+      RequestHash: String(data.RequestHash || '').trim(),
       MovementType: String(data.MovementType || '').trim(),
       ReservationNo: String(data.ReservationNo || '').trim(),
       ReservationItem: String(data.ReservationItem || '').trim(),
@@ -100,11 +101,48 @@ class GoodsIssueAttemptStore {
       createdAt: new Date().toISOString()
     };
     if (!row.ReferenceDocument) throw new Error('ReferenceDocument is required to record a posting attempt');
-    this._memoryStore.set(row.ReferenceDocument, { ...row });
     if (this.db) {
       await this._run(INSERT.into(ATTEMPT_ENTITY).entries(row));
     }
+    this._memoryStore.set(row.ReferenceDocument, { ...row });
     return row;
+  }
+
+  /**
+   * Atomically claims a posting reference, returning the prior row when another request already
+   * claimed the same idempotency key.
+   * @returns {Promise<{ created: boolean, row: Object }>}
+   */
+  async createOrGet(data) {
+    const ref = String(data.ReferenceDocument || '').trim();
+    if (!ref) throw new Error('ReferenceDocument is required to claim a posting attempt');
+
+    const assertSameRequest = (row) => {
+      if (String(row.RequestHash || '') !== String(data.RequestHash || '')) {
+        const err = new Error('Goods Issue idempotency reference collision; posting was not sent to SAP.');
+        err.status = 409;
+        throw err;
+      }
+      return { created: false, row };
+    };
+
+    if (!this.db) {
+      const existing = this._memoryStore.get(ref);
+      if (existing) return assertSameRequest(existing);
+      const row = await this.create(data);
+      return { created: true, row };
+    }
+
+    const existing = await this.getByReference(ref);
+    if (existing) return assertSameRequest(existing);
+    try {
+      const row = await this.create(data);
+      return { created: true, row };
+    } catch (insertErr) {
+      const raced = await this.getByReference(ref);
+      if (raced) return assertSameRequest(raced);
+      throw insertErr;
+    }
   }
 
   /** The attempt for a reference, or null. */

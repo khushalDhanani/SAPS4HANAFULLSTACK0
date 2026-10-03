@@ -23,6 +23,62 @@ const crypto = require('crypto');
 /** Unique per posting attempt, <=16 chars (SAP header ReferenceDocument); reused unchanged on queue replay. */
 const newPostingReference = () => `GI${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`.toUpperCase();
 
+function assign261IdempotencyKey(normalized) {
+  const request = {
+    MovementType: normalized.MovementType,
+    ReservationNo: normalized.ReservationNo,
+    ReservationItem: normalized.ReservationItem,
+    Material: normalized.Material,
+    Plant: normalized.Plant,
+    StorageLocation: normalized.StorageLocation,
+    IssueQty: normalized.IssueQty,
+    Unit: normalized.Unit,
+    Batch: normalized.Batch,
+    OrderNo: normalized.OrderNo,
+    GLAccount: normalized.GLAccount,
+    PostingDate: normalized.PostingDate,
+    DocumentDate: normalized.DocumentDate,
+    SerialNumbers: normalized.SerialNumbers,
+    StorageUnits: normalized.StorageUnits,
+    LastStorageUnitQty: normalized.LastStorageUnitQty
+  };
+  const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
+  const suffix = BigInt(`0x${hash}`).toString(36).toUpperCase().slice(0, 14);
+  normalized.RequestHash = hash;
+  normalized.ReferenceDocument = `GI${suffix}`;
+}
+
+function attemptResponse(attempt) {
+  const status = String(attempt.Status || '').toLowerCase();
+  const posted = status === 'posted';
+  const processing = status === 'sending' || status === 'unconfirmed';
+  return {
+    ReservationNo: attempt.ReservationNo || '',
+    ReservationItem: attempt.ReservationItem || '',
+    MaterialDocument: attempt.MaterialDocument || '',
+    MaterialDocYear: attempt.MaterialDocYear || '',
+    Success: posted,
+    Confirmed: posted,
+    ConfirmationStatus: posted ? 'CONFIRMED' : (processing ? 'POSTING' : status.toUpperCase()),
+    Message: posted
+      ? `Goods Issue already posted in SAP (Material Document: ${attempt.MaterialDocument || ''}${attempt.MaterialDocYear ? `/${attempt.MaterialDocYear}` : ''}).`
+      : (processing
+        ? 'An identical Goods Issue request is already processing or awaiting SAP confirmation.'
+        : (attempt.LastError || `The identical Goods Issue request already ended with status ${status}.`))
+  };
+}
+
+async function getIdempotentAttempt(normalized) {
+  const attempt = await GoodsIssueAttemptStore.getByReference(normalized.ReferenceDocument);
+  if (!attempt) return null;
+  if (String(attempt.RequestHash || '') !== String(normalized.RequestHash || '')) {
+    const err = new Error('Goods Issue idempotency reference collision; posting was not sent to SAP.');
+    err.status = 409;
+    throw err;
+  }
+  return attempt;
+}
+
 /** Serial-status pre-check (ESTO). Returns true to continue, or sends req.error and returns false. */
 async function serialPreCheck(req, normalized) {
   if (!(normalized.SerialNumbers && normalized.SerialNumbers.length > 0)) return true;
@@ -591,6 +647,13 @@ async function checkPendingConfirmation(req, normalized) {
     : false;
 
   if (hasAttempt || hasClaim) {
+    if (normalized.MovementType === '261' && normalized.ReferenceDocument && normalized.RequestHash) {
+      const existing = await getIdempotentAttempt(normalized);
+      if (existing) {
+        normalized._existingAttemptResult = attemptResponse(existing);
+        return false;
+      }
+    }
     req.error(409, `Reservation ${sResv} item ${sItem} has a Goods Issue posting attempt pending confirmation, do not post again until the outcome is verified in SAP.`);
     return false;
   }
@@ -674,10 +737,13 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
 async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
   normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
   try {
-    await GoodsIssueAttemptStore.create(normalized);
+    const claim = await GoodsIssueAttemptStore.createOrGet(normalized);
+    if (!claim.created) return attemptResponse(claim.row);
+    normalized.ReferenceDocument = claim.row.ReferenceDocument;
+    normalized.RequestHash = claim.row.RequestHash;
   } catch (attemptErr) {
     LOG.error('Posting attempt could not be recorded; posting blocked:', attemptErr.message || attemptErr);
-    return req.error(503, `Goods Issue was NOT sent to SAP: the posting attempt could not be recorded (${attemptErr.message || 'database unavailable'}).`);
+    return req.error(attemptErr.status || 503, `Goods Issue was NOT sent to SAP: the posting attempt could not be recorded (${attemptErr.message || 'database unavailable'}).`);
   }
   const settle = (status, fields) => GoodsIssueAttemptStore.setStatus(normalized.ReferenceDocument, status, fields)
     .catch((e) => LOG.error(`Posting attempt ${normalized.ReferenceDocument} could not be set to ${status}; the re-check job will resolve it:`, e.message || e));
@@ -764,9 +830,16 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue261Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
+      try {
+        assign261IdempotencyKey(normalized);
+        const existing = await getIdempotentAttempt(normalized);
+        if (existing) return attemptResponse(existing);
+      } catch (err) {
+        return req.error(err.status || 503, `Goods Issue idempotency could not be verified; posting was not sent to SAP: ${err.message || 'attempt store unavailable'}.`);
+      }
       const resvItem = await reservationReconcileCheck(req, normalized, { batch: true });
       if (!resvItem) return;
-      if (!(await checkPendingConfirmation(req, normalized))) return;
+      if (!(await checkPendingConfirmation(req, normalized))) return normalized._existingAttemptResult;
       if (!(await batchPreCheck261(req, normalized, resvItem))) return;
       if (!(await stagingCheck(req, normalized))) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
