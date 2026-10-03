@@ -292,6 +292,22 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
         warehouse: 'W01'
       });
     });
+
+    it('normalizes a 12-character SAP order number to the 10-character WM dynamic bin', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          PKHD: [{
+            MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01',
+            LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X'
+          }]
+        })
+      });
+
+      await expect(client.findStagingTarget(
+        '1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '000001002599', 'IP1'
+      )).resolves.toMatchObject({ targetBin: '0001002599', stagingSource: 'PKHD_DYNAMIC_BIN' });
+    });
   });
 
   describe('fail-closed WM staging verification', () => {

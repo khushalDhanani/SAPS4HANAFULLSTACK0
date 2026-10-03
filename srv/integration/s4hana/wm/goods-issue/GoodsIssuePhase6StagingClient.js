@@ -5,6 +5,13 @@ function clean(v) {
   return String(v || '').trim();
 }
 
+function dynamicOrderBin(value) {
+  const order = clean(value);
+  if (!/^\d+$/.test(order)) return '';
+  const significantDigits = order.replace(/^0+/, '') || '0';
+  return significantDigits.length <= 10 ? significantDigits.padStart(10, '0') : '';
+}
+
 function wmAlphaIn(v) {
   const s = clean(v);
   return /^\d+$/.test(s) ? s.padStart(18, '0') : s;
@@ -82,10 +89,11 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       if (configuredType && configuredBin) {
         return { targetType: configuredType, targetBin: configuredBin, stagingSource: 'PKHD_CONTROL_CYCLE', psa: clean(row.PRVBE) };
       }
-      if (configuredType && clean(row.NKDYN).toUpperCase() === 'X' && ['1', '2', '3', '4'].includes(clean(row.BERKZ)) && clean(orderNo)) {
+      const orderBin = dynamicOrderBin(orderNo);
+      if (configuredType && clean(row.NKDYN).toUpperCase() === 'X' && ['1', '2', '3', '4'].includes(clean(row.BERKZ)) && orderBin) {
         return {
           targetType: configuredType,
-          targetBin: clean(orderNo).padStart(10, '0'),
+          targetBin: orderBin,
           stagingSource: 'PKHD_DYNAMIC_BIN',
           psa: clean(row.PRVBE)
         };

@@ -16,6 +16,12 @@ const WM_QUANT_FIELDS = ['LGNUM', 'LENUM', 'LQNUM', 'MATNR', 'WERKS', 'LGORT', '
 const EXCLUDED_STORAGE_TYPES = ['OH1', 'QC1', 'RJ1'];
 const EXCLUDED_STORAGE_TYPE_PREFIXES = ['9', 'QC', 'RJ'];
 const wmAlphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+const wmOrderBin = (v) => {
+  const order = String(v ?? '').trim();
+  if (!/^\d+$/.test(order)) return '';
+  const significantDigits = order.replace(/^0+/, '') || '0';
+  return significantDigits.length <= 10 ? significantDigits.padStart(10, '0') : '';
+};
 const wmSapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
 /** RFC_READ_TABLE quantity -> number (last separator is the decimal point). */
 function wmNum(v) {
@@ -678,10 +684,10 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const isStagingType = /^(IP\d|PR\d)/i.test(q.LGTYP || '') || (ctx.targetType && q.LGTYP === ctx.targetType);
     const isOrderBin = /^\d{10}$/.test(q.LGPLA || '');
     if (isStagingType && isOrderBin) {
-      const allowedOrder = ctx.currentOrder ? String(ctx.currentOrder).trim().padStart(10, '0') : '';
-      const allowedBin = ctx.targetBin ? String(ctx.targetBin).trim().padStart(10, '0') : '';
-      const binPadded = String(q.LGPLA || '').trim().padStart(10, '0');
-      if (allowedOrder && binPadded !== allowedOrder && (!allowedBin || binPadded !== allowedBin)) {
+      const allowedOrder = wmOrderBin(ctx.currentOrder);
+      const allowedBin = String(ctx.targetBin || '').trim();
+      const bin = String(q.LGPLA || '').trim();
+      if (allowedOrder && bin !== allowedOrder && (!allowedBin || bin !== allowedBin)) {
         return `staged for another order (${q.LGPLA})`;
       }
     }
@@ -762,7 +768,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     }
 
     const order = String(resbRow.AUFNR || orderNo || '').trim();
-    const orderPadded = order ? order.padStart(10, '0') : '';
+    const orderPadded = order ? wmOrderBin(order) : '';
     const reqQty = Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG));
     const uom = String(resbRow.MEINS || '').trim() || 'KG';
     const sapMaterial = String(resbRow.MATNR || '').replace(/^0+/, '') || material;

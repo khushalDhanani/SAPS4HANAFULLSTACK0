@@ -1,6 +1,28 @@
 
 # Changes Log
 
+## 2026-10-03 10:57 UTC — Add missing English batch-picker key
+- **Agent**: Codex
+- **Request**: Resolve the WM suite failure discovered while validating the dynamic order-bin fix.
+- **Plan**: Add the new Batch placeholder key/value to `i18n_en.properties` and rerun the focused i18n/controller checks plus full WM suite.
+- **Current Status**: Fixed. The new batch placeholder now exists in `i18n_en.properties` as well as the default bundle.
+- **Files Changed**: `app/fiori-app/webapp/i18n/i18n_en.properties` and `WORKSTATUS.md`.
+- **Reason**: Every key used by the 261 view must exist in both English translation bundles.
+- **Validation**: Passed on rerun — `npx jest test/unit/wm --runInBand --silent` (56 suites / 1,125 tests); UI5 lint; UI5 build; `git diff --check`.
+- **Errors / Warnings / Blockers**: First full-suite attempt had one expected failure for the missing key; adding the translation resolved it. UI5 update-check and destination-binding warnings were non-fatal.
+- **Next Steps**: No further work on this translation.
+
+## 2026-10-03 10:46 UTC — Normalize dynamic WM bins from SAP order numbers
+- **Agent**: Codex
+- **Request**: Perform read-only warehouse checks for reservation 480960 and report whether target stock/TR/TO state can be distinguished.
+- **Plan**: Query RESB and LQUA for the reservation/order target; inspect read-only LTAP/LTBP results and map SAP message text; if the application’s target-bin construction conflicts with SAP’s actual bin format, fix that root cause with focused regressions and validate.
+- **Current Status**: Fixed and validated. Dynamic order bins now remove leading AUFNR zeroes before padding to 10 characters. The application live read resolves `0001002599` and returns 0 of 480 KG staged plus 378 KG planned/unconfirmed.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, `test/unit/wm/goodsIssueStockUnitList.test.js`, and `WORKSTATUS.md`.
+- **Reason**: Dynamic-bin resolution pads the full 12-character AUFNR without removing SAP’s leading zeroes, causing a 12-character bin that cannot match the 10-character WM bin.
+- **Validation / SAP Read**: Passed — focused WM tests (3 suites / 39 tests); full WM suite (56 suites / 1,125 tests); ESLint (0 errors); `npx cds compile srv >/dev/null`; UI5 lint/build; `git diff --check`. Read-only SAP RESB/LQUA confirmed AUFNR `000001002599`, target bin `0001002599`, batch `IN26000905`, VERME `0.000`, EINME `378.000` KG. The application `checkStaging` live read now returns target W10/IP1/0001002599, `StagedQty=0`, `PlannedUnconfirmedQty=378`, `RequiredQty=480`, transfer status UNKNOWN. A source LQUA aggregate for this material/batch found 3,200 KG VERME across 12 RM1 rows, plus 320 KG in EN1. No SAP writes were performed.
+- **Errors / Warnings / Blockers**: SAP TBPE/TBPK reads still fail with DA 131; LTAP/LTBP reads returned AD 718 (“Table & does not contain data”), so the TR/TO number/link is not proven. ESLint shows the existing unused caught variable `checkErr`; UI5 update-check and destination-binding warnings were non-fatal. The 378 KG in EINME is insufficient to cover the 480 KG requirement until the remaining 102 KG is also staged and confirmed.
+- **Next Steps**: Warehouse team should inspect LT22/LB10/LB11 for reservation 480960/order 000001002599 and target bin 0001002599, confirm any open TO for the 378 KG, and stage/confirm the remaining 102 KG from suitable W10/CS01 batch stock. Separately resolve RFC access for the TR lookup.
+
 ## 2026-10-03 10:44 UTC — Fix local deep-link asset and MessageStrip settings
 - **Agent**: Codex
 - **Request**: Resolve the pasted browser errors: `deepLink.js` 404/MIME failure and invalid `icon` settings on MessageStrip controls.

@@ -45,6 +45,19 @@ function makeClient({
 }
 
 describe('GoodsIssueStockUnitClient – Storage Units for one reservation line', () => {
+  it('recognizes the normalized 10-character dynamic bin for a 12-character SAP order', () => {
+    const { client } = makeClient();
+    const ownOrderBin = q({ LGTYP: 'IP1', LGPLA: '0001002599', VERME: 378 });
+    const otherOrderBin = q({ LGTYP: 'IP1', LGPLA: '0001002999', VERME: 378 });
+
+    expect(client._wmQuantRejection(ownOrderBin, '', null, {
+      targetType: 'IP1', targetBin: '0001002599', currentOrder: '000001002599'
+    })).toBe('');
+    expect(client._wmQuantRejection(otherOrderBin, '', null, {
+      targetType: 'IP1', targetBin: '0001002599', currentOrder: '000001002599'
+    })).toContain('staged for another order');
+  });
+
   it('queries LQUA by the line material/plant/sloc in any warehouse (no T320 dependency)', async () => {
     const { client, rfc } = makeClient({ lqua: [q()] });
     await client.listStockUnitsForReservationItem('519366', '1');
