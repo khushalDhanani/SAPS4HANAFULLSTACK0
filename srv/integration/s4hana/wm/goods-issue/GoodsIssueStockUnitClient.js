@@ -1000,7 +1000,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       if (staging.transferRequirementStatus === 'FOUND' && staging.tbnum) {
         shortfall += ` Transfer requirement ${staging.tbnum} needs a confirmed transfer order (LT04/LT12).`;
       } else if (staging.transferRequirementStatus === 'UNKNOWN') {
-        shortfall += ' Transfer requirement status unknown; verify the transfer requirement and confirm its transfer order.';
+        shortfall += ' Transfer requirement status unknown; check whether a TR/TO exists, and confirm the TO if one is open.';
       } else {
         shortfall += ' No reservation-linked transfer requirement was found; verify the warehouse requirement before proceeding.';
       }

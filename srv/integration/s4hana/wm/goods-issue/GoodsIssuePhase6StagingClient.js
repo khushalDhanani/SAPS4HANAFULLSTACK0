@@ -305,7 +305,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       if (transferRequirementStatus === 'FOUND' && sTbnum) {
         error += ` Transfer requirement ${sTbnum} needs a confirmed transfer order (LT04/LT12).`;
       } else if (transferRequirementStatus === 'UNKNOWN') {
-        error += ' Transfer requirement status unknown; verify the transfer requirement and confirm its transfer order.';
+        error += ' Transfer requirement status unknown; check whether a TR/TO exists, and confirm the TO if one is open.';
       } else {
         error += ' No reservation-linked transfer requirement was found; verify the warehouse requirement before proceeding.';
       }

@@ -456,6 +456,28 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(mockService.fetchMaterialDetails).toHaveBeenCalledWith('1000000045', expect.any(String));
             expect(lastSelectDialog.open).toHaveBeenCalled();
         });
+
+        it('loads selectable material batches and assigns the chosen batch from value help', async () => {
+            const batches = [
+                { Batch: 'IN25003090', IsSelectable: true, StatusText: 'VALID', ExpiryDate: '2026-11-05' },
+                { Batch: 'BLOCKED', IsSelectable: false, StatusText: 'BLOCKED' }
+            ];
+            controller._oModel.setProperty('/material', '1000000264');
+            controller._oModel.setProperty('/plant', '1110');
+            mockService.fetchMaterialDetails.mockResolvedValueOnce({
+                isBatchManaged: true, batches
+            });
+
+            await controller._loadMaterialInfo('1000000264', '1110');
+            expect(controller._oModel.getProperty('/availableBatches')).toEqual([batches[0]]);
+
+            controller.onBatchValueHelp();
+            expect(lastSelectDialog.open).toHaveBeenCalled();
+            lastSelectDialog.config.confirm({
+                getParameter: () => ({ getTitle: () => 'IN25003090' })
+            });
+            expect(controller._oModel.getProperty('/batch')).toBe('IN25003090');
+        });
     });
 
     describe('Serial number add / delete', () => {

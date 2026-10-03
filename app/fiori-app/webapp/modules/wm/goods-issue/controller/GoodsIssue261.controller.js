@@ -255,7 +255,7 @@ sap.ui.define([
                         if (sTransferStatus === "FOUND" && sTbnum) {
                             sStagingWarning += " Transfer requirement " + sTbnum + " needs a confirmed transfer order (LT04/LT12).";
                         } else if (sTransferStatus === "UNKNOWN") {
-                            sStagingWarning += " Transfer requirement status unknown; verify the transfer requirement and confirm its transfer order.";
+                            sStagingWarning += " Transfer requirement status unknown; check whether a TR/TO exists, and confirm the TO if one is open.";
                         } else {
                             sStagingWarning += " No reservation-linked transfer requirement was found; verify the warehouse requirement before proceeding.";
                         }
@@ -528,6 +528,8 @@ sap.ui.define([
                     if (oSelectedItem) {
                         var sMat = oSelectedItem.getTitle();
                         var sDesc = oSelectedItem.getDescription();
+                        that._oModel.setProperty("/batch", "");
+                        that._oModel.setProperty("/availableBatches", []);
                         that._oModel.setProperty("/material", sMat);
                         that._oModel.setProperty("/materialName", sDesc);
                         that._loadMaterialInfo(sMat);
@@ -564,14 +566,22 @@ sap.ui.define([
             if (!sMaterial) { return; }
             // Prefer an explicitly passed plant (e.g. the reservation item's own plant) over the form's.
             var sPlantVal = sPlant || this._oModel.getProperty("/plant") || "";
-            GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlantVal)
+            return GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlantVal)
                 .then(function (oInfo) {
-                    if (oInfo) {
+                    if (oInfo && that._oModel.getProperty("/material") === sMaterial) {
                         that._oModel.setProperty("/materialName", oInfo.materialName || that._oModel.getProperty("/materialName"));
                         if (oInfo.unit && !that._oModel.getProperty("/unit")) {
                             that._oModel.setProperty("/unit", oInfo.unit);
                         }
                         that._oModel.setProperty("/isBatchManaged", !!oInfo.isBatchManaged);
+                        var aBatches = Array.isArray(oInfo.batches) ? oInfo.batches.filter(function (oBatch) {
+                            return oBatch && oBatch.Batch && oBatch.IsSelectable !== false;
+                        }) : [];
+                        that._oModel.setProperty("/availableBatches", aBatches);
+                        var sCurrentBatch = that._oModel.getProperty("/batch");
+                        if (sCurrentBatch && !aBatches.some(function (oBatch) { return oBatch.Batch === sCurrentBatch; })) {
+                            that._oModel.setProperty("/batch", "");
+                        }
                     }
                     that._validateLive();
                 })
@@ -580,8 +590,62 @@ sap.ui.define([
                 });
         },
 
+        onBatchValueHelp: function () {
+            var that = this;
+            var openBatchDialog = function () {
+                var aBatches = that._oModel.getProperty("/availableBatches") || [];
+                var oDialog = new SelectDialog({
+                    title: that.getText("giBatchSelectionDialogTitle"),
+                    noDataText: that.getText("giNoBatchesFound"),
+                    search: function (oEvt) {
+                        var sValue = oEvt.getParameter("value") || "";
+                        var oBinding = oEvt.getSource().getBinding("items");
+                        if (oBinding) {
+                            oBinding.filter(sValue ? [new Filter({
+                                filters: [
+                                    new Filter("Batch", FilterOperator.Contains, sValue),
+                                    new Filter("StatusText", FilterOperator.Contains, sValue)
+                                ],
+                                and: false
+                            })] : []);
+                        }
+                    },
+                    confirm: function (oEvt) {
+                        var oSelectedItem = oEvt.getParameter("selectedItem");
+                        if (oSelectedItem) {
+                            that._oModel.setProperty("/batch", oSelectedItem.getTitle());
+                            that._validateLive();
+                        }
+                    }
+                });
+                var oItemTemplate = new StandardListItem({
+                    title: "{Batch}",
+                    description: "{StatusText}",
+                    info: "{ExpiryDate}"
+                });
+                oDialog.setModel(new JSONModel(aBatches));
+                oDialog.bindAggregation("items", "/", oItemTemplate);
+                oDialog.open();
+            };
+
+            if ((this._oModel.getProperty("/availableBatches") || []).length) {
+                openBatchDialog();
+                return;
+            }
+            var sMaterial = this._oModel.getProperty("/material") || "";
+            if (!sMaterial) { return; }
+            this._loadMaterialInfo(
+                sMaterial,
+                this._oModel.getProperty("/plant") || ""
+            ).then(openBatchDialog);
+        },
+
         onMaterialLiveChange: function (oEvt) {
             var sVal = oEvt.getParameter("value") || "";
+            if (sVal !== this._oModel.getProperty("/material")) {
+                this._oModel.setProperty("/batch", "");
+                this._oModel.setProperty("/availableBatches", []);
+            }
             this._oModel.setProperty("/material", sVal);
             if (sVal.length >= 8) {
                 this._loadMaterialInfo(sVal);

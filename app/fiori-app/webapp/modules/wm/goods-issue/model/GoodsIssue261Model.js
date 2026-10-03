@@ -87,6 +87,7 @@
                 // Batch Management
                 isBatchManaged: false,
                 batch: "",
+                availableBatches: [],
 
                 // Planned-reservation linkage (populated when completing from Open Reservations list)
                 fromReservation: false,

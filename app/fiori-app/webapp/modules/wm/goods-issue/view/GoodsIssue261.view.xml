@@ -256,12 +256,14 @@
                             <Input
                                 id="inBatch261"
                                 value="{gi261>/batch}"
-                                placeholder="{i18n>gi261BatchPlaceholder}"
+                                placeholder="{i18n>gi261BatchSelectPlaceholder}"
                                 liveChange=".onFieldLiveChange"
                                 valueState="{= ${gi261>/errors/batch} ? 'Error' : 'None' }"
                                 valueStateText="{gi261>/errors/batch}"
                                 visible="{gi261>/isBatchManaged}"
-                                maxLength="10" />
+                                maxLength="10"
+                                showValueHelp="true"
+                                valueHelpRequest=".onBatchValueHelp" />
 
                         </f:content>
                     </f:SimpleForm>

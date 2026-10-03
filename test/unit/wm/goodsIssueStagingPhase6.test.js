@@ -438,7 +438,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
 
       expect(result.transferRequirementStatus).toBe('UNKNOWN');
       expect(result.error).toContain('0 of 40 KG staged in W01/IP1/STAGE-01.');
-      expect(result.error).toContain('Transfer requirement status unknown');
+      expect(result.error).toContain('Transfer requirement status unknown; check whether a TR/TO exists, and confirm the TO if one is open.');
     });
 
     it('fails closed when staged stock is reported in a different unit', async () => {

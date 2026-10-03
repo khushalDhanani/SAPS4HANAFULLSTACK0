@@ -1,6 +1,28 @@
 
 # Changes Log
 
+## 2026-10-03 10:40 UTC — Clarify unknown TR/TO instruction
+- **Agent**: Codex
+- **Request**: Clarify the staging error shown for reservation 480960 when the transfer-requirement lookup status is unknown.
+- **Plan**: Change the UNKNOWN-status message in both the API and 261 controller to direct the warehouse user to check whether a TR/TO exists and confirm only an open TO; update focused assertions and run relevant tests plus diff check.
+- **Current Status**: Updated. The unknown-status message now tells the user to check whether a TR/TO exists and to confirm a TO only if one is open.
+- **Files Changed**: `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `test/unit/wm/goodsIssueStagingPhase6.test.js`, and `WORKSTATUS.md`.
+- **Reason**: Avoid implying that an unverified transfer order exists.
+- **Validation**: Passed — focused WM/controller Jest tests (3 suites / 92 tests); UI5 lint (no findings); UI5 build; ESLint (0 errors); `git diff --check`.
+- **Errors / Warnings / Blockers**: ESLint reports the existing unused caught variable `checkErr` at GoodsIssueStockUnitClient.js:629. UI5 lint/build emitted non-fatal update-check permission warnings. SAP DA 131 previously resolved to “Table & does not exist in the database”; TR/TO existence is still unknown.
+- **Next Steps**: Warehouse team should check target-bin stock and inspect open TR/TO records. No warehouse or SAP transaction has been run from the application.
+
+## 2026-10-03 10:37 UTC — Add batch value help to order-based 261
+- **Agent**: Codex
+- **Request**: On `/wm/goods-issue/order-based-261?resv=480960`, let the user select a batch in the required Batch field.
+- **Plan**: Reuse the existing `MaterialBatches` response already loaded for the material/plant. Store available batch choices in the 261 view model, expose an input value-help dialog with search and batch/expiry/stock details, and set the selected batch into the existing posting field. Add a controller regression and run the UI5 lint/build plus focused controller test and diff check.
+- **Current Status**: Implemented and validated. The batch field provides searchable value help populated from SAP `MaterialBatches`, selects the batch into the existing posting model, and continues to allow manual entry. Entries explicitly marked non-selectable are filtered out.
+- **Files Changed**: `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`, `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`, `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`, `app/fiori-app/webapp/i18n/i18n.properties`, `test/unit/wm/goodsIssue261Controller.test.js`, and `WORKSTATUS.md`.
+- **Reason**: Batch is required for batch-managed materials and the current field provides no way to choose among SAP batches.
+- **Validation**: Passed — `npx jest test/unit/wm/goodsIssue261Controller.test.js --runInBand --silent` (1 suite / 59 tests); `npm --prefix app/fiori-app run lint` (no findings); `npm --prefix app/fiori-app run build`; `git diff --check`. No SAP writes or transaction checks were performed; batch options use the existing `fetchMaterialDetails` / `MaterialBatches` read path.
+- **Errors / Warnings / Blockers**: UI5 lint/build emitted non-fatal update-check permission warnings. Batch entries with missing AvailableStock remain selectable if SAP marks them `IsSelectable: true`; the picker shows status and expiry date.
+- **Next Steps**: Open `/wm/goods-issue/order-based-261?resv=480960`, wait for reservation/material details to load, and select a row from the Batch value-help icon.
+
 ## 2026-10-03 10:27 UTC — Clarifying staging shortfall and TR lookup status
 - **Agent**: Codex
 - **Request**: Make a zero-staged response identify warehouse/type/bin, expose a transfer requirement when found, and report unknown when TBPE/TBPK reads fail; inspect SAP message DA 131.
