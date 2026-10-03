@@ -158,6 +158,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
 
       if (allResults.length > 0) {
         const resvMap = new Map();
+        let openItemCount = 0;
         const boundaryResvNo = (isTruncated && allResults.length > 0) ? allResults[allResults.length - 1].Reservation : null;
 
         for (const r of allResults) {
@@ -169,6 +170,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           const wdnQty = Number(r.ResvnItmWithdrawnQtyInBaseUnit) || 0;
           const openQty = Math.max(0, reqQty - wdnQty);
           if (openQty <= 0) continue;
+          openItemCount++;
 
           if (!resvMap.has(sRes)) {
             resvMap.set(sRes, {
@@ -194,6 +196,12 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
             if (!entry.CreatedByUser && (r.CreatedByUser || r.UserID)) entry.CreatedByUser = r.CreatedByUser || r.UserID;
           }
         }
+
+        LOG.info(
+          `Open reservations item scan movementType='${movementType || 'all'}', plant='${sPlant || 'all'}': ` +
+          `${allResults.length} raw SAP items, ${openItemCount} with positive open quantity, ` +
+          `${allResults.length - openItemCount} with zero open quantity${isTruncated ? ' (safety limit reached; result is partial)' : ''}.`
+        );
 
         // Enrich reservation header creator username from ReservationDocument if missing
         const needsUserEnrichment = Array.from(resvMap.values()).some(v => !v.CreatedByUser);

@@ -1,6 +1,109 @@
 
 # Changes Log
 
+## 2026-10-03 15:34 IST — Final validation for bounded 261 reservation reads
+- **Agent**: Codex
+- **Request**: Complete the review-driven guardrail and diagnostics update without claiming the live reservation symptom is proven fixed.
+- **Plan**: Re-run the focused and full WM suites, UI5 lint/build, CAP compile, targeted ESLint, and diff validation; inspect the resulting worktree and leave remaining SAP checks explicit.
+- **Current Status**: Code change and controlled validation complete; symptom remains unverified in SAP. The 261 scan has a 20,000 raw-item ceiling with the existing partial-result warning; logs raw, positive-open, and zero-open counts. Plant, Reservation, and OrderID filters are passed to the SAP client.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssue.handler.js`; `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`; `test/unit/wm/goodsIssueClients.test.js`; `test/unit/wm/goodsIssueService.test.js`; `WORKSTATUS.md`. Existing staged 261 UI/list changes in the shared worktree were preserved.
+- **Reason**: Bound backend SAP reads while preserving visibility into possible truncation and rows dropped by open-quantity filtering.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssue261ServiceUnit.test.js --runInBand --silent`: passed, 3 suites / 129 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 56 suites / 1,118 tests.
+  - `npx eslint srv/wm/goods-issue/handlers/goodsIssue.handler.js srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueService.test.js`: passed.
+  - `npx cds compile srv >/dev/null`: passed.
+  - `npm --prefix app/fiori-app run lint`: passed; no UI5 findings.
+  - `npm --prefix app/fiori-app run build`: passed.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: Jest printed destination-binding warnings; UI5 lint/build printed non-fatal update-check access warnings. An initial run failed because the sandbox blocked CAP's local server bind; escalated reruns passed. No authoritative metadata snapshot or live SAP `$metadata` response is available for `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`, so `GoodsMovementType` filterability remains unverified. No read of reservation `0000480960` or RESB was performed; the original symptom's exact cause remains unknown.
+- **Next Steps**: With authorized read-only SAP access, inspect this service's `$metadata`, run the direct reservation OData query, compare `BWART`, `KZEAR`, `XLOEK`, `BDMNG`, `ENMNG`, and `WERKS` in RESB, then compare app logs' raw/positive-open counts. Do not describe the symptom as fixed until those results establish the row's drop point.
+
+## 2026-10-03 15:29 IST — Restoring header-enrichment call expectation
+- **Agent**: Codex
+- **Request**: Preserve the existing reservation-filter test while fixing the new capped-scan assertion.
+- **Plan**: Restore its two-call expectation (item read plus creator header enrichment), leaving the new test scoped to item reads only.
+- **Current Status**: Complete — two focused reruns ultimately passed; final aggregate results are recorded in the 15:34 IST validation entry.
+- **Files Changed**: `test/unit/wm/goodsIssueClients.test.js`; `WORKSTATUS.md`.
+- **Reason**: The prior rerun showed the existing test's helper read is valid and its assertion must remain unchanged.
+- **Validation**: The intermediate client-suite run had 60 passing tests and one failing existing call-count assertion; restored the expected helper-read count. The final focused suite result is recorded in the 15:34 IST validation entry.
+- **Errors / Warnings / Blockers**: Destination binding warnings appeared; no live SAP metadata access.
+- **Next Steps**: Perform the read-only SAP metadata and reservation checks listed in the 15:34 IST validation entry.
+
+## 2026-10-03 15:27 IST — Repairing scan-call assertion placement
+- **Agent**: Codex
+- **Request**: Correct the bounded-scan test after the next focused run identified an assertion applied to the wrong existing case.
+- **Plan**: Restore the pre-existing server-filter test's one-call assertion and scope the two-page assertion only to the new capped-scan case.
+- **Current Status**: In Progress — assertion placement fixed; targeted rerun pending.
+- **Files Changed**: `test/unit/wm/goodsIssueClients.test.js`; `WORKSTATUS.md`.
+- **Reason**: The second test run showed that a generic patch had replaced the older single-page expectation instead of the new cap test's total call count.
+- **Validation**: `npx jest …` (three focused suites, escalated): `goodsIssueService.test.js` and `goodsIssue261ServiceUnit.test.js` passed; the client suite failed two assertions, including the misplaced assertion. 127 tests passed, 2 failed. Destination-binding warnings were emitted.
+- **Errors / Warnings / Blockers**: SAP metadata and live reservation checks remain unavailable.
+- **Next Steps**: Run the client suite and focused trio again; finalize log with outcomes.
+
+## 2026-10-03 15:23 IST — Aligning cap assertions with 261 request contract
+- **Agent**: Codex
+- **Request**: Update regressions to expect the finite safety ceiling and distinguish item paging from metadata enrichment reads.
+- **Plan**: Assert exactly two `ReservationDocumentItem` pages (while allowing the separate header read) and expect `maxItems: 20000` from the handler.
+- **Current Status**: In Progress — assertions aligned; rerun pending.
+- **Files Changed**: `test/unit/wm/goodsIssueClients.test.js`; `test/unit/wm/goodsIssueService.test.js`; `WORKSTATUS.md`.
+- **Reason**: The first escalated test rerun reached the CAP tests and exposed stale assertions from the previous unlimited-scan implementation; the item scan itself issues an additional header enrichment request.
+- **Validation**: Initial sandbox run failed with CAP server `EPERM`; escalated rerun reached all tests but failed the two stale assertions above (127 passed, 2 failed). The command exited 139 after Jest's test summary. Handler/client lint, CDS compile, and `git diff --check` passed.
+- **Errors / Warnings / Blockers**: Live SAP read and metadata verification remain unavailable. Jest reported absent destination-binding warnings during the test run.
+- **Next Steps**: Rerun the three focused suites, then record final results and run the relevant final validations.
+
+## 2026-10-03 15:21 IST — Correcting reservation-client test fixture
+- **Agent**: Codex
+- **Request**: Complete the focused regression coverage for the bounded 261 scan.
+- **Plan**: Keep the second-page scan assertions, but make the fixture return an empty result for the separate reservation-header enrichment request.
+- **Current Status**: In Progress — test fixture corrected; rerun pending.
+- **Files Changed**: `test/unit/wm/goodsIssueClients.test.js`; `WORKSTATUS.md`.
+- **Reason**: Header enrichment is a distinct SAP read and should not be counted as another reservation-item scan page.
+- **Validation**: Pending. Initial combined run failed this assertion (expected two reads, received three) and CAP test initialization hit sandbox `EPERM` binding `0.0.0.0`; handler/client lint, CDS compile, and `git diff --check` passed.
+- **Errors / Warnings / Blockers**: CAP test helper requires network binding unavailable in the current sandbox; escalation requested for rerun.
+- **Next Steps**: Rerun the client and CAP service test suites and update this entry with verified results.
+
+## 2026-10-03 15:18 IST — Bounding and instrumenting 261 reservation reads
+- **Agent**: Codex
+- **Request**: Address review feedback on the 261 open-reservation list: cap large reads, retain server-side filters, expose raw/open counts, and verify `GoodsMovementType` metadata.
+- **Plan**: Replace the 261 unlimited scan with a 20,000 raw-item ceiling, retain paging and the existing partial-result warning, log counts before and after the open-quantity filter, and add client tests for cap behavior and server-side filters. Inspect available metadata snapshots; report live metadata validation as unavailable if no authoritative snapshot or SAP access exists.
+- **Current Status**: Code and controlled validations complete; live symptom remains unverified. The implementation and validation results are recorded in the 15:34 IST entry. Repository search found no authoritative `UI_RESERVATION_ITM_MNG_V2` `ReservationDocumentItem` metadata snapshot, and no live SAP metadata access is available in this session.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssue.handler.js`; `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`; `test/unit/wm/goodsIssueClients.test.js`; `WORKSTATUS.md`.
+- **Reason**: Bound resource use and make filtering losses observable without returning an unbounded scan.
+- **Validation**: Passed — see exact focused/full WM test, lint, build, compile, and diff results in the 15:34 IST entry.
+- **Errors / Warnings / Blockers**: `GoodsMovementType` filterability in the live SAP service is not established. Reservation `0000480960` contents and the app-side row counts cannot be observed until run with the configured SAP destination.
+- **Next Steps**: Perform the read-only SAP metadata and reservation checks listed in the 15:34 IST entry.
+
+## 2026-10-03 15:03 IST — In Progress: bounding and instrumenting 261 reservation reads
+- **Agent**: Copilot
+- **Request**: Respond to review feedback on the open-reservation truncation fix: avoid unbounded SAP reads, retain server-side filters, log raw/open counts, and verify movement-type filter metadata.
+- **Plan**: Replace `maxItems: 0` with a 20,000 raw-item safety ceiling for 261; preserve SAP paging and its partial-result warning. Log raw row count, positive-open and zero-open counts after evaluating `BDMNG - ENMNG`. Search repository metadata snapshots for `GoodsMovementType` evidence; do not claim live filterability without `$metadata` or SAP read access. Add tests and run focused/full WM, UI5 lint/build, CAP compile, and diff checks.
+- **Current Status**: Superseded by the bounded implementation and controlled validations recorded in the 15:34 IST entry; `GoodsMovementType` filterability and the live reservation outcome remain unverified because authoritative metadata and SAP read access are unavailable.
+- **Files Changed**: `WORKSTATUS.md` (this plan entry only).
+- **Reason**: Bound resource use without silently hiding truncation, provide evidence where open rows are filtered out, and distinguish code use of `GoodsMovementType` from verified service metadata.
+- **Validation**: Completed in the 15:34 IST entry; no live SAP metadata check was possible.
+- **Errors / Warnings / Blockers**: Live SAP metadata and current list results remain unavailable; cannot certify movement-type property filterability or reservation `0000480960` contents.
+- **Next Steps**: Obtain read-only SAP `$metadata` and reservation data as described in the 15:34 IST entry.
+
+## 2026-10-03 14:56 IST — Removing 261 reservation-list truncation
+- **Agent**: Copilot
+- **Request**: Find why the custom 261 open-reservations page can omit valid reservations and fix it.
+- **Plan**: Trace the exact SAP `ReservationDocumentItem` filter, open quantity calculation, CAP paging, and UI request ceiling. Remove only the 261 page's fixed 200-reservation UI cap and request an unbounded SAP item scan through CAP (which already pages SAP data). Add tests for the exact list URL and more than 2,000 eligible SAP rows; preserve the existing `BDMNG - ENMNG` calculation. Run focused and full WM regressions, lint, CAP compile, and diff checks. No live SAP read or posting.
+- **Current Status**: Code fix complete; live SAP comparison blocked — the 261 page no longer sets a 200-reservation CAP `$top`, and its handler requests `maxItems: 0`, causing the reservations client to page through all eligible SAP rows before grouping them. Its SAP item filter remains movement type 261 plus not-finally-issued and not-deleted; JavaScript computes `max(0, required - withdrawn)` and drops zero-open rows. The actual RESB/RKPF/MATDOC rows for `0000480960` are not available here, so its live result cannot be identified or compared.
+- **Files Changed**: `WORKSTATUS.md`; `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue261Service.js`; `srv/wm/goods-issue/handlers/goodsIssue.handler.js`; `test/unit/wm/goodsIssue261ServiceUnit.test.js`; `test/unit/wm/goodsIssueClients.test.js`; `test/unit/wm/goodsIssueService.test.js`.
+- **Reason**: The previous UI `$top=200` and backend default 2,000 raw-item ceiling silently omitted otherwise-eligible reservations/items. A 2,001-row test case now verifies unbounded SAP paging.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261ServiceUnit.test.js test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssueOpenReservationsPending.test.js --runInBand --silent`: passed, 4 suites / 131 tests.
+  - After the final UI service formatting correction, `npx jest test/unit/wm/goodsIssue261ServiceUnit.test.js --runInBand --silent`: passed, 1 suite / 24 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 56 suites / 1,117 tests.
+  - `npm --prefix app/fiori-app run lint`: passed; UI5 linter found no issues.
+  - `npm --prefix app/fiori-app run build`: passed.
+  - `npx eslint srv/wm/goods-issue/handlers/goodsIssue.handler.js test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssueService.test.js test/unit/wm/goodsIssue261ServiceUnit.test.js`: passed.
+  - `npx cds compile srv >/dev/null`: passed.
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: A lint invocation that included the UI5 service JavaScript was ignored by the repository's ESLint ignore pattern; that file was validated by the UI5 linter instead. Jest emitted pre-existing experimental SQLite and missing destination-binding warnings. No live SAP read or 261 POST was performed. Exact missing/extra reservation item IDs for `0000480960` and live parity against RESB remain unverified.
+- **Next Steps**: Deploy the code, load the 261 list, and compare it against read-only `SE16H` results for RESB filtered by `RSNUM = 0000480960`, `BWART = 261`, `XLOEK = ''`, `KZEAR = ''`, `BDMNG > ENMNG`, joining RKPF on RSNUM. For each displayed item compare SAP values and `BDMNG - ENMNG`; verify any resulting 261 in MATDOC. Do not claim the exact live reservation list is fixed until that comparison is supplied.
+
 ## 2026-10-03 14:46 IST — Aligning 261 staging preview with posting validation
 - **Agent**: Copilot
 - **Request**: Fix the reservation 480960 staging warning without weakening server-side confirmation checks.

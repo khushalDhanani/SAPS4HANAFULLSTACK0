@@ -125,7 +125,7 @@ sap.ui.define([
          * @returns {Promise<Array>}
          */
         fetchOpenReservations: function () {
-            var sUrl = BASE_PATH_GI + "/OpenReservations?$filter=" + encodeURIComponent("MovementType eq '261'") + "&$top=200";
+            var sUrl = BASE_PATH_GI + "/OpenReservations?$filter=" + encodeURIComponent("MovementType eq '261'");
             return ODataClient.get(sUrl)
                 .then(function (oData) {
                     return (oData && oData.value) || (Array.isArray(oData) ? oData : []);

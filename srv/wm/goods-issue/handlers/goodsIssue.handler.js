@@ -112,7 +112,8 @@ class GoodsIssueHandler {
       try {
         let reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant, {
           reservationNo: reservNo,
-          orderNo: orderNo
+          orderNo: orderNo,
+          maxItems: mvtType === '261' ? 20000 : undefined
         });
         if (reservNo && Array.isArray(reservations)) {
           const sResClean = reservNo.replace(/^0+/, '');

@@ -754,7 +754,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(spy).toHaveBeenCalledWith(
         '261',
         '',
-        expect.objectContaining({ reservationNo: '18025', orderNo: '1000040' })
+        expect.objectContaining({ reservationNo: '18025', orderNo: '1000040', maxItems: 20000 })
       );
       spy.mockRestore();
     });

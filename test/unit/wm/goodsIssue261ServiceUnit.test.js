@@ -107,8 +107,8 @@ describe('GoodsIssue261Service Unit Tests', () => {
             const result = await Service.fetchOpenReservations();
             const url = mockODataClient.get.mock.calls[0][0];
             expect(url).toContain('/odata/v4/goods-issue/OpenReservations');
-            expect(url).toContain('261');
-            expect(url).toContain('$top=200');
+            expect(url).toContain('$filter=MovementType%20eq%20\'261\'');
+            expect(url).not.toContain('$top=');
             expect(result).toEqual([{ ReservationNo: '201' }]);
         });
 

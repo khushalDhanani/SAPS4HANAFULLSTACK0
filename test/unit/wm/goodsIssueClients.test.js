@@ -300,6 +300,67 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(nonBoundary.DisplayText).toContain('1 item');
     });
 
+    it('reads beyond 2,000 SAP items when the open-reservations screen requests an unlimited scan', async () => {
+      const sapItems = Array.from({ length: 2001 }, (_, i) => ({
+        Reservation: '0000480960',
+        ReservationItem: String(i + 1).padStart(4, '0'),
+        OrderID: '0000001002749',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        GoodsMovementType: '261',
+        CreatedByUser: 'TESTUSER',
+        Product: 'MAT-261',
+        ResvnItmRequiredQtyInBaseUnit: '100',
+        ResvnItmWithdrawnQtyInBaseUnit: '20'
+      }));
+      const mockAdapter = {
+        _get: jest.fn((path, query) => {
+          expect(path).toContain('UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem');
+          const skip = Number(query.match(/\$skip=(\d+)/)?.[1] || 0);
+          return Promise.resolve(sapItems.slice(skip, skip + 1000));
+        })
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '', {
+        maxItems: 0,
+        pageSize: 1000
+      });
+
+      expect(mockAdapter._get).toHaveBeenCalledTimes(3);
+      expect(result.totalScannedItems).toBe(2001);
+      expect(result.isTruncated).toBe(false);
+      expect(result).toHaveLength(1);
+      expect(result[0].ReservationNo).toBe('0000480960');
+      expect(result[0].ItemCount).toBe(2001);
+    });
+
+    it('stops the open-reservations scan at its configured safety ceiling and keeps SAP-side filters', async () => {
+      const page = Array.from({ length: 1000 }, (_, i) => ({
+        Reservation: '0000480960', ReservationItem: String(i + 1),
+        GoodsMovementType: '261', ResvnItmRequiredQtyInBaseUnit: '5',
+        ResvnItmWithdrawnQtyInBaseUnit: '0'
+      }));
+      const mockAdapter = {
+        _get: jest.fn((path, query) => {
+          if (!path.includes('UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem')) return Promise.resolve([]);
+          expect(decodeURIComponent(query)).toContain("Plant eq '1120'");
+          expect(decodeURIComponent(query)).toContain("Reservation eq '480960'");
+          expect(decodeURIComponent(query)).toContain("OrderID eq '1002749'");
+          return Promise.resolve(page);
+        })
+      };
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+
+      const result = await reservationsClient.getOpenReservations('261', '1120', {
+        reservationNo: '0000480960', orderNo: '1002749', maxItems: 1250, pageSize: 1000
+      });
+
+      expect(mockAdapter._get.mock.calls.filter(([path]) => path.includes('ReservationDocumentItem'))).toHaveLength(2);
+      expect(result.totalScannedItems).toBe(2000);
+      expect(result.isTruncated).toBe(true);
+    });
+
     it('should enrich CreatedByUser from ReservationDocument header', async () => {
       const mockAdapter = {
         _get: jest.fn()
