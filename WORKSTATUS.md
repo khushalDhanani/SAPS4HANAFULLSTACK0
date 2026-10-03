@@ -1,16 +1,33 @@
 
 # Changes Log
 
+## 2026-10-03 12:59 IST
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 6 — Duplicate Posting / Idempotency closeout.
+- **Current Status**: Complete — Movement 261 now derives a stable request fingerprint/reference, persists it before SAP posting under a database-unique reference, returns the existing persisted SAP document for an identical posted retry, returns a processing result for an identical in-flight/unconfirmed retry, and leaves a different payload subject to the existing open-reservation guard.
+- **Files Changed**: `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `test/unit/wm/goodsIssuePendingConfirmationPerType.test.js`, `test/unit/wm/goodsIssue261BatchValidation.test.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `WORKSTATUS.md`.
+- **Reason**: Random references and a reservation-level pending guard did not allow a byte-identical 261 retry to retrieve its prior posting attempt/document; a stable key plus unique persistence and create-or-get closes the duplicate-posting path.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent`: passed, 1 suite / 18 tests.
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssue261BatchValidation.test.js test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/wm/goodsIssueAttempt.test.js --runInBand --silent`: passed, 5 suites / 80 tests.
+  - `npx jest test/unit/wm --runInBand --silent`: passed, 52 suites / 1,038 tests.
+  - `npx eslint` on the changed JavaScript files: passed with 0 errors and one existing unused-variable warning (`isDefinitiveRejection`); the CDS file is ignored by ESLint configuration.
+  - `npx cds compile srv`: passed.
+  - `npx cds compile db/wm/goods-issue-attempt.cds --to sql | rg ...`: generated SQL contains `UNIQUE (ReferenceDocument)`.
+  - `git diff --check` and `git diff --cached --check`: passed after final code review and again after this documentation update; the remaining unstaged diff is the updated work log.
+- **Errors / Warnings / Blockers**: The first full WM run exposed four affected suites/11 tests; the causes and corrections are recorded in entries below, and the subsequent focused and full WM runs passed. Tests emitted the SQLite experimental warning and local Destination-binding warnings. No live SAP POST/read-back or BTP deployment/schema migration was performed; apply/verify the CDS schema change in the target database before deployment. Cross-process runtime behavior relies on that unique constraint being present.
+- **Next Steps**: Apply the database schema migration through the deployment's approved process, then perform any requested SAP validation in a controlled environment; do not treat local mocked tests as live SAP proof.
+
 ## 2026-10-03 12:10 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 6 — Duplicate Posting / Idempotency.
 - **Plan**: Preserve completed Chunks 2–5. Extend the existing persistent GoodsIssuePostingAttempt lifecycle rather than introducing another store. For planned 261 requests, derive a stable key from canonical posting fields, persist its full fingerprint and SAP ReferenceDocument before posting, enforce database uniqueness, and on exact retries return the persisted attempt (including its SAP material document if posted) without making another SAP call. Keep other movement references random and keep unrelated requests for an open reservation blocked. Add tests for identical sequential retries, in-flight duplicates, and distinct payloads; run focused/full WM tests, lint, CAP compile, and diff checks.
-- **Current Status**: In Progress — stable 261 fingerprint lookup now runs before the reservation re-read so a posted retry returns the original SAP document even after SAP's open quantity has changed; database-backed create-or-get and acceptance tests are implemented but not yet validated.
+- **Current Status**: Complete — stable 261 fingerprint lookup runs before reservation re-read, persists a unique attempt before posting, and returns the prior document/processing attempt for exact retries; see the 12:59 closeout validation.
 - **Files Changed**: `db/wm/goods-issue-attempt.cds`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `WORKSTATUS.md`.
 - **Reason**: The handler logs each attempt before SAP and blocks unrelated concurrent reservation posting, but random `ReferenceDocument` values mean an identical retry cannot find and return the prior attempt/document.
-- **Validation**: Pending. Added acceptance tests for identical posted retries (same SAP material document and one adapter post), identical in-flight retries (existing processing result and one adapter post), and a different payload blocked while the reservation has an open attempt.
-- **Errors / Warnings / Blockers**: No live SAP posting will be performed. Must validate CDS uniqueness, CAP persistence behavior, and all retry tests before claiming cross-process idempotency.
-- **Next Steps**: Run focused idempotency and attempt-store tests; resolve any failures before full WM, lint, CDS compile, and diff validation.
+- **Validation**: Complete — focused and full WM tests, CAP compilation, generated SQL uniqueness, ESLint, and diff checks are listed in the 12:59 closeout entry.
+- **Errors / Warnings / Blockers**: No live SAP POST/read-back or deployment database migration was performed; target DB rollout must apply the unique reference constraint and RequestHash column before deployment.
+- **Next Steps**: Apply the CDS schema change with the approved target database migration process and perform controlled SAP validation if requested.
 
 ## 2026-10-03 12:17 IST
 - **Agent**: Copilot
