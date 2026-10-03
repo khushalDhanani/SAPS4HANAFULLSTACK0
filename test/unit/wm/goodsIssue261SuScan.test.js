@@ -322,15 +322,198 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
       RequiredQty: openQty
     });
 
-    jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
+    const sapStockUnits = stockUnits.map((su) => ({
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      Batch: 'IN26000905',
+      Warehouse: 'W01',
+      StorageType: 'IP1',
+      StorageBin: '0000001001',
+      ...su
+    }));
+    return jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
       ReservationNo: '480962',
       ReservationItem: '0001',
       Material: '1000000264',
       Plant: '1110',
       StorageLocation: 'CS01',
-      StockUnits: stockUnits
+      StockUnits: sapStockUnits,
+      IsStagingRequired: false,
+      IsFullyStaged: true
     });
   };
+
+  it('revalidates SAP reservation and selected SUs after claims and immediately before posting', async () => {
+    const listStockUnits = setupMockSap({
+      openQty: 100,
+      stockUnits: [{ StorageUnit: 'SU100', AvailableStock: 100 }]
+    });
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async () => {
+      expect(listStockUnits).toHaveBeenCalledTimes(2);
+      expect(listStockUnits).toHaveBeenLastCalledWith('480962', '0001', {
+        excludeReferenceDocument: expect.any(String)
+      });
+      const claims = await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01');
+      expect(claims).toHaveLength(1);
+      expect(claims[0].Status).toBe('claiming');
+      return { MaterialDocument: '4900012369', MaterialDocYear: '2026' };
+    });
+
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 70,
+        Unit: 'KG',
+        StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    const result = await handlers['postGoodsIssue261'](req);
+    expect(result.MaterialDocument).toBe('4900012369');
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(req.error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the SU disappeared', () => ({ StockUnits: [] })],
+    ['the usable quantity shrank', (unit) => ({ StockUnits: [{ ...unit, AvailableStock: 69 }] })],
+    ['the batch changed', (unit) => ({ StockUnits: [{ ...unit, Batch: 'OTHER-BATCH' }] })],
+    ['the material changed', (unit) => ({ StockUnits: [{ ...unit, Material: 'OTHER-MATERIAL' }] })],
+    ['the confirmed staging bin changed', (unit) => ({
+      IsStagingRequired: true,
+      IsFullyStaged: true,
+      TargetStorageType: 'IP1',
+      TargetStorageBin: '0000001001',
+      StockUnits: [{ ...unit, StorageBin: '0000002002' }]
+    })]
+  ])('blocks and releases claims when %s between allocation and posting', async (_change, makeChange) => {
+    const initialUnit = {
+      StorageUnit: 'SU100',
+      AvailableStock: 100,
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      Batch: 'IN26000905',
+      Warehouse: 'W01',
+      StorageType: 'IP1',
+      StorageBin: '0000001001'
+    };
+    const listStockUnits = setupMockSap({ openQty: 100, stockUnits: [initialUnit] });
+    const initialRead = {
+      ReservationNo: '480962',
+      ReservationItem: '0001',
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      StockUnits: [initialUnit],
+      IsStagingRequired: false,
+      IsFullyStaged: true
+    };
+    listStockUnits
+      .mockResolvedValueOnce(initialRead)
+      .mockResolvedValueOnce({
+        ...initialRead,
+        ...makeChange(initialUnit)
+      });
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 70,
+        Unit: 'KG',
+        StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+
+    expect(listStockUnits).toHaveBeenCalledTimes(2);
+    expect(req.error).toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+    expect(await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01')).toHaveLength(0);
+  });
+
+  it.each([
+    ['reservation batch changed', { Batch: 'NEW-BATCH', OpenQty: 100 }, 'NEW-BATCH'],
+    ['reservation open quantity shrank', { Batch: 'IN26000905', OpenQty: 60 }, 'IN26000905']
+  ])('blocks and releases claims when the %s before final validation', async (_change, freshValues, freshBatch) => {
+    const initialReservation = {
+      ReservationNo: '480962',
+      ReservationItem: '0001',
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      Batch: 'IN26000905',
+      OpenQty: 100,
+      RequiredQty: 100
+    };
+    const getReservation = jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative')
+      .mockResolvedValueOnce(initialReservation)
+      .mockResolvedValueOnce({ ...initialReservation, ...freshValues });
+    const initialUnit = {
+      StorageUnit: 'SU100',
+      AvailableStock: 100,
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      Batch: 'IN26000905',
+      Warehouse: 'W01',
+      StorageType: 'IP1',
+      StorageBin: '0000001001'
+    };
+    const initialRead = {
+      ReservationNo: '480962',
+      ReservationItem: '0001',
+      Material: '1000000264',
+      Plant: '1110',
+      StorageLocation: 'CS01',
+      StockUnits: [initialUnit],
+      IsStagingRequired: false,
+      IsFullyStaged: true
+    };
+    const listStockUnits = jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem')
+      .mockResolvedValueOnce(initialRead)
+      .mockResolvedValueOnce({
+        ...initialRead,
+        StockUnits: [{ ...initialUnit, Batch: freshBatch }]
+      });
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+    const req = {
+      data: {
+        ReservationNo: '480962',
+        ReservationItem: '0001',
+        Material: '1000000264',
+        Plant: '1110',
+        StorageLocation: 'CS01',
+        IssueQty: 70,
+        Unit: 'KG',
+        StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    await handlers['postGoodsIssue261'](req);
+
+    expect(getReservation).toHaveBeenCalledTimes(2);
+    expect(listStockUnits).toHaveBeenCalledTimes(2);
+    expect(req.error).toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+    expect(await GoodsIssueIssuedSuStore.getActiveIssuedSUs('1000000264', '1110', 'CS01')).toHaveLength(0);
+  });
 
   it('allocates the requested partial quantity from a larger SAP storage unit', async () => {
     setupMockSap({

@@ -1,6 +1,37 @@
 
 # Changes Log
 
+## 2026-10-03 13:41 IST — Final-review batch and open-quantity revalidation
+- **Agent**: Copilot
+- **Change**: Full WM validation passed for the first Chunk 15 implementation. Final review identified one stale-input edge case: if the reservation's fixed batch changed after allocation, comparing only the freshly listed SU to the new reservation batch could permit the 261 adapter to receive the earlier normalized batch. Added an explicit comparison between the fresh reservation batch and the batch already normalized for posting, plus regression coverage for reservation batch/open-quantity changes.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `WORKSTATUS.md`.
+- **Reason**: Ensure final authoritative revalidation covers the actual normalized SAP post input, not only whether the newly read SU stock matches the latest reservation values.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssueIssuedSu.test.js test/unit/wm/goodsIssueAttempt.test.js test/unit/wm/goodsIssueStockUnitList.test.js --runInBand --silent`: passed, 4 suites / 98 tests.
+  - Final `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,076 tests.
+  - `npx cds compile srv >/dev/null`: passed.
+  - Targeted ESLint: 0 errors / 3 warnings (`checkErr`, `isDefinitiveRejection`, and `claimId` are unused).
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: No live SAP write/post was performed. ESLint reports three unused-variable warnings. Jest emitted environment-accessor warnings because no destination service binding is configured in this test environment; the SAP-facing interactions were mocked. SAP signoff limitations from Chunk 11 staging-target/process precedence and Chunk 13 reservation/order ownership remain open; SAP-level attribution of aggregate posting quantity to exact SUs is also unproven.
+- **Next Steps**: Obtain SAP/process-owner confirmation of staging-target precedence and SAP-verified reservation/order ownership fields; separately prove whether the posting API supports per-SU quantity allocation. Keep live posting blocked until these SAP contracts are verified.
+
+## 2026-10-03 13:33 IST — Chunk 15 implementation and tests added
+- **Agent**: Copilot
+- **Request**: 261 Goods Issue Chunk 15 — revalidate selected Storage Units immediately before SAP posting.
+- **Plan**: Preserve the existing initial SAP SU allocation. After durable posting-attempt creation and atomic SU claims, re-read the reservation and the selected SAP WM stock, excluding only this attempt's own claim. Verify reservation context/open quantity/status, each selected SU's current identity/context/batch/usable quantity, and confirmed staging scope; on any failure, reject the attempt and release its claims without calling the posting adapter. Add regressions for changes between allocation and final validation, and for own-claim exclusion. No live SAP post.
+- **Current Status**: Implementation and controlled regression tests are in place; validation is pending. Existing SAP-evidence limitations for Chunk 11 staging-target/process precedence and Chunk 13 reservation/order stock ownership remain unresolved.
+- **Files Changed**: `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, `test/unit/wm/goodsIssue261SuScan.test.js`, `test/unit/wm/goodsIssueStockUnitList.test.js`, `test/unit/wm/goodsIssueIssuedSu.test.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `WORKSTATUS.md`.
+- **Reason**: Earlier SAP stock reconciliation was performed before attempt creation and SU claim acquisition, leaving a window in which selected units or their reservation context could change before the 261 posting call.
+- **Validation**:
+  - `npx jest test/unit/wm/goodsIssue261SuScan.test.js test/unit/wm/goodsIssueStockUnitList.test.js --runInBand --silent`: passed, 2 suites / 46 tests.
+  - First `npx jest test/unit/wm --runInBand --silent`: failed, 52 suites passed / 2 failed; 1,070 tests passed / 4 failed. Failures were in legacy handler tests whose mocked SU-list responses omitted the authoritative material/plant/storage-location fields now returned by the real SAP list client. Updated those test fixtures to represent the actual response contract; rerun pending.
+  - Second `npx jest test/unit/wm --runInBand --silent`: passed, 54 suites / 1,074 tests.
+  - `npx cds compile srv`: passed.
+  - Targeted ESLint: 0 errors / 3 warnings (unused `checkErr`, unused `isDefinitiveRejection`, and unused `claimId` in the touched test file).
+  - `git diff --check`: passed.
+- **Errors / Warnings / Blockers**: Final revalidation can only enforce the SAP metadata and stock eligibility returned by the established WM client; reservation/order ownership reference fields remain unverified under Chunk 13. No SAP write or live posting was performed.
+- **Next Steps**: Final review identified a batch-input drift edge case; it is addressed and validated in the 13:41 entry.
+
 ## 2026-10-03 13:17 IST
 - **Agent**: Copilot
 - **Request**: 261 Goods Issue Chunk 14 — server-authoritative Storage Unit/drum partial allocation.

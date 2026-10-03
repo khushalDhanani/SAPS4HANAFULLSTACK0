@@ -531,8 +531,8 @@ class GoodsIssueAdapter {
   }
 
   /** Storage Units valid for one reservation line (classic WM LQUA). */
-  async listStockUnitsForReservationItem(reservationNo, reservationItem) {
-    return this.stockUnits.listStockUnitsForReservationItem(reservationNo, reservationItem);
+  async listStockUnitsForReservationItem(reservationNo, reservationItem, options = {}) {
+    return this.stockUnits.listStockUnitsForReservationItem(reservationNo, reservationItem, options);
   }
 
   /** Check WM staging for reservation before posting */

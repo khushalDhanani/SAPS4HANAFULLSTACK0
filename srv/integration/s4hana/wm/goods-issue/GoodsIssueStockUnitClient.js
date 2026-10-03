@@ -883,7 +883,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    * (and batch, when the reservation fixes one) in the WM warehouse assigned to that storage location,
    * with unrestricted, unblocked, unexpired available stock. Nothing else is returned.
    */
-  async listStockUnitsForReservationItem(reservationNo, reservationItem) {
+  async listStockUnitsForReservationItem(reservationNo, reservationItem, options = {}) {
     if (!reservationNo || !reservationItem) {
       const err = new Error('Reservation number and item are required to list Storage Units.');
       err.status = 400;
@@ -911,7 +911,11 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         try {
           const store = this._getIssuedSuStore();
           if (store && typeof store.getActiveIssuedSUs === 'function') {
-            return await store.getActiveIssuedSUs(material, plant, sloc);
+            const claims = await store.getActiveIssuedSUs(material, plant, sloc);
+            const excludedReference = String(options.excludeReferenceDocument || '').trim();
+            return excludedReference
+              ? claims.filter((claim) => String(claim.ReferenceDocument || '').trim() !== excludedReference)
+              : claims;
           }
         } catch (e) {
           LOG.warn('Could not read active issued SUs in listStockUnitsForReservationItem:', e.message || e);

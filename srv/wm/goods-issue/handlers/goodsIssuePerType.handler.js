@@ -564,6 +564,119 @@ async function storageUnitReconcileCheck261(req, normalized, resvItem) {
   return true;
 }
 
+/**
+ * Re-reads SAP reservation and WM stock after this attempt's SU claims are acquired.
+ * The stock client excludes this attempt's own claim but still accounts for other claims.
+ */
+async function storageUnitFinalReconcileCheck261(req, normalized) {
+  const allocatedItems = Array.isArray(normalized._allocatedSuItems) ? normalized._allocatedSuItems : [];
+  if (allocatedItems.length === 0) return true;
+
+  const reservationNo = String(normalized.ReservationNo || '').trim();
+  const reservationItem = String(normalized.ReservationItem || '').trim();
+  let reservation;
+  let stockResult;
+  try {
+    reservation = await GoodsIssueAdapter.getReservationItemAuthoritative(reservationNo, reservationItem);
+    stockResult = await GoodsIssueAdapter.listStockUnitsForReservationItem(reservationNo, reservationItem, {
+      excludeReferenceDocument: normalized.ReferenceDocument
+    });
+  } catch (err) {
+    LOG.warn(`Final SAP Storage Unit revalidation failed for reservation ${reservationNo} item ${reservationItem}:`, err.message || err);
+    req.error(502, `Could not revalidate SAP reservation and Storage Units immediately before posting: ${err.message || 'SAP data unavailable'}. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const sameMaterial = (left, right) => {
+    const normalize = (value) => String(value || '').trim().toUpperCase().replace(/^0+(?=\d)/, '');
+    return normalize(left) === normalize(right);
+  };
+  const sameCode = (left, right) => String(left || '').trim().toUpperCase() === String(right || '').trim().toUpperCase();
+  const contextMatches = reservation &&
+    sameMaterial(reservation.Material, normalized.Material) &&
+    sameCode(reservation.Plant, normalized.Plant) &&
+    sameCode(reservation.StorageLocation, normalized.StorageLocation);
+  if (!contextMatches) {
+    req.error(409, `SAP reservation material, plant, or storage location changed for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const issueQty = Number(normalized.IssueQty);
+  const openQty = Number(reservation.OpenQty);
+  if (!Number.isFinite(openQty) || openQty < issueQty) {
+    req.error(422, `SAP open reservation quantity changed to ${Number.isFinite(openQty) ? openQty : 'unknown'}; it no longer covers issue quantity ${issueQty}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  if (reservation.ReservationItemIsFinallyIssued || reservation.IsFinallyIssued ||
+      reservation.ReservationItmIsMarkedForDeltn || reservation.IsDeleted) {
+    req.error(409, `SAP reservation ${reservationNo} item ${reservationItem} is finally issued or deleted. Goods Issue was NOT posted.`);
+    return false;
+  }
+  if (reservation.Batch && normalized.Batch && !sameCode(reservation.Batch, normalized.Batch)) {
+    req.error(409, `SAP reservation batch changed from ${normalized.Batch} to ${reservation.Batch} before posting. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const stockUnits = Array.isArray(stockResult?.StockUnits) ? stockResult.StockUnits : [];
+  const stockContextMatches = stockResult &&
+    sameMaterial(stockResult.Material, reservation.Material) &&
+    sameCode(stockResult.Plant, reservation.Plant) &&
+    sameCode(stockResult.StorageLocation, reservation.StorageLocation);
+  if (!stockContextMatches) {
+    req.error(502, `SAP did not return verifiable Storage Unit context for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
+  if (stockResult.IsStagingRequired === true &&
+      (stockResult.IsFullyStaged !== true || !stockResult.TargetStorageType || !stockResult.TargetStorageBin)) {
+    req.error(422, stockResult.Message || `SAP staging is no longer confirmed for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+    return false;
+  }
+
+  const stockBySu = new Map(stockUnits.map((su) => [String(su.StorageUnit || '').trim().toUpperCase(), su]));
+  for (const allocation of allocatedItems) {
+    const storageUnit = String(allocation.storageUnit || allocation.StorageUnit || '').trim().toUpperCase();
+    const current = stockBySu.get(storageUnit);
+    if (!current) {
+      req.error(409, `Storage Unit ${storageUnit} is no longer valid and issuable for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+      return false;
+    }
+
+    const currentQty = Number(current.AvailableStock != null ? current.AvailableStock : current.CurrentStock);
+    const allocatedQty = Number(allocation.issuedQty != null ? allocation.issuedQty : allocation.IssuedQty);
+    if (!Number.isFinite(currentQty) || !Number.isFinite(allocatedQty) || currentQty + 1e-9 < allocatedQty) {
+      req.error(409, `Storage Unit ${storageUnit} now has ${Number.isFinite(currentQty) ? currentQty : 'unknown'} issuable quantity; ${allocatedQty} is required. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (!sameMaterial(current.Material, reservation.Material) ||
+        !sameCode(current.Plant, reservation.Plant) ||
+        !sameCode(current.StorageLocation, reservation.StorageLocation)) {
+      req.error(409, `Storage Unit ${storageUnit} material, plant, or storage location changed in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    const expectedBatch = reservation.Batch || normalized.Batch;
+    if (current.MultipleBatches || (expectedBatch && !sameCode(current.Batch, expectedBatch))) {
+      req.error(409, `Storage Unit ${storageUnit} batch assignment changed or is ambiguous in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (current.StatusState === 'Error') {
+      req.error(409, `Storage Unit ${storageUnit} batch is no longer issuable in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (stockResult.IsStagingRequired === true &&
+        (!sameCode(current.StorageType, stockResult.TargetStorageType) ||
+         !sameCode(current.StorageBin, stockResult.TargetStorageBin))) {
+      req.error(409, `Storage Unit ${storageUnit} is no longer in the confirmed staging location ${stockResult.TargetStorageType}/${stockResult.TargetStorageBin}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (stockResult.Warehouse && current.Warehouse &&
+        !sameCode(current.Warehouse, stockResult.Warehouse)) {
+      req.error(409, `Storage Unit ${storageUnit} warehouse changed in SAP. Goods Issue was NOT posted.`);
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Posting-attempt status for an error the adapter raised: SAP did not answer vs. SAP said no. */
 const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
 
@@ -777,7 +890,7 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
  * @param {Function|null} [preCheckFn]
  * @returns {Promise<Object>}
  */
-async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
+async function executeMovementPost(req, normalized, postFn, preCheckFn = null, beforePostFn = null) {
   normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
   try {
     const claim = await GoodsIssueAttemptStore.createOrGet(normalized);
@@ -821,6 +934,23 @@ async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
     } catch (claimErr) {
       await settle('rejected', { LastError: claimErr.message });
       return req.error(claimErr.status || 400, claimErr.message);
+    }
+  }
+
+  if (typeof beforePostFn === 'function') {
+    let readyToPost;
+    try {
+      readyToPost = await beforePostFn();
+    } catch (err) {
+      LOG.error('Final Goods Issue validation failed; SAP posting blocked:', err.message || err);
+      await settle('rejected', { LastError: `Final validation failed: ${err.message || 'SAP data unavailable'}` });
+      if (claimIds.length > 0) await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: true });
+      return req.error(err.status || 502, `Goods Issue was NOT sent to SAP: final validation failed (${err.message || 'SAP data unavailable'}).`);
+    }
+    if (!readyToPost) {
+      await settle('rejected', { LastError: 'Rejected by final SAP revalidation; not sent to SAP.' });
+      if (claimIds.length > 0) await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: true });
+      return;
     }
   }
 
@@ -890,7 +1020,13 @@ const PerTypeGoodsIssueHandler = {
       if (serialManaged === null) return;
       if (!(await serialPreCheck(req, normalized, { required: true }))) return;
 
-      return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue261(d));
+      return executeMovementPost(
+        req,
+        normalized,
+        (d) => GoodsIssueAdapter.postGoodsIssue261(d),
+        null,
+        () => storageUnitFinalReconcileCheck261(req, normalized)
+      );
     });
 
     srv.on('postGoodsIssue301', async (req) => {

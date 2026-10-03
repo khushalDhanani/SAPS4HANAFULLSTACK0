@@ -64,6 +64,9 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
           StorageUnit: 'DRUM_SHARED_01',
           AvailableStock: 48,
           Unit: 'KG',
+          Material: 'CH-DRUM-01',
+          Plant: '1120',
+          StorageLocation: 'CS01',
           Warehouse: 'W01',
           StorageBin: '01-01'
         }
@@ -73,6 +76,9 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
         ReservationNo: '0000100201',
         ReservationItem: '0001',
+        Material: 'CH-DRUM-01',
+        Plant: '1120',
+        StorageLocation: 'CS01',
         StockUnits: suStock
       });
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
@@ -169,7 +175,10 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         {
           StorageUnit: 'DRUM_PARALLEL_01',
           AvailableStock: 48,
-          Unit: 'KG'
+          Unit: 'KG',
+          Material: 'CH-PARALLEL-01',
+          Plant: '1120',
+          StorageLocation: 'CS01'
         }
       ];
 
@@ -179,6 +188,9 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
         ReservationNo: '0000100201',
         ReservationItem: '0001',
+        Material: 'CH-PARALLEL-01',
+        Plant: '1120',
+        StorageLocation: 'CS01',
         StockUnits: suStock
       });
 
@@ -271,7 +283,10 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         {
           StorageUnit: 'DRUM_RESIDUAL_01',
           AvailableStock: 48,
-          Unit: 'KG'
+          Unit: 'KG',
+          Material: 'CH-RESIDUAL-01',
+          Plant: '1120',
+          StorageLocation: 'CS01'
         }
       ];
 
@@ -281,6 +296,9 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
         ReservationNo: '0000100210',
         ReservationItem: '0001',
+        Material: 'CH-RESIDUAL-01',
+        Plant: '1120',
+        StorageLocation: 'CS01',
         StockUnits: suStock
       });
       let docSeq = 1000;

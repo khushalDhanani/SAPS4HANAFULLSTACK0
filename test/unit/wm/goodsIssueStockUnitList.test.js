@@ -15,7 +15,7 @@ const BATCHES = [
   { Batch: 'IN25031994', ExpiryDate: '2027-01-01', StatusState: 'Warning', StatusText: 'EXPIRING SOON', DaysToExpiry: 90 }
 ];
 
-function makeClient({ resv = RESV_ITEM, lqua = [], batches = BATCHES } = {}) {
+function makeClient({ resv = RESV_ITEM, lqua = [], batches = BATCHES, issuedSuStore = null } = {}) {
   const rfc = {
     readTable: jest.fn((table, fields, where) => {
       if (table === 'LQUA') return Promise.resolve(typeof lqua === 'function' ? lqua(where) : lqua);
@@ -30,7 +30,7 @@ function makeClient({ resv = RESV_ITEM, lqua = [], batches = BATCHES } = {}) {
     }),
     getMaterialBatches: jest.fn().mockResolvedValue(batches)
   };
-  return { client: new GoodsIssueStockUnitClient({ adapter, rfc }), rfc };
+  return { client: new GoodsIssueStockUnitClient({ adapter, rfc, issuedSuStore }), rfc };
 }
 
 describe('GoodsIssueStockUnitClient – Storage Units for one reservation line', () => {
@@ -98,6 +98,35 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
     const res = await client.listStockUnitsForReservationItem('519366', '1');
     expect(res.StockUnits).toHaveLength(1);
     expect(res.StockUnits[0]).toMatchObject({ AvailableStock: 2000, QuantCount: 2 });
+  });
+
+  it('excludes only the current posting attempt claim during its final SAP stock revalidation', async () => {
+    const issuedSuStore = {
+      getActiveIssuedSUs: jest.fn().mockResolvedValue([
+        {
+          ReferenceDocument: 'CURRENT-ATTEMPT',
+          StorageUnit: '1000041635',
+          Status: 'claiming',
+          IssuedQty: 100,
+          PreIssueStock: 1620
+        },
+        {
+          ReferenceDocument: 'OTHER-ATTEMPT',
+          StorageUnit: '1000041635',
+          Status: 'claiming',
+          IssuedQty: 20,
+          PreIssueStock: 1620
+        }
+      ])
+    };
+    const { client } = makeClient({ lqua: [q()], issuedSuStore });
+
+    const result = await client.listStockUnitsForReservationItem('519366', '1', {
+      excludeReferenceDocument: 'CURRENT-ATTEMPT'
+    });
+
+    expect(result.StockUnits).toHaveLength(1);
+    expect(result.StockUnits[0].AvailableStock).toBe(1600);
   });
 
   it('says so when the material has no WM stock at all', async () => {

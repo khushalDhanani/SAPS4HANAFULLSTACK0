@@ -171,7 +171,19 @@ describe('unconfirmed documents and re-confirm job', () => {
     jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
       ReservationNo: '0000142001',
       ReservationItem: '0001',
-      StockUnits: [{ StorageUnit: 'SU9901', AvailableStock: 50, Unit: 'KG' }]
+      Material: '1000000514',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      StockUnits: [{
+        StorageUnit: 'SU9901',
+        AvailableStock: 50,
+        Unit: 'KG',
+        Material: '1000000514',
+        Plant: '1120',
+        StorageLocation: 'HS01'
+      }],
+      IsStagingRequired: false,
+      IsFullyStaged: true
     });
     jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
     jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
