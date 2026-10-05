@@ -184,6 +184,19 @@ describe('post261 unknown-outcome recovery (2xx without document / timeout)', ()
     expect(rfc.readTable.mock.calls.filter(([t]) => t === 'MATDOC')).toHaveLength(4);
   });
 
+  test('findPosted261ByMatdoc throws (UNKNOWN) instead of returning null when RFC table access is unavailable', async () => {
+    const client = new GoodsIssuePostingClient({ rfc: {}, adapter: {} });
+    await expect(client.findPosted261ByMatdoc({ reservationNo: '520615', reservationItem: '0001' }))
+      .rejects.toMatchObject({ status: 502, message: expect.stringContaining('cannot verify') });
+  });
+
+  test('findPosted261ByMatdoc throws instead of returning null when both MATDOC and MSEG reads fail', async () => {
+    const rfc = { readTable: jest.fn().mockRejectedValue(Object.assign(new Error('ID:AD Type:E Number:718 MATDOC'), { code: 5 })) };
+    const client = new GoodsIssuePostingClient({ rfc });
+    await expect(client.findPosted261ByMatdoc({ reservationNo: '520615', reservationItem: '0001' }))
+      .rejects.toThrow('AD Type:E Number:718');
+  });
+
   test('Tier 2 timeout and the document exists → POSTED via MATDOC read-back (no double post)', async () => {
     const { client } = makeRecoveryClient({
       tier2: () => { const err = new Error('Request timed out'); err.code = 'ETIMEDOUT'; throw err; },

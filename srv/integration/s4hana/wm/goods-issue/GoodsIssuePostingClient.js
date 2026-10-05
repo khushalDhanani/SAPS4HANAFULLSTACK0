@@ -577,6 +577,14 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         ? (t, f, w) => this.adapter.readTable(t, f, w)
         : null;
 
+    if (!readTable) {
+      // Absence of a document can only be asserted after a SUCCESSFUL read. No table access
+      // means UNKNOWN (throw), never null — null is callers' "verified not posted".
+      const err = new Error('SAP RFC table access is unavailable; the 261 material-document lookup cannot verify whether a document exists.');
+      err.status = 502;
+      throw err;
+    }
+
     const readBothMovements = async (table, tableFields) => {
       const r261 = await readTable(table, tableFields, [...baseWhere, `AND BWART = '261'`]);
       const r262 = await readTable(table, tableFields, [...baseWhere, `AND BWART = '262'`]);
@@ -801,6 +809,8 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // reservation/item/qty/date within the attempt window, non-reversed, exactly one hit
       // (ambiguity stays UNKNOWN). The lookup can run before SAP has committed, so empty
       // lookups prove nothing and the outcome stays unconfirmed.
+      const trigger = err.sapResponseBody ? 'EMPTY_2XX_RESPONSE' : 'TRANSPORT_ERROR';
+      LOG.warn(`261 unknown-outcome recovery started for reservation ${sReserv} item ${sItem}: trigger=${trigger}, cause=${(v2Err && v2Err.message) || 'n/a'}`);
       const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
       for (const delayMs of delays) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -841,7 +851,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         data.ClientAttemptId ? `client attempt ${data.ClientAttemptId}` : '',
         `reference ${data.ReferenceDocument || 'n/a'}`
       ].filter(Boolean).join(', ');
-      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 261 for reservation ${sReserv} item ${sItem}, and no matching material document is visible yet after ${delays.length} check(s) (${attemptIds}).` +
+      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 261 for reservation ${sReserv} item ${sItem} [trigger: ${trigger}], and no matching material document is visible yet after ${delays.length} check(s) (${attemptIds}).` +
         `${err.sapResponseBody ? ' The SAP response body was recorded in the application log.' : ''}` +
         ' The posting may still appear in SAP and will be reconciled by recheckPostingAttempts. Do not post again.');
       unconfirmed.status = 504;
