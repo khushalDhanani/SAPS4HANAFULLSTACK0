@@ -250,6 +250,24 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(controller._oModel.getProperty('/noSuDataGap')).toBe('gap for item 0002');
         });
 
+        it('proactively sets DELIVERY_CREATED and openDeliveries when OpenDeliveryCount > 0', async () => {
+            mockService.fetchStockUnitsForItem.mockResolvedValueOnce({
+                StockUnits: [{ StorageUnit: 'SU1', AvailableStock: 5, CurrentStock: 5 }],
+                OpenDeliveryCount: 2,
+                OpenDeliveries: ['0080000074', '0080000075'],
+                LatestDeliveryNumber: '0080000075'
+            });
+
+            controller._detectScanMode('520615', '0001', 5);
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('DELIVERY_CREATED');
+            expect(controller._oModel.getProperty('/deliveryNumber')).toBe('0080000075');
+            expect(controller._oModel.getProperty('/openDeliveries')).toEqual(['0080000074', '0080000075']);
+            expect(controller._oModel.getProperty('/openDeliveryCount')).toBe(2);
+            expect(controller._oModel.getProperty('/hasOpenDelivery')).toBe(true);
+        });
+
         it('_onRouteMatched without a resv query should reset and not prefill', () => {
             controller._onRouteMatched({ getParameter: () => ({}) });
             expect(mockService.fetchReservationItems).not.toHaveBeenCalled();
@@ -1055,6 +1073,11 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
         it('formatDeliveryCreatedBanner should return localized text with delivery number', () => {
             const sText = controller.formatDeliveryCreatedBanner('0080000078');
             expect(sText).toBe('gi261DeliveryCreatedBannerText');
+        });
+
+        it('formatDeliveryCreatedBanner should return multiple deliveries banner when openDeliveryCount > 1', () => {
+            const sText = controller.formatDeliveryCreatedBanner('0080000080', 2, ['0080000074', '0080000080']);
+            expect(sText).toBe('gi261MultipleDeliveriesCreatedBannerText');
         });
     });
 

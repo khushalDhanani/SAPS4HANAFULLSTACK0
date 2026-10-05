@@ -48,7 +48,10 @@ sap.ui.define([
     function resolveErrorPostingStatus(oError) {
         var oApiError = oError && oError.response && oError.response.data && oError.response.data.error;
         var sCode = String((oApiError && oApiError.code) || (oError && oError.code) || "").toUpperCase();
-        var sMessage = String((oApiError && oApiError.message) || (oError && oError.message) || "");
+        var sMessage = String((oApiError && oApiError.message && (oApiError.message.value || oApiError.message)) || (oError && oError.message) || "");
+        if (/open outbound deliver|awaiting goods issue \(PGI\)/i.test(sMessage)) {
+            return "DELIVERY_CREATED";
+        }
         if (sCode === "GI_POSTING_UNKNOWN" || sCode === "GI_POSTING_OUTCOME_UNKNOWN" ||
             sCode === "GI_POSTING_UNCONFIRMED" || /outcome unconfirmed|do not post again|may have been posted/i.test(sMessage)) {
             return "UNKNOWN";
@@ -208,6 +211,10 @@ sap.ui.define([
             oModel.setProperty("/partialInstruction", "");
             oModel.setProperty("/excludedUnconfirmedNote", "");
             oModel.setProperty("/excludedUnconfirmedCount", 0);
+            oModel.setProperty("/deliveryNumber", "");
+            oModel.setProperty("/openDeliveryCount", 0);
+            oModel.setProperty("/openDeliveries", []);
+            oModel.setProperty("/hasOpenDelivery", false);
             oModel.setProperty("/lastScanState", "None");
             oModel.setProperty("/lastScanText", "");
             oModel.setProperty("/isStagingRequired", false);
@@ -299,6 +306,15 @@ sap.ui.define([
                         oModel.setProperty("/plannedUnconfirmedNote", (nPlannedUnconfirmedQty + " " + (oModel.getProperty("/unit") || "")).trim() + " in transfer; not yet confirmed in the target bin");
                     } else {
                         oModel.setProperty("/plannedUnconfirmedNote", "");
+                    }
+
+                    if (oData && Number(oData.OpenDeliveryCount) > 0) {
+                        var sLatest = oData.LatestDeliveryNumber || (Array.isArray(oData.OpenDeliveries) && oData.OpenDeliveries[oData.OpenDeliveries.length - 1]) || "";
+                        oModel.setProperty("/openDeliveries", oData.OpenDeliveries || []);
+                        oModel.setProperty("/openDeliveryCount", Number(oData.OpenDeliveryCount) || 0);
+                        oModel.setProperty("/hasOpenDelivery", true);
+                        oModel.setProperty("/postingStatus", "DELIVERY_CREATED");
+                        oModel.setProperty("/deliveryNumber", sLatest);
                     }
 
                     if (aUnits.length > 0) {
@@ -427,8 +443,15 @@ sap.ui.define([
             return this.getText("gi261ReversalBannerText", [sDoc, sYear || ""]);
         },
 
-        formatDeliveryCreatedBanner: function (sDelivery) {
+        formatDeliveryCreatedBanner: function (sDelivery, nOpenCount, aOpenDelivs) {
             if (!sDelivery) return "";
+            var nCount = Number(nOpenCount !== undefined && nOpenCount !== null ? nOpenCount : (this._oModel ? this._oModel.getProperty("/openDeliveryCount") : 0));
+            var aDelivs = Array.isArray(aOpenDelivs) ? aOpenDelivs : (this._oModel ? this._oModel.getProperty("/openDeliveries") : []);
+            if (nCount > 1 && Array.isArray(aDelivs) && aDelivs.length > 1) {
+                var sList = aDelivs.join(", ");
+                return this.getText("gi261MultipleDeliveriesCreatedBannerText", [sList]) ||
+                    ("Open Outbound Deliveries (" + sList + ") exist in SAP S/4HANA for this item. Stock will be issued when warehouse goods issue (PGI) is posted.");
+            }
             return this.getText("gi261DeliveryCreatedBannerText", [sDelivery]);
         },
 
@@ -1031,7 +1054,32 @@ sap.ui.define([
                         var oErr = err.response.data.error;
                         sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
                     }
-                    if (sPostingStatus === "UNKNOWN") {
+                    if (sPostingStatus === "DELIVERY_CREATED") {
+                        var sMatch = /(?:deliveries|delivery)\s+([0-9,\s]+?)\s+in SAP/i.exec(sErrMsg);
+                        var aNums = sMatch ? sMatch[1].split(/[\s,]+/).filter(Boolean) : [];
+                        var sDelivNum = aNums.length > 0 ? aNums[aNums.length - 1] : (that._oModel.getProperty("/deliveryNumber") || "");
+                        if (sDelivNum) {
+                            that._oModel.setProperty("/deliveryNumber", sDelivNum);
+                        }
+                        if (aNums.length > 1) {
+                            that._oModel.setProperty("/openDeliveries", aNums);
+                            that._oModel.setProperty("/openDeliveryCount", aNums.length);
+                            that._oModel.setProperty("/hasOpenDelivery", true);
+                        }
+                        MessageBox.information(sErrMsg, {
+                            title: that.getText("gi261DeliveryCreatedTitle"),
+                            onClose: function () {
+                                if (that._oModel.getProperty("/fromReservation")) {
+                                    var oOutcome = {
+                                        resv: that._oModel.getProperty("/reservationNo"),
+                                        item: that._oModel.getProperty("/reservationItem"),
+                                        delivery: sDelivNum
+                                    };
+                                    that.getRouter().navTo("wmGoodsIssue261Pending", { "?query": oOutcome });
+                                }
+                            }
+                        });
+                    } else if (sPostingStatus === "UNKNOWN") {
                         MessageBox.warning(sErrMsg, { title: that.getText("gi261UnknownTitle") });
                     } else {
                         MessageBox.error(sErrMsg, { title: that.getText("gi261PostFailedTitle") });

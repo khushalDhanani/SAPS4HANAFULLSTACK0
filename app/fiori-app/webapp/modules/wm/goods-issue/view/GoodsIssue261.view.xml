@@ -55,7 +55,7 @@
                 <!-- 2b. Delivery Created Banner -->
                 <MessageStrip
                     id="stripDeliveryCreated261"
-                    text="{parts: [{path: 'gi261>/deliveryNumber'}], formatter: '.formatDeliveryCreatedBanner'}"
+                    text="{parts: [{path: 'gi261>/deliveryNumber'}, {path: 'gi261>/openDeliveryCount'}, {path: 'gi261>/openDeliveries'}], formatter: '.formatDeliveryCreatedBanner'}"
                     type="Information"
                     showIcon="true"
                     showCloseButton="false"

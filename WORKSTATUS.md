@@ -1,6 +1,38 @@
 
 # Changes Log
 
+## 2026-10-05 07:05 UTC — Debug & Fix: /wm/goods-issue/order-based-261?resv=520615 via Chrome DevTools MCP
+- **Agent**: Antigravity
+- **Request**: Using DevTools MCP check, debug, and fix `/wm/goods-issue/order-based-261?resv=520615`.
+- **Current Status**: **Complete, Tested, and Verified in Browser via Chrome DevTools MCP**.
+- **Root Cause & Diagnosis**:
+  1. **Duplicate Outbound Delivery Guard**: Navigating to `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/order-based-261?resv=520615` and clicking submit previously raised an error dialog because SAP S/4HANA already had 7 open Outbound Deliveries (`0080000074` through `0080000080`) created for reservation `520615/0001` awaiting warehouse goods issue (PGI). The backend correctly refused duplicate delivery creation (HTTP 409), but the UI did not proactively surface existing open deliveries upon initial page load, leaving the user with an enabled post button until clicking submit.
+  2. **Storage Location Stock Mismatch Bug**: In `GoodsIssueStockUnitClient.js` (line 1380) and `GoodsIssueBatchesClient.js` (line 418), SAP OData entity set `MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps` ignores the `$filter=StorageLocation eq '...'` query parameter in the request URI and returns all 68 storage locations in Plant 1130. The code previously accessed `slocRes[0].CurrentStock` unconditionally, picking `CS01` (0.000 KG) instead of matching the reservation storage location `CS02` (100.000 KG). This caused `resolveStockUnit` to compute `CurrentStock: 0` and `MaxIssueQty: 0`.
+- **Implementation Changes**:
+  1. **Backend SLoc Matching Fix**: Updated `GoodsIssueStockUnitClient.js` and `GoodsIssueBatchesClient.js` to find the exact entry where `item.StorageLocation === sSLoc` rather than indexing `[0]`. Verified live via curl: `resolveStockUnit` now returns `CurrentStock: 100`, `SuStockQty: 100`, `MaxIssueQty: 100`.
+  2. **Surface Open Deliveries in StockUnitList**: Added `OpenDeliveryCount: Integer`, `OpenDeliveries: array of String(10)`, and `LatestDeliveryNumber: String(10)` to `type StockUnitList` in `srv/wm/goods-issue/service.cds`. In `GoodsIssueStockUnitClient.js` (`listStockUnitsForReservationItem`), called `this.adapter.findDeliveriesForReservationItem(sResv, sItem)` when `wmInfo.isWm` is true to return open delivery counts and numbers to the UI.
+  3. **Proactive Open Delivery UI Banner & Re-Post Guard**:
+     - Updated `GoodsIssue261Model.js` with `openDeliveryCount`, `openDeliveries`, and `hasOpenDelivery`.
+     - Added `gi261MultipleDeliveriesCreatedBannerText` in `i18n.properties` and `i18n_en.properties`.
+     - In `GoodsIssue261.controller.js`: In `_detectScanMode`, automatically set `postingStatus = "DELIVERY_CREATED"`, populated `deliveryNumber` and `openDeliveries`, and formatted `stripDeliveryCreated261` with all open delivery numbers.
+     - In `GoodsIssue261.view.xml`: Bound `stripDeliveryCreated261` text to `parts: [deliveryNumber, openDeliveryCount, openDeliveries]`. Because `btnPostGoodsIssue261` already requires `postingStatus !== 'DELIVERY_CREATED'`, the button is disabled proactively on load.
+- **Execution & Visual Verification via Chrome DevTools MCP**:
+  - Reloaded `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/order-based-261?resv=520615`.
+  - Verified proactive information banner:
+    `Open Outbound Deliveries (0080000074, 0080000075, 0080000076, 0080000077, 0080000078, 0080000079, 0080000080) exist in SAP S/4HANA for this item. Stock will be issued when warehouse goods issue (PGI) is posted.`
+  - Verified `btnPostGoodsIssue261` is disabled on load.
+  - Tested clicking "Scan" on suggested SU `2000018955`: Unit scanned with 100/100 KG, batch `INWS260004` populated, and "Complete Goods Issue (261)" button remains disabled.
+  - Screenshots:
+    - `docs/screenshots/gi261_520615_proactive_banner.png`
+    - `docs/screenshots/gi261_520615_scanned_with_banner.png`
+- **Validation**:
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js`: 73 passed, 73 total.
+  - `npx jest test/unit/wm --runInBand`: 58 passed, 1187 passed, 0 failed.
+  - `git diff --check`: 0 errors.
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: Ready for user review or further tasks.
+
 ## 2026-10-05 06:40 UTC — Verification: Interactive Browser UI Testing via Chrome DevTools MCP
 - **Agent**: Antigravity
 - **Request**: Interactive UI verification in the browser for Goods Issue 261 (validate UI handling, banners, and reservation pending views) using Chrome DevTools MCP.

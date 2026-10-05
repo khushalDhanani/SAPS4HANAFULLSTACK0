@@ -953,7 +953,17 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const plant = resvItem.Plant || '';
     const sloc = resvItem.StorageLocation || '';
     const resvBatch = String(resvItem.Batch || '').trim().toUpperCase();
-    const base = { ReservationNo: sResv, ReservationItem: sItem, Material: material, Plant: plant, StorageLocation: sloc, Batch: resvBatch };
+    const base = {
+      ReservationNo: sResv,
+      ReservationItem: sItem,
+      Material: material,
+      Plant: plant,
+      StorageLocation: sloc,
+      Batch: resvBatch,
+      OpenDeliveryCount: 0,
+      OpenDeliveries: [],
+      LatestDeliveryNumber: ''
+    };
 
     if (!sloc) {
       return { ...base, Warehouse: '', StockUnits: [], ExcludedCount: 0, Message: `Reservation item has no storage location; Storage Units cannot be determined.` };
@@ -1182,6 +1192,18 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       }
     }
 
+    let openDeliveries = [];
+    if (wmInfo.isWm && this.adapter && typeof this.adapter.findDeliveriesForReservationItem === 'function') {
+      try {
+        const delivs = await this.adapter.findDeliveriesForReservationItem(sResv, sItem);
+        openDeliveries = (delivs || []).filter((d) => d.Open);
+      } catch (e) {
+        LOG.warn('Could not read open deliveries in listStockUnitsForReservationItem:', e.message || e);
+      }
+    }
+    const openDeliveryNumbers = [...new Set(openDeliveries.map((d) => d.DeliveryNumber))];
+    const latestDeliveryNumber = openDeliveryNumbers[openDeliveryNumbers.length - 1] || '';
+
     return {
       ...base,
       Warehouse: wmInfo.warehouse || warehouses.join(','),
@@ -1199,7 +1221,10 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       StagingResolutionSource: staging.stagingSource || '',
       StagingStatus: stagingStatus,
       IsStagingRequired: !!staging.isStagingRequired,
-      IsFullyStaged: isFullyStaged
+      IsFullyStaged: isFullyStaged,
+      OpenDeliveryCount: openDeliveryNumbers.length,
+      OpenDeliveries: openDeliveryNumbers,
+      LatestDeliveryNumber: latestDeliveryNumber
     };
   }
 
@@ -1381,9 +1406,12 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
           '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
           `$filter=${slocFilter}&$format=json`
         );
-        if (Array.isArray(slocRes) && slocRes.length > 0 && slocRes[0].CurrentStock !== undefined && slocRes[0].CurrentStock !== null) {
-          currentStock = Number(slocRes[0].CurrentStock);
-          if (slocRes[0].BaseUnit) baseUnit = slocRes[0].BaseUnit;
+        const matchedSloc = Array.isArray(slocRes)
+          ? slocRes.find((item) => String(item.StorageLocation || '').trim().toUpperCase() === String(resvSLoc).trim().toUpperCase()) || slocRes[0]
+          : null;
+        if (matchedSloc && matchedSloc.CurrentStock !== undefined && matchedSloc.CurrentStock !== null) {
+          currentStock = Number(matchedSloc.CurrentStock);
+          if (matchedSloc.BaseUnit) baseUnit = matchedSloc.BaseUnit;
         }
       } catch (err) {
         LOG.warn(`MaterialStorLocHelps query failed for ${resvMaterial}/${resvPlant}/${resvSLoc}: ${err.message}`);
@@ -1396,9 +1424,12 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
             '/sap/opu/odata/sap/C_STOCKQUANTITYVALUEBYTYPE_CDS/C_STOCKQUANTITYVALUEBYTYPE',
             `$filter=${stockFilter}&$format=json`
           );
-          if (Array.isArray(stockRes) && stockRes.length > 0 && stockRes[0].MatlWrhsStkQtyInMatlBaseUnit !== undefined && stockRes[0].MatlWrhsStkQtyInMatlBaseUnit !== null) {
-            currentStock = Number(stockRes[0].MatlWrhsStkQtyInMatlBaseUnit);
-            if (stockRes[0].MaterialBaseUnit) baseUnit = stockRes[0].MaterialBaseUnit;
+          const matchedStock = Array.isArray(stockRes)
+            ? stockRes.find((item) => String(item.StorageLocation || '').trim().toUpperCase() === String(resvSLoc).trim().toUpperCase()) || stockRes[0]
+            : null;
+          if (matchedStock && matchedStock.MatlWrhsStkQtyInMatlBaseUnit !== undefined && matchedStock.MatlWrhsStkQtyInMatlBaseUnit !== null) {
+            currentStock = Number(matchedStock.MatlWrhsStkQtyInMatlBaseUnit);
+            if (matchedStock.MaterialBaseUnit) baseUnit = matchedStock.MaterialBaseUnit;
           }
         } catch (err) {
           LOG.warn(`C_STOCKQUANTITYVALUEBYTYPE query failed for ${resvMaterial}/${resvPlant}/${resvSLoc}: ${err.message}`);

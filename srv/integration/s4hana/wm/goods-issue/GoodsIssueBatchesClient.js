@@ -418,9 +418,12 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
           `$filter=${slocFilter}&$format=json`
         );
-        if (Array.isArray(slocRes) && slocRes.length > 0 && slocRes[0].CurrentStock !== undefined && slocRes[0].CurrentStock !== null) {
-          currentStock = Number(slocRes[0].CurrentStock);
-          baseUnit = (slocRes[0] && slocRes[0].BaseUnit) || '';
+        const matchedSloc = Array.isArray(slocRes)
+          ? slocRes.find((item) => String(item.StorageLocation || '').trim().toUpperCase() === sSLoc.toUpperCase()) || slocRes[0]
+          : null;
+        if (matchedSloc && matchedSloc.CurrentStock !== undefined && matchedSloc.CurrentStock !== null) {
+          currentStock = Number(matchedSloc.CurrentStock);
+          baseUnit = (matchedSloc && matchedSloc.BaseUnit) || '';
           stockReadSuccess = true;
         }
       } catch (err) {
@@ -440,9 +443,12 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
           '/sap/opu/odata/sap/C_STOCKQUANTITYVALUEBYTYPE_CDS/C_STOCKQUANTITYVALUEBYTYPE',
           `$filter=${encodeURIComponent(stockFilter)}&$top=1&$format=json`
         );
-        if (Array.isArray(stockRes) && stockRes.length > 0 && stockRes[0].MatlWrhsStkQtyInMatlBaseUnit !== undefined && stockRes[0].MatlWrhsStkQtyInMatlBaseUnit !== null) {
-          currentStock = Number(stockRes[0].MatlWrhsStkQtyInMatlBaseUnit);
-          baseUnit = stockRes[0].MaterialBaseUnit || '';
+        const matchedStock = Array.isArray(stockRes)
+          ? (sSLoc ? stockRes.find((item) => String(item.StorageLocation || '').trim().toUpperCase() === sSLoc.toUpperCase()) || stockRes[0] : stockRes[0])
+          : null;
+        if (matchedStock && matchedStock.MatlWrhsStkQtyInMatlBaseUnit !== undefined && matchedStock.MatlWrhsStkQtyInMatlBaseUnit !== null) {
+          currentStock = Number(matchedStock.MatlWrhsStkQtyInMatlBaseUnit);
+          baseUnit = matchedStock.MaterialBaseUnit || '';
           stockReadSuccess = true;
         }
       } catch (err) {

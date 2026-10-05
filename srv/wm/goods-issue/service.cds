@@ -483,6 +483,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         StagingStatus           : String(16);
         IsStagingRequired       : Boolean;
         IsFullyStaged           : Boolean;
+        OpenDeliveryCount       : Integer;
+        OpenDeliveries          : array of String(10);
+        LatestDeliveryNumber    : String(10);
     };
 
     // Storage Units valid for exactly one reservation line (material/plant/sloc/batch, issuable stock only).
