@@ -72,6 +72,109 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   }
 
   /**
+   * Parses the SAP Gateway `sap-message` response header (JSON: code, message, severity, details[]).
+   * Returns null when the header is absent and `{ parseError: true, raw }` when it is not JSON, so
+   * callers can fall back to the UNKNOWN outcome instead of guessing.
+   */
+  static parseSapMessage(headers) {
+    const raw = headers && headers['sap-message'];
+    if (!raw) return null;
+    try {
+      const m = JSON.parse(raw);
+      const entry = (e) => ({ code: String(e?.code || ''), text: String(e?.message || ''), severity: String(e?.severity || '') });
+      return { ...entry(m), details: Array.isArray(m?.details) ? m.details.map(entry) : [] };
+    } catch (_e) {
+      return { parseError: true, raw: String(raw).slice(0, 1000) };
+    }
+  }
+
+  /**
+   * Delivery number from SAP message L9/514 ("Delivery & created", SAP standard message class L9,
+   * raised in include MM07MLVS when the goods movement for a WM-managed location is turned into an
+   * outbound delivery instead of a material document). Looks at the main message and its details.
+   * Null when no L9/514 entry carrying a number is present.
+   */
+  static deliveryFromSapMessage(parsed) {
+    if (!parsed || parsed.parseError) return null;
+    for (const e of [parsed, ...(parsed.details || [])]) {
+      const isL9514 = e.code.replace(/\s+/g, '').toUpperCase() === 'L9/514' || /^Delivery\s+\d+\s+created/i.test(e.text);
+      const num = isL9514 && /(\d{1,10})/.exec(e.text);
+      if (num) return num[1].padStart(10, '0');
+    }
+    return null;
+  }
+
+  /** @private RFC_READ_TABLE accessor, or null when no RFC table access exists. */
+  _readTableFn() {
+    if (this.rfc && typeof this.rfc.readTable === 'function') return (t, f, w) => this.rfc.readTable(t, f, w);
+    if (this.adapter && typeof this.adapter.readTable === 'function') return (t, f, w) => this.adapter.readTable(t, f, w);
+    return null;
+  }
+
+  /** @private LIKP headers for delivery numbers, mapped to the delivery shape. Field set live-verified. */
+  async _readDeliveryHeaders(readTable, where) {
+    const rows = await readTable('LIKP', ['VBELN', 'LFART', 'ERDAT', 'ERZET', 'WBSTK', 'LIFEX'], where);
+    return rows.map((r) => ({
+      DeliveryNumber: String(r.VBELN || '').trim(),
+      DeliveryType: String(r.LFART || '').trim(),
+      CreatedOn: String(r.ERDAT || '').trim(),
+      CreatedTime: String(r.ERZET || '').trim(), // SAP server time; time zone not verified
+      GoodsMovementStatus: String(r.WBSTK || '').trim(),
+      ExternalId: String(r.LIFEX || '').trim(),
+      // WBSTK C = goods movement completed; anything else (A/B/blank) still needs PGI.
+      Open: String(r.WBSTK || '').trim() !== 'C'
+    }));
+  }
+
+  /**
+   * Deliveries SAP created for a reservation item (LIPS by RSNUM/RSPOS, joined to LIKP), read-only.
+   * Throws (never returns []) when the tables cannot be read, so a failed read is never mistaken
+   * for "no delivery".
+   */
+  async findDeliveriesForReservationItem(reservationNo, reservationItem) {
+    const readTable = this._readTableFn();
+    if (!readTable) {
+      const err = new Error('No RFC table access: cannot verify outbound deliveries (LIKP/LIPS) for the reservation item.');
+      err.status = 502;
+      throw err;
+    }
+    const rsnum = String(reservationNo || '').trim().padStart(10, '0');
+    const rspos = String(reservationItem || '').trim().padStart(4, '0');
+    const items = await readTable('LIPS', ['VBELN', 'POSNR', 'LFIMG', 'VRKME', 'BWART'],
+      [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`]);
+    if (items.length === 0) return [];
+    const numbers = [...new Set(items.map((i) => String(i.VBELN).trim()))];
+    // One equality per line, OR-joined without parentheses (the RFC parser rejects them).
+    const headers = await this._readDeliveryHeaders(readTable, numbers.map((n, i) => `${i ? 'OR ' : ''}VBELN = '${n}'`));
+    const byNo = new Map(headers.map((h) => [h.DeliveryNumber, h]));
+    return items.map((i) => ({
+      ...(byNo.get(String(i.VBELN).trim()) || { DeliveryNumber: String(i.VBELN).trim(), Open: true }),
+      Item: String(i.POSNR || '').trim(),
+      Quantity: Number(i.LFIMG),
+      Unit: String(i.VRKME || '').trim(),
+      MovementType: String(i.BWART || '').trim()
+    }));
+  }
+
+  /**
+   * Delivery carrying our posting reference. SAP copies the material document header
+   * ReferenceDocument into LIKP-LIFEX (live-verified: 0080000074 <-> GI65GEUZ94A5JDZ0).
+   * Null when none; throws when the table cannot be read.
+   */
+  async findDeliveryByReference(referenceDocument) {
+    const ref = String(referenceDocument || '').trim();
+    if (!ref) return null;
+    const readTable = this._readTableFn();
+    if (!readTable) {
+      const err = new Error('No RFC table access: cannot verify outbound deliveries (LIKP) for the posting reference.');
+      err.status = 502;
+      throw err;
+    }
+    const [hit] = await this._readDeliveryHeaders(readTable, [`LIFEX = '${ref}'`]);
+    return hit || null;
+  }
+
+  /**
    * SAP Gateway can answer an OData V2 POST with HTTP 2xx even when the backend BAPI rejected the
    * posting for a business reason (locked cost center, closed period, stock deficit, etc.),
    * communicating the real outcome only via the `sap-message` response header. Throws a real error
@@ -209,6 +312,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   async _submitMaterialDocument(v2Payload, meta) {
     const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
     const v2Res = await this._post(v2Path, v2Payload);
+    const sapMsg = GoodsIssuePostingClient.parseSapMessage(v2Res && v2Res._headers);
+    if (sapMsg) {
+      LOG.info(`sap-message on movement ${meta.mvt} posting: ${sapMsg.parseError
+        ? `unparseable header: ${sapMsg.raw}`
+        : [sapMsg, ...sapMsg.details].map((e) => `[${e.severity}] ${e.code} ${e.text}`).join(' | ')}`);
+    }
     GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
     const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
     let rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
@@ -218,10 +327,34 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       if (m) rawMatYear = m[0];
     }
     if (!rawMatDoc) {
+      // WM-managed location: SAP answers 201 with an empty MaterialDocument and creates an outbound
+      // delivery instead (sap-message L9/514). That is a definite outcome - no retry, no MATDOC
+      // polling; goods issue only happens when the delivery's PGI is posted in SAP.
+      const deliveryNo = GoodsIssuePostingClient.deliveryFromSapMessage(sapMsg);
+      if (deliveryNo) {
+        LOG.warn(`Movement ${meta.mvt} for reservation ${meta.reservationNo || '-'} item ${meta.reservationItem || '-'}: SAP created outbound delivery ${deliveryNo} (L9/514) instead of a material document.`);
+        return {
+          ReservationNo: String(meta.reservationNo || ''),
+          ReservationItem: String(meta.reservationItem || ''),
+          OrderNo: String(meta.orderNo || ''),
+          MaterialDocument: '',
+          MaterialDocYear: '',
+          DeliveryNumber: deliveryNo,
+          TransferOrder: '',
+          DifferenceCleared: false,
+          DifferenceQty: 0,
+          Success: false,
+          Confirmed: false,
+          PostingStatus: 'DELIVERY_CREATED',
+          ConfirmationStatus: 'DELIVERY_CREATED',
+          Message: `SAP did not post a material document: it created outbound delivery ${deliveryNo} (message L9/514) because the storage location is WM-managed. Stock is issued only when goods issue is posted for that delivery in SAP. Do not post again.`
+        };
+      }
       // HTTP 2xx without a document number: SAP may still have committed the LUW, so this is an
-      // UNKNOWN outcome, not a failure. Log the full response body for reconciliation (the HTTP
-      // client does not surface response headers).
-      const bodySnippet = JSON.stringify(v2Res === undefined ? null : v2Res).slice(0, 4000);
+      // UNKNOWN outcome, not a failure. Log the full response body for reconciliation (headers,
+      // which carry SAP session cookies, are left out).
+      const { _headers, ...bodyOnly } = (v2Res && typeof v2Res === 'object') ? v2Res : { value: v2Res === undefined ? null : v2Res };
+      const bodySnippet = JSON.stringify(bodyOnly).slice(0, 4000);
       LOG.error(`SAP returned 2xx without a material document for movement ${meta.mvt} posting; full response body: ${bodySnippet}`);
       const unknown = new Error(`SAP S/4HANA accepted the movement ${meta.mvt} posting request (HTTP 2xx) but returned no material document number and no sap-message error. The document may still have been created.`);
       unknown.status = 504;

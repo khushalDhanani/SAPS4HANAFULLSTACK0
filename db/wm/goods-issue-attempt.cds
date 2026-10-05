@@ -22,9 +22,10 @@ entity GoodsIssuePostingAttempt : cuid, managed {
     Unit              : String(10);
     PostingUser       : String(255);
     PostingDate       : Date;
-    Status            : String(20);   // sending | posted | rejected | queued | unconfirmed | not_posted
+    Status            : String(20);   // sending | posted | rejected | queued | unconfirmed | not_posted | delivery_created
     ResolvedAt        : Timestamp;
     MaterialDocument  : String(10);
     MaterialDocYear   : String(4);
+    DeliveryNumber    : String(10);   // outbound delivery SAP created instead of a document (L9/514)
     LastError         : String(500);
 }

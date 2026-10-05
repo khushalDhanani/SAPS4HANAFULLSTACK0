@@ -139,7 +139,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         Success           : Boolean;
         Confirmed         : Boolean;
         ConfirmationStatus: String(30);
-        PostingStatus     : String(10);
+        PostingStatus     : String(20);
+        DeliveryNumber    : String(10);
         Message           : String(500);
     };
 
@@ -318,6 +319,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     type PostingAttemptRecheckResult {
         Checked   : Integer;
         Posted    : Integer;
+        DeliveryCreated : Integer;
         NotPosted : Integer;
         StillOpen : Integer;
         Errors    : Integer;

@@ -1,6 +1,72 @@
 
 # Changes Log
 
+## 2026-10-05 06:00 UTC — Session summary: WM-managed 261 → SAP creates an outbound delivery (L9/514), not a material document
+- **Agent**: Claude Code
+- **Request**: Root cause is known: for WM-managed locations SAP answers 201 with an empty MaterialDocument and `sap-message` "L9/514 Delivery <no> created". Fix this without assuming anything. Eight items: headers, a DELIVERY_CREATED outcome, a duplicate guard, the recheck delivery lookup, a PGI design note (no auto-PGI), a read-only open-delivery report, SE91 L9/514 plus a custom-enhancement check, and tests.
+- **Current Status**: **Complete (code + tests + live read-only verification). In Progress (business decision):** whether and how PGI runs is open, waiting for the warehouse owner. **Blocked (needs a manual SAP decision):** 7 open duplicate deliveries for 520615/0001. Changes 1–8 below each have their own entry.
+- **Key live facts (read-only, zero writes)**: 7 open HOD deliveries 0080000074–0080000080, all for 520615/0001, 100 KG each (700 KG against a 100 KG requirement). LIKP-LIFEX = our posting ReferenceDocument (exact correlation key; 0080000080 carries `GITEST_DBG01`). WBSTK/KOSTK/LVSTK = A, no TO, no MATDOC, and stock has not moved. This also explains the earlier stuck attempt GIAMUUSDS4QKGV65DEZKE: SAP did answer, with a delivery.
+
+## 2026-10-05 06:00 UTC — Change 1: sap-message headers surfaced, parsed and logged
+- **Files**: `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`, `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`.
+- **What/why**: `S4HttpClient.post` already returned headers and `_post` attached them as `_headers`, but **only when the body was a JSON object**. An empty body lost the headers (`true` / raw value), so a body-less outcome would have been invisible. Both `_post` implementations now return `{ _headers }` for an empty body. New `GoodsIssuePostingClient.parseSapMessage(headers)` returns `{ code, text, severity, details[] }`, `null` when the header is absent, or `{ parseError, raw }` when it is not JSON. `_submitMaterialDocument` logs every sap-message entry (`[severity] code text`). Also fixed: the empty-2xx body log used to include `_headers`, which contain SAP session cookies (set-cookie). They are now stripped from the logged body.
+- **Validation**: unit tests (parse, details, absent, non-JSON) pass; full suite below.
+
+## 2026-10-05 06:00 UTC — Change 2: new DELIVERY_CREATED outcome
+- **Files**: `GoodsIssuePostingClient.js` (`deliveryFromSapMessage`, `_submitMaterialDocument`), `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js` (`postDirect`, `attemptResponse`), `srv/wm/goods-issue/GoodsIssueAttemptStore.js` (status `delivery_created`, field `DeliveryNumber`), `db/wm/goods-issue-attempt.cds` (+`DeliveryNumber String(10)`), `srv/wm/goods-issue/service.cds` (`GIPostResult.PostingStatus` String(10)→String(20), since `DELIVERY_CREATED` is 16 chars; +`DeliveryNumber`).
+- **What**: an empty MaterialDocument plus an L9/514 entry (main message or details; code `L9/514`, or text "Delivery <n> created") carrying a number returns `PostingStatus/ConfirmationStatus: DELIVERY_CREATED`, `DeliveryNumber` (10-digit padded), `Success: false`, and the message "Do not post again". There is no retry and no MATDOC polling: it is a normal return, not an error, so the 261 recovery loop never runs. The handler settles the attempt as `delivery_created` with the number. The SU claim is kept: no document, and a non-definitive outcome leaves `claiming` intact. An identical replay returns DELIVERY_CREATED from the attempt log without calling SAP.
+- **HTTP status**: the action returns its normal success status with `PostingStatus: DELIVERY_CREATED` in the body. A literal HTTP 202 was **not** implemented, because forcing a status inside a CAP OData action response is not verified to work. The outcome is no longer a 504.
+- **Not verified**: the exact sap-message JSON shape SAP sends for L9/514 has not been captured live by this app. The matching is based on the user's report and the SE91 text. If the shape differs, the code falls back to UNKNOWN (tested), never to a false success.
+- **Deployment**: the HDI container needs the new column `GoodsIssuePostingAttempt.DeliveryNumber`.
+
+## 2026-10-05 06:00 UTC — Change 3: duplicate guard against open deliveries
+- **Files**: `goodsIssuePerType.handler.js` (`openDeliveryCheck`, runs after `stagingCheck`; `stagingCheck` marks `_wmManaged` on status OK), `GoodsIssuePostingClient.js` (`findDeliveriesForReservationItem`: LIPS by RSNUM/RSPOS joined to LIKP, open = WBSTK ≠ C), `GoodsIssueAdapter.js` (passthrough).
+- **What**: for WM-managed 261 items, a post is blocked with 409 while SAP shows an open delivery for the reservation item, and the delivery numbers are listed. A failed SAP read blocks with 502 (fail closed). The lookup throws instead of returning [] when RFC is unavailable. The existing guards are unchanged: sending/unconfirmed attempts and active SU claims still block. NOT_WM_MANAGED items skip the check (no new RFC dependency for them).
+- **Validation**: handler tests (repeat click blocked; read failure blocks) pass. Field sets verified live via contract tests.
+
+## 2026-10-05 06:00 UTC — Change 4: recheckPostingAttempts looks up deliveries
+- **Files**: `GoodsIssueAttemptStore.js` (`_findDeliveryForAttempt`, `recheck`), `GoodsIssuePostingClient.js` / `GoodsIssueAdapter.js` (`findDeliveryByReference`: LIKP by LIFEX), `service.cds` (+`DeliveryCreated` in `PostingAttemptRecheckResult`).
+- **What**: when no material document exists, recheck first looks for a delivery: exact LIFEX = ReferenceDocument, else the reservation item's deliveries without an external id, same quantity and same posting date. Exactly one → `delivery_created` (+number). Several → stays open (StillOpen), **never** `not_posted`. A lookup failure keeps the status (Errors++). `delivery_created` is a terminal attempt status. Whether the delivery is still open is always read live from SAP, never from the log. SU claims are untouched.
+- **Live check**: `findDeliveryByReference('GI65GEUZ94A5JDZ0')` → 0080000074, Open (read-only).
+
+## 2026-10-05 06:00 UTC — Change 5: PGI design note (no auto-PGI)
+- **Files**: `docs/decisions/261-wm-delivery-created-pgi.md` (new).
+- **What**: records the verified SAP behavior, what PGI in W12 would need (TO create LT03/`L_TO_CREATE_DN`, TO confirm LT12, PGI via a service still to be identified and capability-proven, read-back, SU claim promotion), and the open questions for the warehouse owner. **Nothing is implemented. Waiting for the owner's decision.**
+
+## 2026-10-05 06:00 UTC — Change 6: read-only open-delivery report
+- **Files**: `tools/report-open-deliveries.js` (new; `node tools/report-open-deliveries.js [YYYYMMDD]`, read-only).
+- **Result for 2026-10-05** (run live; nothing deleted or changed):
+  | Delivery | Type | GM status | Item | Qty | Created (SAP server time; TZ not verified) | LIFEX |
+  |---|---|---|---|---|---|---|
+  | 0080000074 | HOD | A | 000010 | 100 KG | 20261005 10:35:43 | GI65GEUZ94A5JDZ0 |
+  | 0080000075 | HOD | A | 000010 | 100 KG | 20261005 10:40:28 | GI4STU7HIU7EEGBS |
+  | 0080000076 | HOD | A | 000010 | 100 KG | 20261005 10:44:28 | GI2ANPGHMN55ZP5T |
+  | 0080000077 | HOD | A | 000010 | 100 KG | 20261005 10:54:56 | GI1SVBXWT6XSU35Q |
+  | 0080000078 | HOD | A | 000010 | 100 KG | 20261005 10:57:05 | GI4R3X4KLN9THVWL |
+  | 0080000079 | HOD | A | 000010 | 100 KG | 20261005 11:05:59 | GI3IE7WWUR9NOP2O |
+  | 0080000080 | HOD | A | 000010 | 100 KG | 20261005 11:14:08 | GITEST_DBG01 |
+  All 7 are for reservation 0000520615/0001, material 3000000415, batch INWS260004, plant 1130/CS02, warehouse W12, created by user KHUSHAL, with KOSTK/LVSTK/GBSTK = A.
+
+## 2026-10-05 06:00 UTC — Change 7: SE91 L9/514 and custom-enhancement check (investigation, no code)
+- **Text**: EN "Delivery & created", DE "Lieferung & wurde angelegt" (T100). Message class L9 "Function Modules", TADIR package LVS, author SAP (standard).
+- **Where raised**: CROSS where-used → only standard include **MM07MLVS** (MM-IM/WM interface). No Z*/Y* include references any L9 message.
+- **Custom enhancements**: active Z BAdI implementations exist on goods-movement/delivery BAdIs (e.g. ZMB_DOCUMENT_UPDATE, ZMB_CHECK_LINE_BADI, ZMM_BADI_005, ZZMB_MIGO_BADI, ZZDELIVERY_PUBLISH, ZZLE_SHP_ITEM_STATUS). **Their source was not inspected, so whether any of them contributes is not verified.** The message itself is raised by SAP standard code. The customizing switch that turns this movement into a delivery is **not verified** (T320 OBEST/OBTYP are blank for 1130/CS02).
+
+## 2026-10-05 06:00 UTC — Change 8: tests
+- **Files**: `test/unit/wm/goodsIssueDeliveryCreated.test.js` (new, 10 tests), `test/unit/wm/goodsIssueSapRfcContract.test.js` (+2 live contract tests: the LIPS list by RSNUM/RSPOS; the LIKP list with LIFEX and OR-joined VBELN).
+- **Covered**: 201 + empty doc + L9/514 → DELIVERY_CREATED, no MATDOC read; repeat click blocked while a delivery is open (SAP called once; identical replay served from the log); recheck finds the delivery → `delivery_created`, not `not_posted` even past the age threshold; ambiguous deliveries keep the attempt open; a lookup failure keeps the status; header parse failure → UNKNOWN (504 GI_POSTING_UNCONFIRMED); delivery read failure blocks posting; no RFC access → throws.
+
+## 2026-10-05 06:00 UTC — Validation (all changes above)
+- `npx jest test/unit/wm --runInBand --silent` → **58 suites / 1,178 tests passed** (the contract tests ran LIVE).
+- `npx jest test/unit --runInBand --silent` → **134 suites / 2,341 tests passed**.
+- `npx cds compile srv db --to sql` → OK. `cds --version`: cds-dk 10.1.2 (local).
+- `npx eslint` on the changed files → 0 errors, 3 warnings, all on pre-existing lines not touched here.
+- `git diff --check` → clean.
+- Live SAP: read-only RFC reads only (T100, TADIR, CROSS, SXC_EXIT/SXC_ATTR, T320, LIKP, LIPS, LTAK, MATDOC). **Zero writes.** No delivery was deleted or changed.
+- **Not run**: a real post through the new code (it would create another delivery; it needs the owner's decision first). `mbt validate` was not run (no MTA change).
+- **Errors / Warnings / Blockers**: none in code. Open: the owner's PGI decision; the manual SAP cleanup decision for 0080000074–80; the HDI column `DeliveryNumber` must be deployed before this code.
+- **Next recommended action**: the warehouse owner decides (a) whether delivery-based issue is intended for 1130/CS02 and (b) what to do with deliveries 0080000074–80 (manual VL02N decision in SAP). Then run `recheckPostingAttempts` in the app: the stuck attempts whose references match LIFEX will settle as `delivery_created`.
+
 ## 2026-10-05 06:15 UTC — Complete: review follow-ups — never-null-on-failure lookup, trigger logging, live RFC field-set contract tests, LTAP verdict, bin provenance cleared
 - **Agent**: Claude Code
 - **Request**: Review follow-ups on the unknown-outcome recovery: (1) a failed read must produce UNKNOWN, never null; (2) re-reconcile all old unknowns incl. GIAMUUT5924N3GOA5Z521; (3) `not_posted` only via age threshold; (4) verify bin `0002000622/623` provenance vs order 2000623; (5) log which trigger fired (empty 2xx vs timeout); probe LTAP field-by-field; add a lookup-throws test and a live field-set contract check.
@@ -10096,3 +10162,4 @@ The table below provides a strict, unambiguous separation between **Code Complet
 17. DEPLOYMENT PREREQUISITE (Issued SU Claims & Queue Replay): the HDI container must receive table `saps4hana.wm.GoodsIssueIssuedStorageUnit` (with index `ClaimLookupIdx` on `Material, Plant, StorageLocation, Status`), and column `GoodsIssueQueue.StorageUnits` (LargeString/NCLOB) before the 2026-10-02 12:10 code goes live. All 134 test suites (2,183 tests) pass (100% green).
 18. DEPLOYMENT PREREQUISITE (Unconfirmed Flag on Issued SUs): column `GoodsIssueIssuedStorageUnit.Confirmed` (`Boolean default true`) in `db/wm/goods-issue-issued-su.cds`. All 134 test suites (2,226 tests) pass (100% green).
 19. Movement 261 Chunk 2 (Material / Plant / Storage Location Validation): SAP-authoritative reconciliation was already implemented in the planned-post handler. Dedicated regression coverage now proves mismatched values are rejected before posting and missing client values are sourced from SAP; 155 movement-261 unit tests pass. No live SAP call was needed.
+20. WM-managed 261 → SAP creates outbound delivery (L9/514) instead of a material document (2026-10-05 06:00 UTC entries): DELIVERY_CREATED outcome, open-delivery guard, recheck delivery lookup implemented and tested. OPEN: warehouse owner's decision on PGI (see `docs/decisions/261-wm-delivery-created-pgi.md`) and on the 7 open duplicate deliveries 0080000074–80 for 520615/0001 (manual SAP action, the app changes nothing). DEPLOYMENT PREREQUISITE: column `GoodsIssuePostingAttempt.DeliveryNumber`.

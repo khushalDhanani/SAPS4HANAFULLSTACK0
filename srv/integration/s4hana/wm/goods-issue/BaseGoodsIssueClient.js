@@ -146,7 +146,8 @@ class BaseGoodsIssueClient {
       }
       return res;
     }
-    return true;
+    // Empty body (e.g. 201/204 without content): keep the headers, they may carry the only outcome.
+    return headers ? { _headers: headers } : true;
   }
 }
 

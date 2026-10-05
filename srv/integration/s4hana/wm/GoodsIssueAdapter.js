@@ -138,6 +138,9 @@ class GoodsIssueAdapter {
     const res = (data && typeof data === 'object') ? (data.d || data) : data;
     if (res && typeof res === 'object' && headers) {
       res._headers = headers;
+    } else if (headers) {
+      // Empty body: keep the headers, the sap-message header may carry the only outcome.
+      return { _headers: headers };
     }
     return res;
   }
@@ -588,6 +591,16 @@ class GoodsIssueAdapter {
   /** Fallback lookup in MATDOC for 261 Goods Issue by reservation+item+user+date (exactly one match required). */
   async findPosted261ByMatdoc(...args) {
     return this.posting.findPosted261ByMatdoc(...args);
+  }
+
+  /** Outbound deliveries SAP created for a reservation item (LIKP/LIPS, read-only). */
+  async findDeliveriesForReservationItem(reservationNo, reservationItem) {
+    return this.posting.findDeliveriesForReservationItem(reservationNo, reservationItem);
+  }
+
+  /** Outbound delivery carrying a posting reference in LIKP-LIFEX (read-only), or null. */
+  async findDeliveryByReference(referenceDocument) {
+    return this.posting.findDeliveryByReference(referenceDocument);
   }
 
   /** Read a material document back from SAP to confirm persistence. */

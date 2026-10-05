@@ -53,6 +53,20 @@ function assign261IdempotencyKey(normalized) {
 
 function attemptResponse(attempt) {
   const status = String(attempt.Status || '').toLowerCase();
+  if (status === 'delivery_created') {
+    return {
+      ReservationNo: attempt.ReservationNo || '',
+      ReservationItem: attempt.ReservationItem || '',
+      MaterialDocument: '',
+      MaterialDocYear: '',
+      DeliveryNumber: attempt.DeliveryNumber || '',
+      PostingStatus: 'DELIVERY_CREATED',
+      Success: false,
+      Confirmed: false,
+      ConfirmationStatus: 'DELIVERY_CREATED',
+      Message: `SAP created outbound delivery ${attempt.DeliveryNumber || ''} for this request instead of a material document. Stock is issued only when goods issue is posted for that delivery in SAP. Do not post again.`
+    };
+  }
   const postingStatus = status === 'posted'
     ? 'POSTED'
     : status === 'queued'
@@ -896,6 +910,7 @@ async function stagingCheck(req, normalized) {
       return true;
     }
     if (stagingStatus === 'OK') {
+      normalized._wmManaged = true;
       return true;
     }
 
@@ -920,6 +935,30 @@ async function stagingCheck(req, normalized) {
 }
 
 /**
+ * WM-managed items only: SAP turns a 261 for a WM-managed location into an outbound delivery
+ * (L9/514) instead of a material document. While such a delivery is open (goods movement status
+ * not C), another post would create one more delivery for the same requirement, so it is blocked.
+ * A failed SAP read blocks too (fail closed).
+ */
+async function openDeliveryCheck(req, normalized) {
+  if (!normalized._wmManaged || typeof GoodsIssueAdapter.findDeliveriesForReservationItem !== 'function') return true;
+  const sResv = String(normalized.ReservationNo || '').trim();
+  const sItem = String(normalized.ReservationItem || '').trim();
+  let deliveries;
+  try {
+    deliveries = await GoodsIssueAdapter.findDeliveriesForReservationItem(sResv, sItem);
+  } catch (err) {
+    req.error(502, `Open outbound deliveries for reservation ${sResv} item ${sItem} could not be checked in SAP (${err.message || 'read failed'}). Goods Issue was NOT posted.`);
+    return false;
+  }
+  const open = deliveries.filter((d) => d.Open);
+  if (open.length === 0) return true;
+  const numbers = [...new Set(open.map((d) => d.DeliveryNumber))].join(', ');
+  req.error(409, `Reservation ${sResv} item ${sItem} already has open outbound deliver${open.length > 1 ? 'ies' : 'y'} ${numbers} in SAP awaiting goods issue (PGI). Goods Issue was NOT posted; resolve the open delivery first.`);
+  return false;
+}
+
+/**
  * Posts directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
  * No queue, no stored transaction for later replay.
  *
@@ -937,6 +976,11 @@ async function stagingCheck(req, normalized) {
 async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
   try {
     const result = await postFn(normalized);
+    if (result && result.PostingStatus === 'DELIVERY_CREATED') {
+      // Definite SAP outcome, but no stock moved yet: record the delivery; SU claims stay held.
+      await onOutcome('delivery_created', { DeliveryNumber: result.DeliveryNumber || '', LastError: result.Message || '' });
+      return Object.assign({ _definitiveRejection: false }, result);
+    }
     const hasDoc = Boolean(result && result.MaterialDocument);
     const isConfirmed = hasDoc && (normalized.MovementType === '261'
       ? result?.Confirmed === true
@@ -1122,6 +1166,7 @@ const PerTypeGoodsIssueHandler = {
       if (!(await checkPendingConfirmation(req, normalized))) return normalized._existingAttemptResult;
       if (!(await batchPreCheck261(req, normalized, resvItem))) return;
       if (!(await stagingCheck(req, normalized))) return;
+      if (!(await openDeliveryCheck(req, normalized))) return;
       if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
       const serialManaged = await serialCountCheck261(req, normalized);
       if (serialManaged === null) return;
@@ -1169,5 +1214,6 @@ const PerTypeGoodsIssueHandler = {
 PerTypeGoodsIssueHandler.classifyPostingError = classifyPostingError;
 PerTypeGoodsIssueHandler.postDirect = postDirect;
 PerTypeGoodsIssueHandler.attemptResponse = attemptResponse;
+PerTypeGoodsIssueHandler.openDeliveryCheck = openDeliveryCheck;
 
 module.exports = PerTypeGoodsIssueHandler;

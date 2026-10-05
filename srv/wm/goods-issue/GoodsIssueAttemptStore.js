@@ -9,7 +9,9 @@ const ATTEMPT_ENTITY = 'saps4hana.wm.GoodsIssuePostingAttempt';
 /** Statuses the re-check job still has to resolve against SAP. */
 const OPEN_STATUSES = ['sending', 'unconfirmed'];
 /** Statuses that end an attempt. */
-const FINAL_STATUSES = ['posted', 'rejected', 'not_posted', 'needs-attention'];
+// delivery_created ends the attempt: SAP created an outbound delivery (L9/514) instead of a material
+// document. Whether that delivery is still open is read live from SAP, not from this log.
+const FINAL_STATUSES = ['posted', 'rejected', 'not_posted', 'needs-attention', 'delivery_created'];
 
 function envMs(name, fallback) {
   const n = Number(process.env[name]);
@@ -97,6 +99,7 @@ class GoodsIssueAttemptStore {
       ResolvedAt: null,
       MaterialDocument: '',
       MaterialDocYear: '',
+      DeliveryNumber: '',
       LastError: '',
       createdAt: new Date().toISOString()
     };
@@ -168,6 +171,7 @@ class GoodsIssueAttemptStore {
     const updates = { Status: status, ResolvedAt: FINAL_STATUSES.includes(status) ? new Date().toISOString() : null };
     if (fields.MaterialDocument !== undefined) updates.MaterialDocument = String(fields.MaterialDocument || '');
     if (fields.MaterialDocYear !== undefined) updates.MaterialDocYear = String(fields.MaterialDocYear || '');
+    if (fields.DeliveryNumber !== undefined) updates.DeliveryNumber = String(fields.DeliveryNumber || '');
     if (fields.LastError !== undefined) updates.LastError = String(fields.LastError || '').slice(0, 500);
 
     const mem = this._memoryStore.get(ref);
@@ -269,7 +273,7 @@ class GoodsIssueAttemptStore {
    *
    * @param {Object} adapter - GoodsIssueAdapter (findPostedGoodsIssueByReference)
    * @param {number} [now] - current time in ms (tests)
-   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, StillOpen: number, Errors: number }>}
+   * @returns {Promise<{ Checked: number, Posted: number, DeliveryCreated: number, NotPosted: number, StillOpen: number, Errors: number }>}
    */
   /**
    * Re-confirm job: retries read-back for unconfirmed documents and clears the flag.
@@ -360,8 +364,26 @@ class GoodsIssueAttemptStore {
     return summary;
   }
 
+  /**
+   * Delivery SAP created for an attempt: exact match on LIKP-LIFEX (= our ReferenceDocument), else
+   * the reservation item's deliveries without an external id, same quantity, created on the
+   * attempt's posting date. Exactly one such candidate is attributed; several return 'ambiguous'
+   * (keeps the attempt open, never not_posted). Null when the adapter cannot look deliveries up.
+   */
+  async _findDeliveryForAttempt(adapter, attempt) {
+    if (!adapter || typeof adapter.findDeliveryByReference !== 'function') return null;
+    const byRef = await adapter.findDeliveryByReference(attempt.ReferenceDocument);
+    if (byRef) return byRef;
+    if (!attempt.ReservationNo || !attempt.ReservationItem || typeof adapter.findDeliveriesForReservationItem !== 'function') return null;
+    const day = String(attempt.PostingDate || '').slice(0, 10).replace(/-/g, '');
+    const candidates = (await adapter.findDeliveriesForReservationItem(attempt.ReservationNo, attempt.ReservationItem))
+      .filter((d) => !d.ExternalId && (!day || d.CreatedOn === day) && Math.abs(Number(d.Quantity) - Number(attempt.IssueQty)) < 0.001);
+    if (candidates.length > 1) return 'ambiguous';
+    return candidates[0] || null;
+  }
+
   async recheck(adapter, now = Date.now()) {
-    const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0 };
+    const summary = { Checked: 0, Posted: 0, DeliveryCreated: 0, NotPosted: 0, StillOpen: 0, Errors: 0 };
     if (!this.isAvailable()) return summary;
     await this.reconfirmUnconfirmed(adapter, now).catch((err) => LOG.warn(`reconfirmUnconfirmed failed inside recheck: ${err.message}`));
     let open = [];
@@ -389,6 +411,27 @@ class GoodsIssueAttemptStore {
       if (doc) {
         await this.setStatus(ref, 'posted', { MaterialDocument: doc.MaterialDocument, MaterialDocYear: doc.MaterialDocumentYear, LastError: '' });
         summary.Posted++;
+        continue;
+      }
+
+      // No material document: SAP may have created an outbound delivery instead (WM-managed
+      // location, L9/514). A delivery is never "not posted"; a failed read keeps the status.
+      let delivery;
+      try {
+        delivery = await this._findDeliveryForAttempt(adapter, attempt);
+      } catch (err) {
+        LOG.warn(`Delivery lookup for posting attempt ${ref} failed, status ${attempt.Status} kept: ${err.message}`);
+        summary.Errors++;
+        continue;
+      }
+      if (delivery === 'ambiguous') {
+        summary.StillOpen++;
+      } else if (delivery) {
+        await this.setStatus(ref, 'delivery_created', {
+          DeliveryNumber: delivery.DeliveryNumber,
+          LastError: `SAP created outbound delivery ${delivery.DeliveryNumber} instead of a material document; goods issue requires PGI of that delivery.`
+        });
+        summary.DeliveryCreated++;
       } else if (ageOf(attempt) >= GoodsIssueAttemptStore.notPostedAgeMs()) {
         const finding = `No material document with reference ${ref} exists in S/4HANA ${Math.round(ageOf(attempt) / 60000)} min after the attempt: not posted.`;
         await this.setStatus(ref, 'not_posted', { LastError: finding });

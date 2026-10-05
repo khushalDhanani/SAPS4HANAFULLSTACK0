@@ -49,4 +49,16 @@ liveDescribe('SAP RFC_READ_TABLE field-set contract (live, read-only)', () => {
       'TBNUM', 'RSNUM', 'LGNUM', 'NLTYP', 'NLPLA', 'STATU', 'BWLVS'
     ], ["LGNUM = 'XXX'", "AND TBNUM = '9999999999'"])).resolves.toEqual([]);
   });
+
+  test('LIPS accepts the delivery-item list keyed by RSNUM/RSPOS', async () => {
+    await expect(rfc.readTable('LIPS', [
+      'VBELN', 'POSNR', 'LFIMG', 'VRKME', 'BWART'
+    ], ["RSNUM = '9999999999'", "AND RSPOS = '9999'"])).resolves.toEqual([]);
+  });
+
+  test('LIKP accepts the delivery-header list, LIFEX and OR-joined VBELN predicates', async () => {
+    const fields = ['VBELN', 'LFART', 'ERDAT', 'ERZET', 'WBSTK', 'LIFEX'];
+    await expect(rfc.readTable('LIKP', fields, ["LIFEX = 'GINOMATCH000000X'"])).resolves.toEqual([]);
+    await expect(rfc.readTable('LIKP', fields, ["VBELN = '9999999998'", "OR VBELN = '9999999999'"])).resolves.toEqual([]);
+  });
 });
