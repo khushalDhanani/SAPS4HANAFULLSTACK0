@@ -46,13 +46,19 @@ class RfcClient {
     }
   }
 
-  /** RFC_READ_TABLE -> [{FIELD: trimmed string}]. Each WHERE line must stay <= 72 chars. */
-  async readTable(table, fields, where = []) {
+  /**
+   * RFC_READ_TABLE -> [{FIELD: trimmed string}]. Each WHERE line must stay <= 72 chars and every
+   * token must be space-separated (live: `RSNUM='x'` fails, `( A = 'x' OR B = 'y' )` works).
+   * A field that does not exist in the table fails with AD 718 (TABLE_WITHOUT_DATA).
+   * rowCount > 0 caps the rows SAP returns (ROWCOUNT).
+   */
+  async readTable(table, fields, where = [], rowCount = 0) {
     const res = await this.call('RFC_READ_TABLE', {
       QUERY_TABLE: table,
       DELIMITER: '|',
       FIELDS: fields.map((f) => ({ FIELDNAME: f })),
-      OPTIONS: where.map((t) => ({ TEXT: t }))
+      OPTIONS: where.map((t) => ({ TEXT: t })),
+      ...(rowCount > 0 ? { ROWCOUNT: rowCount } : {})
     });
     return (res.DATA || []).map(({ WA }) => {
       const vals = WA.split('|');

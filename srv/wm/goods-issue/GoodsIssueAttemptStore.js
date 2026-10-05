@@ -226,8 +226,11 @@ class GoodsIssueAttemptStore {
         return aRes === cleanRes;
       });
     } catch (err) {
+      // A failed read is not "no open attempt": block the post instead of failing open.
       LOG.warn('Query failed for open attempts by reservation:', err.message || err);
-      return false;
+      const e = new Error(`Open posting attempts for reservation ${sRes} could not be read (${err.message || 'database error'}). Goods Issue was NOT posted.`);
+      e.status = 503;
+      throw e;
     }
   }
 

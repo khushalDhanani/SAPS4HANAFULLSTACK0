@@ -232,7 +232,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         PostingDate     : Date,
         DocumentDate    : Date,
         SerialNumbers   : array of String(18),
-        SerialNumber    : String(18)
+        SerialNumber    : String(18),
+        // Client-generated id per posting attempt; part of the idempotency key (see 261).
+        ClientAttemptId : String(36)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -275,7 +277,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         PostingDate              : Date,
         DocumentDate             : Date,
         SerialNumbers            : array of String(18),
-        SerialNumber             : String(18)
+        SerialNumber             : String(18),
+        // Client-generated id per posting attempt; part of the idempotency key (see 261).
+        ClientAttemptId : String(36)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -293,7 +297,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         PostingDate              : Date,
         DocumentDate             : Date,
         SerialNumbers            : array of String(18),
-        SerialNumber             : String(18)
+        SerialNumber             : String(18),
+        // Client-generated id per posting attempt; part of the idempotency key (see 261).
+        ClientAttemptId : String(36)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

@@ -315,6 +315,14 @@ sap.ui.define([
                         oModel.setProperty("/hasOpenDelivery", true);
                         oModel.setProperty("/postingStatus", "DELIVERY_CREATED");
                         oModel.setProperty("/deliveryNumber", sLatest);
+                    } else {
+                        oModel.setProperty("/openDeliveries", []);
+                        oModel.setProperty("/openDeliveryCount", 0);
+                        oModel.setProperty("/hasOpenDelivery", false);
+                        if (oModel.getProperty("/postingStatus") === "DELIVERY_CREATED") {
+                            oModel.setProperty("/postingStatus", "INITIAL");
+                            oModel.setProperty("/deliveryNumber", "");
+                        }
                     }
 
                     if (aUnits.length > 0) {
@@ -444,15 +452,28 @@ sap.ui.define([
         },
 
         formatDeliveryCreatedBanner: function (sDelivery, nOpenCount, aOpenDelivs) {
-            if (!sDelivery) return "";
             var nCount = Number(nOpenCount !== undefined && nOpenCount !== null ? nOpenCount : (this._oModel ? this._oModel.getProperty("/openDeliveryCount") : 0));
             var aDelivs = Array.isArray(aOpenDelivs) ? aOpenDelivs : (this._oModel ? this._oModel.getProperty("/openDeliveries") : []);
+            if (!sDelivery && (!Array.isArray(aDelivs) || aDelivs.length === 0)) return "";
             if (nCount > 1 && Array.isArray(aDelivs) && aDelivs.length > 1) {
                 var sList = aDelivs.join(", ");
-                return this.getText("gi261MultipleDeliveriesCreatedBannerText", [sList]) ||
-                    ("Open Outbound Deliveries (" + sList + ") exist in SAP S/4HANA for this item. Stock will be issued when warehouse goods issue (PGI) is posted.");
+                return this.getText("gi261MultipleDeliveriesCreatedBannerText", [nCount, sList]) ||
+                    (nCount + " open, expected 1: warehouse cleanup needed. Open Outbound Deliveries (" + sList + ") exist in SAP S/4HANA for this item. Stock will be issued when warehouse goods issue (PGI) is posted.");
             }
             return this.getText("gi261DeliveryCreatedBannerText", [sDelivery]);
+        },
+
+        formatScanRequiredPrompt: function (aSuggestedUnits, nScanned, nRequired, sUnit) {
+            var aUnits = Array.isArray(aSuggestedUnits) ? aSuggestedUnits : (this._oModel ? this._oModel.getProperty("/suggestedUnits") : []);
+            var sFirstSu = (aUnits && aUnits[0] && (aUnits[0].StorageUnit || aUnits[0].storageUnit)) || "";
+            var nScannedQty = Number(nScanned !== undefined && nScanned !== null ? nScanned : (this._oModel ? this._oModel.getProperty("/scannedQty") : 0)) || 0;
+            var nReq = Number(nRequired !== undefined && nRequired !== null ? nRequired : (this._oModel ? this._oModel.getProperty("/requiredScanCount") : 0)) || 0;
+            var sUom = sUnit || (this._oModel ? this._oModel.getProperty("/unit") : "") || "KG";
+            if (sFirstSu) {
+                return this.getText("gi261ScanRequiredPrompt", [sFirstSu, nScannedQty, nReq, sUom]) ||
+                    ("Scan SU " + sFirstSu + ", " + nScannedQty + " of " + nReq + " " + sUom);
+            }
+            return "";
         },
 
         formatOpenQty: function (nQty, sUnit) {
@@ -1156,6 +1177,16 @@ sap.ui.define([
                         title: that.getText("gi261ReverseFailedTitle")
                     });
                 });
+        },
+
+        onRefresh: function () {
+            var sResv = this._oModel ? this._oModel.getProperty("/reservationNo") : "";
+            var sItem = this._oModel ? this._oModel.getProperty("/reservationItem") : "";
+            var nOpen = this._oModel ? this._oModel.getProperty("/openQty") : 0;
+            if (sResv && sItem) {
+                this._detectScanMode(sResv, sItem, nOpen);
+                MessageToast.show(this.getText("gi261RefreshSuccess"));
+            }
         },
 
         onResetForm: function () {

@@ -3,6 +3,7 @@ const s4Config = require('../../s4Config');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const { RfcClient } = require('../../RfcClient');
+const sapFacts = require('../../sapFacts');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
 const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
@@ -688,16 +689,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const usnam = sUser ? String(sUser).trim().toUpperCase() : '';
     const dDay = sDate ? this._formatDate(sDate).replace(/-/g, '') : '';
 
-    // Live-verified predicate shape: the RFC_READ_TABLE parser on this release rejects
-    // parentheses in OPTIONS lines (SAIS DB_Error on '('), so OR-groups are expressed as one
-    // read per movement type with pure equality predicates, and the posting-date match moves
-    // to a client-side filter on the returned BUDAT/CPUDT.
+    // One equality read per movement type; the posting-date match is a client-side filter on
+    // BUDAT/CPUDT. (Spaced parentheses do parse - live-verified - this shape is kept for simplicity.)
     const baseWhere = [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`];
     if (usnam) baseWhere.push(`AND USNAM = '${usnam}'`);
 
-    // Live-verified field list: MATDOC on this release rejects STORNO/XAUTO/ERFMG with AD 718
-    // (any list containing them fails). Reversal exclusion works via the SMBLN/SJAHR pairing
-    // of the 262 rows, which are read alongside the 261 rows.
+    // MATDOC has no STORNO column (DD03L); asking for it fails with AD 718 (TABLE_WITHOUT_DATA).
+    // Reversals are recognised by the SMBLN/SJAHR pairing of the 262 rows read alongside.
     const fields = [
       'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
       'CPUDT', 'CPUTM', 'MENGE', 'SMBLN', 'SJAHR'
@@ -730,15 +728,18 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       } catch (matdocErr) {
         LOG.warn(`MATDOC read failed for 261 fallback lookup, trying MSEG: ${matdocErr.message}`);
         try {
-          // Live-verified: MSEG on this release only accepts this narrow list (wider lists,
-          // including CPUDT/CPUTM/SJAHR/USNAM/BUDAT, fail with AD 718). Without timestamps the
-          // attempt-window and date filters do not apply on this fallback; the exactly-one-match
-          // rule still protects against ambiguity.
-          const msegFields = ['MBLNR', 'MJAHR', 'BWART', 'RSNUM', 'RSPOS', 'MENGE', 'SMBLN'];
+          // In MSEG the header fields carry an _MKPF suffix (DD03L: CPUDT_MKPF, CPUTM_MKPF,
+          // BUDAT_MKPF, USNAM_MKPF); plain CPUDT/USNAM do not exist there (AD 718). Mapped back
+          // to the MATDOC names so the same filters apply.
+          const msegFields = ['MBLNR', 'MJAHR', 'BWART', 'RSNUM', 'RSPOS', 'MENGE', 'SMBLN', 'SJAHR',
+            'BUDAT_MKPF', 'CPUDT_MKPF', 'CPUTM_MKPF', 'USNAM_MKPF'];
           const msegBaseWhere = [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`];
+          if (usnam) msegBaseWhere.push(`AND USNAM_MKPF = '${usnam}'`);
           const r261 = await readTable('MSEG', msegFields, [...msegBaseWhere, `AND BWART = '261'`]);
           const r262 = await readTable('MSEG', msegFields, [...msegBaseWhere, `AND BWART = '262'`]);
-          rows = [...(r261 || []), ...(r262 || [])];
+          rows = [...(r261 || []), ...(r262 || [])].map((r) => ({
+            ...r, BUDAT: r.BUDAT_MKPF, CPUDT: r.CPUDT_MKPF, CPUTM: r.CPUTM_MKPF, USNAM: r.USNAM_MKPF
+          }));
         } catch (msegErr) {
           LOG.warn(`MSEG read also failed for 261 fallback lookup: ${msegErr.message}`);
           throw matdocErr;
@@ -751,9 +752,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     // Track cancelled or reversal documents
     const reversedDocKeys = new Set();
     for (const r of allRows) {
-      if (r.STORNO === 'X' || r.STORNO === true || r.XAUTO === 'X' || r.Reversed === true || r.Cancelled === true) {
-        reversedDocKeys.add(`${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`);
-      }
       if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') {
         reversedDocKeys.add(`${String(r.SMBLN).trim()}-${String(r.SJAHR || r.MJAHR || '').trim()}`);
       }
@@ -762,6 +760,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     // Filter candidate 261 documents
     const claimTimeMs = sCreatedAt ? new Date(sCreatedAt).getTime() : null;
     const expectedQty = sQty != null ? Number(sQty) : null;
+    // CPUDT/CPUTM are SAP system-local time (live: TTZCU = INDIA, UTC+05:30). Converting needs the
+    // system offset; when it cannot be read the attempt window cannot be applied -> UNKNOWN (throws).
+    const offsetMinutes = (claimTimeMs !== null && allRows.some((r) => r.CPUDT))
+      ? await sapFacts.systemUtcOffsetMinutes(readTable)
+      : 0;
 
     const matches = allRows.filter((r) => {
       // Must be movement 261
@@ -779,7 +782,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // Exclude reversed documents
       const docKey = `${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`;
       if (reversedDocKeys.has(docKey)) return false;
-      if (r.STORNO === 'X' || r.STORNO === true || r.Reversed === true || r.Cancelled === true) return false;
       if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') return false;
 
       // Quantity filter: must equal claim's quantity
@@ -796,15 +798,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         if (r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp) {
           docTimeMs = new Date(r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp).getTime();
         } else if (r.CPUDT) {
-          const cpudt = String(r.CPUDT).trim();
-          const cputm = String(r.CPUTM || '000000').trim().padStart(6, '0');
-          const y = cpudt.slice(0, 4);
-          const m = cpudt.slice(4, 6);
-          const d = cpudt.slice(6, 8);
-          const hh = cputm.slice(0, 2);
-          const mm = cputm.slice(2, 4);
-          const ss = cputm.slice(4, 6);
-          docTimeMs = new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}Z`).getTime();
+          docTimeMs = sapFacts.sapLocalToEpochMs(r.CPUDT, r.CPUTM, offsetMinutes);
         }
         if (docTimeMs !== null && Number.isFinite(docTimeMs) && docTimeMs < claimTimeMs) {
           // Document was created before the claim attempt
@@ -824,8 +818,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
 
     if (matches.length > 1) {
-      LOG.warn(`MATDOC 261 fallback lookup for reservation ${sResv} item ${sItem} returned ${matches.length} matches; exactly one match required. Outcome cannot be proved uniquely.`);
-      return null;
+      // Ambiguity is not absence: callers treat null as "not posted", so this must stay UNKNOWN.
+      const err = new Error(`MATDOC 261 lookup for reservation ${sResv} item ${sItem} matched ${matches.length} documents (${matches.map((m) => String(m.MBLNR).trim()).join(', ')}); exactly one is required, so the outcome cannot be proved.`);
+      err.status = 409;
+      err.code = 'GI_MATDOC_AMBIGUOUS';
+      throw err;
     }
 
     return null;

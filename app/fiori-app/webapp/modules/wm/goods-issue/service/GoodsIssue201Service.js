@@ -56,6 +56,10 @@ sap.ui.define([
                 ReservationItem: oPayload.ReservationItem ? String(oPayload.ReservationItem).trim() : ""
             };
 
+            // One id per user posting attempt: a resend of this exact request is recognised by
+            // the server and answered from its attempt log instead of posting again.
+            oBody.ClientAttemptId = oPayload.ClientAttemptId ||
+                ("GIA" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).toUpperCase();
             return ODataClient.post(BASE_PATH_GI + "/postGoodsIssue201", oBody);
         },
 

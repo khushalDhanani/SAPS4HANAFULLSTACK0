@@ -333,7 +333,12 @@
                 var nRequiredUnits = Number(oData.requiredScanCount) || 0;
 
                 if (aScannedUnits.length === 0) {
-                    errors.scannedUnits = "At least one Storage Unit must be scanned";
+                    var sSug = (Array.isArray(oData.suggestedUnits) && oData.suggestedUnits[0] && (oData.suggestedUnits[0].StorageUnit || oData.suggestedUnits[0].storageUnit)) || "";
+                    if (sSug) {
+                        errors.scannedUnits = "Scan SU " + sSug + ", " + nScannedQty + " of " + nRequiredUnits + " " + (oData.unit || "KG");
+                    } else {
+                        errors.scannedUnits = "At least one Storage Unit must be scanned";
+                    }
                     bValid = false;
                 } else {
                     var seenSu = {};
@@ -349,7 +354,9 @@
 
                         var uMat = String(suObj.material || "").trim().toUpperCase();
                         var expMat = String(oData.material || "").trim().toUpperCase();
-                        if (expMat && uMat && uMat !== expMat) {
+                        var uMatNorm = uMat.replace(/^0+/, "");
+                        var expMatNorm = expMat.replace(/^0+/, "");
+                        if (expMatNorm && uMatNorm && uMatNorm !== expMatNorm) {
                             errors.scannedUnits = "Wrong material: scanned unit belongs to " + uMat + ", expected " + expMat + ".";
                             bValid = false;
                             break;
@@ -537,7 +544,9 @@
                 return { ok: false, state: "Error", text: (oRes && oRes.SuNotFoundReason) || ("Unit '" + sScan + "' not found in unrestricted stock for this reservation.") };
             }
             var sResMat = String(oRes.Material || "").trim().toUpperCase();
-            if (sExpectedMat && sResMat && sResMat !== sExpectedMat) {
+            var sResMatNorm = sResMat.replace(/^0+/, "");
+            var sExpectedMatNorm = sExpectedMat.replace(/^0+/, "");
+            if (sExpectedMatNorm && sResMatNorm && sResMatNorm !== sExpectedMatNorm) {
                 return { ok: false, state: "Error", text: "Wrong material: scanned unit belongs to " + sResMat + ", expected " + sExpectedMat + "." };
             }
             var sResPlant = String(oRes.Plant || "").trim().toUpperCase();

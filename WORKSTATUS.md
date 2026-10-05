@@ -1,6 +1,63 @@
 
 # Changes Log
 
+## 2026-10-05 07:30 UTC — In Progress: zero-assumption audit (Phases 1–3 done; Phase 4 partly done)
+- **Agent**: Claude Code
+- **Request**: Zero-assumption audit of feature/PO (= feature/CL01 @ 1ca7b92). Findings table approved: `/Users/khushaldhanani/.claude/plans/pasted-content-id-ddf7-act-as-adaptive-reddy.md` (IDs W01–W26, R01–R14, U01–U05, with live SAP evidence).
+- **Current Status**: **In Progress** (stopped at the usage limit).
+- **Changes in this session (each listed separately)**:
+  1. `srv/integration/s4hana/sapFacts.js` (new): SAP facts with their sources (T100 texts, RFBSK/STATV domains, reference-persisted movement types), system time-zone loader (TTZCU→TTZZ→TTZR; live INDIA P0530 +05:30), SAP-local→epoch conversion, SAP number parser, RFC message-id parser.
+  2. `RfcClient.readTable` takes ROWCOUNT (R01); its comment documents the verified WHERE rule (spaced tokens) and the AD 718 meaning.
+  3. W02/W07/W09/W10, `GoodsIssuePostingClient.findPosted261ByMatdoc`: CPUDT/CPUTM are converted with the system offset (offset unreadable → throws/UNKNOWN); the MSEG fallback uses the real `*_MKPF` fields (date/time/user filters restored); the wrong XAUTO/STORNO "reversal" checks are removed; more than one match → throws `GI_MATDOC_AMBIGUOUS` (409) instead of returning null; comments corrected.
+  4. W06/W07/W25, `GoodsIssueIssuedSuStore`: `readTableOf()` uses `adapter.rfc.readTable` (verified to be the only reader) → the claim release job and the manual "posted" verification now run; manual resolution without table access → 502; no CAP user as USNAM filter; claim query failure → 503 (no fail-open); DB transaction failure → 503 (no memory-only claim); stock wording no longer makes a 5xx definitive.
+  5. W25, `GoodsIssueAttemptStore.hasOpenAttemptForReservation`: query failure → 503; the handler's `checkPendingConfirmation` turns it into `req.error`.
+  6. W05, `goodsIssuePerType.handler.classifyPostingError`: only 4xx is a definitive rejection; 500/status-less → unknown outcome (claims kept).
+  7. W03: `ODataClient` no longer re-sends POST/PUT/PATCH/DELETE (`maxRetries` 0 for writes); the CSRF re-send fires only on `x-csrf-token: Required`; 201/301/311 actions accept `ClientAttemptId` (service.cds, baseNormalized, UI services) and derive the reference from the request hash (261 keys unchanged); identical resends replay from the attempt log for all types.
+  8. Tests updated: `goodsIssueIssuedSu.test.js` (MATDOC mocks now return the live INDIA zone; times in IST, so the old UTC bug would fail the "earlier same-day posting" test); 201/301/311 UI service tests expect `ClientAttemptId`.
+- **Validation**: `npx jest test/unit/wm --runInBand --silent` → 58 suites / 1,194 tests passed (after change 7). Full suite, ESLint, cds compile and live checks of ROWCOUNT/TZ against SAP were **not run** after the last edits.
+- **Not done yet (from the approved plan)**: W01 (remove the unpublished Tier-1 RAP call; started, not edited), W04, W08 (disable batch submit), W11, W12, W13, W14–W18, W19, W20–W24, W26, R02, R04–R14, U01–U05, all of Phase 5 (metadata contract test, smoke script, ESLint rules, `SAP_LIVE` gate, flow tests), plus new tests for W05 (500 → unknown), W25 (503 on DB failure) and W03 (no write re-send).
+- **Next recommended action**: run `npx jest --runInBand`, `npx eslint .`, `npx cds compile srv db --to sql`, `git diff --check`; then continue with W01, W08, W19, W24 and the Phase 5 guards.
+
+## 2026-10-05 07:50 UTC — Safe State Handling & Reporting for Multi-Delivery 261 Goods Issue (Reservation 520615/0001)
+- **Agent**: Antigravity
+- **Request**: Investigate Reservation 520615/0001 (plant 1130, SLoc CS02, WM W12) with 7 open outbound deliveries (0080000074-80). Produce read-only SAP report (LIKP/LIPS/LTAP), ensure safe backend DELIVERY_CREATED handling with SU claim retention, update UI with multi-delivery banner, scan prompt, refresh button, and material mismatch checks, document W12 PGI design note, and validate full test suite.
+- **Current Status**: **Complete & Verified. Zero writes performed in SAP.**
+- **Read-Only SAP Report (Client 220)**:
+  - Queried live SAP S/4HANA tables `LIPS`, `LIKP`, and `LTAP` for `RSNUM = '0000520615'`, `RSPOS = '0001'`.
+  - Found 7 open deliveries: `0080000074`, `0080000075`, `0080000076`, `0080000077`, `0080000078`, `0080000079`, `0080000080`.
+  - All 7 have: Type `HOD`, Item `000010`, Material `000000003000000415` (`TEST SF - HU`), Batch `INWS260004`, Qty `100.000 KG`.
+  - Statuses: `WBSTK = 'A'` (Goods movement not processed), `KOSTK = 'A'` (Picking not started), `LVSTK = 'A'` (WM activity not started).
+  - Transfer Orders: 0 Transfer Orders exist (`LTAP` query returned 0 rows).
+  - Material Typo Verified: Verified material in SAP reservation and deliveries is `3000000415`. Prior mention of `3000000015` was an assistant write-up typo. UI and backend correctly use `3000000415`.
+- **Implementation Changes**:
+  1. **Backend SU Claim Retention**:
+     - In `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`: In `releaseByLquaDropOrReversal`, checks `adapter.findDeliveryByReference(row.ReferenceDocument)` before releasing claims to ensure SU claim is held while open delivery exists.
+     - Backend client and handlers already parse `sap-message` (L9/514), return `DELIVERY_CREATED` with delivery number (never 504/UNKNOWN), block duplicate posts with HTTP 409, and link attempts in `recheckPostingAttempts`.
+  2. **Frontend UI Display & Refresh**:
+     - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`:
+       - Emits scan required error prompt: `"Scan SU 2000018955, 0 of 100 KG"` when scan is enabled and no unit has been scanned.
+       - Strips leading zeros with `.replace(/^0+/, "")` when comparing materials in `validate` and `applyScanResolution` to strictly prevent `3000000015` vs `3000000415` mismatches without false positives on 18-character zero-padded strings.
+     - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`:
+       - In `formatDeliveryCreatedBanner`: When multiple open deliveries exist, formats localized banner: `"{0} open, expected 1: warehouse cleanup needed: {1}"` (e.g., `"7 open, expected 1: warehouse cleanup needed: 0080000074, 0080000075, ..."`).
+       - Added `formatScanRequiredPrompt` to format prompt string for message strip.
+       - Added `onRefresh` handler to re-detect scan mode and update `openDeliveryCount` / `openDeliveries`.
+       - In `_detectScanMode`: If open deliveries drop to 0, resets `postingStatus` to `INITIAL` and clears delivery fields.
+     - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`:
+       - Added `btnRefresh261` button in `<headerContent>`.
+       - Added `stripScanRequired261` warning message strip in `pnlScanToComplete261` displaying `formatScanRequiredPrompt`.
+       - Updated `stripDeliveryCreated261` visibility to show when `deliveryNumber` or `openDeliveryCount > 0`.
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added `gi261MultipleDeliveriesCreatedBannerText`, `gi261ScanRequiredPrompt`, `gi261BtnRefresh`, and `gi261RefreshSuccess`.
+  3. **W12 Architecture & Operational Design Note**:
+     - `docs/decisions/261-wm-delivery-created-pgi.md`: Documented W12 picking/TO prerequisites (`LT03`/`LT12`), 3 options (Option A: SAP GUI warehouse cleanup, Option B: automated CAP background orchestration, Option C: S/4HANA IMG customization), and operational risks. Waiting for warehouse decision; zero writes made to SAP.
+- **Validation**:
+  - `git diff --check`: Passed with 0 errors.
+  - `npm --prefix app/fiori-app run lint`: Passed with 0 findings.
+  - `npx cds compile srv db --to sql`: Passed with 0 errors.
+  - `npx jest test/unit/wm/goodsIssueDeliveryCreated.test.js test/unit/wm/goodsIssue261Controller.test.js test/unit/wm/goodsIssue261I18n.test.js --runInBand`: 3 passed, 3 total (95 passed).
+  - `npx jest test/unit/wm --runInBand`: 58 passed, 58 total (1,194 passed, 0 failed).
+- **Errors / Warnings / Blockers**: None in codebase. Awaiting warehouse operational decision on which delivery to process.
+- **Next Steps**: Present report, reviewable diffs, and test suite results to user.
+
 ## 2026-10-05 07:22 UTC — Fix & Verification: Batch Stock Scoping by Storage Location
 - **Agent**: Antigravity
 - **Request**: Investigate and fix batch `NMDH250001` error: `Batch NMDH250001 is expired, restricted, deleted, or has no usable stock in SAP.`

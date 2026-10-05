@@ -1362,26 +1362,35 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
   // Test 15: 261 MATDOC Fallback Lookup Filtering (Requirement 2)
   // ──────────────────────────────────────────────────────────
   describe('261 MATDOC Fallback Lookup Filtering (Requirement 2)', () => {
+    // Live SAP system zone (TTZCU/TTZZ/TTZR): INDIA, rule P0530, UTC+05:30, no DST.
+    // CPUDT/CPUTM in the rows below are therefore IST, as SAP returns them.
+    const TZ = {
+      TTZCU: [{ TZONESYS: 'INDIA' }],
+      TTZZ: [{ ZONERULE: 'P0530', DSTRULE: 'NONE' }],
+      TTZR: [{ UTCDIFF: '053000', UTCSIGN: '+' }]
+    };
+    const withTz = (impl) => async (table, fields, where) => (TZ[table] ? TZ[table] : impl(table, fields, where));
     it('proves an earlier same-day posting does NOT prove a later attempt', async () => {
       const mockPosting = GoodsIssueAdapter.posting;
       if (!mockPosting.rfc) {
         const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
         mockPosting.rfc = new RfcClient();
       }
-      // Earlier posting was created at 09:00:00 (CPUDT '20261002', CPUTM '090000').
+      // Earlier posting at 14:30 IST = 09:00Z, before the 12:00Z attempt. The old code read
+      // CPUTM as UTC (14:30Z) and would have wrongly taken it as this attempt's document.
       // The lookup reads 261 and 262 rows separately (equality-only predicates), so the
       // mock must honor the BWART predicate.
       const rows = [
         {
           MBLNR: '4900019991', MJAHR: '2026', ZEILE: '0001', BWART: '261',
-          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '090000',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '143000',
           MENGE: '48.000', STORNO: ''
         }
       ];
-      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(async (table, fields, where) => {
+      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(withTz(async (table, fields, where) => {
         const w = (where || []).join(' ');
         return rows.filter((r) => w.includes(`BWART = '${r.BWART}'`));
-      });
+      }));
 
       // Later claim attempt created at 12:00:00
       const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
@@ -1406,14 +1415,14 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       const rows = [
         {
           MBLNR: '4900019999', MJAHR: '2026', ZEILE: '0001', BWART: '261',
-          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '173500',
           MENGE: '48.000', STORNO: ''
         }
       ];
-      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(async (table, fields, where) => {
+      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(withTz(async (table, fields, where) => {
         const w = (where || []).join(' ');
         return rows.filter((r) => w.includes(`BWART = '${r.BWART}'`));
-      });
+      }));
 
       const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
         reservationNo: '0000100930',
@@ -1433,13 +1442,13 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
         mockPosting.rfc = new RfcClient();
       }
-      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(withTz(async () => [
         {
           MBLNR: '4900019993', MJAHR: '2026', ZEILE: '0001', BWART: '261',
-          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '173500',
           MENGE: '20.000', STORNO: ''
         }
-      ]);
+      ]));
 
       const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
         reservationNo: '0000100930',
@@ -1451,25 +1460,25 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
       expect(doc).toBeNull();
     });
 
-    it('excludes reversed documents (STORNO=X or cancelled by BWART 262 / SMBLN)', async () => {
+    it('excludes reversed documents (cancelled by BWART 262 / SMBLN)', async () => {
       const mockPosting = GoodsIssueAdapter.posting;
       if (!mockPosting.rfc) {
         const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
         mockPosting.rfc = new RfcClient();
       }
       // Document 4900019994 has cancellation document 4900019995 (BWART 262)
-      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(withTz(async () => [
         {
           MBLNR: '4900019994', MJAHR: '2026', ZEILE: '0001', BWART: '261',
-          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '173500',
           MENGE: '48.000', STORNO: ''
         },
         {
           MBLNR: '4900019995', MJAHR: '2026', ZEILE: '0001', BWART: '262',
-          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120600',
+          RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '173600',
           MENGE: '48.000', SMBLN: '4900019994', SJAHR: '2026'
         }
-      ]);
+      ]));
 
       const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
         reservationNo: '0000100930',

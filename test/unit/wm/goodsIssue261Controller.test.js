@@ -9,6 +9,7 @@
 
 let GoodsIssue261Controller;
 const RealModel = require('../../../app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model');
+const GoodsIssue261Model = RealModel;
 
 const flush = () => new Promise((res) => setTimeout(res, 0));
 
@@ -122,7 +123,7 @@ const mockBaseController = {
             this.getModel = (n) => this.models[n] || null;
             this.setModel = (m, n) => { this.models[n] = m; };
             this.getRouter = () => mockRouter;
-            this.getText = (k) => k;
+            this.getText = jest.fn((k) => k);
             this.byId = jest.fn();
         }
         return Controller;
@@ -1078,10 +1079,38 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
         it('formatDeliveryCreatedBanner should return multiple deliveries banner when openDeliveryCount > 1', () => {
             const sText = controller.formatDeliveryCreatedBanner('0080000080', 2, ['0080000074', '0080000080']);
             expect(sText).toBe('gi261MultipleDeliveriesCreatedBannerText');
+            expect(controller.getText).toHaveBeenCalledWith('gi261MultipleDeliveriesCreatedBannerText', [2, '0080000074, 0080000080']);
+        });
+
+        it('formatScanRequiredPrompt should return scan prompt with suggested SU and progress', () => {
+            const prompt = controller.formatScanRequiredPrompt(
+                [{ StorageUnit: '2000018955' }],
+                0,
+                100,
+                'KG'
+            );
+            expect(prompt).toBe('gi261ScanRequiredPrompt');
+            expect(controller.getText).toHaveBeenCalledWith('gi261ScanRequiredPrompt', ['2000018955', 0, 100, 'KG']);
+        });
+
+        it('formatScanRequiredPrompt should return empty string if no suggested unit exists', () => {
+            expect(controller.formatScanRequiredPrompt([], 0, 100, 'KG')).toBe('');
         });
     });
 
-    describe('Reset & navigation', () => {
+    describe('Refresh, Reset & navigation', () => {
+        it('onRefresh should re-read reservation scan mode from SAP and show toast', () => {
+            controller._oModel.setProperty('/reservationNo', '520615');
+            controller._oModel.setProperty('/reservationItem', '0001');
+            controller._oModel.setProperty('/openQty', 100);
+            jest.spyOn(controller, '_detectScanMode').mockImplementation(() => {});
+
+            controller.onRefresh();
+
+            expect(controller._detectScanMode).toHaveBeenCalledWith('520615', '0001', 100);
+            expect(mockMessageToast.show).toHaveBeenCalledWith('gi261RefreshSuccess');
+        });
+
         it('onResetForm should reset the model and toast when confirmed', () => {
             controller._oModel.setProperty('/material', 'X');
             mockMessageBox.confirm.mockImplementationOnce((msg, opts) => opts.onClose('OK'));
@@ -1100,6 +1129,73 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             controller._oModel.setProperty('/fromReservation', true);
             controller.onNavBack();
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending');
+        });
+    });
+
+    describe('Material mismatch checks (3000000015 vs 3000000415)', () => {
+        it('validate should reject scanned unit if material is 3000000015 when reservation expects 3000000415', () => {
+            const data = {
+                scanEnabled: true,
+                reservationNo: '520615',
+                reservationItem: '0001',
+                material: '3000000415',
+                plant: '1130',
+                storageLocation: 'CS02',
+                quantity: 100,
+                unit: 'KG',
+                postingDate: '2026-10-05',
+                documentDate: '2026-10-05',
+                requiredScanCount: 100,
+                scannedUnits: [
+                    { key: '2000018955', material: '3000000015', plant: '1130', storageLocation: 'CS02', qty: 100 }
+                ]
+            };
+            const result = GoodsIssue261Model.validate(data);
+            expect(result.isValid).toBe(false);
+            expect(result.errors.scannedUnits).toContain('Wrong material: scanned unit belongs to 3000000015, expected 3000000415.');
+        });
+
+        it('validate should accept matching material with normalized leading zeros', () => {
+            const data = {
+                scanEnabled: true,
+                reservationNo: '520615',
+                reservationItem: '0001',
+                material: '3000000415',
+                plant: '1130',
+                storageLocation: 'CS02',
+                quantity: 100,
+                unit: 'KG',
+                postingDate: '2026-10-05',
+                documentDate: '2026-10-05',
+                requiredScanCount: 100,
+                scannedUnits: [
+                    { key: '2000018955', material: '000000003000000415', plant: '1130', storageLocation: 'CS02', qty: 100 }
+                ]
+            };
+            const result = GoodsIssue261Model.validate(data);
+            expect(result.errors.scannedUnits).toBeFalsy();
+            expect(result.isValid).toBe(true);
+        });
+
+        it('applyScanResolution should reject material 3000000015 when 3000000415 expected', () => {
+            const data = {
+                material: '3000000415',
+                plant: '1130',
+                storageLocation: 'CS02',
+                requiredScanCount: 100,
+                scannedUnits: []
+            };
+            const res = {
+                SuExists: true,
+                Material: '3000000015',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                SuStockQty: 100
+            };
+            const fb = GoodsIssue261Model.applyScanResolution(data, res, '2000018955');
+            expect(fb.ok).toBe(false);
+            expect(fb.state).toBe('Error');
+            expect(fb.text).toContain('Wrong material: scanned unit belongs to 3000000015, expected 3000000415.');
         });
     });
 });

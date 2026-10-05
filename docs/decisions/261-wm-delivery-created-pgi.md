@@ -41,12 +41,33 @@ Status: **Open: waiting for the warehouse owner's decision.** No PGI automation 
    to be identified and capability-proven per AGENTS.md). This creates the 261 material document
    against the reservation.
 4. **Read back** MATDOC by RSNUM/RSPOS or by the delivery, and promote the SU claim.
-5. Open questions for the owner:
-   - Is delivery-based issue intended for 1130/CS02, or should 261 for staged PSA stock bypass it (a
-     customizing change)?
-   - Who runs TO/PGI: the warehouse in SAP, or this app?
-   - What happens to the 7 duplicate deliveries (0080000074–80) for 520615/0001? Deleting them (VL02N)
-     is a manual SAP action. **The app changes nothing.**
 
-Nothing in the list above is implemented. The PGI service must first be identified and proven per the
-SAP API Discovery protocol.
+## Options for Warehouse Decision
+
+- **Option A (Manual SAP GUI Cleanup & Execution — Recommended for immediate resolution)**:
+  - Warehouse supervisor opens transaction `VL02N` in SAP GUI.
+  - Deletes the 6 duplicate open deliveries (`0080000075` through `0080000080`).
+  - Retains single delivery `0080000074` (or cancels all 7 and posts cleanly).
+  - Creates and confirms Transfer Order (LT03 / LT12) for the 100 KG quantity from bin `GFL/0002000623` (or storage unit `2000018955`).
+  - Posts Goods Issue (PGI) via VL02N.
+  - Fiori UI operator clicks "Refresh" (`btnRefresh261`), which queries `OpenDeliveryCount` (now 0) and re-evaluates reservation open quantity.
+- **Option B (Automated End-to-End Orchestration in CAP)**:
+  - Implement sequential BAPI/RFC flow: TO Create (`L_TO_CREATE_DN`) -> TO Confirm (`L_TO_CONFIRM`) -> PGI (`WS_DELIVERY_UPDATE` or `BAPI_OUTB_DELIVERY_CONFIRM_DEC`).
+  - **Prerequisite**: Must be verified and proven against live SAP Gateway/RFC per `AGENTS.md` API Discovery protocol. Not implemented in this change.
+- **Option C (Customizing Adjustment in SAP S/4HANA IMG)**:
+  - If single-item production staging issue is intended to move directly via IM Material Document (as in non-WM storage locations like PT01), adjust MM-IM/LE-WM interface customizing (e.g., movement type 261 / storage location CS02 customizing) to disable automatic delivery generation.
+
+## Operational Risks
+
+1. **Over-Issue Risk**: If an automated script or operator blindly posts PGI on all 7 deliveries, 700.000 KG of material `3000000415` would be withdrawn against a 100.000 KG requirement, causing massive physical and book inventory divergence.
+2. **Double Storage Unit Allocation**: The available stock in bin `01-01-01` has only one SU `2000018955` (100 KG). Multiple deliveries cannot pick the same physical storage unit without raising stock deficits or duplicate quant errors.
+3. **Zero Write Policy Adherence**: The application code strictly refrains from auto-PGI or auto-deletion. It enforces safety by blocking new postings (`DELIVERY_CREATED` / HTTP 409), displaying both blockers clearly on screen, and waiting for authorized warehouse intervention.
+
+## Current State Summary for Reservation 520615/0001
+
+- **Reservation**: `520615` / Item `0001`
+- **Plant**: `1130`, Storage Location: `CS02`, Warehouse: `W12`
+- **Material**: `3000000415` (`TEST SF - HU`) — *verified authentic; reference in chat to 3000000015 was a typo*
+- **Batch**: `INWS260004`, Requirement: `100.000 KG`, Withdrawn: `0.000 KG`
+- **Open Outbound Deliveries (7 total)**: `0080000074`, `0080000075`, `0080000076`, `0080000077`, `0080000078`, `0080000079`, `0080000080`
+- **Delivery Status**: Type `HOD`, GM Status `WBSTK = 'A'`, Picking `KOSTK = 'A'`, WM Status `LVSTK = 'A'`, Transfer Orders (`LTAP`) = `0` (none created).

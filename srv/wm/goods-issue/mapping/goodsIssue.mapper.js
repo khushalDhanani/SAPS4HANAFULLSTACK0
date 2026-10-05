@@ -104,7 +104,8 @@ function baseNormalized(data, context, movementType) {
     DifferenceReason: '',
     DifferenceStorageType: '',
     FinalIssue: false,
-    User: context.user || 'SYSTEM'
+    User: context.user || 'SYSTEM',
+    ClientAttemptId: data.ClientAttemptId ? String(data.ClientAttemptId).trim() : ''
   };
 }
 

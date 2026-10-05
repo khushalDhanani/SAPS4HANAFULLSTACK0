@@ -25,6 +25,10 @@ const newPostingReference = () => `GI${Date.now().toString(36)}${crypto.randomBy
 
 function assign261IdempotencyKey(normalized) {
   const request = {
+    // Type-specific fields of 201/301/311; absent (undefined) for 261, so 261 keys are unchanged.
+    CostCenter: normalized.MovementType === '261' ? undefined : normalized.CostCenter,
+    ReceivingPlant: normalized.MovementType === '261' ? undefined : normalized.ReceivingPlant,
+    ReceivingStorageLocation: normalized.MovementType === '261' ? undefined : normalized.ReceivingStorageLocation,
     MovementType: normalized.MovementType,
     ReservationNo: normalized.ReservationNo,
     ReservationItem: normalized.ReservationItem,
@@ -49,6 +53,15 @@ function assign261IdempotencyKey(normalized) {
   const suffix = BigInt(`0x${hash}`).toString(36).toUpperCase().slice(0, 14);
   normalized.RequestHash = hash;
   normalized.ReferenceDocument = `GI${suffix}`;
+}
+
+/**
+ * 201/301/311: when the client sends a ClientAttemptId, the reference is derived from the request
+ * (same scheme as 261), so a resent request replays its attempt instead of posting again.
+ * Without one, the previous per-request random reference is kept.
+ */
+function ensureIdempotencyKey(normalized) {
+  if (normalized && normalized.ClientAttemptId && !normalized.RequestHash) assign261IdempotencyKey(normalized);
 }
 
 function attemptResponse(attempt) {
@@ -850,10 +863,23 @@ function classifyPostingError(err) {
     };
   }
 
-  // 4. Rejected by SAP (400, 409, 422, sap-message error)
+  // 4. Only an explicit SAP 4xx answer is a definitive rejection. A 500 or a status-less error
+  //    does not prove that nothing was committed in SAP, so it stays an unknown outcome.
+  if (!(status >= 400 && status < 500)) {
+    const detailMsg = msg ? ` (${msg})` : '';
+    return {
+      category: 'unknown_outcome',
+      status: status || 500,
+      message: `Posting outcome unconfirmed in SAP S/4HANA${detailMsg}. The goods issue may have been posted in SAP. Please do not post again.`,
+      definitive: false,
+      details
+    };
+  }
+
+  // 5. Rejected by SAP (400, 409, 422, sap-message error)
   return {
     category: 'rejected_by_sap',
-    status: status || 400,
+    status,
     message: msg || 'Validation failed for Goods Issue in SAP S/4HANA',
     definitive: true,
     details
@@ -869,20 +895,27 @@ function classifyPostingError(err) {
  * @returns {Promise<boolean>}
  */
 async function checkPendingConfirmation(req, normalized) {
+  ensureIdempotencyKey(normalized);
   const sResv = String(normalized.ReservationNo || '').trim();
   const sItem = String(normalized.ReservationItem || '').trim();
   if (!sResv) return true;
 
-  const hasAttempt = GoodsIssueAttemptStore && typeof GoodsIssueAttemptStore.hasOpenAttemptForReservation === 'function'
-    ? await GoodsIssueAttemptStore.hasOpenAttemptForReservation(sResv, sItem)
-    : false;
-
-  const hasClaim = GoodsIssueIssuedSuStore && typeof GoodsIssueIssuedSuStore.hasActiveClaimForReservation === 'function'
-    ? await GoodsIssueIssuedSuStore.hasActiveClaimForReservation(sResv, sItem)
-    : false;
+  let hasAttempt;
+  let hasClaim;
+  try {
+    hasAttempt = GoodsIssueAttemptStore && typeof GoodsIssueAttemptStore.hasOpenAttemptForReservation === 'function'
+      ? await GoodsIssueAttemptStore.hasOpenAttemptForReservation(sResv, sItem)
+      : false;
+    hasClaim = GoodsIssueIssuedSuStore && typeof GoodsIssueIssuedSuStore.hasActiveClaimForReservation === 'function'
+      ? await GoodsIssueIssuedSuStore.hasActiveClaimForReservation(sResv, sItem)
+      : false;
+  } catch (err) {
+    req.error(err.status || 503, err.message || 'Pending posting attempts could not be verified. Goods Issue was NOT posted.');
+    return false;
+  }
 
   if (hasAttempt || hasClaim) {
-    if (normalized.MovementType === '261' && normalized.ReferenceDocument && normalized.RequestHash) {
+    if (normalized.ReferenceDocument && normalized.RequestHash) {
       const existing = await getIdempotentAttempt(normalized);
       if (existing) {
         normalized._existingAttemptResult = attemptResponse(existing);
@@ -1042,6 +1075,7 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
  * @returns {Promise<Object>}
  */
 async function executeMovementPost(req, normalized, postFn, preCheckFn = null, beforePostFn = null) {
+  ensureIdempotencyKey(normalized);
   normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
   try {
     const claim = await GoodsIssueAttemptStore.createOrGet(normalized);

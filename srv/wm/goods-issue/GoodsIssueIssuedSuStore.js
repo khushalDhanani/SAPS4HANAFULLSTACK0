@@ -41,6 +41,17 @@ class AsyncKeyLock {
   }
 }
 
+/**
+ * RFC table reader of the adapter. GoodsIssueAdapter exposes it as `rfc.readTable` (it has no
+ * `readTable` of its own - verified); the other two shapes are kept for injected test doubles.
+ */
+function readTableOf(adapter) {
+  if (adapter && adapter.rfc && typeof adapter.rfc.readTable === 'function') return (t, f, w) => adapter.rfc.readTable(t, f, w);
+  if (adapter && typeof adapter.readTable === 'function') return (t, f, w) => adapter.readTable(t, f, w);
+  if (adapter && adapter.client && typeof adapter.client.readTable === 'function') return (t, f, w) => adapter.client.readTable(t, f, w);
+  return null;
+}
+
 class GoodsIssueIssuedSuStore {
   constructor(options = {}) {
     this._dbProvider = options.db !== undefined ? () => options.db : () => cds.db;
@@ -130,7 +141,8 @@ class GoodsIssueIssuedSuStore {
 
     // 3. Business / validation rejections
     if (s === 400 || s === 409 || s === 422) return true;
-    if (/deficit|consumed|storage unit|insufficient stock/i.test(msg)) return true;
+    // Wording alone never overrides a 5xx: a server error does not prove nothing was committed.
+    if (!(s >= 500) && /deficit|consumed|storage unit|insufficient stock/i.test(msg)) return true;
 
     // 4. Never-reached errors (404, 503, ECONNREFUSED, DNS failures)
     if (GoodsIssueIssuedSuStore.isNeverReachedError(err)) return true;
@@ -308,7 +320,11 @@ class GoodsIssueIssuedSuStore {
           });
         }
       } catch (err) {
+        // A failed read is not "no claim": block the post instead of failing open.
         LOG.warn('DB query failed for active claims by reservation:', err.message || err);
+        const e = new Error(`Active Storage Unit claims for reservation ${sRes} could not be read (${err.message || 'database error'}). Goods Issue was NOT posted.`);
+        e.status = 503;
+        throw e;
       }
     }
     return false;
@@ -435,16 +451,12 @@ class GoodsIssueIssuedSuStore {
           });
         } catch (dbErr) {
           if (!conflictInfo) {
-            // Real DB error: fallback to memory-only
-            LOG.warn('DB tx failed for claiming rows, falling back to memory:', dbErr.message || dbErr);
-            const memConflict = await this.checkConcurrentClaims(items);
-            if (memConflict.hasClaim) {
-              const e = new Error(`Storage Unit ${memConflict.claimedSu} is currently claimed in an active Goods Issue (available: ${memConflict.availableStock || 0}, requested: ${memConflict.requestedQty || 0}, already claimed: ${memConflict.totalClaimed || 0}). Goods Issue was NOT posted.`);
-              e.status = 400;
-              throw e;
-            }
-            for (const r of rows) this._memoryStore.set(r.ID, r);
-            return ownIds;
+            // Real DB error: a claim held only in this process's memory is invisible to other
+            // instances, so the post is blocked instead.
+            LOG.warn('DB tx failed for claiming rows; posting blocked:', dbErr.message || dbErr);
+            const e = new Error(`Storage Unit claims could not be recorded (${dbErr.message || 'database error'}). Goods Issue was NOT posted.`);
+            e.status = 503;
+            throw e;
           }
         }
 
@@ -904,11 +916,13 @@ class GoodsIssueIssuedSuStore {
 
       // 2. Verify the document in MATDOC (261, same reservation/item)
       const adapter = options.adapter || this.adapter;
-      const readTable = (adapter && typeof adapter.readTable === 'function')
-        ? (t, f, w) => adapter.readTable(t, f, w)
-        : (adapter && adapter.client && typeof adapter.client.readTable === 'function')
-          ? (t, f, w) => adapter.client.readTable(t, f, w)
-          : null;
+      const readTable = readTableOf(adapter);
+      if (!readTable) {
+        // No table access: the document cannot be verified, so it is not accepted.
+        const err = new Error(`SAP RFC table access is unavailable; material document ${matDoc}/${matYear} cannot be verified. Claim not resolved.`);
+        err.status = 502;
+        throw err;
+      }
 
       if (readTable) {
         const docFields = ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS'];
@@ -1059,7 +1073,8 @@ class GoodsIssueIssuedSuStore {
                   foundDoc = await matdocLookup.call(adapter, {
                     reservationNo: row.ReservationNo,
                     reservationItem: row.ReservationItem,
-                    user: row.createdBy || row.CreatedBy || '',
+                    // No user filter: MATDOC-USNAM is the SAP posting user (live: the technical
+                    // destination user), not the CAP user who created this claim.
                     date: row.createdAt || row.CreatedAt || now,
                     createdAt: row.createdAt || row.CreatedAt || now,
                     quantity: row.IssuedQty
@@ -1094,10 +1109,27 @@ class GoodsIssueIssuedSuStore {
               // Still not found: keep re-checking on next run; leave in needs-attention
               LOG.debug && LOG.debug(`Needs-attention claim ${row.ID} re-checked; document not yet in SAP. Remaining needs-attention.`);
             } else if (row.ReferenceDocument && !lookupFailed) {
-              // Conclusively not found in SAP by reference
-              await this.deleteClaims([row.ID], { definitive: true });
-              resolvedClaimingCount++;
-              LOG.info(`Stale claiming row ${row.ID} deleted: not found in SAP after ${Math.round(rowAge / 1000)}s`);
+              // Check if an Outbound Delivery was created instead of a material document (WM 261)
+              let deliveryExists = false;
+              if (adapter && typeof adapter.findDeliveryByReference === 'function') {
+                try {
+                  const deliv = await adapter.findDeliveryByReference(row.ReferenceDocument);
+                  if (deliv) deliveryExists = true;
+                } catch (delivErr) {
+                  LOG.warn(`Delivery lookup error for ref ${row.ReferenceDocument}: ${delivErr.message}. Row left intact.`);
+                  errorCount++;
+                  continue;
+                }
+              }
+              if (deliveryExists) {
+                // Outbound delivery exists in SAP for this reference: keep the SU claim intact awaiting PGI
+                LOG.info(`Claim ${row.ID} kept intact: outbound delivery exists for reference ${row.ReferenceDocument}.`);
+              } else {
+                // Conclusively not found in SAP by reference
+                await this.deleteClaims([row.ID], { definitive: true });
+                resolvedClaimingCount++;
+                LOG.info(`Stale claiming row ${row.ID} deleted: not found in SAP after ${Math.round(rowAge / 1000)}s`);
+              }
             } else {
               // No ReferenceDocument or unprovable:
               // Claims past the threshold become needs-attention with visible flag and manual resolve action.
@@ -1127,11 +1159,7 @@ class GoodsIssueIssuedSuStore {
         if (row.Status === 'issued') {
           let shouldRelease = false, releaseReason = '';
 
-          const readTable = (adapter && typeof adapter.readTable === 'function')
-            ? (t, f, w) => adapter.readTable(t, f, w)
-            : (adapter && adapter.client && typeof adapter.client.readTable === 'function')
-              ? (t, f, w) => adapter.client.readTable(t, f, w)
-              : null;
+          const readTable = readTableOf(adapter);
 
           if (readTable) {
             const suPadded = /^\d+$/.test(row.StorageUnit) ? row.StorageUnit.padStart(20, '0') : row.StorageUnit;

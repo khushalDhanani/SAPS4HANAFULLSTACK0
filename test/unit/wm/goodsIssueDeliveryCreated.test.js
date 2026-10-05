@@ -203,4 +203,35 @@ describe('handler + attempt store', () => {
     expect(await attempts.recheck(adapter, Date.now() + 60 * MIN)).toMatchObject({ Errors: 1, NotPosted: 0 });
     expect((await attempts.getByReference('GIAMBIG0000001')).Status).toBe('sending');
   });
+
+  test('partial PGI (WBSTK B) -> treated as open delivery, blocks repeat post, and keeps the SU claim', async () => {
+    // 1. LIKP delivery with partial PGI: WBSTK = 'B' (Partially processed)
+    const rfc = { readTable: jest.fn(async (table) => (table === 'LIPS'
+      ? [{ VBELN: '0080000074', POSNR: '000010', LFIMG: '100.000', VRKME: 'KG', BWART: '261' }]
+      : [{ VBELN: '0080000074', LFART: 'HOD', ERDAT: '20261005', ERZET: '103543', WBSTK: 'B', LIFEX: 'GIPARTIALPGI01' }])) };
+    const postingClient = new GoodsIssuePostingClient({ rfc });
+    const deliveries = await postingClient.findDeliveriesForReservationItem('520615', '0001');
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({ DeliveryNumber: '0080000074', GoodsMovementStatus: 'B', Open: true });
+
+    // 2. Handler blocks post when partial PGI delivery is open
+    jest.spyOn(GoodsIssueAdapter, 'findDeliveriesForReservationItem').mockResolvedValue([
+      { DeliveryNumber: '0080000074', Open: true, GoodsMovementStatus: 'B', Quantity: 100 }
+    ]);
+    const req = makeReq({ ...payload, ClientAttemptId: 'CLICK-PARTIAL' });
+    await handlers.postGoodsIssue261(req);
+    expect(req.error).toHaveBeenCalledWith(409, expect.stringContaining('open outbound delivery 0080000074'));
+
+    // 3. Recheck links attempt to delivery with WBSTK B and keeps status delivery_created
+    await attempts.create({ ReferenceDocument: 'GIPARTIALPGI01', MovementType: '261', ReservationNo: '520615', ReservationItem: '0001', IssueQty: 100, PostingDate: '2026-10-05' });
+    const adapter = {
+      findPostedGoodsIssueByReference: jest.fn().mockResolvedValue(null),
+      findDeliveryByReference: jest.fn().mockResolvedValue({ DeliveryNumber: '0080000074', Open: true, GoodsMovementStatus: 'B' }),
+      findDeliveriesForReservationItem: jest.fn()
+    };
+    const summary = await attempts.recheck(adapter, Date.now() + 60 * MIN);
+    expect(summary).toMatchObject({ DeliveryCreated: 1, NotPosted: 0 });
+    const row = await attempts.getByReference('GIPARTIALPGI01');
+    expect(row).toMatchObject({ Status: 'delivery_created', DeliveryNumber: '0080000074' });
+  });
 });

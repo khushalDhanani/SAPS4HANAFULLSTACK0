@@ -13,6 +13,12 @@
         class="sapUiSizeCompact">
 
         <headerContent>
+            <Button
+                id="btnRefresh261"
+                icon="sap-icon://refresh"
+                tooltip="{i18n>gi261BtnRefresh}"
+                type="Transparent"
+                press=".onRefresh" />
             <ObjectStatus
                 id="statMvtBadge261"
                 text="{i18n>gi261MovementTypeBadge}"
@@ -56,10 +62,10 @@
                 <MessageStrip
                     id="stripDeliveryCreated261"
                     text="{parts: [{path: 'gi261>/deliveryNumber'}, {path: 'gi261>/openDeliveryCount'}, {path: 'gi261>/openDeliveries'}], formatter: '.formatDeliveryCreatedBanner'}"
-                    type="Information"
+                    type="Warning"
                     showIcon="true"
                     showCloseButton="false"
-                    visible="{= !!${gi261>/deliveryNumber} }"
+                    visible="{= !!${gi261>/deliveryNumber} || ${gi261>/openDeliveryCount} > 0 }"
                     class="sapUiSmallMarginBottom" />
 
                 <!-- 3. Form Container -->
@@ -335,6 +341,15 @@
                     visible="{gi261>/scanEnabled}"
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
+                        <!-- Scan Prompt / Blocker when scanning is required (Requirement 3) -->
+                        <MessageStrip
+                            id="stripScanRequired261"
+                            text="{parts: [{path: 'gi261>/suggestedUnits'}, {path: 'gi261>/scannedQty'}, {path: 'gi261>/requiredScanCount'}, {path: 'gi261>/unit'}], formatter: '.formatScanRequiredPrompt'}"
+                            type="Warning"
+                            showIcon="true"
+                            visible="{= ${gi261>/scanEnabled} &amp;&amp; ${gi261>/scannedQty} &lt; ${gi261>/requiredScanCount} }"
+                            class="sapUiTinyMarginBottom" />
+
                         <!-- Partial drum instruction before scanning (Requirement 5) -->
                         <MessageStrip
                             id="stripPartialInstruction261"

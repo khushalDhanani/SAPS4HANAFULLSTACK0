@@ -66,6 +66,7 @@ describe('GoodsIssue201Service Unit Tests', () => {
             expect(mockODataClient.post).toHaveBeenCalledWith(
                 '/odata/v4/goods-issue/postGoodsIssue201',
                 {
+                    ClientAttemptId: expect.stringMatching(/^GIA[A-Z0-9]+$/),
                     CostCenter: 'CC-100',
                     Material: 'MAT-1',
                     Plant: '1710',
