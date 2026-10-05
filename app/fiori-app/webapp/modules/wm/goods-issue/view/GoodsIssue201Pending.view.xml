@@ -1,0 +1,70 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue201Pending"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <Page
+        id="pageGi201Pending"
+        showHeader="false">
+        <content>
+            <MessageStrip
+                id="msPending201Result"
+                text="{gi201p>/resultText}"
+                type="{= ${gi201p>/resultState} === 'None' ? 'Information' : ${gi201p>/resultState} }"
+                showIcon="true"
+                showCloseButton="true"
+                close=".onCloseResult"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi201p>/resultText} }" />
+
+            <MessageStrip
+                id="msPending201Error"
+                text="{gi201p>/error}"
+                type="Error"
+                showIcon="true"
+                showCloseButton="true"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi201p>/error} }" />
+
+            <Table
+                id="tblPending201"
+                items="{gi201p>/items}"
+                busy="{gi201p>/busy}"
+                growing="true"
+                growingThreshold="50"
+                noDataText="{i18n>gi201OpenResvNoData}"
+                itemPress=".onOpenReservation"
+                class="sapUiResponsiveMargin"
+                width="auto">
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title id="ttlPending201" text="{= ${i18n>gi201OpenResvListTitle} + ' (' + (${gi201p>/items}.length || 0) + ')' }" level="H2" />
+                        <ToolbarSpacer />
+                        <Button id="btnPending201Refresh" icon="sap-icon://refresh" tooltip="{i18n>gi201OpenResvRefresh}" press=".onRefresh" />
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column id="colPendingResv"><Text text="{i18n>gi201OpenResvColReservation}" /></Column>
+                    <Column id="colPendingMaterial"><Text text="{i18n>gi201OpenResvColMaterial}" /></Column>
+                    <Column id="colPendingPlant" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="Begin"><Text text="{i18n>gi201OpenResvColPlant}" /></Column>
+                    <Column id="colPendingItems" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>gi201OpenResvColItems}" /></Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Navigation" press=".onOpenReservation">
+                        <cells>
+                            <ObjectIdentifier title="{gi201p>ReservationNo}" text="{= ${gi201p>StatusText} ? (${gi201p>MovementTypeName} + ' • ' + ${gi201p>StatusText}) : ${gi201p>MovementTypeName} }" />
+                            <VBox>
+                                <Text text="{gi201p>SampleMaterial}" />
+                                <Text text="{gi201p>SampleMaterialDesc}" class="sapUiTinyMarginTop" />
+                            </VBox>
+                            <Text text="{gi201p>Plant}" />
+                            <ObjectNumber number="{gi201p>ItemCount}" unit="{i18n>gi201OpenResvItemsUnit}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+    </Page>
+</mvc:View>

@@ -65,16 +65,26 @@ const mockView = {
     getModel: jest.fn()
 };
 
+const mockMessageBox = {
+    error: jest.fn(),
+    information: jest.fn(),
+    warning: jest.fn(),
+    success: jest.fn()
+};
+
 // Mock sap.ui.define
 global.sap = {
     ui: {
         define: jest.fn((deps, factory) => {
-            ControllerClass = factory(
-                MockBaseController,
-                MockJSONModel,
-                mockBusyIndicator,
-                mockSalesInquiryService
-            );
+            const depMap = {
+                'saps4hana/fiori/controller/BaseController': MockBaseController,
+                'sap/ui/model/json/JSONModel': MockJSONModel,
+                'sap/ui/core/BusyIndicator': mockBusyIndicator,
+                'sap/m/MessageBox': mockMessageBox,
+                'saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService': mockSalesInquiryService
+            };
+            const resolved = deps.map(d => depMap[d] || {});
+            ControllerClass = factory(...resolved);
         })
     }
 };
@@ -173,8 +183,26 @@ describe('Sales Inquiry Detail Controller Unit Tests', () => {
 
             expect(mockBusyIndicator.hide).toHaveBeenCalled();
             expect(spyWarn).toHaveBeenCalledWith(expect.stringContaining('[SalesInquiryDetail]'), expect.any(Error));
+            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Failed to load Sales Inquiry 999999999'));
 
             spyWarn.mockRestore();
+        });
+
+        it('should populate itemsUnavailable flag when inquiry items service fails', async () => {
+            mockSalesInquiryService.getSalesInquiry.mockResolvedValue({
+                header: { SalesInquiry: '160000005' },
+                items: [],
+                itemsUnavailable: true,
+                itemsUnavailableReason: 'Factsheet items service unavailable'
+            });
+
+            controller._loadInquiry('160000005');
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            const setModelCall = mockView.setModel.mock.calls[0];
+            const boundModel = setModelCall[0];
+            expect(boundModel.getData().itemsUnavailable).toBe(true);
+            expect(boundModel.getData().itemsUnavailableReason).toBe('Factsheet items service unavailable');
         });
     });
 

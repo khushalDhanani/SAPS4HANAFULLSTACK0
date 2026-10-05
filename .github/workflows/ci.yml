@@ -1,0 +1,56 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  ci:
+    name: Build, Test & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            app/fiori-app/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install UI5 application dependencies
+        run: |
+          cd app/fiori-app
+          npm ci
+
+      - name: Run root ESLint
+        run: npm run lint
+
+      - name: Run UI5 linter
+        run: |
+          cd app/fiori-app
+          npm run lint
+
+      - name: Run automated test suite
+        run: npm test
+
+      - name: Build UI5 application
+        run: |
+          cd app/fiori-app
+          npm run build
+
+      - name: Validate MTA deployment descriptor
+        run: npm run validate:mta

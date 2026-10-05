@@ -1,0 +1,210 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.le.outbound-delivery.controller.OrdersDueForDelivery"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Page
+        id="ordersDueForDeliveryPage"
+        showHeader="false"
+        backgroundDesign="Solid"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+                <!-- Header Toolbar & Title -->
+                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <VBox class="sapUiTinyMarginBottom">
+                        <Title text="{i18n>ordersDueForDeliveryTitle}" level="H2" titleStyle="H3" />
+                        <Text text="{i18n>ordersDueForDeliverySubtitle}" class="textMuted" />
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <Button
+                            id="btnCreateDeliveryNoRef"
+                            icon="sap-icon://add-document"
+                            text="{i18n>btnCreateDeliveryNoRef}"
+                            type="Emphasized"
+                            press=".onOpenCreateDeliveryNoRefDialog"
+                            visible="{= ${ordersDueView>/canCreateDelivery} !== false }"
+                            class="sapUiTinyMarginEnd" />
+                        <Button
+                            id="btnRefreshOrdersDue"
+                            icon="sap-icon://refresh"
+                            text="{i18n>btnRefresh}"
+                            type="Transparent"
+                            press=".onRefresh" />
+                    </HBox>
+                </HBox>
+
+                <!-- KPI Section -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <GenericTile
+                        id="kpiReadyOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiReady}"
+                        subheader="{= (${ordersDueView>/readyOrdersCount} !== '-' &amp;&amp; ${ordersDueView>/readyOrdersCount} !== undefined) ? (${ordersDueView>/readyOrdersCount} + ' orders (' + ${ordersDueView>/readyCount} + ' lines)') : ${i18n>ordersDueKpiReadySub} }">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiReadyOrdersVal"
+                                value="{ordersDueView>/readyCount}"
+                                icon="sap-icon://accept"
+                                valueColor="Good" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiInApprovalOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiInApproval}"
+                        subheader="{= (${ordersDueView>/inApprovalOrdersCount} !== '-' &amp;&amp; ${ordersDueView>/inApprovalOrdersCount} !== undefined) ? (${ordersDueView>/inApprovalOrdersCount} + ' orders (' + ${ordersDueView>/inApprovalCount} + ' lines)') : ${i18n>ordersDueKpiInApprovalSub} }">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiInApprovalOrdersVal"
+                                value="{ordersDueView>/inApprovalCount}"
+                                icon="sap-icon://pending"
+                                valueColor="Critical" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiDueOrders"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiTotal}"
+                        subheader="{= (${ordersDueView>/distinctOrdersCount} !== '-' &amp;&amp; ${ordersDueView>/distinctOrdersCount} !== undefined) ? (${ordersDueView>/distinctOrdersCount} + ' orders (' + ${ordersDueView>/totalCount} + ' lines)') : ${i18n>ordersDueKpiTotalSub} }">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiDueOrdersVal"
+                                value="{ordersDueView>/totalCount}"
+                                icon="sap-icon://shipping-status"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+
+                    <GenericTile
+                        id="kpiShippingPoints"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+                        header="{i18n>ordersDueKpiShippingPoints}"
+                        subheader="{i18n>ordersDueKpiShippingPointsSub}">
+                        <TileContent>
+                            <NumericContent
+                                id="kpiShippingPointsVal"
+                                value="{ordersDueView>/shippingPointCount}"
+                                icon="sap-icon://map-fill"
+                                valueColor="Neutral" />
+                        </TileContent>
+                    </GenericTile>
+                </HBox>
+
+                <!-- Follow-up on an existing delivery: PGI, then billing. Everything shown comes from S/4HANA. -->
+                <Panel id="deliveryFollowUpPanel" headerText="{i18n>dlvFollowUpTitle}" expandable="true" expanded="{= !!${deliveryFollowUp>/delivery} }" class="sapUiSmallMarginBottom" busy="{deliveryFollowUp>/busy}">
+                    <HBox wrap="Wrap" alignItems="End" class="sapUiTinyMargin">
+                        <VBox class="sapUiTinyMarginEnd">
+                            <Label text="{i18n>dlvFollowUpDelivery}" labelFor="inpFollowUpDelivery" />
+                            <Input id="inpFollowUpDelivery" value="{deliveryFollowUp>/delivery}" width="11rem" placeholder="{i18n>dlvFollowUpDeliveryPlaceholder}" change=".onLoadDeliveryStatus" submit=".onLoadDeliveryStatus" />
+                        </VBox>
+                        <Button id="btnPostGoodsIssue" text="{i18n>btnPostGoodsIssue}" icon="sap-icon://outbox" type="Emphasized" press=".onPostGoodsIssue" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canPgi}" />
+                        <Button id="btnLoadBillingTypes" text="{i18n>btnLoadBillingTypes}" icon="sap-icon://refresh" press=".onLoadBillingTypes" class="sapUiTinyMarginEnd" enabled="{deliveryFollowUp>/canBill}" />
+                        <VBox class="sapUiTinyMarginEnd">
+                            <Label text="{i18n>dlvFollowUpBillingType}" labelFor="selBillingType" />
+                            <Select id="selBillingType" selectedKey="{deliveryFollowUp>/billingType}" forceSelection="false" width="16rem" items="{deliveryFollowUp>/billingTypes}" enabled="{= ${deliveryFollowUp>/billingTypes}.length > 0 }">
+                                <core:Item key="{deliveryFollowUp>BillingDocumentType}" text="{deliveryFollowUp>BillingDocumentType} - {deliveryFollowUp>BillingDocumentTypeName}" />
+                            </Select>
+                        </VBox>
+                        <VBox class="sapUiTinyMarginEnd">
+                            <Label text="{i18n>dlvFollowUpBillingDate}" labelFor="dpBillingDate" />
+                            <DatePicker id="dpBillingDate" value="{deliveryFollowUp>/billingDate}" valueFormat="yyyy-MM-dd" displayFormat="yyyy-MM-dd" width="10rem" placeholder="{i18n>dlvFollowUpBillingDatePlaceholder}" />
+                        </VBox>
+                        <Button id="btnCreateBillingDocument" text="{i18n>btnCreateBillingDocument}" icon="sap-icon://sales-document" type="Emphasized" press=".onCreateBillingDocument" enabled="{deliveryFollowUp>/canBill}" />
+                    </HBox>
+                    <Text text="{deliveryFollowUp>/statusText}" class="sapUiTinyMargin" visible="{= !!${deliveryFollowUp>/statusText} }" />
+                    <Text text="{deliveryFollowUp>/lastResult}" class="sapUiTinyMargin" visible="{= !!${deliveryFollowUp>/lastResult} }" />
+                </Panel>
+
+                <!-- Orders Due Table -->
+                <Table
+                    id="ordersDueTable"
+                    items="{
+                        path: 'outboundDelivery>/OrdersDueForDelivery',
+                        parameters: {
+                            $count: true
+                        },
+                        sorter: [
+                            { path: 'GoodsIssueDate', descending: false },
+                            { path: 'SalesOrder', descending: false }
+                        ]
+                    }"
+                    growing="true"
+                    growingThreshold="25"
+                    growingScrollToLoad="true"
+                    noDataText="{i18n>ordersDueNoDataText}"
+                    sticky="ColumnHeaders,HeaderToolbar">
+                    <headerToolbar>
+                        <OverflowToolbar id="tableToolbar">
+                            <Title
+                                id="tableTitle"
+                                text="{= 'Orders Due for Delivery (' + (${ordersDueView>/displayCount} || ${ordersDueView>/readyCount} || '0') + ')' }"
+                                level="H4" />
+                            <ToolbarSpacer />
+                            <SegmentedButton id="segApprovalStatus" selectedKey="{ordersDueView>/selectedTab}" selectionChange=".onTabSelect">
+                                <items>
+                                    <SegmentedButtonItem id="segBtnReady" key="ready" text="{i18n>ordersDueTabReady}" icon="sap-icon://accept" />
+                                    <SegmentedButtonItem id="segBtnInApproval" key="inApproval" text="{i18n>ordersDueTabInApproval}" icon="sap-icon://pending" />
+                                    <SegmentedButtonItem id="segBtnAll" key="all" text="{i18n>ordersDueTabAll}" />
+                                </items>
+                            </SegmentedButton>
+                            <SearchField
+                                id="searchOrdersDue"
+                                width="16rem"
+                                search=".onSearch"
+                                liveChange=".onSearch"
+                                placeholder="{i18n>ordersDueSearchPlaceholder}">
+                                <layoutData>
+                                    <OverflowToolbarLayoutData priority="High" shrinkable="true" minWidth="8rem" />
+                                </layoutData>
+                            </SearchField>
+                            <Button
+                                id="btnRefreshTable"
+                                icon="sap-icon://refresh"
+                                tooltip="{i18n>btnRefresh}"
+                                press=".onRefresh" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column width="8rem"><Text text="{i18n>ordersDueColSalesOrder}" /></Column>
+                        <Column width="5.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColItemSchedLine}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColShipTo}" /></Column>
+                        <Column width="7.5rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColShippingPoint}" /></Column>
+                        <Column width="8rem" hAlign="End"><Text text="{i18n>ordersDueColGoodsIssueDate}" /></Column>
+                        <Column width="7.5rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColDeliveryBlock}" /></Column>
+                        <Column width="7.5rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColApprovalStatus}" /></Column>
+                        <Column width="8rem" hAlign="Center" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>ordersDueColAction}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Inactive">
+                            <cells>
+                                <ObjectIdentifier title="{outboundDelivery>SalesOrder}" />
+                                <Text text="{= (${outboundDelivery>SalesOrderItem} || '') + ' / ' + (${outboundDelivery>ScheduleLine} || '') }" />
+                                <ObjectIdentifier title="{outboundDelivery>ShipToParty}" />
+                                <ObjectStatus text="{outboundDelivery>ShippingPoint}" state="Information" />
+                                <Text text="{outboundDelivery>GoodsIssueDate}" />
+                                <ObjectStatus
+                                    text="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? ${outboundDelivery>DelivBlockReasonForSchedLine} : 'None' }"
+                                    state="{= %{outboundDelivery>DelivBlockReasonForSchedLine} ? 'Error' : 'None' }" />
+                                <ObjectStatus
+                                    text="{= ${outboundDelivery>SalesDocApprovalStatus} === 'unknown' ? ${i18n>statusApprovalUnknown} : (${outboundDelivery>SalesDocApprovalStatus} === 'A' ? ${i18n>statusInApproval} : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? 'Rejected' : (${outboundDelivery>SalesDocApprovalStatus} === 'D' ? 'To Be Reworked' : (${outboundDelivery>SalesDocApprovalStatus} === 'B' ? 'Released' : 'Not Relevant')))) }"
+                                    state="{= %{outboundDelivery>SalesDocApprovalStatus} === 'unknown' || %{outboundDelivery>SalesDocApprovalStatus} === 'A' || %{outboundDelivery>SalesDocApprovalStatus} === 'D' ? 'Warning' : (%{outboundDelivery>SalesDocApprovalStatus} === 'C' ? 'Error' : (%{outboundDelivery>SalesDocApprovalStatus} === 'B' ? 'Success' : 'None')) }" />
+                                <Button
+                                    text="{i18n>btnCreateDelivery}"
+                                    icon="sap-icon://shipping-status"
+                                    type="Emphasized"
+                                    press=".onCreateDeliveryPress"
+                                    visible="{= ${ordersDueView>/canCreateDelivery} !== false }"
+                                    enabled="{= !%{outboundDelivery>DelivBlockReasonForSchedLine} &amp;&amp; %{outboundDelivery>SalesDocApprovalStatus} !== 'unknown' &amp;&amp; (%{outboundDelivery>SalesDocApprovalStatus} === 'B' || !%{outboundDelivery>SalesDocApprovalStatus}) }"
+                                    tooltip="{= ${outboundDelivery>DelivBlockReasonForSchedLine} ? ${i18n>tooltipOrderDeliveryBlocked} : (${outboundDelivery>SalesDocApprovalStatus} === 'unknown' ? ${i18n>tooltipOrderApprovalUnknown} : (${outboundDelivery>SalesDocApprovalStatus} === 'A' ? ${i18n>tooltipOrderInApproval} : (${outboundDelivery>SalesDocApprovalStatus} === 'C' ? ${i18n>tooltipOrderRejected} : (${outboundDelivery>SalesDocApprovalStatus} === 'D' ? ${i18n>tooltipOrderRework} : ${i18n>tooltipCreateDelivery})))) }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

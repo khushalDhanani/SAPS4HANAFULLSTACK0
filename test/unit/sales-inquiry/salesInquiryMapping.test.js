@@ -1,5 +1,5 @@
 const { normalizeSalesInquiryData } = require('../../../srv/sd/sales-inquiry/mapping/salesInquiry.mapper');
-const { mapToS4InquiryPayload } = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
+const { mapToS4InquiryPayload, mapToS4OrderPayload } = require('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
 
 describe('Unit: Sales Inquiry Mapping', () => {
     describe('normalizeSalesInquiryData', () => {
@@ -69,6 +69,59 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(normalizeSalesInquiryData(null)).toBeNull();
             expect(normalizeSalesInquiryData('abc')).toBe('abc');
         });
+
+        test('should leave dates empty when not provided instead of inventing today or future dates', () => {
+            const raw = {
+                header: {
+                    SoldToParty: '10135'
+                },
+                items: [
+                    {
+                        Material: '4000000123',
+                        OrderQuantity: 5,
+                        OrderQuantityUnit: 'PC'
+                    }
+                ]
+            };
+            const result = normalizeSalesInquiryData(raw);
+            expect(result.header.CustomerPurchaseOrderDate).toBe('');
+            expect(result.header.SalesInquiryDate).toBe('');
+            expect(result.header.CreationDate).toBe('');
+            expect(result.header.RequestedDeliveryDate).toBe('');
+            expect(result.header.BindingPeriodValidityStartDate).toBe('');
+            expect(result.header.BindingPeriodValidityEndDate).toBe('');
+            expect(result.items[0].RequestedDeliveryDate).toBe('');
+        });
+
+        test('should preserve authentic dates when provided', () => {
+            const raw = {
+                header: {
+                    SoldToParty: '10135',
+                    CustomerPurchaseOrderDate: '2026-10-01',
+                    SalesInquiryDate: '2026-10-02',
+                    CreationDate: '2026-10-03',
+                    RequestedDeliveryDate: '2026-10-15',
+                    BindingPeriodValidityStartDate: '2026-10-05',
+                    BindingPeriodValidityEndDate: '2026-11-05'
+                },
+                items: [
+                    {
+                        Material: '4000000123',
+                        OrderQuantity: 5,
+                        OrderQuantityUnit: 'PC',
+                        RequestedDeliveryDate: '2026-10-20'
+                    }
+                ]
+            };
+            const result = normalizeSalesInquiryData(raw);
+            expect(result.header.CustomerPurchaseOrderDate).toBe('2026-10-01');
+            expect(result.header.SalesInquiryDate).toBe('2026-10-02');
+            expect(result.header.CreationDate).toBe('2026-10-03');
+            expect(result.header.RequestedDeliveryDate).toBe('2026-10-15');
+            expect(result.header.BindingPeriodValidityStartDate).toBe('2026-10-05');
+            expect(result.header.BindingPeriodValidityEndDate).toBe('2026-11-05');
+            expect(result.items[0].RequestedDeliveryDate).toBe('2026-10-20');
+        });
     });
 
     describe('mapToS4InquiryPayload', () => {
@@ -117,7 +170,7 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.items[0].TransactionCurrency).toBe('INR');
         });
 
-        test('should preserve CustomerName and ShipToPartyName and fallback description from item text', () => {
+        test('should preserve CustomerName and ShipToPartyName and leave customer reference empty when omitted', () => {
             const raw = {
                 header: {
                     SoldToParty: '10135',
@@ -131,6 +184,7 @@ describe('Unit: Sales Inquiry Mapping', () => {
                         Material: '4000000091',
                         SalesInquiryItemText: 'Industrial Grade Chemical Inquiry',
                         OrderQuantity: 10,
+                        OrderQuantityUnit: 'PC',
                         NetPriceAmount: 100
                     }
                 ]
@@ -139,7 +193,8 @@ describe('Unit: Sales Inquiry Mapping', () => {
             const result = normalizeSalesInquiryData(raw);
             expect(result.header.CustomerName).toBe("Divi's Laboratories Limited");
             expect(result.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
-            expect(result.header.PurchaseOrderByCustomer).toBe('Industrial Grade Chemical Inquiry');
+            expect(result.header.PurchaseOrderByCustomer).toBe('');
+            expect(result.header.PurchaseOrderNumber).toBe('');
         });
 
         test('should throw error if header is null or missing', () => {
@@ -149,6 +204,10 @@ describe('Unit: Sales Inquiry Mapping', () => {
         test('should preserve CustomerName, ShipToPartyName, and TotalNetAmount in mapToS4InquiryPayload', () => {
             const header = {
                 SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
                 SoldToParty: '10135',
                 CustomerName: "Divi's Laboratories Limited",
                 ShipToParty: '10135',
@@ -160,6 +219,143 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.header.CustomerName).toBe("Divi's Laboratories Limited");
             expect(s4.header.ShipToPartyName).toBe("Divi's Laboratories Limited");
             expect(s4.header.TotalNetAmount).toBe('1500');
+        });
+
+        test('should throw error if required org fields, docType, or currency are missing or blank in mapToS4InquiryPayload', () => {
+            const baseHeader = {
+                SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const requiredFields = ['SalesInquiryType', 'SalesOrganization', 'DistributionChannel', 'OrganizationDivision', 'TransactionCurrency'];
+            requiredFields.forEach(field => {
+                const missing = { ...baseHeader };
+                delete missing[field];
+                expect(() => mapToS4InquiryPayload(missing, [])).toThrow(new RegExp(`${field} is required`));
+
+                const blank = { ...baseHeader, [field]: '   ' };
+                expect(() => mapToS4InquiryPayload(blank, [])).toThrow(new RegExp(`${field} is required`));
+            });
+        });
+
+        test('should throw error if an item is missing OrderQuantityUnit in mapToS4InquiryPayload', () => {
+            const header = {
+                SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const items = [{
+                Material: '4000000123',
+                OrderQuantity: 10
+            }];
+            expect(() => mapToS4InquiryPayload(header, items)).toThrow(/OrderQuantityUnit is required for item 000010/);
+        });
+
+        test('should leave dates empty when not provided instead of inventing today in inquiry payload', () => {
+            const header = {
+                SalesInquiryType: 'ZIN',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const items = [
+                {
+                    Material: '4000000123',
+                    OrderQuantity: 5,
+                    OrderQuantityUnit: 'PC'
+                }
+            ];
+            const s4 = mapToS4InquiryPayload(header, items);
+            expect(s4.header.CustomerPurchaseOrderDate).toBe('');
+            expect(s4.header.SalesInquiryDate).toBe('');
+            expect(s4.header.BindingPeriodValidityStartDate).toBe('');
+            expect(s4.header.BindingPeriodValidityEndDate).toBe('');
+        });
+    });
+
+    describe('mapToS4OrderPayload', () => {
+        test('should leave dates empty when not provided instead of inventing today or today + 7 days in order payload', () => {
+            const header = {
+                SalesOrderType: 'OR',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const items = [
+                {
+                    Material: '4000000123',
+                    OrderQuantity: 5,
+                    OrderQuantityUnit: 'PC'
+                }
+            ];
+            const s4 = mapToS4OrderPayload(header, items);
+            expect(s4.header.CustomerPurchaseOrderDate).toBe('');
+            expect(s4.header.SalesOrderDate).toBe('');
+            expect(s4.header.RequestedDeliveryDate).toBe('');
+            expect(s4.items[0].RequestedDeliveryDate).toBe('');
+        });
+
+        test('should throw error if required org fields, docType, or currency are missing or blank in mapToS4OrderPayload', () => {
+            const baseHeader = {
+                SalesOrderType: 'OR',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const requiredFields = ['SalesOrderType', 'SalesOrganization', 'DistributionChannel', 'OrganizationDivision', 'TransactionCurrency'];
+            requiredFields.forEach(field => {
+                const missing = { ...baseHeader };
+                delete missing[field];
+                expect(() => mapToS4OrderPayload(missing, [])).toThrow(new RegExp(`${field} is required`));
+
+                const blank = { ...baseHeader, [field]: '   ' };
+                expect(() => mapToS4OrderPayload(blank, [])).toThrow(new RegExp(`${field} is required`));
+            });
+        });
+
+        test('should preserve authentic dates and item delivery date override in order payload', () => {
+            const header = {
+                SalesOrderType: 'OR',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135',
+                CustomerPurchaseOrderDate: '2026-10-01',
+                SalesOrderDate: '2026-10-02',
+                RequestedDeliveryDate: '2026-10-15'
+            };
+            const items = [
+                {
+                    Material: '4000000123',
+                    OrderQuantity: 5,
+                    OrderQuantityUnit: 'PC'
+                },
+                {
+                    Material: '4000000124',
+                    OrderQuantity: 2,
+                    OrderQuantityUnit: 'PC',
+                    RequestedDeliveryDate: '2026-10-25'
+                }
+            ];
+            const s4 = mapToS4OrderPayload(header, items);
+            expect(s4.header.CustomerPurchaseOrderDate).toBe('2026-10-01');
+            expect(s4.header.SalesOrderDate).toBe('2026-10-02');
+            expect(s4.header.RequestedDeliveryDate).toBe('2026-10-15');
+            expect(s4.items[0].RequestedDeliveryDate).toBe('2026-10-15');
+            expect(s4.items[1].RequestedDeliveryDate).toBe('2026-10-25');
         });
     });
 });

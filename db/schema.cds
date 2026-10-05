@@ -10,11 +10,12 @@
  *   - C_PURCHASEORDER_FS_SRV (OData V2 read & value helps)
  *   - MM_PUR_PO_MAINT_V2_SRV (OData V2 draft & activation)
  *
- * Consequently, no local database tables or SAP HANA HDI container artifacts are provisioned.
- * If local domain persistence or audit trails are required in future phases, entities can be
- * modeled here and bound to an HDI container.
+ * Consequently, no business documents are stored locally.
+ *
+ * NOTE: All Goods Issue transactions post directly to SAP S/4HANA via API_MATERIAL_DOCUMENT_SRV.
+ * No dispatch queue is persisted; S/4HANA remains the authoritative system of record.
  */
 
 namespace saps4hana.fullstack;
 
-// Intentionally empty — persistence delegated completely to SAP S/4HANA.
+// Intentionally empty — business persistence delegated completely to SAP S/4HANA.

@@ -5,7 +5,7 @@
         id="userProfilePopover"
         title="{i18n>userProfileTitle}"
         placement="Bottom"
-        contentWidth="280px"
+        contentWidth="17.5rem"
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiSmallMargin">

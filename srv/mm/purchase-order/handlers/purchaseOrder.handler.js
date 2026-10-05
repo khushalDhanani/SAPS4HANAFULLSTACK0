@@ -1,64 +1,11 @@
+const cds = require('@sap/cds');
+const LOG = require('../../../common/logger')('purchase-order');
 const purchaseOrderAdapter = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const { validateCreatePurchaseOrderPayload } = require('../validation/purchaseOrder.validation');
 const { normalizePurchaseOrderData } = require('../mapping/purchaseOrder.mapper');
 const { mapToS4Payload } = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderMapper');
 const { mapS4Error } = require('../../../integration/s4hana/S4ErrorMapper');
-
-/**
- * Derives the authenticated business user identity from CAP request and security context.
- * In production:
- *   1. XSUAA user attributes (logon_name, email)
- *   2. CAP authenticated user ID (req.user.id !== 'anonymous')
- *   3. CAP user name (req.user.name !== 'anonymous')
- *   4. Fails closed (rejects) if trusted identity cannot be determined.
- * In non-production (local development / test):
- *   1. XSUAA user attributes / CAP user id
- *   2. Custom forwarded 'x-user-id' header (strictly non-production)
- *   3. Configured environment fallback (S4_USER || 'SYSTEM')
- *
- * @param {import('@sap/cds').Request} req
- * @returns {string}
- */
-function resolveUserIdentity(req) {
-    if (!req) {
-        if (process.env.NODE_ENV === 'production') {
-            throw new Error('Authentication required: Missing request context in production');
-        }
-        return process.env.S4_USER || 'SYSTEM';
-    }
-
-    // 1. XSUAA user attributes (e.g. logon_name, email)
-    if (req.user?.attr?.logon_name) {
-        return String(req.user.attr.logon_name).trim();
-    }
-    if (req.user?.attr?.email) {
-        return String(req.user.attr.email).split('@')[0].trim();
-    }
-
-    // 2. CAP user ID (ignore default 'anonymous' in unauthenticated requests)
-    if (req.user?.id && req.user.id !== 'anonymous') {
-        return String(req.user.id).trim();
-    }
-
-    // 3. CAP user name property if present
-    if (req.user?.name && req.user.name !== 'anonymous') {
-        return String(req.user.name).trim();
-    }
-
-    // In production, do NOT trust client headers or silently fall back to privileged system users
-    if (process.env.NODE_ENV === 'production') {
-        throw new Error('Authentication required: Trusted user identity cannot be determined');
-    }
-
-    // 4. Custom forwarded user header (strictly non-production / local dev only)
-    const headerUser = req.headers?.['x-user-id'] || req._?.req?.headers?.['x-user-id'];
-    if (headerUser && String(headerUser).trim() !== '') {
-        return String(headerUser).trim();
-    }
-
-    // 5. Configured system / service user fallback (non-production only)
-    return process.env.S4_USER || 'SYSTEM';
-}
+const { resolveUserIdentity } = require('../../../auth/userIdentity');
 
 /**
  * Registers Purchase Order business handlers on the CAP service.
@@ -109,10 +56,16 @@ function registerPurchaseOrderHandlers(srv) {
         // Step D: Orchestrate draft & activation via integration adapter
         try {
             const result = await purchaseOrderAdapter.createPurchaseOrder(s4Payload);
-            return result.PurchaseOrder || 'PO Created but no ID returned';
+            const poNumber = result && (result.PurchaseOrder || result.PurchaseOrderNumber);
+            if (!poNumber || String(poNumber).trim() === '') {
+                LOG.error('S/4HANA PO activation succeeded but no PurchaseOrder document number was returned by SAP.');
+                req.error(502, 'S/4HANA Purchase Order creation succeeded but no Purchase Order document number was returned by SAP.');
+                return;
+            }
+            return String(poNumber).trim();
         } catch (error) {
             const sapError = mapS4Error(error);
-            console.error(`[PurchaseOrderService] Error creating PO (${sapError.status}):`, sapError.message);
+            LOG.error(`Error creating PO (${sapError.status}):`, sapError.message);
             req.error(sapError.status, `Failed to create Purchase Order: ${sapError.message}`);
         }
     });
@@ -127,47 +80,94 @@ function registerPurchaseOrderHandlers(srv) {
                 PaymentTerms: '',
                 IncotermsClassification: '',
                 IncotermsLocation1: '',
-                derived: false
+                derived: false,
+                source: '',
+                lastPurchaseOrder: ''
             };
         }
 
         const sSupplier = String(Supplier).trim();
+        const sPurchOrg = PurchasingOrganization ? String(PurchasingOrganization).trim() : '';
+        const sCompCode = CompanyCode ? String(CompanyCode).trim() : '';
+        let sLookupFailed = false;
 
         try {
-            // Check PurchaseOrders in S/4HANA FS service for confirmed commercial defaults
-            const s4Query = SELECT.from('C_PURCHASEORDER_FS_SRV.C_PurchaseOrderFs')
-                .columns(
-                    'DocumentCurrency',
-                    'PaymentTerms',
-                    'IncotermsClassification',
-                    'IncotermsTransferLocation'
-                )
-                .where({ Supplier: sSupplier });
+            const findPoWithDefaults = async (filterObj) => {
+                const s4Query = SELECT.from('C_PURCHASEORDER_FS_SRV.C_PurchaseOrderFs')
+                    .columns(
+                        'PurchaseOrder',
+                        'DocumentCurrency',
+                        'PaymentTerms',
+                        'IncotermsClassification',
+                        'IncotermsTransferLocation',
+                        'PurchasingOrganization',
+                        'CompanyCode'
+                    )
+                    .where(filterObj)
+                    .orderBy({ ref: ['PurchaseOrder'], sort: 'desc' })
+                    .limit(1);
+                const result = await purchaseOrderAdapter.readFsData(s4Query);
+                const aOrders = Array.isArray(result) ? result : (result?.value || []);
+                return aOrders.length > 0 ? aOrders[0] : null;
+            };
 
-            if (PurchasingOrganization && String(PurchasingOrganization).trim() !== '') {
-                s4Query.where({ PurchasingOrganization: String(PurchasingOrganization).trim() });
+            let po = null;
+            // Attempt 1: Supplier + PurchOrg + CompCode (if both supplied)
+            if (sPurchOrg && sCompCode) {
+                po = await findPoWithDefaults({ Supplier: sSupplier, PurchasingOrganization: sPurchOrg, CompanyCode: sCompCode });
             }
-            if (CompanyCode && String(CompanyCode).trim() !== '') {
-                s4Query.where({ CompanyCode: String(CompanyCode).trim() });
+            // Attempt 2: Supplier + CompCode (if CompCode supplied)
+            if (!po && sCompCode) {
+                po = await findPoWithDefaults({ Supplier: sSupplier, CompanyCode: sCompCode });
             }
-            s4Query.limit(1);
+            // Attempt 3: Supplier + PurchOrg (if PurchOrg supplied)
+            if (!po && sPurchOrg) {
+                po = await findPoWithDefaults({ Supplier: sSupplier, PurchasingOrganization: sPurchOrg });
+            }
+            // Attempt 4: Supplier alone (broadest commercial history for this vendor)
+            if (!po) {
+                po = await findPoWithDefaults({ Supplier: sSupplier });
+            }
 
-            const result = await purchaseOrderAdapter.readFsData(s4Query);
-            const aOrders = Array.isArray(result) ? result : (result?.value || []);
-            const po = aOrders.length > 0 ? aOrders[0] : null;
+            let sValidPaymentTerms = '';
+            if (po && po.PaymentTerms) {
+                const termUpper = String(po.PaymentTerms).trim().toUpperCase();
+                let validTermsSet = null;
+                if (typeof purchaseOrderAdapter.getValidPaymentTerms === 'function') {
+                    try {
+                        validTermsSet = await purchaseOrderAdapter.getValidPaymentTerms();
+                    } catch (_e) {
+                        validTermsSet = null;
+                    }
+                }
+                if (validTermsSet && validTermsSet.size > 0) {
+                    if (validTermsSet.has(termUpper)) {
+                        sValidPaymentTerms = termUpper;
+                    } else {
+                        LOG.warn(`Historical PO ${po.PurchaseOrder} has invalid/obsolete PaymentTerms '${po.PaymentTerms}' not present in S/4HANA customizing; omitted.`);
+                    }
+                } else if (termUpper !== 'AT01' && termUpper !== 'AT05' && termUpper !== 'AT06') {
+                    // Fallback when S/4 payment terms value help is unreachable or in mock mode
+                    sValidPaymentTerms = termUpper;
+                }
+            }
 
-            if (po && (po.DocumentCurrency || po.PaymentTerms || po.IncotermsClassification)) {
+            if (po && (po.DocumentCurrency || sValidPaymentTerms || po.IncotermsClassification)) {
                 return {
                     Supplier: sSupplier,
                     Currency: po.DocumentCurrency || '',
-                    PaymentTerms: po.PaymentTerms || '',
+                    PaymentTerms: sValidPaymentTerms,
                     IncotermsClassification: po.IncotermsClassification || '',
                     IncotermsLocation1: po.IncotermsTransferLocation || '',
-                    derived: true
+                    derived: true,
+                    source: 'from last PO',
+                    lastPurchaseOrder: po.PurchaseOrder || ''
                 };
             }
         } catch (error) {
-            console.warn('[PurchaseOrderService] getSupplierDefaults readFsData failed, falling back:', error.message);
+            LOG.warn('getSupplierDefaults readFsData failed:', error.message);
+            // A failed lookup is not "no history": say so, so the screen can tell the user.
+            sLookupFailed = true;
         }
 
         return {
@@ -176,14 +176,22 @@ function registerPurchaseOrderHandlers(srv) {
             PaymentTerms: '',
             IncotermsClassification: '',
             IncotermsLocation1: '',
-            derived: false
+            derived: false,
+            source: sLookupFailed ? 'lookup failed' : '',
+            lastPurchaseOrder: ''
         };
     });
 
-    // 4. Function getDashboardMetrics: provides unified, authentic SAP S/4HANA live counts
-    srv.on('getDashboardMetrics', async () => {
-        const metrics = await purchaseOrderAdapter.getDashboardMetrics();
-        return JSON.stringify(metrics);
+    // 4. Function getDashboardMetrics: live SAP S/4HANA counts; a count SAP did not return is null
+    srv.on('getDashboardMetrics', async (req) => {
+        try {
+            const metrics = await purchaseOrderAdapter.getDashboardMetrics();
+            return JSON.stringify(metrics);
+        } catch (error) {
+            const sapError = mapS4Error(error);
+            const status = sapError.status >= 500 ? 503 : sapError.status;
+            return req.error(status, `Dashboard metrics are not available: ${sapError.message}`);
+        }
     });
 }
 

@@ -291,4 +291,25 @@ describe('Purchase Order Material Selection Flow', () => {
             expect(poItem.Plant).toBe('1110');
         });
     });
+
+    describe('PurchaseOrderModel item defaulting', () => {
+        it('should initialize initial item with empty UnitOfMeasure and empty OrderQuantity', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
+            const items = oModel.getProperty('/items');
+            expect(items).toHaveLength(1);
+            expect(items[0].UnitOfMeasure).toBe('');
+            expect(items[0].OrderQuantity).toBe('');
+        });
+
+        it('should add new item via addItem with empty UnitOfMeasure and empty OrderQuantity', () => {
+            const oModel = PurchaseOrderModel.createInitialModel('TESTUSER');
+            PurchaseOrderModel.addItem(oModel, 'TESTUSER');
+            const items = oModel.getProperty('/items');
+            expect(items).toHaveLength(2);
+            expect(items[1].PurchaseOrderItem).toBe('20');
+            expect(items[1].UnitOfMeasure).toBe('');
+            expect(items[1].OrderQuantity).toBe('');
+            expect(items[1].NetPriceAmount).toBe('');
+        });
+    });
 });

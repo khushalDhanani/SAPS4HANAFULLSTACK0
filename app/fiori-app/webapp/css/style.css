@@ -1,3 +1,21 @@
+/* Shared text utilities (used across the module views) */
+.fontBold,
+.fontBold.sapMText,
+.fontBold .sapMObjStatusText {
+    font-weight: bold;
+}
+
+.textMuted,
+.textMuted.sapMText,
+.textMuted.sapMLabel {
+    color: var(--sapContent_LabelColor, #6a6d70);
+}
+
+/* Login card never wider than the screen */
+.loginPanel {
+    max-width: calc(100% - 2rem);
+}
+
 /* Root Application Shell Layout */
 .appRootContainer {
     height: 100vh;
@@ -17,7 +35,7 @@
     width: auto !important;
     max-width: 6.5rem !important;
     object-fit: contain !important;
-    background-color: #ffffff !important;
+    background-color: var(--sapBaseColor, #ffffff) !important;
     padding: 3px 8px !important;
     border-radius: 4px !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18) !important;
@@ -50,9 +68,9 @@
     box-sizing: border-box !important;
     padding: 1.25rem 1.5rem !important;
     margin-bottom: 1.25rem !important;
-    background: #ffffff !important;
+    background: var(--sapGroup_ContentBackground, #ffffff) !important;
     border-radius: 0.75rem !important;
-    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    border: 1px solid var(--sapGroup_ContentBorderColor, rgba(0, 0, 0, 0.08)) !important;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
 }
 
@@ -275,4 +293,196 @@
         width: 100% !important;
         margin-right: 0 !important;
     }
+}
+/* ---------- Ask AI assistant widget (bottom-right) ---------- */
+.aiFab {
+    position: fixed !important;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 50;
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+    min-width: 3.5rem !important;
+    border-radius: 50% !important;
+    box-shadow: var(--sapContent_Shadow2, 0 0.625rem 1.875rem rgba(0,0,0,0.3)) !important;
+}
+.aiFab .sapMBtnInner { width: 100%; height: 100%; border-radius: 50%; }
+.aiFab .sapMBtnIcon { font-size: 1.5rem; line-height: 3.5rem; }
+.aiWidget {
+    position: fixed;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 50;
+    width: 34rem;
+    height: min(42rem, calc(100vh - 3rem));
+    display: flex;
+    flex-direction: column;
+    background: var(--sapGroup_ContentBackground, #fff);
+    border: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9);
+    border-radius: 1rem;
+    box-shadow: var(--sapContent_Shadow3, 0 1.25rem 5rem rgba(0,0,0,0.35));
+    overflow: hidden;
+    font-size: 0.875rem;
+}
+@media (max-width: 700px) {
+    .aiWidget { right: 0; bottom: 0; width: 100vw; height: 100vh; border-radius: 0; }
+}
+.aiWidgetHeader {
+    flex: 0 0 auto;
+    background: var(--sapShellColor, #354a5f);
+    color: var(--sapShell_TextColor, #fff);
+    border-bottom: none;
+}
+.aiWidgetHeader .sapMTitle, .aiWidgetHeader .sapUiIcon, .aiWidgetHeader .sapMBtnIcon { color: var(--sapShell_TextColor, #fff) !important; }
+.aiWidgetHint {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--sapContent_LabelColor, #6a6d70);
+    background: var(--sapList_HeaderBackground, #f2f2f2);
+}
+.aiChatScroll { flex: 1 1 auto; min-height: 0; height: auto !important; background: var(--sapBackgroundColor, #f7f7f7); }
+.aiChatBody { min-height: 100%; }
+.aiChatEmpty .aiSuggestion { justify-content: flex-start; margin-bottom: 0.25rem; }
+.aiMsg { margin-bottom: 0.75rem; }
+.aiBubble {
+    max-width: 100%;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.75rem;
+    border-top-left-radius: 0.125rem;
+    background: var(--sapGroup_ContentBackground, #fff);
+    border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+    box-shadow: var(--sapContent_Shadow0, 0 0 0.125rem rgba(0,0,0,0.15));
+    word-break: break-word;
+    line-height: 1.45;
+}
+.aiMsg[data-role="user"] .aiBubble {
+    max-width: 85%;
+    background: var(--sapButton_Emphasized_Background, #0a6ed1);
+    color: var(--sapButton_Emphasized_TextColor, #fff);
+    border-color: transparent;
+    border-radius: 0.75rem;
+    border-top-right-radius: 0.125rem;
+}
+.aiMsg[data-role="error"] .aiBubble {
+    background: var(--sapErrorBackground, #ffebeb);
+    border-color: var(--sapErrorBorderColor, #e90b0b);
+}
+.aiMsgMeta {
+    margin-top: 0.2rem;
+    padding: 0 0.25rem;
+    font-size: 0.6875rem;
+    color: var(--sapContent_LabelColor, #6a6d70);
+}
+.aiTyping { padding: 0.5rem 0.875rem; }
+.aiTypingIcon { margin-right: 0.5rem; color: var(--sapContent_IconColor, #0854a0); animation: aiPulse 1.2s ease-in-out infinite; }
+@keyframes aiPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+/* rendered markdown */
+.aiMd { font-size: 0.875rem; line-height: 1.45; }
+.aiMd p { margin: 0 0 0.5rem 0; }
+.aiMd p:last-child, .aiMd ul:last-child, .aiMd ol:last-child, .aiMd table:last-child { margin-bottom: 0; }
+.aiMd h3, .aiMd h4, .aiMd h5, .aiMd h6 { margin: 0.5rem 0 0.25rem 0; font-weight: 600; line-height: 1.3; }
+.aiMd h3 { font-size: 1rem; } .aiMd h4 { font-size: 0.9375rem; } .aiMd h5, .aiMd h6 { font-size: 0.875rem; }
+.aiMd ul, .aiMd ol { margin: 0.25rem 0 0.5rem 0; padding-left: 1.25rem; }
+.aiMd li { margin: 0.125rem 0; }
+.aiMd code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.8125rem; background: rgba(0,0,0,0.06); padding: 0 0.25rem; border-radius: 0.25rem; }
+.aiMsg[data-role="user"] .aiMd code { background: rgba(255,255,255,0.2); }
+.aiMd pre { margin: 0.25rem 0 0.5rem 0; padding: 0.5rem 0.625rem; background: rgba(0,0,0,0.06); border-radius: 0.375rem; overflow-x: auto; }
+.aiMd pre code { background: none; padding: 0; }
+.aiMd table { border-collapse: collapse; width: 100%; margin: 0.25rem 0 0.5rem 0; font-size: 0.8125rem; }
+.aiMd th, .aiMd td { border: 1px solid var(--sapList_BorderColor, #e5e5e5); padding: 0.25rem 0.5rem; text-align: left; vertical-align: top; }
+.aiMd th { background: var(--sapList_HeaderBackground, #f2f2f2); font-weight: 600; }
+.aiMd td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aiMd hr { border: 0; border-top: 1px solid var(--sapList_BorderColor, #e5e5e5); margin: 0.5rem 0; }
+.aiMd a { color: var(--sapLinkColor, #0a6ed1); }
+.aiMsg[data-role="user"] .aiMd a { color: inherit; text-decoration: underline; }
+.aiChatFooter { flex: 0 0 auto; border-top: 1px solid var(--sapGroup_ContentBorderColor, #d9d9d9); }
+.aiChatFooter .sapMInputBase { flex: 1 1 auto; }
+
+/* Responsive Table Polish: Ensure clean full-width stretch and comfortable pop-in padding */
+.sapMListTbl {
+    width: 100% !important;
+}
+
+.sapMListTblSubRow {
+    padding: 0.375rem 0.75rem !important;
+}
+
+.sapMListTblSubRowCell {
+    padding: 0.25rem 0.5rem !important;
+}
+
+/* Value Help Icon vertical centering inside Input controls */
+.sapMInputBaseContentWrapper {
+    align-items: center !important;
+}
+
+.sapMInputBaseIconContainer,
+.sapMInputValHelp {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 100% !important;
+    vertical-align: middle !important;
+}
+
+.sapMInputBaseIcon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    height: auto !important;
+}
+
+/* Goods Issue 201 Form Grid & Card Alignment */
+.giCardPanel {
+    height: 100% !important;
+}
+
+.giCardPanel .sapMPanelContent {
+    padding: 1rem 1.25rem !important;
+}
+
+.giFormValueText,
+.giFormValueText.sapMObjStatus,
+.giFormValueText.sapMText {
+    height: 2rem !important;
+    min-height: 2rem !important;
+    max-height: 2rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+    line-height: 1.25rem !important;
+}
+
+.giFormValueText .sapMObjStatusWrapper {
+    height: 100% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    line-height: 1.25rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.giFormValueText .sapMObjStatusText {
+    height: 100% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    line-height: 1.25rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 1rem !important;
+}
+
+.giFormValueText .sapMObjStatusIcon {
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    margin-right: 0.375rem !important;
+}
+
+.giFormValueText.sapMObjStatusNone .sapMObjStatusText {
+    color: var(--sapTextColor, #232629) !important;
 }

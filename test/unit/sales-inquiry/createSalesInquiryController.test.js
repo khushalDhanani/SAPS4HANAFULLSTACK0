@@ -38,6 +38,7 @@ class MockJSONModel {
 const mockMessageBox = {
     success: jest.fn(),
     error: jest.fn(),
+    warning: jest.fn(),
     confirm: jest.fn(),
     information: jest.fn(),
     Action: { OK: "OK" }
@@ -107,6 +108,7 @@ const mockSalesInquiryService = {
     loadConfiguration: jest.fn().mockResolvedValue({}),
     getCustomerDefaults: jest.fn().mockResolvedValue(null),
     getSalesInquiryDefaults: jest.fn().mockResolvedValue(null),
+    getInquiryCreationCapabilities: jest.fn().mockResolvedValue({ CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, Plant: true }),
     getMaterialDetails: jest.fn().mockResolvedValue(null),
     getMaterialUnit: jest.fn().mockResolvedValue(null),
     createSalesInquiry: jest.fn().mockResolvedValue(null)
@@ -487,6 +489,14 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
     });
 
     describe("Submission & Save Flow", () => {
+        function setupValidHeader(m) {
+            m.setProperty("/header/SalesInquiryType", "ZIN");
+            m.setProperty("/header/SalesOrganization", "1000");
+            m.setProperty("/header/DistributionChannel", "10");
+            m.setProperty("/header/OrganizationDivision", "52");
+            m.setProperty("/header/TransactionCurrency", "INR");
+        }
+
         it("onSave blocks when incomplete and opens message popover", () => {
             mockModel.setProperty("/header/SoldToParty", "");
             const popoverSpy = jest.spyOn(controller, "onMessageButtonPress");
@@ -495,11 +505,31 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockSalesInquiryService.createSalesInquiry).not.toHaveBeenCalled();
         });
 
-        it("onSave dispatches payload and presents success dialog with Create Another option", async () => {
+        it("onSave blocks when item Plant is empty and highlights Plant with error state", () => {
+            setupValidHeader(mockModel);
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
             mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "");
+            const popoverSpy = jest.spyOn(controller, "onMessageButtonPress");
+
+            controller.onSave();
+
+            expect(popoverSpy).toHaveBeenCalled();
+            expect(mockSalesInquiryService.createSalesInquiry).not.toHaveBeenCalled();
+            const aItems = mockModel.getProperty("/items");
+            expect(aItems[0].errors.Plant.state).toBe("Error");
+            expect(aItems[0].errors.Plant.text).toContain("Plant is required for each line item");
+        });
+
+        it("onSave dispatches payload and presents success dialog with Create Another option", async () => {
+            setupValidHeader(mockModel);
+            mockModel.setProperty("/header/SoldToParty", "10135");
+            mockModel.setProperty("/items/0/Material", "1000000003");
+            mockModel.setProperty("/items/0/OrderQuantity", 10);
+            mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
             mockModel.setProperty("/items/0/NetPriceAmount", "50.00");
 
             mockSalesInquiryService.createSalesInquiry.mockResolvedValue("10000005");
@@ -526,10 +556,12 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
         });
 
         it("onSave handles backend rejection gracefully", async () => {
+            setupValidHeader(mockModel);
             mockModel.setProperty("/header/SoldToParty", "10135");
             mockModel.setProperty("/items/0/Material", "1000000003");
             mockModel.setProperty("/items/0/OrderQuantity", 10);
             mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
 
             mockSalesInquiryService.createSalesInquiry.mockRejectedValue(new Error("Customer credit limit exceeded"));
 
@@ -541,6 +573,43 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockModel.getProperty("/hasError")).toBe(true);
             expect(mockModel.getProperty("/errorMessage")).toContain("Customer credit limit exceeded");
             expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Customer credit limit exceeded"));
+        });
+
+        it("onSave handles partial backend creation with warning and navigation to detail", async () => {
+            setupValidHeader(mockModel);
+            mockModel.setProperty("/header/SoldToParty", "10135");
+            mockModel.setProperty("/items/0/Material", "1000000003");
+            mockModel.setProperty("/items/0/OrderQuantity", 10);
+            mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            mockModel.setProperty("/items/0/Plant", "1120");
+
+            const partialErrMsg = "Sales Inquiry 1000529 was created in SAP S/4HANA, but adding item 000010 failed: Material blocked. Do not retry: check or complete inquiry 1000529 in SAP.";
+            const partialError = new Error(partialErrMsg);
+            partialError.SalesInquiry = "1000529";
+
+            mockSalesInquiryService.createSalesInquiry.mockRejectedValue(partialError);
+
+            controller.onSave();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(mockBusyIndicator.hide).toHaveBeenCalled();
+            expect(mockModel.getProperty("/hasError")).toBe(true);
+            expect(mockModel.getProperty("/errorMessage")).toContain("1000529");
+            expect(mockMessageBox.warning).toHaveBeenCalledWith(
+                expect.stringContaining("1000529"),
+                expect.objectContaining({
+                    title: "Partial Creation in SAP",
+                    actions: expect.arrayContaining(["Display Inquiry 1000529", "Close"])
+                })
+            );
+
+            // Test navigation on "Display Inquiry 1000529"
+            const warningConfig = mockMessageBox.warning.mock.calls[0][1];
+            warningConfig.onClose("Display Inquiry 1000529");
+            expect(mockRouter.navTo).toHaveBeenCalledWith("salesInquiryDetail", {
+                SalesInquiry: "1000529"
+            });
         });
     });
 

@@ -342,7 +342,9 @@ sap.ui.define([
                     var videoEl = document.getElementById(sVideoId);
                     if (videoEl) {
                         videoEl.srcObject = stream;
-                        videoEl.play().catch(function () {});
+                        videoEl.play().catch(function () {
+                            // Autoplay rejection: the stream is attached; the browser will play on user gesture.
+                        });
                     }
 
                     // If BarcodeDetector is available, initiate frame scanning loop

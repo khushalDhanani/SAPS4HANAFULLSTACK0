@@ -10,8 +10,6 @@ sap.ui.define([
     "sap/m/SearchField",
     "sap/m/SegmentedButton",
     "sap/m/SegmentedButtonItem",
-    "sap/m/Select",
-    "sap/ui/core/Item",
     "sap/m/Button",
     "sap/m/VBox",
     "sap/m/Label",
@@ -21,14 +19,14 @@ sap.ui.define([
     "sap/m/Text",
     "sap/m/ObjectIdentifier",
     "sap/m/ObjectStatus"
-], function (Filter, FilterOperator, SelectDialog, TableSelectDialog, Dialog, Table, Toolbar, ToolbarSpacer, SearchField, SegmentedButton, SegmentedButtonItem, Select, Item, Button, VBox, Label, StandardListItem, Column, ColumnListItem, Text, ObjectIdentifier, ObjectStatus) {
+], function (Filter, FilterOperator, SelectDialog, TableSelectDialog, Dialog, Table, Toolbar, ToolbarSpacer, SearchField, SegmentedButton, SegmentedButtonItem, Button, VBox, Label, StandardListItem, Column, ColumnListItem, Text, ObjectIdentifier, ObjectStatus) {
     "use strict";
 
     var oValueHelpConfig = {
         "/DocumentTypeVH": { title: "Select Document Type", key: "PurchasingDocumentType", desc: "PurchasingDocumentType_Text" },
-        "/CompanyCodeVH": { title: "Select Company Code", key: "CompanyCode", desc: "CompanyCodeName" },
+        "/CompanyCodeVH": { title: "Select Company Code", key: "CompanyCode", desc: "CompanyCodeName", info: "CompanyCode" },
         "/PurchasingOrgVH": { title: "Select Purchasing Org", key: "PurchasingOrganization", desc: "PurchasingOrganizationName" },
-        "/PurchasingGroupVH": { title: "Select Purchasing Group", key: "PurchasingGroup", desc: "PurchasingGroupName" },
+        "/PurchasingGroupVH": { title: "Select Purchasing Group", key: "PurchasingGroup", desc: "PurchasingGroupName", info: "FaxNumber" },
         "/SupplierVH": { title: "Select Supplier", key: "Supplier", desc: "SupplierName", info: "CompanyCode" },
         "/CurrencyVH": { title: "Select Currency", key: "Currency", desc: "Currency_Text" },
         "/IncotermsClassificationVH": { title: "Select Incoterms", key: "IncotermsClassification", desc: "IncotermsClassificationName" },
@@ -39,13 +37,18 @@ sap.ui.define([
         "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName", info: "Plant" },
         "/UnitOfMeasureVH": { title: "Select Unit of Measure", key: "UnitOfMeasure", desc: "UnitOfMeasure_Text" },
         "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" },
+        "/ItemCategoryVH": { title: "Select Item Category", key: "PurchasingDocumentItemCategory", desc: "PurchasingDocumentItemCat_Text" },
+        "/AcctAssignmentCategoryVH": { title: "Select Account Assignment Category", key: "AccountAssignmentCategory", desc: "AccountAssignmentCategory_Text" },
         "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName", descAlt: "SalesDocumentType_Text", info: "Classification" },
+        "/SalesOrderTypeVH": { title: "Select Order Type", key: "SalesOrderType", desc: "SalesOrderTypeName", descAlt: "SalesOrderTypeName", info: "Language key" },
         "/SalesOrganizationVH": { title: "Select Sales Organization", key: "SalesOrganization", desc: "SalesOrganization_Text" },
         "/DistributionChannelVH": { title: "Select Distribution Channel", key: "DistributionChannel", desc: "DistributionChannelName" },
         "/DivisionVH": { title: "Select Division", key: "Division", desc: "DivisionName" },
         "/SoldToPartyVH": { title: "Select Sold-to Party", key: "Customer", desc: "CustomerName" },
-        "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" }
+        "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" },
+        "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" }
     };
+
 
     return {
         /**
@@ -74,7 +77,7 @@ sap.ui.define([
             var oConf = this.getConfig(sPath);
             if (!oConf) return;
 
-            var oModel = oBinding.getModel() || (oView && oView.getModel("salesInquiry")) || oInput.getModel();
+            var oModel = oBinding.getModel() || (oView && (oView.getModel("salesOrder") || oView.getModel("salesInquiry"))) || oInput.getModel();
             var aActiveContextFilters = Array.isArray(aInitialFilters) ? aInitialFilters.slice() : [];
 
             // Dedicated Scannable Dialog for SAP S/4HANA Sales Inquiry Document Types
@@ -91,7 +94,6 @@ sap.ui.define([
                     contentWidth: "52rem",
                     growing: true,
                     growingThreshold: 25,
-                    growingScrollToLoad: true,
                     columns: [
                         new Column({ width: "10rem", header: new Text({ text: "Material Number" }) }),
                         new Column({ minScreenWidth: "Tablet", demandPopin: true, header: new Text({ text: "Product Description" }) }),
@@ -163,6 +165,8 @@ sap.ui.define([
 
                 if (oModel) {
                     oTableSelectDialog.setModel(oModel);
+                    oTableSelectDialog.setModel(oModel, "salesInquiry");
+                    oTableSelectDialog.setModel(oModel, "salesOrder");
                 }
 
                 oTableSelectDialog.bindAggregation("items", {
@@ -188,12 +192,55 @@ sap.ui.define([
                 return;
             }
 
+            var sDialogTitle = oConf.title;
+            if (sPath === "/SupplierVH") {
+                var bHasZDomFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "SupplierAccountGroup" && (f.oValue1 === "ZDOM" || f.sValue === "ZDOM");
+                });
+                var bHasZIntFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "SupplierAccountGroup" && (f.oValue1 === "ZINT" || f.sValue === "ZINT");
+                });
+                if (bHasZDomFilter) {
+                    sDialogTitle = "Select Domestic Supplier";
+                } else if (bHasZIntFilter) {
+                    sDialogTitle = "Select Supplying Plant / Internal Site";
+                }
+            } else if (sPath === "/CompanyCodeVH") {
+                sDialogTitle = "Select Company Code (1000 / 2000)";
+            } else if (sPath === "/PurchasingGroupVH") {
+                var bHas100SeriesFilter = aActiveContextFilters.some(function (f) {
+                    return f && f.sPath === "PurchasingGroup" && (f.oValue1 === "1" || f.sValue === "1");
+                });
+                if (bHas100SeriesFilter) {
+                    sDialogTitle = "Select Purchasing Group (100 Series)";
+                }
+            } else if (sPath === "/SoldToPartyVH" || sPath === "/CustomerVH") {
+                var aAreaTokens = [];
+                var aFilteredContext = [];
+                aActiveContextFilters.forEach(function (f) {
+                    if (f && (f.sPath === "SalesOrganization" || f.sPath === "SalesOrg")) {
+                        aAreaTokens.push(f.oValue1 || f.sValue);
+                    } else if (f && (f.sPath === "DistributionChannel" || f.sPath === "DistChannel")) {
+                        aAreaTokens.push(f.oValue1 || f.sValue);
+                    } else if (f && (f.sPath === "Division" || f.sPath === "OrganizationDivision")) {
+                        aAreaTokens.push(f.oValue1 || f.sValue);
+                    } else {
+                        aFilteredContext.push(f);
+                    }
+                });
+                if (aAreaTokens.length > 0) {
+                    sDialogTitle = (sPath === "/CustomerVH" ? "Select Ship-to Party" : "Select Sold-to Party") +
+                        " (Sales Area: " + aAreaTokens.join(" / ") + ")";
+                }
+                // C_SoldToValueHelp has no SalesOrganization/DistributionChannel/Division properties in SAP CDS
+                aActiveContextFilters = aFilteredContext;
+            }
+
             var oSelectDialog = new SelectDialog({
-                title: oConf.title,
+                title: sDialogTitle,
                 contentWidth: "42rem",
                 growing: true,
-                growingThreshold: 25,
-                growingScrollToLoad: true,
+                growingThreshold: 50,
                 search: function (oSearchEvent) {
                     var sValue = oSearchEvent.getParameter("value");
                     var aSearchFilters = [];
@@ -240,6 +287,7 @@ sap.ui.define([
                             oSelectedData.OrganizationBPName1 = oSelectedData.OrganizationBPName1 || oBindingContext.getProperty("OrganizationBPName1") || "";
                             oSelectedData.CityName = oSelectedData.CityName || oBindingContext.getProperty("CityName") || "";
                             oSelectedData.Country = oSelectedData.Country || oBindingContext.getProperty("Country") || "";
+                            oSelectedData.SupplierAccountGroup = oSelectedData.SupplierAccountGroup || oBindingContext.getProperty("SupplierAccountGroup") || "";
 
                             oSelectedData.Material = oSelectedData.Material || oBindingContext.getProperty("Material") || sKey;
                             oSelectedData.MaterialName = oSelectedData.MaterialName || oBindingContext.getProperty("MaterialName") || oBindingContext.getProperty("Material_Text") || oSelectedItem.getDescription() || "";
@@ -266,6 +314,8 @@ sap.ui.define([
 
             if (oModel) {
                 oSelectDialog.setModel(oModel);
+                oSelectDialog.setModel(oModel, "salesInquiry");
+                oSelectDialog.setModel(oModel, "salesOrder");
             }
 
             var oTemplateConfig = {
@@ -276,11 +326,15 @@ sap.ui.define([
                 if (sPath === "/MaterialVH") {
                     oTemplateConfig.info = "{= ${MaterialType} ? (${MaterialType} + (${MaterialBaseUnit} ? ' • ' + ${MaterialBaseUnit} : '')) : (${MaterialBaseUnit} || '') }";
                 } else if (sPath === "/SupplierVH") {
-                    oTemplateConfig.info = "{= ${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '' }";
+                    oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : (${SupplierAccountGroup} === 'ZINT' ? 'Internal Plant • ' : '')) + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
+                } else if (sPath === "/CompanyCodeVH") {
+                    oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic (AIL)' : (${CompanyCode} === '2000' ? 'Domestic (ASCL)' : '') }";
                 } else if (sPath === "/PlantVH") {
                     oTemplateConfig.info = "{= ${PurchasingOrganization} ? 'PurchOrg ' + ${PurchasingOrganization} : '' }";
                 } else if (sPath === "/StorageLocationVH") {
                     oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
+                } else if (sPath === "/PurchasingGroupVH") {
+                    oTemplateConfig.info = "{= ${FaxNumber} ? ${FaxNumber} : '' }";
                 } else {
                     oTemplateConfig.info = "{" + oConf.info + "}";
                 }
@@ -303,8 +357,9 @@ sap.ui.define([
          * Dedicated compact and scannable dialog for SAP S/4HANA Sales Inquiry Document Types.
          * Dynamically displays:
          * - Primary line: Code + Name (ObjectIdentifier)
-         * - Secondary metadata: Document Category, Classification, SAP Purpose/Scope, Internal Number Range, Active/Inactive Status
-         * - Sub-header filters: Live multi-attribute search across all fields, Status filter (All/Active/Inactive), Category filter, Reset.
+         * - Secondary metadata as returned by SAP: Document Category, Screen Sequence Group, Internal Number Range,
+         *   Active/Inactive Status (from the SAP IsLocked flag)
+         * - Sub-header filters: search across code, description and number range, Status filter (All/Active/Inactive), Reset.
          *
          * @private
          */
@@ -314,7 +369,6 @@ sap.ui.define([
 
             var sCurrentSearchText = "";
             var sCurrentStatusFilter = "ALL";
-            var sCurrentCategoryFilter = "ALL";
 
             var oSelectBtn = new Button({
                 text: "Select",
@@ -349,15 +403,9 @@ sap.ui.define([
                         header: new Text({ text: "Inquiry Type" })
                     }),
                     new Column({
-                        width: "13rem",
                         minScreenWidth: "Tablet",
                         demandPopin: true,
-                        header: new Text({ text: "Classification & Category" })
-                    }),
-                    new Column({
-                        minScreenWidth: "Desktop",
-                        demandPopin: true,
-                        header: new Text({ text: "SAP Business Scope & Purpose" })
+                        header: new Text({ text: "Category" })
                     }),
                     new Column({
                         width: "6.5rem",
@@ -398,16 +446,13 @@ sap.ui.define([
             function updateFilters() {
                 var aCombinedFilters = [];
 
-                // 1. Multi-attribute Search across Code, Description, Purpose, Classification, Category, Status, Number Range
+                // 1. Search across the SAP code, SAP description, status and number range
                 if (sCurrentSearchText && sCurrentSearchText.trim() !== "") {
                     var sVal = sCurrentSearchText.trim();
                     var aOrSearch = [
                         new Filter("SalesDocumentType", FilterOperator.Contains, sVal),
                         new Filter("SalesDocumentTypeName", FilterOperator.Contains, sVal),
                         new Filter("SalesDocumentType_Text", FilterOperator.Contains, sVal),
-                        new Filter("Purpose", FilterOperator.Contains, sVal),
-                        new Filter("Classification", FilterOperator.Contains, sVal),
-                        new Filter("SDDocumentCategoryName", FilterOperator.Contains, sVal),
                         new Filter("StatusText", FilterOperator.Contains, sVal),
                         new Filter("NumberRangeForIntIDAssignment", FilterOperator.Contains, sVal)
                     ];
@@ -419,11 +464,6 @@ sap.ui.define([
                     aCombinedFilters.push(new Filter("IsActive", FilterOperator.EQ, true));
                 } else if (sCurrentStatusFilter === "INACTIVE") {
                     aCombinedFilters.push(new Filter("IsActive", FilterOperator.EQ, false));
-                }
-
-                // 3. Category / Classification Filter
-                if (sCurrentCategoryFilter && sCurrentCategoryFilter !== "ALL") {
-                    aCombinedFilters.push(new Filter("Classification", FilterOperator.Contains, sCurrentCategoryFilter));
                 }
 
                 if (Array.isArray(aActiveContextFilters) && aActiveContextFilters.length > 0) {
@@ -439,7 +479,7 @@ sap.ui.define([
 
             var oSearchField = new SearchField({
                 width: "16rem",
-                placeholder: "Search code, description, purpose...",
+                placeholder: "Search code or description...",
                 liveChange: function (oEvent) {
                     sCurrentSearchText = oEvent.getParameter("newValue") || "";
                     updateFilters();
@@ -463,33 +503,14 @@ sap.ui.define([
                 }
             });
 
-            var oCategorySelect = new Select({
-                selectedKey: "ALL",
-                items: [
-                    new Item({ key: "ALL", text: "All Categories" }),
-                    new Item({ key: "Commercial Sales", text: "Commercial Sales" }),
-                    new Item({ key: "Budgetary", text: "Budgetary / Estimation" }),
-                    new Item({ key: "Logistics", text: "Logistics & Supply Chain" }),
-                    new Item({ key: "Inventory", text: "Inventory & Stock" }),
-                    new Item({ key: "Standard Reference", text: "Standard Reference" }),
-                    new Item({ key: "Reporting", text: "Internal / Reporting" })
-                ],
-                change: function (oEvent) {
-                    sCurrentCategoryFilter = oEvent.getParameter("selectedItem").getKey();
-                    updateFilters();
-                }
-            });
-
             var oResetBtn = new Button({
                 icon: "sap-icon://clear-filter",
                 tooltip: "Reset All Filters",
                 press: function () {
                     sCurrentSearchText = "";
                     sCurrentStatusFilter = "ALL";
-                    sCurrentCategoryFilter = "ALL";
                     oSearchField.setValue("");
                     oStatusSegmentedButton.setSelectedKey("ALL");
-                    oCategorySelect.setSelectedKey("ALL");
                     updateFilters();
                 }
             });
@@ -500,8 +521,6 @@ sap.ui.define([
                     new ToolbarSpacer(),
                     new Label({ text: "Status:" }),
                     oStatusSegmentedButton,
-                    new Label({ text: "Category:" }),
-                    oCategorySelect,
                     oResetBtn
                 ]
             });
@@ -518,16 +537,10 @@ sap.ui.define([
                         }),
                         new VBox({
                             items: [
-                                new Text({ text: "{Classification}" }),
                                 new Text({
                                     text: "{= 'Category ' + (${SDDocumentCategory} || 'A') + ' • ' + (${SDDocumentCategoryName} || 'Inquiry') }",
                                     wrapping: false
-                                }).addStyleClass("sapUiTinyMarginTop")
-                            ]
-                        }),
-                        new VBox({
-                            items: [
-                                new Text({ text: "{Purpose}", wrapping: true }),
+                                }),
                                 new Text({
                                     text: "{= ${ScreenSequenceGroup} ? ('Screen Sequence: ' + ${ScreenSequenceGroup}) : '' }",
                                     wrapping: false
@@ -595,6 +608,7 @@ sap.ui.define([
             if (oModel) {
                 oDialog.setModel(oModel);
                 oDialog.setModel(oModel, "salesInquiry");
+                oDialog.setModel(oModel, "salesOrder");
             }
 
             if (oView && oView.addDependent) {

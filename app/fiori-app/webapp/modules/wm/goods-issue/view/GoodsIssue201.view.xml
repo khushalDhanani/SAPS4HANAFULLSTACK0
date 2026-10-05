@@ -1,0 +1,533 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue201"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout">
+
+    <Page
+        id="pageGoodsIssue201"
+        busy="{gi201>/busy}"
+        busyIndicatorDelay="0"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <ObjectStatus
+                id="statMvtBadge"
+                text="{i18n>gi201MovementTypeBadge}"
+                state="Information"
+                icon="sap-icon://expense-report"
+                class="sapUiTinyMarginEnd" />
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin">
+
+                <!-- 1. Posted Document Success Banner (with 202 Reversal Trigger) -->
+                <MessageStrip
+                    id="stripPostSuccess"
+                    text="{parts: [{path: 'gi201>/postedDocument'}, {path: 'gi201>/postedYear'}], formatter: '.formatSuccessBanner'}"
+                    type="Success"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{gi201>/hasPosted}"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link
+                            id="lnkReverse202"
+                            text="{i18n>gi201ActionReverseNow}"
+                            press=".onReverseGoodsIssue"
+                            enabled="{= !${gi201>/reversalBusy} }" />
+                    </link>
+                </MessageStrip>
+
+                <!-- 2. Reversal Success Banner -->
+                <MessageStrip
+                    id="stripReversalSuccess"
+                    text="{parts: [{path: 'gi201>/reversalDocument'}, {path: 'gi201>/reversalYear'}], formatter: '.formatReversalBanner'}"
+                    type="Information"
+                    showIcon="true"
+                    showCloseButton="true"
+                    visible="{gi201>/hasReversed}"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- 3. Balanced 2/2 Grid (2 columns on desktop, 2 sections per row) -->
+                <layout:Grid
+                    id="gridGoodsIssue201"
+                    defaultSpan="XL6 L6 M6 S12"
+                    hSpacing="1"
+                    vSpacing="1"
+                    class="sapUiNoMarginTop sapUiSmallMarginBottom">
+
+                    <!-- Section 1 (Row 1 Left): Cost Center Assignment -->
+                    <Panel id="pnlCostAssignment" class="giCardPanel">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>gi201TitleCostAssignment}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formGoodsIssue201"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0"
+                            emptySpanL="0"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="1"
+                            columnsL="1"
+                            columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label id="lblCostCenter" text="{i18n>gi201CostCenter}" required="true" />
+                                <Input
+                                    id="inCostCenter"
+                                    value="{gi201>/costCenter}"
+                                    editable="{= !${gi201>/prefilled/costCenter} }"
+                                    placeholder="{i18n>gi201CostCenterPlaceholder}"
+                                    showValueHelp="true"
+                                    valueHelpRequest=".onCostCenterValueHelp"
+                                    liveChange=".onCostCenterLiveChange"
+                                    change=".onCostCenterChange"
+                                    valueState="{= ${gi201>/errors/costCenter} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/costCenter}"
+                                    maxLength="10" />
+
+                                <Label id="lblCostCenterName" text="{i18n>gi201CostCenterName}" />
+                                <Text
+                                    id="txtCostCenterName"
+                                    text="{= ${gi201>/costCenterName} ? ${gi201>/costCenterName} : '—' }"
+                                    class="giFormValueText fontBold" />
+
+                                <Label id="lblGlAccount" text="{i18n>gi201GlAccountLabel}" />
+                                <Input
+                                    id="inGlAccount"
+                                    value="{= ${gi201>/glAccount} ? ${gi201>/glAccount} : ${i18n>gi201GlAccountAutoDerived} }"
+                                    editable="false"
+                                    tooltip="{i18n>gi201GlAccountTooltip}" />
+
+                                <Label id="lblHeaderText" text="{i18n>gi201HeaderText}" />
+                                <Input
+                                    id="inHeaderText"
+                                    value="{gi201>/headerText}"
+                                    placeholder="{i18n>gi201HeaderTextPlaceholder}"
+                                    maxLength="25" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 2 (Row 1 Right): Material & Location -->
+                    <Panel id="pnlMaterialLocation" class="giCardPanel">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>gi201TitleMaterialLocation}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formMaterialLocation"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0"
+                            emptySpanL="0"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="1"
+                            columnsL="1"
+                            columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label id="lblMaterial" text="{i18n>gi201Material}" required="true" />
+                                <Input
+                                    id="inMaterial"
+                                    value="{gi201>/material}"
+                                    editable="{= !${gi201>/prefilled/material} }"
+                                    placeholder="{i18n>gi201MaterialPlaceholder}"
+                                    showValueHelp="true"
+                                    valueHelpRequest=".onMaterialValueHelp"
+                                    change=".onMaterialChange"
+                                    valueState="{= ${gi201>/errors/material} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/material}" />
+
+                                <Label id="lblMaterialDesc" text="{i18n>gi201MaterialDesc}" />
+                                <Text
+                                    id="txtMaterialDesc"
+                                    text="{= ${gi201>/materialName} ? ${gi201>/materialName} : '—' }"
+                                    class="giFormValueText fontBold" />
+
+                                <Label id="lblPlant" text="{i18n>gi201Plant}" required="true" />
+                                <HBox id="boxPlantLocation" alignItems="Center" wrap="Wrap">
+                                    <Input
+                                        id="inPlant"
+                                        value="{gi201>/plant}"
+                                        editable="{= !${gi201>/prefilled/plant} }"
+                                        placeholder="{i18n>gi201Plant}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onPlantValueHelp"
+                                        liveChange=".onFieldLiveChange"
+                                        change=".onFieldChange"
+                                        valueState="{= ${gi201>/errors/plant} ? 'Error' : 'None' }"
+                                        valueStateText="{gi201>/errors/plant}"
+                                        maxLength="4"
+                                        width="7.5rem"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Label id="lblStorageLocation" text="{i18n>gi201StorageLocation}" required="true" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+                                    <Input
+                                        id="inStorageLocation"
+                                        value="{gi201>/storageLocation}"
+                                        editable="{= !${gi201>/prefilled/storageLocation} }"
+                                        placeholder="{i18n>gi201StorageLocation}"
+                                        showValueHelp="true"
+                                        valueHelpRequest=".onStorageLocationValueHelp"
+                                        liveChange=".onFieldLiveChange"
+                                        change=".onFieldChange"
+                                        valueState="{= ${gi201>/errors/storageLocation} ? 'Error' : 'None' }"
+                                        valueStateText="{gi201>/errors/storageLocation}"
+                                        maxLength="4"
+                                        width="7.5rem" />
+                                </HBox>
+
+                                <Label id="lblStockStatus" text="{i18n>gi201StockStatus}" />
+                                <ObjectStatus
+                                    id="statStockStatusLine"
+                                    text="{parts: [{path: 'gi201>/availableStock'}, {path: 'gi201>/unit'}], formatter: '.formatAvailableStock'}"
+                                    state="{= ${gi201>/availableStock} > 0 ? 'Success' : 'None' }"
+                                    icon="{= ${gi201>/availableStock} > 0 ? 'sap-icon://sys-enter-2' : '' }"
+                                    class="giFormValueText" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 3 (Row 2 Left): Quantity & Dates -->
+                    <Panel id="pnlQuantityDates" class="giCardPanel">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>gi201TitleQuantityDates}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formQuantityDates"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0"
+                            emptySpanL="0"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="1"
+                            columnsL="1"
+                            columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label id="lblQuantity" text="{i18n>gi201Quantity}" required="true" />
+                                <HBox id="boxQuantityUnit" alignItems="Center">
+                                    <Input
+                                        id="inQuantity"
+                                        value="{gi201>/quantity}"
+                                        type="Number"
+                                        liveChange=".onQuantityLiveChange"
+                                        valueState="{= ${gi201>/errors/quantity} ? 'Error' : 'None' }"
+                                        valueStateText="{gi201>/errors/quantity}"
+                                        width="10rem"
+                                        class="sapUiTinyMarginEnd" />
+                                    <Input
+                                        id="inUnit"
+                                        value="{gi201>/unit}"
+                                        editable="{gi201>/isUnitEditable}"
+                                        liveChange=".onFieldLiveChange"
+                                        valueState="{= ${gi201>/errors/unit} ? 'Error' : 'None' }"
+                                        valueStateText="{gi201>/errors/unit}"
+                                        width="6rem"
+                                        maxLength="3" />
+                                </HBox>
+
+                                <Label id="lblPostingDate" text="{i18n>gi201PostingDate}" required="true" />
+                                <DatePicker
+                                    id="dpPostingDate"
+                                    value="{gi201>/postingDate}"
+                                    valueFormat="yyyy-MM-dd"
+                                    displayFormat="medium"
+                                    change=".onFieldLiveChange"
+                                    valueState="{= ${gi201>/errors/postingDate} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/postingDate}" />
+
+                                <Label id="lblDocumentDate" text="{i18n>gi201DocumentDate}" required="true" />
+                                <DatePicker
+                                    id="dpDocumentDate"
+                                    value="{gi201>/documentDate}"
+                                    valueFormat="yyyy-MM-dd"
+                                    displayFormat="medium"
+                                    change=".onFieldLiveChange"
+                                    valueState="{= ${gi201>/errors/documentDate} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/documentDate}" />
+
+                                <Label
+                                    id="lblBatch"
+                                    text="{i18n>gi201Batch}"
+                                    required="{gi201>/isBatchManaged}"
+                                    visible="{gi201>/isBatchManaged}" />
+                                <Input
+                                    id="inBatch"
+                                    value="{gi201>/batch}"
+                                    placeholder="{i18n>gi201BatchPlaceholder}"
+                                    liveChange=".onFieldLiveChange"
+                                    valueState="{= ${gi201>/errors/batch} ? 'Error' : 'None' }"
+                                    valueStateText="{gi201>/errors/batch}"
+                                    visible="{gi201>/isBatchManaged}"
+                                    maxLength="10" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 4a (Row 2 Right): Movement Overview & Verification (Default for standard items) -->
+                    <Panel
+                        id="panelMovementSummary"
+                        class="giCardPanel"
+                        visible="{= !${gi201>/scanEnabled} &amp;&amp; !${gi201>/isSerialManaged} }">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>gi201TitleOverview}" level="H3" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <f:SimpleForm
+                            id="formMovementSummary"
+                            editable="true"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0"
+                            emptySpanL="0"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="1"
+                            columnsL="1"
+                            columnsM="1"
+                            singleContainerFullSize="false">
+                            <f:content>
+                                <Label text="{i18n>gi201LabelMovementType}" />
+                                <Text text="{i18n>gi201MovementTypeName}" class="giFormValueText fontBold" />
+
+                                <Label text="{i18n>gi201LabelPostingScenario}" />
+                                <Text text="{= ${gi201>/fromReservation} ? (${i18n>gi201ScenarioResv} + ' ' + ${gi201>/reservationNo} + '/' + ${gi201>/reservationItem}) : ${i18n>gi201ScenarioDirect} }" class="giFormValueText" />
+
+                                <Label text="{i18n>gi201LabelItemTracking}" />
+                                <ObjectStatus
+                                    text="{= ${gi201>/isBatchManaged} ? ${i18n>gi201TrackingBatch} : ${i18n>gi201TrackingStandard} }"
+                                    state="{= ${gi201>/isBatchManaged} ? 'Warning' : 'None' }"
+                                    class="giFormValueText" />
+
+                                <Label text="{i18n>gi201LabelFormStatus}" />
+                                <ObjectStatus
+                                    text="{= ${gi201>/isValid} ? ${i18n>gi201StatusReadyToPost} : ${i18n>gi201StatusIncomplete} }"
+                                    state="{= ${gi201>/isValid} ? 'Success' : 'Warning' }"
+                                    icon="{= ${gi201>/isValid} ? 'sap-icon://sys-enter-2' : 'sap-icon://alert' }"
+                                    class="giFormValueText" />
+                            </f:content>
+                        </f:SimpleForm>
+                    </Panel>
+
+                    <!-- Section 4b (Row 2 Right): Scan-to-Complete (Unit-managed reservations) -->
+                    <Panel
+                        id="pnlScanToComplete"
+                        visible="{gi201>/scanEnabled}">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>gi201ScanSectionTitle}" level="H3" />
+                                <ToolbarSpacer />
+                                <ObjectStatus
+                                    id="osScanProgress"
+                                    title="{i18n>gi201ScanProgress}"
+                                    text="{= ${gi201>/scannedQty} + ' / ' + ${gi201>/requiredScanCount} + ' ' + ${gi201>/unit} }"
+                                    state="{= ${gi201>/scannedQty} >= ${gi201>/requiredScanCount} ? 'Success' : 'Warning' }" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <VBox class="sapUiSmallMargin">
+                            <HBox alignItems="End" class="sapUiTinyMarginBottom" wrap="Wrap">
+                                <Input
+                                    id="inScanUnit"
+                                    value="{gi201>/scanInput}"
+                                    placeholder="{i18n>gi201ScanPlaceholder}"
+                                    submit=".onScanInputSubmit"
+                                    width="16rem"
+                                    class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnScanUnit"
+                                    text="{i18n>gi201ScanBtn}"
+                                    type="Emphasized"
+                                    icon="sap-icon://bar-code"
+                                    press=".onScanUnit" />
+                            </HBox>
+                            <MessageStrip
+                                id="msScanFeedback"
+                                text="{gi201>/lastScanText}"
+                                type="{= ${gi201>/lastScanState} === 'None' ? 'Information' : ${gi201>/lastScanState} }"
+                                showIcon="true"
+                                visible="{= ${gi201>/lastScanState} !== 'None' }"
+                                class="sapUiTinyMarginBottom" />
+                            <MessageStrip
+                                id="msScanIncomplete"
+                                text="{gi201>/errors/scan}"
+                                type="Warning"
+                                showIcon="true"
+                                visible="{= !!${gi201>/errors/scan} }"
+                                class="sapUiTinyMarginBottom" />
+                            <Table
+                                id="tblScannedUnits"
+                                items="{gi201>/scannedUnits}"
+                                noDataText="{i18n>gi201ScanNoData}"
+                                mode="Delete"
+                                delete=".onDeleteScannedUnit"
+                                growing="true"
+                                growingThreshold="5">
+                                <columns>
+                                    <Column id="colScanUnit"><Text text="{i18n>gi201ScanColUnit}" /></Column>
+                                    <Column id="colScanMaterial" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi201ScanColMaterial}" /></Column>
+                                    <Column id="colScanQty" hAlign="End"><Text text="{i18n>gi201ScanColQty}" /></Column>
+                                    <Column id="colScanBatch" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>gi201ScanColBatch}" /></Column>
+                                    <Column id="colScanKind" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" hAlign="End"><Text text="{i18n>gi201ScanColKind}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <Text text="{= ${gi201>serial} ? ${gi201>serial} : ${gi201>barcode} }" />
+                                            <Text text="{gi201>material}" />
+                                            <Text text="{= ${gi201>qty} ? ${gi201>qty} + ' ' + ${gi201>unit} : '—' }" />
+                                            <Text text="{= ${gi201>batch} || '—' }" />
+                                            <ObjectStatus
+                                                text="{= ${gi201>isSerial} ? ${i18n>gi201ScanKindSerial} : ${i18n>gi201ScanKindSU} }"
+                                                state="Information" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </VBox>
+                    </Panel>
+
+                    <!-- Section 4c (Row 2 Right): Serial Numbers Management (Serial-managed materials) -->
+                    <Panel
+                        id="pnlSerialManagement"
+                        visible="{= ${gi201>/isSerialManaged} &amp;&amp; !${gi201>/scanEnabled} }">
+                        <layoutData>
+                            <layout:GridData span="XL6 L6 M6 S12" />
+                        </layoutData>
+                        <headerToolbar>
+                            <Toolbar>
+                                <Title text="{i18n>gi201TitleSerialManagement}" level="H3" />
+                                <ToolbarSpacer />
+                                <ObjectStatus
+                                    id="statSerialCount"
+                                    text="{= ${gi201>/serialNumbers}.length + ' / ' + ${gi201>/quantity} + ' ' + ${i18n>gi201SerialsScanned} }"
+                                    state="{= ${gi201>/serialNumbers}.length === ${gi201>/quantity} ? 'Success' : 'Warning' }" />
+                            </Toolbar>
+                        </headerToolbar>
+                        <VBox class="sapUiSmallMargin">
+                            <HBox alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
+                                <Input
+                                    id="inSerialScan"
+                                    value="{gi201>/serialInput}"
+                                    placeholder="{i18n>gi201SerialScanPlaceholder}"
+                                    submit=".onSerialInputSubmit"
+                                    width="16rem"
+                                    maxLength="18"
+                                    class="sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnAddSerial"
+                                    text="{i18n>gi201BtnAddSerial}"
+                                    icon="sap-icon://bar-code"
+                                    press=".onAddSerialPress" />
+                            </HBox>
+                            <Text
+                                id="txtSerialError"
+                                text="{gi201>/errors/serials}"
+                                class="sapUiTinyMarginBottom"
+                                visible="{= !!${gi201>/errors/serials} }" />
+                            <Table
+                                id="tblSerialNumbers"
+                                items="{gi201>/serialNumbers}"
+                                noDataText="{i18n>gi201NoSerialsScanned}"
+                                width="100%"
+                                growing="true"
+                                growingThreshold="5">
+                                <columns>
+                                    <Column id="colSerialIndex" width="4rem"><Text text="#" /></Column>
+                                    <Column id="colSerialNumber"><Text text="{i18n>gi201ColSerialNumber}" /></Column>
+                                    <Column id="colSerialStatus" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" width="10rem"><Text text="{i18n>gi201ColSerialStatus}" /></Column>
+                                    <Column id="colSerialAction" width="4rem" hAlign="End"><Text text="" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <Text text="{= ${path: ''} ? '' : '' }" />
+                                            <Text text="{gi201>}" class="fontBold" />
+                                            <ObjectStatus text="{i18n>gi201SerialPendingStockVerify}" state="Information" />
+                                            <Button
+                                                icon="sap-icon://delete"
+                                                type="Transparent"
+                                                tooltip="{i18n>gi201BtnDeleteSerial}"
+                                                press=".onDeleteSerial" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </VBox>
+                    </Panel>
+
+                </layout:Grid>
+
+            </VBox>
+        </content>
+
+        <!-- Single Sticky Footer Actions -->
+        <footer>
+            <Toolbar id="tbGoodsIssue201">
+                <Button
+                    id="btnResetForm"
+                    text="{i18n>gi201BtnReset}"
+                    icon="sap-icon://refresh"
+                    type="Transparent"
+                    press=".onResetForm" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnPostGoodsIssue201"
+                    text="{= ${gi201>/fromReservation} ? ${i18n>gi201BtnComplete} : ${i18n>gi201BtnPost} }"
+                    icon="sap-icon://save"
+                    type="Emphasized"
+                    enabled="{gi201>/isValid}"
+                    press=".onPostGoodsIssue" />
+            </Toolbar>
+        </footer>
+
+    </Page>
+</mvc:View>

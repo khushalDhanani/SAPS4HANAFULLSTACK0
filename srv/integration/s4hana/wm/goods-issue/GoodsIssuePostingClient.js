@@ -1,0 +1,908 @@
+const LOG = require('../../logger')('goods-issue-posting');
+const s4Config = require('../../s4Config');
+const S4ErrorMapper = require('../../S4ErrorMapper');
+const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
+const { RfcClient } = require('../../RfcClient');
+const sapFacts = require('../../sapFacts');
+const GoodsIssueMapper = require('./GoodsIssueMapper');
+const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
+const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
+const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
+
+/**
+ * Domain client for SAP S/4HANA Goods Issue Posting and Batch Submission.
+ * Enforces AGENTS.md rules: no mock persistence, transparent failure when SAP posting service is unavailable.
+ */
+// Movement types this screen may post against a reservation (trust boundary for the posting action).
+const POSTABLE_MOVEMENT_TYPES = ['201', '301', '311'];
+
+class GoodsIssuePostingClient extends BaseGoodsIssueClient {
+  /**
+   * Waits (ms) before each idempotency-reference lookup after an unknown posting outcome
+   * (GI_REFERENCE_LOOKUP_DELAYS_MS, comma-separated, default 2000,4000,8000). These only give a fast
+   * answer when SAP commits quickly; the commit lag was observed to exceed them, so an empty result
+   * is never proof that nothing was posted - the attempt re-check job decides that later.
+   */
+  static referenceLookupDelaysMs() {
+    const raw = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+    const parsed = String(raw || '').split(',').map((v) => v.trim()).filter(Boolean).map(Number);
+    return parsed.length > 0 && parsed.every((n) => Number.isFinite(n) && n >= 0) ? parsed : [2000, 4000, 8000];
+  }
+
+  constructor(options = {}) {
+    super(options);
+    this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
+    this.rfc = options.rfc || (options.adapter && options.adapter.rfc) || new RfcClient();
+    this.readBackTimeoutMs = options.readBackTimeoutMs || Number(process.env.GI_READBACK_TIMEOUT_MS) || 5000;
+    this.maxConcurrentReadBacks = options.maxConcurrentReadBacks || Number(process.env.GI_MAX_CONCURRENT_READBACKS) || 5;
+    this._activeReadBacks = 0;
+    this._readBackWaiters = [];
+  }
+
+  async _acquireReadBackSlot(signal) {
+    if (this._activeReadBacks < this.maxConcurrentReadBacks) {
+      this._activeReadBacks++;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject };
+      if (signal && typeof signal.addEventListener === 'function') {
+        const onAbort = () => {
+          const idx = this._readBackWaiters.indexOf(waiter);
+          if (idx >= 0) this._readBackWaiters.splice(idx, 1);
+          const err = new Error('Read-back slot acquisition aborted');
+          err.name = 'AbortError';
+          reject(err);
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        waiter.cleanup = () => signal.removeEventListener('abort', onAbort);
+      }
+      this._readBackWaiters.push(waiter);
+    });
+  }
+
+  _releaseReadBackSlot() {
+    this._activeReadBacks = Math.max(0, this._activeReadBacks - 1);
+    while (this._readBackWaiters.length > 0 && this._activeReadBacks < this.maxConcurrentReadBacks) {
+      const next = this._readBackWaiters.shift();
+      if (next.cleanup) next.cleanup();
+      this._activeReadBacks++;
+      next.resolve();
+    }
+  }
+
+  /**
+   * Parses the SAP Gateway `sap-message` response header (JSON: code, message, severity, details[]).
+   * Returns null when the header is absent and `{ parseError: true, raw }` when it is not JSON, so
+   * callers can fall back to the UNKNOWN outcome instead of guessing.
+   */
+  static parseSapMessage(headers) {
+    const raw = headers && headers['sap-message'];
+    if (!raw) return null;
+    try {
+      const m = JSON.parse(raw);
+      const entry = (e) => ({ code: String(e?.code || ''), text: String(e?.message || ''), severity: String(e?.severity || '') });
+      return { ...entry(m), details: Array.isArray(m?.details) ? m.details.map(entry) : [] };
+    } catch (_e) {
+      return { parseError: true, raw: String(raw).slice(0, 1000) };
+    }
+  }
+
+  /**
+   * Delivery number from SAP message L9/514 ("Delivery & created", SAP standard message class L9,
+   * raised in include MM07MLVS when the goods movement for a WM-managed location is turned into an
+   * outbound delivery instead of a material document). Looks at the main message and its details.
+   * Null when no L9/514 entry carrying a number is present.
+   */
+  static deliveryFromSapMessage(parsed) {
+    if (!parsed || parsed.parseError) return null;
+    for (const e of [parsed, ...(parsed.details || [])]) {
+      const isL9514 = e.code.replace(/\s+/g, '').toUpperCase() === 'L9/514' || /^Delivery\s+\d+\s+created/i.test(e.text);
+      const num = isL9514 && /(\d{1,10})/.exec(e.text);
+      if (num) return num[1].padStart(10, '0');
+    }
+    return null;
+  }
+
+  /** @private RFC_READ_TABLE accessor, or null when no RFC table access exists. */
+  _readTableFn() {
+    if (this.rfc && typeof this.rfc.readTable === 'function') return (t, f, w) => this.rfc.readTable(t, f, w);
+    if (this.adapter && typeof this.adapter.readTable === 'function') return (t, f, w) => this.adapter.readTable(t, f, w);
+    return null;
+  }
+
+  /** @private LIKP headers for delivery numbers, mapped to the delivery shape. Field set live-verified. */
+  async _readDeliveryHeaders(readTable, where) {
+    const rows = await readTable('LIKP', ['VBELN', 'LFART', 'ERDAT', 'ERZET', 'WBSTK', 'LIFEX'], where);
+    return rows.map((r) => ({
+      DeliveryNumber: String(r.VBELN || '').trim(),
+      DeliveryType: String(r.LFART || '').trim(),
+      CreatedOn: String(r.ERDAT || '').trim(),
+      CreatedTime: String(r.ERZET || '').trim(), // SAP server time; time zone not verified
+      GoodsMovementStatus: String(r.WBSTK || '').trim(),
+      ExternalId: String(r.LIFEX || '').trim(),
+      // WBSTK C = goods movement completed; anything else (A/B/blank) still needs PGI.
+      Open: String(r.WBSTK || '').trim() !== 'C'
+    }));
+  }
+
+  /**
+   * Deliveries SAP created for a reservation item (LIPS by RSNUM/RSPOS, joined to LIKP), read-only.
+   * Throws (never returns []) when the tables cannot be read, so a failed read is never mistaken
+   * for "no delivery".
+   */
+  async findDeliveriesForReservationItem(reservationNo, reservationItem) {
+    const readTable = this._readTableFn();
+    if (!readTable) {
+      const err = new Error('No RFC table access: cannot verify outbound deliveries (LIKP/LIPS) for the reservation item.');
+      err.status = 502;
+      throw err;
+    }
+    const rsnum = String(reservationNo || '').trim().padStart(10, '0');
+    const rspos = String(reservationItem || '').trim().padStart(4, '0');
+    const items = await readTable('LIPS', ['VBELN', 'POSNR', 'LFIMG', 'VRKME', 'BWART'],
+      [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`]);
+    if (items.length === 0) return [];
+    const numbers = [...new Set(items.map((i) => String(i.VBELN).trim()))];
+    // One equality per line, OR-joined without parentheses (the RFC parser rejects them).
+    const headers = await this._readDeliveryHeaders(readTable, numbers.map((n, i) => `${i ? 'OR ' : ''}VBELN = '${n}'`));
+    const byNo = new Map(headers.map((h) => [h.DeliveryNumber, h]));
+    return items.map((i) => ({
+      ...(byNo.get(String(i.VBELN).trim()) || { DeliveryNumber: String(i.VBELN).trim(), Open: true }),
+      Item: String(i.POSNR || '').trim(),
+      Quantity: Number(i.LFIMG),
+      Unit: String(i.VRKME || '').trim(),
+      MovementType: String(i.BWART || '').trim()
+    }));
+  }
+
+  /**
+   * Delivery carrying our posting reference. SAP copies the material document header
+   * ReferenceDocument into LIKP-LIFEX (live-verified: 0080000074 <-> GI65GEUZ94A5JDZ0).
+   * Null when none; throws when the table cannot be read.
+   */
+  async findDeliveryByReference(referenceDocument) {
+    const ref = String(referenceDocument || '').trim();
+    if (!ref) return null;
+    const readTable = this._readTableFn();
+    if (!readTable) {
+      const err = new Error('No RFC table access: cannot verify outbound deliveries (LIKP) for the posting reference.');
+      err.status = 502;
+      throw err;
+    }
+    const [hit] = await this._readDeliveryHeaders(readTable, [`LIFEX = '${ref}'`]);
+    return hit || null;
+  }
+
+  /**
+   * SAP Gateway can answer an OData V2 POST with HTTP 2xx even when the backend BAPI rejected the
+   * posting for a business reason (locked cost center, closed period, stock deficit, etc.),
+   * communicating the real outcome only via the `sap-message` response header. Throws a real error
+   * carrying the SAP message text/code when that header reports severity 'error'/'E'; otherwise a
+   * no-op. Mirrors GoodsReceiptAdapter's handling of the same SAP Gateway behavior.
+   *
+   * @private
+   */
+  static _throwIfSapBusinessError(result) {
+    const rawSapMsg = result?._headers?.['sap-message'];
+    if (!rawSapMsg) return;
+    let sapMsgObj = null;
+    try {
+      sapMsgObj = JSON.parse(rawSapMsg);
+    } catch (_e) {
+      return;
+    }
+    const severity = String(sapMsgObj?.severity || '').toUpperCase();
+    if (severity === 'ERROR' || severity === 'E') {
+      const err = new Error(sapMsgObj.message || 'SAP S/4HANA rejected the Goods Issue posting');
+      err.code = sapMsgObj.code || 'SAP_BUSINESS_ERROR';
+      // SAP answered and rejected the posting: a business error, never a queueable availability problem.
+      err.status = 422;
+      throw err;
+    }
+  }
+
+  /**
+   * @deprecated Legacy positional signature retained only for the internal queue-replay path and
+   * back-compat callers/tests. Contains NO movement-type business logic - it normalizes the
+   * positional arguments into a domain object and delegates to the isolated per-type dispatcher
+   * (`postByMovementType`), which routes to post201/301/311. New code calls the per-type
+   * methods (or `postByMovementType`) directly.
+   */
+  async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
+    const data = {
+      MovementType: String(options.movementType || '201').trim(),
+      ReservationNo: reservationNo || '',
+      ReservationItem: reservationItem || '',
+      Material: material || '',
+      IssueQty: issueQty,
+      Unit: unit || '',
+      Batch: batch || '',
+      Plant: plant || '',
+      StorageLocation: storageLocation || '',
+      CostCenter: options.costCenter || '',
+      GLAccount: options.glAccount || options.GLAccount || '',
+      ReceivingPlant: options.receivingPlant || '',
+      ReceivingStorageLocation: options.receivingStorageLocation || '',
+      PostingDate: options.postingDate || options.PostingDate,
+      DocumentDate: options.documentDate || options.DocumentDate,
+      SerialNumbers: Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
+        ? options.serialNumbers
+        : (options.serialNumber ? [options.serialNumber] : [])
+    };
+    return this.postByMovementType(data);
+  }
+
+
+  // ==========================================================================
+  // ISOLATED per-movement-type posting (Phase 1). Each public method owns its
+  // own tier choice + type mapper and touches no other type's logic. The private
+  // helpers below (_assertPostable / _preflightPosting / _submitMaterialDocument)
+  // are pure TRANSPORT infrastructure (HTTP, batch SLED, destination) shared by
+  // all types - they contain no movement-type branching.
+  // ==========================================================================
+
+  /** @private Minimal defence-in-depth guards common to every posting. */
+  _assertPostable(data) {
+    const nQty = Number(data.IssueQty);
+    if (isNaN(nQty) || nQty <= 0) {
+      const err = new Error('IssueQty must be a positive decimal number');
+      err.status = 400;
+      throw err;
+    }
+    if (!String(data.Unit || '').trim()) {
+      const err = new Error('Unit of measure (EntryUnit) is required for Goods Issue');
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  /** @private Batch SLED hard-stop + destination resolution. Transport only. */
+  async _preflightPosting(data, { strictBatchValidation = false } = {}) {
+    const effectiveBatch = data.Batch ? String(data.Batch).trim() : '';
+    if (effectiveBatch) {
+      let valResult = { valid: true };
+      if (strictBatchValidation) {
+        const hasPostingContext = Boolean(data.Plant && data.StorageLocation);
+        const validator = hasPostingContext
+          ? (this.adapter && typeof this.adapter.validateBatchForPosting === 'function'
+            ? this.adapter.validateBatchForPosting.bind(this.adapter)
+            : (this.batchesClient && typeof this.batchesClient.validateBatchForPosting === 'function'
+              ? this.batchesClient.validateBatchForPosting.bind(this.batchesClient)
+              : null))
+          : (this.adapter && typeof this.adapter.validateBatch === 'function'
+            ? this.adapter.validateBatch.bind(this.adapter)
+            : (this.batchesClient && typeof this.batchesClient.validateBatch === 'function'
+              ? this.batchesClient.validateBatch.bind(this.batchesClient)
+              : null));
+        if (!validator) {
+          const err = new Error(`SAP batch/SLED validation is unavailable for batch ${effectiveBatch}. Posting blocked.`);
+          err.status = 500;
+          throw err;
+        }
+        valResult = hasPostingContext
+          ? await validator(data.Material, data.Plant, data.StorageLocation, effectiveBatch, data.IssueQty, data.Unit)
+          : await validator(data.Material, effectiveBatch, data.Plant);
+        if (!valResult || valResult.valid !== true) {
+          const err = new Error(valResult?.reason || `Batch ${effectiveBatch} is not valid for posting.`);
+          err.status = valResult?.status || 422;
+          throw err;
+        }
+      } else if (this.adapter && typeof this.adapter.validateBatch === 'function') {
+        valResult = await this.adapter.validateBatch(data.Material, effectiveBatch);
+      } else if (this.batchesClient && typeof this.batchesClient.validateBatch === 'function') {
+        valResult = await this.batchesClient.validateBatch(data.Material, effectiveBatch);
+      }
+      if (valResult && !valResult.valid) {
+        const err = new Error(valResult.reason || `Batch ${effectiveBatch} is invalid or expired.`);
+        err.status = 400;
+        throw err;
+      }
+    }
+    const dest = await this._getDestination();
+    if (!dest) {
+      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
+      err.status = 502;
+      throw err;
+    }
+  }
+
+  /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
+  /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
+  async _submitMaterialDocument(v2Payload, meta) {
+    const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
+    const v2Res = await this._post(v2Path, v2Payload);
+    const sapMsg = GoodsIssuePostingClient.parseSapMessage(v2Res && v2Res._headers);
+    if (sapMsg) {
+      LOG.info(`sap-message on movement ${meta.mvt} posting: ${sapMsg.parseError
+        ? `unparseable header: ${sapMsg.raw}`
+        : [sapMsg, ...sapMsg.details].map((e) => `[${e.severity}] ${e.code} ${e.text}`).join(' | ')}`);
+    }
+    GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
+    const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
+    let rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
+    if (!rawMatYear && (v2Res.PostingDate || v2Res.d?.PostingDate)) {
+      const pd = v2Res.PostingDate || v2Res.d?.PostingDate;
+      const m = String(pd).match(/\d{4}/);
+      if (m) rawMatYear = m[0];
+    }
+    if (!rawMatDoc) {
+      // WM-managed location: SAP answers 201 with an empty MaterialDocument and creates an outbound
+      // delivery instead (sap-message L9/514). That is a definite outcome - no retry, no MATDOC
+      // polling; goods issue only happens when the delivery's PGI is posted in SAP.
+      const deliveryNo = GoodsIssuePostingClient.deliveryFromSapMessage(sapMsg);
+      if (deliveryNo) {
+        LOG.warn(`Movement ${meta.mvt} for reservation ${meta.reservationNo || '-'} item ${meta.reservationItem || '-'}: SAP created outbound delivery ${deliveryNo} (L9/514) instead of a material document.`);
+        return {
+          ReservationNo: String(meta.reservationNo || ''),
+          ReservationItem: String(meta.reservationItem || ''),
+          OrderNo: String(meta.orderNo || ''),
+          MaterialDocument: '',
+          MaterialDocYear: '',
+          DeliveryNumber: deliveryNo,
+          TransferOrder: '',
+          DifferenceCleared: false,
+          DifferenceQty: 0,
+          Success: false,
+          Confirmed: false,
+          PostingStatus: 'DELIVERY_CREATED',
+          ConfirmationStatus: 'DELIVERY_CREATED',
+          Message: `SAP did not post a material document: it created outbound delivery ${deliveryNo} (message L9/514) because the storage location is WM-managed. Stock is issued only when goods issue is posted for that delivery in SAP. Do not post again.`
+        };
+      }
+      // HTTP 2xx without a document number: SAP may still have committed the LUW, so this is an
+      // UNKNOWN outcome, not a failure. Log the full response body for reconciliation (headers,
+      // which carry SAP session cookies, are left out).
+      const { _headers, ...bodyOnly } = (v2Res && typeof v2Res === 'object') ? v2Res : { value: v2Res === undefined ? null : v2Res };
+      const bodySnippet = JSON.stringify(bodyOnly).slice(0, 4000);
+      LOG.error(`SAP returned 2xx without a material document for movement ${meta.mvt} posting; full response body: ${bodySnippet}`);
+      const unknown = new Error(`SAP S/4HANA accepted the movement ${meta.mvt} posting request (HTTP 2xx) but returned no material document number and no sap-message error. The document may still have been created.`);
+      unknown.status = 504;
+      unknown.code = 'GI_POSTING_OUTCOME_UNKNOWN';
+      unknown.sapResponseBody = bodySnippet;
+      throw unknown;
+    }
+    let verified;
+    try {
+      verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+    } catch (rbErr) {
+      LOG.warn(`readBackDocument error in _submitMaterialDocument for ${rawMatDoc}: ${rbErr.message}`);
+      verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'posted, confirmation pending' };
+    }
+    const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
+    const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
+    const isConfirmed = Boolean(verified?.Confirmed);
+    const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
+    return {
+      ReservationNo: String(meta.reservationNo || ''),
+      ReservationItem: String(meta.reservationItem || ''),
+      OrderNo: String(meta.orderNo || ''),
+      MaterialDocument: matDoc,
+      MaterialDocYear: matYear,
+      TransferOrder: '',
+      DifferenceCleared: false,
+      DifferenceQty: 0,
+      Success: true,
+      Confirmed: isConfirmed,
+      ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
+      Message: `${meta.label} ${meta.mvt} posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`
+    };
+  }
+
+  /**
+   * Reads a material document back from SAP to confirm persistence and verify authoritative values.
+   *
+   * Fallback Sequence on SAP S/4HANA:
+   * 1. Primary (Tier 1): RFC readTable on SAP S/4HANA universal journal/doc table 'MATDOC'
+   * 2. Fallback 1 (Tier 2): RFC readTable on material document header table 'MKPF'
+   * 3. Fallback 2 (Tier 3): OData GET API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader
+   *
+   * Commit-Lag & Error Contract:
+   * If SAP returned a document number but read-back returns nothing (e.g. Gateway commit lag),
+   * times out, or throws an error, the document number is STILL returned marked as "not yet confirmed"
+   * (Confirmed: false, Status: 'not yet confirmed'). It NEVER reports failure, NEVER 504s, and NEVER queues.
+   *
+   * Year Contract:
+   * MaterialDocYear is obtained from SAP MJAHR or derived from the SAP posting date (BUDAT).
+   * MJAHR from SAP is strictly preferred over BUDAT-derived year. It is NEVER derived from the local clock.
+   *
+   * @param {string} matDoc - Material document number returned by SAP
+   * @param {string} [matYear] - Material document year returned by SAP
+   * @param {Object} [options]
+   * @param {number} [options.timeoutMs]
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Confirmed: boolean, Status: string, Tier?: string, Items?: Array }>}
+   */
+  async readBackDocument(matDoc, matYear, options = {}) {
+    const sDoc = String(matDoc || '').trim();
+    const sYear = String(matYear || '').trim();
+    if (!sDoc) return null;
+
+    const timeoutMs = Number(options.timeoutMs || this.readBackTimeoutMs || 5000);
+    const unconfirmedFallback = {
+      MaterialDocument: sDoc,
+      MaterialDocYear: sYear,
+      Confirmed: false,
+      Status: 'posted, confirmation pending'
+    };
+
+    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const signal = options.signal || controller?.signal;
+    const clientRef = options.client || this.client;
+    if (clientRef && clientRef.supportsAbort) {
+      clientRef.abortSignal = signal;
+    }
+
+    let slotAcquired = false;
+    try {
+      await this._acquireReadBackSlot(signal);
+      slotAcquired = true;
+    } catch (acqErr) {
+      LOG.warn(`Could not acquire read-back slot: ${acqErr.message}`);
+      return unconfirmedFallback;
+    }
+
+    const doReadBack = async () => {
+      // 1. Primary: RFC readTable on MATDOC
+      if (this.rfc && typeof this.rfc.readTable === 'function') {
+        try {
+          const where = [`MBLNR = '${sDoc}'`];
+          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+          const rows = await this.rfc.readTable(
+            'MATDOC',
+            ['MBLNR', 'MJAHR', 'BUDAT', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'],
+            where,
+            10
+          );
+          if (Array.isArray(rows) && rows.length > 0) {
+            const docRow = rows[0];
+            // Prefer MJAHR from SAP over BUDAT-derived year
+            let confirmedYear = String(docRow.MJAHR || '').trim();
+            if (!confirmedYear && docRow.BUDAT) {
+              confirmedYear = String(docRow.BUDAT).trim().slice(0, 4);
+            }
+            return {
+              MaterialDocument: String(docRow.MBLNR).trim(),
+              MaterialDocYear: confirmedYear || sYear,
+              Confirmed: true,
+              Status: 'confirmed',
+              Tier: 'MATDOC',
+              Items: rows
+            };
+          }
+        } catch (err) {
+          LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF fallback...`);
+        }
+
+        // 2. Fallback 1: RFC readTable on MKPF
+        try {
+          const where = [`MBLNR = '${sDoc}'`];
+          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+          const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
+          if (Array.isArray(rows) && rows.length > 0) {
+            const mkpfRow = rows[0];
+            // Prefer MJAHR from SAP over BUDAT-derived year
+            let confirmedYear = String(mkpfRow.MJAHR || '').trim();
+            if (!confirmedYear && mkpfRow.BUDAT) {
+              confirmedYear = String(mkpfRow.BUDAT).trim().slice(0, 4);
+            }
+            return {
+              MaterialDocument: String(mkpfRow.MBLNR).trim(),
+              MaterialDocYear: confirmedYear || sYear,
+              Confirmed: true,
+              Status: 'confirmed',
+              Tier: 'MKPF'
+            };
+          }
+        } catch (mkpfErr) {
+          LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}. Trying OData fallback...`);
+        }
+      }
+
+      // 3. Fallback 2: OData A_MaterialDocumentHeader GET
+      try {
+        let docPath;
+        if (sYear) {
+          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(MaterialDocumentYear='${sYear}',MaterialDocument='${sDoc}')`;
+        } else {
+          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json`;
+        }
+        const res = await this._get(docPath, '$format=json', { signal });
+        const header = Array.isArray(res) ? res[0] : (res?.d || res);
+        if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
+          let confirmedYear = String(header.MaterialDocumentYear || '').trim();
+          if (!confirmedYear && header.PostingDate) {
+            const m = String(header.PostingDate).match(/\d{4}/);
+            if (m) confirmedYear = m[0];
+          }
+          return {
+            MaterialDocument: String(header.MaterialDocument || sDoc).trim(),
+            MaterialDocYear: confirmedYear || sYear,
+            Confirmed: true,
+            Status: 'confirmed',
+            Tier: 'OData'
+          };
+        }
+      } catch (odataErr) {
+        LOG.warn(`OData readback for ${sDoc}/${sYear} failed: ${odataErr.message}`);
+      }
+
+      return unconfirmedFallback;
+    };
+
+    let timer;
+    try {
+      const timeoutPromise = new Promise((resolve) => {
+        timer = setTimeout(() => {
+          LOG.warn(`readBackDocument for ${sDoc}/${sYear} timed out after ${timeoutMs}ms; returning unconfirmed document`);
+          if (controller) {
+            try { controller.abort(); } catch (_) {}
+          }
+          resolve(unconfirmedFallback);
+        }, timeoutMs);
+      });
+      const result = await Promise.race([
+        doReadBack().catch((err) => {
+          LOG.warn(`readBackDocument error for ${sDoc}/${sYear}: ${err.message}; returning unconfirmed document`);
+          return unconfirmedFallback;
+        }),
+        timeoutPromise
+      ]);
+      return result || unconfirmedFallback;
+    } catch (err) {
+      LOG.warn(`readBackDocument unexpected error for ${sDoc}/${sYear}: ${err.message}`);
+      return unconfirmedFallback;
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (slotAcquired) this._releaseReadBackSlot();
+    }
+  }
+
+  /**
+   * Looks up a material document this app already posted under an idempotency reference.
+   * SAP does not enforce uniqueness on ReferenceDocument and the 202 reversal copies it from the
+   * original, so several headers can match: only one carrying an item of the expected movement type
+   * counts. The posting date narrows the filter when known. The SAP user is not filtered on: it is
+   * the destination's technical (or propagated) user, which this layer does not know.
+   *
+   * @param {string} referenceDocument
+   * @param {string} mvt - expected GoodsMovementType of the original document
+   * @param {string|Date} [postingDate]
+   * @returns {Promise<{MaterialDocument:string,MaterialDocumentYear:string}|null>}
+   */
+  async findPostedByReference(referenceDocument, mvt, postingDate) {
+    const ref = String(referenceDocument || '').trim().replace(/'/g, '');
+    if (!ref) return null;
+    const day = postingDate ? this._formatDate(postingDate) : '';
+    const filter = `ReferenceDocument eq '${ref}'` +
+      (/^\d{4}-\d{2}-\d{2}$/.test(day) ? ` and PostingDate eq datetime'${day}T00:00:00'` : '');
+    const hits = await this._get(
+      '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader',
+      `$format=json&$expand=to_MaterialDocumentItem&$filter=${encodeURIComponent(filter)}`
+    );
+    const originals = (Array.isArray(hits) ? hits : [])
+      .filter((h) => (h.to_MaterialDocumentItem?.results || []).some((i) => i.GoodsMovementType === mvt))
+      .sort((a, b) => String(a.MaterialDocument).localeCompare(String(b.MaterialDocument)));
+    if (originals.length > 1) {
+      LOG.warn(`Reference ${ref} matches ${originals.length} movement ${mvt} documents (${originals.map((h) => h.MaterialDocument).join(', ')}); using the first.`);
+    }
+    return originals[0] || null;
+  }
+
+  /** @private Posting result for a document found by its idempotency reference. */
+  static _resultFromReference(doc, data, mvt, label) {
+    return {
+      ReservationNo: String(data.ReservationNo || ''),
+      ReservationItem: String(data.ReservationItem || ''),
+      OrderNo: '',
+      MaterialDocument: doc.MaterialDocument,
+      MaterialDocYear: doc.MaterialDocumentYear,
+      TransferOrder: '',
+      DifferenceCleared: false,
+      DifferenceQty: 0,
+      Success: true,
+      Message: `${label} ${mvt} is already posted in S/4HANA (MatDoc: ${doc.MaterialDocument}/${doc.MaterialDocumentYear}, found by reference ${data.ReferenceDocument}); it was not posted again.`
+    };
+  }
+
+  /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
+  async post201(data) {
+    this._assertPostable(data);
+    await this._preflightPosting(data);
+    const payload = GoodsIssue201Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '201', label: 'Goods Issue to Cost Center',
+        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
+      });
+    } catch (v2Err) {
+      const err = this._reclassifyPostingError(new Error('movement 201 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 201');
+      if (err.code !== 'GI_POSTING_OUTCOME_UNKNOWN' || !data.ReferenceDocument) throw err;
+
+      // Unknown outcome: ask SAP whether the document exists. The lookup can run before SAP has
+      // committed (observed live: no hit immediately after a successful POST, a hit about a minute
+      // later), so empty lookups prove nothing and the outcome stays unconfirmed.
+      const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
+      for (const delayMs of delays) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        let doc;
+        try {
+          doc = await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate);
+        } catch (lookupErr) {
+          LOG.warn(`Reference lookup ${data.ReferenceDocument} failed: ${lookupErr.message}`);
+          throw err; // cannot verify: keep the manual-check message
+        }
+        if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '201', 'Goods Issue to Cost Center');
+      }
+      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 201, and no material document with reference ${data.ReferenceDocument} is visible yet after ${delays.length} check(s). The posting may still appear in SAP. Outcome is unconfirmed (reference ${data.ReferenceDocument}); do not post again.`);
+      unconfirmed.status = 504;
+      unconfirmed.code = 'GI_POSTING_UNCONFIRMED';
+      throw unconfirmed;
+    }
+  }
+
+  /** Movement 301 (Plant-to-Plant Transfer) - standard API only. */
+  async post301(data) {
+    this._assertPostable(data);
+    await this._preflightPosting(data);
+    const payload = GoodsIssue301Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '301', label: 'Transfer posting',
+        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
+      });
+    } catch (v2Err) {
+      throw this._reclassifyPostingError(new Error('movement 301 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 301');
+    }
+  }
+
+  /** Movement 311 (Storage Location Transfer) - standard API only. */
+  async post311(data) {
+    this._assertPostable(data);
+    await this._preflightPosting(data);
+    const payload = GoodsIssue311Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '311', label: 'Transfer posting',
+        reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
+      });
+    } catch (v2Err) {
+      throw this._reclassifyPostingError(new Error('movement 311 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 311');
+    }
+  }
+
+  /**
+   * Router that reads a MovementType off a payload and dispatches it to the matching isolated method above.
+   * This is routing, not movement-type business logic.
+   */
+  async postByMovementType(data) {
+    const mvt = String(data.MovementType || '201').trim();
+    switch (mvt) {
+      case '201': {
+        // Never post if reference already exists in SAP.
+        const prior = data.ReferenceDocument ? await this.findPostedByReference(data.ReferenceDocument, '201', data.PostingDate) : null;
+        if (prior) return GoodsIssuePostingClient._resultFromReference(prior, data, '201', 'Goods Issue to Cost Center');
+        return this.post201(data);
+      }
+      case '301': return this.post301(data);
+      case '311': return this.post311(data);
+      default: {
+        const err = new Error(`Movement type ${mvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
+        err.status = 400;
+        throw err;
+      }
+    }
+  }
+
+  /**
+   * Helper to extract numeric HTTP status code from an error or response.
+   *
+   * @private
+   */
+  /** Midnight UTC today. SAP Edm.DateTime posting/document dates carry no time part. */
+  static _today() {
+    return new Date().setUTCHours(0, 0, 0, 0);
+  }
+
+  _extractStatus(err) {
+    if (!err) return null;
+    if (typeof err.status === 'number') return err.status;
+    if (typeof err.statusCode === 'number') return err.statusCode;
+    if (typeof err.response?.status === 'number') return err.response.status;
+    const m = String(err.message || '').match(/\b(40[1-4]|50[0-4])\b/);
+    return m ? Number(m[0]) : null;
+  }
+
+  /** Gateway answers a service that is not registered on the hub with HTTP 403 + /IWFND/MED/170. */
+  static _isServiceNotRegistered(err) {
+    return /IWFND\/MED\/170|No service found/i.test(String(err?.message || '') + JSON.stringify(err?.response?.data || ''));
+  }
+
+  /**
+   * Classifies a Tier 2 (API_MATERIAL_DOCUMENT_SRV) failure into one of three outcomes:
+   *
+   * 1. Rejected by SAP (400/401/409/422/..., or a business message recognised by S4ErrorMapper):
+   *    surfaced to the caller as-is.
+   * 2. Never reached the posting (service not activated/registered, connection refused, DNS failure,
+   *    HTTP 503): wrapped into the diagnostic "capability unavailable" 501 error.
+   * 3. Unknown outcome (timeout, connection reset, proxy 502/504, or a 2xx response without a
+   *    material document): SAP may have posted. Surfaced as 504 GI_POSTING_OUTCOME_UNKNOWN.
+   *
+   * A plain HTTP 403 (no /IWFND/MED/170) is an authorization or CSRF refusal: surfaced directly.
+   *
+   * @private
+   */
+  _reclassifyPostingError(v4Err, v2Err, operationName) {
+    const UNAVAILABLE_STATUSES = [403, 404, 502, 503];
+
+    // An error that already carries an explicit, non-"unavailable" HTTP status was already
+    // correctly classified by the code that raised it (our own pre-flight validation, the
+    // sap-message business error, or a real SAP HTTP error surfaced by S4HttpClient with its true
+    // status) - never re-wrap it.
+    const explicitStatus = this._extractStatus(v2Err);
+    if (S4ErrorMapper.isPostingPeriodClosed(v2Err?.message)) {
+      const mappedPeriod = S4ErrorMapper.mapS4Error(v2Err);
+      const periodErr = new Error(mappedPeriod.message);
+      periodErr.status = mappedPeriod.status;
+      periodErr.code = mappedPeriod.code;
+      periodErr.details = mappedPeriod.details;
+      return periodErr;
+    }
+    if (explicitStatus !== null && !UNAVAILABLE_STATUSES.includes(explicitStatus)) {
+      return v2Err;
+    }
+
+    // An explicit 403/404/502/503, or no status at all: defer to S4ErrorMapper's keyword-based
+    // business-error detection (locked/blocked, posting period, lock/enqueue, ...).
+    const mapped = S4ErrorMapper.mapS4Error(v2Err);
+    if (!UNAVAILABLE_STATUSES.includes(mapped.status) && mapped.status !== 500) {
+      const businessErr = new Error(mapped.message);
+      businessErr.status = mapped.status;
+      businessErr.code = mapped.code;
+      businessErr.details = mapped.details;
+      return businessErr;
+    }
+
+    const networkCode = String(v2Err?.code || v2Err?.cause?.code || '').toUpperCase();
+    const neverPosted = explicitStatus === 404 || explicitStatus === 503 ||
+      (explicitStatus === 403 && GoodsIssuePostingClient._isServiceNotRegistered(v2Err)) ||
+      ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(networkCode);
+    if (neverPosted) {
+      return this._buildPostingUnavailableError(v4Err, v2Err, operationName);
+    }
+
+    if (explicitStatus === 403) {
+      const authErr = new Error(`${mapped.message} SAP refused the ${operationName} (authorization or CSRF token). It was NOT posted; check SU53 for the destination user (S_SERVICE, M_MSEG_BWA, M_MSEG_WWA).`);
+      authErr.status = 403;
+      authErr.code = mapped.code;
+      return authErr;
+    }
+
+    const unknownErr = new Error(`SAP S/4HANA did not confirm the outcome of the ${operationName} (${mapped.message}). The goods issue may or may not have been posted. Outcome is unconfirmed; do not post again.`);
+    unknownErr.status = 504;
+    unknownErr.code = 'GI_POSTING_OUTCOME_UNKNOWN';
+    return unknownErr;
+  }
+
+  /**
+   * Builds an informative, actionable error when backend posting capabilities are unavailable.
+   * Explicitly distinguishes HTTP 403 (Security/S_SERVICE authorization) from HTTP 404 (ABAP/Basis publishing),
+   * identifying the exact SAP teams needed to resolve each tier.
+   *
+   * @private
+   */
+  _buildPostingUnavailableError(v4Err, v2Err, operationName = 'Goods Issue') {
+    const client = s4Config.getClient();
+    // No defaults: inventing 404/403 here would state a cause we did not observe
+    // (a timeout or destination error would be reported as "NOT PUBLISHED").
+    const v4Status = this._extractStatus(v4Err);
+    const v2Status = this._extractStatus(v2Err);
+
+    // Tier 1 diagnostic (RAP V4 service)
+    let t1Diag;
+    if (v4Status === 404) {
+      t1Diag = `(1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 404 - NOT PUBLISHED on this system; ABAP/Basis must publish it in /IWFND/V4_ADMIN (${v4Err?.message || 'HTTP 404 Not Found'})`;
+    } else if (v4Status === 403) {
+      t1Diag = `(1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' returns HTTP 403 - FORBIDDEN; Security must grant authorization (${v4Err?.message || 'HTTP 403 Forbidden'})`;
+    } else {
+      t1Diag = `(1) custom RAP service 'ZUI_GI_ORDER_RSV_O4' failed (${v4Status ? `HTTP ${v4Status}` : 'no HTTP status - network, timeout or destination error'}: ${v4Err?.message || 'Error'})`;
+    }
+
+    // Tier 2 diagnostic (Standard V2 service)
+    let t2Diag;
+    const v2NotRegistered = GoodsIssuePostingClient._isServiceNotRegistered(v2Err);
+    if (v2Status === 403 && v2NotRegistered) {
+      // Gateway answers /IWFND/MED/170 with HTTP 403. This is NOT an authorization
+      // failure - the service is not registered on the hub. Verified 2026-09-18.
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 carrying /IWFND/MED/170 'No service found' - the service is NOT REGISTERED on this Gateway hub; Basis must add and activate it in /IWFND/MAINT_SERVICE (TADIR R3TR IWSV API_MATERIAL_DOCUMENT_SRV 0001). This is a registration task, not an authorization grant (${v2Err?.message || 'HTTP 403'})`;
+    } else if (v2Status === 403) {
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 without /IWFND/MED/170, so it IS registered and this is an authorization failure; Security must grant S_SERVICE for it and M_MSEG_BWA for movement types 201/301/311 (${v2Err?.message || 'HTTP 403 Forbidden'})`;
+    } else if (v2Status === 404) {
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 404 - NOT ACTIVATED; Basis must activate service in /IWFND/MAINT_SERVICE (${v2Err?.message || 'HTTP 404 Not Found'})`;
+    } else {
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' failed (${v2Status ? `HTTP ${v2Status}` : 'no HTTP status - network, timeout or destination error'}: ${v2Err?.message || 'Error'})`;
+    }
+
+    const message = `SAP S/4HANA Backend Posting Capability Unavailable on Gateway client ${client} for ${operationName}. ` +
+      `Two distinct causes, each needing a different SAP team (verified against live SAP 2026-09-23): ` +
+      `${t1Diag}. ${t2Diag}. ` +
+      `Fixing (2) alone unblocks posting and is the smaller request. ` +
+      `'ZMMIM_MATDOC_SRV' is also deregistered (/IWFND/MED/170 as of 2026-09-23; previously returned HTTP 501 'MATDOCHEADERS_CREATE_ENTITY not implemented'). ` +
+      `No alternative OData service on this system supports movement types 201/301/311 — 1,237 services scanned, five GI-capable services found, all delivery-based only. ` +
+      `In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`;
+
+    const postingError = new Error(message);
+    postingError.status = 501;
+    return postingError;
+  }
+
+
+  /**
+   * Reverse an existing Material Document in SAP S/4HANA via CancelHeader FunctionImport.
+   *
+   * @param {string} materialDocument - 10-digit SAP material document
+   * @param {string} [materialDocYear] - 4-digit fiscal year (looked up in SAP if omitted)
+   * @param {string} [postingDate] - Optional posting date (YYYY-MM-DD)
+   * @param {string} [documentDate] - Optional document date (YYYY-MM-DD)
+   * @param {string} [reversalReason] - Optional reason code
+   * @returns {Promise<{ OriginalMaterialDocument: string, OriginalMaterialDocYear: string, ReversalMaterialDocument: string, ReversalMaterialDocYear: string, PostingDate: string, Success: boolean, Message: string }>}
+   */
+  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
+    const sDoc = String(materialDocument || '').trim();
+    let sYear = String(materialDocYear || '').trim();
+    if (!sDoc) {
+      const err = new Error('MaterialDocument is required for reversal');
+      err.status = 400;
+      throw err;
+    }
+    if (!sYear) {
+      let verified;
+      try {
+        verified = await this.readBackDocument(sDoc);
+      } catch (readErr) {
+        LOG.warn(`Reversal year lookup failed for ${sDoc}: ${readErr.message}`);
+      }
+      if (verified && verified.MaterialDocYear && verified.Confirmed) {
+        sYear = verified.MaterialDocYear;
+      } else {
+        const err = new Error(`Material document ${sDoc} was not found in SAP; unable to determine document year for reversal.`);
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    const dest = await this._getDestination();
+    if (!dest) {
+      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
+      err.status = 502;
+      throw err;
+    }
+
+    const cancelUrl = GoodsIssueMapper.mapToCancelHeaderUrl(sDoc, sYear, postingDate);
+    try {
+      const response = await this._post(cancelUrl, {});
+      // Honor a sap-message severity=error on a 2xx (mirrors _submitMaterialDocument), and require a
+      // genuine reversal document. Never fall back to the original document number or claim success
+      // without proof — a reversal that SAP did not persist is not a success (AGENTS.md rule 6).
+      GoodsIssuePostingClient._throwIfSapBusinessError(response);
+      const revMatDoc = response.MaterialDocument || response.d?.MaterialDocument || response.Cancel?.MaterialDocument || response.CancelHeader?.MaterialDocument;
+      const revMatYear = response.MaterialDocumentYear || response.d?.MaterialDocumentYear || sYear;
+      if (!revMatDoc) {
+        throw new Error(`SAP S/4HANA did not return a reversal material document for the cancellation of ${sDoc}/${sYear}, and no sap-message error was present in the response. The reversal was NOT confirmed.`);
+      }
+
+      return {
+        OriginalMaterialDocument: sDoc,
+        OriginalMaterialDocYear: sYear,
+        ReversalMaterialDocument: revMatDoc,
+        ReversalMaterialDocYear: revMatYear,
+        PostingDate: postingDate || new Date().toISOString().split('T')[0],
+        Success: true,
+        Message: `Material Document ${sDoc}/${sYear} reversed successfully in S/4HANA via Cancel. Reversal Document: ${revMatDoc}/${revMatYear}.`
+      };
+    } catch (err) {
+      throw S4ErrorMapper.mapS4Error(err, 'reverseGoodsIssue');
+    }
+  }
+}
+
+module.exports = GoodsIssuePostingClient;

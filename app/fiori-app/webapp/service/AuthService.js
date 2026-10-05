@@ -24,17 +24,60 @@ sap.ui.define([
         init: function (oComponent) {
             this._oComponent = oComponent;
             this._oComponent.setModel(this._oModel, "auth");
-            this._restoreSession();
+            var bRestored = this._restoreSession();
             this.syncModelHeaders(oComponent);
+            if (!bRestored) {
+                this.fetchCurrentUserInfo();
+            }
+        },
+
+        /**
+         * Queries the CAP AuthService to get the current authenticated session
+         * (enforced by XSUAA in deployed environments or via Bearer token in local dev).
+         *
+         * @returns {Promise<Object|null>}
+         */
+        fetchCurrentUserInfo: function () {
+            var that = this;
+            if (!ODataClient || typeof ODataClient.get !== "function") {
+                return Promise.resolve(null);
+            }
+            return ODataClient.get("/odata/v4/auth/getUserInfo()")
+                .then(function (oData) {
+                    var oResult = oData && (oData.value !== undefined ? oData.value : oData);
+                    if (oResult && oResult.authenticated) {
+                        var oUserSession = {
+                            username: oResult.username,
+                            avatarInitials: oResult.avatarInitials || (oResult.username ? oResult.username.substring(0, 2).toUpperCase() : "US"),
+                            system: oResult.system || "S/4HANA (XSUAA SSO)",
+                            loginTimestamp: oResult.loginTimestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                            token: oResult.token || null,
+                            scopes: oResult.scopes || []
+                        };
+                        that._oModel.setProperty("/isAuthenticated", true);
+                        that._oModel.setProperty("/user", oUserSession);
+                        that.syncModelHeaders();
+                        return oUserSession;
+                    }
+                    return null;
+                })
+                .catch(function (err) {
+                    if (Log && typeof Log.info === "function") {
+                        Log.info("AuthService: No active XSUAA/SSO session found (" + (err && err.message) + ")");
+                    }
+                    return null;
+                });
         },
 
         /**
          * Synchronizes authentication Authorization header (Bearer token)
-         * to UI5 OData V4 framework models (default model and fiService).
+         * to all UI5 OData V4 framework models (default purchase-order, fiService,
+         * salesInquiry, salesOrder, goodsIssue, goodsReceipt, warehouseMgmt).
          *
          * @param {sap.ui.core.UIComponent} [oComponent]
+         * @param {boolean} [bForce]
          */
-        syncModelHeaders: function (oComponent) {
+        syncModelHeaders: function (oComponent, bForce) {
             var oComp = oComponent || this._oComponent;
             if (!oComp) {
                 return;
@@ -43,7 +86,7 @@ sap.ui.define([
             var sAuthHeader = sToken ? ("Bearer " + sToken) : undefined;
 
             // Avoid redundant and disruptive changeHttpHeaders calls if header did not change
-            if (this._sLastSyncedAuthHeader === sAuthHeader) {
+            if (!bForce && this._sLastSyncedAuthHeader === sAuthHeader) {
                 return;
             }
 
@@ -51,39 +94,20 @@ sap.ui.define([
                 "Authorization": sAuthHeader
             };
 
-            var oDefaultModel = oComp.getModel();
-            if (oDefaultModel && typeof oDefaultModel.changeHttpHeaders === "function") {
-                try {
-                    oDefaultModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update default model headers: " + (err && err.message));
+            var aModelNames = ["", "fiService", "salesInquiry", "salesOrder", "goodsIssue", "goodsReceipt", "warehouseMgmt", "outboundDelivery", "customerInvoice", "customerReturn"];
+            aModelNames.forEach(function (sModelName) {
+                var oModel = sModelName ? oComp.getModel(sModelName) : oComp.getModel();
+                if (oModel && typeof oModel.changeHttpHeaders === "function") {
+                    try {
+                        oModel.changeHttpHeaders(mHeaders);
+                    } catch (err) {
+                        // Prevent unhandled "Unexpected open requests" rejection if requests are in flight
+                        if (Log && typeof Log.warning === "function") {
+                            Log.warning("AuthService: Unable to update " + (sModelName || "default") + " model headers: " + (err && err.message));
+                        }
                     }
                 }
-            }
-
-            var oFiModel = oComp.getModel("fiService");
-            if (oFiModel && typeof oFiModel.changeHttpHeaders === "function") {
-                try {
-                    oFiModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update fiService headers: " + (err && err.message));
-                    }
-                }
-            }
-
-            var oSdModel = oComp.getModel("salesInquiry");
-            if (oSdModel && typeof oSdModel.changeHttpHeaders === "function") {
-                try {
-                    oSdModel.changeHttpHeaders(mHeaders);
-                } catch (err) {
-                    if (Log && typeof Log.warning === "function") {
-                        Log.warning("AuthService: Unable to update salesInquiry headers: " + (err && err.message));
-                    }
-                }
-            }
+            });
 
             this._sLastSyncedAuthHeader = sAuthHeader;
         },
@@ -241,6 +265,53 @@ sap.ui.define([
             return this._oModel.getProperty("/isAuthenticated") === true;
         },
 
+        /**
+         * Resolves the current authenticated user's name across FLP Container,
+         * AuthService model, and Component-scoped user/auth models.
+         *
+         * @param {sap.ui.core.UIComponent} [oComponent]
+         * @returns {string} The resolved username or empty string
+         */
+        getCurrentUserName: function (oComponent) {
+            try {
+                var oGlobal = typeof window !== "undefined" ? window : null;
+                var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+                var oUshell = oSap ? oSap["ushell"] : null;
+                var oContainer = oUshell ? oUshell["Container"] : null;
+                if (oContainer && typeof oContainer["getUser"] === "function") {
+                    var oUser = oContainer["getUser"]();
+                    if (oUser && typeof oUser["getId"] === "function" && oUser["getId"]()) {
+                        return oUser["getId"]();
+                    }
+                }
+            } catch (e) {
+                // Ignore shell container error when running outside FLP
+            }
+
+            var oAuthUser = this.getCurrentUser();
+            if (oAuthUser && oAuthUser.username && typeof oAuthUser.username === "string" && oAuthUser.username.trim() !== "") {
+                return oAuthUser.username.trim();
+            }
+
+            if (oComponent && oComponent.getModel) {
+                var oAuthModel = oComponent.getModel("auth");
+                if (oAuthModel && oAuthModel.getProperty) {
+                    var sAuthUser = oAuthModel.getProperty("/user/username");
+                    if (sAuthUser && typeof sAuthUser === "string" && sAuthUser.trim() !== "") {
+                        return sAuthUser.trim();
+                    }
+                }
+                var oUserModel = oComponent.getModel("user");
+                if (oUserModel && oUserModel.getProperty) {
+                    var sUser = oUserModel.getProperty("/username");
+                    if (sUser && typeof sUser === "string" && sUser.trim() !== "") {
+                        return sUser.trim();
+                    }
+                }
+            }
+            return "";
+        },
+
         getCurrentUser: function () {
             return this._oModel.getProperty("/user");
         },
@@ -256,8 +327,51 @@ sap.ui.define([
                     var parsed = JSON.parse(sRaw);
                     return (parsed && parsed.user && parsed.user.token) || (parsed && parsed.token) || null;
                 }
-            } catch (e) {}
+            } catch (e) {
+                // Corrupt or unreadable session storage: treated as "no token" and logged.
+                if (Log && typeof Log.warning === "function") {
+                    Log.warning("AuthService: stored auth session unreadable (" + (e && e.message) + ")");
+                }
+            }
             return null;
+        },
+
+        /**
+         * Checks whether the current user has any of the specified roles / scopes.
+         *
+         * @param {string[]} aRoles
+         * @returns {boolean}
+         */
+        hasAnyRole: function (aRoles) {
+            var oUser = this.getCurrentUser();
+            if (!oUser) {
+                return false;
+            }
+            var aScopes = oUser.scopes || [];
+            if (!Array.isArray(aRoles) || aRoles.length === 0) {
+                return true;
+            }
+            var hasRole = function (sTargetRole) {
+                return aScopes.some(function (sScope) {
+                    if (typeof sScope !== "string") return false;
+                    return sScope === sTargetRole || sScope.endsWith("." + sTargetRole);
+                });
+            };
+            if (hasRole("Admin")) {
+                return true;
+            }
+            return aRoles.some(function (sRole) {
+                return hasRole(sRole);
+            });
+        },
+
+        /**
+         * Convenience helper to determine whether current user can create deliveries.
+         *
+         * @returns {boolean}
+         */
+        canCreateDelivery: function () {
+            return this.hasAnyRole(["SalesRepresentative", "WarehouseClerk", "WarehouseManager", "SalesManager", "Admin"]);
         }
     });
 

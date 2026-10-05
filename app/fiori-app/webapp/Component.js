@@ -3,9 +3,45 @@ sap.ui.define([
     "sap/ui/Device",
     "sap/m/MessageToast",
     "saps4hana/fiori/model/models",
-    "saps4hana/fiori/service/AuthService"
-], function (UIComponent, Device, MessageToast, models, AuthService) {
+    "saps4hana/fiori/service/AuthService",
+    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
+    "saps4hana/fiori/modules/wm/goods-receipt/service/GoodsReceiptService",
+    "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService",
+    "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService",
+    "saps4hana/fiori/modules/sd/sales-order/service/SalesOrderService",
+    "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService",
+    "saps4hana/fiori/modules/sd/customer-invoice/service/CustomerInvoiceService"
+], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService, CustomerInvoiceService) {
     "use strict";
+
+    // Defensive normalization for UI5 MessageToast dock validation issue (SAP DINC0487249)
+    // Ensures default 'my' and 'at' properties align with sap.ui.core.Popup.Dock enum ("CenterBottom" instead of legacy "center bottom")
+    function normalizeMessageToastDock() {
+        if (MessageToast && typeof MessageToast.show === "function" && !MessageToast._dockPatched) {
+            MessageToast._dockPatched = true;
+            if (MessageToast._mSettings) {
+                if (MessageToast._mSettings.my === "center bottom") {
+                    MessageToast._mSettings.my = "CenterBottom";
+                }
+                if (MessageToast._mSettings.at === "center bottom") {
+                    MessageToast._mSettings.at = "CenterBottom";
+                }
+            }
+            var fnOrigShow = MessageToast.show;
+            MessageToast.show = function (sMessage, mOptions) {
+                if (mOptions) {
+                    if (mOptions.my === "center bottom") {
+                        mOptions.my = "CenterBottom";
+                    }
+                    if (mOptions.at === "center bottom") {
+                        mOptions.at = "CenterBottom";
+                    }
+                }
+                return fnOrigShow.apply(this, arguments);
+            };
+        }
+    }
+    normalizeMessageToastDock();
 
     return UIComponent.extend("saps4hana.fiori.Component", {
         metadata: {
@@ -14,6 +50,8 @@ sap.ui.define([
         },
 
         init: function () {
+            normalizeMessageToastDock();
+
             // call the base component's init function
             UIComponent.prototype.init.apply(this, arguments);
 
@@ -22,6 +60,39 @@ sap.ui.define([
 
             // set the device model
             this.setModel(models.createDeviceModel(), "device");
+
+            // Wire OData V4 models to services for entity set reads
+            var oGoodsIssueModel = this.getModel("goodsIssue");
+            if (oGoodsIssueModel && GoodsIssueService && typeof GoodsIssueService.setModel === "function") {
+                GoodsIssueService.setModel(oGoodsIssueModel);
+            }
+            var oGoodsReceiptModel = this.getModel("goodsReceipt");
+            if (oGoodsReceiptModel && GoodsReceiptService && typeof GoodsReceiptService.setModel === "function") {
+                GoodsReceiptService.setModel(oGoodsReceiptModel);
+            }
+            var oPoModel = this.getModel();
+            if (oPoModel && PurchaseOrderService && typeof PurchaseOrderService.setModel === "function") {
+                PurchaseOrderService.setModel(oPoModel);
+            }
+            var oSalesInquiryModel = this.getModel("salesInquiry");
+            if (oSalesInquiryModel && SalesInquiryService && typeof SalesInquiryService.setModel === "function") {
+                SalesInquiryService.setModel(oSalesInquiryModel);
+            }
+            var oSalesOrderModel = this.getModel("salesOrder");
+            if (oSalesOrderModel && SalesOrderService && typeof SalesOrderService.setModel === "function") {
+                SalesOrderService.setModel(oSalesOrderModel);
+            }
+            var oOutboundDeliveryModel = this.getModel("outboundDelivery");
+            if (oOutboundDeliveryModel && OutboundDeliveryService && typeof OutboundDeliveryService.setModel === "function") {
+                OutboundDeliveryService.setModel(oOutboundDeliveryModel);
+            }
+            var oCustomerInvoiceModel = this.getModel("customerInvoice");
+            if (oCustomerInvoiceModel && CustomerInvoiceService && typeof CustomerInvoiceService.setModel === "function") {
+                CustomerInvoiceService.setModel(oCustomerInvoiceModel);
+            }
+
+            // Synchronize active authentication headers across all OData V4 models before routing starts
+            AuthService.syncModelHeaders(this);
 
             // setup routing and route guard
             var oRouter = this.getRouter();
@@ -77,17 +148,27 @@ sap.ui.define([
             var bIsAuth = AuthService.isAuthenticated();
             var oRouter = this.getRouter();
 
-            // Default route and login route both show the Login page
-            if (sRouteName === "login" || sRouteName === "default") {
+            if (sRouteName === "login") {
                 if (bIsAuth) {
                     oRouter.navTo("dashboard", {}, true);
                 }
                 return;
             }
 
-            // Protected routes — redirect unauthenticated users to login
-            if (!bIsAuth) {
-                var oI18n = this.getModel("i18n");
+            // If already authenticated, proceed normally
+            if (bIsAuth) {
+                return;
+            }
+
+            // In deployed / XSUAA environments, probe for SSO user info before redirecting
+            var that = this;
+            AuthService.fetchCurrentUserInfo().then(function (oUser) {
+                if (oUser && oUser.username) {
+                    // Authenticated via SSO/XSUAA; stay on route
+                    return;
+                }
+                // Unauthenticated in local environment — redirect to login
+                var oI18n = that.getModel("i18n");
                 var sMsg = "Authentication required. Please sign in to access SAP S/4HANA.";
                 if (oI18n) {
                     var oBundle = oI18n.getResourceBundle();
@@ -97,7 +178,7 @@ sap.ui.define([
                 }
                 MessageToast.show(sMsg);
                 oRouter.navTo("login", {}, true);
-            }
+            });
         },
 
         /**
@@ -107,11 +188,6 @@ sap.ui.define([
         _onHashChanged: function (oEvent) {
             var sNewHash = oEvent.getParameter("newHash") || "";
             var bIsAuth = AuthService.isAuthenticated();
-
-            // If not authenticated and trying to access a protected route, force login hash
-            if (!bIsAuth && sNewHash !== "login" && sNewHash !== "") {
-                window.location.hash = "login";
-            }
 
             // If authenticated and landing on empty hash or login, redirect to dashboard
             if (bIsAuth && (sNewHash === "" || sNewHash === "login")) {

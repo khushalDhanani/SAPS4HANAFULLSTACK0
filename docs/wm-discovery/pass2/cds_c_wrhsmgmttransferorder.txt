@@ -1,0 +1,25 @@
+@AbapCatalog.sqlViewName: 'CWMTO'
+@AbapCatalog.compiler.compareFilter: true
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@AccessControl.authorizationCheck: #CHECK
+@EndUserText.label: 'Warehouse Management Transfer Order'
+@VDM.viewType: #CONSUMPTION
+@ObjectModel.usageType.dataClass: #MIXED
+@ObjectModel.usageType.serviceQuality: #C
+@ObjectModel.usageType.sizeCategory: #XL
+
+define view C_WrhsMgmtTransferOrder
+  as select from I_WrhsMgmtTransferOrder
+{
+  key WarehouseNumber,
+  key WrhsMgmtTransferOrder,
+
+      TransferOrderInWrhsMgmtIsConfd,
+      WrhsMgmtTransfOrdConfDate,
+
+      case TransferOrderInWrhsMgmtIsConfd
+        when 'X'
+          then cast('C' as wm_transfer_order_status)
+          else cast('B' as wm_transfer_order_status)
+      end as WrhsMgmtTransfOrderStatus
+}

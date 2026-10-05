@@ -91,7 +91,8 @@ describe('BaseController Unit Tests', () => {
         };
         
         mockOwnerComponent = {
-            getRouter: jest.fn(() => mockRouter)
+            getRouter: jest.fn(() => mockRouter),
+            getModel: jest.fn()
         };
         
         controller.getOwnerComponent = jest.fn(() => mockOwnerComponent);
@@ -120,6 +121,71 @@ describe('BaseController Unit Tests', () => {
             expect(controller.getOwnerComponent).toHaveBeenCalled();
             expect(mockOwnerComponent.getRouter).toHaveBeenCalled();
             expect(mockRouter.navTo).toHaveBeenCalledWith("fallbackRoute", {}, true);
+        });
+    });
+
+    describe('KPI Metrics Calculation (calculateKpiMetrics)', () => {
+        it('should extract authentic totalCount from event total parameter', () => {
+            const oEvent = {
+                getParameter: jest.fn(param => param === "total" ? 2788 : null)
+            };
+            const result = controller.calculateKpiMetrics(null, oEvent);
+
+            expect(result.totalCount).toBe(2788);
+            expect(result.supplierCount).toBeUndefined();
+            expect(result.completeRate).toBeUndefined();
+        });
+
+        it('should handle zero totalCount correctly as 0 rather than falling back', () => {
+            const oEvent = {
+                getParameter: jest.fn(param => param === "total" ? 0 : null)
+            };
+            const result = controller.calculateKpiMetrics(null, oEvent);
+
+            expect(result.totalCount).toBe(0);
+        });
+
+        it('should return "-" when event total parameter is absent or not a number', () => {
+            const oEvent = {
+                getParameter: jest.fn(() => undefined)
+            };
+            const mockTable = {
+                getItems: () => [{}, {}, {}]
+            };
+            const result = controller.calculateKpiMetrics(mockTable, oEvent);
+
+            expect(result.totalCount).toBe("-");
+        });
+
+        it('should return "-" when oEvent is null or undefined without falling back to loaded rows', () => {
+            const mockTable = {
+                getItems: () => [{}, {}]
+            };
+            const result = controller.calculateKpiMetrics(mockTable, null);
+
+            expect(result.totalCount).toBe("-");
+        });
+    });
+
+    describe('Model Helpers (getModel and setModel)', () => {
+        it('setModel should set model on view and return controller instance', () => {
+            const mockView = { setModel: jest.fn() };
+            controller.getView = jest.fn(() => mockView);
+
+            const mockModel = {};
+            const res = controller.setModel(mockModel, 'myModel');
+
+            expect(mockView.setModel).toHaveBeenCalledWith(mockModel, 'myModel');
+            expect(res).toBe(controller);
+        });
+
+        it('getModel should return model from view or owner component', () => {
+            const mockModel = { id: 1 };
+            const mockView = { getModel: jest.fn(name => name === 'viewModel' ? mockModel : null) };
+            controller.getView = jest.fn(() => mockView);
+
+            expect(controller.getModel('viewModel')).toBe(mockModel);
+            expect(controller.getModel('unknown')).toBeNull();
         });
     });
 });

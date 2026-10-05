@@ -10,12 +10,22 @@ describe('Unit: Sales Inquiry Value Help Configuration', () => {
         expect(SD_VALUE_HELP_ENTITIES).toContain('CustomerVH');
         expect(SD_VALUE_HELP_ENTITIES).toContain('MaterialVH');
         expect(SD_VALUE_HELP_ENTITIES).toContain('CurrencyVH');
+        expect(SD_VALUE_HELP_ENTITIES).toContain('PlantVH');
     });
 
     test('should include UnitOfMeasureVH in sdValueHelpConfig pointing to S/4HANA PO FS service', () => {
         const uomConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('UnitOfMeasureVH'));
         expect(uomConfig).toBeDefined();
         expect(typeof uomConfig.read).toBe('function');
+    });
+
+    test('should include PlantVH in sdValueHelpConfig pointing to readMaintData with deduplication by Plant', () => {
+        const plantConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('PlantVH'));
+        expect(plantConfig).toBeDefined();
+        expect(typeof plantConfig.read).toBe('function');
+        expect(plantConfig.entityDeduplicateBy).toEqual({
+            PlantVH: 'Plant'
+        });
     });
 
     test('should include SD WL entities in sdValueHelpConfig pointing to readWlData', () => {

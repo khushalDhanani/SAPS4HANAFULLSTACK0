@@ -1,4 +1,4 @@
-sap.ui.define([], function () {
+sap.ui.define(["sap/base/Log"], function (Log) {
     "use strict";
 
     var sCsrfToken = null;
@@ -17,6 +17,24 @@ sap.ui.define([], function () {
          * @param {boolean} [bForceRefresh=false]
          * @returns {Promise<string|null>}
          */
+        /** Authorization header from the stored login session ({} when none / unreadable). */
+        authHeaders: function () {
+            try {
+                var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
+                if (sSession) {
+                    var oParsed = JSON.parse(sSession);
+                    var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;
+                    if (sAuthToken) { return { "Authorization": "Bearer " + sAuthToken }; }
+                }
+            } catch (e) {
+                // Corrupt or unreadable session: the request goes out unauthenticated and will 401.
+                if (Log && typeof Log.warning === "function") {
+                    Log.warning("ODataClient: stored auth session unreadable (" + (e && e.message) + ")");
+                }
+            }
+            return {};
+        },
+
         fetchCsrfToken: function (bForceRefresh) {
             if (sCsrfToken && !bForceRefresh) {
                 return Promise.resolve(sCsrfToken);
@@ -110,15 +128,16 @@ sap.ui.define([], function () {
          */
         request: function (sUrl, mOptions) {
             var that = this;
+            var sMethod = String((mOptions && mOptions.method) || "GET").toUpperCase();
+            var bRequiresCsrf = (sMethod === "POST" || sMethod === "PUT" || sMethod === "DELETE" || sMethod === "PATCH");
             var options = Object.assign({
                 method: "GET",
                 headers: {},
-                maxRetries: 1,
+                // A write is never re-sent automatically: a 502/503/504 or a dropped connection does
+                // not tell whether the server already posted it in SAP, so a resend can post twice.
+                maxRetries: bRequiresCsrf ? 0 : 1,
                 retryDelayMs: 300
             }, mOptions || {});
-
-            var sMethod = options.method.toUpperCase();
-            var bRequiresCsrf = (sMethod === "POST" || sMethod === "PUT" || sMethod === "DELETE" || sMethod === "PATCH");
 
             function executeAttempt(iAttempt) {
                 var pCsrf = bRequiresCsrf ? that.fetchCsrfToken() : Promise.resolve(null);
@@ -133,16 +152,7 @@ sap.ui.define([], function () {
                     }
 
                     if (!mHeaders["Authorization"]) {
-                        try {
-                            var sSession = sessionStorage.getItem("saps4hana_fiori_auth_session") || localStorage.getItem("saps4hana_fiori_auth_session");
-                            if (sSession) {
-                                var oParsed = JSON.parse(sSession);
-                                var sAuthToken = (oParsed && oParsed.user && oParsed.user.token) || (oParsed && oParsed.token) || null;
-                                if (sAuthToken) {
-                                    mHeaders["Authorization"] = "Bearer " + sAuthToken;
-                                }
-                            }
-                        } catch (e) {}
+                        Object.assign(mHeaders, that.authHeaders());
                     }
 
                     var bodyData = options.body;
@@ -160,7 +170,8 @@ sap.ui.define([], function () {
                 })
                     .then(function (response) {
                         // Check for CSRF token expiration (HTTP 403 with x-csrf-token: Required)
-                        if (response.status === 403 && bRequiresCsrf && iAttempt === 0) {
+                        if (response.status === 403 && bRequiresCsrf && iAttempt === 0 &&
+                            String(response.headers.get("x-csrf-token") || "").toLowerCase() === "required") {
                             that.clearCsrfToken();
                             return that.fetchCsrfToken(true).then(function () {
                                 return executeAttempt(iAttempt + 1);
@@ -181,7 +192,9 @@ sap.ui.define([], function () {
                                 try {
                                     sessionStorage.removeItem("saps4hana_fiori_auth_session");
                                     localStorage.removeItem("saps4hana_fiori_auth_session");
-                                } catch (e) {}
+                                } catch (e) {
+                                    // Storage unavailable (private mode): nothing to clear.
+                                }
                             }
                             return that.parseError(response).then(function (err) {
                                 throw err;
@@ -218,6 +231,8 @@ sap.ui.define([], function () {
         /**
          * Convenience GET request.
          *
+         * @deprecated Prefer SAPUI5 OData V4 model bindings (bindList / bindContext) for entity set queries.
+         * ODataClient is maintained for unbound actions, function imports, and fallback requests.
          * @param {string} sUrl
          * @param {Object} [mHeaders]
          * @returns {Promise<any>}

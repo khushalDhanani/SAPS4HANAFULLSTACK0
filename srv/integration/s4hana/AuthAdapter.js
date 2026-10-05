@@ -1,62 +1,29 @@
 const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
-const httpClient = require('@sap-cloud-sdk/http-client');
+const LOG = require('../../common/logger')('auth');
+const { S4HttpClient } = require('./S4HttpClient');
+const s4Config = require('./s4Config');
 
 /**
  * Adapter class to encapsulate authentication and credential validation
- * against SAP S/4HANA Gateway catalog service using SAP Cloud SDK.
+ * against SAP S/4HANA Gateway catalog service using the shared S4HttpClient.
  *
  * Keeps technical S/4 communication strictly within srv/integration/s4hana/
  * per architectural boundaries.
  */
 class AuthAdapter {
-  constructor() {
-    this.destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
+  constructor(options = {}) {
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
   }
 
   /**
-   * Resolves destination for S/4HANA communication using SAP Cloud SDK.
-   * Prioritizes BTP Destination Service, with local fallback for offline development.
+   * Resolves destination for S/4HANA communication using the shared S4HttpClient.
    *
    * @param {Object} [options]
    * @returns {Promise<Object|null>}
    */
   async _getDestination(options = {}) {
-    if (options.destination) return options.destination;
-
-    // 1. BTP Destination resolution via Cloud SDK (primary in deployed environments)
-    try {
-      const dest = await connectivity.getDestination({ destinationName: this.destinationName });
-      if (dest && dest.url) {
-        return dest;
-      }
-    } catch (err) {
-      // In local development without BTP Destination service, continue to fallback
-    }
-
-    // 2. Direct environment variable (standard in local dev .env)
-    if (process.env.S4_DESTINATION_URL) {
-      return {
-        url: process.env.S4_DESTINATION_URL.replace(/\/+$/, ''),
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: { 'sap-client': process.env.S4_CLIENT || '220' }
-      };
-    }
-
-    // 3. Fallback to cds.env credentials
-    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials ||
-                  cds.env.requires?.C_PURCHASEORDER_FS_SRV?.credentials;
-    if (creds && creds.url) {
-      return {
-        url: creds.url.replace(/\/+$/, ''),
-        username: creds.username,
-        password: creds.password,
-        headers: creds.headers || {}
-      };
-    }
-
-    return null;
+    return this.client.resolveDestination(options);
   }
 
   /**
@@ -129,13 +96,13 @@ class AuthAdapter {
 
     const sUser = username.trim();
     const sPass = password.trim();
-    const sClient = options.client || process.env.S4_CLIENT || '220';
+    const sClient = options.client || (process.env.S4_CLIENT && process.env.S4_CLIENT.trim()) || s4Config.getClient();
 
     const baseDest = options.destination || (await this._getDestination(options));
     const baseUrl = options.baseUrl || (baseDest && baseDest.url);
 
     if (!baseUrl) {
-      console.error('[AuthAdapter] S/4HANA destination URL is not configured.');
+      LOG.error('S/4HANA destination URL is not configured.');
       return {
         authenticated: false,
         statusCode: 500,
@@ -152,7 +119,7 @@ class AuthAdapter {
       authentication: 'BasicAuthentication'
     };
 
-    const executeFn = options.executeHttpRequest || (options.fetchFn ? this._adaptFetch(options.fetchFn) : httpClient.executeHttpRequest);
+    const executeFn = options.executeHttpRequest || (options.fetchFn ? this._adaptFetch(options.fetchFn) : this.client._execute);
 
     try {
       const response = await executeFn(targetDestination, {
@@ -169,7 +136,7 @@ class AuthAdapter {
           authenticated: true,
           statusCode: status,
           message: 'Authentication successful.',
-          system: `PRD - Client ${sClient}`,
+          system: s4Config.getSystemLabel(sClient, options.systemName),
           client: sClient
         };
       }
@@ -184,7 +151,7 @@ class AuthAdapter {
       }
 
       if (!err.response) {
-        console.error('[AuthAdapter] S/4HANA connection error:', err.message);
+        LOG.error('S/4HANA connection error:', err.message);
         return {
           authenticated: false,
           statusCode: 503,
@@ -192,7 +159,7 @@ class AuthAdapter {
         };
       }
 
-      console.error(`[AuthAdapter] Unexpected S/4 response: ${status}`);
+      LOG.error(`Unexpected S/4 response: ${status}`);
       return {
         authenticated: false,
         statusCode: status,

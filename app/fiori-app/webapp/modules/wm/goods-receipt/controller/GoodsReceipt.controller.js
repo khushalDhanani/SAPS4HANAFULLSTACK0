@@ -41,8 +41,11 @@ sap.ui.define([
                     ExpiryDate: "",
                     BatchStatusState: "None",
                     BatchStatusText: "NO BATCH",
-                    Quantity: 1,
-                    Unit: "KG",
+                    Quantity: "",
+                    OpenQuantity: null,
+                    OrderedQuantity: null,
+                    QuantityInEntryUnit: null,
+                    Unit: "",
                     Supplier: "",
                     SupplierName: "",
                     SupplierCityName: ""
@@ -78,8 +81,16 @@ sap.ui.define([
          * Load open Inbound Deliveries from SAP
          */
         _loadOpenDeliveries: function () {
+            var oAuthModel = this.getModel("auth");
+            if (!oAuthModel && this.getOwnerComponent()) {
+                oAuthModel = this.getOwnerComponent().getModel("auth");
+            }
+            if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
+                return;
+            }
             var oModel = this.getView().getModel("grView");
-            GoodsReceiptService.fetchOpenInboundDeliveries()
+            var oDataModel = this.getModel("goodsReceipt");
+            GoodsReceiptService.fetchOpenInboundDeliveries(oDataModel)
                 .then(function (aList) {
                     oModel.setProperty("/openDeliveries", aList || []);
                 })
@@ -95,7 +106,7 @@ sap.ui.define([
             var oModel = this.getView().getModel("grView");
             var bCurrent = oModel.getProperty("/audioEnabled");
             oModel.setProperty("/audioEnabled", !bCurrent);
-            MessageToast.show(!bCurrent ? "Audio cues enabled" : "Audio cues muted");
+            MessageToast.show(this.getText(!bCurrent ? "grAudioEnabled" : "grAudioMuted"));
         },
 
         /**
@@ -123,7 +134,7 @@ sap.ui.define([
                     osc.start();
                     osc.stop(audioCtx.currentTime + 0.3);
                 }
-            } catch (_) {}
+            } catch (_) { }
         },
 
         /**
@@ -131,7 +142,7 @@ sap.ui.define([
          */
         onCameraScanStorageUnit: function () {
             var that = this;
-            BarcodeScanService.openCameraScanner("Scan Storage Unit Barcode", function (sScanned) {
+            BarcodeScanService.openCameraScanner("Scan Inbound Delivery / PO Barcode", function (sScanned) {
                 if (sScanned && sScanned.trim()) {
                     that.getView().getModel("grView").setProperty("/storageUnitBarcode", sScanned.trim());
                     that.onScanStorageUnit();
@@ -232,7 +243,7 @@ sap.ui.define([
 
             if (!sBarcode) {
                 this._playBeep(false);
-                MessageBox.error("Please scan or enter a Storage Unit Number.");
+                MessageBox.error(this.getText("grScanRequired"));
                 return Promise.resolve();
             }
 
@@ -245,12 +256,12 @@ sap.ui.define([
                     oModel.setProperty("/activeSU", {
                         StorageUnit: oSU.StorageUnit || sBarcode,
                         ScannedBarcode: oSU.ScannedBarcode || sBarcode,
-                        ScannedType: oSU.ScannedType || "STORAGE_UNIT",
-                        ScannedTypeLabel: oSU.ScannedTypeLabel || "Storage Unit",
+                        ScannedType: oSU.ScannedType || (oSU.DeliveryDocument ? "INBOUND_DELIVERY" : (oSU.PurchaseOrder ? "PURCHASE_ORDER" : "DOCUMENT")),
+                        ScannedTypeLabel: oSU.ScannedTypeLabel || (oSU.DeliveryDocument ? "Inbound Delivery" : (oSU.PurchaseOrder ? "Purchase Order" : "Document")),
                         DeliveryDocument: oSU.DeliveryDocument || "",
-                        DeliveryDocumentItem: oSU.DeliveryDocumentItem || "000010",
+                        DeliveryDocumentItem: oSU.DeliveryDocumentItem || "",
                         PurchaseOrder: oSU.PurchaseOrder || "",
-                        PurchaseOrderItem: oSU.PurchaseOrderItem || "00010",
+                        PurchaseOrderItem: oSU.PurchaseOrderItem || "",
                         Material: oSU.Material || "",
                         MaterialName: oSU.MaterialName || "",
                         Plant: oSU.Plant || "",
@@ -262,8 +273,11 @@ sap.ui.define([
                         ExpiryDate: oSU.ExpiryDate || "",
                         BatchStatusState: oSU.BatchStatusState || "None",
                         BatchStatusText: oSU.BatchStatusText || "NO BATCH",
-                        Quantity: Number(oSU.Quantity) || 1,
-                        Unit: oSU.Unit || "KG",
+                        Quantity: (oSU.Quantity !== undefined && oSU.Quantity !== null && !isNaN(Number(oSU.Quantity))) ? Number(oSU.Quantity) : "",
+                        OpenQuantity: (oSU.OpenQuantity !== undefined && oSU.OpenQuantity !== null && !isNaN(Number(oSU.OpenQuantity))) ? Number(oSU.OpenQuantity) : null,
+                        OrderedQuantity: (oSU.OrderedQuantity !== undefined && oSU.OrderedQuantity !== null && !isNaN(Number(oSU.OrderedQuantity))) ? Number(oSU.OrderedQuantity) : null,
+                        QuantityInEntryUnit: (oSU.QuantityInEntryUnit !== undefined && oSU.QuantityInEntryUnit !== null && !isNaN(Number(oSU.QuantityInEntryUnit))) ? Number(oSU.QuantityInEntryUnit) : null,
+                        Unit: oSU.Unit || "",
                         Supplier: oSU.Supplier || "",
                         SupplierName: oSU.SupplierName || "",
                         SupplierCityName: oSU.SupplierCityName || ""
@@ -273,33 +287,45 @@ sap.ui.define([
                     oModel.setProperty("/availableBatches", oSU.AvailableBatches || []);
                     oModel.setProperty("/hasActiveSU", true);
 
-                    var sLabel = oSU.ScannedTypeLabel || "Storage Unit";
+                    var sLabel = oSU.ScannedTypeLabel || (oSU.DeliveryDocument ? "Inbound Delivery" : (oSU.PurchaseOrder ? "Purchase Order" : "Document"));
                     var sToastTpl = that.getText("grResolvedToast");
                     var sToastMsg = (sToastTpl && sToastTpl.includes("{0}"))
                         ? sToastTpl.replace("{0}", sLabel).replace("{1}", sBarcode).replace("{2}", oSU.Material || "")
                         : (sLabel + " " + sBarcode + " resolved from SAP.");
                     MessageToast.show(sToastMsg);
+                    if (Array.isArray(oSU.LookupWarnings) && oSU.LookupWarnings.length > 0) {
+                        MessageBox.warning(oSU.LookupWarnings.join("\n"), { title: that.getText("grLookupWarningsTitle") || "Some SAP data could not be read" });
+                    }
                 })
                 .catch(function (err) {
                     that._playBeep(false);
                     oModel.setProperty("/hasActiveSU", false);
                     var sRawMsg = err.message || err || "";
-                    var sGuidance = that.getText("grNotFoundGuidance");
-                    if (sGuidance && sGuidance.includes("{0}")) {
-                        sGuidance = sGuidance.replace("{0}", sBarcode);
-                    }
-                    var sOpenVHTitle = that.getText("grBtnOpenValueHelp") || "Open Value Help";
-                    MessageBox.error(sRawMsg, {
-                        title: "Validation Error: Document Not Found",
-                        details: sGuidance || undefined,
-                        actions: [MessageBox.Action.CLOSE, sOpenVHTitle],
-                        emphasizedAction: sOpenVHTitle,
-                        onClose: function (sAction) {
-                            if (sAction === sOpenVHTitle) {
-                                that.onStorageUnitValueHelp();
-                            }
+                    var isOutage = err.statusCode === 502 || err.statusCode === 503 || err.statusCode === 504 || err.status === 502 || err.status === 503 || err.status === 504 ||
+                        (sRawMsg && (sRawMsg.toLowerCase().includes("s/4hana outage") || sRawMsg.toLowerCase().includes("destination") || sRawMsg.toLowerCase().includes("econnrefused")));
+                    if (isOutage) {
+                        MessageBox.error(sRawMsg, {
+                            title: that.getText("grOutageTitle"),
+                            actions: [MessageBox.Action.CLOSE]
+                        });
+                    } else {
+                        var sGuidance = that.getText("grNotFoundGuidance");
+                        if (sGuidance && sGuidance.includes("{0}")) {
+                            sGuidance = sGuidance.replace("{0}", sBarcode);
                         }
-                    });
+                        var sOpenVHTitle = that.getText("grBtnOpenValueHelp") || "Open Value Help";
+                        MessageBox.error(sRawMsg, {
+                            title: that.getText("grDocNotFoundTitle"),
+                            details: sGuidance || undefined,
+                            actions: [MessageBox.Action.CLOSE, sOpenVHTitle],
+                            emphasizedAction: sOpenVHTitle,
+                            onClose: function (sAction) {
+                                if (sAction === sOpenVHTitle) {
+                                    that.onStorageUnitValueHelp();
+                                }
+                            }
+                        });
+                    }
                 })
                 .finally(function () {
                     that.setBusy(false);
@@ -342,8 +368,8 @@ sap.ui.define([
                 if (found.StatusState === "Error" || found.StatusText === "EXPIRED") {
                     this._playBeep(false);
                     MessageBox.error(
-                        "Batch " + found.Batch + " expired on " + (found.ExpiryDate || "unknown date") + " (SLED exceeded).\n\nReceiving expired materials is strictly prohibited by quality control rules.",
-                        { title: "Expired Batch Blocked" }
+                        this.getText("grBatchExpiredSelectMsg", [found.Batch, found.ExpiryDate || "unknown date"]),
+                        { title: this.getText("grExpiredBatchTitle") }
                     );
                     return;
                 }
@@ -362,16 +388,16 @@ sap.ui.define([
             var oModel = this.getView().getModel("grView");
             var oActive = oModel.getProperty("/activeSU");
 
-            if (!oActive.StorageUnit && !oActive.DeliveryDocument) {
+            if (!oActive.StorageUnit && !oActive.DeliveryDocument && !oActive.PurchaseOrder) {
                 this._playBeep(false);
-                MessageBox.error("No active Storage Unit selected for Goods Receipt.");
+                MessageBox.error(this.getText("grNoActiveDoc"));
                 return Promise.resolve();
             }
 
             var nQty = Number(oActive.Quantity);
             if (isNaN(nQty) || nQty <= 0) {
                 this._playBeep(false);
-                MessageBox.error("Quantity must be greater than zero.");
+                MessageBox.error(this.getText("grQtyPositive"));
                 return Promise.resolve();
             }
 
@@ -379,18 +405,19 @@ sap.ui.define([
             if (oActive.BatchStatusState === "Error" || oActive.BatchStatusText === "EXPIRED") {
                 this._playBeep(false);
                 MessageBox.error(
-                    "Goods Receipt blocked: Batch " + oActive.Batch + " has expired (SLED exceeded). Receiving expired chemicals or reagents is strictly prohibited.",
-                    { title: "Expired Batch Blocked" }
+                    this.getText("grBatchExpiredPostMsg", [oActive.Batch]),
+                    { title: this.getText("grExpiredBatchTitle") }
                 );
                 return Promise.resolve();
             }
 
             var that = this;
-            var sDoc = oActive.DeliveryDocument || oActive.StorageUnit;
+            var sDoc = oActive.DeliveryDocument || oActive.PurchaseOrder || oActive.StorageUnit;
+            var sDocType = oActive.DeliveryDocument ? "Inbound Delivery " : (oActive.PurchaseOrder ? "Purchase Order " : "Document ");
 
             return new Promise(function (resolve) {
-                MessageBox.confirm("Post Goods Receipt (101) in SAP for Storage Unit " + oActive.StorageUnit + " (Delivery " + sDoc + ")?", {
-                    title: "Confirm Goods Receipt",
+                MessageBox.confirm(that.getText("grPostConfirmPrompt", [sDocType, sDoc]), {
+                    title: that.getText("grPostConfirmTitle"),
                     actions: [MessageBox.Action.YES, MessageBox.Action.NO],
                     emphasizedAction: MessageBox.Action.YES,
                     onClose: function (sAction) {
@@ -401,6 +428,10 @@ sap.ui.define([
                             var oPayload = {
                                 StorageUnit: oActive.StorageUnit,
                                 DeliveryDocument: oActive.DeliveryDocument,
+                                DeliveryDocumentItem: oActive.DeliveryDocumentItem,
+                                PurchaseOrder: oActive.PurchaseOrder,
+                                PurchaseOrderItem: oActive.PurchaseOrderItem,
+                                Unit: oActive.Unit,
                                 Material: oActive.Material,
                                 Plant: oActive.Plant,
                                 StorageLocation: oActive.StorageLocation,
@@ -412,9 +443,9 @@ sap.ui.define([
                             GoodsReceiptService.postGoodsReceipt(oPayload)
                                 .then(function (oResult) {
                                     that._playBeep(true);
-                                    var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : "Goods Receipt posted successfully in SAP.";
+                                    var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : that.getText("grPostSuccessDefault");
                                     MessageBox.success(sSuccessMsg, {
-                                        title: "Goods Receipt Posted",
+                                        title: that.getText("grPostSuccessTitle"),
                                         onClose: function () {
                                             that.onResetWorkflow();
                                         }
@@ -423,7 +454,7 @@ sap.ui.define([
                                 })
                                 .catch(function (err) {
                                     that._playBeep(false);
-                                    MessageBox.error("Goods Receipt Failed: " + (err.message || err));
+                                    MessageBox.error(that.getText("grPostFailed", [err.message || err]));
                                     resolve(null);
                                 })
                                 .finally(function () {
@@ -468,13 +499,16 @@ sap.ui.define([
                 ExpiryDate: "",
                 BatchStatusState: "None",
                 BatchStatusText: "NO BATCH",
-                Quantity: 1,
-                Unit: "KG",
+                Quantity: "",
+                OpenQuantity: null,
+                OrderedQuantity: null,
+                QuantityInEntryUnit: null,
+                Unit: "",
                 Supplier: "",
                 SupplierName: "",
                 SupplierCityName: ""
             });
-            MessageToast.show("Workflow reset");
+            MessageToast.show(this.getText("grWorkflowReset"));
         },
 
         /**

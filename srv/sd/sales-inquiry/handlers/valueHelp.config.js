@@ -14,7 +14,8 @@ const SD_VALUE_HELP_ENTITIES = [
     'SoldToPartyVH',
     'CustomerVH',
     'MaterialVH',
-    'CurrencyVH'
+    'CurrencyVH',
+    'PlantVH'
 ];
 
 const sdValueHelpConfig = [
@@ -51,6 +52,13 @@ const sdValueHelpConfig = [
     {
         entities: ['UnitOfMeasureVH'],
         read: (query) => purchaseOrderAdapter.readFsData(query)
+    },
+    {
+        entities: ['PlantVH'],
+        read: (query) => purchaseOrderAdapter.readMaintData(query),
+        entityDeduplicateBy: {
+            PlantVH: 'Plant'
+        }
     }
 ];
 

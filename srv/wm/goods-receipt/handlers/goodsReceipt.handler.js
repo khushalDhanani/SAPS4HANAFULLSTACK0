@@ -1,4 +1,10 @@
+const cds = require('@sap/cds');
+const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
+const { extractFilterParam, extractFilterParams, applyPaging } = require('../../../common/filterUtils');
+// Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
+// across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
+const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
 
 const init = (srv) => {
     /**
@@ -7,54 +13,31 @@ const init = (srv) => {
      */
     srv.on('READ', 'OpenInboundDeliveries', async (req) => {
         try {
-            let sPlant = '';
-            const whereClause = req.query?.SELECT?.where;
-            if (Array.isArray(whereClause)) {
-                for (let i = 0; i < whereClause.length; i++) {
-                    const token = whereClause[i];
-                    if (token?.ref?.[0] === 'Plant' && whereClause[i + 2]?.val) {
-                        sPlant = String(whereClause[i + 2].val).trim();
-                        break;
-                    }
-                }
-            }
-
-            return await GoodsReceiptAdapter.getOpenInboundDeliveries(sPlant);
+            const sPlant = extractFilterParam(req, 'Plant') || '';
+            const deliveries = await GoodsReceiptAdapter.getOpenInboundDeliveries(sPlant);
+            return applyPaging(deliveries, req);
         } catch (err) {
-            console.error('[GoodsReceiptHandler] READ OpenInboundDeliveries failed:', err.message);
-            req.reject(err.statusCode || 502, err.message || 'Failed to retrieve open inbound deliveries from SAP');
+            LOG.error('READ OpenInboundDeliveries failed:', err.message);
+            req.reject(err.status || err.statusCode || 502, err.message || 'Failed to retrieve open inbound deliveries from SAP');
         }
     });
 
     /**
      * READ MaterialStorageLocations
-     * Queries authentic storage locations and bins from MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps
+     * Queries authentic storage locations from MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp
      */
     srv.on('READ', 'MaterialStorageLocations', async (req) => {
+        const { Material: sMaterial, Plant: sPlant } = extractFilterParams(req, ['Material', 'Plant']);
+
+        if (!sMaterial && !sPlant) {
+            return req.reject(400, 'Plant or Material parameter is required to query storage locations.');
+        }
+
         try {
-            let sMaterial = '';
-            let sPlant = '';
-
-            const whereClause = req.query?.SELECT?.where;
-            if (Array.isArray(whereClause)) {
-                for (let i = 0; i < whereClause.length; i++) {
-                    const token = whereClause[i];
-                    if (token?.ref?.[0] === 'Material' && whereClause[i + 2]?.val) {
-                        sMaterial = String(whereClause[i + 2].val).trim();
-                    }
-                    if (token?.ref?.[0] === 'Plant' && whereClause[i + 2]?.val) {
-                        sPlant = String(whereClause[i + 2].val).trim();
-                    }
-                }
-            }
-
-            if (!sMaterial) {
-                return req.reject(400, 'Material parameter is required to query storage locations.');
-            }
-
-            return await GoodsReceiptAdapter.getMaterialStorageLocations(sMaterial, sPlant);
+            const locations = await GoodsReceiptAdapter.getMaterialStorageLocations(sMaterial, sPlant);
+            return applyPaging(locations, req);
         } catch (err) {
-            req.reject(err.statusCode || 502, err.message || 'Failed to retrieve storage locations from SAP');
+            req.reject(err.status || err.statusCode || 502, err.message || 'Failed to retrieve storage locations from SAP');
         }
     });
 
@@ -63,34 +46,17 @@ const init = (srv) => {
      * Queries authentic batches and SLED from LO_BM_BATCH_SRV/I_Batch
      */
     srv.on('READ', 'MaterialBatches', async (req) => {
+        const { Material: sMaterial, Plant: sPlant, StorageLocation: sStorageLocation } = extractFilterParams(req, ['Material', 'Plant', 'StorageLocation']);
+
+        if (!sMaterial) {
+            return req.reject(400, 'Material parameter is required to query batches.');
+        }
+
         try {
-            let sMaterial = '';
-            let sPlant = '';
-            let sStorageLocation = '';
-
-            const whereClause = req.query?.SELECT?.where;
-            if (Array.isArray(whereClause)) {
-                for (let i = 0; i < whereClause.length; i++) {
-                    const token = whereClause[i];
-                    if (token?.ref?.[0] === 'Material' && whereClause[i + 2]?.val) {
-                        sMaterial = String(whereClause[i + 2].val).trim();
-                    }
-                    if (token?.ref?.[0] === 'Plant' && whereClause[i + 2]?.val) {
-                        sPlant = String(whereClause[i + 2].val).trim();
-                    }
-                    if (token?.ref?.[0] === 'StorageLocation' && whereClause[i + 2]?.val) {
-                        sStorageLocation = String(whereClause[i + 2].val).trim();
-                    }
-                }
-            }
-
-            if (!sMaterial) {
-                return req.reject(400, 'Material parameter is required to query batches.');
-            }
-
-            return await GoodsReceiptAdapter.getMaterialBatches(sMaterial, sPlant, sStorageLocation);
+            const batches = await GoodsReceiptAdapter.getMaterialBatches(sMaterial, sPlant, sStorageLocation);
+            return applyPaging(batches, req);
         } catch (err) {
-            req.reject(err.statusCode || 502, err.message || 'Failed to retrieve batches from SAP');
+            req.reject(err.status || err.statusCode || 502, err.message || 'Failed to retrieve batches from SAP');
         }
     });
 
@@ -107,8 +73,10 @@ const init = (srv) => {
         try {
             return await GoodsReceiptAdapter.resolveStorageUnit(StorageUnit);
         } catch (err) {
-            console.error('[GoodsReceiptHandler] getStorageUnitDetails failed:', err.message);
-            req.reject(err.statusCode || 404, err.message);
+            LOG.error('getStorageUnitDetails failed:', err.message);
+            const isOutage = (GoodsReceiptAdapter._isOutage && GoodsReceiptAdapter._isOutage(err)) || (GoodsReceiptAdapter.constructor && GoodsReceiptAdapter.constructor._isOutage && GoodsReceiptAdapter.constructor._isOutage(err));
+            const statusCode = err.status || err.statusCode || (isOutage ? 502 : 404);
+            req.reject(statusCode, err.message);
         }
     });
 
@@ -125,7 +93,14 @@ const init = (srv) => {
             StorageLocation,
             Batch,
             Quantity,
-            ExpiryDate
+            ExpiryDate,
+            DeliveryDocumentItem,
+            PurchaseOrder,
+            PurchaseOrderItem,
+            Unit,
+            GoodsMovementType,
+            DocumentItemText,
+            SourceOfGR
         } = req.data;
 
         if (!StorageUnit && !DeliveryDocument) {
@@ -143,6 +118,15 @@ const init = (srv) => {
         if (!Quantity || Number(Quantity) <= 0) {
             return req.reject(400, 'Quantity must be greater than zero.');
         }
+        // Field-format validation (reused WM primitives) before posting to SAP — presence is checked
+        // above, so these enforce the shape (plant/sloc = 4 alphanumerics, material/batch max length).
+        const formatErr = checkMaterial(Material, true)
+            || checkPlant(Plant, true)
+            || checkStorageLocation(StorageLocation, true)
+            || checkBatch(Batch);
+        if (formatErr) {
+            return req.reject(400, `${formatErr.field}: ${formatErr.message}`);
+        }
 
         try {
             return await GoodsReceiptAdapter.postGoodsReceipt({
@@ -153,10 +137,17 @@ const init = (srv) => {
                 StorageLocation,
                 Batch,
                 Quantity,
-                ExpiryDate
+                ExpiryDate,
+                DeliveryDocumentItem,
+                PurchaseOrder,
+                PurchaseOrderItem,
+                Unit,
+                GoodsMovementType,
+                DocumentItemText,
+                SourceOfGR
             });
         } catch (err) {
-            console.error('[GoodsReceiptHandler] postGoodsReceipt failed:', err.message);
+            LOG.error('postGoodsReceipt failed:', err.message);
             req.reject(err.statusCode || 500, err.message);
         }
     });

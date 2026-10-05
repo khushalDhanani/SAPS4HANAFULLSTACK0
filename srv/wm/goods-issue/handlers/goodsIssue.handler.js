@@ -1,37 +1,14 @@
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueQueueManager = require('../GoodsIssueQueueManager');
+const { extractFilterParam, applyPaging } = require('../../../common/filterUtils');
+const { validateReversalPayload } = require('../validation/goodsIssue.validation');
+const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
+const LOG = require('../../../common/logger')('goods-issue-handler');
+const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
+const { classifyPostingError } = require('./goodsIssuePerType.handler');
 
-function _extractFilterParam(req, fieldName) {
-  if (req.data?.[fieldName]) return req.data[fieldName];
-  if (req.params && req.params.length > 0 && req.params[0][fieldName]) return req.params[0][fieldName];
-
-  const where = req.query?.SELECT?.where;
-  if (Array.isArray(where)) {
-    for (let i = 0; i < where.length; i++) {
-      const item = where[i];
-      if (item === fieldName && where[i + 1] === '=' && where[i + 2] !== undefined) {
-        const val = where[i + 2];
-        return typeof val === 'object' ? (val.val || val) : String(val).replace(/['"]/g, '');
-      }
-      if (item && typeof item === 'object' && item.ref && item.ref[0] === fieldName) {
-        if (where[i + 1] === '=' && where[i + 2] !== undefined) {
-          const val = where[i + 2];
-          return typeof val === 'object' ? (val.val || val) : String(val).replace(/['"]/g, '');
-        }
-      }
-    }
-  }
-
-  // Fallback to raw query string or query options
-  const rawFilter = req._queryOptions?.$filter || (req.req && req.req.url ? decodeURIComponent(req.req.url) : '');
-  if (rawFilter) {
-    const re = new RegExp(`${fieldName}\\s+eq\\s+['"]?([^'"&\\s)]+)['"]?`, 'i');
-    const m = rawFilter.match(re);
-    if (m && m[1]) return m[1];
-  }
-
-  return null;
-}
+const _extractFilterParam = extractFilterParam;
+const GI_MOVEMENT_TYPE = '201';
+const LIST_MOVEMENT_TYPES = ['201', '301', '311'];
 
 class GoodsIssueHandler {
   static init(srv) {
@@ -42,7 +19,7 @@ class GoodsIssueHandler {
 
       try {
         const items = await GoodsIssueAdapter.getOpenItems(orderNo, reservNo);
-        return items;
+        return applyPaging(items, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read Goods Issue items');
       }
@@ -51,11 +28,49 @@ class GoodsIssueHandler {
     // READ OpenReservations: query distinct open reservations for Goods Issue
     srv.on('READ', 'OpenReservations', async (req) => {
       const plant = _extractFilterParam(req, 'Plant') || '';
-      const mvtType = _extractFilterParam(req, 'MovementType') || '261';
+      const mvtParam = _extractFilterParam(req, 'MovementType') || GI_MOVEMENT_TYPE;
+      const mvtType = mvtParam.split(',').every((m) => LIST_MOVEMENT_TYPES.includes(m.trim())) ? mvtParam : GI_MOVEMENT_TYPE;
+      const reservNo = _extractFilterParam(req, 'ReservationNo');
+      const orderNo = _extractFilterParam(req, 'OrderNo');
 
       try {
-        const reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant);
-        return reservations;
+        let reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant, {
+          reservationNo: reservNo,
+          orderNo: orderNo
+        });
+        if (reservNo && Array.isArray(reservations)) {
+          const sResClean = reservNo.replace(/^0+/, '');
+          reservations = reservations.filter(r => r.ReservationNo === reservNo || r.ReservationNo === sResClean);
+        }
+        if (orderNo && Array.isArray(reservations)) {
+          const sOrderClean = orderNo.replace(/^0+/, '');
+          reservations = reservations.filter(r => r.OrderNo === orderNo || r.OrderNo === sOrderClean);
+        }
+
+        // Enrich reservations with unconfirmed attempt status
+        if (Array.isArray(reservations) && GoodsIssueAttemptStore && typeof GoodsIssueAttemptStore.getOpenAttemptReservations === 'function') {
+          try {
+            const openResvs = await GoodsIssueAttemptStore.getOpenAttemptReservations();
+            if (openResvs && openResvs.size > 0) {
+              for (const r of reservations) {
+                const cleanNo = String(r.ReservationNo || '').trim().replace(/^0+/, '');
+                if (openResvs.has(cleanNo)) {
+                  r.Status = 'pending confirmation';
+                  r.StatusText = 'pending confirmation';
+                  r.StatusState = 'Warning';
+                  r.PendingConfirmation = true;
+                  if (r.DisplayText && !r.DisplayText.includes('pending confirmation')) {
+                    r.DisplayText += ' (pending confirmation)';
+                  }
+                }
+              }
+            }
+          } catch (attErr) {
+            LOG.warn('Could not enrich open reservations with attempt status:', attErr.message || attErr);
+          }
+        }
+
+        return applyPaging(reservations, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read open reservations from S/4HANA');
       }
@@ -73,20 +88,10 @@ class GoodsIssueHandler {
 
       try {
         const batches = await GoodsIssueAdapter.getMaterialBatches(material, plant, storageLoc);
-        return batches;
+        return applyPaging(batches, req);
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to read material batches');
       }
-    });
-
-    // READ GoodsIssueQueue: query offline dispatch queue
-    srv.on('READ', 'GoodsIssueQueue', async () => {
-      return GoodsIssueQueueManager.getAll();
-    });
-
-    // FUNCTION: getQueueSummary: return pending count and items
-    srv.on('getQueueSummary', async () => {
-      return GoodsIssueQueueManager.getSummary();
     });
 
     // FUNCTION: resolveIdentifier (Multi-tier scan resolution for Goods Issue)
@@ -104,185 +109,56 @@ class GoodsIssueHandler {
       }
     });
 
-    // ACTION: postGoodsIssue (Single-line posting with automated Dispatch Queue fallback)
-    srv.on('postGoodsIssue', async (req) => {
-      const {
-        ReservationNo,
-        ReservationItem,
-        Material,
-        IssueQty,
-        Unit,
-        Batch,
-        DifferenceQty,
-        DifferenceReason,
-        DifferenceStorageType,
-        FinalIssue
-      } = req.data;
+    // ACTION: reverseGoodsIssue (Material Document Reversal via CancelHeader FunctionImport)
+    srv.on('reverseGoodsIssue', async (req) => {
+      let matDoc = String(req.data?.MaterialDocument || '').trim();
+      let matYear = String(req.data?.MaterialDocYear || '').trim();
 
-      if (!ReservationNo || !ReservationItem) {
-        return req.error(400, 'ReservationNo and ReservationItem are required');
-      }
-
-      const nQty = Number(IssueQty);
-      if (isNaN(nQty) || nQty <= 0) {
-        return req.error(400, 'IssueQty must be a positive decimal number');
-      }
-
-      try {
-        const result = await GoodsIssueAdapter.postGoodsIssue(
-          ReservationNo,
-          ReservationItem,
-          Material,
-          nQty,
-          Unit,
-          Batch,
-          DifferenceQty,
-          DifferenceReason,
-          DifferenceStorageType,
-          FinalIssue
-        );
-        return Object.assign({
-          Queued: false,
-          QueueReference: '',
-          SyncStatus: 'POSTED_IN_SAP'
-        }, result);
-      } catch (err) {
-        // If client validation error (400) or SLED block, fail immediately
-        if (err.status === 400) {
-          return req.error(400, err.message || 'Validation failed for Goods Issue');
+      if (matDoc && !matYear) {
+        try {
+          const verified = await GoodsIssueAdapter.readBackDocument(matDoc);
+          if (verified && verified.MaterialDocYear && verified.Confirmed) {
+            req.data.MaterialDocYear = verified.MaterialDocYear;
+          } else {
+            return req.error(400, `Material document ${matDoc} year could not be found in SAP; cannot reverse without a valid document year.`);
+          }
+        } catch (readErr) {
+          return req.error(400, `Failed to look up material document ${matDoc} in SAP: ${readErr.message}`);
         }
-
-        // If backend posting capability is unavailable (501 / 403 / 404), route to Dispatch Queue
-        if (err.status === 501 || err.status === 403 || err.status === 404 || (err.message && err.message.includes('Unavailable'))) {
-          const queueRecord = GoodsIssueQueueManager.enqueue({
-            ReservationNo,
-            ReservationItem,
-            Material,
-            IssueQty: nQty,
-            Unit,
-            Batch,
-            DifferenceQty,
-            DifferenceReason,
-            DifferenceStorageType,
-            FinalIssue,
-            LastSyncError: err.message
-          });
-
-          return {
-            ReservationNo: String(ReservationNo),
-            ReservationItem: String(ReservationItem).padStart(4, '0'),
-            MaterialDocument: '',
-            MaterialDocYear: '',
-            TransferOrder: '',
-            DifferenceCleared: Number(DifferenceQty) > 0,
-            DifferenceQty: Number(DifferenceQty) || 0,
-            Success: true,
-            Queued: true,
-            QueueReference: queueRecord.QueueReference,
-            SyncStatus: 'QUEUED',
-            Message: `Transaction safely recorded in CAP Dispatch Queue (${queueRecord.QueueReference}). Pending SAP S/4HANA Gateway service activation.`
-          };
-        }
-
-        return req.error(err.status || 400, err.message || 'Failed to post Goods Issue in S/4HANA');
-      }
-    });
-
-    // ACTION: submitGoodsIssueRequest (Batch scan-then-submit multi-line posting)
-    srv.on('submitGoodsIssueRequest', async (req) => {
-      const { ReservationNo, OrderNo, Items } = req.data;
-
-      if (!ReservationNo && !OrderNo) {
-        return req.error(400, 'Either ReservationNo or OrderNo must be provided for submission');
       }
 
-      if (!Array.isArray(Items) || Items.length === 0) {
-        return req.error(400, 'At least one item must be specified for submission');
+      const valResult = validateReversalPayload(req.data);
+      if (!valResult.isValid) {
+        return req.error(400, valResult.message);
       }
+
+      const normalized = normalizeReversalPayload(req.data, { user: req.user?.id });
 
       try {
-        const batchResult = await GoodsIssueAdapter.submitGoodsIssueRequest(
-          ReservationNo,
-          OrderNo,
-          Items
+        const result = await GoodsIssueAdapter.reverseGoodsIssue(
+          normalized.MaterialDocument,
+          normalized.MaterialDocYear,
+          normalized.PostingDate,
+          normalized.DocumentDate,
+          normalized.ReversalReason
         );
-        return batchResult;
+        return result;
       } catch (err) {
-        return req.error(err.status || 400, err.message || 'Batch Goods Issue submission failed');
+        return req.error(err.status || 500, err.message || 'Failed to reverse Material Document in S/4HANA');
       }
     });
 
-    // ACTION: retryQueuedGoodsIssue (Retry posting a queued item against live SAP)
-    srv.on('retryQueuedGoodsIssue', async (req) => {
-      const { QueueReference } = req.data;
-      if (!QueueReference) {
-        return req.error(400, 'QueueReference parameter is required');
+    // ACTION: recheckPostingAttempts (resolve `sending` / `unconfirmed` attempts against S/4HANA)
+    srv.on('recheckPostingAttempts', async () => GoodsIssueAttemptStore.recheck(GoodsIssueAdapter));
+
+    // FUNCTION: verifySerialNumber — live SAP status of one scanned serial for one reservation item.
+    // Always answers with a Status (UNVERIFIED when SAP could not be read); never a default.
+    srv.on('verifySerialNumber', async (req) => {
+      const { serialNumber, reservationNo, reservationItem, storageLocation } = req.data || {};
+      if (!serialNumber || !reservationNo || !reservationItem) {
+        return req.error(400, 'serialNumber, reservationNo and reservationItem parameters are required');
       }
-
-      const item = GoodsIssueQueueManager.get(QueueReference);
-      if (!item) {
-        return req.error(404, `Queued transaction ${QueueReference} not found`);
-      }
-
-      try {
-        const result = await GoodsIssueAdapter.postGoodsIssue(
-          item.ReservationNo,
-          item.ReservationItem,
-          item.Material,
-          item.IssueQty,
-          item.Unit,
-          item.Batch,
-          item.DifferenceQty,
-          item.DifferenceReason,
-          item.DifferenceStorageType,
-          item.FinalIssue
-        );
-
-        // Update queue item
-        GoodsIssueQueueManager.update(QueueReference, {
-          SyncStatus: 'POSTED_IN_SAP',
-          SapMaterialDocument: result.MaterialDocument || '',
-          SapMaterialDocYear: result.MaterialDocYear || String(new Date().getFullYear()),
-          SyncedAt: new Date().toISOString()
-        });
-
-        return Object.assign({
-          Success: true,
-          Queued: false,
-          QueueReference: item.QueueReference,
-          SyncStatus: 'POSTED_IN_SAP'
-        }, result);
-      } catch (err) {
-        // Record retry attempt
-        GoodsIssueQueueManager.update(QueueReference, {
-          SyncAttempts: (item.SyncAttempts || 1) + 1,
-          LastSyncError: err.message || 'Posting rejected by Gateway'
-        });
-
-        return {
-          ReservationNo: item.ReservationNo,
-          ReservationItem: item.ReservationItem,
-          MaterialDocument: '',
-          MaterialDocYear: '',
-          TransferOrder: '',
-          DifferenceCleared: false,
-          DifferenceQty: item.DifferenceQty || 0,
-          Success: false,
-          Queued: true,
-          QueueReference: item.QueueReference,
-          SyncStatus: 'FAILED',
-          Message: `SAP Gateway retry rejected: ${err.message}`
-        };
-      }
-    });
-
-    // ACTION: clearQueuedGoodsIssue (Remove item from dispatch queue)
-    srv.on('clearQueuedGoodsIssue', async (req) => {
-      const { QueueReference } = req.data;
-      if (!QueueReference) {
-        return req.error(400, 'QueueReference parameter is required');
-      }
-      return GoodsIssueQueueManager.remove(QueueReference);
+      return GoodsIssueAdapter.verifySerialForReservation(serialNumber, reservationNo, reservationItem, storageLocation || '');
     });
 
     // ──────────────────────────────────────────────────────────
@@ -330,16 +206,15 @@ class GoodsIssueHandler {
             MaterialDesc: err.details?.materialDesc || '',
             Plant: err.details?.plant || '',
             StorageLocation: err.details?.storageLocation || '',
-            StorageBin: '',
-            CurrentStock: err.details?.currentStock || 0,
-            SuStockQty: err.details?.currentStock || 0,
+            CurrentStock: err.details?.currentStock ?? null,
+            SuStockQty: err.details?.currentStock ?? null,
             BaseUnit: err.details?.baseUnit || '',
             Batches: err.details?.availableBatches || [],
             DeterminedBatch: '',
             DeterminedBatchExpiry: null,
             DeterminedBatchStatusState: 'None',
             DeterminedBatchStatusText: 'NOT_FOUND',
-            DeterminedBatchDaysToExpiry: 0,
+            DeterminedBatchDaysToExpiry: null,
             MultipleBatches: false,
             NoBatchAvailable: Array.isArray(err.details?.availableBatches) && err.details.availableBatches.length === 0,
             ReservationNo: reservationNo,
@@ -359,6 +234,22 @@ class GoodsIssueHandler {
           httpStatus,
           err.message || 'Failed to resolve Stock Unit in S/4HANA'
         );
+      }
+    });
+
+    // ──────────────────────────────────────────────────────────
+    // FUNCTION: getStockUnitsForItem — only the SUs valid for one reservation line
+    // ──────────────────────────────────────────────────────────
+    srv.on('getStockUnitsForItem', async (req) => {
+      const reservationNo = req.data?.reservationNo || '';
+      const reservationItem = req.data?.reservationItem || '';
+      if (!reservationNo || !reservationItem) {
+        return req.error(400, 'reservationNo and reservationItem parameters are required');
+      }
+      try {
+        return await GoodsIssueAdapter.listStockUnitsForReservationItem(reservationNo, reservationItem);
+      } catch (err) {
+        return req.error(err.status || err.statusCode || 500, err.message || 'Failed to list Storage Units from S/4HANA');
       }
     });
 
@@ -392,8 +283,31 @@ class GoodsIssueHandler {
         );
       }
     });
+
+    // ──────────────────────────────────────────────────────────
+    // FUNCTION: getDashboardData — Server-side aggregation for Goods Issue Dashboard
+    // ──────────────────────────────────────────────────────────
+    srv.on('getDashboardData', async (req) => {
+      const days = req.data?.days !== undefined ? Number(req.data.days) : 30;
+      const plant = req.data?.plant || _extractFilterParam(req, 'plant') || '';
+      const forceRefresh = Boolean(req.data?.forceRefresh);
+      const movementType = req.data?.movementType || '';
+
+      try {
+        return await GoodsIssueAdapter.getDashboardData({
+          days,
+          plant,
+          forceRefresh,
+          movementType
+        });
+      } catch (err) {
+        return req.error(
+          err.status || err.statusCode || 500,
+          err.message || 'Failed to retrieve Goods Issue dashboard data from S/4HANA'
+        );
+      }
+    });
   }
 }
 
 module.exports = GoodsIssueHandler;
-

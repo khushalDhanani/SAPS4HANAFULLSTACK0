@@ -32,14 +32,55 @@ sap.ui.define([
         },
 
         /**
+         * Convenience method for getting a model by name from view or owner component.
+         * @param {string} [sName] the model name
+         * @returns {sap.ui.model.Model|null}
+         */
+        getModel: function (sName) {
+            return (this.getView() && this.getView().getModel(sName)) ||
+                   (this.getOwnerComponent() && typeof this.getOwnerComponent().getModel === "function" && this.getOwnerComponent().getModel(sName)) ||
+                   null;
+        },
+
+        /**
+         * Convenience method for setting a model on the view.
+         * @param {sap.ui.model.Model} oModel the model instance
+         * @param {string} [sName] the model name
+         * @returns {sap.ui.core.mvc.Controller} this controller instance for chaining
+         */
+        setModel: function (oModel, sName) {
+            var oView = this.getView();
+            if (oView) {
+                oView.setModel(oModel, sName);
+            }
+            return this;
+        },
+
+        /**
          * Convenience method for getting the resource bundle text.
          * @param {string} sKey the key of the text
          * @param {string[]} [aArgs] optional arguments
-         * @returns {string} the localized text or key fallback
+         * @param {string} [sFallback] optional fallback string if bundle or key is missing
+         * @returns {string} the localized text or key/fallback
          */
-        getText: function (sKey, aArgs) {
+        getText: function (sKey, aArgs, sFallback) {
             var oResourceModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("i18n") : (this.getView() ? this.getView().getModel("i18n") : null);
             var oBundle = oResourceModel ? oResourceModel.getResourceBundle() : null;
+            if (oBundle) {
+                var sFound = oBundle.getText(sKey, aArgs);
+                if (sFound !== sKey) {
+                    return sFound;
+                }
+            }
+            if (sFallback !== undefined) {
+                var sResult = sFallback;
+                if (Array.isArray(aArgs) && aArgs.length > 0) {
+                    aArgs.forEach(function (arg, idx) {
+                        sResult = sResult.replace(new RegExp("\\{" + idx + "\\}", "g"), arg);
+                    });
+                }
+                return sResult;
+            }
             return oBundle ? oBundle.getText(sKey, aArgs) : sKey;
         },
 
@@ -66,40 +107,25 @@ sap.ui.define([
         },
 
         /**
-         * Computes procurement KPI metrics (totalCount, supplierCount, completeRate)
-         * from a sap.m.Table updateFinished event.
+         * Computes procurement KPI metrics from a sap.m.Table updateFinished event.
+         * Shows live total count from the binding's $count parameter (or '-' if absent).
+         * Eliminates synthetic / page-scoped supplier counts and completeness rates.
          *
          * @param {sap.m.Table} oTable
          * @param {sap.ui.base.Event} [oEvent]
-         * @returns {{ totalCount: number, supplierCount: number, completeRate: number }}
+         * @returns {{ totalCount: number|string }}
          */
         calculateKpiMetrics: function (oTable, oEvent) {
-            var aItems = oTable ? oTable.getItems() : [];
-            var iTotal = (oEvent && oEvent.getParameter("total")) || aItems.length;
-
-            var oSuppliers = {};
-            var iCompleted = 0;
-
-            aItems.forEach(function (oItem) {
-                var oContext = oItem.getBindingContext();
-                if (oContext) {
-                    var sSupplier = oContext.getProperty("Supplier");
-                    if (sSupplier) {
-                        oSuppliers[sSupplier] = true;
-                    }
-                    if (oContext.getProperty("PurchasingCompletenessStatus")) {
-                        iCompleted++;
-                    }
+            var iTotal = null;
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var vTotal = oEvent.getParameter("total");
+                if (typeof vTotal === "number" && !isNaN(vTotal)) {
+                    iTotal = vTotal;
                 }
-            });
-
-            var iSupplierCount = Object.keys(oSuppliers).length;
-            var iRate = aItems.length > 0 ? Math.round((iCompleted / aItems.length) * 100) : 100;
+            }
 
             return {
-                totalCount: iTotal,
-                supplierCount: iSupplierCount > 0 ? iSupplierCount : iTotal,
-                completeRate: iRate
+                totalCount: iTotal !== null ? iTotal : "-"
             };
         },
 

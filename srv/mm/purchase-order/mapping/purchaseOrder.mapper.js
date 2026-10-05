@@ -23,12 +23,17 @@ function normalizePurchaseOrderData(data, context = {}) {
         ? String(context.user).trim()
         : 'SYSTEM';
 
+    if (!data.header.PurchaseOrderType || String(data.header.PurchaseOrderType).trim() === '') {
+        throw new Error('PurchaseOrderType (Document Type) is required');
+    }
+
     const header = {
-        PurchaseOrderType: String(data.header.PurchaseOrderType || 'NB').trim(),
+        PurchaseOrderType: String(data.header.PurchaseOrderType).trim().toUpperCase(),
         CompanyCode: String(data.header.CompanyCode || '').trim(),
         PurchasingOrganization: String(data.header.PurchasingOrganization || '').trim(),
         PurchasingGroup: String(data.header.PurchasingGroup || '').trim(),
         Supplier: String(data.header.Supplier || '').trim(),
+        InvoicingParty: data.header.InvoicingParty ? String(data.header.InvoicingParty).trim() : undefined,
         Currency: String(data.header.Currency || '').trim().toUpperCase(),
         DocumentDate: data.header.DocumentDate ? String(data.header.DocumentDate).trim() : new Date().toISOString().split('T')[0],
         IncotermsClassification: data.header.IncotermsClassification ? String(data.header.IncotermsClassification).trim() : undefined,
@@ -38,12 +43,24 @@ function normalizePurchaseOrderData(data, context = {}) {
 
     const items = data.items.map((item, index) => {
         const itemNo = item.PurchaseOrderItem ? String(item.PurchaseOrderItem).trim() : String((index + 1) * 10);
-        const qty = Number(item.OrderQuantity) || 1;
+        if (item.OrderQuantity === undefined || item.OrderQuantity === null || String(item.OrderQuantity).trim() === '') {
+            throw new Error(`OrderQuantity is required for item ${itemNo}`);
+        }
+        const qty = Number(item.OrderQuantity);
+        if (isNaN(qty) || qty <= 0) {
+            throw new Error(`OrderQuantity must be greater than 0 for item ${itemNo}`);
+        }
         const price = Number(item.NetPriceAmount) || 0;
         const calculatedNetAmount = (qty * price).toFixed(2);
-        const itemRequisitioner = (item.RequisitionerName && String(item.RequisitionerName).trim() !== '')
-            ? String(item.RequisitionerName).trim()
-            : defaultRequisitioner;
+        // Requisitioner identity must be strictly owned by the server's authenticated context
+        // to protect the audit trail and prevent client-side impersonation.
+        const itemRequisitioner = defaultRequisitioner;
+
+        const rawUnit = item.UnitOfMeasure || item.OrderQuantityUnit || item.BaseUnit || item.Unit;
+        if (!rawUnit || String(rawUnit).trim() === '') {
+            throw new Error(`UnitOfMeasure is required for item ${itemNo}`);
+        }
+        const unitOfMeasure = String(rawUnit).trim().toUpperCase();
 
         return {
             PurchaseOrderItem: itemNo,
@@ -51,13 +68,18 @@ function normalizePurchaseOrderData(data, context = {}) {
             Plant: String(item.Plant || '').trim(),
             StorageLocation: item.StorageLocation ? String(item.StorageLocation).trim() : undefined,
             OrderQuantity: String(item.OrderQuantity).trim(),
-            UnitOfMeasure: String(item.UnitOfMeasure || 'PC').trim().toUpperCase(),
+            UnitOfMeasure: unitOfMeasure,
             NetPriceAmount: price.toFixed(2),
-            NetAmount: item.NetAmount ? String(item.NetAmount).trim() : calculatedNetAmount,
+            NetPriceQuantity: item.NetPriceQuantity ? String(item.NetPriceQuantity).trim() : '1',
+            NetAmount: calculatedNetAmount,
             RequisitionerName: itemRequisitioner,
+            PurchaseOrderItemText: item.PurchaseOrderItemText ? String(item.PurchaseOrderItemText).trim() : undefined,
             MaterialGroup: item.MaterialGroup ? String(item.MaterialGroup).trim() : undefined,
             PurchaseOrderItemCategory: item.PurchaseOrderItemCategory ? String(item.PurchaseOrderItemCategory).trim() : undefined,
             AccountAssignmentCategory: item.AccountAssignmentCategory ? String(item.AccountAssignmentCategory).trim() : undefined,
+            GLAccount: item.GLAccount ? String(item.GLAccount).trim() : undefined,
+            CostCenter: item.CostCenter ? String(item.CostCenter).trim() : undefined,
+            IN_GSTControlCode: item.IN_GSTControlCode ? String(item.IN_GSTControlCode).trim() : undefined,
             TaxCode: item.TaxCode ? String(item.TaxCode).trim() : undefined
         };
     });

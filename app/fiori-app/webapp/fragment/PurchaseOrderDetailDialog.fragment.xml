@@ -5,40 +5,40 @@
         id="poDetailDialog"
         title="{i18n>dialogTitle} — {PurchaseOrder}"
         type="Message"
-        contentWidth="400px"
+        contentWidth="25rem"
         class="sapUiSizeCompact">
         <content>
             <VBox class="sapUiSmallMargin">
                 <HBox>
-                    <Label text="{i18n>colPurchaseOrder}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colPurchaseOrder}:" width="10rem" design="Bold" />
                     <Text text="{PurchaseOrder}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colDocType}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colDocType}:" width="10rem" design="Bold" />
                     <Text text="{path: 'PurchaseOrderType', formatter: '.formatter.docTypeDisplay'}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colSupplier}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colSupplier}:" width="10rem" design="Bold" />
                     <Text text="{parts: ['SupplierName', 'Supplier'], formatter: '.formatter.supplierDisplay'}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colCompany}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colCompany}:" width="10rem" design="Bold" />
                     <Text text="{parts: ['CompanyCode', 'CompanyCodeName'], formatter: '.formatter.companyDisplay'}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colPurchasingOrg}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colPurchasingOrg}:" width="10rem" design="Bold" />
                     <Text text="{parts: ['PurchasingOrganization', 'PurchasingGroup'], formatter: '.formatter.purchasingOrgDisplay'}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colCreationDate}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colCreationDate}:" width="10rem" design="Bold" />
                     <Text text="{path: 'CreationDate', formatter: '.formatter.formatDate'}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colCreatedBy}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colCreatedBy}:" width="10rem" design="Bold" />
                     <Text text="{parts: ['UserFullName', 'CreatedByUser'], formatter: '.formatter.createdByDisplay'}" />
                 </HBox>
                 <HBox>
-                    <Label text="{i18n>colStatus}:" width="160px" design="Bold" />
+                    <Label text="{i18n>colStatus}:" width="10rem" design="Bold" />
                     <ObjectStatus
                         text="{
                             parts: [

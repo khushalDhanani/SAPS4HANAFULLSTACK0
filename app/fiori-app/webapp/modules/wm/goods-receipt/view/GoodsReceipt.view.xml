@@ -9,9 +9,6 @@
 
     <Page
         id="goodsReceiptPage"
-        title="{i18n>grTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         class="sapUiSizeCompact">
 
         <headerContent>
@@ -24,14 +21,14 @@
                 <Button
                     id="btnGrToggleAudio"
                     icon="{= ${grView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
-                    tooltip="Toggle Audio Feedback"
+                    tooltip="{i18n>grTooltipToggleAudio}"
                     type="Transparent"
                     press=".onToggleAudio"
                     class="sapUiTinyMarginEnd" />
                 <Button
                     id="btnGrReset"
                     icon="sap-icon://refresh"
-                    tooltip="Reset Workflow"
+                    tooltip="{i18n>grTooltipResetWorkflow}"
                     type="Transparent"
                     press=".onResetWorkflow" />
             </HBox>
@@ -67,7 +64,7 @@
                             <Button
                                 id="btnGrCameraScan"
                                 icon="sap-icon://camera"
-                                tooltip="Scan with Camera"
+                                tooltip="{i18n>grTooltipScanCamera}"
                                 press=".onCameraScanStorageUnit"
                                 class="sapUiTinyMarginEnd" />
                             <Button
@@ -88,7 +85,8 @@
                                     sorter: { path: 'DeliveryDocument' }
                                 }"
                                 change=".onSelectInboundDelivery"
-                                width="340px">
+                                width="21rem"
+                                maxWidth="100%">
                                 <core:Item
                                     key="{grView>DeliveryDocument}"
                                     text="{grView>DeliveryDocument} - {grView>MaterialName} ({grView>SupplierName})" />
@@ -201,9 +199,13 @@
                                         id="inputReceiptQty"
                                         type="Number"
                                         value="{grView>/activeSU/Quantity}"
-                                        width="140px"
+                                        width="9rem"
                                         class="sapUiTinyMarginEnd" />
-                                    <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold" />
+                                    <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold sapUiSmallMarginEnd" />
+                                    <Text
+                                        id="txtOpenQty"
+                                        text="{= ${grView>/activeSU/OpenQuantity} !== null &amp;&amp; ${grView>/activeSU/OpenQuantity} !== '' ? ' / Open: ' + ${grView>/activeSU/OpenQuantity} + ' ' + ${grView>/activeSU/Unit} : '' }"
+                                        class="textMuted" />
                                 </HBox>
 
                             </form:content>

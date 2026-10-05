@@ -26,6 +26,9 @@ sap.ui.define([
             var oModel = SalesInquiryModel.createInitialModel(sUser);
             this.getView().setModel(oModel, "newInquiry");
             SalesInquiryModel.updateStatus(oModel);
+            if (this._oCapabilities) {
+                SalesInquiryModel.applyCapabilities(oModel, this._oCapabilities);
+            }
 
             if (this._oMessagePopover) {
                 this._oMessagePopover.close();
@@ -33,20 +36,44 @@ sap.ui.define([
 
             if (bLoadConfig) {
                 this._loadConfigurationAndDefaults();
+                this._loadCapabilities();
             }
         },
 
-        _loadConfigurationAndDefaults: function () {
+        /**
+         * Asks the backend which incompletion extension fields the SAP inquiry service accepts, so the
+         * form can require those and warn about the rest (to be maintained directly in SAP).
+         */
+        _loadCapabilities: function () {
+            var that = this;
+            if (this._oCapabilities) {
+                return Promise.resolve(this._oCapabilities);
+            }
+            return SalesInquiryService.getInquiryCreationCapabilities().then(function (oCaps) {
+                that._oCapabilities = oCaps || {};
+                var oModel = that.getView().getModel("newInquiry");
+                if (oModel) {
+                    SalesInquiryModel.applyCapabilities(oModel, that._oCapabilities);
+                }
+                return that._oCapabilities;
+            });
+        },
+
+        _loadConfigurationAndDefaults: function (bForce) {
             var that = this;
             var oModel = this.getView().getModel("newInquiry");
 
-            if (this._oConfigData) {
+            // Optimistically apply cached configuration while refetching in background
+            if (this._oConfigData && !bForce) {
                 SalesInquiryModel.applyConfigurationDefaults(oModel, this._oConfigData);
                 this._updateOrganizationalFilters();
-                return Promise.resolve(this._oConfigData);
             }
 
-            return SalesInquiryService.loadConfiguration().then(function (oConfigData) {
+            var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+            var oConfigPromise = oSalesInquiryModel ?
+                SalesInquiryService.loadConfiguration(oSalesInquiryModel) :
+                SalesInquiryService.loadConfiguration();
+            return oConfigPromise.then(function (oConfigData) {
                 that._oConfigData = oConfigData;
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel) {
@@ -56,6 +83,7 @@ sap.ui.define([
                 return oConfigData;
             }).catch(function (err) {
                 console.warn("[CreateSalesInquiry] Error loading config data:", err);
+                return that._oConfigData || null;
             });
         },
 
@@ -232,9 +260,27 @@ sap.ui.define([
                 var oCurrentModel = that.getView().getModel("newInquiry");
                 if (oCurrentModel && oCurrentModel.getProperty("/header/SoldToParty") === sCustomer) {
                     SalesInquiryModel.deriveCustomerDefaults(oCurrentModel, sCustomer, oDefaults);
+                    if (oDefaults && oDefaults.validForSalesArea === false) {
+                        var sErrText = oDefaults.salesAreaError || ("Customer " + sCustomer + " is not maintained for sales area " + sOrg + " " + sChannel + " " + sDivision);
+                        oCurrentModel.setProperty("/errors/SoldToParty", {
+                            state: "Error",
+                            text: sErrText
+                        });
+                        MessageBox.warning(
+                            "Sold-to party " + sCustomer + (oDefaults.CustomerName ? " (" + oDefaults.CustomerName + ")" : "") +
+                            " is not maintained for sales area " + (sOrg || "-") + " " + (sChannel || "-") + " " + (sDivision || "-") + ".\n\n" +
+                            "Maintained in SAP S/4HANA for: " + (oDefaults.maintainedSalesAreasSummary || "another sales area") + ".\n\n" +
+                            "Please select a customer maintained for " + (sOrg || "-") + " / " + (sChannel || "-") + " / " + (sDivision || "-") + " (e.g. 10135 Divi's Laboratories, 10000 3A Chemie) or extend Customer " + sCustomer + " to Sales Area " + (sOrg || "-") + " " + (sChannel || "-") + " " + (sDivision || "-") + " in SAP GUI (transaction BP / XD01).",
+                            { title: "Customer Sales Area Mismatch" }
+                        );
+                    }
+                    if (oDefaults && oDefaults.derived) {
+                        MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsFromHistory")) || "Currency, sales office and sales group were taken from this customer's previous sales documents. Verify before submitting.");
+                    }
                 }
             }).catch(function (err) {
                 console.warn("[CreateSalesInquiry] Error fetching customer defaults:", err);
+                MessageToast.show((typeof that.getText === "function" && that.getText("msgCustomerDefaultsUnavailable")) || "Customer data could not be loaded from SAP.");
             });
         },
 
@@ -280,12 +326,17 @@ sap.ui.define([
         },
 
         onDeleteItem: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem");
-            if (oItem) {
-                var sPath = oItem.getBindingContext("newInquiry").getPath();
-                var oModel = this.getView().getModel("newInquiry");
-                SalesInquiryModel.deleteItem(oModel, sPath);
+            var oItem = oEvent && typeof oEvent.getParameter === "function" ? oEvent.getParameter("listItem") : null;
+            if (!oItem) {
+                return;
             }
+            var oContext = typeof oItem.getBindingContext === "function" ? oItem.getBindingContext("newInquiry") : null;
+            if (!oContext || typeof oContext.getPath !== "function") {
+                return;
+            }
+            var sPath = oContext.getPath();
+            var oModel = this.getView().getModel("newInquiry");
+            SalesInquiryModel.deleteItem(oModel, sPath);
         },
 
         onItemMaterialChange: function (oEvent) {
@@ -304,7 +355,10 @@ sap.ui.define([
             } else {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
                 // Directly retrieve and set Unit from S/4HANA material configuration on manual input
-                var oChangePromise = SalesInquiryService.getMaterialDetails(sVal);
+                var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                var oChangePromise = oSalesInquiryModel ?
+                    SalesInquiryService.getMaterialDetails(oSalesInquiryModel, sVal) :
+                    SalesInquiryService.getMaterialDetails(sVal);
                 if (oChangePromise && typeof oChangePromise.then === "function") {
                     oChangePromise.then(function (oMaterial) {
                         if (oMaterial) {
@@ -390,7 +444,10 @@ sap.ui.define([
             var sMatUnit = oMaterialData && (oMaterialData.MaterialBaseUnit || oMaterialData.BaseUnit);
             var sMatDesc = oMaterialData && (oMaterialData.MaterialName || oMaterialData.Material_Text);
             if (!sMatUnit || !sMatDesc) {
-                var oDetailsPromise = SalesInquiryService.getMaterialDetails(sKey);
+                var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                var oDetailsPromise = oSalesInquiryModel ?
+                    SalesInquiryService.getMaterialDetails(oSalesInquiryModel, sKey) :
+                    SalesInquiryService.getMaterialDetails(sKey);
                 if (oDetailsPromise && typeof oDetailsPromise.then === "function") {
                     oDetailsPromise.then(function (oMat) {
                         if (oMat) {
@@ -431,7 +488,9 @@ sap.ui.define([
         onCheckIncompletion: function () {
             var oModel = this.getView().getModel("newInquiry");
             var bValid = SalesInquiryModel.validateForm(oModel);
-            if (bValid) {
+            // Mirror SAP's own incompletion log: values SAP needs for complete inquiry document
+            var aGaps = SalesInquiryModel.getIncompletionGaps(oModel);
+            if (bValid && aGaps.length === 0) {
                 MessageToast.show("Document is complete. No incompletions detected.");
             } else {
                 this.onMessageButtonPress();
@@ -442,6 +501,21 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("newInquiry");
             var bValid = SalesInquiryModel.validateForm(oModel);
+
+            // Validate Plant per item on submit before calling backend
+            var aItems = oModel.getProperty("/items") || [];
+            var bItemsPlantValid = true;
+            aItems.forEach(function (itm) {
+                if (!itm.Plant || String(itm.Plant).trim() === "") {
+                    itm.errors = itm.errors || {};
+                    itm.errors.Plant = { state: "Error", text: "Plant is required for each line item" };
+                    bItemsPlantValid = false;
+                }
+            });
+            if (!bItemsPlantValid) {
+                oModel.setProperty("/items", aItems);
+                bValid = false;
+            }
 
             if (!bValid) {
                 this.onMessageButtonPress();
@@ -474,7 +548,26 @@ sap.ui.define([
                 var sErrMsg = (error && error.message) ? error.message : "An unexpected error occurred.";
                 oModel.setProperty("/errorMessage", sErrMsg);
                 oModel.setProperty("/hasError", true);
-                MessageBox.error("Failed to create Sales Inquiry: " + sErrMsg);
+
+                var sInquiryMatch = sErrMsg.match(/Sales Inquiry (\d+)/i);
+                var sPartialInquiryId = (error && (error.SalesInquiry || error.documentNumber)) || (sInquiryMatch ? sInquiryMatch[1] : null);
+
+                if (sPartialInquiryId) {
+                    MessageBox.warning(sErrMsg, {
+                        title: "Partial Creation in SAP",
+                        actions: ["Display Inquiry " + sPartialInquiryId, "Close"],
+                        emphasizedAction: "Display Inquiry " + sPartialInquiryId,
+                        onClose: function (sAction) {
+                            if (sAction && sAction.indexOf("Display Inquiry") === 0) {
+                                that.getOwnerComponent().getRouter().navTo("salesInquiryDetail", {
+                                    SalesInquiry: sPartialInquiryId
+                                });
+                            }
+                        }
+                    });
+                } else {
+                    MessageBox.error("Failed to create Sales Inquiry: " + sErrMsg);
+                }
             });
         },
 
@@ -504,6 +597,59 @@ sap.ui.define([
             oModel.setProperty(sPath + "/OrderQuantityUnit", sKey);
             oModel.setProperty(sPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
             this.onItemFieldChange();
+        },
+
+        onItemPlantChange: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext) return;
+
+            var sVal = oSource.getValue() ? oSource.getValue().trim().toUpperCase() : "";
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/Plant", sVal);
+
+            if (!sVal) {
+                oModel.setProperty(sPath + "/errors/Plant", { state: "Error", text: "Plant is required for each line item" });
+            } else if (sVal.length > 4) {
+                oModel.setProperty(sPath + "/errors/Plant", { state: "Error", text: "Plant cannot exceed 4 characters" });
+            } else {
+                oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+            }
+            SalesInquiryModel.updateStatus(oModel);
+        },
+
+        onItemPlantLiveChange: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext) return;
+
+            var sVal = oEvent.getParameter("value");
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/Plant", sVal ? sVal.toUpperCase() : "");
+            if (sVal && sVal.trim() !== "") {
+                if (sVal.trim().length <= 4) {
+                    oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+                }
+            }
+        },
+
+        onItemPlantSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("newInquiry");
+            if (!oContext || !oItem) return;
+
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newInquiry");
+            var sPath = oContext.getPath();
+
+            oModel.setProperty(sPath + "/Plant", sKey);
+            oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
+            SalesInquiryModel.updateStatus(oModel);
         },
 
         onSuggest: function (oEvent) {
@@ -555,6 +701,19 @@ sap.ui.define([
                 if (sChannel) {
                     aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
                 }
+            } else if (sId.indexOf("inSoldToParty") !== -1 || sId.indexOf("inShipToParty") !== -1) {
+                var sOrgCust = oModel.getProperty("/header/SalesOrganization");
+                var sDistCust = oModel.getProperty("/header/DistributionChannel");
+                var sDivCust = oModel.getProperty("/header/OrganizationDivision");
+                if (sOrgCust) {
+                    aInitialFilters.push(new Filter("SalesOrganization", FilterOperator.EQ, sOrgCust));
+                }
+                if (sDistCust) {
+                    aInitialFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sDistCust));
+                }
+                if (sDivCust) {
+                    aInitialFilters.push(new Filter("Division", FilterOperator.EQ, sDivCust));
+                }
             }
 
             ValueHelpService.openValueHelp(oView, oInput, function (sKey, oSelectedItem, oData) {
@@ -577,7 +736,10 @@ sap.ui.define([
                         }
                         SalesInquiryModel.applyMaterialDefaults(oModel, sRowPath, oMatData, true);
                         if (!oData || !oData.MaterialBaseUnit || !(oData.MaterialName || oData.Material_Text)) {
-                            var oVhPromise = SalesInquiryService.getMaterialDetails(sKey);
+                            var oSalesInquiryModel = (this.getModel && this.getModel("salesInquiry")) || null;
+                            var oVhPromise = oSalesInquiryModel ?
+                                SalesInquiryService.getMaterialDetails(oSalesInquiryModel, sKey) :
+                                SalesInquiryService.getMaterialDetails(sKey);
                             if (oVhPromise && typeof oVhPromise.then === "function") {
                                 oVhPromise.then(function (oMat) {
                                     if (oMat) {
@@ -591,6 +753,10 @@ sap.ui.define([
                     } else if (sValPath === "OrderQuantityUnit") {
                         oModel.setProperty(sRowPath + "/OrderQuantityUnit", sKey);
                         oModel.setProperty(sRowPath + "/errors/OrderQuantityUnit", { state: "None", text: "" });
+                        SalesInquiryModel.updateStatus(oModel);
+                    } else if (sValPath === "Plant" || sId.indexOf("Plant") !== -1) {
+                        oModel.setProperty(sRowPath + "/Plant", sKey);
+                        oModel.setProperty(sRowPath + "/errors/Plant", { state: "None", text: "" });
                         SalesInquiryModel.updateStatus(oModel);
                     }
                     return;
@@ -651,6 +817,10 @@ sap.ui.define([
                         }
                     });
                 }
+            });
+
+            (oModel.getProperty("/readinessGaps") || []).forEach(function (gap) {
+                aMessages.push({ type: "Warning", title: gap.title, subtitle: gap.subtitle });
             });
 
             if (aMessages.length === 0) {

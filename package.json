@@ -3,29 +3,45 @@
   "version": "1.0.0",
   "description": "SAP S/4HANA Enterprise Full-Stack Platform",
   "main": "server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
-    "start": "cds watch --exclude data",
+    "start": "cds-serve",
     "watch": "cds watch --exclude data",
     "test": "jest --runInBand",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "jest test/e2e --runInBand",
-    "validate:mta": "mbt validate",
+    "lint": "eslint .",
+    "generate:rules": "node tools/generate-po-rules.js",
+    "validate:mta": "mbt validate -x paths",
     "build:mta": "mbt build"
   },
   "license": "ISC",
   "dependencies": {
+    "@cap-js/hana": "^3",
+    "@sap-ai-sdk/orchestration": "^2.16.0",
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
+    "@sap-cloud-sdk/resilience": "^4",
     "@sap/cds": "^10.0.6",
-    "@sap-cloud-sdk/resilience": "^4"
+    "@ui5/cli": "^4.0.69",
+    "dotenv": "^17.4.2",
+    "openai": "^7.21.0"
   },
   "devDependencies": {
     "@cap-js/cds-test": "^1.0.2",
     "@cap-js/sqlite": "^3.0.2",
     "@sap/cds-dk": "^10.0.7",
     "cds-plugin-ui5": "^0.17.4",
-    "jest": "^30.5.1"
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "jest": "^30.5.1",
+    "mbt": "^1.2.49"
+  },
+  "overrides": {
+    "@sigstore/core": "^4.0.1"
   },
   "cds": {
     "requires": {
@@ -35,7 +51,6 @@
           "users": {
             "alice": {
               "roles": [
-                "User",
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
@@ -48,8 +63,19 @@
             },
             "bob": {
               "roles": [
-                "User",
                 "Viewer"
+              ]
+            },
+            "khushal": {
+              "roles": [
+                "Admin",
+                "Viewer",
+                "PurchasingManager",
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
               ]
             }
           }
@@ -59,7 +85,6 @@
           "users": {
             "alice": {
               "roles": [
-                "User",
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
@@ -72,8 +97,19 @@
             },
             "bob": {
               "roles": [
-                "User",
                 "Viewer"
+              ]
+            },
+            "khushal": {
+              "roles": [
+                "Admin",
+                "Viewer",
+                "PurchasingManager",
+                "FinanceViewer",
+                "SalesRepresentative",
+                "SalesManager",
+                "WarehouseClerk",
+                "WarehouseManager"
               ]
             }
           }
@@ -108,9 +144,6 @@
       "FAC_GL_JOURNALENTRY_VER_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
-        "credentials": {
-          "url": "http://localhost:5000"
-        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -120,25 +153,74 @@
       },
       "SD_F2370_INQY_WL_SRV": {
         "kind": "odata-v2",
-        "model": "srv/external/SD_F2370_INQY_WL_SRV"
-      },
-      "SD_F2369_INQY_FS_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/SD_F2369_INQY_FS_SRV"
-      },
-      "LORD_ODATA_ORDER_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/LORD_ODATA_ORDER_SRV"
-      },
-      "API_SALES_QUOTATION_SRV": {
-        "kind": "odata-v2",
+        "model": "srv/external/SD_F2370_INQY_WL_SRV",
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
-            "path": "/sap/opu/odata/sap/API_SALES_QUOTATION_SRV"
+            "path": "/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV"
+          }
+        }
+      },
+      "SD_F2369_INQY_FS_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/SD_F2369_INQY_FS_SRV",
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/SD_F2369_INQY_FS_SRV"
+          }
+        }
+      },
+      "SD_F1873_SO_WL_SRV": {
+        "kind": "odata-v2",
+        "model": "srv/external/SD_F1873_SO_WL_SRV",
+        "[production]": {
+          "credentials": {
+            "destination": "S4HANA_PO_API",
+            "path": "/sap/opu/odata/sap/SD_F1873_SO_WL_SRV"
           }
         }
       }
+    },
+    "log": {
+      "format": "plain",
+      "levels": {
+        "auth": "info",
+        "s4-client": "info",
+        "purchase-order": "info",
+        "purchase-order-adapter": "info",
+        "sales-inquiry": "info",
+        "sales-inquiry-adapter": "info",
+        "goods-receipt": "info",
+        "goods-receipt-adapter": "info",
+        "goods-issue-adapter": "info",
+        "tr-to-adapter": "info"
+      }
+    },
+    "s4": {
+      "client": "220",
+      "plant": "1120",
+      "storageLocation": "CS01",
+      "salesOrganization": "1000",
+      "distributionChannel": "10",
+      "division": "52",
+      "currency": "INR",
+      "inquiryType": "ZIN",
+      "orderType": "ZDOM",
+      "conditionType": "ZPR1",
+      "shippingPoints": [
+        "1120",
+        "1112",
+        "1108",
+        "1109"
+      ],
+      "salesMaterialTypes": [
+        "ZFRT",
+        "FERT"
+      ]
     }
+  },
+  "optionalDependencies": {
+    "node-rfc": "^3.3.1"
   }
 }

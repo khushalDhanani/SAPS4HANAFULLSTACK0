@@ -33,6 +33,62 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "salesOrderService": {
+        "uri": "/odata/v4/sales-order/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "goodsIssueService": {
+        "uri": "/odata/v4/goods-issue/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "goodsReceiptService": {
+        "uri": "/odata/v4/goods-receipt/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "outboundDeliveryService": {
+        "uri": "/odata/v4/outbound-delivery/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "customerInvoiceService": {
+        "uri": "/odata/v4/customer-invoice/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "customerReturnService": {
+        "uri": "/odata/v4/customer-return/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
+      },
+      "trToService": {
+        "uri": "/odata/v4/tr-to/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -87,6 +143,55 @@
           "operationMode": "Server",
           "autoExpandSelect": true
         }
+      },
+      "salesOrder": {
+        "dataSource": "salesOrderService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "goodsIssue": {
+        "dataSource": "goodsIssueService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "goodsReceipt": {
+        "dataSource": "goodsReceiptService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "outboundDelivery": {
+        "dataSource": "outboundDeliveryService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "customerInvoice": {
+        "dataSource": "customerInvoiceService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "customerReturn": {
+        "dataSource": "customerReturnService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "trTo": {
+        "dataSource": "trToService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
       }
     },
     "resources": {
@@ -109,7 +214,7 @@
         {
           "name": "default",
           "pattern": "",
-          "target": "TargetLogin"
+          "target": "TargetDashboard"
         },
         {
           "name": "login",
@@ -157,29 +262,74 @@
           "target": "TargetSalesInquiryDetail"
         },
         {
-          "name": "ewmWarehouseCockpit",
-          "pattern": "ewm/cockpit",
-          "target": "TargetWarehouseCockpit"
+          "name": "salesOrders",
+          "pattern": "sd/sales-orders",
+          "target": "TargetSalesOrders"
         },
         {
-          "name": "ewmRfTerminal",
-          "pattern": "ewm/rf-terminal",
-          "target": "TargetRfTerminal"
+          "name": "createSalesOrder",
+          "pattern": "sd/sales-orders/create",
+          "target": "TargetCreateSalesOrder"
         },
         {
-          "name": "createWarehouseTask",
-          "pattern": "ewm/tasks/create",
-          "target": "TargetCreateWarehouseTask"
+          "name": "wmGoodsIssue201Pending",
+          "pattern": "wm/goods-issue/201/open-reservations:?query:",
+          "target": "TargetGoodsIssue201Pending"
         },
         {
-          "name": "wmGoodsIssue",
-          "pattern": "wm/goods-issue",
-          "target": "TargetGoodsIssue"
+          "name": "wmGoodsIssue201",
+          "pattern": "wm/goods-issue/cost-center-201:?query:",
+          "target": "TargetGoodsIssue201"
+        },
+        {
+          "name": "wmGoodsIssue301Pending",
+          "pattern": "wm/goods-issue/301/open-transfers:?query:",
+          "target": "TargetGoodsIssue301Pending"
+        },
+        {
+          "name": "wmGoodsIssue301",
+          "pattern": "wm/goods-issue/plant-transfer-301:?query:",
+          "target": "TargetGoodsIssue301"
+        },
+        {
+          "name": "wmGoodsIssue311Pending",
+          "pattern": "wm/goods-issue/311/open-transfers:?query:",
+          "target": "TargetGoodsIssue311Pending"
+        },
+        {
+          "name": "wmGoodsIssue311",
+          "pattern": "wm/goods-issue/sloc-transfer-311:?query:",
+          "target": "TargetGoodsIssue311"
         },
         {
           "name": "wmGoodsReceipt",
           "pattern": "wm/goods-receipt",
           "target": "TargetGoodsReceipt"
+        },
+        {
+          "name": "ordersDueForDelivery",
+          "pattern": "le/orders-due",
+          "target": "TargetOrdersDueForDelivery"
+        },
+        {
+          "name": "customerInvoices",
+          "pattern": "sd/invoices",
+          "target": "TargetCustomerInvoices"
+        },
+        {
+          "name": "customerReturns",
+          "pattern": "sd/returns",
+          "target": "TargetCustomerReturns"
+        },
+        {
+          "name": "createCustomerReturn",
+          "pattern": "sd/returns/create",
+          "target": "TargetCreateCustomerReturn"
+        },
+        {
+          "name": "wmTrTo",
+          "pattern": "wm/tr-to",
+          "target": "TargetTrTo"
         }
       ],
       "targets": {
@@ -226,30 +376,75 @@
           "name": "SalesInquiryDetail",
           "path": "saps4hana.fiori.modules.sd.sales-inquiry.view"
         },
-        "TargetWarehouseCockpit": {
-          "id": "warehouseCockpit",
-          "name": "WarehouseCockpit",
-          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        "TargetSalesOrders": {
+          "id": "salesOrders",
+          "name": "SalesOrders",
+          "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetRfTerminal": {
-          "id": "rfTerminal",
-          "name": "RfTerminal",
-          "path": "saps4hana.fiori.modules.ewm.rf-terminal.view"
+        "TargetCreateSalesOrder": {
+          "id": "createSalesOrder",
+          "name": "CreateSalesOrder",
+          "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetCreateWarehouseTask": {
-          "id": "createWarehouseTask",
-          "name": "CreateWarehouseTask",
-          "path": "saps4hana.fiori.modules.ewm.warehouse-cockpit.view"
+        "TargetGoodsIssue201": {
+          "id": "goodsIssue201",
+          "name": "GoodsIssue201",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
-        "TargetGoodsIssue": {
-          "id": "goodsIssue",
-          "name": "GoodsIssue",
+        "TargetGoodsIssue201Pending": {
+          "id": "goodsIssue201Pending",
+          "name": "GoodsIssue201Pending",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue301Pending": {
+          "id": "goodsIssue301Pending",
+          "name": "GoodsIssue301Pending",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue301": {
+          "id": "goodsIssue301",
+          "name": "GoodsIssue301",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue311Pending": {
+          "id": "goodsIssue311Pending",
+          "name": "GoodsIssue311Pending",
+          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
+        },
+        "TargetGoodsIssue311": {
+          "id": "goodsIssue311",
+          "name": "GoodsIssue311",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsReceipt": {
           "id": "goodsReceipt",
           "name": "GoodsReceipt",
           "path": "saps4hana.fiori.modules.wm.goods-receipt.view"
+        },
+        "TargetOrdersDueForDelivery": {
+          "id": "ordersDueForDelivery",
+          "name": "OrdersDueForDelivery",
+          "path": "saps4hana.fiori.modules.le.outbound-delivery.view"
+        },
+        "TargetCustomerInvoices": {
+          "id": "customerInvoices",
+          "name": "CustomerInvoices",
+          "path": "saps4hana.fiori.modules.sd.customer-invoice.view"
+        },
+        "TargetCustomerReturns": {
+          "id": "customerReturns",
+          "name": "CustomerReturns",
+          "path": "saps4hana.fiori.modules.sd.customer-return.view"
+        },
+        "TargetCreateCustomerReturn": {
+          "id": "createCustomerReturn",
+          "name": "CreateCustomerReturn",
+          "path": "saps4hana.fiori.modules.sd.customer-return.view"
+        },
+        "TargetTrTo": {
+          "id": "trTo",
+          "name": "TrTo",
+          "path": "saps4hana.fiori.modules.wm.tr-to.view"
         }
       }
     }

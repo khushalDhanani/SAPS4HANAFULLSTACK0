@@ -7,7 +7,10 @@ const { sdValueHelpConfig } = require('./handlers/valueHelp.config');
  * SalesInquiryService Implementation for SAP SD Sales Inquiry module.
  * Binds domain business handlers and SD value help configuration.
  */
-module.exports = cds.service.impl(async function() {
-    registerValueHelpHandlers(this, sdValueHelpConfig);
-    registerSalesInquiryHandlers(this);
-});
+module.exports = class SalesInquiryService extends cds.ApplicationService {
+    async init() {
+        registerValueHelpHandlers(this, sdValueHelpConfig);
+        registerSalesInquiryHandlers(this);
+        return super.init();
+    }
+};
