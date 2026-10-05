@@ -1142,7 +1142,14 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: mockPost
       };
-      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      const savedDelays = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+      process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0';
+      // The unknown-outcome recovery tries a MATDOC read-back; an unreadable lookup must
+      // keep the original unknown-outcome error.
+      const postingClient = new GoodsIssuePostingClient({
+        adapter: mockAdapter,
+        rfc: { readTable: jest.fn().mockRejectedValue(new Error('RFC unavailable')) }
+      });
 
       try {
         await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01');
@@ -1155,6 +1162,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         expect(err.message).not.toContain('Unavailable');
         expect(err.message).not.toContain('NOT PUBLISHED');
         expect(err.message).not.toContain('NOT REGISTERED');
+      } finally {
+        if (savedDelays === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+        else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = savedDelays;
       }
     });
   });

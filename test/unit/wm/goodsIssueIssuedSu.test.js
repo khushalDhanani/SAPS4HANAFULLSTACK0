@@ -1368,14 +1368,20 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
         mockPosting.rfc = new RfcClient();
       }
-      // Earlier posting was created at 09:00:00 (CPUDT '20261002', CPUTM '090000')
-      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+      // Earlier posting was created at 09:00:00 (CPUDT '20261002', CPUTM '090000').
+      // The lookup reads 261 and 262 rows separately (equality-only predicates), so the
+      // mock must honor the BWART predicate.
+      const rows = [
         {
           MBLNR: '4900019991', MJAHR: '2026', ZEILE: '0001', BWART: '261',
           RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '090000',
           MENGE: '48.000', STORNO: ''
         }
-      ]);
+      ];
+      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(async (table, fields, where) => {
+        const w = (where || []).join(' ');
+        return rows.filter((r) => w.includes(`BWART = '${r.BWART}'`));
+      });
 
       // Later claim attempt created at 12:00:00
       const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
@@ -1397,13 +1403,17 @@ describe('Option (b) Issued Storage Units Persistence & Reconciliation', () => {
         const { RfcClient } = require('../../../srv/integration/s4hana/wm/RfcClient');
         mockPosting.rfc = new RfcClient();
       }
-      jest.spyOn(mockPosting.rfc, 'readTable').mockResolvedValue([
+      const rows = [
         {
           MBLNR: '4900019999', MJAHR: '2026', ZEILE: '0001', BWART: '261',
           RSNUM: '0000100930', RSPOS: '0001', CPUDT: '20261002', CPUTM: '120500',
           MENGE: '48.000', STORNO: ''
         }
-      ]);
+      ];
+      jest.spyOn(mockPosting.rfc, 'readTable').mockImplementation(async (table, fields, where) => {
+        const w = (where || []).join(' ');
+        return rows.filter((r) => w.includes(`BWART = '${r.BWART}'`));
+      });
 
       const doc = await GoodsIssueAdapter.findPosted261ByMatdoc({
         reservationNo: '0000100930',

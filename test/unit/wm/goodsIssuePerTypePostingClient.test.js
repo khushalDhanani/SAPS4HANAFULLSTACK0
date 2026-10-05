@@ -114,6 +114,90 @@ test('post261 → does not fall back to standard API on Tier 1 500 error (preven
   expect(calls).toHaveLength(1);
 });
 
+describe('post261 unknown-outcome recovery (2xx without document / timeout)', () => {
+  const savedDelays = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+  beforeAll(() => { process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0,0'; });
+  afterAll(() => {
+    if (savedDelays === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+    else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = savedDelays;
+  });
+
+  const matdocRow = {
+    MBLNR: '4900012345', MJAHR: '2026', ZEILE: '0001', BWART: '261',
+    RSNUM: '0000518023', RSPOS: '0001', MENGE: '1.000',
+    STORNO: '', SMBLN: '', createdAt: new Date(Date.now() + 1000).toISOString()
+  };
+
+  const makeRecoveryClient = ({ tier2, matdocRows }) => {
+    // The lookup issues one equality-only read per movement type (the live RFC parser
+    // rejects OR-groups), so the mock must honor the BWART predicate.
+    const rfc = {
+      readTable: jest.fn(async (table, fields, where) => {
+        if (table !== 'MATDOC') return [];
+        const w = (where || []).join(' ');
+        return matdocRows.filter((r) => w.includes(`BWART = '${String(r.BWART).trim()}'`));
+      })
+    };
+    const client = new GoodsIssuePostingClient({ rfc });
+    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+    client._post = jest.fn(async (path) => {
+      if (path.includes('zui_gi_order_rsv_o4')) {
+        const err = new Error('Not Found');
+        err.status = 404;
+        throw err;
+      }
+      return tier2();
+    });
+    return { client, rfc };
+  };
+
+  test('2xx with empty body and the document exists → POSTED via MATDOC read-back', async () => {
+    const { client, rfc } = makeRecoveryClient({ tier2: () => ({}), matdocRows: [matdocRow] });
+
+    const res = await client.post261({
+      ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001'
+    });
+
+    expect(res).toMatchObject({
+      Success: true,
+      Confirmed: true,
+      ConfirmationStatus: 'CONFIRMED',
+      MaterialDocument: '4900012345',
+      MaterialDocYear: '2026'
+    });
+    expect(res.Message).toContain('verified by reservation read-back');
+    expect(rfc.readTable).toHaveBeenCalledWith('MATDOC', expect.any(Array), expect.any(Array));
+  });
+
+  test('2xx with empty body and no document after retries → 504 GI_POSTING_UNCONFIRMED carrying the attempt ids', async () => {
+    const { client, rfc } = makeRecoveryClient({ tier2: () => ({}), matdocRows: [] });
+
+    await expect(client.post261({
+      ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001',
+      ClientAttemptId: 'GIA-TEST-1', ReferenceDocument: 'GIREF000000001'
+    })).rejects.toMatchObject({
+      status: 504,
+      code: 'GI_POSTING_UNCONFIRMED',
+      message: expect.stringMatching(/client attempt GIA-TEST-1.*reference GIREF000000001.*recheckPostingAttempts.*Do not post again/s)
+    });
+    // 2 configured delays -> 2 lookup attempts, each reading 261 and 262 rows separately.
+    expect(rfc.readTable.mock.calls.filter(([t]) => t === 'MATDOC')).toHaveLength(4);
+  });
+
+  test('Tier 2 timeout and the document exists → POSTED via MATDOC read-back (no double post)', async () => {
+    const { client } = makeRecoveryClient({
+      tier2: () => { const err = new Error('Request timed out'); err.code = 'ETIMEDOUT'; throw err; },
+      matdocRows: [matdocRow]
+    });
+
+    const res = await client.post261({
+      ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001'
+    });
+
+    expect(res).toMatchObject({ Success: true, Confirmed: true, MaterialDocument: '4900012345' });
+  });
+});
+
 test('unplanned post261 → sends its persisted reference on the standard API header', async () => {
   const { client, calls } = makeClient();
   await client.post261({

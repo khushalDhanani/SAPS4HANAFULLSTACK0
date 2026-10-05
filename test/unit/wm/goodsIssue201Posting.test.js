@@ -102,7 +102,7 @@ describe('Movement 201 Backend Posting, Reversal & Serial Stock Pre-Check', () =
         // HTTP success without a document: SAP may have posted, so the outcome is unknown.
         status: 504,
         code: 'GI_POSTING_OUTCOME_UNKNOWN',
-        message: expect.stringContaining('did not return a material document')
+        message: expect.stringContaining('returned no material document number')
       });
     });
 

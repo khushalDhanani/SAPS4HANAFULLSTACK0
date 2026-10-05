@@ -876,6 +876,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       targetBin: target.targetBin,
       warehouse: String(warehouse || '').trim(),
       tbnum: transfer.tbnum || '',
+      trItem: transfer.trItem || null,
       transferRequirementStatus: transfer.status || 'UNKNOWN',
       stagingSource,
       order,
@@ -1151,7 +1152,14 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         shortfall += ` ${plannedUnconfirmedQty} of ${requiredQty} ${uom} in transfer; ${stagedQty} ${uom} confirmed in the bin.`;
       }
       if (staging.transferRequirementStatus === 'FOUND' && staging.tbnum) {
-        shortfall += ` Transfer requirement ${staging.tbnum} needs a confirmed transfer order (LT04/LT12).`;
+        // Per-item TR state (LTBP): "no TO yet" needs LT04 first; an existing TO needs LT12.
+        if (staging.trItem && Number(staging.trItem.toCreatedQty) <= 0) {
+          shortfall += ` Transfer requirement ${staging.tbnum} item has no transfer order yet; create it with LT04, then confirm with LT12.`;
+        } else if (staging.trItem && Number(staging.trItem.toCreatedQty) > 0) {
+          shortfall += ` Transfer requirement ${staging.tbnum} has a transfer order over ${staging.trItem.toCreatedQty} ${uom}; confirm it with LT12.`;
+        } else {
+          shortfall += ` Transfer requirement ${staging.tbnum} needs a confirmed transfer order (LT04/LT12).`;
+        }
       } else if (staging.transferRequirementStatus === 'UNKNOWN') {
         shortfall += ' Transfer requirement status unknown; check whether a TR/TO exists, and confirm the TO if one is open.';
       } else {

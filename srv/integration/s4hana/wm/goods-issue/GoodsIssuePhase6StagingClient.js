@@ -177,25 +177,36 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     // predicate return AD 718. On any LTBP read failure we fall back to the previous
     // reservation-level resolution, which fails closed on conflicting destinations.
     let rowsForItem = validRows;
+    // Per-item TR-item state (LTBP MENGE = requested, TAMEN = already on a transfer order,
+    // ELIKZ = item complete). Live-verified readable with the extended field list; falls back
+    // to the narrow list, then to reservation-level resolution, on read failure. Never judge a
+    // TR by its header STATU: a partially processed TR can still carry a valid open item.
+    let trItem = null;
     const sItemPadded = clean(item) ? clean(item).padStart(4, '0') : '';
     if (sItemPadded) {
       const tbnums = [...new Set(validRows.map((row) => clean(row.TBNUM)))];
       const matchingTrs = new Set();
+      const itemRowsByTr = new Map();
       let ltbpFailed = false;
       for (const tb of tbnums) {
         const lg = clean(validRows.find((row) => clean(row.TBNUM) === tb)?.LGNUM);
+        const where = [`LGNUM = '${lg}'`, `AND TBNUM = '${tb}'`];
+        let ltbpRows = null;
         try {
-          const ltbpRows = await this.rfc.readTable(
-            'LTBP', ['TBNUM', 'TBPOS', 'RSPOS'],
-            [`LGNUM = '${lg}'`, `AND TBNUM = '${tb}'`], 100
-          );
-          if ((ltbpRows || []).some((pos) => clean(pos.RSPOS) === sItemPadded)) {
-            matchingTrs.add(tb);
+          ltbpRows = await this.rfc.readTable('LTBP', ['TBNUM', 'TBPOS', 'RSPOS', 'MENGE', 'TAMEN', 'ELIKZ'], where, 100);
+        } catch (_extendedErr) {
+          try {
+            ltbpRows = await this.rfc.readTable('LTBP', ['TBNUM', 'TBPOS', 'RSPOS'], where, 100);
+          } catch (e) {
+            LOG.warn(`LTBP item mapping failed for TR ${tb} (${e.message || e}); falling back to reservation-level TR resolution.`);
+            ltbpFailed = true;
+            break;
           }
-        } catch (e) {
-          LOG.warn(`LTBP item mapping failed for TR ${tb} (${e.message || e}); falling back to reservation-level TR resolution.`);
-          ltbpFailed = true;
-          break;
+        }
+        const itemRows = (ltbpRows || []).filter((pos) => clean(pos.RSPOS) === sItemPadded);
+        if (itemRows.length > 0) {
+          matchingTrs.add(tb);
+          itemRowsByTr.set(tb, itemRows);
         }
       }
       if (!ltbpFailed) {
@@ -204,6 +215,15 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
           return includeTarget
             ? { tbnum: '', status: 'NOT_FOUND', error: `No transfer requirement found for reservation ${sRes} item ${sItemPadded}.` }
             : '';
+        }
+        const itemRows = itemRowsByTr.get(clean(rowsForItem[0].TBNUM)) || [];
+        if (itemRows.some((row) => row.MENGE !== undefined || row.TAMEN !== undefined)) {
+          const sum = (field) => Math.round(itemRows.reduce((n, row) => n + (Number(row[field]) || 0), 0) * 1000) / 1000;
+          trItem = {
+            requestedQty: sum('MENGE'),
+            toCreatedQty: sum('TAMEN'),
+            isComplete: itemRows.length > 0 && itemRows.every((row) => clean(row.ELIKZ))
+          };
         }
       }
     }
@@ -231,7 +251,8 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         tbnum: destinations[0].tbnum || tbnum,
         status: 'FOUND',
         targetType: destinations[0].targetType,
-        targetBin: destinations[0].targetBin
+        targetBin: destinations[0].targetBin,
+        ...(trItem ? { trItem } : {})
       };
     }
 
@@ -260,6 +281,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     requiredQty = 0,
     uom = 'PC',
     tbnum = '',
+    trItem = null,
     resNo = '',
     resItem = ''
   }) {
@@ -430,7 +452,15 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         error += ` ${plannedUnconfirmedQty} of ${reqQty} ${uom} in transfer; ${stagedQty} ${uom} confirmed in the bin.`;
       }
       if (transferRequirementStatus === 'FOUND' && sTbnum) {
-        error += ` Transfer requirement ${sTbnum} needs a confirmed transfer order (LT04/LT12).`;
+        // Per-item TR state (LTBP): distinguish "no TO yet" (LT04) from "TO awaiting
+        // confirmation" (LT12) when SAP exposes the item quantities.
+        if (trItem && Number(trItem.toCreatedQty) <= 0) {
+          error += ` Transfer requirement ${sTbnum} item has no transfer order yet; create it with LT04, then confirm with LT12.`;
+        } else if (trItem && Number(trItem.toCreatedQty) > 0) {
+          error += ` Transfer requirement ${sTbnum} has a transfer order over ${trItem.toCreatedQty} ${uom}; confirm it with LT12.`;
+        } else {
+          error += ` Transfer requirement ${sTbnum} needs a confirmed transfer order (LT04/LT12).`;
+        }
       } else if (transferRequirementStatus === 'UNKNOWN') {
         error += ' Transfer requirement status unknown; check whether a TR/TO exists, and confirm the TO if one is open.';
       } else {
@@ -670,6 +700,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       requiredQty: requiredBaseQty,
       uom: baseUnit,
       tbnum: transfer.tbnum,
+      trItem: transfer.trItem || null,
       resNo: sResv,
       resItem: sItem
     });

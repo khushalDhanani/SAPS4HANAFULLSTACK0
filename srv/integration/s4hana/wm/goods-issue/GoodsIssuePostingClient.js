@@ -218,7 +218,16 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       if (m) rawMatYear = m[0];
     }
     if (!rawMatDoc) {
-      throw new Error(`SAP S/4HANA did not return a material document for movement ${meta.mvt} posting, and no sap-message error was present in the response.`);
+      // HTTP 2xx without a document number: SAP may still have committed the LUW, so this is an
+      // UNKNOWN outcome, not a failure. Log the full response body for reconciliation (the HTTP
+      // client does not surface response headers).
+      const bodySnippet = JSON.stringify(v2Res === undefined ? null : v2Res).slice(0, 4000);
+      LOG.error(`SAP returned 2xx without a material document for movement ${meta.mvt} posting; full response body: ${bodySnippet}`);
+      const unknown = new Error(`SAP S/4HANA accepted the movement ${meta.mvt} posting request (HTTP 2xx) but returned no material document number and no sap-message error. The document may still have been created.`);
+      unknown.status = 504;
+      unknown.code = 'GI_POSTING_OUTCOME_UNKNOWN';
+      unknown.sapResponseBody = bodySnippet;
+      throw unknown;
     }
     let verified;
     try {
@@ -546,17 +555,19 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const usnam = sUser ? String(sUser).trim().toUpperCase() : '';
     const dDay = sDate ? this._formatDate(sDate).replace(/-/g, '') : '';
 
-    const where = [
-      `RSNUM = '${rsnum}'`,
-      `AND RSPOS = '${rspos}'`,
-      `AND (BWART = '261' OR BWART = '262')`
-    ];
-    if (usnam) where.push(`AND USNAM = '${usnam}'`);
-    if (dDay) where.push(`AND (BUDAT = '${dDay}' OR CPUDT = '${dDay}')`);
+    // Live-verified predicate shape: the RFC_READ_TABLE parser on this release rejects
+    // parentheses in OPTIONS lines (SAIS DB_Error on '('), so OR-groups are expressed as one
+    // read per movement type with pure equality predicates, and the posting-date match moves
+    // to a client-side filter on the returned BUDAT/CPUDT.
+    const baseWhere = [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`];
+    if (usnam) baseWhere.push(`AND USNAM = '${usnam}'`);
 
+    // Live-verified field list: MATDOC on this release rejects STORNO/XAUTO/ERFMG with AD 718
+    // (any list containing them fails). Reversal exclusion works via the SMBLN/SJAHR pairing
+    // of the 262 rows, which are read alongside the 261 rows.
     const fields = [
       'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
-      'CPUDT', 'CPUTM', 'MENGE', 'ERFMG', 'STORNO', 'SMBLN', 'SJAHR', 'XAUTO'
+      'CPUDT', 'CPUTM', 'MENGE', 'SMBLN', 'SJAHR'
     ];
 
     let rows = [];
@@ -566,22 +577,27 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         ? (t, f, w) => this.adapter.readTable(t, f, w)
         : null;
 
+    const readBothMovements = async (table, tableFields) => {
+      const r261 = await readTable(table, tableFields, [...baseWhere, `AND BWART = '261'`]);
+      const r262 = await readTable(table, tableFields, [...baseWhere, `AND BWART = '262'`]);
+      return [...(r261 || []), ...(r262 || [])];
+    };
+
     if (readTable) {
       try {
-        rows = await readTable('MATDOC', fields, where);
+        rows = await readBothMovements('MATDOC', fields);
       } catch (matdocErr) {
         LOG.warn(`MATDOC read failed for 261 fallback lookup, trying MSEG: ${matdocErr.message}`);
         try {
-          const msegFields = [
-            'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
-            'CPUDT', 'CPUTM', 'MENGE', 'ERFMG', 'SMBLN', 'SJAHR'
-          ];
-          const msegWhere = [
-            `RSNUM = '${rsnum}'`,
-            `AND RSPOS = '${rspos}'`,
-            `AND (BWART = '261' OR BWART = '262')`
-          ];
-          rows = await readTable('MSEG', msegFields, msegWhere);
+          // Live-verified: MSEG on this release only accepts this narrow list (wider lists,
+          // including CPUDT/CPUTM/SJAHR/USNAM/BUDAT, fail with AD 718). Without timestamps the
+          // attempt-window and date filters do not apply on this fallback; the exactly-one-match
+          // rule still protects against ambiguity.
+          const msegFields = ['MBLNR', 'MJAHR', 'BWART', 'RSNUM', 'RSPOS', 'MENGE', 'SMBLN'];
+          const msegBaseWhere = [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`];
+          const r261 = await readTable('MSEG', msegFields, [...msegBaseWhere, `AND BWART = '261'`]);
+          const r262 = await readTable('MSEG', msegFields, [...msegBaseWhere, `AND BWART = '262'`]);
+          rows = [...(r261 || []), ...(r262 || [])];
         } catch (msegErr) {
           LOG.warn(`MSEG read also failed for 261 fallback lookup: ${msegErr.message}`);
           throw matdocErr;
@@ -609,6 +625,15 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     const matches = allRows.filter((r) => {
       // Must be movement 261
       if (String(r.BWART).trim() !== '261') return false;
+
+      // Posting-date filter (client-side; the RFC parser rejects OR-groups in WHERE):
+      // accept when either BUDAT or CPUDT equals the requested day, or when the row
+      // carries neither field (MSEG fallback).
+      if (dDay && (r.BUDAT || r.CPUDT)) {
+        const budat = String(r.BUDAT || '').trim();
+        const cpudt = String(r.CPUDT || '').trim();
+        if (budat !== dDay && cpudt !== dDay) return false;
+      }
 
       // Exclude reversed documents
       const docKey = `${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`;
@@ -757,13 +782,71 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
 
     // Tier 2: standard API_MATERIAL_DOCUMENT_SRV.
+    const postStartedAt = new Date();
     try {
       const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
       return await this._submitMaterialDocument(payload, {
         mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem, orderNo: sOrder
       });
     } catch (v2Err) {
-      throw this._reclassifyPostingError(tier1Error, v2Err, 'single-item movement 261');
+      const err = this._reclassifyPostingError(tier1Error, v2Err, 'single-item movement 261');
+      if (err.code !== 'GI_POSTING_OUTCOME_UNKNOWN') throw err;
+      // Without RFC table access there is nothing to read back; keep the unknown outcome.
+      const canLookup = (this.rfc && typeof this.rfc.readTable === 'function') ||
+        (this.adapter && typeof this.adapter.readTable === 'function');
+      if (!canLookup) throw err;
+
+      // Unknown outcome (2xx without a document number, timeout, connection drop after send):
+      // ask SAP whether the document exists before reporting UNKNOWN. MATDOC is matched by
+      // reservation/item/qty/date within the attempt window, non-reversed, exactly one hit
+      // (ambiguity stays UNKNOWN). The lookup can run before SAP has committed, so empty
+      // lookups prove nothing and the outcome stays unconfirmed.
+      const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
+      for (const delayMs of delays) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        let found;
+        try {
+          found = await this.findPosted261ByMatdoc({
+            reservationNo: sReserv,
+            reservationItem: sItem,
+            date: data.PostingDate,
+            quantity: data.IssueQty,
+            // 2 min of slack absorbs app/SAP clock skew; a second matching document inside the
+            // widened window fails the exactly-one rule and keeps the outcome UNKNOWN.
+            createdAt: new Date(postStartedAt.getTime() - 120000)
+          });
+        } catch (lookupErr) {
+          LOG.warn(`261 MATDOC fallback lookup failed for reservation ${sReserv} item ${sItem}: ${lookupErr.message}`);
+          throw err; // cannot verify: keep the unknown-outcome message
+        }
+        if (found && found.MaterialDocument) {
+          LOG.info(`261 posting for reservation ${sReserv} item ${sItem} recovered by MATDOC read-back: document ${found.MaterialDocument}/${found.MaterialDocYear || ''} exists in SAP.`);
+          return {
+            ReservationNo: sReserv,
+            ReservationItem: sItem,
+            OrderNo: sOrder,
+            MaterialDocument: found.MaterialDocument,
+            MaterialDocYear: found.MaterialDocYear || '',
+            TransferOrder: '',
+            DifferenceCleared: false,
+            DifferenceQty: 0,
+            Success: true,
+            Confirmed: true,
+            ConfirmationStatus: 'CONFIRMED',
+            Message: `Goods Issue 261 posted in S/4HANA (MatDoc: ${found.MaterialDocument}${found.MaterialDocYear ? '/' + found.MaterialDocYear : ''}); SAP did not confirm the request directly, and the document was verified by reservation read-back.`
+          };
+        }
+      }
+      const attemptIds = [
+        data.ClientAttemptId ? `client attempt ${data.ClientAttemptId}` : '',
+        `reference ${data.ReferenceDocument || 'n/a'}`
+      ].filter(Boolean).join(', ');
+      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 261 for reservation ${sReserv} item ${sItem}, and no matching material document is visible yet after ${delays.length} check(s) (${attemptIds}).` +
+        `${err.sapResponseBody ? ' The SAP response body was recorded in the application log.' : ''}` +
+        ' The posting may still appear in SAP and will be reconciled by recheckPostingAttempts. Do not post again.');
+      unconfirmed.status = 504;
+      unconfirmed.code = 'GI_POSTING_UNCONFIRMED';
+      throw unconfirmed;
     }
   }
 

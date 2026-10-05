@@ -164,6 +164,64 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       );
     });
 
+    it('names the missing LT04 step when the TR item has no transfer order yet (TAMEN = 0, live 520609 shape)', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({ LQUA: [] })
+      });
+
+      const res = await client.checkStaging({
+        material: '2000000042', plant: '1130', sloc: 'CS02',
+        warehouse: 'W12', targetType: 'GFL', targetBin: '0002000622',
+        requiredQty: 5, uom: 'NOS', tbnum: '0001001670',
+        trItem: { requestedQty: 5, toCreatedQty: 0, isComplete: false }
+      });
+
+      expect(res.stagingStatus).toBe('NOT_STAGED');
+      expect(res.error).toContain('Transfer requirement 0001001670 item has no transfer order yet; create it with LT04');
+    });
+
+    it('names the pending LT12 confirmation when the TR item already has a transfer order (TAMEN > 0)', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({ LQUA: [] })
+      });
+
+      const res = await client.checkStaging({
+        material: '2000000042', plant: '1130', sloc: 'CS02',
+        warehouse: 'W12', targetType: 'GFL', targetBin: '0002000622',
+        requiredQty: 5, uom: 'NOS', tbnum: '0001001670',
+        trItem: { requestedQty: 5, toCreatedQty: 5, isComplete: false }
+      });
+
+      expect(res.error).toContain('Transfer requirement 0001001670 has a transfer order over 5 NOS; confirm it with LT12.');
+    });
+
+    it('derives per-item TR quantities (MENGE/TAMEN/ELIKZ) from LTBP and never filters by LTBK header STATU', async () => {
+      // Live 520609 shape: TR header partially processed (STATU T); item 0001 done, item 0002 open.
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          LTBK: [
+            { TBNUM: '0001001670', RSNUM: '0000520609', LGNUM: 'W12', NLTYP: 'GFL', NLPLA: '0002000622', STATU: 'T' }
+          ],
+          LTBP: [
+            { TBNUM: '0001001670', TBPOS: '0001', RSPOS: '0001', MENGE: '1000.000', TAMEN: '1000.000', ELIKZ: 'X' },
+            { TBNUM: '0001001670', TBPOS: '0002', RSPOS: '0002', MENGE: '5.000', TAMEN: '0.000', ELIKZ: '' }
+          ]
+        })
+      });
+
+      const res = await client.findTransferRequirement('520609', '0002', '', '', 'W12', true);
+      expect(res).toMatchObject({
+        tbnum: '0001001670',
+        status: 'FOUND',
+        targetType: 'GFL',
+        targetBin: '0002000622',
+        trItem: { requestedQty: 5, toCreatedQty: 0, isComplete: false }
+      });
+    });
+
     it('reports plannedUnconfirmedQty (EINME) separately from confirmed bin stock', async () => {
       const rfc = mockRfc({
         LQUA: [
