@@ -1,6 +1,39 @@
 
 # Changes Log
 
+## 2026-10-05 06:40 UTC — Verification: Interactive Browser UI Testing via Chrome DevTools MCP
+- **Agent**: Antigravity
+- **Request**: Interactive UI verification in the browser for Goods Issue 261 (validate UI handling, banners, and reservation pending views) using Chrome DevTools MCP.
+- **Current Status**: **Complete & Verified in Browser**.
+- **Execution & Visual Evidence**:
+  1. **Pending Reservations View (`wmGoodsIssue261Pending`)**:
+     - Navigated to `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/261/open-reservations?resv=520615&item=0001&delivery=0080000080`.
+     - Verified `stripResult261` message strip appears with `Information` state and exact text:
+       `Reservation 520615 processed - Outbound Delivery 0080000080 created in SAP S/4HANA.`
+     - Responsive table loaded with 148 live open reservations from SAP (including `521608`, `521607`, `521606`, `520615`).
+     - Screenshot saved to `docs/screenshots/gi261_pending_delivery_created.png`.
+  2. **Goods Issue 261 Entry Form (`wmGoodsIssue261`) for Reservation 521607/0001**:
+     - Navigated to `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/order-based-261?resv=521607&item=0001`.
+     - Verified form binding: Reservation `521607`, Item `0001`, Order `1002800`, Material `3000000016`, Plant `1110`, Storage Location `PT01`, Quantity `5000 KG`.
+     - Verified IM-managed indicator: Warning strip correctly notes `No WM stock for material 3000000016 in plant 1110 / storage location PT01.` (confirming direct IM path).
+     - Screenshot saved to `docs/screenshots/gi261_form_521607.png`.
+  3. **`DELIVERY_CREATED` Form Banner & Re-post Guard**:
+     - Simulated `deliveryNumber: "0080000080"` and `postingStatus: "DELIVERY_CREATED"` in UI model.
+     - Verified `stripDeliveryCreated261` appears with text:
+       `Outbound Delivery 0080000080 created in SAP S/4HANA. Stock will be issued when warehouse goods issue (PGI) is posted.`
+     - Verified `btnPostGoodsIssue261` ("Complete Goods Issue (261)") is automatically disabled (`enabled: false`).
+     - Screenshot saved to `docs/screenshots/gi261_form_delivery_created.png`.
+  4. **Console Health**:
+     - Queried `list_console_messages` via Chrome DevTools MCP: 0 application errors.
+- **Files**:
+  - `docs/screenshots/gi261_pending_delivery_created.png`
+  - `docs/screenshots/gi261_form_521607.png`
+  - `docs/screenshots/gi261_form_delivery_created.png`
+- **Validation**:
+  - Chrome DevTools MCP (`navigate_page`, `take_snapshot`, `take_screenshot`, `evaluate_script`, `list_console_messages`)
+- **Errors / Warnings / Blockers**: None. UI renders and transitions cleanly.
+- **Next Steps**: Awaiting user direction on Phase 3 or further tasks.
+
 ## 2026-10-05 06:30 UTC — Live Test: 261 IM Flow on Non-WM Reservation (521607/0001) Verified End-to-End
 - **Agent**: Antigravity
 - **Request**: Test Live 261 IM Flow on Non-WM Reservation: Reservations 521607 or 521608 (Plant 1110, SLoc PT01) do not require delivery creation and post direct Material Documents (CONFIRMED). Run an end-to-end test in the UI or via test script.
