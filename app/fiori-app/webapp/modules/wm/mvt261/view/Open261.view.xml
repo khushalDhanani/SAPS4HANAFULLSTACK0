@@ -1,0 +1,82 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.mvt261.controller.Open261"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="open261Page" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <form:SimpleForm id="open261FilterForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>mvt261Filters}" />
+                        <Label text="{i18n>mvt261Plant}" labelFor="open261Plant" />
+                        <Input id="open261Plant" value="{open261View>/plant}" maxLength="4" submit=".onGo" />
+                        <Label text="{i18n>mvt261Order}" labelFor="open261Order" />
+                        <Input id="open261Order" value="{open261View>/productionOrder}" maxLength="12" submit=".onGo" />
+                        <Label text="{i18n>mvt261Material}" labelFor="open261Material" />
+                        <Input id="open261Material" value="{open261View>/material}" maxLength="40" submit=".onGo" />
+
+                        <core:Title text="{i18n>mvt261Options}" />
+                        <Label text="{i18n>open261Reservation}" labelFor="open261Reservation" />
+                        <Input id="open261Reservation" value="{open261View>/reservation}" maxLength="10" submit=".onGo" />
+                        <Label text="{i18n>open261RequirementDate}" labelFor="open261Dates" />
+                        <DateRangeSelection id="open261Dates" dateValue="{open261View>/dateFrom}" secondDateValue="{open261View>/dateTo}" />
+                        <Label text="{i18n>open261IncludeWithdrawn}" labelFor="open261IncludeWithdrawn" />
+                        <Switch id="open261IncludeWithdrawn" state="{open261View>/includeFullyWithdrawn}" />
+                        <Label />
+                        <Button id="open261Go" text="{i18n>open261Go}" type="Emphasized" icon="sap-icon://search" press=".onGo" enabled="{= !${open261View>/busy} }" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="open261Message" visible="{= !!${open261View>/message} }" text="{open261View>/message}" type="{open261View>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table
+                    id="open261Table"
+                    items="{open261View>/items}"
+                    busy="{open261View>/busy}"
+                    growing="true"
+                    growingThreshold="50"
+                    noDataText="{i18n>open261NoData}"
+                    class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title id="open261Count" text="{= ${i18n>open261ListTitle} + ' (' + ${open261View>/items}.length + ')' }" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="open261Export" icon="sap-icon://excel-attachment" text="{i18n>open261Export}" press=".onExport" enabled="{= ${open261View>/items}.length > 0 }" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column><Text text="{i18n>open261Reservation}" /></Column>
+                        <Column><Text text="{i18n>mvt261Order}" /></Column>
+                        <Column><Text text="{i18n>mvt261Material}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261PlantSloc}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261RequirementDate}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Required}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Withdrawn}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>open261Open}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>open261MovementAllowed}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{open261View>Reservation}" text="{open261View>ReservationItem}" />
+                                <ObjectIdentifier title="{open261View>ProductionOrder}" text="{open261View>OrderDescription}" />
+                                <ObjectIdentifier title="{open261View>Material}" text="{open261View>MaterialName}" />
+                                <Text text="{open261View>Plant} / {open261View>StorageLocation}" />
+                                <Text text="{open261View>RequirementDate}" />
+                                <ObjectNumber number="{open261View>RequiredQuantity}" unit="{open261View>Unit}" emphasized="false" />
+                                <ObjectNumber number="{open261View>WithdrawnQuantity}" unit="{open261View>Unit}" emphasized="false" />
+                                <ObjectNumber number="{open261View>OpenQuantity}" unit="{open261View>Unit}" state="{= ${open261View>OpenQuantity} > 0 ? 'None' : 'Warning' }" />
+                                <ObjectStatus text="{= ${open261View>MovementAllowed} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" state="{= ${open261View>MovementAllowed} ? 'None' : 'Warning' }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

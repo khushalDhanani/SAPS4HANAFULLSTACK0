@@ -648,6 +648,16 @@
                                             <NumericContent icon="sap-icon://bar-code" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tileMvt261" header="{i18n>mvt261Title}" subheader="{i18n>mvt261TileSub}" press=".onNavigateToMvt261" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>mvt261TileUnit}">
+                                            <NumericContent icon="sap-icon://inspection" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
+                                    <GenericTile id="tileOpen261" header="{i18n>open261Title}" subheader="{i18n>open261TileSub}" press=".onNavigateToOpen261" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>mvt261TileUnit}">
+                                            <NumericContent icon="sap-icon://list" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                 </HBox>
                             </VBox>
                         </IconTabFilter>

@@ -330,6 +330,16 @@
           "name": "wmTrTo",
           "pattern": "wm/tr-to",
           "target": "TargetTrTo"
+        },
+        {
+          "name": "wmOpen261",
+          "pattern": "wm/mvt261/open",
+          "target": "TargetOpen261"
+        },
+        {
+          "name": "wmMvt261",
+          "pattern": "wm/mvt261",
+          "target": "TargetMvt261"
         }
       ],
       "targets": {
@@ -445,6 +455,16 @@
           "id": "trTo",
           "name": "TrTo",
           "path": "saps4hana.fiori.modules.wm.tr-to.view"
+        },
+        "TargetOpen261": {
+          "id": "open261",
+          "name": "Open261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
+        },
+        "TargetMvt261": {
+          "id": "mvt261",
+          "name": "Mvt261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
         }
       }
     }

@@ -312,6 +312,14 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmTrTo");
         },
 
+        onNavigateToOpen261: function () {
+            this.getOwnerComponent().getRouter().navTo("wmOpen261");
+        },
+
+        onNavigateToMvt261: function () {
+            this.getOwnerComponent().getRouter().navTo("wmMvt261");
+        },
+
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },
