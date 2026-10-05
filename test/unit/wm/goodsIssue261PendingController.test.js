@@ -144,27 +144,12 @@ describe('GoodsIssue261Pending Controller Unit Tests', () => {
             expect(controller.getModel('gi261p').getProperty('/items')).toEqual([]);
         });
 
-        it('should filter out a just-completed reservation with no remaining items and show posted result', async () => {
+        it('should show the posted result and keep every reservation the fresh SAP read returns', async () => {
+            // The fresh read after a POSTED outcome is authoritative: a reservation the
+            // read still returns (remaining open items, or a partial post leaving the same
+            // item open) must stay listed with no client-side filtering.
             const aItems = [
-                { ReservationNo: '0000000201', ItemCount: 1 },
-                { ReservationNo: '0000000202', ItemCount: 1 }
-            ];
-            mockService.fetchOpenReservations.mockResolvedValue(aItems);
-
-            await controller._onRouteMatched(makeRouteEvent({
-                resv: '0000000201', doc: '4900009999', year: '2026'
-            })); await flush();
-
-            const model = controller.getModel('gi261p');
-            expect(model.getProperty('/items')).toHaveLength(1);
-            expect(model.getProperty('/items')[0].ReservationNo).toBe('0000000202');
-            expect(model.getProperty('/resultState')).toBe('Success');
-            expect(model.getProperty('/resultText')).toContain('4900009999');
-        });
-
-        it('should keep a just-posted reservation listed when it still has further open items', async () => {
-            const aItems = [
-                { ReservationNo: '0000480960', ItemCount: 6 },
+                { ReservationNo: '0000480960', ItemCount: 5 },
                 { ReservationNo: '0000000202', ItemCount: 1 }
             ];
             mockService.fetchOpenReservations.mockResolvedValue(aItems);
@@ -180,9 +165,9 @@ describe('GoodsIssue261Pending Controller Unit Tests', () => {
             expect(model.getProperty('/resultText')).toContain('4900010000');
         });
 
-        it('should hide a just-posted reservation whose fresh read shows only the posted item (commit lag)', async () => {
+        it('should show the posted result when the fresh SAP read no longer returns the completed reservation', async () => {
             const aItems = [
-                { ReservationNo: '0000480960', ItemCount: 1 }
+                { ReservationNo: '0000000202', ItemCount: 1 }
             ];
             mockService.fetchOpenReservations.mockResolvedValue(aItems);
 
@@ -191,8 +176,10 @@ describe('GoodsIssue261Pending Controller Unit Tests', () => {
             })); await flush();
 
             const model = controller.getModel('gi261p');
-            expect(model.getProperty('/items')).toHaveLength(0);
+            expect(model.getProperty('/items')).toHaveLength(1);
+            expect(model.getProperty('/items')[0].ReservationNo).toBe('0000000202');
             expect(model.getProperty('/resultState')).toBe('Success');
+            expect(model.getProperty('/resultText')).toContain('4900010001');
         });
         // Queue tests removed — dispatch queue eliminated; direct posting only.
 

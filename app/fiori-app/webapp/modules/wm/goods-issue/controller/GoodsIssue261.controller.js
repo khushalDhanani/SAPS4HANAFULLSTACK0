@@ -169,8 +169,16 @@ sap.ui.define([
             oModel.setProperty("/storageLocation", oItem.StorageLocation || "");
             oModel.setProperty("/quantity", nOpen);
             oModel.setProperty("/openQty", nOpen);
-            if (oItem.Unit) {
-                oModel.setProperty("/unit", oItem.Unit);
+            // Always take unit and batch from THIS item — never carry over a previously
+            // selected item's values. An empty unit stays empty and fails validation
+            // instead of silently posting with the prior item's unit.
+            oModel.setProperty("/unit", oItem.Unit || "");
+            oModel.setProperty("/batch", "");
+            if (typeof oItem.IsSerialManaged === "boolean") {
+                oModel.setProperty("/isSerialManaged", oItem.IsSerialManaged);
+            }
+            if (typeof oItem.IsBatchManaged === "boolean") {
+                oModel.setProperty("/isBatchManaged", oItem.IsBatchManaged);
             }
             this._loadMaterialInfo(oItem.Material || "", oItem.Plant || "");
             this._detectScanMode(sResv, sItem, nOpen);
@@ -186,6 +194,9 @@ sap.ui.define([
         _detectScanMode: function (sResv, sItem, nOpenQty) {
             var that = this;
             var oModel = this._oModel;
+            // Guard against a late response for a previously selected item overwriting
+            // the staging/SU state of the item the user has since switched to.
+            var nToken = this._scanModeToken = (this._scanModeToken || 0) + 1;
             oModel.setProperty("/scanEnabled", false);
             oModel.setProperty("/scannedUnits", []);
             oModel.setProperty("/suggestedUnits", []);
@@ -215,6 +226,7 @@ sap.ui.define([
             }
             GoodsIssue261Service.fetchStockUnitsForItem(sResv, sItem)
                 .then(function (oData) {
+                    if (that._scanModeToken !== nToken) { return; }
                     var aUnits = (oData && oData.StockUnits) || [];
                     var nExcludedUnconfirmed = (oData && oData.ExcludedUnconfirmedCount) || 0;
                     oModel.setProperty("/excludedUnconfirmedCount", nExcludedUnconfirmed);
@@ -253,7 +265,7 @@ sap.ui.define([
                         sStagingWarning = (oData && oData.Message) || that.getText("gi261StagingDestinationUnknown");
                     } else if (bStagingRequired && !bIsFullyStaged) {
                         bCanComplete = false;
-                        var sUom = oModel.getProperty("/unit") || "PC";
+                        var sUom = oModel.getProperty("/unit") || "";
                         var sBinLocation = (sWarehouse ? sWarehouse + "/" : "") + (sTargetType ? sTargetType + "/" + sTargetBin : sTargetBin);
                         sStagingWarning = "Only " + nStagedQty + " of " + nRequiredQty + " " + sUom + " staged in " + sBinLocation + ".";
                         if (nPlannedUnconfirmedQty > 0) {
@@ -273,7 +285,7 @@ sap.ui.define([
                     oModel.setProperty("/targetStorageType", sTargetType);
                     oModel.setProperty("/targetStorageBin", sTargetBin);
                     oModel.setProperty("/stagedQty", nStagedQty);
-                    oModel.setProperty("/stagedQtyDisplay", bStagingUnknown ? that.getText("gi261StagingUnknown") : (nStagedQty + " / " + nRequiredQty + " " + (oModel.getProperty("/unit") || "PC")));
+                    oModel.setProperty("/stagedQtyDisplay", bStagingUnknown ? that.getText("gi261StagingUnknown") : ((nStagedQty + " / " + nRequiredQty + " " + (oModel.getProperty("/unit") || "")).trim()));
                     oModel.setProperty("/requiredStagingQty", nRequiredQty);
                     oModel.setProperty("/plannedUnconfirmedQty", nPlannedUnconfirmedQty);
                     oModel.setProperty("/stagingStatusBadge", sStagingStatus);
@@ -282,7 +294,7 @@ sap.ui.define([
                     oModel.setProperty("/transferRequirement", sTbnum);
                     oModel.setProperty("/canCompleteStaging", bCanComplete);
                     if (nPlannedUnconfirmedQty > 0) {
-                        oModel.setProperty("/plannedUnconfirmedNote", nPlannedUnconfirmedQty + " " + (oModel.getProperty("/unit") || "PC") + " in transfer; not yet confirmed in the target bin");
+                        oModel.setProperty("/plannedUnconfirmedNote", (nPlannedUnconfirmedQty + " " + (oModel.getProperty("/unit") || "")).trim() + " in transfer; not yet confirmed in the target bin");
                     } else {
                         oModel.setProperty("/plannedUnconfirmedNote", "");
                     }
@@ -305,8 +317,18 @@ sap.ui.define([
                     }
                 })
                 .catch(function (err) {
-                    var sGapMsg = (err && err.message) || that.getText("gi261NoSuDataGap", [sResv, sItem]);
-                    oModel.setProperty("/noSuDataGap", sGapMsg);
+                    if (that._scanModeToken !== nToken) { return; }
+                    // Fail closed: when the staging/SU state cannot be read from SAP it is UNKNOWN,
+                    // never "no staging required". The item stays visible; only posting is blocked,
+                    // with a message naming the read failure (not a generic SU data gap).
+                    oModel.setProperty("/stagingStatus", "UNKNOWN");
+                    oModel.setProperty("/isStagingRequired", true);
+                    oModel.setProperty("/canCompleteStaging", false);
+                    oModel.setProperty("/stagingWarning", that.getText("gi261StagingReadFailed", [(err && err.message) || ""]));
+                    oModel.setProperty("/stagingStatusBadge", that.getText("gi261StagingUnknown"));
+                    oModel.setProperty("/stagingStatusState", "Information");
+                    oModel.setProperty("/stagedQtyDisplay", that.getText("gi261StagingUnknown"));
+                    oModel.setProperty("/noSuDataGap", "");
                 })
                 .finally(function () { that._validateLive(); });
         },
@@ -429,6 +451,15 @@ sap.ui.define([
             var sVal = oEvent.getParameter("value") || "";
             var nVal = parseFloat(sVal);
             this._oModel.setProperty("/quantity", isNaN(nVal) ? sVal : nVal);
+            // Scan-to-complete must cover the quantity being issued, not the full open quantity.
+            if (this._oModel.getProperty("/scanEnabled") && !isNaN(nVal) && nVal > 0) {
+                this._oModel.setProperty("/requiredScanCount", nVal);
+                var aUnits = this._oModel.getProperty("/availableUnits") || [];
+                var aSuggested = GoodsIssue261Model.calculateSuggestedUnits(aUnits, nVal);
+                this._oModel.setProperty("/suggestedUnits", aSuggested);
+                this._oModel.setProperty("/suggestedUnitsCount", aSuggested.length);
+                this._oModel.setProperty("/partialInstruction", GoodsIssue261Model.getPartialInstruction(aSuggested));
+            }
             this._validateLive();
         },
 
@@ -757,6 +788,13 @@ sap.ui.define([
                             that._applyReservationPrefill(oRow, that._oModel.getProperty("/reservationNo"));
                         }
                     }
+                    oDialog.destroy();
+                },
+                cancel: function () {
+                    // No item selected: the form stays locked to the reservation with no item,
+                    // so return the user to the pending list instead of leaving them stuck.
+                    oDialog.destroy();
+                    that.onNavBack();
                 }
             });
 

@@ -218,7 +218,7 @@ sap.ui.define([
                                 return {
                                     material: sMaterial,
                                     materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
-                                    unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                    unit: oMat ? (oMat.MaterialBaseUnit || "") : "",
                                     isBatchManaged: bBatchManaged,
                                     availableStock: bBatchManaged ? nTotalStock : null,
                                     batches: aBatches
@@ -228,7 +228,7 @@ sap.ui.define([
                                 return {
                                     material: sMaterial,
                                     materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
-                                    unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                                    unit: oMat ? (oMat.MaterialBaseUnit || "") : "",
                                     isBatchManaged: false,
                                     availableStock: null,
                                     batches: []
@@ -239,7 +239,7 @@ sap.ui.define([
                     return {
                         material: sMaterial,
                         materialName: oMat ? (oMat.MaterialName || oMat.Material_Text || "") : "",
-                        unit: oMat ? (oMat.MaterialBaseUnit || "EA") : "EA",
+                        unit: oMat ? (oMat.MaterialBaseUnit || "") : "",
                         isBatchManaged: false,
                         availableStock: null,
                         batches: []

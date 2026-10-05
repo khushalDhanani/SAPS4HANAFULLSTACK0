@@ -219,6 +219,37 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(controller._oModel.getProperty('/canCompleteStaging')).toBe(false);
         });
 
+        it('fails closed when the staging/SU read itself fails: UNKNOWN, posting blocked, specific message', async () => {
+            mockService.fetchStockUnitsForItem.mockRejectedValueOnce(new Error('SAP read timeout'));
+
+            controller._detectScanMode('519366', '0001', 5);
+            await flush();
+
+            expect(controller._oModel.getProperty('/stagingStatus')).toBe('UNKNOWN');
+            expect(controller._oModel.getProperty('/isStagingRequired')).toBe(true);
+            expect(controller._oModel.getProperty('/canCompleteStaging')).toBe(false);
+            expect(controller._oModel.getProperty('/stagingWarning')).toBe('gi261StagingReadFailed');
+            expect(controller._oModel.getProperty('/noSuDataGap')).toBe('');
+            expect(controller._oModel.getProperty('/scanEnabled')).toBe(false);
+        });
+
+        it('ignores a stale staging/SU response after the user switched to another item', async () => {
+            let resolveFirst;
+            mockService.fetchStockUnitsForItem
+                .mockImplementationOnce(() => new Promise((res) => { resolveFirst = res; }))
+                .mockResolvedValueOnce({ StockUnits: [], Message: 'gap for item 0002' });
+
+            controller._detectScanMode('519366', '0001', 5);
+            controller._detectScanMode('519366', '0002', 7);
+            await flush();
+            // The first (stale) response arrives last with scannable units; it must be dropped.
+            resolveFirst({ StockUnits: [{ StorageUnit: 'SU1', AvailableStock: 5, CurrentStock: 5 }] });
+            await flush();
+
+            expect(controller._oModel.getProperty('/scanEnabled')).toBe(false);
+            expect(controller._oModel.getProperty('/noSuDataGap')).toBe('gap for item 0002');
+        });
+
         it('_onRouteMatched without a resv query should reset and not prefill', () => {
             controller._onRouteMatched({ getParameter: () => ({}) });
             expect(mockService.fetchReservationItems).not.toHaveBeenCalled();
@@ -320,6 +351,19 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(controller._oModel.getProperty('/reservationItem')).toBe('');
             expect(controller._oModel.getProperty('/reservationNo')).toBe('0000123456');
             expect(controller._aResolvedItems).toHaveLength(2);
+        });
+
+        it('must not carry a previous item\'s unit or batch into the next selected item', async () => {
+            controller._oModel.setProperty('/unit', 'KG');
+            controller._oModel.setProperty('/batch', 'OLD-BATCH');
+
+            controller._applyReservationPrefill({
+                ReservationNo: '0000123456', ReservationItem: '0005', Material: 'MAT-NOUNIT',
+                Plant: '3000', StorageLocation: 'RM01', OpenQty: 2, MovementType: '261'
+            }, '0000123456');
+
+            expect(controller._oModel.getProperty('/unit')).toBe('');
+            expect(controller._oModel.getProperty('/batch')).toBe('');
         });
 
         it('should show MessageBox.error when reservation fetch fails', async () => {
@@ -499,6 +543,33 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
                 getParameter: () => ({ getTitle: () => 'IN25003090' })
             });
             expect(controller._oModel.getProperty('/batch')).toBe('IN25003090');
+        });
+    });
+
+    describe('Quantity live change with scan-to-complete', () => {
+        it('re-targets the scan requirement to the entered quantity', () => {
+            controller._oModel.setProperty('/scanEnabled', true);
+            controller._oModel.setProperty('/requiredScanCount', 10);
+            controller._oModel.setProperty('/availableUnits', [
+                { StorageUnit: 'SU1', AvailableStock: 3, CurrentStock: 3 },
+                { StorageUnit: 'SU2', AvailableStock: 3, CurrentStock: 3 }
+            ]);
+
+            controller.onQuantityLiveChange({ getParameter: () => '4' });
+
+            expect(controller._oModel.getProperty('/quantity')).toBe(4);
+            expect(controller._oModel.getProperty('/requiredScanCount')).toBe(4);
+        });
+
+        it('leaves the scan requirement alone outside scan mode and for invalid input', () => {
+            controller._oModel.setProperty('/scanEnabled', false);
+            controller._oModel.setProperty('/requiredScanCount', 10);
+            controller.onQuantityLiveChange({ getParameter: () => '4' });
+            expect(controller._oModel.getProperty('/requiredScanCount')).toBe(10);
+
+            controller._oModel.setProperty('/scanEnabled', true);
+            controller.onQuantityLiveChange({ getParameter: () => 'abc' });
+            expect(controller._oModel.getProperty('/requiredScanCount')).toBe(10);
         });
     });
 

@@ -199,7 +199,6 @@
                                     id="inQuantity261"
                                     value="{gi261>/quantity}"
                                     type="Number"
-                                    editable="{= !${gi261>/fromReservation} }"
                                     liveChange=".onQuantityLiveChange"
                                     valueState="{= ${gi261>/errors/quantity} ? 'Error' : 'None' }"
                                     valueStateText="{gi261>/errors/quantity}"
@@ -279,6 +278,44 @@
                     visible="{= !!${gi261>/noSuDataGap} }"
                     class="sapUiSmallMarginBottom" />
 
+                <!-- Staging diagnostics: shown whenever WM staging applies, independent of SU scan
+                     mode — IN_TRANSFER / NOT_STAGED / UNKNOWN items return no scannable units, and
+                     the user must still see WHY posting is blocked before pressing Post. -->
+                <MessageStrip
+                    id="stripStagingWarning261"
+                    text="{gi261>/stagingWarning}"
+                    type="Error"
+                    showIcon="true"
+                    visible="{= !!${gi261>/stagingWarning} }"
+                    class="sapUiSmallMarginBottom" />
+                <MessageStrip
+                    id="stripPlannedUnconfirmedNote261"
+                    text="{gi261>/plannedUnconfirmedNote}"
+                    type="Information"
+                    showIcon="true"
+                    visible="{= !!${gi261>/plannedUnconfirmedNote} }"
+                    class="sapUiSmallMarginBottom" />
+                <HBox id="boxStagingStatus261" alignItems="Center" class="sapUiSmallMarginBottom" wrap="Wrap" visible="{= ${gi261>/isStagingRequired} }">
+                    <ObjectStatus
+                        id="osTargetStagingBin261"
+                        title="{i18n>gi261TargetStagingBin}"
+                        text="{= ${gi261>/targetStorageType} ? ${gi261>/targetStorageType} + ' / ' + ${gi261>/targetStorageBin} : ${gi261>/targetStorageBin} }"
+                        state="Information"
+                        class="sapUiMediumMarginEnd" />
+                    <ObjectStatus
+                        id="osStagedQty261"
+                        title="{i18n>gi261StagedInBin}"
+                        text="{gi261>/stagedQtyDisplay}"
+                        state="{gi261>/stagingStatusState}"
+                        class="sapUiMediumMarginEnd" />
+                    <ObjectStatus
+                        id="osStagingStatusBadge261"
+                        title="{i18n>gi261StagingStatus}"
+                        text="{gi261>/stagingStatusBadge}"
+                        state="{gi261>/stagingStatusState}"
+                        class="sapUiMediumMarginEnd" />
+                </HBox>
+
                 <!-- 3b. Scan-to-complete: unit-managed reservations (serial or storage unit). Scanning
                      validates each unit against S/4 (right material, in stock, not already issued). -->
                 <Panel
@@ -305,46 +342,6 @@
                             showIcon="true"
                             visible="{= !!${gi261>/excludedUnconfirmedNote} }"
                             class="sapUiTinyMarginBottom" />
-
-                        <!-- Staging Block Warning (Requirement 5) -->
-                        <MessageStrip
-                            id="stripStagingWarning261"
-                            text="{gi261>/stagingWarning}"
-                            type="Error"
-                            showIcon="true"
-                            visible="{= !!${gi261>/stagingWarning} }"
-                            class="sapUiTinyMarginBottom" />
-
-                        <!-- TO created, not confirmed Note (Requirement 5) -->
-                        <MessageStrip
-                            id="stripPlannedUnconfirmedNote261"
-                            text="{gi261>/plannedUnconfirmedNote}"
-                            type="Information"
-                            showIcon="true"
-                            visible="{= !!${gi261>/plannedUnconfirmedNote} }"
-                            class="sapUiTinyMarginBottom" />
-
-                        <!-- Staging Status and Target Bin Information (Requirement 4) -->
-                        <HBox alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap" visible="{= ${gi261>/isStagingRequired} }">
-                            <ObjectStatus
-                                id="osTargetStagingBin261"
-                                title="{i18n>gi261TargetStagingBin}"
-                                text="{= ${gi261>/targetStorageType} ? ${gi261>/targetStorageType} + ' / ' + ${gi261>/targetStorageBin} : ${gi261>/targetStorageBin} }"
-                                state="Information"
-                                class="sapUiMediumMarginEnd" />
-                            <ObjectStatus
-                                id="osStagedQty261"
-                                title="{i18n>gi261StagedInBin}"
-                                text="{gi261>/stagedQtyDisplay}"
-                                state="{gi261>/stagingStatusState}"
-                                class="sapUiMediumMarginEnd" />
-                            <ObjectStatus
-                                id="osStagingStatusBadge261"
-                                title="{i18n>gi261StagingStatus}"
-                                text="{gi261>/stagingStatusBadge}"
-                                state="{gi261>/stagingStatusState}"
-                                class="sapUiMediumMarginEnd" />
-                        </HBox>
 
                         <HBox alignItems="End" class="sapUiTinyMarginBottom" wrap="Wrap">
                             <Input
