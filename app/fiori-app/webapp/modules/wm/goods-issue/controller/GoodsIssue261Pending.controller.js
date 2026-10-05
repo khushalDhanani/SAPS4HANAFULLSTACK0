@@ -33,7 +33,14 @@ sap.ui.define([
                     var aList = Array.isArray(aItems) ? aItems : [];
                     var oDone = that._completedOutcome;
                     if (oDone && oDone.resv && oDone.doc) {
-                        aList = aList.filter(function (r) { return String(r.ReservationNo) !== String(oDone.resv); });
+                        // One item was just posted. Keep the reservation listed when the fresh SAP
+                        // read still shows further open items (ItemCount > 1), so the user can select
+                        // and post the next item. Hide it only when the posted item was the last one
+                        // (ItemCount <= 1 also absorbs SAP commit lag on that final item).
+                        aList = aList.filter(function (r) {
+                            if (String(r.ReservationNo) !== String(oDone.resv)) return true;
+                            return Number(r.ItemCount) > 1;
+                        });
                         that._showCompletionResult(oDone);
                         that._completedOutcome = null; // one-shot
                     }

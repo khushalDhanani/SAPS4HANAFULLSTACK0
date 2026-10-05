@@ -719,6 +719,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       }
     } catch (v4Err) {
       tier1Error = v4Err;
+      const is404OrNotFound = v4Err.status === 404 ||
+        v4Err.code === '404' ||
+        /no service found|service not found|not found|resource not found|\b404\b|IWFND\/MED\/170/i.test(v4Err.message || '');
+      if (!is404OrNotFound) {
+        LOG.error('Tier 1 postGoodsIssue failed with non-404 error; fallback to Tier 2 blocked:', v4Err.message || v4Err);
+        throw this._reclassifyPostingError(null, v4Err, 'single-item movement 261');
+      }
     }
 
     if (tier1MatDoc) {
@@ -891,6 +898,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     } catch (v4Err) {
       if (items.some((item) => item.FinalIssue === true)) {
         throw v4Err;
+      }
+      const is404OrNotFound = v4Err.status === 404 ||
+        v4Err.code === '404' ||
+        /no service found|service not found|not found|resource not found|\b404\b|IWFND\/MED\/170/i.test(v4Err.message || '');
+      if (!is404OrNotFound) {
+        LOG.error('Tier 1 submitRequest failed with non-404 error; fallback to Tier 2 blocked:', v4Err.message || v4Err);
+        throw this._reclassifyPostingError(null, v4Err, 'batch Goods Issue submission');
       }
       // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV with multi-line deep insert
       try {

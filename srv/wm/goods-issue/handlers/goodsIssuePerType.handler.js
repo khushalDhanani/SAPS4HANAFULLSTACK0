@@ -865,18 +865,31 @@ async function stagingCheck(req, normalized) {
       issueQty: normalized.IssueQty,
       issueUnit: normalized.Unit
     });
-    if (!staging || staging.isVerified !== true) {
-      req.error(502, staging?.error || `SAP WM staging requirement could not be verified for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
+    const stagingStatus = staging?.stagingStatus || (staging?.isFullyStaged || staging?.isStaged ? 'OK' : 'NOT_STAGED');
+    // Requirement 4: Allow posting only on OK and NOT_WM_MANAGED
+    if (stagingStatus === 'NOT_WM_MANAGED' || (staging?.isStagingRequired === false && staging?.isVerified)) {
+      return true;
+    }
+    if (stagingStatus === 'OK') {
+      return true;
+    }
+
+    // Blocked states: UNKNOWN, IN_TRANSFER, NOT_STAGED
+    // Requirement 5: Status codes: 422 for staging business blocks, 502 for SAP read/connectivity failure.
+    if (stagingStatus === 'UNKNOWN' || staging?.isVerified !== true) {
+      const isReadOrConnFailure = /read failed|connectivity|unavailable|ID:\w+|could not be resolved/i.test(staging?.error || '') && !/multiple destinations/i.test(staging?.error || '');
+      const statusCode = isReadOrConnFailure ? 502 : 422;
+      req.error(statusCode, staging?.error || `SAP WM staging requirement could not be verified for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
       return false;
     }
-    if (!staging.isStaged) {
-      req.error(422, staging.error || 'Available SAP staging stock is insufficient for goods issue.');
-      return false;
-    }
-    return true;
+
+    // IN_TRANSFER or NOT_STAGED: staging business blocks -> 422
+    req.error(422, staging?.error || 'Available SAP staging stock is insufficient for goods issue.');
+    return false;
   } catch (err) {
     LOG.error(`SAP staging check failed for reservation ${sResv} item ${sItem}; blocking 261 posting:`, err.message || err);
-    req.error(err.status || 502, `${err.message || 'SAP WM staging could not be verified'}. Goods Issue was NOT posted.`);
+    const status = err.status === 400 || err.status === 422 ? err.status : 502;
+    req.error(status, `${err.message || 'SAP WM staging could not be verified'}. Goods Issue was NOT posted.`);
     return false;
   }
 }

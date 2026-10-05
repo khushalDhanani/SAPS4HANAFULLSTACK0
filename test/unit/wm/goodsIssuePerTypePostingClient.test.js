@@ -43,12 +43,15 @@ test('post261 → tries RAP ZUI_GI_ORDER_RSV_O4 first', async () => {
   expect(calls[0].path).toContain("ReservationNo='518023'");
 });
 
-test('post261 → falls back to standard API when RAP yields no document', async () => {
+test('post261 → falls back to standard API on 404 / service-not-found', async () => {
   const { client, calls } = makeClient();
-  // RAP returns no MaterialDocument; standard returns one.
   client._post = jest.fn(async (path, body) => {
     calls.push({ path, body });
-    if (path.includes('zui_gi_order_rsv_o4')) return {};
+    if (path.includes('zui_gi_order_rsv_o4')) {
+      const err = new Error('No service found for namespace, name ZUI_GI_ORDER_RSV_O4');
+      err.status = 404;
+      throw err;
+    }
     return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
   });
   const res = await client.post261({
@@ -62,6 +65,53 @@ test('post261 → falls back to standard API when RAP yields no document', async
   expect(calls[1].path).toContain('A_MaterialDocumentHeader');
   expect(calls[1].body.ReferenceDocument).toBe('GI261RETRY001');
   expect(calls[1].body.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
+});
+
+test('post261 → does not fall back to standard API on Tier 1 timeout (prevents double posting)', async () => {
+  const { client, calls } = makeClient();
+  client._post = jest.fn(async (path, body) => {
+    calls.push({ path, body });
+    if (path.includes('zui_gi_order_rsv_o4')) {
+      const err = new Error('Gateway request timed out');
+      err.code = 'ETIMEDOUT';
+      err.status = 504;
+      throw err;
+    }
+    return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
+  });
+
+  await expect(client.post261({
+    ...base,
+    Material: '1000001002',
+    ReservationNo: '518023',
+    ReservationItem: '0001',
+    ReferenceDocument: 'GI261RETRY001'
+  })).rejects.toThrow('Gateway request timed out');
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0].path).toContain('zui_gi_order_rsv_o4');
+});
+
+test('post261 → does not fall back to standard API on Tier 1 500 error (prevents double posting)', async () => {
+  const { client, calls } = makeClient();
+  client._post = jest.fn(async (path, body) => {
+    calls.push({ path, body });
+    if (path.includes('zui_gi_order_rsv_o4')) {
+      const err = new Error('Internal Server Error');
+      err.status = 500;
+      throw err;
+    }
+    return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
+  });
+
+  await expect(client.post261({
+    ...base,
+    Material: '1000001002',
+    ReservationNo: '518023',
+    ReservationItem: '0001'
+  })).rejects.toThrow('Internal Server Error');
+
+  expect(calls).toHaveLength(1);
 });
 
 test('unplanned post261 → sends its persisted reference on the standard API header', async () => {

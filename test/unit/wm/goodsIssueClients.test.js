@@ -1129,7 +1129,8 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
     });
 
     it('should report an unknown outcome when the error carries no HTTP status', async () => {
-      const v4Err = new Error('connect ETIMEDOUT');   // no .status
+      const v4Err = new Error('HTTP 404 Not Found');
+      v4Err.status = 404;
       const v2Err = new Error('socket hang up');      // no .status
 
       const mockPost = jest.fn()

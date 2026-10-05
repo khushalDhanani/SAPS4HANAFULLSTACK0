@@ -144,10 +144,10 @@ describe('GoodsIssue261Pending Controller Unit Tests', () => {
             expect(controller.getModel('gi261p').getProperty('/items')).toEqual([]);
         });
 
-        it('should filter out a just-completed reservation and show posted result', async () => {
+        it('should filter out a just-completed reservation with no remaining items and show posted result', async () => {
             const aItems = [
-                { ReservationNo: '0000000201' },
-                { ReservationNo: '0000000202' }
+                { ReservationNo: '0000000201', ItemCount: 1 },
+                { ReservationNo: '0000000202', ItemCount: 1 }
             ];
             mockService.fetchOpenReservations.mockResolvedValue(aItems);
 
@@ -160,6 +160,39 @@ describe('GoodsIssue261Pending Controller Unit Tests', () => {
             expect(model.getProperty('/items')[0].ReservationNo).toBe('0000000202');
             expect(model.getProperty('/resultState')).toBe('Success');
             expect(model.getProperty('/resultText')).toContain('4900009999');
+        });
+
+        it('should keep a just-posted reservation listed when it still has further open items', async () => {
+            const aItems = [
+                { ReservationNo: '0000480960', ItemCount: 6 },
+                { ReservationNo: '0000000202', ItemCount: 1 }
+            ];
+            mockService.fetchOpenReservations.mockResolvedValue(aItems);
+
+            await controller._onRouteMatched(makeRouteEvent({
+                resv: '0000480960', item: '0001', doc: '4900010000', year: '2026'
+            })); await flush();
+
+            const model = controller.getModel('gi261p');
+            expect(model.getProperty('/items')).toHaveLength(2);
+            expect(model.getProperty('/items')[0].ReservationNo).toBe('0000480960');
+            expect(model.getProperty('/resultState')).toBe('Success');
+            expect(model.getProperty('/resultText')).toContain('4900010000');
+        });
+
+        it('should hide a just-posted reservation whose fresh read shows only the posted item (commit lag)', async () => {
+            const aItems = [
+                { ReservationNo: '0000480960', ItemCount: 1 }
+            ];
+            mockService.fetchOpenReservations.mockResolvedValue(aItems);
+
+            await controller._onRouteMatched(makeRouteEvent({
+                resv: '0000480960', item: '0006', doc: '4900010001', year: '2026'
+            })); await flush();
+
+            const model = controller.getModel('gi261p');
+            expect(model.getProperty('/items')).toHaveLength(0);
+            expect(model.getProperty('/resultState')).toBe('Success');
         });
         // Queue tests removed — dispatch queue eliminated; direct posting only.
 

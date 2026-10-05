@@ -5,8 +5,6 @@ function clean(v) {
   return String(v || '').trim();
 }
 
-const UNKNOWN_DYNAMIC_BIN_MESSAGE = 'Cannot verify staging: transfer destination not readable (DA 131).';
-
 function wmAlphaIn(v) {
   const s = clean(v);
   return /^\d+$/.test(s) ? s.padStart(18, '0') : s;
@@ -42,15 +40,20 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       throw stagingError('SAP RFC table access is unavailable; the WM staging target cannot be verified.');
     }
     if (!sLgnum) {
-      const t320 = await this.rfc.readTable(
-        'T320', ['WERKS', 'LGORT', 'LGNUM'],
-        [`WERKS = '${sPlant}'`, `AND LGORT = '${sSloc}'`], 2
-      );
+      let t320;
+      try {
+        t320 = await this.rfc.readTable(
+          'T320', ['WERKS', 'LGORT', 'LGNUM'],
+          [`WERKS = '${sPlant}'`, `AND LGORT = '${sSloc}'`], 2
+        );
+      } catch (err) {
+        return { isWm: false, targetType: '', targetBin: '', stagingSource: 'T320_READ_FAILED', warehouse: '', status: 'UNKNOWN', error: `Cannot verify staging: SAP T320 read failed: ${err.message || err}` };
+      }
       if (t320.length > 1) throw stagingError(`SAP returned ambiguous WM warehouse mappings for ${sPlant}/${sSloc}.`);
       sLgnum = clean(t320[0]?.LGNUM);
     }
     if (!sLgnum) {
-      return { isWm: false, targetType: '', targetBin: '', stagingSource: 'T320_NO_WM_MAPPING', warehouse: '' };
+      return { isWm: false, targetType: '', targetBin: '', stagingSource: 'T320_NO_WM_MAPPING', warehouse: '', status: 'NOT_WM_MANAGED' };
     }
 
     const matnrIn = wmAlphaIn(sMat);
@@ -103,7 +106,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
           status: 'UNKNOWN',
           stagingSource: 'PKHD_DYNAMIC_BIN',
           warehouse: sLgnum,
-          error: UNKNOWN_DYNAMIC_BIN_MESSAGE
+          error: 'PKHD control cycle has dynamic bin (NKDYN=X) with no configured storage bin.'
         };
       }
       return {
@@ -121,7 +124,8 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
   }
 
   /**
-   * Find transfer requirement (TBNUM) associated with a reservation or reservation item.
+   * Find transfer requirement (TBNUM) associated with a reservation or reservation item via LTBK.
+   * TBPE/TBPK do not exist in DDIC in this release.
    */
   async findTransferRequirement(resNo, item = '', _material = '', _plant = '', warehouse = '', includeTarget = false) {
     if (!this.rfc || typeof this.rfc.readTable !== 'function') {
@@ -130,68 +134,74 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
     const sRes = clean(resNo);
     if (!sRes) return includeTarget ? { tbnum: '', status: 'UNKNOWN' } : '';
     const resPadded = sRes.padStart(10, '0');
-    let tbnum = '';
-    let itemLinkedTransfer = false;
-    let lookupFailed = false;
 
+    let ltbkRows;
     try {
       const where = [`RSNUM = '${resPadded}'`];
-      if (clean(item)) {
-        where.push(`AND RSPOS = '${clean(item).padStart(4, '0')}'`);
-      }
-      const tbpeRows = await this.rfc.readTable('TBPE', ['TBNUM', 'TBPOS', 'RSNUM', 'RSPOS'], where, 5);
-      const itemLink = (tbpeRows || []).find((row) =>
-        clean(row.RSNUM) === resPadded
-        && (!clean(item) || clean(row.RSPOS) === clean(item).padStart(4, '0'))
-        && clean(row.TBNUM)
+      ltbkRows = await this.rfc.readTable(
+        'LTBK',
+        ['TBNUM', 'RSNUM', 'LGNUM', 'NLTYP', 'NLPLA', 'STATU', 'BWLVS'],
+        where,
+        20
       );
-      if (itemLink) {
-        tbnum = clean(itemLink.TBNUM);
-        itemLinkedTransfer = true;
-      }
     } catch (e) {
-      lookupFailed = true;
-      LOG.warn(`TBPE lookup failed for reservation ${sRes}: ${e.message || e}`);
+      LOG.warn(`LTBK lookup failed for reservation ${sRes}: ${e.message || e}`);
+      const errCode = e.code || (typeof e.message === 'string' && e.message.match(/ID:\w+\s+Type:\w+\s+Number:\d+/)?.[0]) || 'READ_FAILED';
+      const msg = `Cannot verify staging: SAP LTBK read failed (${errCode}).`;
+      return includeTarget
+        ? { tbnum: '', status: 'UNKNOWN', error: msg, table: 'LTBK', errorCode: errCode }
+        : '';
     }
 
-    if (!tbnum) {
-      try {
-        const where = [`RSNUM = '${resPadded}'`];
-        const tbpkRows = await this.rfc.readTable('TBPK', ['TBNUM', 'LGNUM', 'RSNUM', 'STATUS'], where, 5);
-        if (tbpkRows && tbpkRows.length > 0 && tbpkRows[0].TBNUM) {
-          tbnum = clean(tbpkRows[0].TBNUM);
-        }
-      } catch (e) {
-        lookupFailed = true;
-        LOG.warn(`TBPK lookup failed for reservation ${sRes}: ${e.message || e}`);
-      }
+    if (!ltbkRows || ltbkRows.length === 0) {
+      return includeTarget
+        ? { tbnum: '', status: 'NOT_FOUND', error: `No transfer requirement found for reservation ${sRes}.` }
+        : '';
     }
 
-    if (!tbnum) return includeTarget ? { tbnum: '', status: lookupFailed ? 'UNKNOWN' : 'NOT_FOUND' } : '';
+    const validRows = ltbkRows.filter((row) =>
+      clean(row.RSNUM) === resPadded &&
+      (!clean(warehouse) || clean(row.LGNUM) === clean(warehouse))
+    );
+
+    if (validRows.length === 0) {
+      return includeTarget
+        ? { tbnum: '', status: 'NOT_FOUND', error: `No transfer requirement found in warehouse ${warehouse} for reservation ${sRes}.` }
+        : '';
+    }
+
+    const tbnum = clean(validRows[0].TBNUM);
     if (!includeTarget) return tbnum;
-    if (!itemLinkedTransfer) return { tbnum, status: lookupFailed ? 'UNKNOWN' : 'FOUND' };
-    try {
-      const ltbkRows = await this.rfc.readTable(
-        'LTBK', ['TBNUM', 'LGNUM', 'NLTYP', 'NLPLA'],
-        [`TBNUM = '${tbnum}'`], 5
-      );
-      const destinations = [...new Map(ltbkRows
-        .filter((row) => clean(row.TBNUM) === tbnum
-          && (!clean(warehouse) || clean(row.LGNUM) === clean(warehouse))
-          && clean(row.NLTYP) && clean(row.NLPLA))
-        .map((row) => [`${clean(row.NLTYP)}|${clean(row.NLPLA)}`, {
-          targetType: clean(row.NLTYP),
-          targetBin: clean(row.NLPLA)
-        }])).values()];
-      if (destinations.length > 1) {
-        throw stagingError(`SAP returned multiple transfer requirement staging targets for reservation ${sRes}.`);
-      }
-      return { tbnum, status: lookupFailed ? 'UNKNOWN' : 'FOUND', ...(destinations[0] || {}) };
-    } catch (err) {
-      if (err.status) throw err;
-      LOG.warn(`LTBK target lookup failed for transfer requirement ${tbnum}: ${err.message || err}`);
-      return { tbnum, status: 'UNKNOWN' };
+
+    const destRows = validRows.filter((row) => clean(row.NLTYP) && clean(row.NLPLA));
+    const destinations = [...new Map(destRows.map((row) => [
+      `${clean(row.NLTYP)}|${clean(row.NLPLA)}`,
+      { targetType: clean(row.NLTYP), targetBin: clean(row.NLPLA), tbnum: clean(row.TBNUM) }
+    ])).values()];
+
+    if (destinations.length > 1) {
+      const destList = destinations.map((d) => `${d.targetType}/${d.targetBin}`).join(', ');
+      return {
+        tbnum,
+        status: 'UNKNOWN',
+        error: `Cannot verify staging: multiple destinations found in transfer requirements (${destList}).`
+      };
     }
+
+    if (destinations.length === 1) {
+      return {
+        tbnum: destinations[0].tbnum || tbnum,
+        status: 'FOUND',
+        targetType: destinations[0].targetType,
+        targetBin: destinations[0].targetBin
+      };
+    }
+
+    return {
+      tbnum,
+      status: 'NOT_FOUND',
+      error: `Transfer requirement ${tbnum} has no staging destination in LTBK.`
+    };
   }
 
   /**
@@ -234,6 +244,7 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         return {
           isVerified: false,
           isStaged: false,
+          isFullyStaged: false,
           isStagingRequired: true,
           stagingStatus: 'UNKNOWN',
           targetType: sType,
@@ -246,32 +257,61 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         return {
           isVerified: true,
           isStaged: true,
+          isFullyStaged: true,
           isStagingRequired: false,
+          stagingStatus: 'NOT_WM_MANAGED',
           stagedQty: reqQty,
           requiredQty: reqQty,
           plannedUnconfirmedQty: 0
         };
       }
-      sType = target.targetType;
-      sBin = target.targetBin;
-      sLgnum = target.warehouse;
-      if (target.status === 'UNKNOWN') {
-        return {
-          isVerified: false,
-          isStaged: false,
-          isStagingRequired: true,
-          stagingStatus: 'UNKNOWN',
-          targetType: sType,
-          targetBin: '',
-          warehouse: sLgnum,
-          error: target.error || UNKNOWN_DYNAMIC_BIN_MESSAGE
-        };
+      sLgnum = target.warehouse || sLgnum;
+      if (target.targetType && target.targetBin && target.stagingSource === 'PKHD_CONTROL_CYCLE') {
+        sType = target.targetType;
+        sBin = target.targetBin;
+      } else if (resNo) {
+        const transfer = await this.findTransferRequirement(resNo, resItem, sMat, sPlant, sLgnum, true);
+        sTbnum = transfer.tbnum || '';
+        transferRequirementStatus = transfer.status || 'UNKNOWN';
+        if (transfer.status === 'UNKNOWN') {
+          return {
+            isVerified: false,
+            isStaged: false,
+            isFullyStaged: false,
+            isStagingRequired: true,
+            stagingStatus: 'UNKNOWN',
+            targetType: transfer.targetType || sType,
+            targetBin: '',
+            warehouse: sLgnum,
+            error: transfer.error
+          };
+        }
+        if (transfer.status === 'NOT_FOUND') {
+          return {
+            isVerified: true,
+            isStaged: false,
+            isFullyStaged: false,
+            isStagingRequired: true,
+            stagingStatus: 'NOT_STAGED',
+            targetType: sType,
+            targetBin: '',
+            warehouse: sLgnum,
+            error: transfer.error || `No transfer requirement found for reservation ${resNo}.`
+          };
+        }
+        if (transfer.targetType && transfer.targetBin) {
+          sType = transfer.targetType;
+          sBin = transfer.targetBin;
+        }
       }
+
       if (!sType || !sBin) {
         return {
           isVerified: false,
           isStaged: false,
+          isFullyStaged: false,
           isStagingRequired: true,
+          stagingStatus: 'UNKNOWN',
           warehouse: sLgnum,
           error: target.error || `SAP staging target could not be resolved for material ${sMat}.`
         };
@@ -458,7 +498,9 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       return {
         isVerified: true,
         isStaged: true,
+        isFullyStaged: true,
         isStagingRequired: false,
+        stagingStatus: 'NOT_WM_MANAGED',
         stagedQty: 0,
         requiredQty: Number(issueQty ?? Math.max(0, itemData.RequiredQty - itemData.WithdrawnQty)),
         plannedUnconfirmedQty: 0,
@@ -505,34 +547,78 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
       throw stagingError(`Requested staging quantity ${requiredBaseQty} ${baseUnit} exceeds SAP reservation open quantity ${netOpen} ${baseUnit}.`, 422);
     }
 
-    const transfer = await this.findTransferRequirement(sResv, sItem, '', '', warehouse, true);
-    const target = transfer.targetType && transfer.targetBin
-      ? {
-        isWm: true,
-        targetType: transfer.targetType,
-        targetBin: transfer.targetBin,
-        stagingSource: 'TRANSFER_REQUIREMENT',
-        warehouse
+    // Resolve target bin: PKHD-LGPLA if set, else LTBK NLTYP/NLPLA by RSNUM/RSPOS
+    const pkhdTarget = await this.findStagingTarget(
+      itemData.Material, itemData.Plant, itemData.StorageLocation, warehouse,
+      itemData.Psa, itemData.OrderNo, itemData.TargetType
+    );
+    let target = null;
+    let transfer = { tbnum: '', status: 'UNKNOWN' };
+
+    if (pkhdTarget && pkhdTarget.targetType && pkhdTarget.targetBin && pkhdTarget.stagingSource === 'PKHD_CONTROL_CYCLE') {
+      target = pkhdTarget;
+      try {
+        transfer = await this.findTransferRequirement(sResv, sItem, '', '', warehouse, true);
+      } catch (_e) {
+        // non-blocking when PKHD static target is already resolved
       }
-      : await this.findStagingTarget(
-        itemData.Material, itemData.Plant, itemData.StorageLocation, warehouse,
-        itemData.Psa, itemData.OrderNo, itemData.TargetType
-      );
-    if (!target.targetType || !target.targetBin) {
-      if (target.status === 'UNKNOWN') {
+    } else {
+      transfer = await this.findTransferRequirement(sResv, sItem, '', '', warehouse, true);
+      if (transfer.status === 'UNKNOWN') {
         return {
           isVerified: false,
           isStaged: false,
+          isFullyStaged: false,
           isStagingRequired: true,
           stagingStatus: 'UNKNOWN',
-          targetType: target.targetType || '',
+          targetType: transfer.targetType || itemData.TargetType || '',
+          targetBin: '',
+          warehouse,
+          transferRequirementStatus: 'UNKNOWN',
+          error: transfer.error
+        };
+      }
+      if (transfer.targetType && transfer.targetBin) {
+        target = {
+          isWm: true,
+          targetType: transfer.targetType,
+          targetBin: transfer.targetBin,
+          stagingSource: 'TRANSFER_REQUIREMENT',
+          warehouse,
+          tbnum: transfer.tbnum
+        };
+      } else if (transfer.status === 'NOT_FOUND') {
+        return {
+          isVerified: true,
+          isStaged: false,
+          isFullyStaged: false,
+          isStagingRequired: true,
+          stagingStatus: 'NOT_STAGED',
+          targetType: itemData.TargetType || '',
+          targetBin: '',
+          warehouse,
+          transferRequirementStatus: 'NOT_FOUND',
+          error: transfer.error || `No transfer requirement found for reservation ${sResv}.`
+        };
+      }
+    }
+
+    if (!target || !target.targetType || !target.targetBin) {
+      if (target?.status === 'UNKNOWN') {
+        return {
+          isVerified: false,
+          isStaged: false,
+          isFullyStaged: false,
+          isStagingRequired: true,
+          stagingStatus: 'UNKNOWN',
+          targetType: target?.targetType || '',
           targetBin: '',
           warehouse,
           transferRequirementStatus: transfer.status || 'UNKNOWN',
-          error: target.error || UNKNOWN_DYNAMIC_BIN_MESSAGE
+          error: target.error || 'SAP staging target could not be resolved.'
         };
       }
-      throw stagingError(target.error || `SAP staging target could not be resolved for reservation ${sResv} item ${sItem}.`);
+      throw stagingError(target?.error || `SAP staging target could not be resolved for reservation ${sResv} item ${sItem}.`);
     }
     return this.checkStaging({
       material: itemData.Material,

@@ -90,9 +90,7 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
       IsStagingRequired: true,
       IsFullyStaged: false,
       TargetStorageType: 'IP1',
-      TargetStorageBin: '',
-      StockUnits: [],
-      Message: 'Cannot verify staging: transfer destination not readable (DA 131).'
+      Message: 'Cannot verify staging: transfer destination not readable.'
     });
     expect(result).not.toHaveProperty('StagedQty');
     expect(result).not.toHaveProperty('PlannedUnconfirmedQty');
@@ -144,7 +142,9 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
     expect(stagingClient.findTransferRequirement).toHaveBeenCalledWith(
       '519366', '0001', '1000000867', '1000', 'W01', true
     );
-    expect(stagingClient.findStagingTarget).not.toHaveBeenCalled();
+    expect(stagingClient.findStagingTarget).toHaveBeenCalledWith(
+      '1000000867', '1000', '1100', 'W01', 'PSA1', '1002749', 'IP1'
+    );
     expect(rfc.readTable.mock.calls.some(([table]) => table === 'LTBK')).toBe(false);
     expect(result).toMatchObject({
       TargetStorageType: 'IP1',

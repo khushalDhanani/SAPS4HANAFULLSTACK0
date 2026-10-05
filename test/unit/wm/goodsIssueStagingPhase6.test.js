@@ -305,7 +305,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
         status: 'UNKNOWN',
         stagingSource: 'PKHD_DYNAMIC_BIN',
         warehouse: 'W01',
-        error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+        error: 'PKHD control cycle has dynamic bin (NKDYN=X) with no configured storage bin.'
       });
     });
 
@@ -324,7 +324,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
         '1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '000001002599', 'IP1'
       )).resolves.toMatchObject({
         status: 'UNKNOWN', targetBin: '', stagingSource: 'PKHD_DYNAMIC_BIN',
-        error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+        error: 'PKHD control cycle has dynamic bin (NKDYN=X) with no configured storage bin.'
       });
     });
 
@@ -335,7 +335,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '1234567890', 'IP1'))
         .resolves.toMatchObject({
           status: 'UNKNOWN', targetBin: '', stagingSource: 'PKHD_DYNAMIC_BIN',
-          error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+          error: 'PKHD control cycle has dynamic bin (NKDYN=X) with no configured storage bin.'
         });
     });
 
@@ -346,7 +346,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', 'ORDER-99', 'IP1'))
         .resolves.toMatchObject({
           status: 'UNKNOWN', stagingSource: 'PKHD_DYNAMIC_BIN', targetBin: '',
-          error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+          error: 'PKHD control cycle has dynamic bin (NKDYN=X) with no configured storage bin.'
         });
     });
 
@@ -357,11 +357,11 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       await expect(client.findStagingTarget('1000000867', '1000', '1100', 'W01', 'PSA-LINE1', '123456789012', 'IP1'))
         .resolves.toMatchObject({
           status: 'UNKNOWN', stagingSource: 'PKHD_DYNAMIC_BIN', targetBin: '',
-          error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+          error: 'PKHD control cycle has dynamic bin (NKDYN=X) with no configured storage bin.'
         });
     });
 
-    it('does not read LQUA or report zero staged when a dynamic target is unknown', async () => {
+    it('does not read LQUA or report zero staged when a dynamic target has no TR', async () => {
       const rfc = mockRfc({
         T320: [{ LGNUM: 'W01', WERKS: '1000', LGORT: '1100' }],
         PKHD: [{
@@ -376,11 +376,40 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       });
 
       expect(result).toMatchObject({
-        isVerified: false, isStaged: false, stagingStatus: 'UNKNOWN',
-        targetBin: '', error: 'Cannot verify staging: transfer destination not readable (DA 131).'
+        isVerified: true, isStaged: false, stagingStatus: 'NOT_STAGED',
+        targetBin: '', error: 'No transfer requirement found for reservation 519366.'
       });
       expect(result).not.toHaveProperty('stagedQty');
       expect(rfc.readTable.mock.calls.some(([table]) => table === 'LQUA')).toBe(false);
+    });
+
+    it('returns UNKNOWN with SAP error code and table when LTBK read fails during checkStaging', async () => {
+      const rfc = {
+        readTable: jest.fn((table) => {
+          if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01', WERKS: '1000', LGORT: '1100' }]);
+          if (table === 'PKHD') return Promise.resolve([{
+            MATNR: '000000001000000867', PRVBE: 'PSA-LINE1', WERKS: '1000', LGNUM: 'W01',
+            LGTYP: 'IP1', LGPLA: '', BERKZ: '1', NKDYN: 'X'
+          }]);
+          if (table === 'LTBK') {
+            const err = new Error('SAP RFC communication failure');
+            err.code = 'RFC_COMM_FAILURE';
+            return Promise.reject(err);
+          }
+          return Promise.resolve([]);
+        })
+      };
+      const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc });
+      const result = await client.checkStaging({
+        material: '1000000867', plant: '1000', sloc: '1100', warehouse: 'W01',
+        requiredQty: 10, uom: 'KG', resNo: '519366', resItem: '1', orderNo: '000001002599'
+      });
+
+      expect(result).toMatchObject({
+        isVerified: false, isStaged: false, stagingStatus: 'UNKNOWN',
+        targetBin: '', error: expect.stringContaining('LTBK read failed')
+      });
+      expect(result).not.toHaveProperty('stagedQty');
     });
 
     it('uses an explicit bin unchanged for another storage type with a different bin length', async () => {
@@ -409,7 +438,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
         .rejects.toThrow('no staging type for WM-managed reservation');
     });
 
-    it('rejects a WM mapping when no SAP target bin/type is configured', async () => {
+    it('returns NOT_STAGED when WM reservation has no PKHD bin and no LTBK TR', async () => {
       const rfc = mockRfc({
         T320: [{ LGNUM: 'W01', WERKS: '1000', LGORT: '1100' }],
         RESB: [{
@@ -420,7 +449,12 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       });
       const client = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc });
 
-      await expect(client.getStagingForReservation('519366', '0001')).rejects.toMatchObject({ status: 502 });
+      await expect(client.getStagingForReservation('519366', '0001')).resolves.toMatchObject({
+        stagingStatus: 'NOT_STAGED',
+        isStaged: false,
+        transferRequirementStatus: 'NOT_FOUND',
+        targetBin: ''
+      });
     });
 
     it('fails closed when the live SAP WM mapping cannot be read', async () => {
@@ -523,8 +557,7 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
         rfc: mockRfc({
-          TBPE: () => { throw new Error('Table unavailable'); },
-          TBPK: () => { throw new Error('Table unavailable'); },
+          LTBK: () => { throw new Error('Table unavailable'); },
           LQUA: []
         })
       });
@@ -558,15 +591,13 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
     });
   });
 
-  describe('reservation transfer requirement', () => {
-    it('preserves the existing transfer-number result and resolves an exact SAP destination when requested', async () => {
+  describe('reservation transfer requirement and target resolution', () => {
+    it('resolves TR destination from LTBK by RSNUM when TR found', async () => {
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
         rfc: mockRfc({
-          TBPE: [{ TBNUM: '0000000789', TBPOS: '0001', RSNUM: '0000012345', RSPOS: '0001' }],
           LTBK: [
-            { TBNUM: '0000000789', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' },
-            { TBNUM: '0000000789', LGNUM: 'W02', NLTYP: 'IP2', NLPLA: 'OTHER-BIN' }
+            { TBNUM: '0000000789', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' }
           ]
         })
       });
@@ -580,20 +611,68 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       });
     });
 
-    it('reports UNKNOWN when TBPE and TBPK reads fail, and NOT_FOUND when both reads succeed empty', async () => {
-      const failedClient = new GoodsIssuePhase6StagingClient({
+    it('returns NOT_FOUND when LTBK returns an empty read (no TR)', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({ LTBK: [] })
+      });
+
+      const res = await client.findTransferRequirement('12345', '1', '', '', 'W01', true);
+      expect(res.status).toBe('NOT_FOUND');
+      expect(res.error).toContain('No transfer requirement found');
+    });
+
+    it('returns UNKNOWN with SAP error code and table when LTBK read fails', async () => {
+      const err = new Error('ID:DA Type:E Number:131 LTBK');
+      err.code = 'DA_131';
+      const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
         rfc: mockRfc({
-          TBPE: () => { throw new Error('Table unavailable'); },
-          TBPK: () => { throw new Error('Table unavailable'); }
+          LTBK: () => { throw err; }
         })
       });
-      const emptyClient = new GoodsIssuePhase6StagingClient({ adapter: mockAdapter(), rfc: mockRfc() });
 
-      await expect(failedClient.findTransferRequirement('12345', '1', '', '', 'W01', true))
-        .resolves.toEqual({ tbnum: '', status: 'UNKNOWN' });
-      await expect(emptyClient.findTransferRequirement('12345', '1', '', '', 'W01', true))
-        .resolves.toEqual({ tbnum: '', status: 'NOT_FOUND' });
+      const res = await client.findTransferRequirement('12345', '1', '', '', 'W01', true);
+      expect(res.status).toBe('UNKNOWN');
+      expect(res.table).toBe('LTBK');
+      expect(res.errorCode).toBe('DA_131');
+      expect(res.error).toContain('Cannot verify staging: SAP LTBK read failed (DA_131).');
+    });
+
+    it('returns UNKNOWN with multiple destinations when multiple TRs have different destinations', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          LTBK: [
+            { TBNUM: '0000000789', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' },
+            { TBNUM: '0000000790', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP2', NLPLA: 'STAGE-02' }
+          ]
+        })
+      });
+
+      const res = await client.findTransferRequirement('12345', '1', '', '', 'W01', true);
+      expect(res.status).toBe('UNKNOWN');
+      expect(res.error).toContain('multiple destinations');
+    });
+
+    it('returns NOT_WM_MANAGED when plant/sloc has no T320 warehouse mapping', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          T320: [],
+          RESB: [{
+            RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000001000000867', WERKS: '1000',
+            LGORT: '1100', BDMNG: '50.000', ENMNG: '10.000', MEINS: 'KG',
+            AUFNR: '0000001001', LGTYP: '', PRVBE: ''
+          }]
+        })
+      });
+
+      const res = await client.getStagingForReservation('519366', '0001');
+      expect(res.stagingStatus).toBe('NOT_WM_MANAGED');
+      expect(res.isStagingRequired).toBe(false);
+      expect(res.isVerified).toBe(true);
+      expect(res.isStaged).toBe(true);
     });
   });
 
