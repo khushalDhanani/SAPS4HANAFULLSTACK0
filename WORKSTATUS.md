@@ -1,6 +1,42 @@
 
 # Changes Log
 
+## 2026-10-05 06:30 UTC — Live Test: 261 IM Flow on Non-WM Reservation (521607/0001) Verified End-to-End
+- **Agent**: Antigravity
+- **Request**: Test Live 261 IM Flow on Non-WM Reservation: Reservations 521607 or 521608 (Plant 1110, SLoc PT01) do not require delivery creation and post direct Material Documents (CONFIRMED). Run an end-to-end test in the UI or via test script.
+- **Current Status**: **Complete & Verified Live in SAP S/4HANA (Client 220)**.
+- **Protocol Adherence**: Executed per `AGENTS.md` SAP Definition of Done: Pre-check reservation in SAP → Verify metadata/service (`API_MATERIAL_DOCUMENT_SRV`) → Post live 261 Goods Issue through CAP service → Verify SAP-generated document number → Direct read-back via RFC `MATDOC` and OData `A_MaterialDocumentHeader` → Verify SAP `RESB` consumption → Reverse document via CAP `reverseGoodsIssue` action (`CancelHeader`) → Verify SAP reversal document number → Confirm SAP `RESB` withdrawn quantity restored to 0.000 KG.
+- **Execution & Evidence**:
+  1. **Pre-check Reservation (SAP RESB)**:
+     - Reservation: `521607`, Item: `0001`
+     - Process Order: `1002800`, Material: `3000000016`, Plant: `1110`, Storage Location: `PT01` (Non-WM managed)
+     - Batch: `NMDH260006`, Required Qty: `5000.000 KG`, Withdrawn Qty: `0.000 KG`, Open Qty: `5000.000 KG`
+  2. **Live Posting via CAP Service (`/odata/v4/goods-issue/postGoodsIssue261`)**:
+     - Action call: `POST /odata/v4/goods-issue/postGoodsIssue261` with 1.000 KG
+     - ClientAttemptId: `GITEST_MGZ2SZTI`
+     - Response: `HTTP 200 OK`, `PostingStatus: 'POSTED'`, `Confirmed: true`, `ConfirmationStatus: 'CONFIRMED'`
+     - SAP Material Document: **`4900050037 / 2026`**
+  3. **Authoritative Read-Back from SAP S/4HANA**:
+     - **RFC `MATDOC`**: Document `4900050037`, Year `2026`, Line `0001`, Movement `261`, Material `000000003000000016`, Plant `1110`, SLoc `PT01`, Batch `NMDH260006`, Qty `1.000 KG`, Reservation `0000521607/0001`, Status: `confirmed`.
+     - **OData `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`**: Document `4900050037`, CreatedByUser `KHUSHAL`, Order `1002800`.
+  4. **SAP RESB Withdrawn Quantity Verification**:
+     - Authoritative read of `521607/0001`: Withdrawn Qty increased from `0.000 KG` to `1.000 KG` (Open Qty `4999.000 KG`).
+  5. **Clean State Restoration — Live Reversal via CAP (`/odata/v4/goods-issue/reverseGoodsIssue`)**:
+     - Action call: `POST /odata/v4/goods-issue/reverseGoodsIssue` for `4900050037 / 2026` (Reason `01`)
+     - Response: `HTTP 200 OK`, `Success: true`
+     - SAP Reversal Material Document: **`4900050038 / 2026`**
+     - **RFC `MATDOC`**: Line `0001`, Movement `262` (Reversal of 261), Material `000000003000000016`, Qty `1.000 KG`, Reservation `0000521607/0001`.
+  6. **Final SAP State Confirmation**:
+     - Authoritative read of `521607/0001`: Withdrawn Qty = `0.000 KG`, Open Qty = `5000.000 KG` (100% restored, zero residual inventory impact).
+- **Files**:
+  - Test script: `brain/.../scratch/test-live-261-im.js`
+- **Validation**:
+  - Direct live SAP RFC table reads (`MATDOC`, `RESB`)
+  - Direct live SAP OData service reads (`API_MATERIAL_DOCUMENT_SRV`)
+  - CAP OData v4 actions `postGoodsIssue261` and `reverseGoodsIssue`
+- **Errors / Warnings / Blockers**: None. Live IM 261 flow is completely operational and verified against SAP S/4HANA.
+- **Next Steps**: Awaiting user direction on warehouse delivery workflow (Phase 3) or further live tests.
+
 ## 2026-10-05 06:20 UTC — Complete: Phase 2 — Frontend UI handling for DELIVERY_CREATED and full validation
 - **Agent**: Antigravity
 - **Request**: Phase 2 (Frontend UI handling for DELIVERY_CREATED and full validation).
