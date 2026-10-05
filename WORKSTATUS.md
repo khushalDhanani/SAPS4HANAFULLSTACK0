@@ -1,6 +1,34 @@
 
 # Changes Log
 
+## 2026-10-05 07:12 UTC — Interactive Browser Verification: /wm/goods-issue/order-based-261?resv=521608
+- **Agent**: Antigravity
+- **Request**: Test and verify `/wm/goods-issue/order-based-261?resv=521608` using Chrome DevTools MCP.
+- **Current Status**: **Complete & Verified in Browser**.
+- **Backend SAP Inspection**:
+  - Reservation `521608` in SAP S/4HANA contains multiple open 261 items:
+    - Item `0001`: Order `1002801`, Material `3000000016` (NMDH Hydrogenation), Plant `1110`, SLoc `PT01`, Open Qty `5000 KG`, Movement Type `261`.
+    - Item `0002`: Order `1002801`, Material `8300000022` (Recovered Solution MWR - NMDG), Plant `1110`, SLoc `PT01`, Open Qty `78 KG`, Movement Type `261`.
+- **Browser Execution & Visual Verification**:
+  1. **Item Selection Dialog (`_openReservationItemPicker`)**:
+     - Navigated to `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/order-based-261?resv=521608`.
+     - Because `521608` has multiple eligible items, the UI cleanly opened the "Select Reservation Item" modal showing both Item 0001 (5000 KG) and Item 0002 (78 KG).
+     - Captured screenshot: `docs/screenshots/gi261_521608_item_picker.png`.
+  2. **Form Prefill & IM Path Warning**:
+     - Selected Item `0001`: Form auto-populated Order `1002801`, Material `3000000016`, Plant `1110`, SLoc `PT01`, Qty `5000 KG`.
+     - Warning strip correctly confirmed: `No WM stock for material 3000000016 in plant 1110 / storage location PT01.` (Direct IM issue path).
+  3. **Batch Selection via Value Help (`Select Batch & Verify SLED`)**:
+     - Material is batch-managed; clicking Batch Value Help opened modal listing SAP batches (`NMDH250001`, `NMDH260001` - `NMDH260012`).
+     - Captured screenshot: `docs/screenshots/gi261_521608_batch_help.png`.
+  4. **Validation & Submit Enablement**:
+     - Selected batch `NMDH250001`.
+     - Validation completed successfully and "Complete Goods Issue (261)" button transitioned to enabled (Emphasized blue).
+     - Captured screenshot: `docs/screenshots/gi261_521608_ready_to_post.png`.
+  5. **Console Health**: 0 application errors reported.
+- **Validation**:
+  - Chrome DevTools MCP (`navigate_page`, `click`, `take_snapshot`, `take_screenshot`, `list_console_messages`).
+- **Next Steps**: Awaiting user direction on posting or next workflow test.
+
 ## 2026-10-05 07:05 UTC — Debug & Fix: /wm/goods-issue/order-based-261?resv=520615 via Chrome DevTools MCP
 - **Agent**: Antigravity
 - **Request**: Using DevTools MCP check, debug, and fix `/wm/goods-issue/order-based-261?resv=520615`.
