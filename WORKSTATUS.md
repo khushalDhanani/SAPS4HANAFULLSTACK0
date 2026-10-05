@@ -1,6 +1,79 @@
 
 # Changes Log
 
+## 2026-10-05 10:35 UTC — Implement SU Selection Option & List for Warehouse Management TR-to-TO (Screen 9001 / Route wm/tr-to)
+- **Agent**: Antigravity
+- **Current Status**: **Complete, Tested, and Verified on Live SAP S/4HANA.**
+- **Scope & User Request**:
+  - The user requested for `index.html#/wm/tr-to`:
+    ```
+    index.html#/wm/tr-to
+
+    Give me list here option SU Selection.
+    ```
+  - Provide an SU Selection option and list on the mobile RF / barcode screen for Transfer Requirement to Transfer Order creation (`#/wm/tr-to`).
+- **Technical Analysis & SAP Discovery**:
+  - In SAP LE-WM (Warehouse Management), open Transfer Requirements (TRs) specify material, required quantity, plant, and optionally a batch.
+  - To pick stock and create a Transfer Order, the operator must scan or select an active Storage Unit (SU / `LENUM`) containing available stock (`VERME > 0`) in the warehouse (`LGNUM = 'W01'`).
+  - Previously, `TrTo.view.xml` only allowed manual input or camera scan for SU (`inputSU`), with no Value Help (F4) dialog or on-page list of available SUs matching the TR line items.
+  - Live SAP S/4HANA discovery (DS4 Client 220 via `RFC_READ_TABLE` on `LQUA`) proved:
+    - Quants with `LENUM <> ' '` and `VERME > 0` contain `LENUM`, `MATNR`, `WERKS`, `LGORT`, `CHARG`, `VERME`, `MEINS`, `LGTYP`, and `LGPLA`.
+    - Live queries against TR `1000446` (3 items with batches `IN25031691`, `IN25031994`, `IN25032604`) returned matching SUs: `1000041635` (1620 KG), `1000041636` (1800 KG), and `1000041637` (3950 KG) in bin `RM1/0-L0001-03`.
+    - Live query against TR `1000033` returned SU `1000041543` (200 NOS) in bin `RM1/0-L0003-03`.
+- **Changes**:
+  1. **`srv/integration/s4hana/wm/TrToAdapter.js`**:
+     - Implemented `getAvailableSUs(tbnum, lgnum, tbpos)` method.
+     - Resolves the TR, identifies open items, and reads `LQUA` quants via RFC matching warehouse, material, plant, batch, and non-empty SU.
+     - Formats and returns available SUs sorted by available stock descending.
+  2. **`srv/wm/tr-to/service.cds`**:
+     - Enhanced `SUQuant` type with `Tbpos : String(4);`, `DisplayText : String(120);`, `Description : String(120);`.
+     - Exposed CAP function:
+       `function getAvailableSUs(tbnum: String(10), lgnum: String(3), tbpos: String(4)) returns array of SUQuant;`
+  3. **`srv/wm/tr-to/handlers/trTo.handler.js`**:
+     - Registered handler `srv.on('getAvailableSUs', run(({ tbnum, lgnum, tbpos }) => adapter.getAvailableSUs(tbnum, lgnum, tbpos)));`.
+  4. **`app/fiori-app/webapp/modules/wm/tr-to/service/TrToService.js`**:
+     - Added client method `getAvailableSUs(sTbnum, sLgnum, sTbpos)` calling OData V4 function `/odata/v4/tr-to/getAvailableSUs(...)`.
+  5. **`app/fiori-app/webapp/modules/wm/tr-to/view/TrTo.view.xml`**:
+     - On Field 2 (`inputSU`): added `showValueHelp="true"` and `valueHelpRequest=".onValueHelpSU"`.
+     - Added button `btnSelectSU` (icon `sap-icon://list`, tooltip `{i18n>trToBtnSelectSU}`, enabled when TR is active, press `.onValueHelpSU`).
+     - Added on-page Panel `panelAvailableSUs` ("Available Storage Units (SU Selection)") right below Material Details, visible when an active TR is loaded.
+     - Panel includes a responsive table `tableAvailableSUs` displaying: SU Number (`ObjectIdentifier`), Batch & Material Description, Available Stock (`ObjectNumber`), Storage Bin (`LGTYP / LGPLA`), and a direct "Select SU" button (`btnSelectThisSU`) on each row.
+     - Added "Refresh" button in panel header toolbar.
+  6. **`app/fiori-app/webapp/modules/wm/tr-to/view/SuSelectDialog.fragment.xml`**:
+     - Created `SelectDialog` fragment for searchable SU Value Help (F4) dialog.
+  7. **`app/fiori-app/webapp/modules/wm/tr-to/controller/TrTo.controller.js`**:
+     - Added `availableSUs: []` and `isLoadingSUs: false` to `trToView` JSONModel.
+     - Implemented `_loadAvailableSUs(sTbpos)` to fetch matching SUs.
+     - Automatically triggers `_loadAvailableSUs` upon loading TR (`onFetchTR`) and switching line item in `tableTrItems` (`onItemSelectionChange`).
+     - Implemented `onValueHelpSU`, `onSearchSUValueHelp`, `onConfirmSUValueHelp`, `onCancelSUValueHelp`.
+     - Implemented `onSelectSUFromTable` and `onSelectSUButton` which sets the selected SU and immediately invokes `this.onScanSU()`.
+     - Implemented `onRefreshAvailableSUs`.
+     - Reset state in `onClearAll` and clean up `_oSuSelectDialog` in `onExit`.
+  8. **`app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`**:
+     - Added keys: `trToBtnSelectSU`, `trToSuSelectDialogTitle`, `trToSuSelectDialogNoData`, `trToAvailableSUsTitle`, `trToRefreshSUs`, `trToColSU`, `trToColBatch`, `trToColStock`, `trToColBin`, `trToColAction`, `trToBtnSelectThisSU`.
+  9. **Unit Tests**:
+     - `test/unit/wm/trToAdapter.test.js`: Added tests for `getAvailableSUs` (quant mapping, position filtering, empty/closed TRs).
+     - `test/unit/wm/trToHandler.test.js`: Added delegation tests for `getAvailableSUs`.
+     - `test/unit/wm/trToService.test.js`: Added tests for `getAvailableSUs` client call and parameter validation.
+     - `test/unit/wm/trToController.test.js`: Added 10 tests covering `onValueHelpSU`, search filtering, confirmation, table selection, row button selection, refresh, and dialog lifecycle.
+- **Validation**:
+  - **Live SAP S/4HANA Verification**:
+    - Tested live RFC against SAP S/4HANA (DS4 Client 220) for TR `1000446`: successfully retrieved 3 matching SUs (`1000041637`, `1000041636`, `1000041635`).
+    - Tested live RFC for TR `1000033`: successfully retrieved matching SU `1000041543` in bin `RM1/0-L0003-03`.
+  - **Unit Tests**:
+    - `npx jest test/unit/wm/trTo`: **4 suites / 81 tests passed**, 0 failed.
+    - Full test suite (`npm run test:unit`): **134 suites / 2,388 tests passed**, 0 failed.
+  - **UI5 Linter**:
+    - `npm --prefix app/fiori-app run lint`: **Success! No findings detected.**
+  - **ESLint**:
+    - `npm run lint`: **0 errors**, 14 existing warnings.
+  - **CDS Compile**:
+    - `npx cds compile srv/wm/tr-to/service.cds`: **OK** (exited 0).
+  - **Git Diff Check**:
+    - `git diff --check`: **Clean** (no whitespace errors).
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: Ready for user testing on `index.html#/wm/tr-to`.
+
 ## 2026-10-05 10:18 UTC — Fix Contact Person 400 Rejection via HeaderPartnerSet in LORD_ODATA_ORDER_SRV & Live SAP Proof
 - **Agent**: Antigravity
 - **Current Status**: **Complete, Tested, and Verified on Live SAP S/4HANA.**

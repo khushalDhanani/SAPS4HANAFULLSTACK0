@@ -64,6 +64,27 @@ sap.ui.define([
         },
 
         /**
+         * Retrieve available Storage Units in warehouse for open TR line item(s)
+         * @param {string} sTbnum - Transfer Requirement Number
+         * @param {string} [sLgnum='W01'] - Warehouse Number
+         * @param {string} [sTbpos=''] - Optional TR Line Item Position
+         * @returns {Promise<Array>}
+         */
+        getAvailableSUs: function (sTbnum, sLgnum, sTbpos) {
+            if (!sTbnum) {
+                return Promise.reject(new Error("Transfer Requirement number is required"));
+            }
+            var sWh = sLgnum || "W01";
+            var sPos = sTbpos ? sTbpos.trim() : "";
+            var sUrl = BASE_PATH + "/getAvailableSUs(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "',tbpos='" + encodeURIComponent(sPos) + "')";
+
+            return ODataClient.get(sUrl).then(function (oData) {
+                var aItems = (oData && oData.value) ? oData.value : (Array.isArray(oData) ? oData : []);
+                return aItems;
+            });
+        },
+
+        /**
          * Validate scanned Storage Unit against Transfer Requirement
          * @param {string} sLenum - Storage Unit Number
          * @param {string} sTbnum - Transfer Requirement Number

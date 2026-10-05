@@ -52,6 +52,9 @@ const mockTrToService = {
         { Tbnum: '0001000663', Bwlvs: '319', DisplayText: 'TR 1000663' }
     ]),
     getTR: jest.fn(),
+    getAvailableSUs: jest.fn().mockResolvedValue([
+        { StorageUnit: '1000041635', Material: '1000000156', AvailableStock: 1620.0 }
+    ]),
     checkSU: jest.fn(),
     createTO: jest.fn()
 };
@@ -552,6 +555,112 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
             controller.onExit();
             expect(mockDialog.destroy).toHaveBeenCalled();
             expect(controller._oTrSelectDialog).toBeNull();
+        });
+    });
+
+    describe('Value Help & On-Page SU Selection', () => {
+        it('onValueHelpSU should warn and not open dialog if no active TR', async () => {
+            controller.getModel('trToView').setProperty('/hasActiveTR', false);
+            await controller.onValueHelpSU();
+            expect(mockDialog.open).not.toHaveBeenCalled();
+            expect(controller.getModel('trToView').getProperty('/hasMessage')).toBe(true);
+        });
+
+        it('onValueHelpSU should load available SUs and open dialog if active TR', async () => {
+            controller.getModel('trToView').setProperty('/hasActiveTR', true);
+            controller.getModel('trToView').setProperty('/trNumber', '1000446');
+            await controller.onValueHelpSU();
+            expect(controller._oSuSelectDialog).toBe(mockDialog);
+            expect(mockDialog.open).toHaveBeenCalled();
+            expect(controller.getModel('trToView').getProperty('/availableSUs')).toHaveLength(1);
+        });
+
+        it('onSearchSUValueHelp should apply filter when query is present', () => {
+            const mockBinding = { filter: jest.fn() };
+            const mockEvent = {
+                getParameter: () => '1000041635',
+                getSource: () => ({ getBinding: () => mockBinding })
+            };
+            controller.onSearchSUValueHelp(mockEvent);
+            expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Object));
+        });
+
+        it('onSearchSUValueHelp should clear filter when query is empty', () => {
+            const mockBinding = { filter: jest.fn() };
+            const mockEvent = {
+                getParameter: () => '',
+                getSource: () => ({ getBinding: () => mockBinding })
+            };
+            controller.onSearchSUValueHelp(mockEvent);
+            expect(mockBinding.filter).toHaveBeenCalledWith([]);
+        });
+
+        it('onConfirmSUValueHelp should set storageUnit and trigger scanSU', () => {
+            const scanSpy = jest.spyOn(controller, 'onScanSU').mockImplementation(() => {});
+            const mockEvent = {
+                getParameter: jest.fn(() => ({
+                    getBindingContext: () => ({
+                        getProperty: (prop) => prop === 'StorageUnit' ? '1000041635' : ''
+                    })
+                }))
+            };
+            controller.onConfirmSUValueHelp(mockEvent);
+            expect(controller.getModel('trToView').getProperty('/storageUnit')).toBe('1000041635');
+            expect(scanSpy).toHaveBeenCalled();
+        });
+
+        it('onCancelSUValueHelp should reset items filter', () => {
+            const mockBinding = { filter: jest.fn() };
+            const mockEvent = {
+                getSource: () => ({ getBinding: () => mockBinding })
+            };
+            controller.onCancelSUValueHelp(mockEvent);
+            expect(mockBinding.filter).toHaveBeenCalledWith([]);
+        });
+
+        it('onSelectSUFromTable should set storageUnit from table item and trigger scanSU', () => {
+            const scanSpy = jest.spyOn(controller, 'onScanSU').mockImplementation(() => {});
+            const mockEvent = {
+                getParameter: jest.fn(() => ({
+                    getBindingContext: () => ({
+                        getProperty: (prop) => prop === 'StorageUnit' ? '1000041635' : ''
+                    })
+                }))
+            };
+            controller.onSelectSUFromTable(mockEvent);
+            expect(controller.getModel('trToView').getProperty('/storageUnit')).toBe('1000041635');
+            expect(scanSpy).toHaveBeenCalled();
+        });
+
+        it('onSelectSUButton should set storageUnit from button context and trigger scanSU', () => {
+            const scanSpy = jest.spyOn(controller, 'onScanSU').mockImplementation(() => {});
+            const mockEvent = {
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getProperty: (prop) => prop === 'StorageUnit' ? '1000041636' : ''
+                    })
+                })
+            };
+            controller.onSelectSUButton(mockEvent);
+            expect(controller.getModel('trToView').getProperty('/storageUnit')).toBe('1000041636');
+            expect(scanSpy).toHaveBeenCalled();
+        });
+
+        it('onRefreshAvailableSUs should reload available SUs', async () => {
+            controller.getModel('trToView').setProperty('/trNumber', '1000446');
+            const res = await controller.onRefreshAvailableSUs();
+            expect(res).toHaveLength(1);
+            expect(mockTrToService.getAvailableSUs).toHaveBeenCalled();
+        });
+
+        it('onExit should destroy SuSelectDialog if created', async () => {
+            controller.getModel('trToView').setProperty('/hasActiveTR', true);
+            controller.getModel('trToView').setProperty('/trNumber', '1000446');
+            await controller.onValueHelpSU();
+            expect(controller._oSuSelectDialog).toBe(mockDialog);
+            controller.onExit();
+            expect(mockDialog.destroy).toHaveBeenCalled();
+            expect(controller._oSuSelectDialog).toBeNull();
         });
     });
 });

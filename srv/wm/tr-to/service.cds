@@ -41,6 +41,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Lgnum          : String(3);
         QuantNumber    : String(10);
         StorageUnit    : String(20);
+        Tbpos          : String(4);
         Material       : String(40);
         MaterialDesc   : String(80);
         Plant          : String(4);
@@ -50,6 +51,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Unit           : String(3);
         StorageType    : String(3);
         StorageBin     : String(10);
+        DisplayText    : String(120);
+        Description    : String(120);
     };
 
     type StorageUnit {
@@ -90,6 +93,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getTR(tbnum: String(10), lgnum: String(3)) returns TRHeader;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getAvailableSUs(tbnum: String(10), lgnum: String(3), tbpos: String(4)) returns array of SUQuant;
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function checkSU(lenum: String(20), tbnum: String(10), lgnum: String(3)) returns StorageUnit;

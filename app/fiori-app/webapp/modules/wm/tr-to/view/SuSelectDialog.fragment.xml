@@ -1,0 +1,21 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <SelectDialog
+        id="dlgSuSelect"
+        title="{i18n>trToSuSelectDialogTitle}"
+        noDataText="{i18n>trToSuSelectDialogNoData}"
+        search=".onSearchSUValueHelp"
+        confirm=".onConfirmSUValueHelp"
+        cancel=".onCancelSUValueHelp"
+        items="{trToView>/availableSUs}"
+        contentWidth="36rem">
+        <StandardListItem
+            title="{trToView>DisplayText}"
+            description="{trToView>Description}"
+            info="{trToView>AvailableStock} {trToView>Unit}"
+            infoState="Success"
+            icon="sap-icon://inventory"
+            type="Active" />
+    </SelectDialog>
+</core:FragmentDefinition>

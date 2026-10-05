@@ -189,6 +189,83 @@ class TrToAdapter {
     };
   }
 
+  /** Retrieve available Storage Units in the warehouse that can satisfy open TR line items. */
+  async getAvailableSUs(tbnum, lgnum, tbpos = '') {
+    const wh = required(lgnum, 'Warehouse', RE.lgnum);
+    const tr = await this.getTR(tbnum, wh);
+
+    let items = tr.Items.filter((i) => !i.DeliveryCompleted && i.OpenQty > 0);
+    if (tbpos) {
+      const sPos = alphaIn(required(tbpos, 'Item position', /^\d{1,4}$/), 4);
+      items = items.filter((i) => i.Tbpos === sPos);
+    }
+    if (!items.length) {
+      return [];
+    }
+
+    const available = [];
+    const seenQuants = new Set();
+
+    for (const item of items) {
+      const matPadded = /^\d+$/.test(item.Material) ? item.Material.padStart(18, '0') : item.Material;
+      const where = [
+        `LGNUM = '${wh}'`,
+        `AND MATNR = '${matPadded}'`,
+        "AND LENUM <> ' '",
+        "AND VERME > 0"
+      ];
+      if (item.Batch) {
+        where.push(`AND CHARG = '${item.Batch}'`);
+      }
+      if (item.Plant) {
+        where.push(`AND WERKS = '${item.Plant}'`);
+      }
+
+      const rows = await this._rfc(
+        () => this.rfc.readTable(
+          'LQUA',
+          ['LQNUM', 'LENUM', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'VERME', 'MEINS', 'LGTYP', 'LGPLA', 'BESTQ'],
+          where
+        ),
+        `Read available Storage Units for TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos}`
+      );
+
+      for (const r of rows) {
+        const lqnum = alphaOut(r.LQNUM);
+        if (seenQuants.has(lqnum)) continue;
+        seenQuants.add(lqnum);
+
+        const stock = sapNum(r.VERME);
+        if (stock <= 0) continue;
+
+        const su = alphaOut(r.LENUM);
+        const mat = alphaOut(r.MATNR);
+        const bin = `${r.LGTYP}/${r.LGPLA}`;
+
+        available.push({
+          Lgnum: wh,
+          QuantNumber: lqnum,
+          StorageUnit: su,
+          Tbpos: item.Tbpos,
+          Material: mat,
+          MaterialDesc: item.MaterialDesc || '',
+          Plant: r.WERKS || '',
+          StorageLocation: r.LGORT || '',
+          Batch: r.CHARG || '',
+          AvailableStock: stock,
+          Unit: r.MEINS || '',
+          StorageType: r.LGTYP || '',
+          StorageBin: r.LGPLA || '',
+          DisplayText: `SU ${su} (${stock.toFixed(3)} ${r.MEINS}) - Bin ${bin}`,
+          Description: `Batch: ${r.CHARG || '-'} | Material: ${mat}${item.MaterialDesc ? ' - ' + item.MaterialDesc : ''}`
+        });
+      }
+    }
+
+    available.sort((a, b) => b.AvailableStock - a.AvailableStock);
+    return available;
+  }
+
   /** Create only (as ZTO): confirmation stays in LT12 until the ABAP side offers it. */
   async createTO({ lgnum, tbnum, lenum, qty } = {}) {
     const quantity = Number(qty);

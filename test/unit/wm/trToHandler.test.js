@@ -17,15 +17,18 @@ describe('TrToHandler', () => {
     expect(adapter.getOpenTRs).toHaveBeenCalledWith('W01', '319');
   });
 
-  it('delegates getTR / checkSU with the request values unchanged (no defaults)', async () => {
+  it('delegates getTR / checkSU / getAvailableSUs with the request values unchanged (no defaults)', async () => {
     adapter.getTR.mockResolvedValue({ Tbnum: '0001000663' });
     adapter.checkSU.mockResolvedValue({ IsValid: true });
+    adapter.getAvailableSUs = jest.fn().mockResolvedValue([{ StorageUnit: '1000041635' }]);
 
     await expect(handlers.getTR(req({ tbnum: '1000663', lgnum: 'W01' }))).resolves.toEqual({ Tbnum: '0001000663' });
     await handlers.checkSU(req({ lenum: '1000043935', tbnum: '1000663' }));
+    await expect(handlers.getAvailableSUs(req({ tbnum: '1000663', lgnum: 'W01', tbpos: '0001' }))).resolves.toEqual([{ StorageUnit: '1000041635' }]);
 
     expect(adapter.getTR).toHaveBeenCalledWith('1000663', 'W01');
     expect(adapter.checkSU).toHaveBeenCalledWith('1000043935', '1000663', undefined);
+    expect(adapter.getAvailableSUs).toHaveBeenCalledWith('1000663', 'W01', '0001');
   });
 
   it('passes only operator input to createTO (item, unit, limits come from SAP)', async () => {

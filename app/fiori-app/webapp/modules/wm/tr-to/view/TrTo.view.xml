@@ -100,6 +100,8 @@
                                     id="inputSU"
                                     value="{trToView>/storageUnit}"
                                     placeholder="{i18n>trToPlaceholderSU}"
+                                    showValueHelp="true"
+                                    valueHelpRequest=".onValueHelpSU"
                                     submit=".onScanSU"
                                     enabled="{= !!${trToView>/hasActiveTR} }"
                                     width="100%"
@@ -108,6 +110,13 @@
                                         <FlexItemData growFactor="1" />
                                     </layoutData>
                                 </Input>
+                                <Button
+                                    id="btnSelectSU"
+                                    icon="sap-icon://list"
+                                    tooltip="{i18n>trToBtnSelectSU}"
+                                    enabled="{= !!${trToView>/hasActiveTR} }"
+                                    press=".onValueHelpSU"
+                                    class="sapUiTinyMarginEnd" />
                                 <Button
                                     id="btnCameraScanSU"
                                     icon="sap-icon://camera"
@@ -227,6 +236,68 @@
 
                         </form:content>
                     </form:SimpleForm>
+                </Panel>
+
+                <!-- AVAILABLE STORAGE UNITS TABLE (SU SELECTION) -->
+                <Panel
+                    id="panelAvailableSUs"
+                    headerText="{i18n>trToAvailableSUsTitle} ({= ${trToView>/availableSUs}.length })"
+                    expandable="true"
+                    expanded="true"
+                    visible="{= !!${trToView>/hasActiveTR} }"
+                    class="sapUiSmallMarginBottom">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title text="{i18n>trToAvailableSUsTitle} ({= ${trToView>/availableSUs}.length })" />
+                            <ToolbarSpacer />
+                            <Button
+                                id="btnRefreshSUs"
+                                icon="sap-icon://refresh"
+                                text="{i18n>trToRefreshSUs}"
+                                tooltip="{i18n>trToRefreshSUs}"
+                                press=".onRefreshAvailableSUs"
+                                enabled="{= !${trToView>/isLoadingSUs} }" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <Table
+                        id="tableAvailableSUs"
+                        noDataText="{i18n>trToSuSelectDialogNoData}"
+                        items="{trToView>/availableSUs}"
+                        busy="{trToView>/isLoadingSUs}"
+                        busyIndicatorDelay="0"
+                        mode="SingleSelectMaster"
+                        selectionChange=".onSelectSUFromTable">
+                        <columns>
+                            <Column width="9.5rem"><Text text="{i18n>trToColSU}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>trToColBatch}" /></Column>
+                            <Column width="7.5rem" hAlign="End"><Text text="{i18n>trToColStock}" /></Column>
+                            <Column width="7.5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline"><Text text="{i18n>trToColBin}" /></Column>
+                            <Column width="6.5rem" hAlign="Center"><Text text="{i18n>trToColAction}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <ObjectIdentifier
+                                        title="{trToView>StorageUnit}"
+                                        text="{trToView>Material}" />
+                                    <VBox>
+                                        <Text text="{= ${trToView>Batch} ? ${trToView>Batch} : '-' }" />
+                                        <Text text="{trToView>MaterialDesc}" />
+                                    </VBox>
+                                    <ObjectNumber
+                                        number="{trToView>AvailableStock}"
+                                        unit="{trToView>Unit}"
+                                        state="Success" />
+                                    <Text text="{trToView>StorageType} / {trToView>StorageBin}" />
+                                    <Button
+                                        text="{i18n>trToBtnSelectThisSU}"
+                                        icon="sap-icon://accept"
+                                        type="Emphasized"
+                                        press=".onSelectSUButton" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
                 </Panel>
 
                 <!-- OPEN TR ITEMS TABLE (FOR MULTI-ITEM TR SELECTION) -->

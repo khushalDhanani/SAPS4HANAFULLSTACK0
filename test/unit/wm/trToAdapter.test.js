@@ -127,6 +127,41 @@ describe('TrToAdapter (RFC)', () => {
       .rejects.toMatchObject({ status: 502, message: 'Read Transfer Requirement 1000663: RFC_COMMUNICATION_FAILURE' });
   });
 
+  it('getAvailableSUs reads quants from LQUA and returns available SUs for open TR items', async () => {
+    const q1 = { LQNUM: '0001030622', LENUM: '00000000001000041635', MATNR: '000000001000000867', WERKS: '1000',
+      LGORT: 'RM01', CHARG: 'IN25003572', VERME: '11.210,000', MEINS: 'KG', LGTYP: 'RM1', LGPLA: '0-L0001-03' };
+    const rfc = fakeRfc({ quants: [q1] });
+    const sus = await new TrToAdapter({ rfc }).getAvailableSUs('1000663', 'W01');
+
+    expect(rfc.readTable).toHaveBeenCalledWith('LQUA', expect.any(Array), [
+      "LGNUM = 'W01'", "AND MATNR = '000000001000000867'", "AND LENUM <> ' '", "AND VERME > 0", "AND WERKS = '1000'"
+    ]);
+    expect(sus).toHaveLength(1);
+    expect(sus[0]).toMatchObject({
+      StorageUnit: '1000041635',
+      Tbpos: '0001',
+      Material: '1000000867',
+      AvailableStock: 11210,
+      Unit: 'KG',
+      StorageType: 'RM1',
+      StorageBin: '0-L0001-03'
+    });
+  });
+
+  it('getAvailableSUs filters by tbpos when specified', async () => {
+    const rfc = fakeRfc({ quants: [] });
+    const sus = await new TrToAdapter({ rfc }).getAvailableSUs('1000663', 'W01', '0001');
+    expect(sus).toEqual([]);
+    expect(rfc.readTable).toHaveBeenCalledWith('LQUA', expect.any(Array), expect.any(Array));
+  });
+
+  it('getAvailableSUs returns empty array when TR has no open items or tbpos is not found', async () => {
+    const rfc = fakeRfc({ items: [{ ...ITEMS[1], OpenQty: 0, DeliveryCompleted: true }] });
+    const sus = await new TrToAdapter({ rfc }).getAvailableSUs('1000663', 'W01');
+    expect(sus).toEqual([]);
+    expect(rfc.readTable).not.toHaveBeenCalledWith('LQUA', expect.anything(), expect.anything());
+  });
+
   it('sapNum reads both SAP number formats', () => {
     expect(sapNum('11.210,000')).toBe(11210);
     expect(sapNum('11,210.000')).toBe(11210);

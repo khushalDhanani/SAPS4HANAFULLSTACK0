@@ -85,6 +85,32 @@ describe('TrToService Unit Tests', () => {
         });
     });
 
+    describe('getAvailableSUs', () => {
+        it('should reject when TR number is empty', async () => {
+            await expect(TrToService.getAvailableSUs('')).rejects.toThrow('Transfer Requirement number is required');
+            await expect(TrToService.getAvailableSUs(null)).rejects.toThrow('Transfer Requirement number is required');
+        });
+
+        it('should fetch available SUs via ODataClient.get', async () => {
+            const mockList = [
+                { StorageUnit: '1000041635', Material: '1000000156', AvailableStock: 1620.0 }
+            ];
+            mockODataClient.get.mockResolvedValue({ value: mockList });
+
+            const result = await TrToService.getAvailableSUs('0001000446', 'W01', '0001');
+            expect(mockODataClient.get).toHaveBeenCalledWith(
+                expect.stringContaining("/odata/v4/tr-to/getAvailableSUs(tbnum='0001000446',lgnum='W01',tbpos='0001')")
+            );
+            expect(result).toHaveLength(1);
+            expect(result[0].StorageUnit).toBe('1000041635');
+        });
+
+        it('should propagate backend errors (no mock fallback)', async () => {
+            mockODataClient.get.mockRejectedValue(new Error('Backend offline'));
+            await expect(TrToService.getAvailableSUs('0001000446', 'W01')).rejects.toThrow('Backend offline');
+        });
+    });
+
     describe('checkSU', () => {
         it('should reject when SU number is empty', async () => {
             await expect(TrToService.checkSU('', '0001000663')).rejects.toThrow('Storage Unit number is required');

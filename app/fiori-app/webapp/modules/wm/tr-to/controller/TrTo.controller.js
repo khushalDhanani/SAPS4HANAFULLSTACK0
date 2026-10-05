@@ -31,7 +31,9 @@ sap.ui.define([
                 selectedItem: null,
                 items: [],
                 openTRs: [],
+                availableSUs: [],
                 isLoadingTRs: false,
+                isLoadingSUs: false,
                 hasActiveTR: false,
                 hasActiveSU: false,
                 canCreateTO: false,
@@ -84,6 +86,10 @@ sap.ui.define([
             if (this._oTrSelectDialog) {
                 this._oTrSelectDialog.destroy();
                 this._oTrSelectDialog = null;
+            }
+            if (this._oSuSelectDialog) {
+                this._oSuSelectDialog.destroy();
+                this._oSuSelectDialog = null;
             }
         },
 
@@ -248,6 +254,142 @@ sap.ui.define([
         },
 
         /**
+         * Open Value Help dialog to select an available Storage Unit
+         */
+        onValueHelpSU: function () {
+            var oView = this.getView();
+            var oModel = this.getModel("trToView");
+            var sSelectedPos = oModel.getProperty("/selectedItem/Tbpos") || "";
+            var that = this;
+
+            if (!oModel.getProperty("/hasActiveTR")) {
+                this._showMessage("Please select or scan a Transfer Requirement first.", "Warning");
+                this._playAudio("warn");
+                this._focusTR();
+                return Promise.resolve();
+            }
+
+            var aCurrentSUs = oModel.getProperty("/availableSUs") || [];
+            var pLoad = aCurrentSUs.length > 0 ? Promise.resolve(aCurrentSUs) : this._loadAvailableSUs(sSelectedPos);
+
+            return pLoad.then(function () {
+                if (!that._oSuSelectDialog) {
+                    return Fragment.load({
+                        id: oView.getId(),
+                        name: "saps4hana.fiori.modules.wm.tr-to.view.SuSelectDialog",
+                        controller: that
+                    }).then(function (oDialog) {
+                        that._oSuSelectDialog = oDialog;
+                        oView.addDependent(oDialog);
+                        oDialog.open();
+                        return oDialog;
+                    });
+                } else {
+                    that._oSuSelectDialog.open();
+                    return that._oSuSelectDialog;
+                }
+            });
+        },
+
+        _loadAvailableSUs: function (sTbpos) {
+            var oModel = this.getModel("trToView");
+            var sTbnum = (oModel.getProperty("/trNumber") || "").trim();
+            var sWh = oModel.getProperty("/warehouse") || "W01";
+            var that = this;
+
+            if (!sTbnum) {
+                oModel.setProperty("/availableSUs", []);
+                return Promise.resolve([]);
+            }
+
+            oModel.setProperty("/isLoadingSUs", true);
+            return TrToService.getAvailableSUs(sTbnum, sWh, sTbpos).then(function (aSUs) {
+                oModel.setProperty("/availableSUs", aSUs || []);
+                oModel.setProperty("/isLoadingSUs", false);
+                return aSUs;
+            }).catch(function (oErr) {
+                oModel.setProperty("/isLoadingSUs", false);
+                that._showMessage(oErr.message || "Failed to load available Storage Units.", "Warning");
+                return [];
+            });
+        },
+
+        onSearchSUValueHelp: function (oEvent) {
+            var sQuery = (oEvent.getParameter("value") || "").trim().toLowerCase();
+            var oBinding = oEvent.getSource().getBinding("items");
+            if (!oBinding) return;
+
+            if (!sQuery) {
+                oBinding.filter([]);
+                return;
+            }
+
+            var aFilters = [
+                new Filter("StorageUnit", FilterOperator.Contains, sQuery),
+                new Filter("Batch", FilterOperator.Contains, sQuery),
+                new Filter("Material", FilterOperator.Contains, sQuery),
+                new Filter("StorageBin", FilterOperator.Contains, sQuery),
+                new Filter("StorageType", FilterOperator.Contains, sQuery),
+                new Filter("DisplayText", FilterOperator.Contains, sQuery),
+                new Filter("Description", FilterOperator.Contains, sQuery)
+            ];
+            oBinding.filter(new Filter({
+                filters: aFilters,
+                and: false
+            }));
+        },
+
+        onConfirmSUValueHelp: function (oEvent) {
+            var oSelectedItem = oEvent.getParameter("selectedItem");
+            if (oSelectedItem) {
+                var oContext = oSelectedItem.getBindingContext("trToView");
+                if (oContext) {
+                    var sLenum = oContext.getProperty("StorageUnit") || "";
+                    this._applySelectedSU(sLenum);
+                }
+            }
+        },
+
+        onCancelSUValueHelp: function (oEvent) {
+            var oBinding = oEvent.getSource().getBinding("items");
+            if (oBinding) {
+                oBinding.filter([]);
+            }
+        },
+
+        onSelectSUFromTable: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem");
+            if (!oItem) return;
+            var oContext = oItem.getBindingContext("trToView");
+            if (oContext) {
+                var sLenum = oContext.getProperty("StorageUnit") || "";
+                this._applySelectedSU(sLenum);
+            }
+        },
+
+        onSelectSUButton: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("trToView");
+            if (oContext) {
+                var sLenum = oContext.getProperty("StorageUnit") || "";
+                this._applySelectedSU(sLenum);
+            }
+        },
+
+        _applySelectedSU: function (sLenum) {
+            if (!sLenum) return;
+            var oModel = this.getModel("trToView");
+            oModel.setProperty("/storageUnit", sLenum);
+            this.onScanSU();
+        },
+
+        onRefreshAvailableSUs: function () {
+            var oModel = this.getModel("trToView");
+            var sSelectedPos = oModel.getProperty("/selectedItem/Tbpos") || "";
+            return this._loadAvailableSUs(sSelectedPos);
+        },
+
+        /**
          * Step 1: Fetch Transfer Requirement Details
          */
         onFetchTR: function () {
@@ -290,6 +432,8 @@ sap.ui.define([
                 oModel.setProperty("/stepBadgeText", "2. SCAN SU");
                 oModel.setProperty("/stepBadgeState", "Information");
 
+                that._loadAvailableSUs(oFirstItem.Tbpos);
+
                 that._showMessage("TR " + (oData.Tbnum || sTbnum) + " loaded. Please scan Storage Unit (SU).", "Information");
                 that._playAudio("success");
                 that._focusSU();
@@ -317,6 +461,8 @@ sap.ui.define([
             oModel.setProperty("/unit", oSelected.Unit || "");
             oModel.setProperty("/destBin", oSelected.DestStorageBin || "");
             oModel.setProperty("/destType", oSelected.DestStorageType || "");
+
+            this._loadAvailableSUs(oSelected.Tbpos);
 
             // If SU was already scanned, re-evaluate quantity against new item
             if (oModel.getProperty("/hasActiveSU")) {
@@ -495,6 +641,8 @@ sap.ui.define([
             oModel.setProperty("/trNumber", "");
             oModel.setProperty("/storageUnit", "");
             oModel.setProperty("/items", []);
+            oModel.setProperty("/availableSUs", []);
+            oModel.setProperty("/isLoadingSUs", false);
             oModel.setProperty("/selectedItem", null);
             oModel.setProperty("/hasActiveTR", false);
             oModel.setProperty("/hasActiveSU", false);
