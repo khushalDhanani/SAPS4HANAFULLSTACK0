@@ -7,9 +7,9 @@ sap.ui.define([
     var CONTACT_PERSON_REGEX = /^\d{1,10}$/;
 
     var INCOMPLETION_HEADER_FIELDS = [
-        { field: "CustomerGroup2", label: "Customer Group 2" },
-        { field: "PortOfLoading", label: "Port of Loading" },
-        { field: "PortOfDischarge", label: "Port of Discharge" },
+        { field: "PaymentTerms", label: "Payment Terms" },
+        { field: "IncotermsClassification", label: "Incoterms" },
+        { field: "IncotermsLocation1", label: "Incoterms Location" },
         { field: "ContactPerson", label: "Contact Person" }
     ];
 
@@ -104,7 +104,10 @@ sap.ui.define([
                     }
                 ],
                 errors: {
-                    ContactPerson: { state: "None", text: "" }
+                    ContactPerson: { state: "None", text: "" },
+                    PaymentTerms: { state: "None", text: "" },
+                    IncotermsClassification: { state: "None", text: "" },
+                    IncotermsLocation1: { state: "None", text: "" }
                 },
                 errorList: [],
                 errorCount: 0,
@@ -169,6 +172,8 @@ sap.ui.define([
          */
         applyCustomerDefaults: function (oModel, oCustomerData) {
             if (!oModel || !oCustomerData) return;
+            var oHeader = oModel.getProperty("/header") || {};
+            var oModified = oModel.getProperty("/modifiedFields") || {};
 
             if (oCustomerData.CustomerName) {
                 oModel.setProperty("/header/CustomerName", oCustomerData.CustomerName);
@@ -179,22 +184,22 @@ sap.ui.define([
             if (oCustomerData.Country) {
                 oModel.setProperty("/header/CustomerCountry", oCustomerData.Country);
             }
-            if (oCustomerData.Currency) {
+            if (oCustomerData.Currency && !oModified.TransactionCurrency && (!oHeader.TransactionCurrency || String(oHeader.TransactionCurrency).trim() === "")) {
                 oModel.setProperty("/header/TransactionCurrency", oCustomerData.Currency);
             }
-            if (oCustomerData.ShipToParty) {
+            if (oCustomerData.ShipToParty && !oModified.ShipToParty && (!oHeader.ShipToParty || String(oHeader.ShipToParty).trim() === "")) {
                 oModel.setProperty("/header/ShipToParty", oCustomerData.ShipToParty);
             }
             if (oCustomerData.ShipToPartyName) {
                 oModel.setProperty("/header/ShipToPartyName", oCustomerData.ShipToPartyName);
             }
-            if (oCustomerData.SalesOffice) {
+            if (oCustomerData.SalesOffice && !oModified.SalesOffice && (!oHeader.SalesOffice || String(oHeader.SalesOffice).trim() === "")) {
                 oModel.setProperty("/header/SalesOffice", oCustomerData.SalesOffice);
             }
-            if (oCustomerData.SalesGroup) {
+            if (oCustomerData.SalesGroup && !oModified.SalesGroup && (!oHeader.SalesGroup || String(oHeader.SalesGroup).trim() === "")) {
                 oModel.setProperty("/header/SalesGroup", oCustomerData.SalesGroup);
             }
-            if (oCustomerData.PaymentTerms) {
+            if (oCustomerData.PaymentTerms && !oModified.PaymentTerms && (!oHeader.PaymentTerms || String(oHeader.PaymentTerms).trim() === "")) {
                 oModel.setProperty("/header/PaymentTerms", oCustomerData.PaymentTerms);
             }
         },
@@ -307,8 +312,31 @@ sap.ui.define([
                         }
                     }
                     break;
+                case "PaymentTerms":
+                    if (!vVal || String(vVal).trim() === "") {
+                        sError = "Payment Terms are required";
+                    } else if (String(vVal).trim().length > 4) {
+                        sError = "Payment Terms cannot exceed 4 characters";
+                    }
+                    break;
+                case "IncotermsClassification":
+                    if (!vVal || String(vVal).trim() === "") {
+                        sError = "Incoterms are required";
+                    } else if (String(vVal).trim().length > 3) {
+                        sError = "Incoterms cannot exceed 3 characters";
+                    }
+                    break;
+                case "IncotermsLocation1":
+                    if (!vVal || String(vVal).trim() === "") {
+                        sError = "Incoterms Location is required";
+                    } else if (String(vVal).trim().length > 28) {
+                        sError = "Incoterms Location cannot exceed 28 characters";
+                    }
+                    break;
                 case "ContactPerson":
-                    if (vVal && String(vVal).trim() !== "" && !CONTACT_PERSON_REGEX.test(String(vVal).trim())) {
+                    if (!vVal || String(vVal).trim() === "") {
+                        sError = "Contact Person is required";
+                    } else if (!CONTACT_PERSON_REGEX.test(String(vVal).trim())) {
                         sError = "Contact Person must be a numeric SAP contact number (up to 10 digits)";
                     }
                     break;
@@ -339,7 +367,11 @@ sap.ui.define([
                 "DistributionChannel",
                 "OrganizationDivision",
                 "SoldToParty",
-                "TransactionCurrency"
+                "TransactionCurrency",
+                "PaymentTerms",
+                "IncotermsClassification",
+                "IncotermsLocation1",
+                "ContactPerson"
             ];
 
             var that = this;
@@ -360,19 +392,6 @@ sap.ui.define([
                 if (isNaN(dReq.getTime())) {
                     aErrors.push({ field: "RequestedDeliveryDate", message: "Requested Delivery Date must be a valid date" });
                 }
-            }
-
-            // ContactPerson: optional but must be purely numeric when provided
-            if (oHeader.ContactPerson && String(oHeader.ContactPerson).trim() !== "") {
-                if (!CONTACT_PERSON_REGEX.test(String(oHeader.ContactPerson).trim())) {
-                    var oContactErr = { state: "Error", text: "Contact Person must be a numeric SAP contact number (up to 10 digits)" };
-                    oModel.setProperty("/errors/ContactPerson", oContactErr);
-                    aErrors.push({ field: "ContactPerson", message: oContactErr.text });
-                } else {
-                    oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
-                }
-            } else {
-                oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
             }
 
             // Items validation
@@ -595,7 +614,11 @@ sap.ui.define([
             }
             INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
                 if (oHeader[f.field] && String(oHeader[f.field]).trim() !== "") {
-                    oCleanHeader[f.field] = String(oHeader[f.field]).trim();
+                    if (f.field === "IncotermsClassification") {
+                        oCleanHeader[f.field] = String(oHeader[f.field]).trim().toUpperCase();
+                    } else {
+                        oCleanHeader[f.field] = String(oHeader[f.field]).trim();
+                    }
                 }
             });
 

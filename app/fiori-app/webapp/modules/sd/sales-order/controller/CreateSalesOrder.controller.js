@@ -276,8 +276,56 @@ sap.ui.define([
             this.onCurrencyChange();
         },
 
-        onHeaderFieldChange: function () {
+        onPaymentTermsSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
             var oModel = this.getView().getModel("newOrder");
+            oModel.setProperty("/header/PaymentTerms", sKey);
+            oModel.setProperty("/modifiedFields/PaymentTerms", true);
+            oModel.setProperty("/isModified", true);
+            SalesOrderModel.validateSingleField(oModel, "PaymentTerms");
+            SalesOrderModel.updateStatus(oModel);
+        },
+
+        onIncotermsSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newOrder");
+            oModel.setProperty("/header/IncotermsClassification", sKey ? sKey.toUpperCase() : "");
+            oModel.setProperty("/modifiedFields/IncotermsClassification", true);
+            oModel.setProperty("/isModified", true);
+            SalesOrderModel.validateSingleField(oModel, "IncotermsClassification");
+            SalesOrderModel.updateStatus(oModel);
+        },
+
+        onContactPersonSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newOrder");
+            oModel.setProperty("/header/ContactPerson", sKey);
+            oModel.setProperty("/modifiedFields/ContactPerson", true);
+            oModel.setProperty("/isModified", true);
+            this.onContactPersonChange();
+        },
+
+        onHeaderFieldChange: function (oEvent) {
+            var oModel = this.getView().getModel("newOrder");
+            if (oModel && oEvent && typeof oEvent.getSource === "function") {
+                var oSource = oEvent.getSource();
+                var oBinding = oSource && typeof oSource.getBinding === "function" && oSource.getBinding("value");
+                if (oBinding && typeof oBinding.getPath === "function") {
+                    var sPath = oBinding.getPath() || "";
+                    var sField = sPath.split("/").pop();
+                    if (sField) {
+                        oModel.setProperty("/modifiedFields/" + sField, true);
+                        oModel.setProperty("/isModified", true);
+                        SalesOrderModel.validateSingleField(oModel, sField);
+                    }
+                }
+            }
             SalesOrderModel.updateStatus(oModel);
         },
 
@@ -285,6 +333,8 @@ sap.ui.define([
             var sVal = oEvent.getParameter("value");
             var oModel = this.getView().getModel("newOrder");
             oModel.setProperty("/header/ContactPerson", sVal);
+            oModel.setProperty("/modifiedFields/ContactPerson", true);
+            oModel.setProperty("/isModified", true);
             // Clear error while the user is still typing so it isn't distracting
             if (!sVal || String(sVal).trim() === "") {
                 oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
@@ -293,6 +343,8 @@ sap.ui.define([
 
         onContactPersonChange: function () {
             var oModel = this.getView().getModel("newOrder");
+            oModel.setProperty("/modifiedFields/ContactPerson", true);
+            oModel.setProperty("/isModified", true);
             SalesOrderModel.validateSingleField(oModel, "ContactPerson");
             SalesOrderModel.updateStatus(oModel);
         },
@@ -611,6 +663,11 @@ sap.ui.define([
                 if (sChannel) {
                     aContextFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
                 }
+            } else if (sId.indexOf("inContactPerson") !== -1) {
+                var sCustomer = oModel.getProperty("/header/SoldToParty");
+                if (sCustomer) {
+                    aContextFilters.push(new Filter("Customer", FilterOperator.EQ, sCustomer));
+                }
             }
 
             ValueHelpService.applySuggestionFilter(oInput, sValue, aContextFilters);
@@ -651,6 +708,11 @@ sap.ui.define([
                 }
                 if (sDivCust) {
                     aInitialFilters.push(new Filter("Division", FilterOperator.EQ, sDivCust));
+                }
+            } else if (sId.indexOf("inContactPerson") !== -1) {
+                var sCust = oModel.getProperty("/header/SoldToParty");
+                if (sCust) {
+                    aInitialFilters.push(new Filter("Customer", FilterOperator.EQ, sCust));
                 }
             }
 
@@ -722,6 +784,23 @@ sap.ui.define([
                     that.onHeaderFieldChange();
                 } else if (sId.indexOf("inCurrency") !== -1) {
                     that.onCurrencyChange();
+                } else if (sId.indexOf("inPaymentTerms") !== -1) {
+                    oModel.setProperty("/header/PaymentTerms", sKey);
+                    oModel.setProperty("/modifiedFields/PaymentTerms", true);
+                    oModel.setProperty("/isModified", true);
+                    SalesOrderModel.validateSingleField(oModel, "PaymentTerms");
+                    SalesOrderModel.updateStatus(oModel);
+                } else if (sId.indexOf("inIncotermsClassification") !== -1) {
+                    oModel.setProperty("/header/IncotermsClassification", sKey ? sKey.toUpperCase() : "");
+                    oModel.setProperty("/modifiedFields/IncotermsClassification", true);
+                    oModel.setProperty("/isModified", true);
+                    SalesOrderModel.validateSingleField(oModel, "IncotermsClassification");
+                    SalesOrderModel.updateStatus(oModel);
+                } else if (sId.indexOf("inContactPerson") !== -1) {
+                    oModel.setProperty("/header/ContactPerson", sKey);
+                    oModel.setProperty("/modifiedFields/ContactPerson", true);
+                    oModel.setProperty("/isModified", true);
+                    that.onContactPersonChange();
                 }
             }, aInitialFilters);
         },

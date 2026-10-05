@@ -199,6 +199,10 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
             OrderQuantityUnit: "KG"
         });
         oModel.setProperty("/header/SoldToParty", "10135");
+        oModel.setProperty("/header/PaymentTerms", "0001");
+        oModel.setProperty("/header/IncotermsClassification", "FOB");
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
+        oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/Plant", "1120");
         oModel.setProperty("/items/0/OrderQuantity", "5.000");
@@ -210,7 +214,103 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(oModel.getProperty("/errorCount")).toBe(0);
     });
 
-    test("buildPayload constructs clean API-compliant payload", () => {
+    test("each required field empty blocks Create", () => {
+        const createPopulatedModel = () => {
+            const oModel = SalesOrderModel.createInitialModel();
+            SalesOrderModel.applyServerDefaults(oModel, {
+                SalesOrderType: "ZDOM",
+                SalesOrganization: "1000",
+                DistributionChannel: "10",
+                OrganizationDivision: "52",
+                TransactionCurrency: "INR",
+                Plant: "1120",
+                OrderQuantityUnit: "KG"
+            });
+            oModel.setProperty("/header/SoldToParty", "10135");
+            oModel.setProperty("/header/PaymentTerms", "0001");
+            oModel.setProperty("/header/IncotermsClassification", "FOB");
+            oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
+            oModel.setProperty("/header/ContactPerson", "25116");
+            oModel.setProperty("/items/0/Material", "4000000001");
+            oModel.setProperty("/items/0/Plant", "1120");
+            oModel.setProperty("/items/0/OrderQuantity", "5.000");
+            oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+            return oModel;
+        };
+
+        const requiredFields = [
+            { field: "PaymentTerms", expectedError: "Payment Terms are required" },
+            { field: "IncotermsClassification", expectedError: "Incoterms are required" },
+            { field: "IncotermsLocation1", expectedError: "Incoterms Location is required" },
+            { field: "ContactPerson", expectedError: "Contact Person is required" }
+        ];
+
+        requiredFields.forEach(({ field, expectedError }) => {
+            const oModel = createPopulatedModel();
+            oModel.setProperty("/header/" + field, "");
+            const bValid = SalesOrderModel.validateForm(oModel);
+            expect(bValid).toBe(false);
+            expect(oModel.getProperty("/hasError")).toBe(true);
+            const err = oModel.getProperty("/errors/" + field);
+            expect(err.state).toBe("Error");
+            expect(err.text).toBe(expectedError);
+        });
+    });
+
+    test("hidden fields empty do not block Create", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        SalesOrderModel.applyServerDefaults(oModel, {
+            SalesOrderType: "ZDOM",
+            SalesOrganization: "1000",
+            DistributionChannel: "10",
+            OrganizationDivision: "52",
+            TransactionCurrency: "INR",
+            Plant: "1120",
+            OrderQuantityUnit: "KG"
+        });
+        oModel.setProperty("/header/SoldToParty", "10135");
+        oModel.setProperty("/header/PaymentTerms", "0001");
+        oModel.setProperty("/header/IncotermsClassification", "FOB");
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
+        oModel.setProperty("/header/ContactPerson", "25116");
+
+        // Explicitly leave all hidden fields empty
+        oModel.setProperty("/header/PurchaseOrderNumber", "");
+        oModel.setProperty("/header/CustomerPurchaseOrderDate", "");
+        oModel.setProperty("/header/CustomerGroup2", "");
+        oModel.setProperty("/header/PortOfLoading", "");
+        oModel.setProperty("/header/PortOfDischarge", "");
+        oModel.setProperty("/items/0/Material", "4000000001");
+        oModel.setProperty("/items/0/Plant", "1120");
+        oModel.setProperty("/items/0/OrderQuantity", "5.000");
+        oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+        oModel.setProperty("/items/0/SalesOrderItemText", "");
+        oModel.setProperty("/items/0/NetPriceAmount", "");
+
+        const bValid = SalesOrderModel.validateForm(oModel);
+        expect(bValid).toBe(true);
+        expect(oModel.getProperty("/hasError")).toBe(false);
+        expect(oModel.getProperty("/errorCount")).toBe(0);
+    });
+
+    test("getIncompletionGaps returns gaps for missing commercial fields", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        const gaps = SalesOrderModel.getIncompletionGaps(oModel);
+        expect(gaps).toContain("Payment Terms");
+        expect(gaps).toContain("Incoterms");
+        expect(gaps).toContain("Incoterms Location");
+        expect(gaps).toContain("Contact Person");
+
+        oModel.setProperty("/header/PaymentTerms", "0001");
+        oModel.setProperty("/header/IncotermsClassification", "CIF");
+        oModel.setProperty("/header/IncotermsLocation1", "London");
+        oModel.setProperty("/header/ContactPerson", "12345");
+
+        const noGaps = SalesOrderModel.getIncompletionGaps(oModel);
+        expect(noGaps).toHaveLength(0);
+    });
+
+    test("buildPayload constructs clean API-compliant payload with four commercial fields", () => {
         const oModel = SalesOrderModel.createInitialModel("sales_rep");
         SalesOrderModel.applyServerDefaults(oModel, {
             SalesOrderType: "ZDOM",
@@ -221,6 +321,10 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-99988");
+        oModel.setProperty("/header/PaymentTerms", "PT11");
+        oModel.setProperty("/header/IncotermsClassification", "fob");
+        oModel.setProperty("/header/IncotermsLocation1", "Nhava Sheva");
+        oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/OrderQuantity", "10.000");
         oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
@@ -233,6 +337,11 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.header.SalesOrderType).toBe("ZDOM");
         expect(payload.header.SoldToParty).toBe("10135");
         expect(payload.header.PurchaseOrderNumber).toBe("PO-99988");
+        expect(payload.header.PaymentTerms).toBe("PT11");
+        expect(payload.header.PaymentTermCode).toBe("PT11");
+        expect(payload.header.IncotermsClassification).toBe("FOB");
+        expect(payload.header.IncotermsLocation1).toBe("Nhava Sheva");
+        expect(payload.header.ContactPerson).toBe("25116");
         expect(payload.header.TotalNetAmount).toBe(500);
 
         expect(payload.items).toHaveLength(1);
@@ -242,6 +351,23 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.items[0].NetPriceAmount).toBe(50);
         expect(payload.items[0].NetAmount).toBe(500);
         expect(payload.items[0].Plant).toBe("1120");
+    });
+
+    test("applyCustomerDefaults does not overwrite user-entered values", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        oModel.setProperty("/header/PaymentTerms", "USER");
+        oModel.setProperty("/header/TransactionCurrency", "USD");
+        oModel.setProperty("/modifiedFields/PaymentTerms", true);
+
+        SalesOrderModel.applyCustomerDefaults(oModel, {
+            CustomerName: "Customer ABC",
+            Currency: "EUR",
+            PaymentTerms: "DEFL"
+        });
+
+        expect(oModel.getProperty("/header/CustomerName")).toBe("Customer ABC");
+        expect(oModel.getProperty("/header/PaymentTerms")).toBe("USER");
+        expect(oModel.getProperty("/header/TransactionCurrency")).toBe("USD");
     });
 
     test("buildPayload leaves empty fields without hardcoded fallbacks", () => {

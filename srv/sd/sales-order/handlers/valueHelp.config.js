@@ -15,7 +15,10 @@ const SO_VALUE_HELP_ENTITIES = [
     'CustomerVH',
     'MaterialVH',
     'CurrencyVH',
-    'PlantVH'
+    'PlantVH',
+    'PaymentTermsVH',
+    'IncotermsClassificationVH',
+    'ContactPersonVH'
 ];
 
 const soValueHelpConfig = [
@@ -59,8 +62,30 @@ const soValueHelpConfig = [
         entityDeduplicateBy: {
             PlantVH: 'Plant'
         }
+    },
+    {
+        entities: ['IncotermsClassificationVH'],
+        read: (query) => salesInquiryAdapter.getIncoterms(query),
+        entityDeduplicateBy: {
+            IncotermsClassificationVH: 'IncotermsClassification'
+        }
+    },
+    {
+        entities: ['PaymentTermsVH'],
+        read: (query) => salesInquiryAdapter.getPaymentTerms(query),
+        entityDeduplicateBy: {
+            PaymentTermsVH: 'PaymentTerms'
+        }
+    },
+    {
+        entities: ['ContactPersonVH'],
+        read: (query) => salesInquiryAdapter.getContactPersons(query),
+        entityDeduplicateBy: {
+            ContactPersonVH: 'ContactPerson'
+        }
     }
 ];
+
 
 module.exports = {
     soValueHelpConfig,

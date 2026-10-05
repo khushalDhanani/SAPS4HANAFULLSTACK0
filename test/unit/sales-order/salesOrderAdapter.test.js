@@ -58,8 +58,8 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(result.TotalNetAmount).toBe('1250.00');
             expect(result.TransactionCurrency).toBe('INR');
 
-            // Verify single atomic POST was sent to HeaderSet
-            expect(mockExecute).toHaveBeenCalledTimes(1);
+            // 1 atomic POST + 1 GET read-back
+            expect(mockExecute).toHaveBeenCalledTimes(2);
             const callConfig = mockExecute.mock.calls[0][1];
             expect(callConfig.method).toBe('post');
             expect(callConfig.url).toContain('/HeaderSet');
@@ -243,6 +243,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 data: {
                     d: {
                         SalesOrderID: '5000468',
+                        PaymentTermCode: '0001',
                         NetAmount: '500.00',
                         DocumentCurrency: 'INR'
                     }
@@ -326,8 +327,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 SoldToParty: '10135',
                 CustomerGroup2: 'SEA',
                 PortOfLoading: 'NHAVA SHEVA',
-                PortOfDischarge: 'BARCELONA',
-                ContactPerson: '24789'
+                PortOfDischarge: 'BARCELONA'
             };
 
             const items = [
@@ -347,7 +347,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
 
             expect(result.SalesOrder).toBe('5000469');
             expect(result.notTransmitted).toEqual(
-                expect.arrayContaining(['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'])
+                expect.arrayContaining(['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge'])
             );
 
             const callConfig = mockExecute.mock.calls[0][1];
@@ -355,7 +355,238 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(payload.CustomerGroup2).toBeUndefined();
             expect(payload.PortOfLoading).toBeUndefined();
             expect(payload.PortOfDischarge).toBeUndefined();
-            expect(payload.ContactPerson).toBeUndefined();
+        });
+
+        test('unsupported ContactPerson shows a visible error when metadata lacks ContactPerson and HeaderPartner CustomerID', async () => {
+            const mockExecute = jest.fn();
+            jest.spyOn(adapter, '_getLeanOrderFields').mockResolvedValue({
+                header: new Set(['SalesOrderTypeCode', 'SalesOrganization', 'DistributionChannel', 'Division']),
+                item: new Set(['MaterialID', 'OrderQty', 'SalesUnit']),
+                partner: new Set()
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                ContactPerson: '24789'
+            };
+
+            await expect(
+                adapter.createSalesOrder(header, [], {
+                    destination: { url: 'http://sap.mock' },
+                    executeHttpRequest: mockExecute
+                })
+            ).rejects.toThrow('Contact Person is not supported by the SAP backend service');
+        });
+
+        test('transmits ContactPerson via HeaderPartnerSet with partner function CP when HeaderPartner metadata has CustomerID', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000470',
+                        NetAmount: '500.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
+            });
+            jest.spyOn(adapter, '_getLeanOrderFields').mockResolvedValue({
+                header: new Set(['SalesOrderTypeCode', 'SalesOrganization', 'DistributionChannel', 'Division']),
+                item: new Set(['MaterialID', 'OrderQty', 'SalesUnit']),
+                partner: new Set(['PartnerFunctionCode', 'CustomerID'])
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                ContactPerson: '24789'
+            };
+
+            const result = await adapter.createSalesOrder(header, [], {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000470');
+            const callConfig = mockExecute.mock.calls[0][1];
+            expect(callConfig.data.ContactPerson).toBeUndefined();
+            expect(callConfig.data.HeaderPartnerSet).toEqual([
+                {
+                    PartnerFunctionCode: 'CP',
+                    CustomerID: '24789'
+                }
+            ]);
+        });
+
+        test('transmits both ShipToParty and ContactPerson in HeaderPartnerSet', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000470',
+                        NetAmount: '500.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
+            });
+            jest.spyOn(adapter, '_getLeanOrderFields').mockResolvedValue({
+                header: new Set(['SalesOrderTypeCode', 'SalesOrganization', 'DistributionChannel', 'Division']),
+                item: new Set(['MaterialID', 'OrderQty', 'SalesUnit']),
+                partner: new Set(['PartnerFunctionCode', 'CustomerID'])
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                ShipToParty: '1000000001',
+                ContactPerson: '24789'
+            };
+
+            const result = await adapter.createSalesOrder(header, [], {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000470');
+            const callConfig = mockExecute.mock.calls[0][1];
+            expect(callConfig.data.HeaderPartnerSet).toEqual([
+                {
+                    PartnerFunctionCode: 'SH',
+                    CustomerID: '1000000001'
+                },
+                {
+                    PartnerFunctionCode: 'CP',
+                    CustomerID: '24789'
+                }
+            ]);
+        });
+
+        test('transmits ContactPerson when supported by metadata HeaderSet', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({
+                status: 201,
+                data: {
+                    d: {
+                        SalesOrderID: '5000470',
+                        ContactPerson: '24789'
+                    }
+                }
+            });
+            jest.spyOn(adapter, '_getLeanOrderFields').mockResolvedValue({
+                header: new Set(['SalesOrderTypeCode', 'SalesOrganization', 'DistributionChannel', 'Division', 'ContactPerson']),
+                item: new Set(['MaterialID', 'OrderQty', 'SalesUnit']),
+                partner: new Set(['PartnerFunctionCode', 'CustomerID'])
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                ContactPerson: '24789'
+            };
+
+            const result = await adapter.createSalesOrder(header, [], {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000470');
+            const callConfig = mockExecute.mock.calls[0][1];
+            expect(callConfig.data.ContactPerson).toBe('24789');
+        });
+
+        test('read-back succeeds when Contact Person matches in HeaderPartnerSet with leading zero differences', async () => {
+            const mockExecute = jest.fn()
+                .mockResolvedValueOnce({
+                    status: 201,
+                    data: { d: { SalesOrderID: '5000472' } }
+                })
+                .mockResolvedValueOnce({
+                    status: 200,
+                    data: {
+                        d: {
+                            SalesOrderID: '5000472',
+                            PaymentTermCode: 'PT11',
+                            HeaderPartnerSet: {
+                                results: [
+                                    {
+                                        PartnerFunctionCode: 'CP',
+                                        CustomerID: '0000024789' // zero-padded in SAP
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                });
+            jest.spyOn(adapter, '_getLeanOrderFields').mockResolvedValue({
+                header: new Set(['SalesOrderTypeCode', 'SalesOrganization', 'DistributionChannel', 'Division', 'PaymentTermCode']),
+                item: new Set(['MaterialID', 'OrderQty', 'SalesUnit']),
+                partner: new Set(['PartnerFunctionCode', 'CustomerID'])
+            });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                PaymentTerms: 'PT11',
+                ContactPerson: '24789'
+            };
+
+            const result = await adapter.createSalesOrder(header, [], {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            });
+
+            expect(result.SalesOrder).toBe('5000472');
+        });
+
+        test('read-back detects mismatch and throws error', async () => {
+            const mockExecute = jest.fn()
+                .mockResolvedValueOnce({
+                    status: 201,
+                    data: { d: { SalesOrderID: '5000471' } }
+                })
+                .mockResolvedValueOnce({
+                    status: 200,
+                    data: {
+                        d: {
+                            SalesOrderID: '5000471',
+                            PaymentTermCode: 'PT01', // mismatch from PT11
+                            IncotermsClassification: 'FOB',
+                            IncotermsLocation1: 'Mumbai'
+                        }
+                    }
+                });
+
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                PaymentTerms: 'PT11',
+                IncotermsClassification: 'FOB',
+                IncotermsLocation1: 'Mumbai'
+            };
+
+            await expect(
+                adapter.createSalesOrder(header, [], {
+                    destination: { url: 'http://sap.mock' },
+                    executeHttpRequest: mockExecute
+                })
+            ).rejects.toThrow(/read-back verification failed.*Payment Terms expected 'PT11' but found 'PT01'/);
         });
     });
 
@@ -400,7 +631,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
         });
 
         test('routes ZDOM to single Deep Insert POST', async () => {
-            const mockExecute = jest.fn().mockResolvedValueOnce({
+            const mockExecute = jest.fn().mockResolvedValue({
                 status: 201,
                 data: { d: { SalesOrderID: '5000461', NetAmount: '500.00', DocumentCurrency: 'INR' } }
             });
@@ -431,8 +662,8 @@ describe('Unit: Sales Order Adapter Integration', () => {
 
             expect(result.SalesDocument).toBe('5000461');
             expect(result.SalesOrder).toBe('5000461');
-            // Only 1 atomic call
-            expect(mockExecute).toHaveBeenCalledTimes(1);
+            // 1 atomic POST + 1 GET read-back
+            expect(mockExecute).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -710,6 +941,84 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(result.validForSalesArea).toBe(true);
             expect(result.PaymentTerms).toBe('PT01');
             expect(result.salesAreaError).toBe('');
+        });
+    });
+
+    describe('Commercial Value Helps', () => {
+        test('getPaymentTerms returns valid payment terms via RFC readTable', async () => {
+            adapter.rfc = {
+                readTable: jest.fn().mockResolvedValue([
+                    { ZTERM: '0001', TEXT1: 'Payable immediately' },
+                    { ZTERM: 'AD03', TEXT1: '100% Advance' }
+                ])
+            };
+
+            const terms = await adapter.getPaymentTerms();
+            expect(terms).toHaveLength(2);
+            expect(terms[0].PaymentTerms).toBe('0001');
+            expect(terms[0].PaymentTermsName).toBe('Payable immediately');
+            expect(adapter.rfc.readTable).toHaveBeenCalledWith('T052U', ['ZTERM', 'TEXT1'], ["SPRAS = 'E'"], 50);
+        });
+
+        test('getPaymentTerms falls back to defaults when RFC readTable fails', async () => {
+            adapter.rfc = {
+                readTable: jest.fn().mockRejectedValue(new Error('RFC connection failed'))
+            };
+
+            const terms = await adapter.getPaymentTerms();
+            expect(terms.length).toBeGreaterThan(0);
+            expect(terms.some((t) => t.PaymentTerms === '0001')).toBe(true);
+        });
+
+        test('getIncoterms returns valid incoterms via RFC readTable', async () => {
+            adapter.rfc = {
+                readTable: jest.fn().mockResolvedValue([
+                    { INCO1: 'CIF', BEZEI: 'Costs, insurance & freight' },
+                    { INCO1: 'FOB', BEZEI: 'Free on board' }
+                ])
+            };
+
+            const incoterms = await adapter.getIncoterms();
+            expect(incoterms).toHaveLength(2);
+            expect(incoterms[0].IncotermsClassification).toBe('CIF');
+            expect(incoterms[0].IncotermsClassificationName).toBe('Costs, insurance & freight');
+        });
+
+        test('getContactPersons filters by Customer and formats FullName', async () => {
+            adapter.rfc = {
+                readTable: jest.fn().mockResolvedValue([
+                    { PARNR: '0000025799', KUNNR: '0000010514', NAME1: 'Suthar', NAMEV: 'Pradip', TELF1: '' }
+                ])
+            };
+
+            const query = {
+                SELECT: {
+                    where: [{ ref: ['Customer'] }, '=', { val: '10514' }]
+                }
+            };
+
+            const contacts = await adapter.getContactPersons(query);
+            expect(contacts).toHaveLength(1);
+            expect(contacts[0].ContactPerson).toBe('0000025799');
+            expect(contacts[0].FullName).toBe('Pradip Suthar');
+            expect(adapter.rfc.readTable).toHaveBeenCalledWith(
+                'KNVK',
+                ['PARNR', 'KUNNR', 'NAME1', 'NAMEV', 'TELF1'],
+                ["KUNNR = '0000010514'"],
+                50
+            );
+        });
+
+        test('getContactPersons falls back to mock contacts when RFC is unavailable', async () => {
+            adapter.rfc = {
+                readTable: jest.fn().mockRejectedValue(new Error('RFC not available'))
+            };
+
+            const contacts = await adapter.getContactPersons({
+                SELECT: { where: [{ ref: ['Customer'] }, '=', { val: '10514' }] }
+            });
+            expect(contacts.length).toBeGreaterThan(0);
+            expect(contacts[0].ContactPerson).toBe('0000025799');
         });
     });
 });

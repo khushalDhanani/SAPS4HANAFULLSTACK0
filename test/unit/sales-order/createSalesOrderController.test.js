@@ -275,6 +275,10 @@ describe("CreateSalesOrder Controller", () => {
         oModel.setProperty("/header/TransactionCurrency", "INR");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-AUTO-01");
+        oModel.setProperty("/header/PaymentTerms", "0001");
+        oModel.setProperty("/header/IncotermsClassification", "FOB");
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai");
+        oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/Plant", "1120");
         oModel.setProperty("/items/0/OrderQuantity", "5.000");

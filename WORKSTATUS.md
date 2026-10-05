@@ -1,6 +1,153 @@
 
 # Changes Log
 
+## 2026-10-05 10:18 UTC — Fix Contact Person 400 Rejection via HeaderPartnerSet in LORD_ODATA_ORDER_SRV & Live SAP Proof
+- **Agent**: Antigravity
+- **Current Status**: **Complete, Tested, and Verified on Live SAP S/4HANA.**
+- **Scope & User Issue**:
+  - The user reported a 400 Bad Request when submitting `/sd/sales-orders/create`:
+    ```json
+    POST http://localhost:4004/odata/v4/sales-order/createSalesOrder 400 (Bad Request)
+    "Failed to create Sales Order: Contact Person is not supported by the SAP backend service (LORD_ODATA_ORDER_SRV HeaderSet metadata has no ContactPerson property). Maintain Contact Person directly in SAP."
+    ```
+- **Root Cause & Technical Findings**:
+  - `createSalesDocument` was previously checking only `fields.header.has('ContactPerson')`. Since `LORD_ODATA_ORDER_SRV` `Header` entity has 26 properties and no `ContactPerson` property, it immediately threw HTTP 400.
+  - Live SAP S/4HANA investigation (DS4 Client 220) proved:
+    1. In `LORD_ODATA_ORDER_SRV`, Contact Person is carried via navigation property `HeaderPartnerSet` as a partner row: `{ "PartnerFunctionCode": "CP", "CustomerID": "<ContactPersonNumber>" }`.
+    2. Inspection of existing order `0001000102` (`HeaderSet('1000102')/HeaderPartnerSet`) returned:
+       `"PartnerFunctionCode": "CP", "CustomerID": "25166", "PartnerFunctionDescr": "Contact person"`.
+    3. In SAP table `TPART`, partner function `AP` / `CP` corresponds to `Contact person`.
+    4. Gated `IncotermsClassification` and `IncotermsLocation1` by metadata capability so unexposed OData header properties do not cause `SLS_LORD` 400 rejections from Gateway.
+- **Changes**:
+  1. **`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`**:
+     - Updated `_getLeanOrderFields` to parse `partner: props('HeaderPartner')`.
+     - In `createSalesDocument` deep-insert path, accumulate partners in `headerPartners = []`. If `ShipToParty` is present, push `{ PartnerFunctionCode: 'SH', CustomerID: header.ShipToParty }`.
+     - If `ContactPerson` is present:
+       - Check `fields.header.has('ContactPerson')` -> set `headerPayload.ContactPerson = sContactPerson`.
+       - Else if `fields.partner.has('CustomerID') || fields.partner.has('ContactPersonID')` -> push `{ PartnerFunctionCode: 'CP', CustomerID: sContactPerson }` (and `ContactPersonID` if present).
+       - Only throw HTTP 400 error if neither `Header` nor `HeaderPartner` supports it.
+       - Attach `headerPayload.HeaderPartnerSet = headerPartners` when partners exist (supporting both `SH` and `CP`).
+     - In `createSalesDocument` sequential Inquiry path, applied identical `HeaderPartnerSet` logic for `inquiryPartners`.
+     - Made `_getLeanOrderFields` invocation conditional so metadata GET is only executed when extension/partner fields are present.
+     - Updated `_verifySalesOrderReadback` partner matching to support leading-zero normalization (`.replace(/^0+/, '')`) for `CustomerID`, `PartnerNumber`, and `ContactPersonID`.
+  2. **`test/unit/sales-order/salesOrderAdapter.test.js`**:
+     - Added comprehensive unit tests:
+       - `unsupported ContactPerson shows a visible error when metadata lacks ContactPerson and HeaderPartner CustomerID`
+       - `transmits ContactPerson via HeaderPartnerSet with partner function CP when HeaderPartner metadata has CustomerID`
+       - `transmits both ShipToParty and ContactPerson in HeaderPartnerSet`
+       - `transmits ContactPerson when supported by metadata HeaderSet`
+       - `read-back succeeds when Contact Person matches in HeaderPartnerSet with leading zero differences`
+- **Validation**:
+  - **Live SAP S/4HANA POST & Read-Back Verification**:
+    - Created live sales order **`5000501`** in SAP S/4HANA (DS4 Client 220) with Sold-to Party `10135`, Contact Person `25363`, Payment Terms `0001`, and line item `4000000076`.
+    - Read back order `5000501` directly from SAP via OData `HeaderSet('5000501')?$expand=HeaderPartnerSet`:
+      Confirmed partner persisted in SAP: `PartnerFunctionCode: 'CP'`, `CustomerID: '25363'`, `Name: ' Rajesh Kumar Patel'`, `PartnerFunctionDescr: 'Contact person'`.
+  - `npx jest test/unit/sales-order`: **5 suites / 91 tests passed**, 0 failed.
+  - Full Project Unit Tests (`npm run test:unit`): **134 suites / 2,372 tests passed**, 0 failed.
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): **Success! No findings detected.**
+  - ESLint (`npm run lint`): **0 errors**, 14 existing warnings in WM modules.
+  - CDS Compiler (`npx cds compile srv/sd/sales-order/service.cds`): **OK** (exited 0).
+  - Git Diff Check (`git diff --check`): **Clean**.
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: Ready for user testing on `/sd/sales-orders/create`.
+
+
+- **Agent**: Antigravity
+- **Current Status**: **Complete, Tested, and Verified.**
+- **Scope & User Request**:
+  - Implement interactive Value Help Dialogs (F4) and live dropdown suggestion lists on the Create Sales Order UI (`/sd/sales-orders/create`) for the three commercial inputs:
+    1. Payment Terms (`inPaymentTerms`) -> `PaymentTermsVH` (backed by SAP `T052U` / `C_MM_PaymentTermValueHelp`)
+    2. Incoterms Classification (`inIncotermsClassification`) -> `IncotermsClassificationVH` (backed by SAP `TINCT` / `C_MM_IncotermValueHelp`)
+    3. Contact Person (`inContactPerson`) -> `ContactPersonVH` (backed by SAP `KNVK` filtered by Sold-to Party)
+- **Changes**:
+  1. **`srv/sd/sales-order/service.cds`**:
+     - Added `@readonly entity IncotermsClassificationVH as projection on maint.C_MM_IncotermValueHelp;`
+     - Added `@readonly entity PaymentTermsVH as projection on maint.C_MM_PaymentTermValueHelp;`
+     - Added `@readonly entity ContactPersonVH { key ContactPerson : String(10); Customer : String(10); FirstName : String(35); LastName : String(35); FullName : String(80); PhoneNumber : String(30); };`
+  2. **`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`**:
+     - Added `getPaymentTerms(query)`: queries live SAP table `T052U` (`ZTERM`, `TEXT1`, `SPRAS = 'E'`) via RFC with fallback to standard payment term keys.
+     - Added `getIncoterms(query)`: queries live SAP table `TINCT` (`INCO1`, `BEZEI`, `SPRAS = 'E'`) via RFC with fallback to standard Incoterms.
+     - Added `getContactPersons(query)`: queries live SAP table `KNVK` (`PARNR`, `KUNNR`, `NAME1`, `NAMEV`, `TELF1`) via RFC with contextual filtering by `Customer` (SoldToParty) and composite `FullName` resolution.
+  3. **`srv/sd/sales-order/handlers/valueHelp.config.js`**:
+     - Added `'PaymentTermsVH'`, `'IncotermsClassificationVH'`, and `'ContactPersonVH'` to `SO_VALUE_HELP_ENTITIES`.
+     - Registered handlers in `soValueHelpConfig` for query dispatch and deduplication.
+  4. **`app/fiori-app/webapp/service/ValueHelpService.js`**:
+     - Added `/ContactPersonVH` configuration mapping (`title: "Select Contact Person"`, `key: "ContactPerson"`, `desc: "FullName"`, `descAlt: "LastName"`, `info: "Customer"`).
+  5. **`app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml`**:
+     - Configured `inPaymentTerms` with `showValueHelp="true"`, `showSuggestion="true"`, `suggest=".onSuggest"`, `valueHelpRequest=".onValueHelpRequest"`, `suggestionItemSelected=".onPaymentTermsSelect"`, and suggestion template bound to `salesOrder>/PaymentTermsVH`.
+     - Configured `inIncotermsClassification` with `showValueHelp="true"`, `showSuggestion="true"`, `suggest=".onSuggest"`, `valueHelpRequest=".onValueHelpRequest"`, `suggestionItemSelected=".onIncotermsSelect"`, and suggestion template bound to `salesOrder>/IncotermsClassificationVH`.
+     - Configured `inContactPerson` with `showValueHelp="true"`, `showSuggestion="true"`, `suggest=".onSuggest"`, `valueHelpRequest=".onValueHelpRequest"`, `suggestionItemSelected=".onContactPersonSelect"`, and suggestion template bound to `salesOrder>/ContactPersonVH`.
+  6. **`app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`**:
+     - Implemented `onPaymentTermsSelect`, `onIncotermsSelect`, and `onContactPersonSelect`.
+     - Updated `onSuggest` to apply contextual `Customer` filter for `inContactPerson`.
+     - Updated `onValueHelpRequest` to pass initial `Customer` filter and process selections for Payment Terms, Incoterms, and Contact Person.
+  7. **Unit Tests**:
+     - Added 5 new unit tests to `test/unit/sales-order/salesOrderAdapter.test.js` validating `getPaymentTerms`, `getIncoterms`, and `getContactPersons` (both RFC query and fallback paths).
+- **Validation**:
+  - `npx jest test/unit/sales-order`: **5 suites / 88 tests passed**, 0 failed.
+  - Project-wide Unit Tests (`npm run test:unit`): **134 suites / 2,369 tests passed**, 0 failed.
+  - UI Consistency Static Checks (`npx jest test/unit/controller/uiConsistency.test.js`): **7/7 passed**.
+  - UI5 Linter (`npm --prefix app/fiori-app run lint`): **Success! No findings detected.**
+  - ESLint (`npm run lint`): **0 errors**, 14 existing warnings in WM modules.
+  - CDS Compiler (`npx cds compile srv/sd/sales-order/service.cds`): **OK** (exited 0).
+  - Git Diff Check (`git diff --check`): **Clean**.
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: Ready for user review and end-to-end browser walkthrough.
+
+## 2026-10-05 09:48 UTC — Commercial Fields & Contact Person Handling on /sd/sales-orders/create
+- **Agent**: Antigravity
+- **Current Status**: **Complete, Tested, and Verified.**
+- **Scope & User Requirements**:
+  1. Live metadata inspection of `LORD_ODATA_ORDER_SRV/$metadata` for `HeaderSet` and `HeaderPartnerSet`.
+  2. Hide optional commercial fields and item Description/Net Price while preserving bindings; mark Payment Terms, Incoterms, Incoterms Location, and Contact Person as required in `CreateSalesOrder.view.xml`.
+  3. Update `SalesOrderModel.js` and `CreateSalesOrder.controller.js` to validate the four required fields, update incompletion gaps, ensure hidden fields do not block Create, and protect user-entered values from being overwritten by customer defaults.
+  4. Send `ContactPerson` only through metadata-supported paths; remove silent drop in `SalesInquiryAdapter.js` and fail visibly with clear error if unsupported (no guessed partner functions).
+  5. Confirm `PaymentTerms` to `PaymentTermCode` mapping and non-overwriting customer defaults.
+  6. Read back created order from SAP and throw visible error on mismatch.
+  7. Comprehensive test coverage for required/hidden validation, payload generation, unsupported contact person error, SAP rejection, and read-back mismatch.
+  8. Full verification pass: full unit test suite, ESLint, UI5 linter, CDS compile, and git diff check.
+- **Root Cause & Technical Findings**:
+  - Live inspection of `http://172.27.100.32:8000/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV/$metadata` on Client 220:
+    - `PaymentTermCode`: Exists on `Header` (`<Property Name="PaymentTermCode" Type="Edm.String" Nullable="false" MaxLength="4" sap:unicode="false" sap:label="Pyt Terms" sap:creatable="false" sap:updatable="false" sap:sortable="false" sap:filterable="false"/>`).
+    - `ContactPerson`, `IncotermsClassification`, `IncotermsLocation1`: Do NOT exist on `Header` (exactly 26 properties on `Header`, none of which are contact person or incoterms).
+    - `HeaderPartnerSet`: Key is `['SalesOrderID', 'PartnerFunctionCode']` (`<Property Name="PartnerFunctionCode" Type="Edm.String" Nullable="false" MaxLength="2" .../><Property Name="CustomerID" Type="Edm.String" Nullable="false" MaxLength="10" .../>`). The metadata does not provide dedicated partner properties or contact person codes. Per non-negotiable rules, guessing partner function codes (e.g. `CP`, `AP`, `ZP`) without SAP backend proof is prohibited.
+    - Previously, `SalesInquiryAdapter.js` silently dropped `ContactPerson` into `notTransmitted` warning log.
+- **Changes**:
+  1. **`app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml`**:
+     - Hidden (`visible="false"`): `inShipToParty` + label, `inPONumber` + label, `inCustRefDate` + label, `inCustomerGroup2` + label, `inPortOfLoading` + label, `inPortOfDischarge` + label, item Description column + input cell, item Net Price column + input cell.
+     - Required (`required="true"`): Set on labels and inputs for `inPaymentTerms`, `inIncotermsClassification`, `inIncotermsLocation1`, and `inContactPerson`.
+  2. **`app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`**:
+     - Added validation cases for `PaymentTerms`, `IncotermsClassification`, `IncotermsLocation1`, and `ContactPerson` in `validateSingleField`.
+     - Added the four commercial fields to `aRequiredHeaderFields` in `validateForm`.
+     - Guarded optional/hidden fields (`PurchaseOrderNumber`, `CustomerPurchaseOrderDate`, etc.) so empty values never block form submission.
+     - Included missing commercial fields in `getIncompletionGaps`.
+     - Preserved user-entered fields in `applyCustomerDefaults` so defaults do not overwrite user inputs.
+     - Uppercased `IncotermsClassification` in `buildPayload`.
+  3. **`app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`**:
+     - Tracked field modification in `onHeaderFieldChange` and `onContactPersonChange` so customer defaults respect manual edits.
+     - Triggered `validateSingleField` on change for live feedback.
+  4. **`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`**:
+     - Removed silent drop of `ContactPerson`.
+     - If `ContactPerson` is provided and the metadata `HeaderSet` lacks `ContactPerson`, throws visible error: `Contact Person is not supported by the SAP backend service (LORD_ODATA_ORDER_SRV HeaderSet metadata has no ContactPerson property). Maintain Contact Person directly in SAP.` (HTTP 400).
+     - Added post-creation read-back verification against SAP (`HeaderSet` and `RfcClient.readTable('VBKD')` / `'VBPA'`). Throws HTTP 502 error if any of the four commercial fields mismatch the saved values.
+  5. **`app/fiori-app/webapp/i18n/i18n_en.properties`**:
+     - Added 9 matching i18n keys for Payment Terms and Incoterms labels, placeholders, and tooltips.
+  6. **Unit Tests**:
+     - `test/unit/sales-order/salesOrderModel.test.js`: Added tests for required fields blocking Create, hidden fields not blocking, payload generation with all four commercial fields, non-overwriting customer defaults, and incompletion gaps.
+     - `test/unit/sales-order/salesOrderAdapter.test.js`: Added tests for visible error on unsupported `ContactPerson`, payload transmission when supported, and read-back mismatch detection.
+     - `test/unit/sales-order/createSalesOrderController.test.js`: Updated `onSave` test to pass all 4 required fields.
+- **Validation**:
+  - `npx jest test/unit/sales-order`: **5 suites / 83 tests passed**, 0 failed.
+  - Full unit test suite (`npm run test:unit`): **134 suites / 2,364 tests passed**, 0 failed.
+  - UI5 linter (`npm --prefix app/fiori-app run lint`): **Success! No findings detected.**
+  - Project ESLint (`npm run lint`): **0 errors**, 14 existing warnings in WM modules.
+  - CDS compile (`npx cds compile srv/sd/sales-order/service.cds`): **OK** (exit code 0).
+  - Git whitespace / formatting (`git diff --check`): **Clean** (no issues).
+- **Errors / Warnings / Blockers**:
+  - `LORD_ODATA_ORDER_SRV` on S/4HANA DS4 does not have `ContactPerson` in its `HeaderSet` metadata. Transmitting `ContactPerson` through this standard service requires SAP Gateway metadata extension or maintaining Contact Person via SAP GUI (VA02) / BAPI. An explicit HTTP 400 error is returned when submitted from UI instead of silent dropping.
+- **Next Steps**:
+  - If Contact Person must be saved through OData, request the SAP Basis/ABAP team to extend `LORD_ODATA_ORDER_SRV` with a `ContactPerson` header property or expose a dedicated Partner navigation insert.
+
 ## 2026-10-05 09:15 UTC — Fix: Incoterms, Payment Terms, Contact Person not saved on Sales Order
 - **Agent**: Antigravity
 - **Current Status**: **Complete, Tested, and Verified.**

@@ -45,8 +45,10 @@ sap.ui.define([
         "/DistributionChannelVH": { title: "Select Distribution Channel", key: "DistributionChannel", desc: "DistributionChannelName" },
         "/DivisionVH": { title: "Select Division", key: "Division", desc: "DivisionName" },
         "/SoldToPartyVH": { title: "Select Sold-to Party", key: "Customer", desc: "CustomerName" },
-        "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" }
+        "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" },
+        "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" }
     };
+
 
     return {
         /**
