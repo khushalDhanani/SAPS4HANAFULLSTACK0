@@ -1,6 +1,34 @@
 
 # Changes Log
 
+## 2026-10-05 07:22 UTC — Fix & Verification: Batch Stock Scoping by Storage Location
+- **Agent**: Antigravity
+- **Request**: Investigate and fix batch `NMDH250001` error: `Batch NMDH250001 is expired, restricted, deleted, or has no usable stock in SAP.`
+- **Current Status**: **Complete, Tested, and Verified in Browser via Chrome DevTools MCP**.
+- **Root Cause & Diagnosis**:
+  1. **Batch Master vs SLoc Stock**: Batch `NMDH250001` exists in SAP batch master (`I_Batch`) with a valid expiration date (2026-12-12). However, in Plant `1110` / Storage Location `PT01`, it has **0.000 KG stock**. The batches that actually have stock in `PT01` are `NMDH260006` (5000 KG), `NMDH260007` (5000 KG), and `NMDH260008` (5000 KG).
+  2. **Value Help Unscoped Query**: When opening the Batch Value Help on the 261 form, `GoodsIssue261Service.fetchMaterialDetails` queried `MaterialBatches?$filter=Material eq '...' and Plant eq '...'`, omitting `StorageLocation eq 'PT01'`. Unscoped by storage location, SAP returned `AvailableStock: null` and marked `IsSelectable: true`, allowing the operator to select `NMDH250001`.
+  3. **Backend Validation Guard**: Upon posting, the backend handler invoked `validateBatchForPosting('3000000016', '1110', 'PT01', 'NMDH250001', ...)`. It correctly evaluated that `NMDH250001` has no usable stock in storage location `PT01` (`IsSelectable === false`) and rejected the posting with HTTP 422: `Batch NMDH250001 is expired, restricted, deleted, or has no usable stock in SAP.`
+- **Implementation Changes**:
+  1. **Storage-Location Scoped Batch Query in Frontend Service**: Updated `GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlant, sStorageLocation)` to include `StorageLocation` in the `MaterialBatches` OData filter when present.
+  2. **Controller SLoc Propagation**: In `GoodsIssue261.controller.js`, updated `_loadMaterialInfo(sMaterial, sPlant, sStorageLocation)` to pass the reservation item's storage location.
+  3. **Batch Value Help UI Enhancement**: Updated the batch selection template to display available stock: `Stock: {AvailableStock} {Unit}` alongside SLED status. Because `MaterialBatches` returns `IsSelectable: false` for batches with zero stock in the storage location, zero-stock batches are automatically filtered out from selectable options.
+  4. **`revalidateStock` Alignment**: In `GoodsIssueBatchesClient.js`, prevented batch stock lookup from falling back to generic storage location stock totals when a specific batch is queried, and aligned batch validity with `IsSelectable` / stock sufficiency.
+- **Execution & Visual Verification via Chrome DevTools MCP**:
+  - Re-tested Batch Value Help on `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/goods-issue/order-based-261?resv=521608`:
+    - Dialog now only presents authentic, stocked batches for `PT01`: `NMDH260006`, `NMDH260007`, `NMDH260008`, each clearly indicating `Stock: 5000 KG`.
+    - Zero-stock batch `NMDH250001` is eliminated from selection.
+  - Selected `NMDH260006`: Form validated successfully and "Complete Goods Issue (261)" button transitioned to enabled.
+  - Captured screenshots:
+    - `docs/screenshots/gi261_521608_batch_help_scoped.png`
+    - `docs/screenshots/gi261_521608_ready_with_valid_batch.png`
+- **Validation**:
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js`: 73 passed, 73 total.
+  - `git diff --check`: 0 errors.
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: Ready for user review or live posting execution.
+
 ## 2026-10-05 07:12 UTC — Interactive Browser Verification: /wm/goods-issue/order-based-261?resv=521608
 - **Agent**: Antigravity
 - **Request**: Test and verify `/wm/goods-issue/order-based-261?resv=521608` using Chrome DevTools MCP.

@@ -304,8 +304,8 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(m.getProperty('/orderNo')).toBe('600001');
             expect(m.getProperty('/quantity')).toBe(4);
             expect(m.getProperty('/openQty')).toBe(4);
-            // The reservation item's own plant must win over the (blank) form plant.
-            expect(mockService.fetchMaterialDetails).toHaveBeenCalledWith('1000000045', '3000');
+            // The reservation item's own plant and storage location must be passed to scope batches.
+            expect(mockService.fetchMaterialDetails).toHaveBeenCalledWith('1000000045', '3000', 'RM01');
         });
 
         it('should reject an explicit item hint instead of substituting another eligible item', async () => {

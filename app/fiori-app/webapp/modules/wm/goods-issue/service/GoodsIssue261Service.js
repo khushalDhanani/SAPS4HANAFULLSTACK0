@@ -191,7 +191,7 @@ sap.ui.define([
          * @param {string} [sPlant]
          * @returns {Promise<Object>}
          */
-        fetchMaterialDetails: function (sMaterial, sPlant) {
+        fetchMaterialDetails: function (sMaterial, sPlant, sStorageLocation) {
             if (!sMaterial) {
                 return Promise.resolve(null);
             }
@@ -209,6 +209,9 @@ sap.ui.define([
 
                     if (sPlant) {
                         var sBatchUrl = BASE_PATH_GI + "/MaterialBatches?$filter=Material eq '" + sMatClean + "' and Plant eq '" + encodeURIComponent(sPlant) + "'";
+                        if (sStorageLocation) {
+                            sBatchUrl += " and StorageLocation eq '" + encodeURIComponent(String(sStorageLocation).trim()) + "'";
+                        }
                         return ODataClient.get(sBatchUrl)
                             .then(function (oBatchData) {
                                 var aBatches = (oBatchData && oBatchData.value) || (Array.isArray(oBatchData) ? oBatchData : []);

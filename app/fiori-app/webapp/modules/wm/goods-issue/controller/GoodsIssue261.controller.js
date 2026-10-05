@@ -185,7 +185,7 @@ sap.ui.define([
             if (typeof oItem.IsBatchManaged === "boolean") {
                 oModel.setProperty("/isBatchManaged", oItem.IsBatchManaged);
             }
-            this._loadMaterialInfo(oItem.Material || "", oItem.Plant || "");
+            this._loadMaterialInfo(oItem.Material || "", oItem.Plant || "", oItem.StorageLocation || "");
             this._detectScanMode(sResv, sItem, nOpen);
             this._validateLive();
         },
@@ -641,12 +641,16 @@ sap.ui.define([
             }
         },
 
-        _loadMaterialInfo: function (sMaterial, sPlant) {
+        _loadMaterialInfo: function (sMaterial, sPlant, sStorageLocation) {
             var that = this;
             if (!sMaterial) { return; }
-            // Prefer an explicitly passed plant (e.g. the reservation item's own plant) over the form's.
+            // Prefer an explicitly passed plant / storage location over the form's.
             var sPlantVal = sPlant || this._oModel.getProperty("/plant") || "";
-            return GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlantVal)
+            var sSLocVal = sStorageLocation || this._oModel.getProperty("/storageLocation") || "";
+            var oPromise = sSLocVal
+                ? GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlantVal, sSLocVal)
+                : GoodsIssue261Service.fetchMaterialDetails(sMaterial, sPlantVal);
+            return oPromise
                 .then(function (oInfo) {
                     if (oInfo && that._oModel.getProperty("/material") === sMaterial) {
                         that._oModel.setProperty("/materialName", oInfo.materialName || that._oModel.getProperty("/materialName"));
@@ -700,8 +704,9 @@ sap.ui.define([
                 });
                 var oItemTemplate = new StandardListItem({
                     title: "{Batch}",
-                    description: "{StatusText}",
-                    info: "{ExpiryDate}"
+                    description: "{= ${AvailableStock} !== null && ${AvailableStock} !== undefined ? ('Stock: ' + ${AvailableStock} + ' ' + (${Unit} || '')) : (${StatusText} || '') }",
+                    info: "{= ${ExpiryDate} ? ('SLED: ' + ${ExpiryDate}) : (${StatusText} || '') }",
+                    infoState: "{StatusState}"
                 });
                 oDialog.setModel(new JSONModel(aBatches));
                 oDialog.bindAggregation("items", "/", oItemTemplate);
@@ -716,7 +721,8 @@ sap.ui.define([
             if (!sMaterial) { return; }
             this._loadMaterialInfo(
                 sMaterial,
-                this._oModel.getProperty("/plant") || ""
+                this._oModel.getProperty("/plant") || "",
+                this._oModel.getProperty("/storageLocation") || ""
             ).then(openBatchDialog);
         },
 

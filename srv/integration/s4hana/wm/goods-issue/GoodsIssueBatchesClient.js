@@ -410,8 +410,29 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
       }
     }
 
-    // 2. Storage location fallback if not found at batch level or batch not specified
-    if (!stockReadSuccess && sPlant && sSLoc) {
+    // 2. If batch specified, check getMaterialBatches before generic SLoc fallback
+    if (sBatch && !stockReadSuccess && sPlant && sSLoc) {
+      try {
+        const getBatchesFn = (mat, plt, sloc) => {
+          if (this.adapter && typeof this.adapter.getMaterialBatches === 'function') {
+            return this.adapter.getMaterialBatches(mat, plt, sloc);
+          }
+          return this.getMaterialBatches(mat, plt, sloc);
+        };
+        const batches = await getBatchesFn(sMat, sPlant, sSLoc);
+        const found = Array.isArray(batches) ? batches.find(b => b.Batch && b.Batch.toUpperCase() === sBatch.toUpperCase()) : null;
+        if (found && found.AvailableStock !== undefined && found.AvailableStock !== null) {
+          currentStock = Number(found.AvailableStock);
+          baseUnit = found.Unit || '';
+          stockReadSuccess = true;
+        }
+      } catch (e) {
+        LOG.warn(`Batch stock lookup fallback failed for batch ${sBatch}: ${e.message}`);
+      }
+    }
+
+    // 3. Storage location fallback only when batch is not specified or for non-batch materials
+    if (!stockReadSuccess && sPlant && sSLoc && !sBatch) {
       try {
         const slocFilter = `Material eq '${encodeURIComponent(sMat)}' and Plant eq '${encodeURIComponent(sPlant)}' and StorageLocation eq '${encodeURIComponent(sSLoc)}'`;
         const slocRes = await this._get(
@@ -435,7 +456,7 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
       }
     }
 
-    if (!stockReadSuccess && sPlant) {
+    if (!stockReadSuccess && sPlant && !sBatch) {
       try {
         let stockFilter = `Material eq '${encodeURIComponent(sMat)}' and Plant eq '${encodeURIComponent(sPlant)}'`;
         if (sSLoc) stockFilter += ` and StorageLocation eq '${encodeURIComponent(sSLoc)}'`;
@@ -489,14 +510,20 @@ class GoodsIssueBatchesClient extends BaseGoodsIssueClient {
         } else {
           // Get current batch details
           const batches = await getBatchesFn(sMat, sPlant, sSLoc);
-          const found = batches.find(b => b.Batch && b.Batch.toUpperCase() === sBatch.toUpperCase());
+          const found = Array.isArray(batches) ? batches.find(b => b.Batch && b.Batch.toUpperCase() === sBatch.toUpperCase()) : null;
           if (found) {
             batchStatusState = found.StatusState || 'None';
             batchStatusText = found.StatusText || 'unknown';
             batchExpiry = found.ExpiryDate || null;
+            if (found.IsSelectable === false || found.StatusState === 'Error' || (found.AvailableStock !== null && found.AvailableStock <= 0)) {
+              batchValid = false;
+              batchStatusState = 'Error';
+              batchStatusText = `Batch ${sBatch} is expired, restricted, deleted, or has no usable stock in SAP.`;
+            }
           } else {
-            batchStatusState = 'None';
-            batchStatusText = 'unknown';
+            batchValid = false;
+            batchStatusState = 'Error';
+            batchStatusText = `Batch ${sBatch} is not usable for material ${sMat} at plant ${sPlant}, storage location ${sSLoc}; it may be unknown, expired, deleted, or restricted in SAP.`;
           }
         }
       } catch (err) {
