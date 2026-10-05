@@ -5,11 +5,12 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Open 261 items (read-only list)** — backend validated live against SAP (393 with open quantity / 467 open in SAP, equal to RESB); UI page `#/wm/mvt261/open` built, statically validated, **not yet verified in a browser**. Posting (Phase 2) not started: no proven requirement source.
+- **Open 261 items + 261 cycle (read-only)** — list (153 for plant 1120 = user's reference, reconciled with RESB) and click-through cycle page validated live against SAP at backend level; UI pages `#/wm/mvt261/open` and `#/wm/mvt261/open/{reservation}/{item}` statically validated, **not yet verified in a browser**. Posting (261, 262, transfer orders) **not built — Blocked** on test reservations and explicit approval.
 - **First Goods Issue 261 finder (read-only)** — backend complete and validated live against SAP; UI built, statically validated, **not yet verified in a browser** (login needs the user's SAP credentials).
 
 ## Unresolved Issues
 
+0. **OPEN SAP POSTING:** material document 4900050046/2026 (261, 1 NOS, reservation 278650/1, plant 1120, HS01) was posted in live test 1 and is NOT yet reversed; WM transfer requirement 1000744 (W01) was created by it. Waiting for the user's decision to cancel it. Status: **Blocked**.
 1. UI page `#/wm/mvt261` not exercised in a browser (see above). Status: **In Progress**.
 2. The original spec asked for ABAP RAP objects (ZI_MVT261, ZC_MVT261, DCL, V4 binding). By user decision (2026-10-05) the feature is built as CAP + UI5 on existing SAP services; no ABAP objects exist.
 3. "Show a message if authorization removes rows" cannot be detected: SAP filters unauthorized plants / movement types silently inside the OData services. The UI shows a static note instead.
@@ -18,7 +19,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-0. User to confirm the default definition of "open" (open quantity > 0 = 393; toggle shows all 467) and to check the page `#/wm/mvt261/open` in a browser, including Excel export.
+0. User to decide: reverse 4900050046/2026 with the API Cancel action (then verify ENMNG, KZEAR, stock and the WM transfer requirement), and whether to run test 2 (418011/4, 1 KG, needs a batch decision).
 1. Log in locally, open the dashboard tile "First Goods Issue 261" (WM tab) and confirm the page with plant 1120.
 2. Decide whether the ABAP RAP variant is still wanted.
 
@@ -120,3 +121,72 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Validation:** `npx jest test/unit/wm/mvt261Adapter.test.js` → 9 passed. `npm test` → 130 suites, 2,076 tests passed. `npx eslint` on both files → clean.
 - **Result:** PASS.
 - **UNVERIFIED:** ABAP Unit tests (no ABAP objects exist); CAP role check answering 403 for a user without the four allowed roles (every mocked user has one; only anonymous → 401 was verified); SAP's own authorization filtering for a restricted SAP user (only one SAP user available); browser rendering and Excel export.
+
+### 2026-10-05 21:40 IST — Discovery for the full 261 cycle (no code change)
+
+- **Why:** new spec (list + click-through 261 cycle with posting). Read-only checks of every data source it names, on reservation 20808 item 8 / order 1000086 / plant 1120.
+- **Findings (live):**
+  - User's reference count 153 = app default list for plant 1120 (RESB: BWART 261, XLOEK blank, KZEAR blank, BDMNG > ENMNG; all items have an order) — PASS in `tools/reconcile-open-261.js 1120`.
+  - Readable via RFC: RESB (incl. CHARG, XWAOK, MEINS, BDTER), AUFK, AFKO, AFPO, JEST + TJ02T, T320, MARD, MCHB, LQUA, LTBK, LTBP, LTAK, LTAP, MATDOC (by RSNUM/RSPOS).
+  - Order 1000086: type ZP01 (category 40, process order), active statuses include REL and LKD (locked).
+  - Plant 1120: 15 storage locations mapped to a warehouse in T320 → classic WM active. Reservation 20808 has a staging TR (LTBK, movement 319, requirement type P, open) and a 261 TR (requirement type F, status E).
+  - Open 261 items in 1120 (205): none carries a batch in RESB; 27 have no storage location.
+  - `API_MATERIAL_DOCUMENT_SRV` exposes POST function imports `Cancel` and `CancelItem` (metadata only).
+- **UNVERIFIED:** any posting (261, 262, TO create/confirm); BAPI_GOODSMVT_CREATE / BAPI_GOODSMVT_CANCEL over RFC; behaviour of a 261 post on WM-managed locations.
+- **Blocked on user:** three test reservations, explicit approval to post real documents in this client, ABAP RAP vs CAP.
+
+### 2026-10-05 22:40 IST — Adapter + CAP: read-only 261 cycle (`cycle`) and order status in the list
+
+- **Trigger:** user answered "Yes" to the proposed build order; it did not name test reservations or settle RAP vs CAP, so only the read-only steps were built (CAP + UI5 as before). Nothing posts.
+- **Files:** `srv/integration/s4hana/wm/Mvt261Adapter.js` (`cycle`, `_orderStatuses`, `_table`; `openItems` now adds `OrderStatus`), `srv/wm/mvt261/service.cds` (cycle types, function `cycle`, `OrderStatus`), `srv/wm/mvt261/service.js`, `test/unit/wm/mvt261Adapter.test.js` (5 cycle tests; list tests stub RFC).
+- **Change:** `cycle(reservation, item)` reads RESB, AUFK, JEST, MARD, MCHB, T320, LQUA, LTBK, LTBP, LTAK, LTAP, MATDOC over RFC and returns header data, 8 steps (done / open / blocked + reason), stock, quants, transfer requirements, transfer orders and the 261/262 history. Blocking rules: item deleted / final issue / movement not allowed; order not released, locked, technically completed, closed or deletion flag (status texts verified in TJ02T); unrestricted stock below open quantity.
+- **Validation (live):** reservation 20808/8 → order "LKD REL", order + availability + goods issue blocked, staging open (TR 1000514, movement 319), no history; 17974/5 → item deleted, order closed, history 4900000255 (261, reversed) + 4900000282 (262). Unknown reservation → 404. List for plant 1120 still 153, statuses seen: "REL", "CRTD", "LKD REL". Over HTTP on local `cds-serve`: same results. `tools/reconcile-open-261.js` (all, 1120) → 7/7 PASS.
+- **Tests:** `npm test` → 130 suites, 2,081 tests passed. `npx eslint` on changed files clean, `cds compile` OK, `git diff --check` clean.
+- **Result:** PASS (read path). **UNVERIFIED:** posting 261, reversal 262, transfer order create/confirm — not built.
+- **Not in the list:** batch column (RESB-CHARG is blank on all open 261 items of plant 1120 and the reservation service does not carry it; the cycle page shows it).
+
+### 2026-10-05 22:55 IST — UI5 page "261 Cycle" and list navigation
+
+- **Files:** `app/fiori-app/webapp/modules/wm/mvt261/view/Cycle261.view.xml` (new), `.../controller/Cycle261.controller.js` (new), `Open261.view.xml` + `Open261.controller.js` (row navigation, order status column, export column), `manifest.json` (route `wmCycle261`, `wm/mvt261/open/{reservation}/{item}`), `controller/App.controller.js` (shell title), both i18n bundles (`cycle261*`, `open261OrderStatus`).
+- **Change:** header, step table with status and reason, stock, quants, transfer requirements, transfer orders, document history. No action buttons.
+- **Validation:** `npx ui5lint "webapp/modules/wm/mvt261/**"` → no findings; `test/unit/controller/uiConsistency.test.js` passes in the full run.
+- **Not validated:** browser rendering and navigation (login needs the user's SAP credentials). **In Progress.**
+
+### 2026-10-05 23:20 IST — Candidate test reservations and evidence (no code change, read-only)
+
+- **Why:** user relayed a review asking for raw evidence and for candidates the user will pick from. Nothing posted.
+- **Evidence:** raw RESB row 20808/8 (BWART 261, AUFNR 1000086, MATNR 1000000400, WERKS 1120, LGORT CS01, BDMNG 1200.000, ENMNG 0.000, KG, XLOEK/KZEAR blank, XWAOK X). RESB plant 1120, 261, XLOEK blank, KZEAR blank → 205 rows; with BDMNG > ENMNG → 153. Client category in T000: T (test), text "Pre-Test".
+- **Candidates (plant 1120):** of the 153, 97 are on orders with REL and none of LKD/TECO/CLSD/DLFL, movement allowed, storage location set; 72 of those have unrestricted stock ≥ open quantity. Never issued, smallest: 278650/1, 278650/2, 377755/2, 463010/1 (1 NOS each, HS01). Partly issued: 418011/4 (2,145 of 4,290 KG open, CS01), 418011/2 (2,600 of 5,200 KG open, CS01).
+- **Blocked:** user to pick the reservations, the maximum quantity, and give the go-ahead.
+
+### 2026-10-05 23:45 IST — Adapter: guarded `postGoodsIssue` and `reverse` (not exposed in CAP or UI)
+
+- **Trigger:** user's limited go-ahead (tests 1–3, plant 1120, max 1 NOS / 1 KG).
+- **Files:** `srv/integration/s4hana/wm/Mvt261Adapter.js` (`postGoodsIssue`, `reverse`, `_post`), `tools/test-261-post-cycle.js` (new, supervised live test — WRITES to SAP), `test/unit/wm/mvt261Adapter.test.js` (4 tests).
+- **Change:** `postGoodsIssue` re-reads the cycle, refuses with 422 and no SAP call unless the goods issue step is open, quantity ≤ open quantity, storage location set, stock sufficient and batch given where batch stock exists; then one `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader` deep insert (code 03, 261, reservation + item + order). A response without a material document is an error. `reverse` calls the API `Cancel` action. No idempotency key yet — not wired to CAP/UI.
+- **Tests:** `npm test` → 130 suites, 2,085 tests passed; ESLint clean.
+
+### 2026-10-05 23:50 IST — Live test 3 (blocked case, reservation 20808/8)
+
+- **Result:** PASS — app refused with 422 "Goods issue not possible: order is locked", 0 POST calls sent, RESB / MARD / MATDOC identical before and after.
+
+### 2026-10-05 23:58 IST — Live test 1 (reservation 278650/1, 1 NOS) — STOPPED after step 2, document NOT reversed
+
+- **Pre-check:** RESB BDMNG 1.000 / ENMNG 0.000, order REL, MARD HS01 10.000 — as in the evidence.
+- **Step 2 (POST):** HTTP 201, material document **4900050046 / 2026**, no sap-message, no delivery.
+- **Step 3 (read back):** immediate GET of the document → **HTTP 404** (unexpected). Per the go-ahead rules everything stopped: no retry, no cancel, test 2 not started.
+- **State read afterwards (read-only):** document exists (MATDOC/MKPF 4900050046, 261, 1.000, reservation 278650/1, user of the connection); API GET now returns it; RESB ENMNG 1.000 and **KZEAR = X**; MARD HS01 9.000; no failed update record; WM created transfer requirement **1000744** (W01, movement 261, open) for the document.
+- **Cause of the 404:** SAP returned the number before its update task had written the document. `tools/test-261-post-cycle.js` now waits for the document (reads only); not re-run.
+- **OPEN — needs user decision:** document 4900050046/2026 is posted and not reversed; stock is 1 NOS lower and the reservation item is final-issued. Reversal (API Cancel) and test 2 are **Blocked** until the user says to continue.
+
+### 2026-10-06 00:20 IST — Evidence for the proposed SU-scan screen, reservation 24685/2 (no code change, read-only)
+
+- **Why:** user relayed a design proposal (scan storage units, then post 261) that asked for raw data on 24685/2. Nothing posted, nothing built.
+- **Findings (live):** RESB 24685/2: 261, order 1000109, material 8300000159 (AESOL-CN HB CUT, batch-managed), plant **1130**, CS01, BDMNG 510.000, ENMNG 509.000 (open 1 KG), not deleted, not final-issued. Order status "LKD REL" → the app blocks goods issue. MARD: CS01 7,377.036, PT01 7,972.518. LQUA (warehouse W12): 17 quants in CS01, only 2 carry a storage unit (1000033499, 1000033500, type FG1, 200 KG each, batch IN25002833); 15 are in interim type 901 / bin WE-ZONE without storage unit. No block flags set on any quant. Existing 261 documents for the item (4900012536, 397 + 112 KG) were issued from **PT01**, not from the reservation's CS01. No transfer requirement for the reservation.
+- **Still open:** document 4900050046/2026 from live test 1 is NOT reversed (see Unresolved Issues).
+
+### 2026-10-06 00:50 IST — Positive test-case search for the SU-scan screen (no code change, read-only)
+
+- **Why:** relayed request for a released, unlocked order with storage-unit stock in the reservation's own storage location, spanning 2–3 drums. Nothing posted, nothing built. The relayed text did not contain a user go-ahead for the reversal, so 4900050046/2026 was NOT reversed.
+- **Findings (live, all plants):** 344 open 261 items with storage location and movement allowed; 308 on REL orders without LKD/TECO/CLSD/DLFL; 125 of those have SU stock (LQUA with LENUM, available, not blocked) in the reservation plant/storage location; 72 covered by one SU, 18 fully covered needing ≥ 2 SUs, 35 with SU stock that does not cover the open quantity. Candidates: 519944/1 (plant 1130, CS02, 600 KG), 512835/3 and 512851/3 (1130, CS02, 800 KG), 471326/1 and 471327/1 (1600, CS01, 500 KG), 512830/1 (1120, CS01, 400 KG — its SUs sit in storage type OH1, bin ONHOLD).
+- **Still open:** document 4900050046/2026 not reversed (Unresolved Issue 0).

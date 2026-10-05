@@ -14,6 +14,7 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
     };
     this.on('findFirst', run((data) => adapter.findFirst(data)));
     this.on('openItems', run((data) => adapter.openItems(data)));
+    this.on('cycle', run((data) => adapter.cycle(data)));
     return super.init();
   }
 };

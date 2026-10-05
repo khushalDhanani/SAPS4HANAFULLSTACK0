@@ -9,7 +9,7 @@ sap.ui.define([
     // Export columns: i18n label key -> result property, in table order.
     var EXPORT_COLUMNS = [
         ["open261Reservation", "Reservation"], ["open261Item", "ReservationItem"], ["mvt261Order", "ProductionOrder"],
-        ["open261OrderDescription", "OrderDescription"], ["mvt261Material", "Material"], ["open261MaterialName", "MaterialName"],
+        ["open261OrderDescription", "OrderDescription"], ["open261OrderStatus", "OrderStatus"], ["mvt261Material", "Material"], ["open261MaterialName", "MaterialName"],
         ["mvt261Plant", "Plant"], ["open261Sloc", "StorageLocation"], ["open261RequirementDate", "RequirementDate"],
         ["open261Required", "RequiredQuantity", "Number"], ["open261Withdrawn", "WithdrawnQuantity", "Number"],
         ["open261Open", "OpenQuantity", "Number"], ["open261Unit", "Unit"], ["open261MovementAllowed", "MovementAllowed", "Boolean"]
@@ -65,6 +65,11 @@ sap.ui.define([
             }.bind(this)).then(function () {
                 oModel.setProperty("/busy", false);
             });
+        },
+
+        onOpenCycle: function (oEvent) {
+            var o = oEvent.getSource().getBindingContext("open261View").getObject();
+            this.getRouter().navTo("wmCycle261", { reservation: o.Reservation, item: o.ReservationItem });
         },
 
         onExport: function () {

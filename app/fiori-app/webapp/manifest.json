@@ -332,6 +332,11 @@
           "target": "TargetTrTo"
         },
         {
+          "name": "wmCycle261",
+          "pattern": "wm/mvt261/open/{reservation}/{item}",
+          "target": "TargetCycle261"
+        },
+        {
           "name": "wmOpen261",
           "pattern": "wm/mvt261/open",
           "target": "TargetOpen261"
@@ -455,6 +460,11 @@
           "id": "trTo",
           "name": "TrTo",
           "path": "saps4hana.fiori.modules.wm.tr-to.view"
+        },
+        "TargetCycle261": {
+          "id": "cycle261",
+          "name": "Cycle261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
         },
         "TargetOpen261": {
           "id": "open261",

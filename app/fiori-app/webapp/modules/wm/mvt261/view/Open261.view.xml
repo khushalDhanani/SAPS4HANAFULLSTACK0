@@ -52,6 +52,7 @@
                     <columns>
                         <Column><Text text="{i18n>open261Reservation}" /></Column>
                         <Column><Text text="{i18n>mvt261Order}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261OrderStatus}" /></Column>
                         <Column><Text text="{i18n>mvt261Material}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261PlantSloc}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261RequirementDate}" /></Column>
@@ -61,10 +62,11 @@
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>open261MovementAllowed}" /></Column>
                     </columns>
                     <items>
-                        <ColumnListItem>
+                        <ColumnListItem type="Navigation" press=".onOpenCycle">
                             <cells>
                                 <ObjectIdentifier title="{open261View>Reservation}" text="{open261View>ReservationItem}" />
                                 <ObjectIdentifier title="{open261View>ProductionOrder}" text="{open261View>OrderDescription}" />
+                                <Text text="{open261View>OrderStatus}" />
                                 <ObjectIdentifier title="{open261View>Material}" text="{open261View>MaterialName}" />
                                 <Text text="{open261View>Plant} / {open261View>StorageLocation}" />
                                 <Text text="{open261View>RequirementDate}" />

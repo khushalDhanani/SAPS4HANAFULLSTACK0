@@ -3,6 +3,9 @@
 const LOG = require('../logger')('mvt261-adapter');
 const { S4HttpClient } = require('../S4HttpClient');
 const { formatDateToYMD } = require('../../../common/dateUtils');
+const { RfcClient } = require('../RfcClient');
+const { parseSapNumber } = require('../sapFacts');
+const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 
 /**
  * Read-only finder for the FIRST goods movement of movement type 261 (GET only, no ABAP change).
@@ -16,6 +19,7 @@ const { formatDateToYMD } = require('../../../common/dateUtils');
  */
 const FIND_PATH = '/sap/opu/odata/sap/MMIM_MATDOC_OV_SRV/F_Mmim_Findmatdoc';
 const ITEM_PATH = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem';
+const MATDOC_API = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV';
 const TOP = 5;
 
 /**
@@ -52,6 +56,16 @@ const RE = {
   date: /^\d{4}-\d{2}-\d{2}$/
 };
 
+/**
+ * Order system statuses the cycle evaluates (JEST-STAT; texts verified live in TJ02T):
+ * I0001 CRTD, I0002 REL, I0043 LKD, I0045 TECO, I0046 CLSD, I0076 DLFL.
+ */
+const ORDER_STATUS = { I0001: 'CRTD', I0002: 'REL', I0043: 'LKD', I0045: 'TECO', I0046: 'CLSD', I0076: 'DLFL' };
+const ORDER_BLOCKERS = { LKD: 'order is locked', TECO: 'order is technically completed', CLSD: 'order is closed', DLFL: 'order has the deletion flag' };
+
+const strip = (v) => String(v || '').replace(/^0+(?=.)/, '');
+const sapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
+
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
 /** Trust-boundary check: values go into an OData $filter, so only the listed characters pass. */
@@ -70,6 +84,7 @@ const isoInstant = (v) => {
 class Mvt261Adapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
+    this.rfc = options.rfc || new RfcClient();
   }
 
   async _results(path, params, context) {
@@ -81,6 +96,30 @@ class Mvt261Adapter {
       LOG.error(`${context}: ${e.message}`);
       throw httpError(e.status || 502, `${context}: ${e.message}`);
     }
+  }
+
+  async _table(table, fields, where, context) {
+    try {
+      return await this.rfc.readTable(table, fields, where);
+    } catch (e) {
+      LOG.error(`${context}: ${e.message}`);
+      throw httpError(e.status || 502, `${context}: ${e.message}`);
+    }
+  }
+
+  /** Active system statuses (short texts, e.g. "REL LKD") per order number, from JEST. */
+  async _orderStatuses(orders) {
+    const out = {};
+    const list = [...new Set(orders.filter(Boolean).map((o) => strip(o).padStart(12, '0')))];
+    for (let i = 0; i < list.length; i += 40) {
+      const or = list.slice(i, i + 40).map((o, n) => `${n ? 'OR ' : '( '}OBJNR = 'OR${o}'`);
+      const rows = await this._table('JEST', ['OBJNR', 'STAT'], ["INACT = ''", 'AND', ...or, ')'], 'Read order statuses');
+      for (const r of rows) {
+        const key = strip(r.OBJNR.slice(2));
+        if (ORDER_STATUS[r.STAT]) (out[key] = out[key] || []).push(ORDER_STATUS[r.STAT]);
+      }
+    }
+    return out;
   }
 
   /** "doc/year/item" of the 262 that reverses each cancelled row; {} when SAP does not answer. */
@@ -164,7 +203,182 @@ class Mvt261Adapter {
       };
     }).filter((i) => input.includeFullyWithdrawn || i.OpenQuantity > 0);
 
+    // Order status is an extra column: the list stays usable when RFC is not available.
+    try {
+      const statuses = await this._orderStatuses(Items.map((i) => i.ProductionOrder));
+      Items.forEach((i) => { i.OrderStatus = (statuses[strip(i.ProductionOrder)] || []).sort().join(' '); });
+    } catch (e) {
+      LOG.warn(`Order statuses not read: ${e.message}`);
+      Items.forEach((i) => { i.OrderStatus = ''; });
+    }
+
     return { TotalCount: Items.length, SapOpenCount: sapCount, Truncated: rows.length < sapCount, Items };
+  }
+
+  /**
+   * Read-only 261 cycle of one reservation item: reservation, order, stock, WM staging, document
+   * history and closure, each with a status (done / open / blocked) and the reason.
+   * Tables: RESB, AUFK, JEST, MARD, MCHB, T320, LQUA, LTBK, LTBP, LTAK, LTAP, MATDOC (all read live over RFC).
+   * ponytail: one RFC connection per table read (about a dozen); pool them if the page feels slow.
+   */
+  async cycle(input = {}) {
+    const rsnum = clean(input.reservation, 'Reservation', /^\d{1,10}$/, true).padStart(10, '0');
+    const rspos = clean(input.item, 'Reservation item', /^\d{1,4}$/, true).padStart(4, '0');
+    const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for reservation ${strip(rsnum)}/${strip(rspos)}`);
+
+    const [resb] = await read('RESB',
+      ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BDTER', 'BDMNG', 'ENMNG', 'MEINS', 'XLOEK', 'KZEAR', 'XWAOK'],
+      [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
+    if (!resb) throw httpError(404, `Reservation ${strip(rsnum)} item ${strip(rspos)} with movement type 261 not found`);
+
+    const required = parseSapNumber(resb.BDMNG);
+    const withdrawn = parseSapNumber(resb.ENMNG);
+    const open = Math.max(0, required - withdrawn);
+    const matWhere = [`MATNR = '${resb.MATNR}'`, `AND WERKS = '${resb.WERKS}'`].concat(resb.LGORT ? [`AND LGORT = '${resb.LGORT}'`] : []);
+
+    const [aufk] = resb.AUFNR ? await read('AUFK', ['AUFNR', 'AUART', 'LOEKZ'], [`AUFNR = '${resb.AUFNR}'`]) : [];
+    const statuses = resb.AUFNR ? ((await this._orderStatuses([resb.AUFNR]))[strip(resb.AUFNR)] || []).sort() : [];
+    const mard = await read('MARD', ['LGORT', 'LABST'], matWhere);
+    const mchb = await read('MCHB', ['LGORT', 'CHARG', 'CLABS'], [...matWhere, 'AND CLABS > 0']);
+    const t320 = resb.LGORT ? await read('T320', ['LGNUM'], [`WERKS = '${resb.WERKS}'`, `AND LGORT = '${resb.LGORT}'`]) : [];
+    const lqua = await read('LQUA', ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'VERME', 'LENUM'], [...matWhere, 'AND VERME > 0']);
+    const ltbk = await read('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'STATU'], [`RSNUM = '${rsnum}'`]);
+    const TransferRequirements = [];
+    const TransferOrders = [];
+    for (const tr of ltbk) {
+      const key = [`LGNUM = '${tr.LGNUM}'`, `AND TBNUM = '${tr.TBNUM}'`];
+      const items = await read('LTBP', ['TBPOS', 'MENGE', 'TAMEN', 'ELIKZ'], [...key, `AND MATNR = '${resb.MATNR}'`]);
+      for (const it of items) {
+        TransferRequirements.push({
+          Warehouse: tr.LGNUM, TransferRequirement: strip(tr.TBNUM), Item: strip(it.TBPOS), MovementType: tr.BWLVS,
+          Quantity: parseSapNumber(it.MENGE), TransferOrderQuantity: parseSapNumber(it.TAMEN), Completed: tr.STATU === 'E' || it.ELIKZ === 'X'
+        });
+      }
+      if (!items.length) continue; // transfer requirement is for other materials of the reservation
+      for (const to of await read('LTAK', ['TANUM', 'BWLVS'], key)) {
+        const lines = await read('LTAP', ['TAPOS', 'PQUIT'], [`LGNUM = '${tr.LGNUM}'`, `AND TANUM = '${to.TANUM}'`, `AND MATNR = '${resb.MATNR}'`]);
+        if (!lines.length) continue;
+        TransferOrders.push({
+          Warehouse: tr.LGNUM, TransferOrder: strip(to.TANUM), TransferRequirement: strip(tr.TBNUM), MovementType: to.BWLVS,
+          Confirmed: lines.every((l) => l.PQUIT === 'X')
+        });
+      }
+    }
+    const docs = await read('MATDOC',
+      ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'BUDAT', 'MENGE', 'MEINS', 'CHARG', 'LGORT', 'SMBLN', 'SJAHR', 'SMBLP', 'CANCELLED', 'USNAM'],
+      [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND RECORD_TYPE = 'MDOC'", "AND ( BWART = '261' OR BWART = '262' )"]);
+
+    const stockAtLocation = mard.reduce((sum, r) => sum + parseSapNumber(r.LABST), 0);
+    const History = docs.map((d) => ({
+      MaterialDocument: d.MBLNR, MaterialDocumentYear: d.MJAHR, MaterialDocumentItem: d.ZEILE, MovementType: d.BWART,
+      PostingDate: sapDate(d.BUDAT), Quantity: parseSapNumber(d.MENGE), Unit: d.MEINS, Batch: d.CHARG, StorageLocation: d.LGORT,
+      Reverses: d.SMBLN ? `${d.SMBLN}/${d.SJAHR}/${d.SMBLP}` : '', IsReversed: d.CANCELLED === 'X', CreatedByUser: d.USNAM
+    })).sort((a, b) => `${a.MaterialDocumentYear}${a.MaterialDocument}${a.MaterialDocumentItem}`.localeCompare(`${b.MaterialDocumentYear}${b.MaterialDocument}${b.MaterialDocumentItem}`));
+    const effective261 = History.filter((h) => h.MovementType === '261' && !h.IsReversed);
+
+    // Steps: a blocked step carries the reason; nothing here posts or changes data.
+    const orderBlockers = statuses.filter((st) => ORDER_BLOCKERS[st]).map((st) => ORDER_BLOCKERS[st]);
+    if (aufk && aufk.LOEKZ === 'X' && !statuses.includes('DLFL')) orderBlockers.push(ORDER_BLOCKERS.DLFL);
+    if (aufk && !statuses.includes('REL')) orderBlockers.unshift('order is not released');
+    const resvBlockers = [resb.XLOEK === 'X' && 'item is deleted', resb.KZEAR === 'X' && 'final issue is set', resb.XWAOK !== 'X' && 'goods movement is not allowed for the item'].filter(Boolean);
+    const step = (Step, Status, Reason = '') => ({ Step, Status, Reason });
+    const blockedBefore = [...resvBlockers, ...orderBlockers];
+    const openTr = TransferRequirements.filter((t) => !t.Completed);
+    const openTo = TransferOrders.filter((t) => !t.Confirmed);
+    const Steps = [
+      step('Reservation', resvBlockers.length ? 'blocked' : 'done', resvBlockers.join('; ')),
+      step('ProductionOrder', !aufk ? 'blocked' : orderBlockers.length ? 'blocked' : 'done', !aufk ? 'no order on the reservation item' : orderBlockers.join('; ')),
+      step('Availability', open === 0 ? 'done' : stockAtLocation >= open ? 'done' : 'blocked',
+        open > 0 && stockAtLocation < open ? `unrestricted stock ${stockAtLocation} ${resb.MEINS} is less than the open quantity ${open} ${resb.MEINS}` : ''),
+      step('WmStaging', openTr.length || openTo.length ? 'open' : 'done',
+        !t320.length && !ltbk.length ? 'storage location is not WM-managed and no transfer requirement exists'
+          : openTr.length ? `${openTr.length} transfer requirement item(s) not completed`
+            : openTo.length ? `${openTo.length} transfer order(s) not confirmed` : ''),
+      step('GoodsIssue', open === 0 ? 'done' : blockedBefore.length ? 'blocked' : 'open', open > 0 ? blockedBefore.join('; ') : ''),
+      step('DocumentHistory', History.length ? 'done' : 'open', History.length ? '' : 'no 261 or 262 document yet'),
+      step('Reversal', effective261.length ? 'open' : 'done', effective261.length ? `${effective261.length} document(s) of movement type 261 can be reversed` : ''),
+      step('Closure', open === 0 || resvBlockers.length ? 'done' : 'open', open === 0 ? '' : resvBlockers.length ? resvBlockers.join('; ') : `${open} ${resb.MEINS} still open`)
+    ];
+
+    return {
+      Reservation: strip(resb.RSNUM), ReservationItem: strip(resb.RSPOS), ProductionOrder: strip(resb.AUFNR), OrderType: aufk ? aufk.AUART : '',
+      OrderStatus: statuses.join(' '), Material: strip(resb.MATNR), Plant: resb.WERKS, StorageLocation: resb.LGORT, Batch: resb.CHARG,
+      RequirementDate: sapDate(resb.BDTER), RequiredQuantity: required, WithdrawnQuantity: withdrawn, OpenQuantity: open, Unit: resb.MEINS,
+      IsDeleted: resb.XLOEK === 'X', IsFinalIssue: resb.KZEAR === 'X', MovementAllowed: resb.XWAOK === 'X',
+      Warehouse: t320[0] ? t320[0].LGNUM : '',
+      Steps,
+      Stock: [
+        ...mard.map((r) => ({ StorageLocation: r.LGORT, Batch: '', Quantity: parseSapNumber(r.LABST) })),
+        ...mchb.map((r) => ({ StorageLocation: r.LGORT, Batch: r.CHARG, Quantity: parseSapNumber(r.CLABS) }))
+      ],
+      Quants: lqua.map((q) => ({ Warehouse: q.LGNUM, StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, Batch: q.CHARG, AvailableQuantity: parseSapNumber(q.VERME), StorageUnit: strip(q.LENUM) })),
+      TransferRequirements, TransferOrders, History
+    };
+  }
+
+  async _post(path, data, context) {
+    try {
+      const res = await this.client.post(path, { data, csrfPath: `${MATDOC_API}/` });
+      return { body: res.data?.d || res.data || {}, sapMessage: res.headers?.['sap-message'] || '' };
+    } catch (e) {
+      LOG.error(`${context}: ${e.message}`);
+      throw httpError(e.status || 502, `${context}: ${e.message}`);
+    }
+  }
+
+  /**
+   * Post one goods issue 261 against a reservation item (API_MATERIAL_DOCUMENT_SRV deep insert,
+   * goods movement code 03, referencing reservation, item and order). Reservation, order status and
+   * stock are re-read immediately before; anything not postable is refused with 422 and no SAP call.
+   * A response without a material document (e.g. SAP created a delivery instead) is an error.
+   * ponytail: no idempotency key and no retry here - one call is one posting. Add an attempt store
+   * (as GoodsIssueAttemptStore does for 201) before this is wired to a button.
+   */
+  async postGoodsIssue(input = {}) {
+    const quantity = Number(input.quantity);
+    const batch = clean(input.batch, 'Batch', /^[A-Z0-9]{1,10}$/);
+    if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
+
+    const c = await this.cycle(input);
+    const gi = c.Steps.find((st) => st.Step === 'GoodsIssue');
+    if (gi.Status !== 'open') throw httpError(422, `Goods issue not possible: ${gi.Reason || 'nothing left to issue'}`);
+    if (quantity > c.OpenQuantity) throw httpError(422, `Quantity ${quantity} exceeds the open quantity ${c.OpenQuantity} ${c.Unit}`);
+    if (!c.StorageLocation) throw httpError(422, 'Goods issue not possible: the reservation item has no storage location');
+    const batches = c.Stock.filter((st) => st.Batch);
+    if (batches.length && !batch) throw httpError(422, 'Goods issue not possible: the material has batch stock, a batch is required');
+    const stock = (batch ? batches.filter((st) => st.Batch === batch) : c.Stock.filter((st) => !st.Batch)).reduce((sum, st) => sum + st.Quantity, 0);
+    if (stock < quantity) throw httpError(422, `Goods issue not possible: unrestricted stock ${stock} ${c.Unit} is less than ${quantity} ${c.Unit}`);
+
+    // Entry unit in external format, from the same service the list reads.
+    const d = await this._results(RESV_PATH, {
+      $filter: `Reservation eq '${c.Reservation}' and ReservationItem eq '${c.ReservationItem}' and GoodsMovementType eq '261'`,
+      $select: 'Reservation,ReservationItem,BaseUnit',
+      $format: 'json'
+    }, 'Read reservation item unit');
+    const unit = d.results?.[0]?.BaseUnit;
+    if (!unit) throw httpError(422, 'Goods issue not possible: unit of the reservation item could not be read');
+
+    const payload = buildHeaderEnvelope({
+      gmCode: '03',
+      headerText: `GI Resv ${c.Reservation}`,
+      item: buildBaseItem({
+        Material: c.Material, Unit: unit, IssueQty: quantity, Plant: c.Plant, StorageLocation: c.StorageLocation,
+        ReservationNo: c.Reservation, ReservationItem: c.ReservationItem, Batch: batch, OrderNo: c.ProductionOrder
+      }, '261')
+    });
+    const { body, sapMessage } = await this._post(`${MATDOC_API}/A_MaterialDocumentHeader`, payload, `Post goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}`);
+    if (!body.MaterialDocument) throw httpError(502, `SAP did not return a material document for the goods issue. sap-message: ${sapMessage || '(none)'}`);
+    return { MaterialDocument: body.MaterialDocument, MaterialDocumentYear: body.MaterialDocumentYear, SapMessage: sapMessage };
+  }
+
+  /** Reverse one material document with the API's own Cancel action (SAP writes the 262 and SMBLN). */
+  async reverse(input = {}) {
+    const doc = clean(input.materialDocument, 'Material document', /^\d{10}$/, true);
+    const year = clean(input.materialDocumentYear, 'Material document year', /^\d{4}$/, true);
+    const { body, sapMessage } = await this._post(`${MATDOC_API}/Cancel?MaterialDocument='${doc}'&MaterialDocumentYear='${year}'`, {}, `Reverse material document ${doc}/${year}`);
+    const rev = body.Cancel || body;
+    if (!rev.MaterialDocument) throw httpError(502, `SAP did not return a reversal document. sap-message: ${sapMessage || '(none)'}`);
+    return { MaterialDocument: rev.MaterialDocument, MaterialDocumentYear: rev.MaterialDocumentYear, SapMessage: sapMessage };
   }
 
   async findFirst(input = {}) {

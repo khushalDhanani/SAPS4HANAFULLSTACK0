@@ -56,6 +56,8 @@ sap.ui.define([
                 this._updateShell("salesInquiries");
             } else if (sHash.indexOf("wm/tr-to") === 0) {
                 this._updateShell("wmTrTo");
+            } else if (sHash.indexOf("wm/mvt261/open/") === 0) {
+                this._updateShell("wmCycle261");
             } else if (sHash.indexOf("wm/mvt261/open") === 0) {
                 this._updateShell("wmOpen261");
             } else if (sHash.indexOf("wm/mvt261") === 0) {
@@ -220,6 +222,10 @@ sap.ui.define([
                     break;
                 case "wmTrTo":
                     sTitle = oBundle ? oBundle.getText("trToTitle") : "TO Creation (ZTO)";
+                    bShowNav = true;
+                    break;
+                case "wmCycle261":
+                    sTitle = oBundle ? oBundle.getText("cycle261Title") : "261 Cycle";
                     bShowNav = true;
                     break;
                 case "wmOpen261":

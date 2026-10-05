@@ -1,0 +1,159 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.mvt261.controller.Cycle261"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    displayBlock="true">
+
+    <Page id="cycle261Page" class="sapUiSizeCompact" busy="{cycle261View>/busy}">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <MessageStrip id="cycle261Error" visible="{= !!${cycle261View>/error} }" text="{cycle261View>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
+                <MessageStrip id="cycle261ReadOnly" text="{i18n>cycle261ReadOnly}" type="Information" showIcon="true" class="sapUiSmallMarginBottom" />
+
+                <ObjectHeader
+                    id="cycle261Header"
+                    visible="{= !!${cycle261View>/c} }"
+                    title="{cycle261View>/c/Reservation} / {cycle261View>/c/ReservationItem}"
+                    number="{cycle261View>/c/OpenQuantity}"
+                    numberUnit="{cycle261View>/c/Unit}"
+                    backgroundDesign="Transparent">
+                    <attributes>
+                        <ObjectAttribute title="{i18n>mvt261Order}" text="{cycle261View>/c/ProductionOrder} ({cycle261View>/c/OrderType})" />
+                        <ObjectAttribute title="{i18n>mvt261Material}" text="{cycle261View>/c/Material}" />
+                        <ObjectAttribute title="{i18n>mvt261PlantSloc}" text="{cycle261View>/c/Plant} / {cycle261View>/c/StorageLocation}" />
+                        <ObjectAttribute title="{i18n>open261RequirementDate}" text="{cycle261View>/c/RequirementDate}" />
+                        <ObjectAttribute title="{i18n>open261Required}" text="{cycle261View>/c/RequiredQuantity} {cycle261View>/c/Unit}" />
+                        <ObjectAttribute title="{i18n>open261Withdrawn}" text="{cycle261View>/c/WithdrawnQuantity} {cycle261View>/c/Unit}" />
+                    </attributes>
+                    <statuses>
+                        <ObjectStatus title="{i18n>open261OrderStatus}" text="{cycle261View>/c/OrderStatus}" />
+                        <ObjectStatus title="{i18n>cycle261Warehouse}" text="{cycle261View>/c/Warehouse}" />
+                        <ObjectStatus title="{i18n>cycle261FinalIssue}" text="{= ${cycle261View>/c/IsFinalIssue} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" />
+                        <ObjectStatus title="{i18n>cycle261Deleted}" text="{= ${cycle261View>/c/IsDeleted} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" />
+                    </statuses>
+                </ObjectHeader>
+
+                <Table id="cycle261Steps" items="{cycle261View>/c/Steps}" noDataText="{i18n>cycle261NoData}" headerText="{i18n>cycle261StepsTitle}" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>cycle261Step}" /></Column>
+                        <Column><Text text="{i18n>cycle261Status}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261Reason}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem highlight="{path: 'cycle261View>Status', formatter: '.formatState'}">
+                            <cells>
+                                <Text text="{path: 'cycle261View>Step', formatter: '.formatStep'}" />
+                                <ObjectStatus text="{path: 'cycle261View>Status', formatter: '.formatStatus'}" state="{path: 'cycle261View>Status', formatter: '.formatState'}" />
+                                <Text text="{cycle261View>Reason}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+                <Table id="cycle261Stock" items="{cycle261View>/c/Stock}" noDataText="{i18n>cycle261NoData}" headerText="{i18n>cycle261StockTitle}" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>open261Sloc}" /></Column>
+                        <Column><Text text="{i18n>cycle261Batch}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>cycle261Unrestricted}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <Text text="{cycle261View>StorageLocation}" />
+                                <Text text="{= ${cycle261View>Batch} || ${i18n>cycle261AllBatches} }" />
+                                <ObjectNumber number="{cycle261View>Quantity}" unit="{cycle261View>/c/Unit}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+                <Table id="cycle261Quants" items="{cycle261View>/c/Quants}" noDataText="{i18n>cycle261NoData}" headerText="{i18n>cycle261QuantsTitle}" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>cycle261Warehouse}" /></Column>
+                        <Column><Text text="{i18n>cycle261TypeBin}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261Batch}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261StorageUnit}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>cycle261Available}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <Text text="{cycle261View>Warehouse}" />
+                                <Text text="{cycle261View>StorageType} / {cycle261View>StorageBin}" />
+                                <Text text="{cycle261View>Batch}" />
+                                <Text text="{cycle261View>StorageUnit}" />
+                                <ObjectNumber number="{cycle261View>AvailableQuantity}" unit="{cycle261View>/c/Unit}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+                <Table id="cycle261Trs" items="{cycle261View>/c/TransferRequirements}" noDataText="{i18n>cycle261NoData}" headerText="{i18n>cycle261TrTitle}" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>cycle261Tr}" /></Column>
+                        <Column><Text text="{i18n>cycle261Movement}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>mvt261Quantity}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>cycle261ToQuantity}" /></Column>
+                        <Column><Text text="{i18n>cycle261Completed}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{cycle261View>TransferRequirement}" text="{cycle261View>Warehouse} / {cycle261View>Item}" />
+                                <Text text="{cycle261View>MovementType}" />
+                                <ObjectNumber number="{cycle261View>Quantity}" unit="{cycle261View>/c/Unit}" />
+                                <ObjectNumber number="{cycle261View>TransferOrderQuantity}" unit="{cycle261View>/c/Unit}" />
+                                <ObjectStatus text="{= ${cycle261View>Completed} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" state="{= ${cycle261View>Completed} ? 'Success' : 'Warning' }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+                <Table id="cycle261Tos" items="{cycle261View>/c/TransferOrders}" noDataText="{i18n>cycle261NoData}" headerText="{i18n>cycle261ToTitle}" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>cycle261To}" /></Column>
+                        <Column><Text text="{i18n>cycle261Tr}" /></Column>
+                        <Column><Text text="{i18n>cycle261Movement}" /></Column>
+                        <Column><Text text="{i18n>cycle261Confirmed}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{cycle261View>TransferOrder}" text="{cycle261View>Warehouse}" />
+                                <Text text="{cycle261View>TransferRequirement}" />
+                                <Text text="{cycle261View>MovementType}" />
+                                <ObjectStatus text="{= ${cycle261View>Confirmed} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" state="{= ${cycle261View>Confirmed} ? 'Success' : 'Warning' }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+                <Table id="cycle261History" items="{cycle261View>/c/History}" noDataText="{i18n>cycle261NoHistory}" headerText="{i18n>cycle261HistoryTitle}" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>mvt261Document}" /></Column>
+                        <Column><Text text="{i18n>cycle261Movement}" /></Column>
+                        <Column><Text text="{i18n>mvt261PostingDate}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>mvt261Quantity}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261Batch}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261Reversal}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mvt261User}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{cycle261View>MaterialDocument}" text="{cycle261View>MaterialDocumentYear} / {cycle261View>MaterialDocumentItem}" />
+                                <Text text="{cycle261View>MovementType}" />
+                                <Text text="{cycle261View>PostingDate}" />
+                                <ObjectNumber number="{cycle261View>Quantity}" unit="{cycle261View>Unit}" />
+                                <Text text="{cycle261View>Batch}" />
+                                <ObjectStatus text="{= ${cycle261View>Reverses} ? ${i18n>cycle261Reverses} + ' ' + ${cycle261View>Reverses} : (${cycle261View>IsReversed} ? ${i18n>cycle261IsReversed} : '') }" state="{= ${cycle261View>IsReversed} ? 'Warning' : 'None' }" />
+                                <Text text="{cycle261View>CreatedByUser}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>
