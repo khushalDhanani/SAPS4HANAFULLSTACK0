@@ -159,6 +159,12 @@ function mapToS4OrderPayload(header, items, _options = {}) {
         s4Header.PaymentTerms = String(payTermsOrd).trim();
         s4Header.PaymentTermCode = String(payTermsOrd).trim();
     }
+    if (header.IncotermsClassification && String(header.IncotermsClassification).trim() !== '') {
+        s4Header.IncotermsClassification = String(header.IncotermsClassification).trim().toUpperCase();
+    }
+    if (header.IncotermsLocation1 && String(header.IncotermsLocation1).trim() !== '') {
+        s4Header.IncotermsLocation1 = String(header.IncotermsLocation1).trim();
+    }
 
     ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson'].forEach(field => {
         if (header[field] && String(header[field]).trim() !== '') {

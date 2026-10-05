@@ -4,6 +4,7 @@ sap.ui.define([
     "use strict";
 
     var CURRENCY_REGEX = /^[A-Z]{3}$/;
+    var CONTACT_PERSON_REGEX = /^\d{1,10}$/;
 
     var INCOMPLETION_HEADER_FIELDS = [
         { field: "CustomerGroup2", label: "Customer Group 2" },
@@ -79,6 +80,10 @@ sap.ui.define([
                     PortOfLoading: "",
                     PortOfDischarge: "",
                     ContactPerson: "",
+                    PaymentTerms: "",
+                    PaymentTermCode: "",
+                    IncotermsClassification: "",
+                    IncotermsLocation1: "",
                     CreatedByUser: sUser || "alice",
                     StatusText: "In Progress",
                     StatusState: "Warning",
@@ -98,7 +103,9 @@ sap.ui.define([
                         errors: {}
                     }
                 ],
-                errors: {},
+                errors: {
+                    ContactPerson: { state: "None", text: "" }
+                },
                 errorList: [],
                 errorCount: 0,
                 errorMessage: "",
@@ -300,6 +307,11 @@ sap.ui.define([
                         }
                     }
                     break;
+                case "ContactPerson":
+                    if (vVal && String(vVal).trim() !== "" && !CONTACT_PERSON_REGEX.test(String(vVal).trim())) {
+                        sError = "Contact Person must be a numeric SAP contact number (up to 10 digits)";
+                    }
+                    break;
                 default:
                     break;
             }
@@ -348,6 +360,19 @@ sap.ui.define([
                 if (isNaN(dReq.getTime())) {
                     aErrors.push({ field: "RequestedDeliveryDate", message: "Requested Delivery Date must be a valid date" });
                 }
+            }
+
+            // ContactPerson: optional but must be purely numeric when provided
+            if (oHeader.ContactPerson && String(oHeader.ContactPerson).trim() !== "") {
+                if (!CONTACT_PERSON_REGEX.test(String(oHeader.ContactPerson).trim())) {
+                    var oContactErr = { state: "Error", text: "Contact Person must be a numeric SAP contact number (up to 10 digits)" };
+                    oModel.setProperty("/errors/ContactPerson", oContactErr);
+                    aErrors.push({ field: "ContactPerson", message: oContactErr.text });
+                } else {
+                    oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
+                }
+            } else {
+                oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
             }
 
             // Items validation
@@ -539,6 +564,22 @@ sap.ui.define([
                 TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "",
                 TotalNetAmount: oHeader.TotalNetAmount !== undefined && oHeader.TotalNetAmount !== null ? Number(oHeader.TotalNetAmount) : 0
             };
+
+            // Payment Terms: populated from customer defaults via applyCustomerDefaults; optional
+            if (oHeader.PaymentTerms && String(oHeader.PaymentTerms).trim() !== "") {
+                oCleanHeader.PaymentTerms = String(oHeader.PaymentTerms).trim();
+                oCleanHeader.PaymentTermCode = String(oHeader.PaymentTerms).trim();
+            } else if (oHeader.PaymentTermCode && String(oHeader.PaymentTermCode).trim() !== "") {
+                oCleanHeader.PaymentTerms = String(oHeader.PaymentTermCode).trim();
+                oCleanHeader.PaymentTermCode = String(oHeader.PaymentTermCode).trim();
+            }
+            // Incoterms: optional, entered by user
+            if (oHeader.IncotermsClassification && String(oHeader.IncotermsClassification).trim() !== "") {
+                oCleanHeader.IncotermsClassification = String(oHeader.IncotermsClassification).trim().toUpperCase();
+            }
+            if (oHeader.IncotermsLocation1 && String(oHeader.IncotermsLocation1).trim() !== "") {
+                oCleanHeader.IncotermsLocation1 = String(oHeader.IncotermsLocation1).trim();
+            }
 
             if (oHeader.CustomerName) {
                 oCleanHeader.CustomerName = String(oHeader.CustomerName).trim();

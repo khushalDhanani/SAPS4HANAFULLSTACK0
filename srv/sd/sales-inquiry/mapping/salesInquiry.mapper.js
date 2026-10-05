@@ -94,7 +94,9 @@ function normalizeSalesDocumentData(data, options = {}) {
         PortOfDischarge: rawHeader.PortOfDischarge ? String(rawHeader.PortOfDischarge).trim() : '',
         ContactPerson: rawHeader.ContactPerson ? String(rawHeader.ContactPerson).trim() : '',
         PaymentTerms: rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : (rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : ''),
-        PaymentTermCode: rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : (rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : '')
+        PaymentTermCode: rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : (rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : ''),
+        IncotermsClassification: rawHeader.IncotermsClassification ? String(rawHeader.IncotermsClassification).trim().toUpperCase() : '',
+        IncotermsLocation1: rawHeader.IncotermsLocation1 ? String(rawHeader.IncotermsLocation1).trim() : ''
     };
 
     return {

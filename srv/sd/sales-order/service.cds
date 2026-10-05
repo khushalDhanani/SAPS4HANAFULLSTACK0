@@ -104,6 +104,8 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         ContactPerson: String;
         PaymentTerms: String;
         PaymentTermCode: String;
+        IncotermsClassification: String;
+        IncotermsLocation1: String;
     }
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])

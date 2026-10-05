@@ -128,7 +128,11 @@ sap.ui.define([
                 "CustomerGroup2",
                 "PortOfLoading",
                 "PortOfDischarge",
-                "ContactPerson"
+                "ContactPerson",
+                "PaymentTerms",
+                "PaymentTermCode",
+                "IncotermsClassification",
+                "IncotermsLocation1"
             ];
 
             var ALLOWED_ITEM_FIELDS = [

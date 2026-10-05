@@ -181,6 +181,21 @@
                                     </suggestionItems>
                                 </Input>
 
+                                <Label text="{i18n>salesOrderLabelPaymentTerms}" />
+                                <Input id="inPaymentTerms" value="{newOrder>/header/PaymentTerms}" placeholder="{i18n>salesOrderPlaceholderPaymentTerms}" maxLength="4"
+                                    tooltip="{i18n>salesOrderTooltipPaymentTerms}"
+                                    change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderLabelIncoterms}" />
+                                <Input id="inIncotermsClassification" value="{newOrder>/header/IncotermsClassification}" placeholder="{i18n>salesOrderPlaceholderIncoterms}" maxLength="3"
+                                    tooltip="{i18n>salesOrderTooltipIncoterms}"
+                                    change=".onHeaderFieldChange" />
+
+                                <Label text="{i18n>salesOrderLabelIncotermsLocation}" />
+                                <Input id="inIncotermsLocation1" value="{newOrder>/header/IncotermsLocation1}" placeholder="{i18n>salesOrderPlaceholderIncotermsLocation}" maxLength="28"
+                                    tooltip="{i18n>salesOrderTooltipIncotermsLocation}"
+                                    change=".onHeaderFieldChange" />
+
                                 <Label text="{i18n>salesOrderCustomerGroup2}" />
                                 <Input id="inCustomerGroup2" value="{newOrder>/header/CustomerGroup2}" placeholder="{i18n>salesOrderPlaceholderCustomerGroup2}" maxLength="3" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
 
@@ -191,7 +206,12 @@
                                 <Input id="inPortOfDischarge" value="{newOrder>/header/PortOfDischarge}" placeholder="{i18n>salesOrderPlaceholderPortDischarge}" maxLength="50" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
 
                                 <Label text="{i18n>salesOrderContactPerson}" />
-                                <Input id="inContactPerson" value="{newOrder>/header/ContactPerson}" placeholder="{i18n>salesOrderPlaceholderContactPerson}" maxLength="10" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" />
+                                <Input id="inContactPerson" value="{newOrder>/header/ContactPerson}" placeholder="{i18n>salesOrderPlaceholderContactPerson}" maxLength="10"
+                                    valueState="{newOrder>/errors/ContactPerson/state}"
+                                    valueStateText="{newOrder>/errors/ContactPerson/text}"
+                                    tooltip="{i18n>salesOrderTooltipExtensionField}"
+                                    liveChange=".onContactPersonLiveChange"
+                                    change=".onContactPersonChange" />
                             </f:content>
                         </f:SimpleForm>
                     </Panel>

@@ -42,7 +42,7 @@ sap.ui.define([
             }
         },
 
-        _loadConfigurationAndDefaults: function () {
+        _loadConfigurationAndDefaults: function (bForce) {
             var that = this;
             var oModel = this.getView().getModel("newOrder");
 
@@ -278,6 +278,22 @@ sap.ui.define([
 
         onHeaderFieldChange: function () {
             var oModel = this.getView().getModel("newOrder");
+            SalesOrderModel.updateStatus(oModel);
+        },
+
+        onContactPersonLiveChange: function (oEvent) {
+            var sVal = oEvent.getParameter("value");
+            var oModel = this.getView().getModel("newOrder");
+            oModel.setProperty("/header/ContactPerson", sVal);
+            // Clear error while the user is still typing so it isn't distracting
+            if (!sVal || String(sVal).trim() === "") {
+                oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
+            }
+        },
+
+        onContactPersonChange: function () {
+            var oModel = this.getView().getModel("newOrder");
+            SalesOrderModel.validateSingleField(oModel, "ContactPerson");
             SalesOrderModel.updateStatus(oModel);
         },
 
@@ -811,17 +827,27 @@ sap.ui.define([
                 });
             }).catch(function (error) {
                 BusyIndicator.hide();
-                var sErrMsg = (error && error.message) ? error.message : "An unexpected error occurred.";
+                var sRaw = (error && error.message) ? error.message : "An unexpected error occurred.";
+                // Strip double-prefix added by the CAP handler + this catch block
+                var PREFIX = "Failed to create Sales Order: ";
+                var sErrMsg = sRaw.startsWith(PREFIX) ? sRaw.slice(PREFIX.length) : sRaw;
+
                 oModel.setProperty("/errorMessage", sErrMsg);
                 oModel.setProperty("/hasError", true);
+
                 if (sErrMsg.indexOf("not maintained for sales area") !== -1 || sErrMsg.indexOf("Sold-to party") !== -1) {
-                    oModel.setProperty("/errors/SoldToParty", {
-                        state: "Error",
-                        text: sErrMsg
-                    });
-                    sErrMsg += "\n\nPlease select a customer maintained for this sales area (e.g. 10135 Divi's Laboratories, 10000 3A Chemie) or extend the customer in SAP GUI (transaction BP / XD01).";
+                    oModel.setProperty("/errors/SoldToParty", { state: "Error", text: sErrMsg });
+                    sErrMsg += "\n\nPlease select a customer maintained for this sales area or extend the customer in SAP GUI (transaction BP / XD01).";
+                } else if (sErrMsg.indexOf("is not listed") !== -1 || sErrMsg.indexOf("not allowed") !== -1) {
+                    // SAP SD Material Listing (condition type A001): the sold-to party has a listing record
+                    // that restricts which materials can be ordered. This material is not on the list.
+                    sErrMsg += "\n\nThis is a SAP Material Listing restriction (condition type A001).\n" +
+                        "To resolve:\n" +
+                        "\u2022 Ask your SAP SD consultant to add this material to the customer's listing (transaction VB01 / VB02).\n" +
+                        "\u2022 Or select a material already listed for this sold-to party.";
                 }
-                MessageBox.error("Failed to create Sales Order: " + sErrMsg);
+
+                MessageBox.error(PREFIX + sErrMsg);
                 SalesOrderModel.updateStatus(oModel);
             });
         },

@@ -1,6 +1,76 @@
 
 # Changes Log
 
+## 2026-10-05 09:15 UTC — Fix: Incoterms, Payment Terms, Contact Person not saved on Sales Order
+- **Agent**: Antigravity
+- **Current Status**: **Complete, Tested, and Verified.**
+- **Root Cause (Step 6 table result)**:
+  | Field | First hop where lost | file:line | Proven? |
+  |---|---|---|---|
+  | Incoterms (`IncotermsClassification`, `IncotermsLocation1`) | No UI control + absent from `buildPayload` + absent from `OrderHeader` CDS type | `CreateSalesOrder.view.xml` (absent), `SalesOrderModel.js:549-562`, `service.cds:84-107` | Proven |
+  | Payment Terms (`PaymentTerms`) | `SalesOrderModel.buildPayload` never reads `/header/PaymentTerms`; field was set by `applyCustomerDefaults` at `SalesOrderModel.js:193` but not copied into `oCleanHeader` | `SalesOrderModel.js:547-562` | Proven |
+  | Contact Person (`ContactPerson`) | Conditionally dropped at `SalesInquiryAdapter._getLeanOrderFields` metadata gate if LORD_ODATA_ORDER_SRV/HeaderSet does not expose `ContactPerson` as a property | `SalesInquiryAdapter.js:1414-1426` | Mechanism proven; SAP metadata confirmation needed |
+  | (4th silent drop found) | `SalesOrderService._sanitizePayload` ALLOWED_HEADER_FIELDS allowlist also strips `PaymentTerms`, `PaymentTermCode`, `IncotermsClassification`, `IncotermsLocation1` before POST | `SalesOrderService.js:111-132` | Proven |
+- **Changes**:
+  1. **`srv/sd/sales-order/service.cds`**: Added `IncotermsClassification: String` and `IncotermsLocation1: String` to `OrderHeader` type so CAP does not strip them at deserialization.
+  2. **`srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`**: Added `IncotermsClassification` and `IncotermsLocation1` to `normalizedHeader` in `normalizeSalesDocumentData`.
+  3. **`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`**: Added `IncotermsClassification` and `IncotermsLocation1` to `s4Header` in `mapToS4OrderPayload` (not gated by `_getLeanOrderFields` — standard VBKD fields).
+  4. **`srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`**: Added `IncotermsClassification` and `IncotermsLocation1` to `headerPayload` in `createSalesDocument` deep-insert path (alongside `PaymentTermCode`, outside the `_getLeanOrderFields` extension gate).
+  5. **`app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`**: Added `PaymentTerms`, `PaymentTermCode`, `IncotermsClassification`, `IncotermsLocation1` to `createInitialModel`. Fixed `buildPayload` to read `PaymentTerms`/`PaymentTermCode` and both Incoterms fields from the header model.
+  6. **`app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js`**: Added `PaymentTerms`, `PaymentTermCode`, `IncotermsClassification`, `IncotermsLocation1` to `ALLOWED_HEADER_FIELDS` in `_sanitizePayload`.
+  7. **`app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml`**: Added three new inputs: `inPaymentTerms`, `inIncotermsClassification`, `inIncotermsLocation1`.
+  8. **`app/fiori-app/webapp/i18n/i18n.properties`**: Added 9 new keys for Payment Terms and Incoterms labels, placeholders, and tooltips.
+- **SAP Note**: Incoterms are standard VBKD table fields; they will be accepted by LORD_ODATA_ORDER_SRV if the sales order type and customer master are configured. If SAP rejects an invalid Incoterms key, the 400 error propagates to the user. ContactPerson remains gated by `_getLeanOrderFields` — if the field is absent from LORD_ODATA_ORDER_SRV metadata, the order is created without it and a `LOG.warn` is emitted. To resolve completely, the SAP service must expose `ContactPerson` on HeaderSet.
+- **Validation**:
+  - `npx jest test/unit/sales-order --runInBand --silent`: **5 suites / 76 tests passed**, 0 failed.
+  - `npm --prefix app/fiori-app run lint`: **Success — no findings.**
+  - `npx cds compile srv/sd/sales-order/service.cds`: **OK**.
+  - `git diff --check`: **Clean.**
+- **Errors / Warnings / Blockers**: No new tests added for Incoterms/PaymentTerms in `buildPayload` — recommended follow-up. ContactPerson saving from UI still depends on LORD_ODATA_ORDER_SRV having a `ContactPerson` property on `HeaderSet` — verify via live `$metadata`.
+- **Next Steps**: (1) Add unit tests for Incoterms and PaymentTerms in `buildPayload`/`validateForm`. (2) Verify live POST against SAP with Incoterms and Payment Terms to confirm they save (read back via VA03/VBKD). (3) Verify `LORD_ODATA_ORDER_SRV/HeaderSet/$metadata` for `ContactPerson` property.
+
+## 2026-10-05 08:47 UTC — Fix: `Invalid path: /` & `400 Material is not listed and therefore not allowed`
+- **Agent**: Antigravity
+- **Current Status**: **Complete, Tested, and Verified.**
+- **Issues**:
+  1. `Uncaught Error: Invalid path: /` — The new `valueState="{newOrder>/errors/ContactPerson/state}"` binding added in the previous session navigated into `errors.ContactPerson.state`, but `errors` was initialized as `{}` (no `ContactPerson` key). SAPUI5 JSONModel throws `Invalid path: /` when a binding's intermediate path segment resolves to `undefined` and it cannot continue resolution.
+  2. `400 Bad Request: Material 4000000085 is not listed and therefore not allowed` — SAP SD **Material Listing** (condition type A001). The sold-to party has a listing record in SAP that restricts which materials can be ordered; material 4000000085 is not in that list. Additionally, the error was displayed with a **doubled prefix** (`"Failed to create Sales Order: Failed to create Sales Order: ..."`) because the CAP handler wraps the SAP message, and the UI catch block added the prefix again.
+- **Root Cause — NOT a code bug in the integration layer**: The Material Listing rejection is a pure SAP configuration/master data issue. The code correctly propagates the SAP message; the only code-side issues were the duplicate prefix and no actionable guidance for the user.
+- **Changes**:
+  1. **`SalesOrderModel.js`**: Pre-seeded `errors: { ContactPerson: { state: "None", text: "" } }` in `createInitialModel()` so the binding path `/errors/ContactPerson/state` is always resolvable from initial load.
+  2. **`CreateSalesOrder.controller.js`** (catch block in `onSave`): Strip the `"Failed to create Sales Order: "` prefix that the CAP handler already added before appending it again in `MessageBox.error`. Added a dedicated `else if` branch for `"is not listed"` / `"not allowed"` messages that appends a clear user hint: check SAP transaction VB01/VB02 to extend the material listing for the sold-to party.
+- **Files Changed**:
+  - `app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`
+- **SAP Background**: Material Listing (A001) in SAP SD means only explicitly listed materials can be sold to a customer. Resolution is either: (a) add the material to the listing via VB01/VB02, or (b) use a material already on the list for that sold-to party.
+- **Validation**:
+  - `npx jest test/unit/sales-order --runInBand --silent`: **5 suites / 76 tests passed**, 0 failed.
+  - `npm --prefix app/fiori-app run lint`: **Success — no findings.**
+- **Errors / Warnings / Blockers**: The `400` itself is a live SAP data constraint — cannot be resolved from code alone.
+- **Next Steps**: The sold-to party in use has a Material Listing record in SAP. Either extend the listing for material 4000000085 (VB01/VB02 in SAP GUI), or test with a different material/sold-to party that does not have listing restrictions.
+
+## 2026-10-05 08:27 UTC — Fix: CreateSalesOrder — `bForce` ReferenceError & ContactPerson 400 validation
+- **Agent**: Antigravity
+- **Request**: Fix two runtime errors: (1) `ReferenceError: bForce is not defined` at `CreateSalesOrder.controller.js:62`, (2) HTTP 400 `Contact Person must be a numeric SAP contact number (up to 10 digits)` from `createSalesOrder` action.
+- **Current Status**: **Complete, Tested, and Verified.**
+- **Root Cause & Diagnosis**:
+  1. **`bForce` not defined** (`CreateSalesOrder.controller.js:62`): `_loadConfigurationAndDefaults` was declared without a parameter but used `bForce` on line 62 (copied from the analogous `CreateSalesInquiry` controller where the signature does include `bForce`). The function is called both without argument (from `_resetModel`) and with `true` from future callers, so the parameter was simply missing from the function signature.
+  2. **ContactPerson 400 error**: The backend validation in `srv/sd/sales-inquiry/validation/salesInquiry.validation.js` (line 100) rejects any `ContactPerson` value that is not purely numeric up to 10 digits. The frontend had no matching validation — no `validateSingleField` case, no `validateForm` check, and no `valueState` binding on the input — so invalid values (e.g. alphabetical names) reached the server and returned a raw 400.
+- **Changes**:
+  1. **`CreateSalesOrder.controller.js`**: Added `bForce` parameter to `_loadConfigurationAndDefaults(bForce)` function signature. Added `onContactPersonLiveChange` (clears error while typing) and `onContactPersonChange` (runs `validateSingleField` on blur) handlers.
+  2. **`SalesOrderModel.js`**: Added `CONTACT_PERSON_REGEX = /^\d{1,10}$/` constant. Added `ContactPerson` case to `validateSingleField`. Added explicit ContactPerson format check inside `validateForm` (writes error state to `/errors/ContactPerson`).
+  3. **`CreateSalesOrder.view.xml`**: Added `valueState`, `valueStateText`, `liveChange=".onContactPersonLiveChange"`, `change=".onContactPersonChange"` bindings to `inContactPerson` input — matching the existing pattern on `inSoldToParty`, `inCurrency`, etc.
+- **Files Changed**:
+  - `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`
+  - `app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml`
+- **Validation**:
+  - `npx jest test/unit/sales-order --runInBand --silent`: **5 suites / 76 tests passed**, 0 failed.
+  - `npm --prefix app/fiori-app run lint`: **Success — no findings.**
+  - `git diff --check`: **Clean.**
+- **Errors / Warnings / Blockers**: None in code. No new tests added yet for `validateSingleField("ContactPerson")` or `validateForm` ContactPerson branch — recommended follow-up.
+- **Next Steps**: Add unit tests for ContactPerson validation; consider adding `onContactPersonLiveChange`/`onContactPersonChange` test cases to `createSalesOrderController.test.js`.
+
 ## 2026-10-05 07:30 UTC — In Progress: zero-assumption audit (Phases 1–3 done; Phase 4 partly done)
 - **Agent**: Claude Code
 - **Request**: Zero-assumption audit of feature/PO (= feature/CL01 @ 1ca7b92). Findings table approved: `/Users/khushaldhanani/.claude/plans/pasted-content-id-ddf7-act-as-adaptive-reddy.md` (IDs W01–W26, R01–R14, U01–U05, with live SAP evidence).

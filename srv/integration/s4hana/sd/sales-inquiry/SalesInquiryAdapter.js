@@ -1402,6 +1402,13 @@ class SalesInquiryAdapter {
       if (payTerms && String(payTerms).trim() !== '') {
         headerPayload.PaymentTermCode = String(payTerms).trim();
       }
+      // Incoterms: standard VBKD fields — not gated by _getLeanOrderFields
+      if (header.IncotermsClassification && String(header.IncotermsClassification).trim() !== '') {
+        headerPayload.IncotermsClassification = String(header.IncotermsClassification).trim().toUpperCase();
+      }
+      if (header.IncotermsLocation1 && String(header.IncotermsLocation1).trim() !== '') {
+        headerPayload.IncotermsLocation1 = String(header.IncotermsLocation1).trim();
+      }
       if (header.ShipToParty && String(header.ShipToParty).trim() !== '') {
         headerPayload.HeaderPartnerSet = [
           {
