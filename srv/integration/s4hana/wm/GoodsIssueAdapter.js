@@ -504,6 +504,9 @@ class GoodsIssueAdapter {
       ReceivingStorageLocation: String(recv.ReceivingStorageLocation || '').trim(),
       Batch: String(resvItem.Batch || '').trim(),
       Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || resvItem.Unit || '').trim(),
+      // SAP requires ManufacturingOrder on 261 material-document items; the reservation
+      // carries its order, so posting must never depend on the client sending it.
+      OrderNo: String(resvItem.OrderID || resvItem.OrderNo || '').trim(),
       MovementType: movementType,
       RequiredQty: reqQty,
       WithdrawnQty: wdnQty,

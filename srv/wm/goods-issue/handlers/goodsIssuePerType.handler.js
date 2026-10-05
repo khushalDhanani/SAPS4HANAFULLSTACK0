@@ -229,6 +229,9 @@ async function reservationReconcileCheck(req, normalized, { receiving = false, b
   if (batch && normalized.Batch && item.Batch && norm(normalized.Batch) !== norm(item.Batch)) {
     mismatches.push(`Batch (submitted ${normalized.Batch}, reservation ${item.Batch})`);
   }
+  if (normalized.OrderNo && item.OrderNo && normMat(normalized.OrderNo) !== normMat(item.OrderNo)) {
+    mismatches.push(`Order (submitted ${normalized.OrderNo}, reservation ${item.OrderNo})`);
+  }
   if (receiving) {
     if (normalized.ReceivingPlant && item.ReceivingPlant && norm(normalized.ReceivingPlant) !== norm(item.ReceivingPlant)) {
       mismatches.push(`Receiving Plant (submitted ${normalized.ReceivingPlant}, reservation ${item.ReceivingPlant})`);
@@ -278,7 +281,7 @@ async function reservationReconcileCheck(req, normalized, { receiving = false, b
     }
   }
 
-  const fromReservation = ['Material', 'Plant', 'StorageLocation', 'Batch'].concat(receiving ? ['ReceivingPlant', 'ReceivingStorageLocation'] : []);
+  const fromReservation = ['Material', 'Plant', 'StorageLocation', 'Batch', 'OrderNo'].concat(receiving ? ['ReceivingPlant', 'ReceivingStorageLocation'] : []);
   fromReservation.forEach((f) => { if (item[f]) normalized[f] = item[f]; });
   item.OpenQty = authoritativeOpenQty;
   return item;

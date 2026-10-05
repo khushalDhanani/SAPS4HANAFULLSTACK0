@@ -1,6 +1,42 @@
 
 # Changes Log
 
+## 2026-10-05 05:05 UTC — Complete: second live E2E run proves the ClientAttemptId idempotency fix
+- **Agent**: Claude Code (postings user-executed via the E2E script; agent verification read-only)
+- **Request / Current Status**: The user re-ran the E2E proof on reservation 521608 with the SAME items, quantities (1 KG) and day as the 05:00 UTC run. With fresh `ClientAttemptId`s the backend correctly treated them as new attempts and posted new documents — **4900050028/2026** (item 0001) and **4900050029/2026** (item 0002), both read back from SAP — instead of replaying 4900050024/25. This is the live proof of the 04:40 UTC idempotency fix. Both were reversed (**4900050030**, **4900050031**). Post-run RFC read of RESB: item 0001 withdrawn 0.000 (all four postings across both runs fully offset); item 0002 withdrawn 1.000 (only the pre-existing external withdrawal). The script's final read showing 77 KG for item 0002 in both runs is SAP read lag (~0.6 s between reversal and read); the restore is confirmed present on re-read.
+- **Files Changed**: `WORKSTATUS.md` only.
+- **Validation**: Live documents verified in SAP with reservation references and reversal links; RESB withdrawn quantities re-read after settlement. No code changed.
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: None.
+
+## 2026-10-05 05:00 UTC — Complete: LIVE end-to-end proof of the 261 flow (post → read-back → refresh → second item → reversal)
+- **Agent**: Claude Code (postings executed by the user running the prepared E2E script; agent performed read-only verification)
+- **Request**: Prove the full flow live: open reservation → select one item → enter quantity → validate SAP staging/SU/serial/batch state → post one item → refresh SAP → continue with remaining items.
+- **Current Status**: Complete and proven against live SAP (reservation 521608, order 1002801, plant 1110/PT01, 2 open 261 items), driven through the REAL `postGoodsIssue261` handler chain with no mocks:
+  1. Open pending list: reservation listed with ItemCount 2 (fresh SAP read, 380 open items scanned).
+  2. Eligible items read fresh: 0001 (3000000016, 5000 KG), 0002 (8300000022).
+  3. Item 0001 posted, 1 KG, batch NMDH260006 (selected from live SAP batches the way the UI value help does): **Material Document 4900050024/2026**, PostingStatus POSTED, read back from SAP.
+  4. Fresh re-read: item 0001 open 4999 KG; reservation STILL in the pending list (ItemCount 2) — the continue-with-remaining-items loop works.
+  5. Item 0002 posted separately, 1 KG, batch IN26000894: **Material Document 4900050025/2026**, read back. Distinct documents — one item per material document confirmed live.
+  6. Both documents reversed (reason 01): reversal documents **4900050026** and **4900050027**.
+  7. Post-run read-only audit (RFC RESB + API_MATERIAL_DOCUMENT_SRV): all four documents exist in SAP with correct reservation references (521608/1, 521608/2) and reversal links (26→24, 27→25); RESB withdrawn quantity for item 0001 is 0.000 — fully restored. Item 0002 shows withdrawn 1.000, which is EXTERNAL to this run: its open quantity had already moved 79→78 between the user's script runs before any posting succeeded (shared dev client activity); our documents net to zero on both items.
+  - Earlier blocked attempts during the same proof were correct validations observed live: missing batch → 400 naming material/plant ("batch-managed; Batch is required"), and SAP's own "Property ManufacturingOrder is mandatory for GoodsMovementType 261" → fixed at the root in the 04:55 UTC entry (order backfilled from the authoritative reservation; this run posted successfully with the client sending no OrderNo).
+- **Files Changed**: `WORKSTATUS.md` only (this entry). The proof scripts live in the session scratchpad, outside the repository.
+- **Validation**: Live SAP postings and reversals as above (user-executed); read-only post-run audit by agent; all 14 points of the AGENTS.md SAP-create Definition of Done are now satisfied for the 261 single-item flow (service identified, metadata/entity verified, live POST, SAP document number, read-back, UI contract, no mock persistence, READ functionality intact — full WM suite 56 suites / 1,154 tests passing as of 04:55 UTC).
+- **Errors / Warnings / Blockers**: None. Note for history: reservation 521608 item 0002 carries 1 KG withdrawn from activity outside this session.
+- **Next Steps**: None for the 261 flow. Open warehouse questions remain as recorded on 04:40 UTC (LTBK STATU semantics; blank-LGTYP issuing policy).
+
+## 2026-10-05 04:55 UTC — Complete: backfill ManufacturingOrder for 261 postings from the authoritative reservation
+- **Agent**: Claude Code
+- **Request**: Live end-to-end posting proof (user-run) of the 261 flow on reservation 521608. SAP rejected the Tier 2 post with HTTP 400 "Property ManufacturingOrder is mandatory for GoodsMovementType 261" when the request carried no OrderNo.
+- **Plan**: Root cause, not a script workaround: the mapper already maps OrderNo → ManufacturingOrder, and the UI sends OrderNo from prefill, but a reservation-based posting must never depend on the client supplying the order — the reservation itself carries it.
+- **Current Status**: Complete. `GoodsIssueAdapter.getReservationItemAuthoritative` now returns `OrderNo` (from the SAP row's `OrderID`), and `reservationReconcileCheck` reconciles a submitted order against the reservation's (mismatch → 400, consistent with Material/Plant/StorageLocation) and backfills `normalized.OrderNo` from the reservation like the other authoritative fields. Any client posting by ReservationNo + Item alone now produces a payload satisfying SAP's mandatory ManufacturingOrder. The earlier live-run block on batch ("Material 3000000016 is batch-managed … Batch is required", 400) was correct fail-closed behavior, not a defect; the E2E script now selects a usable SAP batch the way the UI value help does.
+- **Files Changed**: `srv/integration/s4hana/wm/GoodsIssueAdapter.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/goodsIssueAttempt.test.js`, `WORKSTATUS.md`.
+- **Reason**: Live SAP evidence (user-run posting attempt on 521608/0001): API_MATERIAL_DOCUMENT_SRV requires ManufacturingOrder on 261 items; the authoritative reservation read is the correct generic source.
+- **Validation**: Passed — full WM suite `npx jest test/unit/wm --runInBand --silent` (56 suites / 1,154 tests, incl. new assertion that the posted payload carries the reservation's order when the client sends none); `git diff --check` (clean). The live posting proof itself is pending the user re-running the E2E script; posting was NOT performed by the agent.
+- **Errors / Warnings / Blockers**: The live E2E posting/reversal proof on 521608 is still outstanding (user-run; agent execution of SAP writes is permission-blocked). Both prior blocks in the user's runs were correct validations (missing batch; missing order), which also exercised the error-differentiation path live.
+- **Next Steps**: User re-runs `scratchpad/e2e-261-live.js 521608 1` to complete the posting → read-back → refresh → second item → reversal proof; record the material document numbers here afterwards.
+
 ## 2026-10-05 04:40 UTC — Complete: resolve the four documented 261 risks (per-item TR destination, idempotency nonce, partial-issue staging, engine alignment)
 - **Agent**: Claude Code
 - **Request**: Fix the four remaining risks documented in the 04:20 UTC entry: (a) multi-item WM reservations with differing TR destinations fail closed as UNKNOWN; (b) the idempotency key collapses two genuine same-item/same-qty/same-day postings; (c) SU-scanned partial issues are measured against the full open quantity at final reconcile; (d) a WM-managed location with blank RESB.LGTYP previews as postable but posts as 502.

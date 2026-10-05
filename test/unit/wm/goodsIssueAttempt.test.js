@@ -373,6 +373,7 @@ describe('Movement 261 idempotent posting attempts', () => {
     Plant: request.Plant,
     StorageLocation: request.StorageLocation,
     Batch: request.Batch,
+    OrderNo: '1002801',
     RequiredQty: 100,
     WithdrawnQty: 0,
     BaseUnit: request.Unit,
@@ -413,6 +414,9 @@ describe('Movement 261 idempotent posting attempts', () => {
     const retry = await handlers.postGoodsIssue261(req({ ...request }));
 
     expect(firstReq.error.mock.calls).toEqual([]);
+    // SAP requires ManufacturingOrder for 261: the order is backfilled from the
+    // authoritative reservation even though the client did not send one.
+    expect(firstPostedPayload.OrderNo).toBe('1002801');
     expect(storedAttempts.map((attempt) => attempt.ReferenceDocument)).toEqual([firstPostedPayload.ReferenceDocument]);
     expect(persisted).toMatchObject({
       ReferenceDocument: firstPostedPayload.ReferenceDocument,
