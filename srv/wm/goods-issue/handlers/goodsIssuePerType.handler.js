@@ -40,7 +40,10 @@ function assign261IdempotencyKey(normalized) {
     DocumentDate: normalized.DocumentDate,
     SerialNumbers: normalized.SerialNumbers,
     StorageUnits: normalized.StorageUnits,
-    LastStorageUnitQty: normalized.LastStorageUnitQty
+    LastStorageUnitQty: normalized.LastStorageUnitQty,
+    // Distinguishes two deliberate postings of the same item/qty/day; '' keeps the
+    // field-only key for clients that do not send one.
+    ClientAttemptId: normalized.ClientAttemptId || ''
   };
   const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
   const suffix = BigInt(`0x${hash}`).toString(36).toUpperCase().slice(0, 14);
@@ -653,10 +656,29 @@ async function storageUnitFinalReconcileCheck261(req, normalized) {
     req.error(502, `SAP did not return verifiable Storage Unit context for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
     return false;
   }
-  if (stockResult.IsStagingRequired === true &&
-      (stockResult.IsFullyStaged !== true || !stockResult.TargetStorageType || !stockResult.TargetStorageBin)) {
-    req.error(422, stockResult.Message || `SAP staging is no longer confirmed for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-    return false;
+  if (stockResult.IsStagingRequired === true) {
+    // IsFullyStaged measures the FULL open quantity; a partial issue only needs the issue
+    // quantity staged. Re-verify with the staging engine, which is issue-quantity and
+    // unit-conversion aware and resolves the target itself.
+    let staging;
+    try {
+      staging = await GoodsIssueAdapter.checkStagingForReservation(reservationNo, reservationItem, {
+        issueQty: normalized.IssueQty,
+        issueUnit: normalized.Unit
+      });
+    } catch (err) {
+      const status = err.status === 400 || err.status === 422 ? err.status : 502;
+      req.error(status, `${err.message || 'SAP WM staging could not be re-verified before posting'}. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (!staging || staging.isVerified !== true) {
+      req.error(502, staging?.error || `SAP staging could not be re-verified for reservation ${reservationNo} item ${reservationItem} immediately before posting. Goods Issue was NOT posted.`);
+      return false;
+    }
+    if (!staging.isStaged) {
+      req.error(422, staging.error || stockResult.Message || `SAP staging is no longer confirmed for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
+      return false;
+    }
   }
 
   const stockBySu = new Map(stockUnits.map((su) => [String(su.StorageUnit || '').trim().toUpperCase(), su]));

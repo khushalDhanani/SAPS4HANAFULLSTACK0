@@ -431,6 +431,35 @@ describe('Movement 261 idempotent posting attempts', () => {
     expect((await allAttempts()).filter((attempt) => attempt.MovementType === '261')).toHaveLength(1);
   });
 
+  test('two deliberate postings with distinct ClientAttemptId are separate attempts, same id replays', async () => {
+    let docNo = 0;
+    const postPayloads = [];
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
+      postPayloads.push({ ...data });
+      docNo += 1;
+      return {
+        MaterialDocument: `490009991${docNo}`,
+        MaterialDocYear: '2026',
+        Success: true,
+        Confirmed: true,
+        ConfirmationStatus: 'CONFIRMED'
+      };
+    });
+
+    const first = await handlers.postGoodsIssue261(req({ ...request, ClientAttemptId: 'GIA-ATTEMPT-1' }));
+    const second = await handlers.postGoodsIssue261(req({ ...request, ClientAttemptId: 'GIA-ATTEMPT-2' }));
+    const replay = await handlers.postGoodsIssue261(req({ ...request, ClientAttemptId: 'GIA-ATTEMPT-2' }));
+
+    // Same item/qty/day, different attempt ids: two real SAP posts with distinct references.
+    expect(postPayloads).toHaveLength(2);
+    expect(postPayloads[0].ReferenceDocument).not.toBe(postPayloads[1].ReferenceDocument);
+    expect(first).toMatchObject({ MaterialDocument: '4900099911' });
+    expect(second).toMatchObject({ MaterialDocument: '4900099912' });
+    // Replaying the same attempt id must NOT post again.
+    expect(replay).toMatchObject({ MaterialDocument: '4900099912', PostingStatus: 'POSTED' });
+    expect(postPayloads).toHaveLength(2);
+  });
+
   test('an identical retry during posting returns the existing pending attempt without reposting', async () => {
     let signalStarted;
     let releasePost;

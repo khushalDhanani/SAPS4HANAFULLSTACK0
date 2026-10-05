@@ -252,7 +252,11 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         SerialNumbers   : array of String(18),
         SerialNumber       : String(18),
         StorageUnits       : array of String(20),
-        LastStorageUnitQty : Decimal(13, 3)
+        LastStorageUnitQty : Decimal(13, 3),
+        // Client-generated id, unique per user posting attempt. It is part of the
+        // idempotency key, so two deliberate postings of the same item/quantity/day are
+        // distinct attempts, while replays of one attempt still deduplicate.
+        ClientAttemptId    : String(36)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

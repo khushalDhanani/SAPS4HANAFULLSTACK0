@@ -170,10 +170,48 @@ class GoodsIssuePhase6StagingClient extends BaseGoodsIssueClient {
         : '';
     }
 
-    const tbnum = clean(validRows[0].TBNUM);
+    // Per-item TR resolution: LTBP (TR item) carries RSPOS, so each reservation item can be
+    // mapped to ITS transfer requirement instead of merging every TR of the reservation.
+    // Live-verified on this release: LTBP is readable only with the narrow field list
+    // TBNUM/TBPOS/RSPOS and an LGNUM + TBNUM predicate; wider field lists or a RSNUM
+    // predicate return AD 718. On any LTBP read failure we fall back to the previous
+    // reservation-level resolution, which fails closed on conflicting destinations.
+    let rowsForItem = validRows;
+    const sItemPadded = clean(item) ? clean(item).padStart(4, '0') : '';
+    if (sItemPadded) {
+      const tbnums = [...new Set(validRows.map((row) => clean(row.TBNUM)))];
+      const matchingTrs = new Set();
+      let ltbpFailed = false;
+      for (const tb of tbnums) {
+        const lg = clean(validRows.find((row) => clean(row.TBNUM) === tb)?.LGNUM);
+        try {
+          const ltbpRows = await this.rfc.readTable(
+            'LTBP', ['TBNUM', 'TBPOS', 'RSPOS'],
+            [`LGNUM = '${lg}'`, `AND TBNUM = '${tb}'`], 100
+          );
+          if ((ltbpRows || []).some((pos) => clean(pos.RSPOS) === sItemPadded)) {
+            matchingTrs.add(tb);
+          }
+        } catch (e) {
+          LOG.warn(`LTBP item mapping failed for TR ${tb} (${e.message || e}); falling back to reservation-level TR resolution.`);
+          ltbpFailed = true;
+          break;
+        }
+      }
+      if (!ltbpFailed) {
+        rowsForItem = validRows.filter((row) => matchingTrs.has(clean(row.TBNUM)));
+        if (rowsForItem.length === 0) {
+          return includeTarget
+            ? { tbnum: '', status: 'NOT_FOUND', error: `No transfer requirement found for reservation ${sRes} item ${sItemPadded}.` }
+            : '';
+        }
+      }
+    }
+
+    const tbnum = clean(rowsForItem[0].TBNUM);
     if (!includeTarget) return tbnum;
 
-    const destRows = validRows.filter((row) => clean(row.NLTYP) && clean(row.NLPLA));
+    const destRows = rowsForItem.filter((row) => clean(row.NLTYP) && clean(row.NLPLA));
     const destinations = [...new Map(destRows.map((row) => [
       `${clean(row.NLTYP)}|${clean(row.NLPLA)}`,
       { targetType: clean(row.NLTYP), targetBin: clean(row.NLPLA), tbnum: clean(row.TBNUM) }

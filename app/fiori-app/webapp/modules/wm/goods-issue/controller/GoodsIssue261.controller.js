@@ -451,6 +451,16 @@ sap.ui.define([
             var sVal = oEvent.getParameter("value") || "";
             var nVal = parseFloat(sVal);
             this._oModel.setProperty("/quantity", isNaN(nVal) ? sVal : nVal);
+            // Staging must cover the quantity being issued, not the full open quantity.
+            // (UNKNOWN staging keeps stagedQty null, so the gate stays closed there.)
+            if (this._oModel.getProperty("/isStagingRequired") &&
+                this._oModel.getProperty("/stagingStatus") !== "UNKNOWN" &&
+                !isNaN(nVal) && nVal > 0) {
+                var nStaged = Number(this._oModel.getProperty("/stagedQty"));
+                if (Number.isFinite(nStaged)) {
+                    this._oModel.setProperty("/canCompleteStaging", nStaged + 1e-9 >= nVal);
+                }
+            }
             // Scan-to-complete must cover the quantity being issued, not the full open quantity.
             if (this._oModel.getProperty("/scanEnabled") && !isNaN(nVal) && nVal > 0) {
                 this._oModel.setProperty("/requiredScanCount", nVal);

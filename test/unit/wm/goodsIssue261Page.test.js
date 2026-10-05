@@ -203,6 +203,22 @@ describe('Movement 261 Dedicated Page: Model & Service Tests', () => {
             expect(payload.GLAccount).toBeUndefined();
             expect(payload.SerialNumbers).toEqual(['SN-001', 'SN-002']);
         });
+
+        it('toBackendPayload carries a fresh ClientAttemptId per call so deliberate re-posts are distinct attempts', () => {
+            const data = GoodsIssue261Model.getInitialData();
+            data.reservationNo = 'RES001';
+            data.reservationItem = '10';
+            data.material = 'MAT1';
+            data.plant = '1120';
+            data.quantity = 2;
+            data.unit = 'EA';
+
+            const first = GoodsIssue261Model.toBackendPayload(data);
+            const second = GoodsIssue261Model.toBackendPayload(data);
+            expect(first.ClientAttemptId).toEqual(expect.stringMatching(/^GIA/));
+            expect(first.ClientAttemptId.length).toBeLessThanOrEqual(36);
+            expect(second.ClientAttemptId).not.toBe(first.ClientAttemptId);
+        });
     });
 
     describe('GoodsIssue261Service: Client Calls', () => {

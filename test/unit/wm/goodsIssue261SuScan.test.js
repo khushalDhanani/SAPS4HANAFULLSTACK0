@@ -390,6 +390,85 @@ describe('Server-Side postGoodsIssue261: Storage Unit Reconciliation', () => {
     expect(req.error).not.toHaveBeenCalled();
   });
 
+  it('allows an SU partial issue when staging covers the issue quantity even if the full open quantity is not staged', async () => {
+    // IsFullyStaged (full open qty) is false, but the staging engine confirms the issue qty.
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      ReservationNo: '480962', ReservationItem: '0001', Material: '1000000264', Plant: '1110',
+      StorageLocation: 'CS01', Batch: 'IN26000905', OpenQty: 100, RequiredQty: 100
+    });
+    jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
+      ReservationNo: '480962', ReservationItem: '0001', Material: '1000000264', Plant: '1110',
+      StorageLocation: 'CS01',
+      StockUnits: [{
+        Material: '1000000264', Plant: '1110', StorageLocation: 'CS01', Batch: 'IN26000905',
+        Warehouse: 'W01', StorageType: 'IP1', StorageBin: '0000001001',
+        StorageUnit: 'SU100', AvailableStock: 40
+      }],
+      IsStagingRequired: true,
+      IsFullyStaged: false,
+      TargetStorageType: 'IP1',
+      TargetStorageBin: '0000001001'
+    });
+    const stagingSpy = jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation')
+      .mockResolvedValue({ isVerified: true, isStaged: true, stagingStatus: 'OK' });
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261')
+      .mockResolvedValue({ MaterialDocument: '4900012370', MaterialDocYear: '2026' });
+
+    const req = {
+      data: {
+        ReservationNo: '480962', ReservationItem: '0001', Material: '1000000264',
+        Plant: '1110', StorageLocation: 'CS01', IssueQty: 40, Unit: 'KG', StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn()
+    };
+
+    const result = await handlers['postGoodsIssue261'](req);
+    expect(req.error).not.toHaveBeenCalled();
+    expect(result.MaterialDocument).toBe('4900012370');
+    expect(post).toHaveBeenCalledTimes(1);
+    // The final reconcile re-verifies staging for the ISSUE quantity, not the open quantity.
+    expect(stagingSpy).toHaveBeenLastCalledWith('480962', '0001', { issueQty: 40, issueUnit: 'KG' });
+  });
+
+  it('blocks posting with 422 when the final staging re-check no longer covers the issue quantity', async () => {
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      ReservationNo: '480962', ReservationItem: '0001', Material: '1000000264', Plant: '1110',
+      StorageLocation: 'CS01', Batch: 'IN26000905', OpenQty: 100, RequiredQty: 100
+    });
+    jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
+      ReservationNo: '480962', ReservationItem: '0001', Material: '1000000264', Plant: '1110',
+      StorageLocation: 'CS01',
+      StockUnits: [{
+        Material: '1000000264', Plant: '1110', StorageLocation: 'CS01', Batch: 'IN26000905',
+        Warehouse: 'W01', StorageType: 'IP1', StorageBin: '0000001001',
+        StorageUnit: 'SU100', AvailableStock: 40
+      }],
+      IsStagingRequired: true,
+      IsFullyStaged: false,
+      TargetStorageType: 'IP1',
+      TargetStorageBin: '0000001001'
+    });
+    // Pre-check passes, the final re-check finds the staged stock gone.
+    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation')
+      .mockResolvedValueOnce({ isVerified: true, isStaged: true, stagingStatus: 'OK' })
+      .mockResolvedValueOnce({ isVerified: true, isStaged: false, stagingStatus: 'NOT_STAGED', error: 'Only 0 of 40 KG staged in W01/IP1/0000001001.' });
+    const post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+
+    const req = {
+      data: {
+        ReservationNo: '480962', ReservationItem: '0001', Material: '1000000264',
+        Plant: '1110', StorageLocation: 'CS01', IssueQty: 40, Unit: 'KG', StorageUnits: ['SU100']
+      },
+      user: { id: 'TESTUSER' },
+      error: jest.fn((status, message) => ({ status, message }))
+    };
+
+    await handlers['postGoodsIssue261'](req);
+    expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('staged'));
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it('does not post if final SU audit evidence cannot be persisted', async () => {
     setupMockSap({
       openQty: 100,

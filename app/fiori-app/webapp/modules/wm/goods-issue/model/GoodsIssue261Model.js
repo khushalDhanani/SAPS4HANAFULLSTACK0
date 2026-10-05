@@ -676,6 +676,11 @@
                 oPayload.LastStorageUnitQty = nLastSuQty;
             }
 
+            // Unique per user posting attempt: lets the backend treat a second deliberate
+            // posting of the same item/quantity/day as a new attempt instead of replaying
+            // the first attempt's outcome.
+            oPayload.ClientAttemptId = ("GIA" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).toUpperCase();
+
             return oPayload;
         }
     };

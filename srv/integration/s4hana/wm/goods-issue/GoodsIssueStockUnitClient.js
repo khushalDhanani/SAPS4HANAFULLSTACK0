@@ -751,7 +751,26 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     }
 
     const resbLgtyp = String(resbRow.LGTYP || '').trim();
-    if (!resbLgtyp) return { isStagingRequired: false };
+    if (!resbLgtyp) {
+      // The storage location IS WM-managed (this method only runs after a T320 hit), but the
+      // reservation item carries no staging type. The 261 posting path
+      // (GoodsIssuePhase6StagingClient) blocks this state, so the 261 LIST must not label it
+      // NOT_WM_MANAGED and show it postable. Barcode/serial resolution for flows without a
+      // staging gate (301/311) keeps working, so this is a marker, not a hard UNKNOWN here.
+      return {
+        isStagingRequired: false,
+        stagingStatus: 'NO_STAGING_TYPE',
+        targetType: '',
+        targetBin: '',
+        warehouse: String(warehouse || '').trim(),
+        tbnum: '',
+        transferRequirementStatus: 'UNKNOWN',
+        stagingSource: 'NO_RESB_LGTYP',
+        requiredQty: Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG)),
+        uom: String(resbRow.MEINS || '').trim(),
+        error: `SAP RESB has no staging type for WM-managed reservation ${sResv} item ${sItem}; staging requirement cannot be verified.`
+      };
+    }
 
     if (!this.stagingClient
       || typeof this.stagingClient.findTransferRequirement !== 'function'
@@ -1009,7 +1028,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
         };
       }
     }
-    if (staging.stagingStatus === 'UNKNOWN') {
+    if (staging.stagingStatus === 'UNKNOWN' || staging.stagingStatus === 'NO_STAGING_TYPE') {
       return {
         ...base,
         Warehouse: staging.warehouse || wmInfo.warehouse,

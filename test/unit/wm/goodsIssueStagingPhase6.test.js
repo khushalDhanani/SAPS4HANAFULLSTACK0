@@ -598,6 +598,9 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
         rfc: mockRfc({
           LTBK: [
             { TBNUM: '0000000789', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' }
+          ],
+          LTBP: [
+            { TBNUM: '0000000789', TBPOS: '0001', RSPOS: '0001' }
           ]
         })
       });
@@ -639,15 +642,100 @@ describe('GoodsIssuePhase6StagingClient – Staging Validation (Phase 6)', () =>
       expect(res.error).toContain('Cannot verify staging: SAP LTBK read failed (DA_131).');
     });
 
-    it('returns UNKNOWN with multiple destinations when multiple TRs have different destinations', async () => {
+    it('returns UNKNOWN with multiple destinations when the item itself maps to TRs with different destinations', async () => {
       const client = new GoodsIssuePhase6StagingClient({
         adapter: mockAdapter(),
         rfc: mockRfc({
           LTBK: [
             { TBNUM: '0000000789', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' },
             { TBNUM: '0000000790', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP2', NLPLA: 'STAGE-02' }
+          ],
+          LTBP: (where) => {
+            const w = (where || []).join(' ');
+            if (w.includes("'0000000789'")) return [{ TBNUM: '0000000789', TBPOS: '0001', RSPOS: '0001' }];
+            if (w.includes("'0000000790'")) return [{ TBNUM: '0000000790', TBPOS: '0001', RSPOS: '0001' }];
+            return [];
+          }
+        })
+      });
+
+      const res = await client.findTransferRequirement('12345', '1', '', '', 'W01', true);
+      expect(res.status).toBe('UNKNOWN');
+      expect(res.error).toContain('multiple destinations');
+    });
+
+    it('resolves the item-specific destination when each TR covers different reservation items (live 521128 shape)', async () => {
+      // Live-verified: LTBK carries one TR per destination, LTBP maps TR items to RSPOS.
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          LTBK: [
+            { TBNUM: '0001001747', RSNUM: '0000521128', LGNUM: 'W12', NLTYP: '2FL', NLPLA: '0001002797' },
+            { TBNUM: '0001001746', RSNUM: '0000521128', LGNUM: 'W12', NLTYP: '1FL', NLPLA: '0001002797' }
+          ],
+          LTBP: (where) => {
+            const w = (where || []).join(' ');
+            if (w.includes("'0001001747'")) {
+              return [
+                { TBNUM: '0001001747', TBPOS: '0001', RSPOS: '0002' },
+                { TBNUM: '0001001747', TBPOS: '0002', RSPOS: '0003' },
+                { TBNUM: '0001001747', TBPOS: '0003', RSPOS: '0004' }
+              ];
+            }
+            if (w.includes("'0001001746'")) {
+              return [
+                { TBNUM: '0001001746', TBPOS: '0001', RSPOS: '0005' },
+                { TBNUM: '0001001746', TBPOS: '0002', RSPOS: '0007' }
+              ];
+            }
+            return [];
+          }
+        })
+      });
+
+      await expect(client.findTransferRequirement('521128', '0002', '', '', 'W12', true)).resolves.toEqual({
+        tbnum: '0001001747', status: 'FOUND', targetType: '2FL', targetBin: '0001002797'
+      });
+      await expect(client.findTransferRequirement('521128', '0005', '', '', 'W12', true)).resolves.toEqual({
+        tbnum: '0001001746', status: 'FOUND', targetType: '1FL', targetBin: '0001002797'
+      });
+    });
+
+    it('returns NOT_FOUND for an item that appears in no TR instead of borrowing another item\'s destination', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: mockRfc({
+          LTBK: [
+            { TBNUM: '0000000789', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' }
+          ],
+          LTBP: [
+            { TBNUM: '0000000789', TBPOS: '0001', RSPOS: '0002' }
           ]
         })
+      });
+
+      const res = await client.findTransferRequirement('12345', '0001', '', '', 'W01', true);
+      expect(res.status).toBe('NOT_FOUND');
+      expect(res.error).toContain('item 0001');
+    });
+
+    it('falls back to fail-closed reservation-level resolution when the LTBP item read fails', async () => {
+      const client = new GoodsIssuePhase6StagingClient({
+        adapter: mockAdapter(),
+        rfc: {
+          readTable: jest.fn((table) => {
+            if (table === 'LTBK') {
+              return Promise.resolve([
+                { TBNUM: '0000000789', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP1', NLPLA: 'STAGE-01' },
+                { TBNUM: '0000000790', RSNUM: '0000012345', LGNUM: 'W01', NLTYP: 'IP2', NLPLA: 'STAGE-02' }
+              ]);
+            }
+            if (table === 'LTBP') {
+              return Promise.reject(Object.assign(new Error('ID:AD Type:E Number:718 LTBP'), { code: 5 }));
+            }
+            return Promise.resolve([]);
+          })
+        }
       });
 
       const res = await client.findTransferRequirement('12345', '1', '', '', 'W01', true);

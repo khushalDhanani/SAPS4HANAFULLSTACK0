@@ -16,6 +16,7 @@ function normalizeGoodsIssue261Payload(data, context = {}) {
   const n = baseNormalized(data, context, '261');
   n.OrderNo = String(data.OrderNo || data.OrderID || '').trim();
   n.GLAccount = data.GLAccount ? String(data.GLAccount).trim() : '';
+  n.ClientAttemptId = data.ClientAttemptId ? String(data.ClientAttemptId).trim() : '';
 
   const rawSu = Array.isArray(data.StorageUnits) && data.StorageUnits.length > 0
     ? data.StorageUnits

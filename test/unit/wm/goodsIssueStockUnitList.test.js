@@ -19,12 +19,22 @@ function makeClient({
   resv = RESV_ITEM,
   resb = {
     RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100',
-    BDMNG: '5000', ENMNG: '0', MEINS: 'KG', AUFNR: '1002749', LGTYP: '', PRVBE: ''
+    BDMNG: '5000', ENMNG: '0', MEINS: 'KG', AUFNR: '1002749', LGTYP: 'RM1', PRVBE: ''
   },
   lqua = [],
   batches = BATCHES,
   issuedSuStore = null,
-  stagingClient = null
+  // Default: a resolved static staging target matching the default quants' type/bin, so the
+  // listing-mechanics tests run on a postable staging state. A WM item with blank RESB LGTYP
+  // is fail-closed (UNKNOWN) and has its own tests.
+  stagingClient = {
+    findStagingTarget: jest.fn().mockResolvedValue({
+      isWm: true, targetType: 'RM1', targetBin: '0-L0001-03', stagingSource: 'PKHD_CONTROL_CYCLE', warehouse: 'W01'
+    }),
+    findTransferRequirement: jest.fn().mockResolvedValue({
+      tbnum: '0000000777', status: 'FOUND', targetType: 'RM1', targetBin: '0-L0001-03'
+    })
+  }
 } = {}) {
   const rfc = {
     readTable: jest.fn((table, fields, where) => {
@@ -163,6 +173,18 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
   it('live case 519366/0001: bin stock without SU in W13 -> no SUs, message names the bin stock', async () => {
     const { client } = makeClient({
       resv: { ...RESV_ITEM, Product: '8000001648', Plant: '1120', StorageLocation: 'HS01' },
+      resb: {
+        RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000008000001648', WERKS: '1120', LGORT: 'HS01',
+        BDMNG: '55', ENMNG: '0', MEINS: 'EA', AUFNR: '1002749', LGTYP: 'EN1', PRVBE: ''
+      },
+      stagingClient: {
+        findStagingTarget: jest.fn().mockResolvedValue({
+          isWm: true, targetType: 'EN1', targetBin: '0-L0002-02', stagingSource: 'PKHD_CONTROL_CYCLE', warehouse: 'W13'
+        }),
+        findTransferRequirement: jest.fn().mockResolvedValue({
+          tbnum: '0000000888', status: 'FOUND', targetType: 'EN1', targetBin: '0-L0002-02'
+        })
+      },
       batches: [],
       lqua: [
         q({ LGNUM: 'W13', LENUM: '', MATNR: '000000008000001648', WERKS: '1120', LGORT: 'HS01', CHARG: '', VERME: '55.000', MEINS: 'EA', LGTYP: 'EN1', LGPLA: '0-L0002-02' }),
@@ -174,6 +196,26 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
     expect(res.ExcludedCount).toBe(0);
     expect(res.Warehouse).toBe('W13');
     expect(res.Message).toMatch(/55 EA in W13 EN1\/0-L0002-02\) is not SU-managed/);
+  });
+
+  it('fails closed (UNKNOWN) when the storage location is WM-managed but RESB has no staging type', async () => {
+    // Aligns the preview with the posting engine, which blocks this state: the item must not
+    // be labelled NOT_WM_MANAGED and shown as postable.
+    const { client } = makeClient({
+      resb: {
+        RSNUM: '0000519366', RSPOS: '0001', MATNR: '000000001000000867', WERKS: '1000', LGORT: '1100',
+        BDMNG: '5000', ENMNG: '0', MEINS: 'KG', AUFNR: '1002749', LGTYP: '', PRVBE: ''
+      },
+      lqua: [q()]
+    });
+    const res = await client.listStockUnitsForReservationItem('519366', '1');
+    expect(res).toMatchObject({
+      StagingStatus: 'UNKNOWN',
+      IsStagingRequired: true,
+      IsFullyStaged: false,
+      StockUnits: []
+    });
+    expect(res.Message).toContain('no staging type');
   });
 
   it('excludes SUs sitting in interim storage types (9xx)', async () => {
