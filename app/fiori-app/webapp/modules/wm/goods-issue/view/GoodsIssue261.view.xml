@@ -52,6 +52,16 @@
                     visible="{gi261>/hasReversed}"
                     class="sapUiSmallMarginBottom" />
 
+                <!-- 2b. Delivery Created Banner -->
+                <MessageStrip
+                    id="stripDeliveryCreated261"
+                    text="{parts: [{path: 'gi261>/deliveryNumber'}], formatter: '.formatDeliveryCreatedBanner'}"
+                    type="Information"
+                    showIcon="true"
+                    showCloseButton="false"
+                    visible="{= !!${gi261>/deliveryNumber} }"
+                    class="sapUiSmallMarginBottom" />
+
                 <!-- 3. Form Container -->
                 <Panel
                     id="pnlGeneralData261"
@@ -541,7 +551,7 @@
                     text="{= ${gi261>/fromReservation} ? ${i18n>gi261BtnComplete} : ${i18n>gi261BtnPost} }"
                     icon="{= ${gi261>/fromReservation} ? 'sap-icon://accept' : 'sap-icon://save' }"
                     type="Emphasized"
-                    enabled="{= ${gi261>/isValid} &amp;&amp; !${gi261>/busy} &amp;&amp; ${gi261>/postingStatus} !== 'POSTED' &amp;&amp; ${gi261>/postingStatus} !== 'QUEUED' &amp;&amp; ${gi261>/postingStatus} !== 'UNKNOWN' }"
+                    enabled="{= ${gi261>/isValid} &amp;&amp; !${gi261>/busy} &amp;&amp; ${gi261>/postingStatus} !== 'POSTED' &amp;&amp; ${gi261>/postingStatus} !== 'QUEUED' &amp;&amp; ${gi261>/postingStatus} !== 'UNKNOWN' &amp;&amp; ${gi261>/postingStatus} !== 'DELIVERY_CREATED' }"
                     press=".onPostGoodsIssue" />
             </Toolbar>
         </footer>

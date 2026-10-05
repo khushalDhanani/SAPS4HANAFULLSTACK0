@@ -731,19 +731,92 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
             expect(controller._oModel.getProperty('/postingStatus')).toBe('POSTED');
         });
 
-        it.each(['POSTED', 'QUEUED', 'UNKNOWN'])('should guard controller re-entry after %s', async (postingStatus) => {
+        it.each(['POSTED', 'QUEUED', 'UNKNOWN', 'DELIVERY_CREATED'])('should guard controller re-entry after %s', async (postingStatus) => {
             makeValidPlanned();
             mockService.postGoodsIssue.mockResolvedValueOnce({
                 PostingStatus: postingStatus,
+                ConfirmationStatus: postingStatus,
                 Success: postingStatus === 'POSTED',
                 Confirmed: postingStatus === 'POSTED',
-                MaterialDocument: postingStatus === 'POSTED' ? '4900004326' : ''
+                MaterialDocument: postingStatus === 'POSTED' ? '4900004326' : '',
+                DeliveryNumber: postingStatus === 'DELIVERY_CREATED' ? '0080000078' : ''
             });
 
             controller.onPostGoodsIssue();
             await flush();
             controller.onPostGoodsIssue();
             expect(mockService.postGoodsIssue).toHaveBeenCalledTimes(1);
+        });
+
+        it('should handle DELIVERY_CREATED outcome, display information message, and set deliveryNumber', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'DELIVERY_CREATED',
+                ConfirmationStatus: 'DELIVERY_CREATED',
+                DeliveryNumber: '0080000078',
+                ReservationNo: '0000123456',
+                ReservationItem: '0001',
+                Message: 'SAP created outbound delivery 0080000078 for this request instead of a material document. Stock is issued only when goods issue is posted for that delivery in SAP. Do not post again.'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('DELIVERY_CREATED');
+            expect(controller._oModel.getProperty('/deliveryNumber')).toBe('0080000078');
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(false);
+            expect(controller._oModel.getProperty('/postedDocument')).toBe('');
+            expect(mockMessageBox.information).toHaveBeenCalledWith(
+                expect.stringContaining('0080000078'),
+                expect.objectContaining({ title: 'gi261DeliveryCreatedTitle' })
+            );
+            expect(mockMessageBox.error).not.toHaveBeenCalled();
+            expect(mockMessageBox.success).not.toHaveBeenCalled();
+        });
+
+        it('should resolve DELIVERY_CREATED from ConfirmationStatus when PostingStatus is missing', async () => {
+            makeValidPlanned();
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                ConfirmationStatus: 'DELIVERY_CREATED',
+                DeliveryNumber: '0080000079',
+                Success: false,
+                Confirmed: false
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(controller._oModel.getProperty('/postingStatus')).toBe('DELIVERY_CREATED');
+            expect(controller._oModel.getProperty('/deliveryNumber')).toBe('0080000079');
+            expect(mockMessageBox.information).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ title: 'gi261DeliveryCreatedTitle' })
+            );
+        });
+
+        it('should route back to Pending list with delivery query param on DELIVERY_CREATED when fromReservation', async () => {
+            makeValidPlanned();
+            controller._oModel.setProperty('/fromReservation', true);
+            mockMessageBox.information.mockImplementationOnce((msg, opts) => {
+                if (opts && typeof opts.onClose === 'function') {
+                    opts.onClose();
+                }
+            });
+            mockService.postGoodsIssue.mockResolvedValueOnce({
+                PostingStatus: 'DELIVERY_CREATED',
+                ConfirmationStatus: 'DELIVERY_CREATED',
+                DeliveryNumber: '0080000080',
+                ReservationNo: '0000123456',
+                ReservationItem: '0001'
+            });
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending', {
+                '?query': expect.objectContaining({
+                    resv: '0000123456',
+                    item: '0001',
+                    delivery: '0080000080'
+                })
+            });
         });
 
         // Queue tests removed — dispatch queue eliminated; direct posting only.
@@ -969,6 +1042,19 @@ describe('GoodsIssue261 Controller Unit Tests', () => {
                 expect.stringContaining('Document already reversed'),
                 expect.any(Object)
             );
+        });
+    });
+
+    describe('Formatters', () => {
+        it('formatDeliveryCreatedBanner should return empty string if delivery is empty', () => {
+            expect(controller.formatDeliveryCreatedBanner('')).toBe('');
+            expect(controller.formatDeliveryCreatedBanner(null)).toBe('');
+            expect(controller.formatDeliveryCreatedBanner(undefined)).toBe('');
+        });
+
+        it('formatDeliveryCreatedBanner should return localized text with delivery number', () => {
+            const sText = controller.formatDeliveryCreatedBanner('0080000078');
+            expect(sText).toBe('gi261DeliveryCreatedBannerText');
         });
     });
 

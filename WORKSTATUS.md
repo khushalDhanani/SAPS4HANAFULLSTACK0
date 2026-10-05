@@ -1,6 +1,54 @@
 
 # Changes Log
 
+## 2026-10-05 06:20 UTC — Complete: Phase 2 — Frontend UI handling for DELIVERY_CREATED and full validation
+- **Agent**: Antigravity
+- **Request**: Phase 2 (Frontend UI handling for DELIVERY_CREATED and full validation).
+- **Current Status**: **Complete**.
+  - **`GoodsIssue261.controller.js`**:
+    - `resolvePostingStatus(oResult)`: Recognizes `PostingStatus === 'DELIVERY_CREATED'` and `ConfirmationStatus === 'DELIVERY_CREATED'` returning `"DELIVERY_CREATED"`.
+    - `onPostGoodsIssue` entry guard: Prevents re-posting when `postingStatus === 'DELIVERY_CREATED'`.
+    - `postGoodsIssue` success handler: When `sPostingStatus === "DELIVERY_CREATED"`: sets `/deliveryNumber`, displays `MessageBox.information` with title `gi261DeliveryCreatedTitle` and message `gi261DeliveryCreatedMsg` referencing delivery and reservation numbers; on close, if `fromReservation` is true, navigates back to `wmGoodsIssue261Pending` with `{ resv, item, delivery: sDelivNum }`.
+    - Formatter: Added `formatDeliveryCreatedBanner(sDelivery)` returning `gi261DeliveryCreatedBannerText`.
+  - **`GoodsIssue261Pending.controller.js`**:
+    - `_loadPending`: Updated completion check to `oDone && oDone.resv && (oDone.doc || oDone.delivery)` to detect both completed material documents and created deliveries.
+    - `_showCompletionResult(oDone)`: Displays `resultState: "Information"` with `gi261OpenResvCompletedDelivery` message strip when returning with `delivery` query parameter.
+  - **`GoodsIssue261Model.js`**:
+    - Initial data model defaults `deliveryNumber: ""` ensuring reset and initial bindings are clean.
+  - **`GoodsIssue261.view.xml`**:
+    - Added `stripDeliveryCreated261` message strip (Information state, icon, visible when `deliveryNumber` is present).
+    - Updated `btnPostGoodsIssue261` enabled expression to disable submission when `postingStatus === 'DELIVERY_CREATED'`.
+  - **i18n (`i18n.properties`, `i18n_en.properties`)**:
+    - Added `gi261DeliveryCreatedTitle=Outbound Delivery Created`.
+    - Added `gi261DeliveryCreatedMsg=SAP S/4HANA created Outbound Delivery {0} for single-item movement 261 (reservation {1}/{2}). The delivery is awaiting warehouse goods issue (PGI). Do not post again.`
+    - Added `gi261DeliveryCreatedBannerText=Outbound Delivery {0} created in SAP S/4HANA. Stock will be issued when warehouse goods issue (PGI) is posted.`
+    - Added `gi261OpenResvCompletedDelivery=Reservation {0} processed - Outbound Delivery {1} created in SAP S/4HANA.`
+  - **Tests**:
+    - `test/unit/wm/goodsIssue261Controller.test.js`: Added unit tests for re-entry guard on `DELIVERY_CREATED`, `DELIVERY_CREATED` outcome handling and `deliveryNumber` persistence, `ConfirmationStatus` resolution, navigation on close with delivery query param, and `formatDeliveryCreatedBanner`.
+    - `test/unit/wm/goodsIssue261PendingController.test.js`: Added unit test verifying Information strip display when returning with `delivery` query parameter.
+    - `test/unit/wm/goodsIssue261I18n.test.js`: Verified zero missing/unresolved keys across bundles.
+- **Files Changed**:
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261Pending.controller.js`
+  - `test/unit/wm/goodsIssue261Controller.test.js`
+  - `test/unit/wm/goodsIssue261PendingController.test.js`
+  - `WORKSTATUS.md`
+- **Validation**:
+  - `npm --prefix app/fiori-app run lint`: Success! No findings detected.
+  - `npx jest test/unit/wm/goodsIssue261I18n.test.js --silent`: 5 passed, 5 total.
+  - `npx jest test/unit/wm/goodsIssue261Controller.test.js --silent`: 71 passed, 71 total.
+  - `npx jest test/unit/wm/goodsIssue261PendingController.test.js --silent`: 15 passed, 15 total.
+  - `npx jest test/unit/wm --runInBand --silent`: 58 suites passed, 1,185 tests passed (all live contract tests passed).
+  - `npx jest test/unit --runInBand --silent`: 134 suites passed, 2,348 tests passed (entire repository test suite).
+  - `npx cds compile srv db --to sql`: Exit code 0, clean DDL generation.
+  - `git diff --check`: Clean, zero trailing whitespace or issues.
+- **Errors / Warnings / Blockers**: None in code. Pending business decisions: (1) manual SAP cleanup decision for duplicate open deliveries 0080000074–0080000080; (2) warehouse owner PGI decision documented in `docs/decisions/261-wm-delivery-created-pgi.md`.
+- **Next Steps**: Warehouse team / owner review of delivery 261 workflow. Run `recheckPostingAttempts` in running app to settle earlier attempts whose correlation references match LIFEX.
+
 ## 2026-10-05 06:00 UTC — Session summary: WM-managed 261 → SAP creates an outbound delivery (L9/514), not a material document
 - **Agent**: Claude Code
 - **Request**: Root cause is known: for WM-managed locations SAP answers 201 with an empty MaterialDocument and `sap-message` "L9/514 Delivery <no> created". Fix this without assuming anything. Eight items: headers, a DELIVERY_CREATED outcome, a duplicate guard, the recheck delivery lookup, a PGI design note (no auto-PGI), a read-only open-delivery report, SE91 L9/514 plus a custom-enhancement check, and tests.

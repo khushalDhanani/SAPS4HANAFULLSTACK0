@@ -29,10 +29,12 @@ sap.ui.define([
         }
 
         var sStatus = String(oResult.PostingStatus || "").trim().toUpperCase();
+        if (sStatus === "DELIVERY_CREATED") return "DELIVERY_CREATED";
         if (sStatus === "POSTED") return oResult.MaterialDocument ? "POSTED" : "UNKNOWN";
         if (sStatus === "QUEUED" || sStatus === "FAILED" || sStatus === "UNKNOWN") return sStatus;
 
         var sConfirmation = String(oResult.ConfirmationStatus || "").trim().toUpperCase();
+        if (sConfirmation === "DELIVERY_CREATED") return "DELIVERY_CREATED";
         if (oResult.Queued === true || sConfirmation === "QUEUED") return "QUEUED";
         if (oResult.MaterialDocument && (oResult.Confirmed === true || sConfirmation === "CONFIRMED")) return "POSTED";
         if (oResult.MaterialDocument || oResult.Confirmed === false || oResult.Success === true ||
@@ -423,6 +425,11 @@ sap.ui.define([
         formatReversalBanner: function (sDoc, sYear) {
             if (!sDoc) return "";
             return this.getText("gi261ReversalBannerText", [sDoc, sYear || ""]);
+        },
+
+        formatDeliveryCreatedBanner: function (sDelivery) {
+            if (!sDelivery) return "";
+            return this.getText("gi261DeliveryCreatedBannerText", [sDelivery]);
         },
 
         formatOpenQty: function (nQty, sUnit) {
@@ -898,7 +905,8 @@ sap.ui.define([
             var oData = this._oModel ? this._oModel.getData() : {};
             var sCurrentPostingStatus = String((oData && oData.postingStatus) || "").toUpperCase();
             if ((oData && oData.busy) || sCurrentPostingStatus === "POSTED" ||
-                sCurrentPostingStatus === "QUEUED" || sCurrentPostingStatus === "UNKNOWN") {
+                sCurrentPostingStatus === "QUEUED" || sCurrentPostingStatus === "UNKNOWN" ||
+                sCurrentPostingStatus === "DELIVERY_CREATED") {
                 return;
             }
             var sMaterial = (oData && oData.material != null) ? String(oData.material).trim() : "";
@@ -940,7 +948,30 @@ sap.ui.define([
                         that._oModel.setProperty("/hasPosted", false);
                         that._oModel.setProperty("/postedDocument", "");
                         that._oModel.setProperty("/postedYear", "");
-                        if (sPostingStatus === "QUEUED") {
+                        if (sPostingStatus === "DELIVERY_CREATED") {
+                            var sDelivNum = (res && res.DeliveryNumber) || "";
+                            that._oModel.setProperty("/deliveryNumber", sDelivNum);
+                            var sResvNo = that._oModel.getProperty("/reservationNo") || (res && res.ReservationNo) || "";
+                            var sResvItem = that._oModel.getProperty("/reservationItem") || (res && res.ReservationItem) || "";
+                            var sDelivMsg = (res && res.Message) || that.getText("gi261DeliveryCreatedMsg", [
+                                sDelivNum,
+                                sResvNo,
+                                sResvItem
+                            ]);
+                            MessageBox.information(sDelivMsg, {
+                                title: that.getText("gi261DeliveryCreatedTitle"),
+                                onClose: function () {
+                                    if (that._oModel.getProperty("/fromReservation")) {
+                                        var oOutcome = {
+                                            resv: sResvNo,
+                                            item: sResvItem,
+                                            delivery: sDelivNum
+                                        };
+                                        that.getRouter().navTo("wmGoodsIssue261Pending", { "?query": oOutcome });
+                                    }
+                                }
+                            });
+                        } else if (sPostingStatus === "QUEUED") {
                             MessageBox.information((res && res.Message) || that.getText("gi261QueuedMsg"), {
                                 title: that.getText("gi261QueuedTitle")
                             });

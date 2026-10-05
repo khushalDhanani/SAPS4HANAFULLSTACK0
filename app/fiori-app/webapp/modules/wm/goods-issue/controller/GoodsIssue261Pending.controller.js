@@ -32,12 +32,11 @@ sap.ui.define([
                 .then(function (aItems) {
                     var aList = Array.isArray(aItems) ? aItems : [];
                     var oDone = that._completedOutcome;
-                    if (oDone && oDone.resv && oDone.doc) {
-                        // One item was just posted. POSTED is only reported after the material
-                        // document was read back from SAP, so this fresh list read already reflects
-                        // the posting: a reservation with remaining open items is still returned,
-                        // and one whose last open item was posted is no longer returned at all.
-                        // Trust the SAP read — no client-side filtering of the reservation.
+                    if (oDone && oDone.resv && (oDone.doc || oDone.delivery)) {
+                        // One item was just posted or an outbound delivery was created in SAP.
+                        // POSTED is only reported after the material document was read back from SAP.
+                        // DELIVERY_CREATED is reported when WM delivery-based staging was triggered.
+                        // Fresh list read already reflects SAP state — no client-side filtering.
                         that._showCompletionResult(oDone);
                         that._completedOutcome = null; // one-shot
                     }
@@ -53,10 +52,14 @@ sap.ui.define([
         },
 
         /**
-         * Show the outcome of a completed reservation: the SAP Material Document number when posted.
+         * Show the outcome of a completed reservation: the SAP Material Document number when posted,
+         * or Outbound Delivery number when delivery was created.
          */
         _showCompletionResult: function (oDone) {
-            if (oDone && oDone.doc) {
+            if (oDone && oDone.delivery) {
+                this._oModel.setProperty("/resultState", "Information");
+                this._oModel.setProperty("/resultText", this.getText("gi261OpenResvCompletedDelivery", [oDone.resv, oDone.delivery]));
+            } else if (oDone && oDone.doc) {
                 this._oModel.setProperty("/resultState", "Success");
                 this._oModel.setProperty("/resultText", this.getText("gi261OpenResvCompletedPosted", [oDone.resv, oDone.doc, oDone.year || ""]));
             }

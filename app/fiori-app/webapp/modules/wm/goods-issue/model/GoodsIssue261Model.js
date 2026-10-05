@@ -123,6 +123,7 @@
                 hasPosted: false,
                 postedDocument: "",
                 postedYear: "",
+                deliveryNumber: "",
                 postingAttemptDocument: "",
                 reversalBusy: false,
                 hasReversed: false,

@@ -181,6 +181,22 @@ describe('GoodsIssue261Pending Controller Unit Tests', () => {
             expect(model.getProperty('/resultState')).toBe('Success');
             expect(model.getProperty('/resultText')).toContain('4900010001');
         });
+
+        it('should show the delivery created result in Information state when returning with delivery query', async () => {
+            const aItems = [
+                { ReservationNo: '0000520615', ItemCount: 1 }
+            ];
+            mockService.fetchOpenReservations.mockResolvedValue(aItems);
+
+            await controller._onRouteMatched(makeRouteEvent({
+                resv: '0000520615', item: '0001', delivery: '0080000078'
+            })); await flush();
+
+            const model = controller.getModel('gi261p');
+            expect(model.getProperty('/resultState')).toBe('Information');
+            expect(model.getProperty('/resultText')).toContain('0080000078');
+            expect(model.getProperty('/resultText')).toContain('0000520615');
+        });
         // Queue tests removed — dispatch queue eliminated; direct posting only.
 
         it('should surface backend errors and clear the list', async () => {
