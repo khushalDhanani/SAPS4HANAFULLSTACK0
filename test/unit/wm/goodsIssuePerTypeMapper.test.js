@@ -4,7 +4,6 @@
  */
 
 const M201 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue201Mapper');
-const M261 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper');
 const M301 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue301Mapper');
 const M311 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue311Mapper');
 
@@ -24,30 +23,6 @@ describe('201 mapper', () => {
   });
 });
 
-describe('261 mapper', () => {
-  const p = M261.mapToMaterialDocumentPayload({ ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001', Batch: 'IN26091921' });
-  test('GoodsMovementCode 03, type 261, reservation linked, no cost center/receiving', () => {
-    expect(p.GoodsMovementCode).toBe('03');
-    expect(item(p).GoodsMovementType).toBe('261');
-    expect(item(p).Reservation).toBe('518023');
-    expect(item(p).Batch).toBe('IN26091921');
-    expect(item(p).CostCenter).toBeUndefined();
-    expect(item(p).IssuingOrReceivingPlant).toBeUndefined();
-  });
-  test('does not send server/client SU identifiers or allocation as SAP item properties', () => {
-    const suPayload = M261.mapToMaterialDocumentPayload({
-      ...base,
-      Material: '1000001002',
-      ReservationNo: '518023',
-      ReservationItem: '0001',
-      StorageUnits: ['SU-001'],
-      _allocatedSuItems: [{ storageUnit: 'SU-001', issuedQty: 1 }]
-    });
-    expect(JSON.stringify(suPayload)).not.toContain('SU-001');
-    expect(item(suPayload).StorageUnit).toBeUndefined();
-    expect(item(suPayload).HandlingUnit).toBeUndefined();
-  });
-});
 
 describe.each([
   ['301', M301, '04'],

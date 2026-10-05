@@ -86,7 +86,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
 
   /**
    * Fetch distinct open reservations for Goods Issue directly from UI_RESERVATION_ITM_MNG_V2
-   * @param {string} [movementType='261']
+   * @param {string} [movementType='']
    * @param {string} [plant]
    * @param {object|string} [options] - Options object or reservationNo string
    * @param {string} [options.reservationNo] - Server-side filter by Reservation
@@ -95,7 +95,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
    * @param {number} [options.pageSize=1000] - OData page size
    * @returns {Promise<Array>}
    */
-  async getOpenReservations(movementType = '261', plant = '', options = {}) {
+  async getOpenReservations(movementType = '', plant = '', options = {}) {
     const sPlant = plant ? String(plant).trim() : '';
     const opts = typeof options === 'string' ? { reservationNo: options } : (options || {});
     const sResv = opts.reservationNo ? String(opts.reservationNo).trim() : '';
@@ -107,8 +107,6 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
 
     let filter = `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`;
     if (movementType) {
-      // Only the movement type this screen posts. 201 (cost center) and 531 (by-product RECEIPT) were listed
-      // too, but posting always uses 261, which SAP rejects against a reservation of another movement type.
       // Comma list allowed ("301,311" for the transfer block); values are trusted-listed by the handler.
       const mvts = String(movementType).split(',').map((m) => m.trim()).filter(Boolean);
       filter += ` and (${mvts.map((m) => `GoodsMovementType eq '${encodeURIComponent(m)}'`).join(' or ')})`;

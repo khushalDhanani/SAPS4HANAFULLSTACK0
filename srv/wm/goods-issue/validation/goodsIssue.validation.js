@@ -3,11 +3,11 @@
  * Reversal validation + shared calendar-date primitive for Goods Issue.
  *
  * NOTE: Per-movement-type posting validation now lives in the isolated
- * goodsIssue201/261/301/311.validation.js modules (Phase 1). This file no longer
+ * goodsIssue201/301/311.validation.js modules (Phase 1). This file no longer
  * contains any MovementType-branching posting validation.
  */
 
-const POSTABLE_MOVEMENT_TYPES = ['201', '261', '301', '311'];
+const POSTABLE_MOVEMENT_TYPES = ['201', '301', '311'];
 
 /**
  * Validates a calendar date string (YYYY-MM-DD or ISO) or Date, rejecting impossible dates.

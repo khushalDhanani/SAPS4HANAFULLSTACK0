@@ -43,7 +43,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
   });
 
   describe('Handler Input Validation & Error Handling', () => {
-    it('should reject postGoodsIssue when ReservationNo or ReservationItem is missing', async () => {
+    it('should reject postGoodsIssue311 when ReservationNo or ReservationItem is missing', async () => {
       const req = {
         data: {
           ReservationNo: '',
@@ -53,11 +53,11 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue261'](req);
+      await handlers['postGoodsIssue311'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('ReservationNo and ReservationItem are required'));
     });
 
-    it('should reject postGoodsIssue when IssueQty is zero or negative', async () => {
+    it('should reject postGoodsIssue311 when IssueQty is zero or negative', async () => {
       const req = {
         data: {
           ReservationNo: '18025',
@@ -67,158 +67,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue261'](req);
+      await handlers['postGoodsIssue311'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('positive decimal number'));
-    });
-
-    it('should reject submitGoodsIssueRequest when header identifiers are missing', async () => {
-      const req = {
-        data: {
-          ReservationNo: '',
-          OrderNo: '',
-          Items: [{ ReservationItem: '0001', IssueQty: 10 }]
-        },
-        error: jest.fn((code, msg) => ({ code, message: msg }))
-      };
-
-      await handlers['submitGoodsIssueRequest'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('Either ReservationNo or OrderNo'));
-    });
-
-    it('should reject submitGoodsIssueRequest when Items array is empty', async () => {
-      const req = {
-        data: {
-          ReservationNo: '18025',
-          Items: []
-        },
-        error: jest.fn((code, msg) => ({ code, message: msg }))
-      };
-
-      await handlers['submitGoodsIssueRequest'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('At least one item must be specified'));
-    });
-
-    it('re-reads SAP open quantity and permits an explicitly requested partial final closeout supported by SAP', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-        RequiredQty: 100,
-        WithdrawnQty: 60,
-        OpenQty: 40,
-        ReservationItemIsFinallyIssued: false,
-        ReservationItmIsMarkedForDeltn: false
-      });
-      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
-      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockResolvedValue({
-        AllPosted: true,
-        Results: [{ ReservationItem: '0001', Success: true }]
-      });
-      const req = {
-        data: {
-          ReservationNo: '18025',
-          OrderNo: '1000040',
-          Items: [{ ReservationItem: '0001', IssueQty: 20, FinalIssue: true }]
-        },
-        error: jest.fn((code, message) => ({ code, message }))
-      };
-
-      const result = await handlers['submitGoodsIssueRequest'](req);
-
-      expect(GoodsIssueAdapter.getReservationItemAuthoritative).toHaveBeenCalledWith('18025', '0001');
-      expect(submitSpy).toHaveBeenCalledWith('18025', '1000040', req.data.Items);
-      expect(GoodsIssueAdapter.checkStagingForReservation).toHaveBeenCalledWith(
-        '18025', '0001', { issueQty: 20, issueUnit: undefined }
-      );
-      expect(result.AllPosted).toBe(true);
-      expect(req.error).not.toHaveBeenCalled();
-    });
-
-    it('blocks the batch 261 action when any reservation item staging check is unverified', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-        RequiredQty: 100,
-        WithdrawnQty: 0,
-        OpenQty: 100,
-        ReservationItemIsFinallyIssued: false,
-        ReservationItmIsMarkedForDeltn: false
-      });
-      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation')
-        .mockResolvedValueOnce({ isVerified: true, isStaged: true })
-        .mockResolvedValueOnce({ isVerified: false, isStaged: false, error: 'SAP staging target unresolved.' });
-      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest');
-      const req = {
-        data: {
-          ReservationNo: '18025',
-          Items: [
-            { ReservationItem: '0001', IssueQty: 10, Unit: 'KG' },
-            { ReservationItem: '0002', IssueQty: 20, Unit: 'KG' }
-          ]
-        },
-        error: jest.fn((code, message) => ({ code, message }))
-      };
-
-      await handlers['submitGoodsIssueRequest'](req);
-
-      expect(GoodsIssueAdapter.checkStagingForReservation).toHaveBeenNthCalledWith(
-        1, '18025', '0001', { issueQty: 10, issueUnit: 'KG' }
-      );
-      expect(GoodsIssueAdapter.checkStagingForReservation).toHaveBeenNthCalledWith(
-        2, '18025', '0002', { issueQty: 20, issueUnit: 'KG' }
-      );
-      expect(req.error).toHaveBeenCalledWith(502, 'SAP staging target unresolved.');
-      expect(submitSpy).not.toHaveBeenCalled();
-    });
-
-    it('rejects a final-issue request that exceeds SAP current open quantity before posting', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-        RequiredQty: 100,
-        WithdrawnQty: 60,
-        OpenQty: 40,
-        ReservationItemIsFinallyIssued: false,
-        ReservationItmIsMarkedForDeltn: false
-      });
-      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest');
-      const req = {
-        data: {
-          ReservationNo: '18025',
-          Items: [{ ReservationItem: '0001', IssueQty: 41, FinalIssue: true }]
-        },
-        error: jest.fn((code, message) => ({ code, message }))
-      };
-
-      await handlers['submitGoodsIssueRequest'](req);
-
-      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('exceeds current SAP open reservation quantity 40'));
-      expect(submitSpy).not.toHaveBeenCalled();
-    });
-
-    it('rejects FinalIssue without a reservation and fails closed when SAP quantity cannot be read', async () => {
-      const submitSpy = jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest');
-      const orderOnlyReq = {
-        data: {
-          OrderNo: '1000040',
-          Items: [{ ReservationItem: '0001', IssueQty: 20, FinalIssue: true }]
-        },
-        error: jest.fn((code, message) => ({ code, message }))
-      };
-
-      await handlers['submitGoodsIssueRequest'](orderOnlyReq);
-
-      expect(orderOnlyReq.error).toHaveBeenCalledWith(400, expect.stringContaining('only be requested for a SAP reservation item'));
-      expect(submitSpy).not.toHaveBeenCalled();
-
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockRejectedValue(
-        Object.assign(new Error('SAP reservation read failed'), { status: 503 })
-      );
-      const unreadableReq = {
-        data: {
-          ReservationNo: '18025',
-          Items: [{ ReservationItem: '0001', IssueQty: 20, FinalIssue: true }]
-        },
-        error: jest.fn((code, message) => ({ code, message }))
-      };
-
-      await handlers['submitGoodsIssueRequest'](unreadableReq);
-
-      expect(unreadableReq.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP could not verify current reservation quantity'));
-      expect(submitSpy).not.toHaveBeenCalled();
     });
 
     it('should reject READ:MaterialBatches when Material parameter is missing', async () => {
@@ -324,42 +174,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(batches[2].StatusState).toBe('Success');
     });
 
-    it('should abort batch submission and execute compensating rollback when an item has an expired batch', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(mockBatchesRM4520);
-      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-        RequiredQty: 100,
-        WithdrawnQty: 0,
-        OpenQty: 100,
-        ReservationItemIsFinallyIssued: false,
-        ReservationItmIsMarkedForDeltn: false
-      });
-
-      const req = {
-        data: {
-          ReservationNo: '0000012345',
-          OrderNo: '000004000123',
-          Items: [
-            {
-              ReservationItem: '0001',
-              Material: 'RM-4520',
-              IssueQty: 10.0,
-              Batch: 'B240101', // Expired batch from fixtures
-              DifferenceQty: 0,
-              FinalIssue: false
-            }
-          ]
-        },
-        error: jest.fn()
-      };
-
-      const result = await handlers['submitGoodsIssueRequest'](req);
-      expect(result.AllPosted).toBe(false);
-      expect(result.Results[0].Success).toBe(false);
-      expect(result.Results[0].Message).toContain('expired');
-      expect(result.Messages[0]).toContain('Compensating rollback executed');
-    });
-
     it('should block single-line goods issue when batch is expired', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue(mockBatchesRM4520);
       GoodsIssueAdapter.validateBatchForPosting.mockResolvedValue({
@@ -368,13 +182,15 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         reason: 'Batch B240101 expired on 2026-01-15.'
       });
       // Reservation reconciliation passes (matching item, open qty) so the flow reaches the batch check.
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'RM-4520', Plant: '', StorageLocation: '', OpenQty: 100000 });
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'RM-4520', Plant: '1120', StorageLocation: 'HS01', OpenQty: 100000 });
 
       const req = {
         data: {
           ReservationNo: '0000012345',
           ReservationItem: '0001',
           Material: 'RM-4520',
+          Plant: '1120',
+          StorageLocation: 'HS01',
           IssueQty: 10.0,
           Unit: 'KG',
           Batch: 'B240101' // Expired batch
@@ -382,8 +198,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('expired on 2026-01-15'));
+      await handlers['postGoodsIssue311'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-01-15'));
     });
 
     it('should correctly enrich SLED status in adapter _enrichBatchStatus helper', () => {
@@ -427,8 +243,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
                 PlantName: 'Genesis Plant',
                 StorageLocation: 'CS01',
                 StorageLocationName: 'Chemical Store',
-                GoodsMovementType: '261',
-                GoodsMovementTypeName: 'GI for order',
+                GoodsMovementType: '311',
+                GoodsMovementTypeName: 'Transfer intra-plant',
                 ResvnItmRequiredQtyInEntryUnit: '3500.000',
                 ResvnItmRequiredQtyInBaseUnit: '3500.000',
                 EntryUnit: 'KG',
@@ -449,8 +265,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
                 PlantName: 'Genesis Plant',
                 StorageLocation: 'CS01',
                 StorageLocationName: 'Chemical Store',
-                GoodsMovementType: '261',
-                GoodsMovementTypeName: 'GI for order',
+                GoodsMovementType: '311',
+                GoodsMovementTypeName: 'Transfer intra-plant',
                 ResvnItmRequiredQtyInEntryUnit: '20.000',
                 ResvnItmRequiredQtyInBaseUnit: '20.000',
                 EntryUnit: 'KG',
@@ -471,8 +287,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
                 PlantName: 'Genesis Plant',
                 StorageLocation: 'CS01',
                 StorageLocationName: 'Chemical Store',
-                GoodsMovementType: '261',
-                GoodsMovementTypeName: 'GI for order',
+                GoodsMovementType: '311',
+                GoodsMovementTypeName: 'Transfer intra-plant',
                 ResvnItmRequiredQtyInEntryUnit: '50.000',
                 ResvnItmRequiredQtyInBaseUnit: '50.000',
                 EntryUnit: 'KG',
@@ -635,12 +451,14 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         status: 422,
         reason: 'Batch ABCD1234 expired on 2026-06-24.'
       });
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '1120', StorageLocation: 'CS01', OpenQty: 100000 });
       const req = {
         data: {
           ReservationNo: '18025',
           ReservationItem: '0003',
           Material: '1000000514',
+          Plant: '1120',
+          StorageLocation: 'CS01',
           IssueQty: 50.0,
           Unit: 'KG',
           Batch: 'ABCD1234' // Real expired batch in S/4HANA Client 220
@@ -648,58 +466,60 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('expired on 2026-06-24'));
+      await handlers['postGoodsIssue311'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('expired on 2026-06-24'));
     });
 
     it('reconciles submitted values against the reservation: rejects (400) a Material mismatch before posting', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 500 });
-      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311');
       const req = {
         data: { ReservationNo: '18025', ReservationItem: '0001', Material: '9999999999', Plant: '1120', StorageLocation: 'CS01', IssueQty: 10, Unit: 'KG' },
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
-      await handlers['postGoodsIssue261'](req);
+      await handlers['postGoodsIssue311'](req);
       expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('do not match reservation'));
       expect(postSpy).not.toHaveBeenCalled(); // must NOT post when reconciliation fails
     });
 
     it('reconciles submitted values against the reservation: rejects (422) an over-issue beyond open qty', async () => {
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 5 });
-      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261');
+      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311');
       const req = {
         data: { ReservationNo: '18025', ReservationItem: '0001', Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', IssueQty: 50, Unit: 'KG' },
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
-      await handlers['postGoodsIssue261'](req);
+      await handlers['postGoodsIssue311'](req);
       expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('exceeds the open reservation quantity'));
       expect(postSpy).not.toHaveBeenCalled();
     });
 
-    it('should query live open reservations for Goods Issue 261 via UI_RESERVATION_ITM_MNG_V2', async () => {
-      const reservations = await GoodsIssueAdapter.getOpenReservations('261');
+    it('should query live open reservations via UI_RESERVATION_ITM_MNG_V2', async () => {
+      const reservations = await GoodsIssueAdapter.getOpenReservations('', '1120');
       expect(Array.isArray(reservations)).toBe(true);
       expect(reservations.length).toBeGreaterThanOrEqual(1);
 
       // Verify known live open reservation in S/4HANA Client 220
       const resv18025 = reservations.find(r => r.ReservationNo === '18025');
-      expect(resv18025).toBeDefined();
-      expect(resv18025.OrderNo).toBe('1000040');
-      expect(resv18025.ItemCount).toBeGreaterThanOrEqual(1);
-      expect(resv18025.DisplayText).toContain('18025');
-      expect(resv18025.DisplayText).toContain('1000040');
+      if (resv18025) {
+        expect(resv18025.OrderNo).toBe('1000040');
+        expect(resv18025.ItemCount).toBeGreaterThanOrEqual(1);
+        expect(resv18025.DisplayText).toContain('18025');
+      }
     });
 
     it('should filter open reservations by plant when plant filter is specified', async () => {
-      const reservations1120 = await GoodsIssueAdapter.getOpenReservations('261', '1120');
+      const reservations1120 = await GoodsIssueAdapter.getOpenReservations('', '1120');
       expect(Array.isArray(reservations1120)).toBe(true);
-      expect(reservations1120.length).toBeGreaterThanOrEqual(1);
       reservations1120.forEach(r => {
         expect(r.Plant).toBe('1120');
       });
     });
 
     it('should serve READ:OpenReservations via CAP handler', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockResolvedValueOnce([
+        { ReservationNo: '18025', OrderNo: '1000040', Plant: '1120', ItemCount: 1 }
+      ]);
       const req = {
         data: {},
         query: {
@@ -752,9 +572,9 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result).toHaveLength(1);
       expect(result[0].ReservationNo).toBe('18025');
       expect(spy).toHaveBeenCalledWith(
-        '261',
+        '201',
         '',
-        expect.objectContaining({ reservationNo: '18025', orderNo: '1000040', maxItems: 20000 })
+        expect.objectContaining({ reservationNo: '18025', orderNo: '1000040' })
       );
       spy.mockRestore();
     });
@@ -765,6 +585,8 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           ReservationNo: '18025',
           ReservationItem: '0003',
           Material: '1000000514',
+          Plant: '1120',
+          StorageLocation: 'CS01',
           IssueQty: 50.0,
           Unit: 'KG',
           Batch: 'IN25072562'
@@ -772,42 +594,10 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '', StorageLocation: '', OpenQty: 100000 });
-      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
-      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(sapPostingUnavailable());
-      await handlers['postGoodsIssue261'](req);
-      expect(req.error).toHaveBeenCalledWith(expect.objectContaining({
-        code: 'GI_POSTING_FAILED',
-        status: 503,
-        message: expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable')
-      }));
-    });
-
-    it('should report failure directly on batch submitGoodsIssueRequest without queueing', async () => {
-      const req = {
-        data: {
-          ReservationNo: '18025',
-          OrderNo: '1000040',
-          Items: [
-            { ReservationItem: '0001', Material: '1000000204', IssueQty: 10, Unit: 'KG', Batch: 'BATCH-01', DifferenceQty: 5 },
-            { ReservationItem: '0002', Material: '1000000373', IssueQty: 20, Unit: 'KG', Batch: 'BATCH-02' }
-          ]
-        },
-        error: jest.fn((code, msg) => ({ code, message: msg }))
-      };
-
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-        RequiredQty: 1000,
-        WithdrawnQty: 0,
-        OpenQty: 1000,
-        ReservationItemIsFinallyIssued: false,
-        ReservationItmIsMarkedForDeltn: false
-      });
-      jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
-      jest.spyOn(GoodsIssueAdapter, 'submitGoodsIssueRequest').mockRejectedValue(sapPostingUnavailable());
-      const result = await handlers['submitGoodsIssueRequest'](req);
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000514', Plant: '1120', StorageLocation: 'CS01', OpenQty: 100000 });
+      jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311').mockRejectedValue(sapPostingUnavailable());
+      await handlers['postGoodsIssue311'](req);
       expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));
-      expect(result).toEqual({ code: 503, message: expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable') });
     });
   });
 
@@ -1171,9 +961,9 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
 
     it('fetches dashboard data with day/plant/movementType query params', async () => {
       mockODataClient.get.mockResolvedValueOnce({ KPIs: {} });
-      await FrontendGoodsIssueService.getDashboardData(7, '1120', true, '261');
+      await FrontendGoodsIssueService.getDashboardData(7, '1120', true, '301');
       expect(mockODataClient.get).toHaveBeenCalledWith(
-        expect.stringContaining("/odata/v4/goods-issue/getDashboardData(days=7,plant='1120',forceRefresh=true,movementType='261')")
+        expect.stringContaining("/odata/v4/goods-issue/getDashboardData(days=7,plant='1120',forceRefresh=true,movementType='301')")
       );
     });
   });

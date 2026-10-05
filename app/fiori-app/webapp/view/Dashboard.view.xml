@@ -195,18 +195,6 @@
                                         </GenericTile>
 
                                         <GenericTile
-                                            id="tileOverviewGoodsIssue"
-                                            header="{i18n>dashGoodsIssue261}"
-                                            subheader="{i18n>dashOpenReservationItems}"
-                                            press=".onNavigateToGoodsIssue"
-                                            state="{path: 'dashboardView>/openReservationCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashReservationItems}">
-                                                <NumericContent value="{path: 'dashboardView>/openReservationCount', formatter: '.formatMetricValue'}" icon="sap-icon://shipping-status" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
                                             id="tileOverviewGoodsReceipt"
                                             header="{i18n>dashGoodsReceipt101}"
                                             subheader="{i18n>dashInboundDeliveries}"
@@ -591,7 +579,7 @@
                                     visible="{= !!${dashboardView>/giKpiError} }"
                                     class="sapUiSmallMarginBottom" />
 
-                                <!-- Movement-Type KPI Cards (201 / 261 / 301 / 311) -->
+                                <!-- Movement-Type KPI Cards (201 / 301 / 311) -->
                                 <Panel
                                     id="panelMvtTypeKpis"
                                     headerText="{i18n>giKpiSectionTitle}"
@@ -611,22 +599,6 @@
                                                     id="kpiMvt201Val"
                                                     value="{path: 'dashboardView>/mvt201Total', formatter: '.formatMetricValue'}"
                                                     icon="sap-icon://factory"
-                                                    valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileMvt261"
-                                            header="{i18n>dashboardMvt261Header}"
-                                            subheader="{i18n>dashboardMvt261Subheader}"
-                                            press=".onMvt261TilePress"
-                                            state="{path: 'dashboardView>/mvt261Total', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{path: 'dashboardView>/mvt261Today', formatter: '.formatMvtTodayUnit'}">
-                                                <NumericContent
-                                                    id="kpiMvt261Val"
-                                                    value="{path: 'dashboardView>/mvt261Total', formatter: '.formatMetricValue'}"
-                                                    icon="sap-icon://shipping-status"
                                                     valueColor="Neutral" />
                                             </TileContent>
                                         </GenericTile>

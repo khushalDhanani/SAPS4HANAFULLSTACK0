@@ -4,86 +4,11 @@ const { validateReversalPayload } = require('../validation/goodsIssue.validation
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
-const GoodsIssueIssuedSuStore = require('../GoodsIssueIssuedSuStore');
 const { classifyPostingError } = require('./goodsIssuePerType.handler');
 
 const _extractFilterParam = extractFilterParam;
-// Movement type this app is built for (GI for order). App parameter, not SAP-sourced data.
-const GI_MOVEMENT_TYPE = '261';
-const LIST_MOVEMENT_TYPES = ['201', '261', '301', '311'];
-
-async function validateSubmitReservationQuantities(req, reservationNo, items) {
-  const sReservationNo = String(reservationNo || '').trim();
-
-  for (const item of items) {
-    if (item.FinalIssue != null && typeof item.FinalIssue !== 'boolean') {
-      req.error(400, `FinalIssue must be a Boolean for reservation item ${item.ReservationItem || '(unknown)'}. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (!sReservationNo) {
-      if (item.FinalIssue === true) {
-        req.error(400, 'FinalIssue can only be requested for a SAP reservation item. Goods Issue was NOT posted.');
-        return false;
-      }
-      continue;
-    }
-
-    const sReservationItem = String(item.ReservationItem || '').trim();
-    if (!sReservationItem) {
-      req.error(400, 'ReservationItem is required for every item submitted with ReservationNo. Goods Issue was NOT posted.');
-      return false;
-    }
-    const issueQty = Number(item.IssueQty);
-    if (!Number.isFinite(issueQty) || issueQty <= 0) {
-      req.error(400, `Issue quantity must be a positive decimal number for reservation item ${sReservationItem}. Goods Issue was NOT posted.`);
-      return false;
-    }
-
-    let reservationItem;
-    try {
-      if (typeof GoodsIssueAdapter.getReservationItemAuthoritative !== 'function') {
-        req.error(500, 'SAP reservation quantity verification is unavailable. Goods Issue was NOT posted.');
-        return false;
-      }
-      reservationItem = await GoodsIssueAdapter.getReservationItemAuthoritative(sReservationNo, sReservationItem);
-    } catch (err) {
-      LOG.error(`SAP reservation quantity verification failed for ${sReservationNo}/${sReservationItem}: ${err.message || err}`);
-      req.error(err.status === 404 ? 422 : (err.status || 502), `SAP could not verify current reservation quantity for ${sReservationNo} item ${sReservationItem}: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
-      return false;
-    }
-
-    const requiredQty = Number(reservationItem && reservationItem.RequiredQty);
-    const withdrawnQty = Number(reservationItem && reservationItem.WithdrawnQty);
-    const isClosed = Boolean(
-      reservationItem && (
-        reservationItem.ReservationItemIsFinallyIssued
-        || reservationItem.ReservationItmIsMarkedForDeltn
-        || reservationItem.IsFinallyIssued
-        || reservationItem.IsDeleted
-      )
-    );
-    const openQty = isClosed
-      ? 0
-      : (Number.isFinite(requiredQty) && Number.isFinite(withdrawnQty)
-        ? Math.max(0, requiredQty - withdrawnQty)
-        : Number(reservationItem && reservationItem.OpenQty));
-
-    if (!Number.isFinite(openQty)) {
-      req.error(502, `SAP returned an unverifiable open quantity for reservation ${sReservationNo} item ${sReservationItem}. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (openQty <= 0) {
-      req.error(422, `Reservation ${sReservationNo} item ${sReservationItem} has no open quantity remaining. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (issueQty > openQty + 1e-9) {
-      req.error(422, `Issue quantity ${issueQty} exceeds current SAP open reservation quantity ${openQty} for reservation ${sReservationNo} item ${sReservationItem}. Goods Issue was NOT posted.`);
-      return false;
-    }
-  }
-
-  return true;
-}
+const GI_MOVEMENT_TYPE = '201';
+const LIST_MOVEMENT_TYPES = ['201', '301', '311'];
 
 class GoodsIssueHandler {
   static init(srv) {
@@ -103,7 +28,6 @@ class GoodsIssueHandler {
     // READ OpenReservations: query distinct open reservations for Goods Issue
     srv.on('READ', 'OpenReservations', async (req) => {
       const plant = _extractFilterParam(req, 'Plant') || '';
-      // '261' (goods issue block) or '301,311' (transfer block); anything else falls back to 261.
       const mvtParam = _extractFilterParam(req, 'MovementType') || GI_MOVEMENT_TYPE;
       const mvtType = mvtParam.split(',').every((m) => LIST_MOVEMENT_TYPES.includes(m.trim())) ? mvtParam : GI_MOVEMENT_TYPE;
       const reservNo = _extractFilterParam(req, 'ReservationNo');
@@ -112,8 +36,7 @@ class GoodsIssueHandler {
       try {
         let reservations = await GoodsIssueAdapter.getOpenReservations(mvtType, plant, {
           reservationNo: reservNo,
-          orderNo: orderNo,
-          maxItems: mvtType === '261' ? 20000 : undefined
+          orderNo: orderNo
         });
         if (reservNo && Array.isArray(reservations)) {
           const sResClean = reservNo.replace(/^0+/, '');
@@ -171,31 +94,6 @@ class GoodsIssueHandler {
       }
     });
 
-    // READ GoodsIssueIssuedStorageUnit: active/released issued SUs held pending TO confirmation
-    srv.on('READ', 'GoodsIssueIssuedStorageUnit', async (req, next) => {
-      if (GoodsIssueIssuedSuStore.db) return typeof next === 'function' ? next() : [];
-      return GoodsIssueIssuedSuStore.getActiveIssuedSUs();
-    });
-
-    // ACTION: resolveClaimManual: Operator action to resolve a needs-attention claim ('posted' | 'not-posted')
-    srv.on('resolveClaimManual', async (req) => {
-      const { claimId, action, materialDocument, materialDocYear } = req.data || {};
-      if (!claimId || !action) {
-        return req.error(400, 'claimId and action ("posted" or "not-posted") are required');
-      }
-      try {
-        const resolved = await GoodsIssueIssuedSuStore.resolveClaimManual(claimId, action, {
-          materialDocument,
-          materialDocYear,
-          adapter: GoodsIssueAdapter,
-          user: req.user ? req.user.id : 'OPERATOR'
-        });
-        return resolved;
-      } catch (err) {
-        return req.error(err.status || 400, err.message);
-      }
-    });
-
     // FUNCTION: resolveIdentifier (Multi-tier scan resolution for Goods Issue)
     srv.on('resolveIdentifier', async (req) => {
       const barcode = req.data?.barcode || (req.params && req.params[0]?.barcode);
@@ -210,7 +108,6 @@ class GoodsIssueHandler {
         return req.error(err.status || err.statusCode || 404, err.message || 'Failed to resolve scanned identifier in S/4HANA');
       }
     });
-
 
     // ACTION: reverseGoodsIssue (Material Document Reversal via CancelHeader FunctionImport)
     srv.on('reverseGoodsIssue', async (req) => {
@@ -248,57 +145,6 @@ class GoodsIssueHandler {
         return result;
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Failed to reverse Material Document in S/4HANA');
-      }
-    });
-
-    // ACTION: submitGoodsIssueRequest (Batch scan-then-submit multi-line direct posting)
-    srv.on('submitGoodsIssueRequest', async (req) => {
-      const { ReservationNo, OrderNo, Items } = req.data;
-
-      if (!ReservationNo && !OrderNo) {
-        return req.error(400, 'Either ReservationNo or OrderNo must be provided for submission');
-      }
-
-      if (!Array.isArray(Items) || Items.length === 0) {
-        return req.error(400, 'At least one item must be specified for submission');
-      }
-
-      if (!(await validateSubmitReservationQuantities(req, ReservationNo, Items))) return;
-
-      if (ReservationNo) {
-        for (const item of Items) {
-          const reservationItem = String(item.ReservationItem || '').trim();
-          if (!reservationItem) {
-            return req.error(400, 'ReservationItem is required to verify WM staging before Goods Issue.');
-          }
-          try {
-            const staging = await GoodsIssueAdapter.checkStagingForReservation(ReservationNo, reservationItem, {
-              issueQty: item.IssueQty,
-              issueUnit: item.Unit
-            });
-            if (!staging || staging.isVerified !== true) {
-              return req.error(502, staging?.error || `SAP WM staging could not be verified for reservation ${ReservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-            }
-            if (!staging.isStaged) {
-              return req.error(422, staging.error || `Available SAP staging stock is insufficient for reservation ${ReservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-            }
-          } catch (err) {
-            LOG.error(`submitGoodsIssueRequest staging check failed for reservation ${ReservationNo} item ${reservationItem}; blocking 261 posting:`, err.message || err);
-            return req.error(err.status || 502, `${err.message || 'SAP WM staging could not be verified'}. Goods Issue was NOT posted.`);
-          }
-        }
-      }
-
-      try {
-        const batchResult = await GoodsIssueAdapter.submitGoodsIssueRequest(
-          ReservationNo,
-          OrderNo,
-          Items
-        );
-        return batchResult;
-      } catch (err) {
-        const classified = classifyPostingError(err);
-        return req.error(classified.status, classified.message);
       }
     });
 

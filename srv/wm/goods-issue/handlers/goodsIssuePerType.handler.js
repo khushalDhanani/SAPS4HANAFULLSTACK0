@@ -8,13 +8,10 @@
 
 const GoodsIssueAdapter = require('../../../integration/s4hana/wm/GoodsIssueAdapter');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
-const GoodsIssueIssuedSuStore = require('../GoodsIssueIssuedSuStore');
 const { normalizeGoodsIssue201Payload } = require('../mapping/goodsIssue201.normalize');
-const { normalizeGoodsIssue261Payload } = require('../mapping/goodsIssue261.normalize');
 const { normalizeGoodsIssue301Payload } = require('../mapping/goodsIssue301.normalize');
 const { normalizeGoodsIssue311Payload } = require('../mapping/goodsIssue311.normalize');
 const { validateGoodsIssue201Payload } = require('../validation/goodsIssue201.validation');
-const { validateGoodsIssue261Payload } = require('../validation/goodsIssue261.validation');
 const { validateGoodsIssue301Payload } = require('../validation/goodsIssue301.validation');
 const { validateGoodsIssue311Payload } = require('../validation/goodsIssue311.validation');
 const LOG = require('../../../common/logger')('goods-issue-pertype-handler');
@@ -23,12 +20,11 @@ const crypto = require('crypto');
 /** Unique per posting attempt, <=16 chars (SAP header ReferenceDocument); reused unchanged on queue replay. */
 const newPostingReference = () => `GI${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`.toUpperCase();
 
-function assign261IdempotencyKey(normalized) {
+function assignIdempotencyKey(normalized) {
   const request = {
-    // Type-specific fields of 201/301/311; absent (undefined) for 261, so 261 keys are unchanged.
-    CostCenter: normalized.MovementType === '261' ? undefined : normalized.CostCenter,
-    ReceivingPlant: normalized.MovementType === '261' ? undefined : normalized.ReceivingPlant,
-    ReceivingStorageLocation: normalized.MovementType === '261' ? undefined : normalized.ReceivingStorageLocation,
+    CostCenter: normalized.CostCenter,
+    ReceivingPlant: normalized.ReceivingPlant,
+    ReceivingStorageLocation: normalized.ReceivingStorageLocation,
     MovementType: normalized.MovementType,
     ReservationNo: normalized.ReservationNo,
     ReservationItem: normalized.ReservationItem,
@@ -56,12 +52,12 @@ function assign261IdempotencyKey(normalized) {
 }
 
 /**
- * 201/301/311: when the client sends a ClientAttemptId, the reference is derived from the request
- * (same scheme as 261), so a resent request replays its attempt instead of posting again.
+ * 201/301/311: when the client sends a ClientAttemptId, the reference is derived from the request,
+ * so a resent request replays its attempt instead of posting again.
  * Without one, the previous per-request random reference is kept.
  */
 function ensureIdempotencyKey(normalized) {
-  if (normalized && normalized.ClientAttemptId && !normalized.RequestHash) assign261IdempotencyKey(normalized);
+  if (normalized && normalized.ClientAttemptId && !normalized.RequestHash) assignIdempotencyKey(normalized);
 }
 
 function attemptResponse(attempt) {
@@ -152,36 +148,6 @@ async function serialPreCheck(req, normalized, { required = false } = {}) {
   }
 }
 
-/** SAP-derived serial profile/count gate for direct Movement 261; returns true/false or null on error. */
-async function serialCountCheck261(req, normalized) {
-  if (typeof GoodsIssueAdapter.isSerialManaged !== 'function') {
-    req.error(503, `SAP serial-management verification is unavailable for material ${normalized.Material} at plant ${normalized.Plant}. Goods Issue was NOT posted.`);
-    return null;
-  }
-
-  let serialManaged;
-  try {
-    serialManaged = await GoodsIssueAdapter.isSerialManaged(normalized.Material, normalized.Plant);
-  } catch (err) {
-    LOG.error('SAP serial-management verification failed; blocking 261 posting:', err.message || err);
-    req.error(err.status || 502, `SAP serial-management requirement could not be verified for material ${normalized.Material} at plant ${normalized.Plant}: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
-    return null;
-  }
-  if (typeof serialManaged !== 'boolean') {
-    req.error(502, `SAP returned no valid serial-management status for material ${normalized.Material} at plant ${normalized.Plant}. Goods Issue was NOT posted.`);
-    return null;
-  }
-  if (!serialManaged) return false;
-
-  const quantity = Number(normalized.IssueQty);
-  const serialCount = Array.isArray(normalized.SerialNumbers) ? normalized.SerialNumbers.length : 0;
-  if (!Number.isInteger(quantity) || serialCount !== quantity) {
-    req.error(400, `Material ${normalized.Material} is serial-managed: ${serialCount} serial number(s) supplied for quantity ${quantity}. Supply exactly one valid serial number per unit. Goods Issue was NOT posted.`);
-    return null;
-  }
-  return true;
-}
-
 /** 201-only stock pre-check. Returns true to continue, or sends req.error and returns false. */
 async function stockPreCheck201(req, normalized) {
   if (typeof GoodsIssueAdapter.revalidateStockBeforePosting !== 'function') return true;
@@ -206,11 +172,11 @@ async function stockPreCheck201(req, normalized) {
 }
 
 /**
- * Reservation reconciliation for reservation-based movements (261/301/311). The Fiori UI derives
+ * Reservation reconciliation for reservation-based movements (301/311). The Fiori UI derives
  * Material/Plant/StorageLocation from the resolved reservation item, but the CAP action can be
  * called directly, so we reconcile server-side against SAP before posting: submitted master data
  * must match the reservation item, and IssueQty must not exceed its open quantity. Skips cleanly
- * when there is no reservation (e.g. 261 unplanned direct-to-order). Returns the reservation item
+ * when there is no reservation. Returns the reservation item
  * (or true when there was nothing to reconcile) to continue, or sends req.error and returns false.
  * Fails CLOSED when the reservation cannot be read. A storage location the reservation does not
  * carry cannot be reconciled, so a submitted one is accepted in that case.
@@ -314,66 +280,6 @@ async function reservationReconcileCheck(req, normalized, { receiving = false, b
   return item;
 }
 
-/** SAP batch-management, reservation assignment, SLED, and storage-location stock pre-check for 261. */
-async function batchPreCheck261(req, normalized, resvItem) {
-  const assignedBatch = resvItem && typeof resvItem === 'object'
-    ? String(resvItem.Batch || '').trim()
-    : '';
-  const submittedBatch = String(normalized.Batch || '').trim();
-  const norm = (value) => String(value || '').trim().toUpperCase();
-
-  if (assignedBatch && submittedBatch && norm(assignedBatch) !== norm(submittedBatch)) {
-    req.error(400, `Submitted batch ${submittedBatch} does not match SAP reservation batch ${assignedBatch}. Goods Issue was NOT posted.`);
-    return false;
-  }
-  if (assignedBatch) normalized.Batch = assignedBatch;
-
-  let batchManaged = Boolean(assignedBatch);
-  if (!batchManaged && !submittedBatch) {
-    if (typeof GoodsIssueAdapter.isBatchManaged !== 'function') {
-      req.error(500, `SAP batch-management verification is unavailable for material ${normalized.Material} at plant ${normalized.Plant}. Goods Issue was NOT posted.`);
-      return false;
-    }
-    try {
-      batchManaged = await GoodsIssueAdapter.isBatchManaged(normalized.Material, normalized.Plant);
-    } catch (err) {
-      LOG.error('SAP batch-management verification failed; blocking 261 posting:', err.message || err);
-      req.error(err.status || 502, `SAP batch-management requirement could not be verified for material ${normalized.Material} at plant ${normalized.Plant}: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
-      return false;
-    }
-  }
-
-  if (batchManaged && !normalized.Batch) {
-    req.error(400, `Material ${normalized.Material} is batch-managed in plant ${normalized.Plant}; Batch is required. Goods Issue was NOT posted.`);
-    return false;
-  }
-  if (!normalized.Batch) return true;
-
-  if (typeof GoodsIssueAdapter.validateBatchForPosting !== 'function') {
-    req.error(500, `SAP batch and stock validation is unavailable for batch ${normalized.Batch}. Goods Issue was NOT posted.`);
-    return false;
-  }
-  try {
-    const result = await GoodsIssueAdapter.validateBatchForPosting(
-      normalized.Material,
-      normalized.Plant,
-      normalized.StorageLocation,
-      normalized.Batch,
-      normalized.IssueQty,
-      normalized.Unit
-    );
-    if (!result || result.valid !== true) {
-      req.error(result?.status || 422, result?.reason || `SAP could not verify batch ${normalized.Batch} before posting. Goods Issue was NOT posted.`);
-      return false;
-    }
-  } catch (err) {
-    LOG.error('SAP batch stock verification failed; blocking 261 posting:', err.message || err);
-    req.error(err.status || 502, `${err.message || 'SAP batch stock could not be verified'}. Goods Issue was NOT posted.`);
-    return false;
-  }
-  return true;
-}
-
 /**
  * Serial-managed materials need exactly one serial number per unit. Checked against SAP master data
  * (not a client flag) before posting. Returns true to continue, or sends req.error(400) and returns
@@ -396,388 +302,6 @@ async function serialCountCheck(req, normalized) {
   return false;
 }
 
-/**
- * Storage Unit reconciliation for Movement 261 reservation-based issue.
- * Re-reads the real SUs for the reservation item from SAP stock (listStockUnitsForReservationItem).
- * When SU data exists in SAP, validates:
- *  - Client-scanned StorageUnits are unique and exist in the SAP reservation stock
- *  - SAP stock for the scanned units covers normalized.IssueQty without exceeding open reservation quantity
- *  - Server-owned per-SU allocations use full quantities where possible and a server-calculated partial for the last unit
- * Returns true to continue, or calls req.error(400, ...) and returns false (no queueing).
- */
-async function storageUnitReconcileCheck261(req, normalized, resvItem) {
-  const sResv = String(normalized.ReservationNo || '').trim();
-  const sItem = String(normalized.ReservationItem || '').trim();
-  if (!sResv || !sItem) return true; // unplanned path (no reservation)
-  const submittedSUs = Array.isArray(normalized.StorageUnits) ? normalized.StorageUnits : [];
-  if (submittedSUs.length === 0) return true; // Non-SU goods issue or standard order flow
-
-  let stockResult;
-  try {
-    stockResult = await GoodsIssueAdapter.listStockUnitsForReservationItem(sResv, sItem);
-  } catch (err) {
-    LOG.warn(`Could not read stock units for reservation ${sResv} item ${sItem}:`, err.message || err);
-    req.error(400, `Failed to verify Storage Units from SAP: ${err.message || 'unexpected error'}. Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  const sapStockUnits = (stockResult && Array.isArray(stockResult.StockUnits)) ? stockResult.StockUnits : [];
-
-  // If no SU data exists in SAP for this item:
-  if (sapStockUnits.length === 0) {
-    req.error(400, `No Storage Units exist in SAP for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  // Duplicate scan check
-  const seen = new Set();
-  for (const suId of submittedSUs) {
-    const cleanId = String(suId).trim().toUpperCase();
-    if (seen.has(cleanId)) {
-      req.error(400, `Duplicate Storage Unit ${cleanId} in submission. Goods Issue was NOT posted.`);
-      return false;
-    }
-    seen.add(cleanId);
-  }
-
-  // Build lookup map and authoritative SAP order index
-  const validSuMap = new Map();
-  const sapOrderMap = new Map();
-  sapStockUnits.forEach((su, idx) => {
-    const suKey = String(su.StorageUnit).trim().toUpperCase();
-    validSuMap.set(suKey, su);
-    sapOrderMap.set(suKey, idx);
-  });
-
-  // Authoritative open quantity from SAP reservation item (Requirement 2)
-  let openQty = resvItem && (resvItem.OpenQty !== undefined && resvItem.OpenQty !== null)
-    ? Math.round(Number(resvItem.OpenQty) * 1000) / 1000
-    : null;
-  if (openQty === null && typeof GoodsIssueAdapter.getReservationItemAuthoritative === 'function') {
-    try {
-      const freshResv = await GoodsIssueAdapter.getReservationItemAuthoritative(sResv, sItem);
-      if (freshResv && freshResv.OpenQty != null) {
-        openQty = Math.round(Number(freshResv.OpenQty) * 1000) / 1000;
-      }
-    } catch (e) {
-      LOG.warn(`Could not re-verify reservation open quantity for ${sResv} item ${sItem}:`, e.message || e);
-    }
-  }
-  const issueQty = Math.round(Number(normalized.IssueQty) * 1000) / 1000;
-  if (!Number.isFinite(openQty) || openQty < 0) {
-    req.error(502, `SAP open reservation quantity could not be verified for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
-    return false;
-  }
-  if (!Number.isFinite(issueQty) || issueQty <= 0 || issueQty > openQty + 1e-9) {
-    req.error(422, `Requested issue quantity ${issueQty} is invalid or exceeds SAP open reservation quantity ${openQty} for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  // Verify all submitted SUs exist in SAP stock and have available stock > 0
-  const numSUs = submittedSUs.length;
-  for (let i = 0; i < numSUs; i++) {
-    const cleanId = String(submittedSUs[i]).trim().toUpperCase();
-    const sapSu = validSuMap.get(cleanId);
-    if (!sapSu) {
-      req.error(400, `Storage Unit ${cleanId} is not valid for material ${normalized.Material} or was consumed in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-    const suAvailStock = Number(sapSu.AvailableStock != null ? sapSu.AvailableStock : (sapSu.CurrentStock != null ? sapSu.CurrentStock : 0));
-    if (suAvailStock <= 0) {
-      req.error(400, `Storage Unit ${cleanId} has no available stock or was consumed in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-  }
-
-  // Allocate only the requested quantity; SAP stock and ordering determine each SU contribution.
-  const targetTotal = issueQty;
-
-  const authoritativeSUs = [...submittedSUs].sort((a, b) => {
-    const keyA = String(a).trim().toUpperCase();
-    const keyB = String(b).trim().toUpperCase();
-    const idxA = sapOrderMap.has(keyA) ? sapOrderMap.get(keyA) : Number.MAX_SAFE_INTEGER;
-    const idxB = sapOrderMap.has(keyB) ? sapOrderMap.get(keyB) : Number.MAX_SAFE_INTEGER;
-    return idxA - idxB;
-  });
-
-  let runningSum = 0;
-  let precedingSum = 0;
-  let serverPartialSu = null;
-  let serverPartialQty = 0;
-  const allocatedSuItems = [];
-
-  for (let i = 0; i < authoritativeSUs.length; i++) {
-    const suId = String(authoritativeSUs[i]).trim().toUpperCase();
-    const su = validSuMap.get(suId);
-    const avail = Number(su.AvailableStock != null ? su.AvailableStock : (su.CurrentStock != null ? su.CurrentStock : 0));
-    const fullStock = Number(su.PreIssueStock != null ? su.PreIssueStock : avail);
-    const needed = Math.round((targetTotal - runningSum) * 1000) / 1000;
-
-    if (needed <= 0) {
-      break;
-    }
-
-    if (avail <= needed) {
-      precedingSum = runningSum;
-      runningSum = Math.round((runningSum + avail) * 1000) / 1000;
-      allocatedSuItems.push({
-        storageUnit: suId,
-        issuedQty: avail,
-        preIssueStock: fullStock,
-        batch: su.Batch || '',
-        warehouse: su.Warehouse || '',
-        storageType: su.StorageType || '',
-        storageBin: su.StorageBin || '',
-        multipleBatches: su.MultipleBatches === true
-      });
-    } else {
-      // avail > needed: this SU is chosen by the server to take the partial
-      serverPartialSu = su;
-      serverPartialQty = needed;
-      precedingSum = runningSum;
-      runningSum = Math.round((runningSum + needed) * 1000) / 1000;
-      allocatedSuItems.push({
-        storageUnit: suId,
-        issuedQty: needed,
-        preIssueStock: fullStock,
-        batch: su.Batch || '',
-        warehouse: su.Warehouse || '',
-        storageType: su.StorageType || '',
-        storageBin: su.StorageBin || '',
-        multipleBatches: su.MultipleBatches === true
-      });
-      break;
-    }
-  }
-
-  const explicitLastQty = normalized.LastStorageUnitQty != null ? Number(normalized.LastStorageUnitQty) : null;
-
-  if (serverPartialSu) {
-    const partialSuId = String(serverPartialSu.StorageUnit).trim().toUpperCase();
-    const fullStock = Number(serverPartialSu.AvailableStock != null ? serverPartialSu.AvailableStock : (serverPartialSu.CurrentStock != null ? serverPartialSu.CurrentStock : 0));
-
-    // Reject partial <= 0 or >= that SU's full stock (Requirement 2)
-    if (serverPartialQty <= 0) {
-      req.error(400, `Partial quantity (${serverPartialQty}) for Storage Unit ${partialSuId} must be greater than zero. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (serverPartialQty >= fullStock) {
-      req.error(400, `Partial quantity (${serverPartialQty}) for Storage Unit ${partialSuId} cannot equal or exceed full stock (${fullStock}). Goods Issue was NOT posted.`);
-      return false;
-    }
-
-    // The optional client hint must agree with the server-calculated quantity; it never drives allocation.
-    if (explicitLastQty !== null) {
-      if (isNaN(explicitLastQty) || explicitLastQty <= 0) {
-        req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${partialSuId} must be greater than zero. Goods Issue was NOT posted.`);
-        return false;
-      }
-      if (explicitLastQty >= fullStock) {
-        req.error(400, `Partial quantity (${explicitLastQty}) cannot equal or exceed full stock (${fullStock}) of Storage Unit ${partialSuId}. Goods Issue was NOT posted.`);
-        return false;
-      }
-      if (openQty !== null && openQty > 0 && precedingSum + explicitLastQty > openQty + 1e-9) {
-        req.error(400, `Partial quantity (${explicitLastQty}) for Storage Unit ${partialSuId} causes total (${precedingSum + explicitLastQty}) to exceed open reservation quantity (${openQty}). Partial above open qty rejected. Goods Issue was NOT posted.`);
-        return false;
-      }
-      if (Math.abs(explicitLastQty - serverPartialQty) > 0.001) {
-        req.error(400, `Partial quantity (${explicitLastQty}) does not match server-calculated partial quantity (${serverPartialQty}) for Storage Unit ${partialSuId}. Goods Issue was NOT posted.`);
-        return false;
-      }
-    }
-  } else {
-    // No partial SU was needed in the server allocation.
-    if (explicitLastQty !== null) {
-      const clientLastSu = validSuMap.get(String(submittedSUs[numSUs - 1]).trim().toUpperCase());
-      const clientLastStock = clientLastSu ? Number(clientLastSu.AvailableStock || clientLastSu.CurrentStock || 0) : 0;
-      if (explicitLastQty < clientLastStock) {
-        req.error(400, `Partial quantity specified for Storage Unit ${submittedSUs[numSUs - 1]} but reservation requires full issue. Goods Issue was NOT posted.`);
-        return false;
-      }
-    }
-  }
-
-  const realSum = runningSum;
-  // Server allocation must exactly cover the requested issue quantity from SAP stock.
-  if (Math.abs(realSum - issueQty) > 0.001) {
-    req.error(400, `Requested IssueQty (${issueQty}) exceeds the scanned SAP Storage Unit stock allocated by the server (${realSum}). Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  // Reservation open quantity comparison from live SAP (Requirement 2)
-  if (openQty !== null && openQty > 0) {
-    if (realSum > openQty + 1e-9) {
-      req.error(400, `Storage Units total quantity (${realSum}) exceeds open reservation quantity (${openQty}). Over-issue blocked. Goods Issue was NOT posted.`);
-      return false;
-    }
-  }
-
-  // Quantity-based concurrent claims check (Requirement 1):
-  // claimed + requested <= current LQUA stock for that SU. A partial residual stays claimable.
-  const claimCheck = await GoodsIssueIssuedSuStore.checkConcurrentClaims(allocatedSuItems);
-  if (claimCheck && claimCheck.hasClaim) {
-    req.error(400, `Storage Unit ${claimCheck.claimedSu} is currently claimed in an active Goods Issue (available: ${claimCheck.availableStock || 0}, requested: ${claimCheck.requestedQty || 0}, already claimed: ${claimCheck.totalClaimed || 0}). Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  normalized._allocatedSuItems = allocatedSuItems;
-  return true;
-}
-
-/**
- * Re-reads SAP reservation and WM stock after this attempt's SU claims are acquired.
- * The stock client excludes this attempt's own claim but still accounts for other claims.
- */
-async function storageUnitFinalReconcileCheck261(req, normalized) {
-  const allocatedItems = Array.isArray(normalized._allocatedSuItems) ? normalized._allocatedSuItems : [];
-  if (allocatedItems.length === 0) return true;
-
-  const reservationNo = String(normalized.ReservationNo || '').trim();
-  const reservationItem = String(normalized.ReservationItem || '').trim();
-  let reservation;
-  let stockResult;
-  try {
-    reservation = await GoodsIssueAdapter.getReservationItemAuthoritative(reservationNo, reservationItem);
-    stockResult = await GoodsIssueAdapter.listStockUnitsForReservationItem(reservationNo, reservationItem, {
-      excludeReferenceDocument: normalized.ReferenceDocument
-    });
-  } catch (err) {
-    LOG.warn(`Final SAP Storage Unit revalidation failed for reservation ${reservationNo} item ${reservationItem}:`, err.message || err);
-    req.error(502, `Could not revalidate SAP reservation and Storage Units immediately before posting: ${err.message || 'SAP data unavailable'}. Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  const sameMaterial = (left, right) => {
-    const normalize = (value) => String(value || '').trim().toUpperCase().replace(/^0+(?=\d)/, '');
-    return normalize(left) === normalize(right);
-  };
-  const sameCode = (left, right) => String(left || '').trim().toUpperCase() === String(right || '').trim().toUpperCase();
-  const contextMatches = reservation &&
-    sameMaterial(reservation.Material, normalized.Material) &&
-    sameCode(reservation.Plant, normalized.Plant) &&
-    sameCode(reservation.StorageLocation, normalized.StorageLocation);
-  if (!contextMatches) {
-    req.error(409, `SAP reservation material, plant, or storage location changed for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  const issueQty = Number(normalized.IssueQty);
-  const openQty = Number(reservation.OpenQty);
-  if (!Number.isFinite(openQty) || openQty < issueQty) {
-    req.error(422, `SAP open reservation quantity changed to ${Number.isFinite(openQty) ? openQty : 'unknown'}; it no longer covers issue quantity ${issueQty}. Goods Issue was NOT posted.`);
-    return false;
-  }
-  if (reservation.ReservationItemIsFinallyIssued || reservation.IsFinallyIssued ||
-      reservation.ReservationItmIsMarkedForDeltn || reservation.IsDeleted) {
-    req.error(409, `SAP reservation ${reservationNo} item ${reservationItem} is finally issued or deleted. Goods Issue was NOT posted.`);
-    return false;
-  }
-  if (reservation.Batch && normalized.Batch && !sameCode(reservation.Batch, normalized.Batch)) {
-    req.error(409, `SAP reservation batch changed from ${normalized.Batch} to ${reservation.Batch} before posting. Goods Issue was NOT posted.`);
-    return false;
-  }
-
-  const stockUnits = Array.isArray(stockResult?.StockUnits) ? stockResult.StockUnits : [];
-  const stockContextMatches = stockResult &&
-    sameMaterial(stockResult.Material, reservation.Material) &&
-    sameCode(stockResult.Plant, reservation.Plant) &&
-    sameCode(stockResult.StorageLocation, reservation.StorageLocation);
-  if (!stockContextMatches) {
-    req.error(502, `SAP did not return verifiable Storage Unit context for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-    return false;
-  }
-  if (stockResult.IsStagingRequired === true) {
-    // IsFullyStaged measures the FULL open quantity; a partial issue only needs the issue
-    // quantity staged. Re-verify with the staging engine, which is issue-quantity and
-    // unit-conversion aware and resolves the target itself.
-    let staging;
-    try {
-      staging = await GoodsIssueAdapter.checkStagingForReservation(reservationNo, reservationItem, {
-        issueQty: normalized.IssueQty,
-        issueUnit: normalized.Unit
-      });
-    } catch (err) {
-      const status = err.status === 400 || err.status === 422 ? err.status : 502;
-      req.error(status, `${err.message || 'SAP WM staging could not be re-verified before posting'}. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (!staging || staging.isVerified !== true) {
-      req.error(502, staging?.error || `SAP staging could not be re-verified for reservation ${reservationNo} item ${reservationItem} immediately before posting. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (!staging.isStaged) {
-      req.error(422, staging.error || stockResult.Message || `SAP staging is no longer confirmed for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-      return false;
-    }
-  }
-
-  const stockBySu = new Map(stockUnits.map((su) => [String(su.StorageUnit || '').trim().toUpperCase(), su]));
-  for (const allocation of allocatedItems) {
-    const storageUnit = String(allocation.storageUnit || allocation.StorageUnit || '').trim().toUpperCase();
-    const current = stockBySu.get(storageUnit);
-    if (!current) {
-      req.error(409, `Storage Unit ${storageUnit} is no longer valid and issuable for reservation ${reservationNo} item ${reservationItem}. Goods Issue was NOT posted.`);
-      return false;
-    }
-
-    const currentQty = Number(current.AvailableStock != null ? current.AvailableStock : current.CurrentStock);
-    const allocatedQty = Number(allocation.issuedQty != null ? allocation.issuedQty : allocation.IssuedQty);
-    if (!Number.isFinite(currentQty) || !Number.isFinite(allocatedQty) || currentQty + 1e-9 < allocatedQty) {
-      req.error(409, `Storage Unit ${storageUnit} now has ${Number.isFinite(currentQty) ? currentQty : 'unknown'} issuable quantity; ${allocatedQty} is required. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (!sameMaterial(current.Material, reservation.Material) ||
-        !sameCode(current.Plant, reservation.Plant) ||
-        !sameCode(current.StorageLocation, reservation.StorageLocation)) {
-      req.error(409, `Storage Unit ${storageUnit} material, plant, or storage location changed in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-    const expectedBatch = reservation.Batch || normalized.Batch;
-    if (current.MultipleBatches || (expectedBatch && !sameCode(current.Batch, expectedBatch))) {
-      req.error(409, `Storage Unit ${storageUnit} batch assignment changed or is ambiguous in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (!sameCode(allocation.batch, current.Batch) ||
-        (allocation.warehouse && !sameCode(allocation.warehouse, current.Warehouse)) ||
-        (allocation.storageType && !sameCode(allocation.storageType, current.StorageType)) ||
-        (allocation.storageBin && !sameCode(allocation.storageBin, current.StorageBin))) {
-      req.error(409, `Storage Unit ${storageUnit} physical stock identity changed before posting. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (current.StatusState === 'Error') {
-      req.error(409, `Storage Unit ${storageUnit} batch is no longer issuable in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (stockResult.IsStagingRequired === true &&
-        (!sameCode(current.StorageType, stockResult.TargetStorageType) ||
-         !sameCode(current.StorageBin, stockResult.TargetStorageBin))) {
-      req.error(409, `Storage Unit ${storageUnit} is no longer in the confirmed staging location ${stockResult.TargetStorageType}/${stockResult.TargetStorageBin}. Goods Issue was NOT posted.`);
-      return false;
-    }
-    if (stockResult.Warehouse && current.Warehouse &&
-        !sameCode(current.Warehouse, stockResult.Warehouse)) {
-      req.error(409, `Storage Unit ${storageUnit} warehouse changed in SAP. Goods Issue was NOT posted.`);
-      return false;
-    }
-
-    Object.assign(allocation, {
-      batch: current.Batch || '',
-      warehouse: current.Warehouse || '',
-      storageType: current.StorageType || '',
-      storageBin: current.StorageBin || '',
-      multipleBatches: current.MultipleBatches === true
-    });
-  }
-  try {
-    await GoodsIssueIssuedSuStore.updateClaimEvidence(normalized.ReferenceDocument, allocatedItems);
-  } catch (err) {
-    LOG.error(`Could not persist final SU audit evidence for posting ${normalized.ReferenceDocument}:`, err.message || err);
-    req.error(503, `Goods Issue was NOT sent to SAP: final Storage Unit audit evidence could not be persisted (${err.message || 'store unavailable'}).`);
-    return false;
-  }
-  return true;
-}
-
 /** Posting-attempt status for an error the adapter raised: SAP did not answer vs. SAP said no. */
 const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED'];
 
@@ -787,9 +311,6 @@ const UNCONFIRMED_CODES = ['GI_POSTING_OUTCOME_UNKNOWN', 'GI_POSTING_UNCONFIRMED
  * 504, 2xx without document, etc.) — those must keep the `claiming` row alive.
  */
 function isDefinitiveRejection(err) {
-  if (GoodsIssueIssuedSuStore && typeof GoodsIssueIssuedSuStore.isDefinitiveRejection === 'function') {
-    return GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
-  }
   const s = err && (err.status || err.statusCode);
   if (s === 400 || s === 409 || s === 422 || s === 403) return true;
   if (/deficit|consumed|storage unit|insufficient stock/i.test(err && err.message || '')) return true;
@@ -901,20 +422,16 @@ async function checkPendingConfirmation(req, normalized) {
   if (!sResv) return true;
 
   let hasAttempt;
-  let hasClaim;
   try {
     hasAttempt = GoodsIssueAttemptStore && typeof GoodsIssueAttemptStore.hasOpenAttemptForReservation === 'function'
       ? await GoodsIssueAttemptStore.hasOpenAttemptForReservation(sResv, sItem)
-      : false;
-    hasClaim = GoodsIssueIssuedSuStore && typeof GoodsIssueIssuedSuStore.hasActiveClaimForReservation === 'function'
-      ? await GoodsIssueIssuedSuStore.hasActiveClaimForReservation(sResv, sItem)
       : false;
   } catch (err) {
     req.error(err.status || 503, err.message || 'Pending posting attempts could not be verified. Goods Issue was NOT posted.');
     return false;
   }
 
-  if (hasAttempt || hasClaim) {
+  if (hasAttempt) {
     if (normalized.ReferenceDocument && normalized.RequestHash) {
       const existing = await getIdempotentAttempt(normalized);
       if (existing) {
@@ -926,69 +443,6 @@ async function checkPendingConfirmation(req, normalized) {
     return false;
   }
   return true;
-}
-
-async function stagingCheck(req, normalized) {
-  const sResv = String(normalized?.ReservationNo || '').trim();
-  const sItem = String(normalized?.ReservationItem || '').trim();
-  if (!sResv || !sItem) return true;
-  try {
-    const staging = await GoodsIssueAdapter.checkStagingForReservation(sResv, sItem, {
-      issueQty: normalized.IssueQty,
-      issueUnit: normalized.Unit
-    });
-    const stagingStatus = staging?.stagingStatus || (staging?.isFullyStaged || staging?.isStaged ? 'OK' : 'NOT_STAGED');
-    // Requirement 4: Allow posting only on OK and NOT_WM_MANAGED
-    if (stagingStatus === 'NOT_WM_MANAGED' || (staging?.isStagingRequired === false && staging?.isVerified)) {
-      return true;
-    }
-    if (stagingStatus === 'OK') {
-      normalized._wmManaged = true;
-      return true;
-    }
-
-    // Blocked states: UNKNOWN, IN_TRANSFER, NOT_STAGED
-    // Requirement 5: Status codes: 422 for staging business blocks, 502 for SAP read/connectivity failure.
-    if (stagingStatus === 'UNKNOWN' || staging?.isVerified !== true) {
-      const isReadOrConnFailure = /read failed|connectivity|unavailable|ID:\w+|could not be resolved/i.test(staging?.error || '') && !/multiple destinations/i.test(staging?.error || '');
-      const statusCode = isReadOrConnFailure ? 502 : 422;
-      req.error(statusCode, staging?.error || `SAP WM staging requirement could not be verified for reservation ${sResv} item ${sItem}. Goods Issue was NOT posted.`);
-      return false;
-    }
-
-    // IN_TRANSFER or NOT_STAGED: staging business blocks -> 422
-    req.error(422, staging?.error || 'Available SAP staging stock is insufficient for goods issue.');
-    return false;
-  } catch (err) {
-    LOG.error(`SAP staging check failed for reservation ${sResv} item ${sItem}; blocking 261 posting:`, err.message || err);
-    const status = err.status === 400 || err.status === 422 ? err.status : 502;
-    req.error(status, `${err.message || 'SAP WM staging could not be verified'}. Goods Issue was NOT posted.`);
-    return false;
-  }
-}
-
-/**
- * WM-managed items only: SAP turns a 261 for a WM-managed location into an outbound delivery
- * (L9/514) instead of a material document. While such a delivery is open (goods movement status
- * not C), another post would create one more delivery for the same requirement, so it is blocked.
- * A failed SAP read blocks too (fail closed).
- */
-async function openDeliveryCheck(req, normalized) {
-  if (!normalized._wmManaged || typeof GoodsIssueAdapter.findDeliveriesForReservationItem !== 'function') return true;
-  const sResv = String(normalized.ReservationNo || '').trim();
-  const sItem = String(normalized.ReservationItem || '').trim();
-  let deliveries;
-  try {
-    deliveries = await GoodsIssueAdapter.findDeliveriesForReservationItem(sResv, sItem);
-  } catch (err) {
-    req.error(502, `Open outbound deliveries for reservation ${sResv} item ${sItem} could not be checked in SAP (${err.message || 'read failed'}). Goods Issue was NOT posted.`);
-    return false;
-  }
-  const open = deliveries.filter((d) => d.Open);
-  if (open.length === 0) return true;
-  const numbers = [...new Set(open.map((d) => d.DeliveryNumber))].join(', ');
-  req.error(409, `Reservation ${sResv} item ${sItem} already has open outbound deliver${open.length > 1 ? 'ies' : 'y'} ${numbers} in SAP awaiting goods issue (PGI). Goods Issue was NOT posted; resolve the open delivery first.`);
-  return false;
 }
 
 /**
@@ -1015,9 +469,7 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
       return Object.assign({ _definitiveRejection: false }, result);
     }
     const hasDoc = Boolean(result && result.MaterialDocument);
-    const isConfirmed = hasDoc && (normalized.MovementType === '261'
-      ? result?.Confirmed === true
-      : result?.Confirmed !== false);
+    const isConfirmed = hasDoc && result?.Confirmed !== false;
     const outcomeStatus = isConfirmed ? 'posted' : 'unconfirmed';
 
     await onOutcome(outcomeStatus, {
@@ -1025,32 +477,15 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
       MaterialDocYear: result?.MaterialDocYear || ''
     });
 
-    const res = Object.assign({ _definitiveRejection: false }, result, {
+    return Object.assign({ _definitiveRejection: false }, result, {
       PostingStatus: isConfirmed ? 'POSTED' : 'UNKNOWN'
     });
-    if (normalized.MovementType === '261') {
-      res.Success = isConfirmed;
-      res.Confirmed = isConfirmed;
-      if (!isConfirmed) {
-        res.Message = hasDoc
-          ? `SAP returned material document ${result.MaterialDocument}${result.MaterialDocYear ? `/${result.MaterialDocYear}` : ''}, but read-back confirmation is pending. Posting status is UNKNOWN; do not post again until verified.`
-          : 'SAP did not confirm a material document. Posting status is UNKNOWN; do not post again until the attempt is reconciled.';
-      }
-    }
-    return res;
   } catch (err) {
     const classified = classifyPostingError(err);
     const outcomeStatus = classified.definitive ? 'rejected' : 'unconfirmed';
     await onOutcome(outcomeStatus, { LastError: classified.message });
 
-    const errResult = normalized.MovementType === '261'
-      ? req.error({
-          code: classified.definitive ? 'GI_POSTING_FAILED' : 'GI_POSTING_UNKNOWN',
-          status: classified.status,
-          message: classified.message,
-          details: classified.details.map((d) => ({ code: String(d.code || ''), message: String(d.message || '') }))
-        })
-      : Array.isArray(classified.details) && classified.details.length > 0
+    const errResult = Array.isArray(classified.details) && classified.details.length > 0
       ? req.error({
           code: err.code || String(classified.status),
           status: classified.status,
@@ -1074,7 +509,7 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
  * @param {Function|null} [preCheckFn]
  * @returns {Promise<Object>}
  */
-async function executeMovementPost(req, normalized, postFn, preCheckFn = null, beforePostFn = null) {
+async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
   ensureIdempotencyKey(normalized);
   normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
   try {
@@ -1097,78 +532,7 @@ async function executeMovementPost(req, normalized, postFn, preCheckFn = null, b
     }
   }
 
-  // Atomic SU claims: acquire 'claiming' rows BEFORE the SAP call
-  let claimIds = [];
-  const suItemsToClaim = Array.isArray(normalized._allocatedSuItems) && normalized._allocatedSuItems.length > 0
-    ? normalized._allocatedSuItems
-    : (Array.isArray(normalized.StorageUnits) && normalized.StorageUnits.length > 0
-      ? normalized.StorageUnits.map(su => typeof su === 'string' ? { storageUnit: su, issuedQty: normalized.IssueQty, preIssueStock: normalized.IssueQty } : su)
-      : []);
-
-  if (suItemsToClaim.length > 0) {
-    try {
-      claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
-        reservationNo: normalized.ReservationNo,
-        reservationItem: normalized.ReservationItem,
-        material: normalized.Material,
-        plant: normalized.Plant,
-        storageLocation: normalized.StorageLocation,
-        referenceDocument: normalized.ReferenceDocument,
-        items: suItemsToClaim
-      });
-    } catch (claimErr) {
-      await settle('rejected', { LastError: claimErr.message });
-      return req.error(claimErr.status || 400, claimErr.message);
-    }
-  }
-
-  if (typeof beforePostFn === 'function') {
-    let readyToPost;
-    try {
-      readyToPost = await beforePostFn();
-    } catch (err) {
-      LOG.error('Final Goods Issue validation failed; SAP posting blocked:', err.message || err);
-      await settle('rejected', { LastError: `Final validation failed: ${err.message || 'SAP data unavailable'}` });
-      if (claimIds.length > 0) await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: true });
-      return req.error(err.status || 502, `Goods Issue was NOT sent to SAP: final validation failed (${err.message || 'SAP data unavailable'}).`);
-    }
-    if (!readyToPost) {
-      await settle('rejected', { LastError: 'Rejected by final SAP revalidation; not sent to SAP.' });
-      if (claimIds.length > 0) await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: true });
-      return;
-    }
-  }
-
-  let res;
-  try {
-    res = await postDirect(req, normalized, postFn, settle);
-  } catch (err) {
-    if (claimIds.length > 0) {
-      const isDef = GoodsIssueIssuedSuStore.isDefinitiveRejection(err);
-      await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive: isDef });
-    }
-    throw err;
-  }
-
-  if (res && res.MaterialDocument) {
-    if (claimIds.length > 0) {
-      try {
-        await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
-          materialDocument: res.MaterialDocument,
-          materialDocYear: res.MaterialDocYear || '',
-          confirmed: res.Confirmed !== false
-        });
-      } catch (suErr) {
-        LOG.warn('Could not promote claiming Storage Units after successful IM post:', suErr.message || suErr);
-      }
-    }
-  } else {
-    const definitive = Boolean(res && res._definitiveRejection === true);
-    if (claimIds.length > 0) {
-      await GoodsIssueIssuedSuStore.deleteClaims(claimIds, { definitive });
-    }
-  }
-  return res;
+  return postDirect(req, normalized, postFn, settle);
 }
 
 const PerTypeGoodsIssueHandler = {
@@ -1182,37 +546,6 @@ const PerTypeGoodsIssueHandler = {
 
       const preCheck = async () => (await stockPreCheck201(req, normalized)) && (await serialPreCheck(req, normalized));
       return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), preCheck);
-    });
-
-    srv.on('postGoodsIssue261', async (req) => {
-      const v = validateGoodsIssue261Payload(req.data);
-      if (!v.isValid) return req.error(400, v.message);
-      const normalized = normalizeGoodsIssue261Payload(req.data, { user: req.user?.id });
-      try {
-        assign261IdempotencyKey(normalized);
-        const existing = await getIdempotentAttempt(normalized);
-        if (existing) return attemptResponse(existing);
-      } catch (err) {
-        return req.error(err.status || 503, `Goods Issue idempotency could not be verified; posting was not sent to SAP: ${err.message || 'attempt store unavailable'}.`);
-      }
-      const resvItem = await reservationReconcileCheck(req, normalized, { batch: true, expectedMovementType: '261' });
-      if (!resvItem) return;
-      if (!(await checkPendingConfirmation(req, normalized))) return normalized._existingAttemptResult;
-      if (!(await batchPreCheck261(req, normalized, resvItem))) return;
-      if (!(await stagingCheck(req, normalized))) return;
-      if (!(await openDeliveryCheck(req, normalized))) return;
-      if (!(await storageUnitReconcileCheck261(req, normalized, resvItem))) return;
-      const serialManaged = await serialCountCheck261(req, normalized);
-      if (serialManaged === null) return;
-      if (!(await serialPreCheck(req, normalized, { required: true }))) return;
-
-      return executeMovementPost(
-        req,
-        normalized,
-        (d) => GoodsIssueAdapter.postGoodsIssue261(d),
-        null,
-        () => storageUnitFinalReconcileCheck261(req, normalized)
-      );
     });
 
     srv.on('postGoodsIssue301', async (req) => {
@@ -1248,6 +581,5 @@ const PerTypeGoodsIssueHandler = {
 PerTypeGoodsIssueHandler.classifyPostingError = classifyPostingError;
 PerTypeGoodsIssueHandler.postDirect = postDirect;
 PerTypeGoodsIssueHandler.attemptResponse = attemptResponse;
-PerTypeGoodsIssueHandler.openDeliveryCheck = openDeliveryCheck;
 
 module.exports = PerTypeGoodsIssueHandler;

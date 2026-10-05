@@ -4,7 +4,6 @@ const GoodsIssueBatchesClient = require('./GoodsIssueBatchesClient');
 const GoodsIssueStockUnitClient = require('./GoodsIssueStockUnitClient');
 const GoodsIssuePostingClient = require('./GoodsIssuePostingClient');
 const GoodsIssueDashboardClient = require('./GoodsIssueDashboardClient');
-const GoodsIssuePhase6StagingClient = require('./GoodsIssuePhase6StagingClient');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 
 module.exports = {
@@ -14,6 +13,5 @@ module.exports = {
   GoodsIssueStockUnitClient,
   GoodsIssuePostingClient,
   GoodsIssueDashboardClient,
-  GoodsIssuePhase6StagingClient,
   GoodsIssueMapper
 };

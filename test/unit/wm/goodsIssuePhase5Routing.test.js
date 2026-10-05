@@ -31,13 +31,7 @@ function req(data) {
 describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
   const handlers = fakeService();
 
-  test('postGoodsIssue261 rejects a 201-shaped payload (CostCenter, no reservation) via 261 validation', async () => {
-    const r = req({ CostCenter: '1011202902', Material: 'M1', Plant: '1130', StorageLocation: 'CS01', IssueQty: 1, Unit: 'EA' });
-    await handlers['postGoodsIssue261'](r);
-    expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('ReservationNo'));
-  });
-
-  test('postGoodsIssue201 rejects a 261-shaped payload (reservation, no CostCenter) via 201 validation', async () => {
+  test('postGoodsIssue201 rejects a payload with reservation and no CostCenter via 201 validation', async () => {
     const r = req({ ReservationNo: '518023', ReservationItem: '0001', Material: 'M1', Plant: '1130', StorageLocation: 'CS02', IssueQty: 1, Unit: 'EA' });
     await handlers['postGoodsIssue201'](r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('Cost Center'));
@@ -74,11 +68,11 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
     });
   });
 
-  test('all four per-type actions are registered (and no shared postGoodsIssue action)', () => {
+  test('all per-type actions are registered (and no shared postGoodsIssue action)', () => {
     expect(typeof handlers['postGoodsIssue201']).toBe('function');
-    expect(typeof handlers['postGoodsIssue261']).toBe('function');
     expect(typeof handlers['postGoodsIssue301']).toBe('function');
     expect(typeof handlers['postGoodsIssue311']).toBe('function');
+    expect(handlers['postGoodsIssue261']).toBeUndefined();
     expect(handlers['postGoodsIssue']).toBeUndefined();
   });
 });
@@ -148,7 +142,7 @@ describe('postGoodsIssue201 direct posting and error classification', () => {
 describe('Phase 5 #4 - frontend service contract (each posts only to its own action)', () => {
   const FE = path.resolve(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue/service');
 
-  test.each(['201', '261', '301', '311'])('GoodsIssue%sService posts to /postGoodsIssue%s and never the shared endpoint', (type) => {
+  test.each(['201', '301', '311'])('GoodsIssue%sService posts to /postGoodsIssue%s and never the shared endpoint', (type) => {
     const src = fs.readFileSync(path.join(FE, `GoodsIssue${type}Service.js`), 'utf8');
     // The posting call must target the type's own action.
     expect(src).toContain(`/postGoodsIssue${type}`);

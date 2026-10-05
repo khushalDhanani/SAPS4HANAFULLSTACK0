@@ -377,22 +377,18 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('routes movement type tile presses to their dedicated pending pages (201/261/301/311)', () => {
+    test('routes movement type tile presses to their dedicated pending pages (201/301/311)', () => {
         const controller = new DashboardControllerClass();
         controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
 
         expect(controller.mRoutes).toEqual({
             "201": "wmGoodsIssue201Pending",
-            "261": "wmGoodsIssue261Pending",
             "301": "wmGoodsIssue301Pending",
             "311": "wmGoodsIssue311Pending"
         });
 
         controller.onMvt201TilePress();
         expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201Pending');
-
-        controller.onMvt261TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue261Pending');
 
         controller.onMvt301TilePress();
         expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301Pending');
@@ -411,7 +407,6 @@ describe('Unit: Dashboard view binds only live figures', () => {
         // Movement-type KPI card model keys (loaded from GoodsIssueService.getDashboardData)
         'giKpiError',
         'mvt201Total', 'mvt201Today',
-        'mvt261Total', 'mvt261Today',
         'mvt301Total', 'mvt301Today',
         'mvt311Total', 'mvt311Today'
     ];

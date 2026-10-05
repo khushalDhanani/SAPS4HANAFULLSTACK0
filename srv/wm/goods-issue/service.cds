@@ -1,6 +1,5 @@
 namespace saps4hana.wm;
 
-using { saps4hana.wm.GoodsIssueIssuedStorageUnit as DBGoodsIssueIssuedStorageUnit } from '../../../db/wm/goods-issue-issued-su';
 // Posting-attempt log (written before S/4HANA is called); internal, not exposed as an entity.
 using from '../../../db/wm/goods-issue-attempt';
 
@@ -15,11 +14,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         FactorToBase : Decimal(13, 3);
         IsBaseUnit   : Boolean;
     };
-
-    // Issued Storage Units tracking held until TO confirmation (LQUA stock drop) or doc reversal
-    @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
-    entity GoodsIssueIssuedStorageUnit as projection on DBGoodsIssueIssuedStorageUnit;
 
     @readonly
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -90,40 +84,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
             StatusText         : String(30);
             StatusState        : String(10);
             PendingConfirmation: Boolean;
-    };
-
-    type GISubmitItem {
-        ReservationItem       : String(4);
-        Material              : String(40);
-        IssueQty              : Decimal(13, 3);
-        Batch                 : String(10);
-        DifferenceQty         : Decimal(13, 3);
-        DifferenceReason      : String(4);
-        DifferenceStorageType : String(3);
-        FinalIssue            : Boolean;
-        SerialNumber          : String(18);
-        SerialNumbers         : array of String(18);
-    };
-
-    type GISubmitLineResult {
-        ReservationItem   : String(4);
-        MaterialDocument  : String(10);
-        MaterialDocYear   : String(4);
-        TransferOrder     : String(10);
-        DifferenceCleared : Boolean;
-        DifferenceQty     : Decimal(13, 3);
-        Message           : String(255);
-        Success           : Boolean;
-        Confirmed         : Boolean;
-        ConfirmationStatus: String(30);
-    };
-
-    type GISubmitBatchResult {
-        AllPosted          : Boolean;
-        Confirmed          : Boolean;
-        ConfirmationStatus : String(30);
-        Results            : array of GISubmitLineResult;
-        Messages           : array of String;
     };
 
     type GIPostResult {
@@ -233,33 +193,8 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DocumentDate    : Date,
         SerialNumbers   : array of String(18),
         SerialNumber    : String(18),
-        // Client-generated id per posting attempt; part of the idempotency key (see 261).
+        // Client-generated id per posting attempt; part of the idempotency key.
         ClientAttemptId : String(36)
-    ) returns GIPostResult;
-
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
-    action postGoodsIssue261(
-        ReservationNo   : String(10),
-        ReservationItem : String(4),
-        Material        : String(40),
-        MaterialDesc    : String(80),
-        OrderNo         : String(12),
-        IssueQty        : Decimal(13, 3),
-        Unit            : String(10),
-        Batch           : String(20),
-        Plant           : String(4),
-        StorageLocation : String(4),
-        GLAccount       : String(10),
-        PostingDate     : Date,
-        DocumentDate    : Date,
-        SerialNumbers   : array of String(18),
-        SerialNumber       : String(18),
-        StorageUnits       : array of String(20),
-        LastStorageUnitQty : Decimal(13, 3),
-        // Client-generated id, unique per user posting attempt. It is part of the
-        // idempotency key, so two deliberate postings of the same item/quantity/day are
-        // distinct attempts, while replays of one attempt still deduplicate.
-        ClientAttemptId    : String(36)
     ) returns GIPostResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -278,7 +213,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DocumentDate             : Date,
         SerialNumbers            : array of String(18),
         SerialNumber             : String(18),
-        // Client-generated id per posting attempt; part of the idempotency key (see 261).
+        // Client-generated id per posting attempt; part of the idempotency key.
         ClientAttemptId : String(36)
     ) returns GIPostResult;
 
@@ -298,7 +233,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DocumentDate             : Date,
         SerialNumbers            : array of String(18),
         SerialNumber             : String(18),
-        // Client-generated id per posting attempt; part of the idempotency key (see 261).
+        // Client-generated id per posting attempt; part of the idempotency key.
         ClientAttemptId : String(36)
     ) returns GIPostResult;
 
@@ -310,17 +245,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         DocumentDate     : Date,
         ReversalReason   : String(4)
     ) returns GIReversalResult;
-
-    // Order/reservation-based batch scan-then-submit. This is movement type 261 ONLY (GI for order):
-    // there is deliberately no movementType parameter, and the adapter posts as 261. Do NOT route
-    // 201/301/311 through this action — use the dedicated postGoodsIssue201/301/311 actions, which
-    // carry the correct movement type and mappings.
-    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
-    action submitGoodsIssueRequest(
-        ReservationNo : String(10),
-        OrderNo       : String(12),
-        Items         : array of GISubmitItem
-    ) returns GISubmitBatchResult;
 
     type PostingAttemptRecheckResult {
         Checked   : Integer;
@@ -518,7 +442,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     type GIDashboardKpis {
         Mvt201  : GIDashboardKpiItem;
-        Mvt261  : GIDashboardKpiItem;
         Mvt301  : GIDashboardKpiItem;
         Mvt311  : GIDashboardKpiItem;
         Overall : GIDashboardKpiItem;
@@ -535,7 +458,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         PostingDate : Date;
         DateLabel   : String(10);
         Count201    : Integer;
-        Count261    : Integer;
         Count301    : Integer;
         Count311    : Integer;
         Total       : Integer;
@@ -566,10 +488,9 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
     };
 
     // Per-movement-type recent postings, returned only on the combined (unfiltered) call so the Fiori
-    // dashboard can fill all four Recent Postings tables from one request instead of four extra calls.
+    // dashboard can fill the Recent Postings tables from one request.
     type GIRecentByType {
         Mvt201 : array of GIMaterialDocumentItem;
-        Mvt261 : array of GIMaterialDocumentItem;
         Mvt301 : array of GIMaterialDocumentItem;
         Mvt311 : array of GIMaterialDocumentItem;
     };
@@ -592,14 +513,6 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         forceRefresh : Boolean,
         movementType : String(4)
     ) returns GIDashboardData;
-
-    @(requires: ['WarehouseManager', 'Admin'])
-    action resolveClaimManual(
-        claimId          : UUID,
-        action           : String(20), // 'posted' | 'not-posted'
-        materialDocument : String(10),
-        materialDocYear  : String(4)
-    ) returns GoodsIssueIssuedStorageUnit;
 }
 
 // These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data:

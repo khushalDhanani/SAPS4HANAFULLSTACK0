@@ -830,10 +830,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
     it('should reject posting with missing or invalid parameters', async () => {
       const postingClient = new GoodsIssuePostingClient();
 
-      await expect(postingClient.postGoodsIssue('', '1', 'MAT01', 10)).rejects.toThrow('ReservationNo and ReservationItem are required');
-      await expect(postingClient.postGoodsIssue('10001', '', 'MAT01', 10)).rejects.toThrow('ReservationNo and ReservationItem are required');
-      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', 0)).rejects.toThrow('IssueQty must be a positive decimal number');
-      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', -5)).rejects.toThrow('IssueQty must be a positive decimal number');
+      await expect(postingClient.postGoodsIssue('', '1', 'MAT01', 10, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: '' })).rejects.toThrow('Property CostCenter is mandatory for GoodsMovementType 201');
+      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', 0, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' })).rejects.toThrow('IssueQty must be a positive decimal number');
+      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', -5, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' })).rejects.toThrow('IssueQty must be a positive decimal number');
     });
 
     it('should block posting if batch is expired', async () => {
@@ -843,7 +842,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
       await expect(
-        postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'EXPIRED01')
+        postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'EXPIRED01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' })
       ).rejects.toThrow('Batch EXPIRED01 has expired.');
     });
 
@@ -859,7 +858,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       };
 
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
-      const res = await postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'B01', 2, 'DAMAGE', '999');
+      const res = await postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: '1011101301' });
 
       expect(res.Success).toBe(true);
       expect(res.MaterialDocument).toBe('4900009999');
@@ -869,7 +868,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.DifferenceQty).toBe(0);
     });
 
-    it('posts a 311 transfer via API_MATERIAL_DOCUMENT_SRV (code 04, receiving plant/sloc), skipping the 261-only RAP action', async () => {
+    it('posts a 311 transfer via API_MATERIAL_DOCUMENT_SRV (code 04, receiving plant/sloc)', async () => {
       const mockAdapter = {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012345', MaterialDocumentYear: '2026' })
@@ -890,7 +889,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.Message).toMatch(/Transfer posting 311/);
     });
 
-    it('posts a 201 goods issue to cost center via API_MATERIAL_DOCUMENT_SRV (code 03, CostCenter), skipping the 261-only RAP action', async () => {
+    it('posts a 201 goods issue to cost center via API_MATERIAL_DOCUMENT_SRV (code 03, CostCenter)', async () => {
       const mockAdapter = {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012346', MaterialDocumentYear: '2026' })
@@ -912,7 +911,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.Message).toMatch(/Goods Issue to Cost Center 201/);
     });
 
-    it('rejects movement types other than 201 / 261 / 301 / 311', async () => {
+    it('rejects movement types other than 201 / 301 / 311', async () => {
       await expect(new GoodsIssuePostingClient().postGoodsIssue('1', '1', 'M', 1, 'KG', '', 0, '', '', false, '', '', { movementType: '551' }))
         .rejects.toMatchObject({ status: 400 });
     });
@@ -943,141 +942,17 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(res.MaterialDocument).toBe('4900012350');
     });
 
-    it('should validate items in submitGoodsIssueRequest', async () => {
-      const postingClient = new GoodsIssuePostingClient();
-
-      await expect(postingClient.submitGoodsIssueRequest('', '', [])).rejects.toThrow('Either ReservationNo or OrderNo must be provided');
-      await expect(postingClient.submitGoodsIssueRequest('10001', '', [])).rejects.toThrow('At least one item must be specified');
-      await expect(postingClient.submitGoodsIssueRequest('10001', '', [{ ReservationItem: '1', IssueQty: -1 }])).rejects.toThrow('Issue quantity must be a positive decimal number');
-    });
-
-    it('should successfully post batch Goods Issue via Tier 1 RAP service when available', async () => {
-      const mockPost = jest.fn().mockResolvedValue({
-        AllPosted: true,
-        Results: [
-          { ReservationItem: '0001', Success: true, MaterialDocument: '4900001111' },
-          { ReservationItem: '0002', Success: true, MaterialDocument: '4900001111' }
-        ],
-        Messages: ['Batch posted successfully']
-      });
-      const mockAdapter = {
-        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
-        _post: mockPost
-      };
-      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
-      const items = [
-        { ReservationItem: '1', Material: 'MAT01', IssueQty: 10, Unit: 'KG' },
-        { ReservationItem: '2', Material: 'MAT02', IssueQty: 20, Unit: 'PC' }
-      ];
-
-      const res = await postingClient.submitGoodsIssueRequest('18025', '1000040', items);
-
-      expect(res.AllPosted).toBe(true);
-      expect(mockPost).toHaveBeenCalledTimes(1);
-      expect(mockPost.mock.calls[0][0]).toContain('zui_gi_order_rsv_o4/0001/submitRequest');
-    });
-
-    it('should fallback to Tier 2 API_MATERIAL_DOCUMENT_SRV deep insert when Tier 1 returns 404', async () => {
-      const v4Err = new Error('HTTP 404 Not Found');
-      v4Err.status = 404;
-
-      const mockPost = jest.fn()
-        .mockRejectedValueOnce(v4Err)
-        .mockResolvedValueOnce({
-          MaterialDocument: '4900005555',
-          MaterialDocYear: '2026'
-        });
-
-      const mockAdapter = {
-        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
-        _post: mockPost
-      };
-      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
-      const items = [
-        { ReservationItem: '1', Material: 'MAT01', IssueQty: 10, Unit: 'KG', Batch: 'B01', DifferenceQty: 2 },
-        { ReservationItem: '2', Material: 'MAT02', IssueQty: 25, Unit: 'KG', Batch: 'B02' }
-      ];
-
-      const res = await postingClient.submitGoodsIssueRequest('18025', '1000040', items);
-
-      expect(res.AllPosted).toBe(true);
-      expect(res.Results).toHaveLength(2);
-      expect(res.Results[0].ReservationItem).toBe('0001');
-      expect(res.Results[0].MaterialDocument).toBe('4900005555');
-      expect(res.Results[0].DifferenceCleared).toBe(true);
-      expect(res.Results[1].ReservationItem).toBe('0002');
-      expect(res.Results[1].MaterialDocument).toBe('4900005555');
-
-      // Verify Tier 2 deep-insert call arguments
-      expect(mockPost).toHaveBeenCalledTimes(2);
-      expect(mockPost.mock.calls[1][0]).toBe('/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
-      const v2Payload = mockPost.mock.calls[1][1];
-      expect(v2Payload.GoodsMovementCode).toBe('03');
-      expect(v2Payload.to_MaterialDocumentItem.results).toHaveLength(2);
-      expect(v2Payload.to_MaterialDocumentItem.results[0]).toEqual({
-        Material: 'MAT01',
-        GoodsMovementType: '261',
-        EntryUnit: 'KG',
-        QuantityInEntryUnit: '10',
-        Reservation: '18025',
-        ReservationItem: '0001',
-        Batch: 'B01'
-      });
-      expect(v2Payload.to_MaterialDocumentItem.results[1]).toEqual({
-        Material: 'MAT02',
-        GoodsMovementType: '261',
-        EntryUnit: 'KG',
-        QuantityInEntryUnit: '25',
-        Reservation: '18025',
-        ReservationItem: '0002',
-        Batch: 'B02'
-      });
-    });
-
-    it('should surface a plain 403 in submitGoodsIssueRequest as an authorization failure instead of queueing it', async () => {
-      const v4Err = new Error('Not Found');
-      v4Err.status = 404;
-      const v2Err = new Error('Forbidden');
-      v2Err.status = 403;
-
-      const mockPost = jest.fn()
-        .mockRejectedValueOnce(v4Err)
-        .mockRejectedValueOnce(v2Err);
-
-      const mockAdapter = {
-        _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
-        _post: mockPost
-      };
-      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
-      const items = [{ ReservationItem: '1', Material: 'MAT01', IssueQty: 10, Unit: 'KG' }];
-
-      try {
-        await postingClient.submitGoodsIssueRequest('18025', '1000040', items);
-        throw new Error('Expected submitGoodsIssueRequest to throw');
-      } catch (err) {
-        // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
-        expect(err.status).toBe(403);
-        expect(err.message).toContain('NOT posted');
-        expect(err.message).toContain('SU53');
-        expect(err.message).not.toContain('Unavailable');
-      }
-    });
-
     it('should throw validation error when an item is missing Unit in postGoodsIssue', async () => {
       const postingClient = new GoodsIssuePostingClient();
-      await expect(postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, ''))
+      await expect(postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, '', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }))
         .rejects.toThrow(/Unit of measure \(EntryUnit\) is required for Goods Issue/);
     });
 
     it('should surface a plain 403 in postGoodsIssue as an authorization failure instead of queueing it', async () => {
-      const v4Err = new Error('HTTP 404 Not Found');
-      v4Err.status = 404;
       const v2Err = new Error('HTTP 403 Forbidden');
       v2Err.status = 403;
 
-      const mockPost = jest.fn()
-        .mockRejectedValueOnce(v4Err)
-        .mockRejectedValueOnce(v2Err);
+      const mockPost = jest.fn().mockRejectedValue(v2Err);
 
       const mockAdapter = {
         validateBatch: jest.fn().mockResolvedValue({ valid: true }),
@@ -1087,7 +962,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
       try {
-        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01');
+        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' });
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
         // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
@@ -1099,15 +974,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
     });
 
     it('should read a 403 carrying /IWFND/MED/170 as NOT REGISTERED, not as an authorization failure', async () => {
-      const v4Err = new Error('HTTP 404 Not Found');
-      v4Err.status = 404;
       // Verbatim shape DS4 client 220 returns for an unregistered service.
       const v2Err = new Error("/IWFND/MED/170 No service found for namespace '', name 'API_MATERIAL_DOCUMENT_SRV', version '0001'");
       v2Err.status = 403;
 
-      const mockPost = jest.fn()
-        .mockRejectedValueOnce(v4Err)
-        .mockRejectedValueOnce(v2Err);
+      const mockPost = jest.fn().mockRejectedValue(v2Err);
 
       const mockAdapter = {
         validateBatch: jest.fn().mockResolvedValue({ valid: true }),
@@ -1117,7 +988,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
       try {
-        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01');
+        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' });
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
         expect(err.status).toBe(501);
@@ -1129,13 +1000,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
     });
 
     it('should report an unknown outcome when the error carries no HTTP status', async () => {
-      const v4Err = new Error('HTTP 404 Not Found');
-      v4Err.status = 404;
       const v2Err = new Error('socket hang up');      // no .status
 
-      const mockPost = jest.fn()
-        .mockRejectedValueOnce(v4Err)
-        .mockRejectedValueOnce(v2Err);
+      const mockPost = jest.fn().mockRejectedValue(v2Err);
 
       const mockAdapter = {
         validateBatch: jest.fn().mockResolvedValue({ valid: true }),
@@ -1152,7 +1019,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       });
 
       try {
-        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01');
+        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' });
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
         // No response at all: SAP may have posted, so this is an unknown outcome, never queued.

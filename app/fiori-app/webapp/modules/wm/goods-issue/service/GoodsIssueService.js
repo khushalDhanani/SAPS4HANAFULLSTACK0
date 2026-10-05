@@ -8,7 +8,7 @@ sap.ui.define([
 
     /**
      * GoodsIssueService (shared)
-     * Provides Goods Issue Dashboard KPIs; each movement type (201/261/301/311)
+     * Provides Goods Issue Dashboard KPIs; each movement type (201/301/311)
      * has its own dedicated service. All goods issue transactions post directly to S/4HANA.
      */
     var GoodsIssueService = {
@@ -33,7 +33,7 @@ sap.ui.define([
          * @param {number} [nDays=30] - Lookback window in days (7 or 30)
          * @param {string} [sPlant=""] - Optional plant filter
          * @param {boolean} [bForceRefresh=false] - Force cache bypass
-         * @param {string} [sMovementType=""] - Optional movement type (201/261/301/311) to filter
+         * @param {string} [sMovementType=""] - Optional movement type (201/301/311) to filter
          *   RecentDocuments server-side to a single type.
          * @returns {Promise<Object>} GIDashboardData
          */

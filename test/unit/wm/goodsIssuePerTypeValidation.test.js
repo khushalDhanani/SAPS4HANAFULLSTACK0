@@ -4,7 +4,6 @@
  */
 
 const { validateGoodsIssue201Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue201.validation');
-const { validateGoodsIssue261Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue261.validation');
 const { validateGoodsIssue301Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue301.validation');
 const { validateGoodsIssue311Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue311.validation');
 
@@ -31,21 +30,6 @@ describe('201 validation (Cost Center)', () => {
   });
 });
 
-describe('261 validation (Order/Reservation)', () => {
-  test('valid 261 payload with reservation passes', () => {
-    const r = validateGoodsIssue261Payload({ ...base, ReservationNo: '518023', ReservationItem: '0001' });
-    expect(r.isValid).toBe(true);
-  });
-  test('missing reservation fails', () => {
-    const r = validateGoodsIssue261Payload({ ...base, Material: 'M1', Plant: '1130', StorageLocation: 'CS02' });
-    expect(r.isValid).toBe(false);
-    expect(r.errors.some(e => e.field === 'ReservationNo')).toBe(true);
-  });
-  test('does NOT enforce a Cost Center rule (261 isolation)', () => {
-    const r = validateGoodsIssue261Payload({ ...base, ReservationNo: '518023', ReservationItem: '0001' });
-    expect(r.errors.some(e => e.field === 'CostCenter')).toBe(false);
-  });
-});
 
 describe.each([
   ['301', validateGoodsIssue301Payload],

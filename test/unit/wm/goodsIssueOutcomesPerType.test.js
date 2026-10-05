@@ -2,10 +2,9 @@
 
 const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 
-describe('User-Facing Posting Outcome Messages Per Movement Type (201, 261, 301, 311)', () => {
+describe('User-Facing Posting Outcome Messages Per Movement Type (201, 301, 311)', () => {
   const movementTypes = [
     { type: '201', name: 'Goods Issue to Cost Center' },
-    { type: '261', name: 'Goods Issue to Order' },
     { type: '301', name: 'Plant-to-Plant Stock Transfer' },
     { type: '311', name: 'Storage Location Stock Transfer' }
   ];

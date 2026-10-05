@@ -16,7 +16,6 @@ const { ATTEMPT_ENTITY } = attempts;
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 
 const { SELECT, DELETE } = cds.ql;
 
@@ -47,9 +46,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
     jest.restoreAllMocks();
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     attempts.clearMemoryStore();
-    await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
 
     // Default safe pre-check mocks
     if (typeof GoodsIssueAdapter.revalidateStockBeforePosting === 'function') {
@@ -64,7 +61,6 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
     jest.restoreAllMocks();
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     attempts.clearMemoryStore();
-    await GoodsIssueIssuedSuStore.clear();
   });
 
   // -------------------------------------------------------------
@@ -123,75 +119,6 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
       );
 
       // SAP post method must NOT have been called a second time
-      expect(postSpy).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // -------------------------------------------------------------
-  // Movement Type 261: Goods Issue to Order (with Storage Units)
-  // -------------------------------------------------------------
-  describe('Movement Type 261 (Goods Issue to Order with Storage Units)', () => {
-    const payload261 = {
-      ReservationNo: '261001',
-      ReservationItem: '0001',
-      OrderNo: '1000856',
-      Material: 'MAT-261-SU',
-      Plant: '1120',
-      StorageLocation: 'CS01',
-      IssueQty: 50,
-      Unit: 'KG',
-      StorageUnits: ['SU-DRUM-261-01'],
-      PostingDate: '2026-10-02'
-    };
-
-    it('after 504 unknown outcome: SU claim stays claiming, and an identical retry returns the existing pending attempt', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-        ReservationNo: '261001',
-        ReservationItem: '0001',
-        OrderNo: '1000856',
-        Material: 'MAT-261-SU',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        OpenQty: 50,
-        RequiredQty: 50
-      });
-
-      jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
-        ReservationNo: '261001',
-        ReservationItem: '0001',
-        Material: 'MAT-261-SU',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        StockUnits: [
-          { StorageUnit: 'SU-DRUM-261-01', AvailableStock: 50, Material: 'MAT-261-SU', Plant: '1120', StorageLocation: 'CS01' }
-        ]
-      });
-
-      const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockRejectedValue(
-        Object.assign(new Error('Socket hangup during SAP posting'), { status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' })
-      );
-
-      // Attempt 1: Encounter 504 unknown outcome
-      const req1 = makeReq(payload261);
-      await handlers.postGoodsIssue261(req1);
-
-      expect(req1.error).toHaveBeenCalled();
-
-      // REQUIREMENT: Verify SU claim remains in 'claiming' status (never dropped on 504)
-      const hasActiveClaim = await GoodsIssueIssuedSuStore.hasActiveClaimForReservation('261001', '0001');
-      expect(hasActiveClaim).toBe(true);
-
-      const dbAttempts = await allAttempts();
-      expect(dbAttempts).toHaveLength(1);
-      expect(dbAttempts[0].Status).toBe('unconfirmed');
-
-      // Attempt 2: Duplicate post for the same reservation item MUST be rejected with 409
-      const req2 = makeReq(payload261);
-      const retry = await handlers.postGoodsIssue261(req2);
-      expect(req2.error).not.toHaveBeenCalled();
-      expect(retry).toMatchObject({ Success: false, ConfirmationStatus: 'POSTING' });
-
-      // SAP post method was called exactly once
       expect(postSpy).toHaveBeenCalledTimes(1);
     });
   });

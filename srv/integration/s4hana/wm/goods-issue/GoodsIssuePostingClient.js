@@ -6,7 +6,6 @@ const { RfcClient } = require('../../RfcClient');
 const sapFacts = require('../../sapFacts');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
-const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
 const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
 const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
 
@@ -15,7 +14,7 @@ const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
  * Enforces AGENTS.md rules: no mock persistence, transparent failure when SAP posting service is unavailable.
  */
 // Movement types this screen may post against a reservation (trust boundary for the posting action).
-const POSTABLE_MOVEMENT_TYPES = ['201', '261', '301', '311'];
+const POSTABLE_MOVEMENT_TYPES = ['201', '301', '311'];
 
 class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /**
@@ -207,12 +206,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * @deprecated Legacy positional signature retained only for the internal queue-replay path and
    * back-compat callers/tests. Contains NO movement-type business logic - it normalizes the
    * positional arguments into a domain object and delegates to the isolated per-type dispatcher
-   * (`postByMovementType`), which routes to post201/261/301/311. New code calls the per-type
+   * (`postByMovementType`), which routes to post201/301/311. New code calls the per-type
    * methods (or `postByMovementType`) directly.
    */
   async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
     const data = {
-      MovementType: String(options.movementType || '261').trim(),
+      MovementType: String(options.movementType || '201').trim(),
       ReservationNo: reservationNo || '',
       ReservationItem: reservationItem || '',
       Material: material || '',
@@ -641,355 +640,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
   }
 
-  /**
-   * MATDOC Fallback Lookup for Movement 261:
-   * When SAP does not echo ReferenceDocument or no reference lookup is available,
-   * searches MATDOC (with fallback to MSEG) by reservation + item + user + date.
-   *
-   * Hardened verification requirements:
-   *   1. Exclude reversed documents (STORNO = 'X', BWART = '262', cancelled by SMBLN).
-   *   2. Quantity must equal the claim's quantity (if provided).
-   *   3. Document must be created at or after the claim's createdAt timestamp
-   *      (an earlier same-day posting must not prove a later attempt).
-   *   4. Exactly ONE match is required:
-   *      - 1 match: returns { MaterialDocument, MaterialDocYear }
-   *      - 0 matches: returns null
-   *      - >1 matches: logs warning and returns null (cannot disambiguate)
-   *
-   * @param {Object|string} optionsOrResv
-   * @param {string} [item]
-   * @param {string} [user]
-   * @param {string|Date} [date]
-   * @param {number} [quantity]
-   * @param {string|Date} [createdAt]
-   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string }|null>}
-   */
-  async findPosted261ByMatdoc(optionsOrResv, item, user, date, quantity, createdAt) {
-    let sResv, sItem, sUser, sDate, sQty, sCreatedAt;
-    if (typeof optionsOrResv === 'object' && optionsOrResv !== null) {
-      sResv = optionsOrResv.reservationNo || optionsOrResv.ReservationNo;
-      sItem = optionsOrResv.reservationItem || optionsOrResv.ReservationItem;
-      sUser = optionsOrResv.user || optionsOrResv.userName || optionsOrResv.CreatedByUser || optionsOrResv.USNAM;
-      sDate = optionsOrResv.date || optionsOrResv.postingDate || optionsOrResv.PostingDate;
-      sQty = optionsOrResv.quantity != null ? optionsOrResv.quantity : (optionsOrResv.issuedQty != null ? optionsOrResv.issuedQty : optionsOrResv.IssuedQty);
-      sCreatedAt = optionsOrResv.createdAt || optionsOrResv.CreatedAt;
-    } else {
-      sResv = optionsOrResv;
-      sItem = item;
-      sUser = user;
-      sDate = date;
-      sQty = quantity;
-      sCreatedAt = createdAt;
-    }
-
-    if (!sResv || !sItem) return null;
-
-    const rsnum = String(sResv).trim().padStart(10, '0');
-    const rspos = String(sItem).trim().padStart(4, '0');
-    const usnam = sUser ? String(sUser).trim().toUpperCase() : '';
-    const dDay = sDate ? this._formatDate(sDate).replace(/-/g, '') : '';
-
-    // One equality read per movement type; the posting-date match is a client-side filter on
-    // BUDAT/CPUDT. (Spaced parentheses do parse - live-verified - this shape is kept for simplicity.)
-    const baseWhere = [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`];
-    if (usnam) baseWhere.push(`AND USNAM = '${usnam}'`);
-
-    // MATDOC has no STORNO column (DD03L); asking for it fails with AD 718 (TABLE_WITHOUT_DATA).
-    // Reversals are recognised by the SMBLN/SJAHR pairing of the 262 rows read alongside.
-    const fields = [
-      'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
-      'CPUDT', 'CPUTM', 'MENGE', 'SMBLN', 'SJAHR'
-    ];
-
-    let rows = [];
-    const readTable = (this.rfc && typeof this.rfc.readTable === 'function')
-      ? (t, f, w) => this.rfc.readTable(t, f, w)
-      : (this.adapter && typeof this.adapter.readTable === 'function')
-        ? (t, f, w) => this.adapter.readTable(t, f, w)
-        : null;
-
-    if (!readTable) {
-      // Absence of a document can only be asserted after a SUCCESSFUL read. No table access
-      // means UNKNOWN (throw), never null — null is callers' "verified not posted".
-      const err = new Error('SAP RFC table access is unavailable; the 261 material-document lookup cannot verify whether a document exists.');
-      err.status = 502;
-      throw err;
-    }
-
-    const readBothMovements = async (table, tableFields) => {
-      const r261 = await readTable(table, tableFields, [...baseWhere, `AND BWART = '261'`]);
-      const r262 = await readTable(table, tableFields, [...baseWhere, `AND BWART = '262'`]);
-      return [...(r261 || []), ...(r262 || [])];
-    };
-
-    if (readTable) {
-      try {
-        rows = await readBothMovements('MATDOC', fields);
-      } catch (matdocErr) {
-        LOG.warn(`MATDOC read failed for 261 fallback lookup, trying MSEG: ${matdocErr.message}`);
-        try {
-          // In MSEG the header fields carry an _MKPF suffix (DD03L: CPUDT_MKPF, CPUTM_MKPF,
-          // BUDAT_MKPF, USNAM_MKPF); plain CPUDT/USNAM do not exist there (AD 718). Mapped back
-          // to the MATDOC names so the same filters apply.
-          const msegFields = ['MBLNR', 'MJAHR', 'BWART', 'RSNUM', 'RSPOS', 'MENGE', 'SMBLN', 'SJAHR',
-            'BUDAT_MKPF', 'CPUDT_MKPF', 'CPUTM_MKPF', 'USNAM_MKPF'];
-          const msegBaseWhere = [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`];
-          if (usnam) msegBaseWhere.push(`AND USNAM_MKPF = '${usnam}'`);
-          const r261 = await readTable('MSEG', msegFields, [...msegBaseWhere, `AND BWART = '261'`]);
-          const r262 = await readTable('MSEG', msegFields, [...msegBaseWhere, `AND BWART = '262'`]);
-          rows = [...(r261 || []), ...(r262 || [])].map((r) => ({
-            ...r, BUDAT: r.BUDAT_MKPF, CPUDT: r.CPUDT_MKPF, CPUTM: r.CPUTM_MKPF, USNAM: r.USNAM_MKPF
-          }));
-        } catch (msegErr) {
-          LOG.warn(`MSEG read also failed for 261 fallback lookup: ${msegErr.message}`);
-          throw matdocErr;
-        }
-      }
-    }
-
-    const allRows = Array.isArray(rows) ? rows : [];
-
-    // Track cancelled or reversal documents
-    const reversedDocKeys = new Set();
-    for (const r of allRows) {
-      if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') {
-        reversedDocKeys.add(`${String(r.SMBLN).trim()}-${String(r.SJAHR || r.MJAHR || '').trim()}`);
-      }
-    }
-
-    // Filter candidate 261 documents
-    const claimTimeMs = sCreatedAt ? new Date(sCreatedAt).getTime() : null;
-    const expectedQty = sQty != null ? Number(sQty) : null;
-    // CPUDT/CPUTM are SAP system-local time (live: TTZCU = INDIA, UTC+05:30). Converting needs the
-    // system offset; when it cannot be read the attempt window cannot be applied -> UNKNOWN (throws).
-    const offsetMinutes = (claimTimeMs !== null && allRows.some((r) => r.CPUDT))
-      ? await sapFacts.systemUtcOffsetMinutes(readTable)
-      : 0;
-
-    const matches = allRows.filter((r) => {
-      // Must be movement 261
-      if (String(r.BWART).trim() !== '261') return false;
-
-      // Posting-date filter (client-side; the RFC parser rejects OR-groups in WHERE):
-      // accept when either BUDAT or CPUDT equals the requested day, or when the row
-      // carries neither field (MSEG fallback).
-      if (dDay && (r.BUDAT || r.CPUDT)) {
-        const budat = String(r.BUDAT || '').trim();
-        const cpudt = String(r.CPUDT || '').trim();
-        if (budat !== dDay && cpudt !== dDay) return false;
-      }
-
-      // Exclude reversed documents
-      const docKey = `${String(r.MBLNR).trim()}-${String(r.MJAHR || '').trim()}`;
-      if (reversedDocKeys.has(docKey)) return false;
-      if (r.SMBLN && String(r.SMBLN).trim() && String(r.SMBLN).trim() !== '0000000000') return false;
-
-      // Quantity filter: must equal claim's quantity
-      if (expectedQty !== null && Number.isFinite(expectedQty)) {
-        const candQty = Number(r.MENGE != null ? r.MENGE : (r.ERFMG != null ? r.ERFMG : r.Quantity));
-        if (Number.isFinite(candQty) && Math.abs(candQty - expectedQty) > 0.001) {
-          return false;
-        }
-      }
-
-      // Timestamp filter: must be created at or after the claim's createdAt
-      if (claimTimeMs !== null && Number.isFinite(claimTimeMs)) {
-        let docTimeMs = null;
-        if (r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp) {
-          docTimeMs = new Date(r.createdAt || r.CreatedAt || r.timestamp || r.EntryTimestamp).getTime();
-        } else if (r.CPUDT) {
-          docTimeMs = sapFacts.sapLocalToEpochMs(r.CPUDT, r.CPUTM, offsetMinutes);
-        }
-        if (docTimeMs !== null && Number.isFinite(docTimeMs) && docTimeMs < claimTimeMs) {
-          // Document was created before the claim attempt
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    if (matches.length === 1) {
-      const match = matches[0];
-      return {
-        MaterialDocument: String(match.MBLNR).trim(),
-        MaterialDocYear: String(match.MJAHR || match.MBLNR_YEAR || (match.BUDAT ? match.BUDAT.slice(0, 4) : '')).trim()
-      };
-    }
-
-    if (matches.length > 1) {
-      // Ambiguity is not absence: callers treat null as "not posted", so this must stay UNKNOWN.
-      const err = new Error(`MATDOC 261 lookup for reservation ${sResv} item ${sItem} matched ${matches.length} documents (${matches.map((m) => String(m.MBLNR).trim()).join(', ')}); exactly one is required, so the outcome cannot be proved.`);
-      err.status = 409;
-      err.code = 'GI_MATDOC_AMBIGUOUS';
-      throw err;
-    }
-
-    return null;
-  }
-
-  // Fallback MATDOC lookup implemented above for 261; 301, 311 and batch path can follow the same pattern.
-
-  /** Movement 261 (Goods Issue for Order/Reservation) - RAP first, standard API fallback. */
-  async post261(data) {
-    const sReserv = String(data.ReservationNo || '').trim();
-    const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
-    const sItem = rawItem ? rawItem.padStart(4, '0') : '';
-    const sOrder = String(data.OrderNo || data.OrderID || '').trim();
-
-    if ((!sReserv || !sItem) && !sOrder) {
-      const err = new Error('ReservationNo and ReservationItem are required (or OrderNo for unplanned Goods Issue)');
-      err.status = 400;
-      throw err;
-    }
-    this._assertPostable(data);
-    await this._preflightPosting(data, { strictBatchValidation: true });
-
-    // Unplanned (no reservation, but order is provided): bypass Tier 1 reservation-keyed RAP service
-    // and route directly to Tier 2 standard API_MATERIAL_DOCUMENT_SRV.
-    if (!sReserv || !sItem) {
-      const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
-      return await this._submitMaterialDocument(payload, {
-        mvt: '261', label: 'Goods Issue for Order', reservationNo: '', reservationItem: '', orderNo: sOrder
-      });
-    }
-
-    // Tier 1: custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4 (posts 261 only).
-    let tier1Response = null;
-    let tier1MatDoc = null;
-    let tier1MatYear = '';
-    let tier1Error = null;
-    try {
-      const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/GIItem(ReservationNo='${sReserv}',ReservationItem='${sItem}')/com.sap.gateway.srvd.zui_gi_order_rsv_o4.v0001.postGoodsIssue`;
-      const response = await this._post(path, {
-        IssueQty: Number(data.IssueQty),
-        Batch: data.Batch ? String(data.Batch).trim() : '',
-        DifferenceQty: 0,
-        DifferenceReason: '',
-        DifferenceStorageType: '',
-        FinalIssue: false
-      });
-      if (response && (response.MaterialDocument || response.MatDoc)) {
-        tier1Response = response;
-        tier1MatDoc = response.MaterialDocument || response.MatDoc;
-        tier1MatYear = response.MaterialDocYear || '';
-        if (!tier1MatYear && response.PostingDate) {
-          const m = String(response.PostingDate).match(/\d{4}/);
-          if (m) tier1MatYear = m[0];
-        }
-      } else {
-        throw new Error(`RAP postGoodsIssue returned no material document: ${JSON.stringify(response || null).slice(0, 300)}`);
-      }
-    } catch (v4Err) {
-      tier1Error = v4Err;
-      const is404OrNotFound = v4Err.status === 404 ||
-        v4Err.code === '404' ||
-        /no service found|service not found|not found|resource not found|\b404\b|IWFND\/MED\/170/i.test(v4Err.message || '');
-      if (!is404OrNotFound) {
-        LOG.error('Tier 1 postGoodsIssue failed with non-404 error; fallback to Tier 2 blocked:', v4Err.message || v4Err);
-        throw this._reclassifyPostingError(null, v4Err, 'single-item movement 261');
-      }
-    }
-
-    if (tier1MatDoc) {
-      let verified;
-      try {
-        verified = await this.readBackDocument(tier1MatDoc, tier1MatYear);
-      } catch (rbErr) {
-        LOG.warn(`readBackDocument error after RAP post: ${rbErr.message}`);
-        verified = { MaterialDocument: tier1MatDoc, MaterialDocYear: tier1MatYear, Confirmed: false, Status: 'posted, confirmation pending' };
-      }
-      const matDoc = verified?.MaterialDocument || String(tier1MatDoc).trim();
-      const matYear = verified?.MaterialDocYear || String(tier1MatYear).trim();
-      const isConfirmed = Boolean(verified?.Confirmed);
-      const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
-      return {
-        ReservationNo: sReserv,
-        ReservationItem: sItem,
-        OrderNo: sOrder,
-        MaterialDocument: matDoc,
-        MaterialDocYear: matYear,
-        TransferOrder: tier1Response.TransferOrder || tier1Response.ToNumber || '',
-        DifferenceCleared: false,
-        DifferenceQty: 0,
-        Success: true,
-        Confirmed: isConfirmed,
-        ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
-        Message: `Goods Issue 261 posted successfully in S/4HANA${confirmationText}.`
-      };
-    }
-
-    // Tier 2: standard API_MATERIAL_DOCUMENT_SRV.
-    const postStartedAt = new Date();
-    try {
-      const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
-      return await this._submitMaterialDocument(payload, {
-        mvt: '261', label: 'Goods Issue', reservationNo: sReserv, reservationItem: sItem, orderNo: sOrder
-      });
-    } catch (v2Err) {
-      const err = this._reclassifyPostingError(tier1Error, v2Err, 'single-item movement 261');
-      if (err.code !== 'GI_POSTING_OUTCOME_UNKNOWN') throw err;
-      // Without RFC table access there is nothing to read back; keep the unknown outcome.
-      const canLookup = (this.rfc && typeof this.rfc.readTable === 'function') ||
-        (this.adapter && typeof this.adapter.readTable === 'function');
-      if (!canLookup) throw err;
-
-      // Unknown outcome (2xx without a document number, timeout, connection drop after send):
-      // ask SAP whether the document exists before reporting UNKNOWN. MATDOC is matched by
-      // reservation/item/qty/date within the attempt window, non-reversed, exactly one hit
-      // (ambiguity stays UNKNOWN). The lookup can run before SAP has committed, so empty
-      // lookups prove nothing and the outcome stays unconfirmed.
-      const trigger = err.sapResponseBody ? 'EMPTY_2XX_RESPONSE' : 'TRANSPORT_ERROR';
-      LOG.warn(`261 unknown-outcome recovery started for reservation ${sReserv} item ${sItem}: trigger=${trigger}, cause=${(v2Err && v2Err.message) || 'n/a'}`);
-      const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
-      for (const delayMs of delays) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        let found;
-        try {
-          found = await this.findPosted261ByMatdoc({
-            reservationNo: sReserv,
-            reservationItem: sItem,
-            date: data.PostingDate,
-            quantity: data.IssueQty,
-            // 2 min of slack absorbs app/SAP clock skew; a second matching document inside the
-            // widened window fails the exactly-one rule and keeps the outcome UNKNOWN.
-            createdAt: new Date(postStartedAt.getTime() - 120000)
-          });
-        } catch (lookupErr) {
-          LOG.warn(`261 MATDOC fallback lookup failed for reservation ${sReserv} item ${sItem}: ${lookupErr.message}`);
-          throw err; // cannot verify: keep the unknown-outcome message
-        }
-        if (found && found.MaterialDocument) {
-          LOG.info(`261 posting for reservation ${sReserv} item ${sItem} recovered by MATDOC read-back: document ${found.MaterialDocument}/${found.MaterialDocYear || ''} exists in SAP.`);
-          return {
-            ReservationNo: sReserv,
-            ReservationItem: sItem,
-            OrderNo: sOrder,
-            MaterialDocument: found.MaterialDocument,
-            MaterialDocYear: found.MaterialDocYear || '',
-            TransferOrder: '',
-            DifferenceCleared: false,
-            DifferenceQty: 0,
-            Success: true,
-            Confirmed: true,
-            ConfirmationStatus: 'CONFIRMED',
-            Message: `Goods Issue 261 posted in S/4HANA (MatDoc: ${found.MaterialDocument}${found.MaterialDocYear ? '/' + found.MaterialDocYear : ''}); SAP did not confirm the request directly, and the document was verified by reservation read-back.`
-          };
-        }
-      }
-      const attemptIds = [
-        data.ClientAttemptId ? `client attempt ${data.ClientAttemptId}` : '',
-        `reference ${data.ReferenceDocument || 'n/a'}`
-      ].filter(Boolean).join(', ');
-      const unconfirmed = new Error(`SAP S/4HANA did not confirm the single-item movement 261 for reservation ${sReserv} item ${sItem} [trigger: ${trigger}], and no matching material document is visible yet after ${delays.length} check(s) (${attemptIds}).` +
-        `${err.sapResponseBody ? ' The SAP response body was recorded in the application log.' : ''}` +
-        ' The posting may still appear in SAP and will be reconciled by recheckPostingAttempts. Do not post again.');
-      unconfirmed.status = 504;
-      unconfirmed.code = 'GI_POSTING_UNCONFIRMED';
-      throw unconfirmed;
-    }
-  }
-
   /** Movement 301 (Plant-to-Plant Transfer) - standard API only. */
   async post301(data) {
     this._assertPostable(data);
@@ -1025,7 +675,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * This is routing, not movement-type business logic.
    */
   async postByMovementType(data) {
-    const mvt = String(data.MovementType || '261').trim();
+    const mvt = String(data.MovementType || '201').trim();
     switch (mvt) {
       case '201': {
         // Never post if reference already exists in SAP.
@@ -1033,203 +683,12 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         if (prior) return GoodsIssuePostingClient._resultFromReference(prior, data, '201', 'Goods Issue to Cost Center');
         return this.post201(data);
       }
-      case '261': return this.post261(data);
       case '301': return this.post301(data);
       case '311': return this.post311(data);
       default: {
         const err = new Error(`Movement type ${mvt} cannot be posted here (allowed: ${POSTABLE_MOVEMENT_TYPES.join(', ')})`);
         err.status = 400;
         throw err;
-      }
-    }
-  }
-
-  /**
-   * Submit Goods Issue batch in a single LUW with multi-tier posting
-   */
-  async submitGoodsIssueRequest(reservationNo, orderNo, items) {
-    if (!reservationNo && !orderNo) {
-      const err = new Error('Either ReservationNo or OrderNo must be provided for submission');
-      err.status = 400;
-      throw err;
-    }
-    if (!Array.isArray(items) || items.length === 0) {
-      const err = new Error('At least one item must be specified for submission');
-      err.status = 400;
-      throw err;
-    }
-
-    // Validate quantities
-    for (const item of items) {
-      const nQty = Number(item.IssueQty);
-      if (isNaN(nQty) || nQty <= 0) {
-        const err = new Error(`Item ${item.ReservationItem || ''}: Issue quantity must be a positive decimal number`);
-        err.status = 400;
-        throw err;
-      }
-    }
-
-    const validateBatchFn = (mat, bch) => {
-      if (this.adapter && typeof this.adapter.validateBatch === 'function') {
-        return this.adapter.validateBatch(mat, bch);
-      }
-      if (this.batchesClient && typeof this.batchesClient.validateBatch === 'function') {
-        return this.batchesClient.validateBatch(mat, bch);
-      }
-      return { valid: true };
-    };
-
-    // SLED Hard-Stop Validation for all items in batch
-    for (const item of items) {
-      if (item.Batch) {
-        const valResult = await validateBatchFn(item.Material, item.Batch);
-        if (!valResult.valid) {
-          return {
-            AllPosted: false,
-            Results: items.map(it => ({
-              ReservationItem: it.ReservationItem,
-              Success: false,
-              Message: valResult.reason || `Batch ${item.Batch} is invalid or expired.`
-            })),
-            Messages: [`Batch submission aborted: Line Item ${item.ReservationItem} batch ${item.Batch} is expired. Compensating rollback executed.`]
-          };
-        }
-      }
-    }
-
-    // Check destination
-    const dest = await this._getDestination();
-    if (!dest) {
-      const err = new Error('S/4HANA Destination could not be resolved or is not configured');
-      err.status = 502;
-      throw err;
-    }
-
-    // Tier 1: Attempt Custom RAP OData V4 service ZUI_GI_ORDER_RSV_O4
-    try {
-      const path = `/sap/opu/odata4/sap/zui_gi_order_rsv_o4/srvd/sap/zui_gi_order_rsv_o4/0001/submitRequest`;
-      const response = await this._post(path, {
-        ReservationNo: reservationNo || '',
-        OrderNo: orderNo || '',
-        Items: items
-      });
-      if (response && (response.AllPosted !== undefined || response.Results)) {
-        return response;
-      }
-      // Same rule as single-item posting: an unrecognized 2xx must reach Tier 2.
-      throw new Error(`RAP submitRequest returned an unrecognized response shape: ${JSON.stringify(response || null).slice(0, 300)}`);
-    } catch (v4Err) {
-      if (items.some((item) => item.FinalIssue === true)) {
-        throw v4Err;
-      }
-      const is404OrNotFound = v4Err.status === 404 ||
-        v4Err.code === '404' ||
-        /no service found|service not found|not found|resource not found|\b404\b|IWFND\/MED\/170/i.test(v4Err.message || '');
-      if (!is404OrNotFound) {
-        LOG.error('Tier 1 submitRequest failed with non-404 error; fallback to Tier 2 blocked:', v4Err.message || v4Err);
-        throw this._reclassifyPostingError(null, v4Err, 'batch Goods Issue submission');
-      }
-      // Tier 2: Attempt standard S/4HANA OData V2 service API_MATERIAL_DOCUMENT_SRV with multi-line deep insert
-      try {
-        const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
-        const v2Items = items.map((item, idx) => {
-          const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
-          const sItem = rawItem ? rawItem.padStart(4, '0') : '';
-          const nQty = Number(item.IssueQty);
-          const itemUnit = String(item.Unit || item.EntryUnit || item.BaseUnit || '').trim().toUpperCase();
-          if (!itemUnit) {
-            const err = new Error(`Unit of measure (EntryUnit) is required for Goods Issue item ${sItem || idx + 1}`);
-            err.status = 400;
-            throw err;
-          }
-          const itemPayload = {
-            Material: item.Material || '',
-            GoodsMovementType: '261',
-            EntryUnit: itemUnit,
-            QuantityInEntryUnit: String(nQty),
-            Reservation: String(reservationNo || item.ReservationNo || '').trim(),
-            ReservationItem: sItem,
-            Batch: item.Batch ? String(item.Batch).trim() : ''
-          };
-          if (item.Plant) itemPayload.Plant = item.Plant;
-          if (item.StorageLocation) itemPayload.StorageLocation = item.StorageLocation;
-
-          const itemSerials = Array.isArray(item.SerialNumbers) && item.SerialNumbers.length > 0
-            ? item.SerialNumbers
-            : item.SerialNumber
-              ? [item.SerialNumber]
-              : [];
-          if (itemSerials.length > 0) {
-            itemPayload.to_SerialNumbers = {
-              results: itemSerials.map((sn) => ({ SerialNumber: String(sn).trim() }))
-            };
-          }
-          return itemPayload;
-        });
-
-        const v2Payload = {
-          GoodsMovementCode: '03',
-          PostingDate: `/Date(${GoodsIssuePostingClient._today()})/`,
-          DocumentDate: `/Date(${GoodsIssuePostingClient._today()})/`,
-          MaterialDocumentHeaderText: `GI Resv ${reservationNo || orderNo || ''}`.trim(),
-          to_MaterialDocumentItem: {
-            results: v2Items
-          }
-        };
-
-        const v2Res = await this._post(v2Path, v2Payload);
-        GoodsIssuePostingClient._throwIfSapBusinessError(v2Res);
-        const rawMatDoc = v2Res.MaterialDocument || v2Res.d?.MaterialDocument;
-        let rawMatYear = v2Res.MaterialDocumentYear || v2Res.d?.MaterialDocumentYear || '';
-        if (!rawMatYear && (v2Res.PostingDate || v2Res.d?.PostingDate)) {
-          const pd = v2Res.PostingDate || v2Res.d?.PostingDate;
-          const m = String(pd).match(/\d{4}/);
-          if (m) rawMatYear = m[0];
-        }
-
-        if (rawMatDoc) {
-          let verified;
-          try {
-            verified = await this.readBackDocument(rawMatDoc, rawMatYear);
-          } catch (rbErr) {
-            LOG.warn(`readBackDocument error in post261Batch for ${rawMatDoc}: ${rbErr.message}`);
-            verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'posted, confirmation pending' };
-          }
-          const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
-          const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
-          const isConfirmed = Boolean(verified?.Confirmed);
-          const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
-          const results = items.map(item => {
-            const rawItem = item.ReservationItem != null ? String(item.ReservationItem).trim() : '';
-            const sItem = rawItem ? rawItem.padStart(4, '0') : '';
-            const nDiffQty = Number(item.DifferenceQty) || 0;
-            return {
-              ReservationItem: sItem,
-              MaterialDocument: matDoc,
-              MaterialDocYear: matYear,
-              TransferOrder: '',
-              DifferenceCleared: nDiffQty > 0,
-              DifferenceQty: nDiffQty,
-              Success: true,
-              Confirmed: isConfirmed,
-              ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
-              Message: `Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`
-            };
-          });
-
-          return {
-            AllPosted: true,
-            Confirmed: isConfirmed,
-            ConfirmationStatus: isConfirmed ? 'CONFIRMED' : 'POSTED_CONFIRMATION_PENDING',
-            Results: results,
-            Messages: [`Batch Goods Issue 261 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (Material Document: ${matDoc}${matYear ? '/' + matYear : ''})${confirmationText}.`]
-          };
-        }
-        // Same rule as single-item posting: never resolve without either a genuine material
-        // document or a thrown error.
-        throw new Error('SAP S/4HANA did not return a material document for the batch Goods Issue submission, and no sap-message error was present in the response.');
-      } catch (v2Err) {
-        throw this._reclassifyPostingError(v4Err, v2Err, 'batch Goods Issue submission');
       }
     }
   }
@@ -1356,7 +815,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       // failure - the service is not registered on the hub. Verified 2026-09-18.
       t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 carrying /IWFND/MED/170 'No service found' - the service is NOT REGISTERED on this Gateway hub; Basis must add and activate it in /IWFND/MAINT_SERVICE (TADIR R3TR IWSV API_MATERIAL_DOCUMENT_SRV 0001). This is a registration task, not an authorization grant (${v2Err?.message || 'HTTP 403'})`;
     } else if (v2Status === 403) {
-      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 without /IWFND/MED/170, so it IS registered and this is an authorization failure; Security must grant S_SERVICE for it and M_MSEG_BWA for movement type 261 (${v2Err?.message || 'HTTP 403 Forbidden'})`;
+      t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 403 without /IWFND/MED/170, so it IS registered and this is an authorization failure; Security must grant S_SERVICE for it and M_MSEG_BWA for movement types 201/301/311 (${v2Err?.message || 'HTTP 403 Forbidden'})`;
     } else if (v2Status === 404) {
       t2Diag = `(2) standard service 'API_MATERIAL_DOCUMENT_SRV' returns HTTP 404 - NOT ACTIVATED; Basis must activate service in /IWFND/MAINT_SERVICE (${v2Err?.message || 'HTTP 404 Not Found'})`;
     } else {
@@ -1368,7 +827,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       `${t1Diag}. ${t2Diag}. ` +
       `Fixing (2) alone unblocks posting and is the smaller request. ` +
       `'ZMMIM_MATDOC_SRV' is also deregistered (/IWFND/MED/170 as of 2026-09-23; previously returned HTTP 501 'MATDOCHEADERS_CREATE_ENTITY not implemented'). ` +
-      `No alternative OData service on this system supports reservation-based movement type 261 — 1,237 services scanned, five GI-capable services found, all delivery-based only. ` +
+      `No alternative OData service on this system supports movement types 201/301/311 — 1,237 services scanned, five GI-capable services found, all delivery-based only. ` +
       `In accordance with AGENTS.md, mock persistence and dummy document generation are strictly prohibited.`;
 
     const postingError = new Error(message);

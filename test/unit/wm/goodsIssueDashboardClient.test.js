@@ -68,30 +68,30 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
   describe('Caching Behavior', () => {
     it('returns cached data on subsequent call without invoking RFC again within TTL', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
-      mockClient.getText.mockImplementation(countByType({ '261': 1 })); // all-time counts via OData $count
+      mockClient.getText.mockImplementation(countByType({ '201': 1 })); // all-time counts via OData $count
       mockRfc.readTable.mockResolvedValue([]); // window rows (no materials -> no MAKT read)
 
       const res1 = await client.getDashboardData({ days: 7, plant: '1120' });
-      expect(res1.Kpis.Mvt261.TotalCount).toBe(1);
-      expect(mockClient.getText).toHaveBeenCalledTimes(4); // one $count per movement type
+      expect(res1.Kpis.Mvt201.TotalCount).toBe(1);
+      expect(mockClient.getText).toHaveBeenCalledTimes(3); // one $count per movement type (201, 301, 311)
       expect(mockRfc.readTable).toHaveBeenCalledTimes(1); // window only
 
       // Second call with same parameters should hit cache
       const res2 = await client.getDashboardData({ days: 7, plant: '1120' });
       expect(res2).toBe(res1);
-      expect(mockClient.getText).toHaveBeenCalledTimes(4);
+      expect(mockClient.getText).toHaveBeenCalledTimes(3);
       expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
     });
 
     it('bypasses cache when forceRefresh is true', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
-      mockClient.getText.mockImplementation(countByType({ '261': 1 }));
+      mockClient.getText.mockImplementation(countByType({ '201': 1 }));
       mockRfc.readTable.mockResolvedValue([]);
 
       await client.getDashboardData({ days: 7, plant: '1120' });
       expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
 
-      mockClient.getText.mockImplementation(countByType({ '261': 1, '301': 1 }));
+      mockClient.getText.mockImplementation(countByType({ '201': 1, '301': 1 }));
       const refreshed = await client.getDashboardData({ days: 7, plant: '1120', forceRefresh: true });
       expect(refreshed.Kpis.Mvt301.TotalCount).toBe(1);
       expect(mockRfc.readTable).toHaveBeenCalledTimes(2); // window re-read on forced refresh
@@ -99,17 +99,16 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
   });
 
   describe('Aggregation & S/4HANA Data Mapping', () => {
-    it('aggregates MATDOC postings correctly across 201, 261, 301, 311 and overall', async () => {
+    it('aggregates MATDOC postings correctly across 201, 301, 311 and overall', async () => {
       mockReservationsClient.getOpenReservations
         .mockImplementation((type) => {
           if (type === '201') return Promise.resolve([{ ReservationNo: 'R201' }]);
-          if (type === '261') return Promise.resolve([{ ReservationNo: 'R1' }, { ReservationNo: 'R2' }]);
           if (type === '301') return Promise.resolve([{ ReservationNo: 'R3' }]);
           return Promise.resolve([]);
         });
 
       // All-time counts now come from the SAP-side OData $count (per movement type).
-      mockClient.getText.mockImplementation(countByType({ '201': 1, '261': 2, '301': 1, '311': 1 }));
+      mockClient.getText.mockImplementation(countByType({ '201': 1, '301': 1, '311': 1 }));
 
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
@@ -137,25 +136,6 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
           SHKZG: 'H'
         },
         {
-          MBLNR: '0000001001',
-          MJAHR: '2026',
-          ZEILE: '0001',
-          BWART: '261',
-          MATNR: '000000000000000514',
-          WERKS: '1120',
-          LGORT: '1121',
-          CHARG: 'B1',
-          MENGE: '10.500',
-          MEINS: 'EA',
-          BUDAT: todayYMD,
-          USNAM: 'ALICE',
-          KOSTL: '',
-          AUFNR: '000001000856',
-          RSNUM: '00000168779',
-          RSPOS: '0001',
-          SHKZG: 'H'
-        },
-        {
           MBLNR: '0000001002',
           MJAHR: '2026',
           ZEILE: '0001',
@@ -179,7 +159,6 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       mockRfc.readTable
         .mockResolvedValueOnce(windowRows) // 1. MATDOC window rows
         .mockResolvedValueOnce([ // 2. MAKT descriptions — now a single batched read for all materials
-          { MATNR: '000000000000000514', MAKTX: 'Flange Steel 514' },
           { MATNR: '000000000000000421', MAKTX: 'Macbook Air M3' },
           { MATNR: '000000000000000515', MAKTX: 'Pipe Copper 515' }
         ]);
@@ -191,10 +170,6 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       expect(data.Kpis.Mvt201.OpenPendingCount).toBe(1); // 1 reservation
       expect(data.Kpis.Mvt201.TodayPostingsCount).toBe(1);
 
-      expect(data.Kpis.Mvt261.TotalCount).toBe(2);
-      expect(data.Kpis.Mvt261.OpenPendingCount).toBe(2); // 2 reservations
-      expect(data.Kpis.Mvt261.TodayPostingsCount).toBe(1);
-
       expect(data.Kpis.Mvt301.TotalCount).toBe(1);
       expect(data.Kpis.Mvt301.OpenPendingCount).toBe(1); // 1 reservation
       expect(data.Kpis.Mvt301.TodayPostingsCount).toBe(0);
@@ -203,31 +178,21 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       expect(data.Kpis.Mvt311.OpenPendingCount).toBe(0); // 0 reservations
       expect(data.Kpis.Mvt311.TodayPostingsCount).toBe(0);
 
-      expect(data.Kpis.Overall.TotalCount).toBe(5);
-      expect(data.Kpis.Overall.OpenPendingCount).toBe(4); // 1 + 2 + 1 + 0 = 4
-      expect(data.Kpis.Overall.TodayPostingsCount).toBe(2);
+      expect(data.Kpis.Overall.TotalCount).toBe(3);
+      expect(data.Kpis.Overall.OpenPendingCount).toBe(2); // 1 + 1 + 0 = 2
+      expect(data.Kpis.Overall.TodayPostingsCount).toBe(1);
 
       // Distribution checks
-      expect(data.Distribution.length).toBe(4);
+      expect(data.Distribution.length).toBe(3);
       const dist201 = data.Distribution.find((d) => d.MovementType === '201');
       expect(dist201.Count).toBe(1);
-      expect(dist201.Percentage).toBe(20);
-
-      const dist261 = data.Distribution.find((d) => d.MovementType === '261');
-      expect(dist261.Count).toBe(2);
-      expect(dist261.Percentage).toBe(40);
+      expect(dist201.Percentage).toBe(33.33);
 
       // Recent documents check with CostCenter and enriched MAKT descriptions
-      expect(data.RecentDocuments.length).toBe(3);
-      expect(data.RecentDocuments[0].MaterialDocument).toBe('1001');
-      expect(data.RecentDocuments[0].Material).toBe('514');
-      expect(data.RecentDocuments[0].MaterialDesc).toBe('Flange Steel 514');
-      expect(data.RecentDocuments[0].Quantity).toBe(10.5);
-      expect(data.RecentDocuments[0].OrderNo).toBe('1000856');
-
-      expect(data.RecentDocuments[1].MaterialDocument).toBe('1000');
-      expect(data.RecentDocuments[1].CostCenter).toBe('1011103001');
-      expect(data.RecentDocuments[1].MaterialDesc).toBe('Macbook Air M3');
+      expect(data.RecentDocuments.length).toBe(2);
+      expect(data.RecentDocuments[0].MaterialDocument).toBe('1000');
+      expect(data.RecentDocuments[0].CostCenter).toBe('1011103001');
+      expect(data.RecentDocuments[0].MaterialDesc).toBe('Macbook Air M3');
     });
 
     it('falls back to MSEG when MATDOC table read throws an error', async () => {
@@ -284,7 +249,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       // Window read (readTable call 0) is scoped to BWART = '301', not the combined IN clause.
       const windowWhere = mockRfc.readTable.mock.calls[0][2];
       expect(windowWhere[0]).toBe("BWART = '301'");
-      expect(windowWhere.join(' ')).not.toContain("IN ('201','261','301','311')");
+      expect(windowWhere.join(' ')).not.toContain("IN ('201','301','311')");
     });
 
     it('returns RecentDocuments containing only the requested type, with ReceivingPlant/ReceivingStorageLocation mapped from UMWRK/UMLGO', async () => {
@@ -312,14 +277,14 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
       expect(data.RecentDocuments[0].ReceivingStorageLocation).toBe('MT01');
     });
 
-    it('caches per movementType independently - a 201 call does not serve a 261 call\'s cache', async () => {
+    it('caches per movementType independently - a 201 call does not serve a 301 call\'s cache', async () => {
       mockReservationsClient.getOpenReservations.mockResolvedValue([]);
       mockRfc.readTable.mockResolvedValue([]);
 
       await client.getDashboardData({ days: 30, plant: '1120', movementType: '201' });
       const callsAfterFirst = mockRfc.readTable.mock.calls.length;
 
-      await client.getDashboardData({ days: 30, plant: '1120', movementType: '261' });
+      await client.getDashboardData({ days: 30, plant: '1120', movementType: '301' });
       expect(mockRfc.readTable.mock.calls.length).toBeGreaterThan(callsAfterFirst);
     });
   });

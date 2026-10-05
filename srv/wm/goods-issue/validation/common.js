@@ -1,7 +1,7 @@
 /**
  * validation/common.js
  * Pure, type-agnostic validation PRIMITIVES shared by the per-movement-type validators
- * (goodsIssue201/261/301/311.validation.js).
+ * (goodsIssue201/301/311.validation.js).
  *
  * These are field-level rules that every Goods Issue movement type shares by definition
  * (a material number is a material number; a quantity is a quantity). They contain NO
@@ -209,7 +209,7 @@ function checkBatch(value) {
 }
 
 /**
- * Reservation-mandatory rule shared by the reservation-based movement types (261/301/311).
+ * Reservation-mandatory rule shared by the reservation-based movement types (301/311).
  * Pushes errors into the supplied array and returns whether a complete reservation is present.
  * This is a field-level rule, not movement-type logic - the per-type files choose to call it.
  * @param {Object} data

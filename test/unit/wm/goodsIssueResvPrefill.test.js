@@ -70,7 +70,6 @@ describe('311 prefill from a reservation item', () => {
 describe('prefilled fields are read-only in the views', () => {
   const v311 = view('GoodsIssue311.view.xml');
   const v301 = view('GoodsIssue301.view.xml');
-  const v261 = view('GoodsIssue261.view.xml');
   const v201 = view('GoodsIssue201.view.xml');
 
   test('311: material / plant are display-only texts; storage location is an input only when the reservation has none', () => {
@@ -91,9 +90,8 @@ describe('prefilled fields are read-only in the views', () => {
     expect(tag(v311, 'inUnit311')).toContain('editable="{gi311>/isUnitEditable}"');
   });
 
-  test('301 / 261 / 201 follow the same pattern for the fields they prefill', () => {
+  test('301 / 201 follow the same pattern for the fields they prefill', () => {
     expect(tag(v301, 'inBatch301')).toContain('editable="{= !${gi301>/prefilled/batch} }"');
-    expect(tag(v261, 'inReservationItem261')).toContain('editable="{= !${gi261>/fromReservation} }"');
     ['inCostCenter:costCenter', 'inMaterial:material', 'inPlant:plant', 'inStorageLocation:storageLocation'].forEach((pair) => {
       const [id, field] = pair.split(':');
       expect(tag(v201, id)).toContain(`editable="{= !\${gi201>/prefilled/${field}} }"`);
@@ -134,7 +132,7 @@ describe('server posts the reservation values, not the client values', () => {
   const handlers = {};
   PerTypeGoodsIssueHandler.init({ on: (event, handler) => { handlers[event] = handler; } });
   const req = (data) => ({ data, user: { id: 'TESTER' }, error: jest.fn() });
-  const resv = { Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Batch: '', MovementType: '261', OpenQty: 2 };
+  const resv = { Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Batch: '', MovementType: '311', OpenQty: 2 };
   const body = { ReservationNo: '519367', ReservationItem: '0001', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', IssueQty: 2, Unit: 'NOS' };
   let post;
 
@@ -172,11 +170,10 @@ describe('server posts the reservation values, not the client values', () => {
   });
 
   test.each([
-    ['postGoodsIssue261', { OrderNo: '1002741' }],
     ['postGoodsIssue301', { ReceivingPlant: '1130' }],
     ['postGoodsIssue201', { CostCenter: '1011101301' }]
   ])('%s: tampered material against its reservation -> 400 before anything is posted', async (action, extra) => {
-    const posts = ['postGoodsIssue201', 'postGoodsIssue261', 'postGoodsIssue301'].map((m) => jest.spyOn(GoodsIssueAdapter, m).mockResolvedValue({}));
+    const posts = ['postGoodsIssue201', 'postGoodsIssue301'].map((m) => jest.spyOn(GoodsIssueAdapter, m).mockResolvedValue({}));
     const r = req({ ReservationNo: '519367', ReservationItem: '0001', Material: '8000002951', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS', ...extra });
     await handlers[action](r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('do not match reservation'));

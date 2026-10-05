@@ -17,12 +17,6 @@
       "csrfProtection": false
     },
     {
-      "source": "^/wm/goods-issue/order-based-261/?$",
-      "target": "/saps4hanafiori/index.html",
-      "service": "html5-apps-repo-rt",
-      "authenticationType": "xsuaa"
-    },
-    {
       "source": "^(.*)$",
       "target": "$1",
       "service": "html5-apps-repo-rt",

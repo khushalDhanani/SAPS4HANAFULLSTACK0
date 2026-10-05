@@ -1,7 +1,100 @@
 
 # Changes Log
 
-## 2026-10-05 10:35 UTC — Implement SU Selection Option & List for Warehouse Management TR-to-TO (Screen 9001 / Route wm/tr-to)
+## 2026-10-05 11:40 UTC — Complete Removal of Movement Type 261 (Goods Issue to Order, Staging, Reservation Picker, 261 Posting)
+- **Agent**: Antigravity
+- **Current Status**: **Complete, 100% Tested and Validated.**
+- **Scope & User Request**:
+  - Completely remove everything specific to movement type 261 (goods issue to order, WM staging, 261 reservation picker, 261 posting, SU claiming tables, and 261-only entities) across the full-stack repository (srv, app, db, test, tools, docs, config, package.json, manifest.json, cds, i18n).
+  - Strictly preserve shared flows (201 Cost Center, 301 Plant Transfer, 311 SLoc Transfer, and general Goods Issue functionality).
+- **Execution & Changes**:
+  1. **Phase 1: Full Inventory**:
+     - Audited all occurrences of `261`, `Movement261`, `GoodsIssue261`, `postGoodsIssue261`, `OpenReservations`, `order-based-261`, `stagingCheck`, `Phase6Staging`, `test-261`, `show-resv-item`, etc. Classified each item as 261-only (delete) or shared (keep/edit).
+  2. **Deleted 261-Only Files (22 files deleted)**:
+     - **Database Model**:
+       - `db/wm/goods-issue-issued-su.cds` (261 SU claiming persistence)
+     - **Backend / Integration Modules**:
+       - `srv/wm/goods-issue/GoodsIssueIssuedSuStore.js`
+       - `srv/wm/goods-issue/validation/goodsIssue261.validation.js`
+       - `srv/wm/goods-issue/mapping/goodsIssue261.normalize.js`
+       - `srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper.js`
+       - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePhase6StagingClient.js`
+     - **Frontend Presentation / Controllers / Services**:
+       - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261.view.xml`
+       - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue261Pending.view.xml`
+       - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261.controller.js`
+       - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue261Pending.controller.js`
+       - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue261Model.js`
+       - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue261Service.js`
+       - `app/fiori-app/webapp/deepLink.js`
+     - **16 261-Specific Unit Test Suites**:
+       - `test/unit/wm/fiori261DeepLink.test.js`
+       - `test/unit/wm/goodsIssue261BatchValidation.test.js`
+       - `test/unit/wm/goodsIssue261Controller.test.js`
+       - `test/unit/wm/goodsIssue261I18n.test.js`
+       - `test/unit/wm/goodsIssue261OverIssue.test.js`
+       - `test/unit/wm/goodsIssue261Page.test.js`
+       - `test/unit/wm/goodsIssue261PendingController.test.js`
+       - `test/unit/wm/goodsIssue261Scan.test.js`
+       - `test/unit/wm/goodsIssue261SerialValidation.test.js`
+       - `test/unit/wm/goodsIssue261ServiceUnit.test.js`
+       - `test/unit/wm/goodsIssue261StagingValidation.test.js`
+       - `test/unit/wm/goodsIssue261SuScan.test.js`
+       - `test/unit/wm/goodsIssue261Unplanned.test.js`
+       - `test/unit/wm/goodsIssueDeliveryCreated.test.js`
+       - `test/unit/wm/goodsIssueIssuedSu.test.js`
+       - `test/unit/wm/goodsIssueStagingPhase6.test.js`
+     - **Tools and Documentation**:
+       - `tools/test-261.sh`
+       - `docs/goods-issue-261-debugging-guide.md`
+       - `docs/decisions/261-su-audit-contract.md`
+       - `docs/decisions/261-wm-delivery-created-pgi.md`
+       - `docs/decisions/261-posting-outcome-status.md`
+  3. **Modified Core Backend & Integration Modules**:
+     - `srv/wm/goods-issue/service.cds`: Removed `GoodsIssueIssuedSu` entity, `IssuedSuAction` type, `postGoodsIssue261` action, `submitGoodsIssueRequest` action, `checkStagingForReservation` function, and `GoodsIssueDashboardKpis.Mvt261`. Preserved `postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311`, `reverseGoodsIssue`.
+     - `srv/wm/goods-issue/service.js`: Removed `postGoodsIssue261` and `submitGoodsIssueRequest` action wrappers.
+     - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`: Defaulted `GI_MOVEMENT_TYPE` to `201`; set `LIST_MOVEMENT_TYPES = ['201', '301', '311']`; removed 261-specific handlers.
+     - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: Removed `postGoodsIssue261` action handler and 261 normalizer/validator/mapper bindings.
+     - `srv/wm/goods-issue/GoodsIssueAttemptStore.js`: Removed `GoodsIssueIssuedSu` update references and 261 default movement type.
+     - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Removed `stagingClient`, `issuedSuStore`, `postGoodsIssue261`, `submitGoodsIssueRequest`, `checkStagingForReservation`, and 261 mapper.
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`: Removed `post261`, preserved `post201`, `post301`, `post311`.
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueDashboardClient.js`: Set `SUPPORTED_TYPES = ['201', '301', '311']`; removed `Mvt261` KPI computation and `261` filtering.
+     - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js` & `index.js`: Removed `issuedSuStore` injection and 261 mapper exports.
+     - `srv/integration/s4hana/sapFacts.js`: Removed `Movement261` and `Phase6Staging` entries.
+  4. **Modified Frontend Modules**:
+     - `app/fiori-app/webapp/manifest.json`: Removed `wmGoodsIssue261`, `wmGoodsIssue261Pending` routes, and `TargetGoodsIssue261`, `TargetGoodsIssue261Pending` targets.
+     - `app/fiori-app/webapp/view/Dashboard.view.xml`: Removed 261 KPI card (`Mvt261` / `Goods Issue to Order`), tile, and navigation button. Preserved 201, 301, 311 cards.
+     - `app/fiori-app/webapp/controller/Dashboard.controller.js`: Removed 261 tile click handler, navigation target, and `Mvt261` state updates.
+     - `app/fiori-app/webapp/controller/App.controller.js`: Removed 261 quick navigation and deep-link routing.
+     - `app/fiori-app/webapp/index.html`: Removed deep link script reference.
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Cleaned all `261`-specific keys (`gi261*`, `dashMvt261*`, `tileGoodsIssueOrder*`). 0 occurrences remain.
+     - `app/router/xs-app.json`: Removed `postGoodsIssue261` route.
+  5. **Updated Test Suites**:
+     - Cleaned and aligned:
+       - `test/unit/wm/goodsIssuePerTypePostingClient.test.js`
+       - `test/unit/wm/goodsIssueIsolation.test.js`
+       - `test/unit/wm/goodsIssuePerTypeNormalize.test.js`
+       - `test/unit/wm/goodsIssuePerTypeMapper.test.js`
+       - `test/unit/wm/goodsIssuePerTypeValidation.test.js`
+       - `test/unit/wm/goodsIssueDashboardClient.test.js`
+       - `test/unit/wm/goodsIssuePhase5Routing.test.js`
+       - `test/unit/wm/goodsIssueResvPrefill.test.js`
+       - `test/unit/wm/goodsIssueService.test.js`
+       - `test/unit/wm/goodsIssueOutcomesPerType.test.js`
+       - `test/unit/wm/goodsIssueSapRfcContract.test.js`
+       - `test/unit/dashboard/dashboardMetrics.test.js`
+       - `test/unit/dashboard/dashboardMvtKpi.test.js`
+       - `test/unit/wm/fixtures/goodsIssueFixtures.js`
+  6. **Documentation**:
+     - `docs/service-map.md`: Removed 261 references.
+- **Validation Results**:
+  - `npm run test:unit -- --forceExit`: **118 passed / 118 test suites, 2016 passed / 2016 tests** (0 failed).
+  - `npx cds compile srv/wm/goods-issue/service.cds`: **Passed** (exited 0, CSN generated cleanly).
+  - `npm --prefix app/fiori-app run lint`: **Passed** (UI5 Linter: "Success! No findings detected.").
+  - `git diff --check`: **Clean** (0 whitespace/formatting errors).
+  - `grep -r "261" srv/ db/ app/`: **Zero occurrences**.
+- **Errors / Warnings / Blockers**: None.
+- **Next Steps**: Repository clean and ready. All remaining Goods Issue operations (201 Cost Center, 301 Plant Transfer, 311 Storage Location Transfer) fully functional.
 - **Agent**: Antigravity
 - **Current Status**: **Complete, Tested, and Verified on Live SAP S/4HANA.**
 - **Scope & User Request**:

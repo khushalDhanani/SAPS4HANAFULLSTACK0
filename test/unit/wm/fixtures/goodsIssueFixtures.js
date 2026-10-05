@@ -46,8 +46,8 @@ function createMockReservationItems() {
       RequiredQty: 100.0,
       WithdrawnQty: 0.0,
       OpenQty: 100.0,
-      MovementType: '261',
-      MovementTypeName: 'GI for order',
+      MovementType: '311',
+      MovementTypeName: 'Transfer intra-plant',
       PackagingUnits: [...mockPackagingUnitsRM4520]
     },
     {
@@ -66,8 +66,8 @@ function createMockReservationItems() {
       RequiredQty: 60.0,
       WithdrawnQty: 0.0,
       OpenQty: 60.0,
-      MovementType: '261',
-      MovementTypeName: 'GI for order',
+      MovementType: '311',
+      MovementTypeName: 'Transfer intra-plant',
       PackagingUnits: [...mockPackagingUnitsRM4831]
     },
     {
@@ -86,8 +86,8 @@ function createMockReservationItems() {
       RequiredQty: 40.0,
       WithdrawnQty: 15.0,
       OpenQty: 25.0,
-      MovementType: '261',
-      MovementTypeName: 'GI for order',
+      MovementType: '311',
+      MovementTypeName: 'Transfer intra-plant',
       PackagingUnits: [...mockPackagingUnitsRM5100]
     },
     {
@@ -106,8 +106,8 @@ function createMockReservationItems() {
       RequiredQty: 50.0,
       WithdrawnQty: 10.0,
       OpenQty: 40.0,
-      MovementType: '261',
-      MovementTypeName: 'GI for order',
+      MovementType: '311',
+      MovementTypeName: 'Transfer intra-plant',
       PackagingUnits: [...mockPackagingUnitsAlum]
     }
   ];

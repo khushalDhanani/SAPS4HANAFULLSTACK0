@@ -8,7 +8,6 @@ const CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
 
 const MOVEMENT_TYPE_NAMES = {
   '201': 'Goods Issue for Cost Center',
-  '261': 'Goods Issue to Order',
   '301': 'Plant-to-Plant Transfer',
   '311': 'Storage Location Transfer'
 };
@@ -139,7 +138,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     }
 
     const sMovementType = String(movementType || '').trim();
-    if (sMovementType && !['201', '261', '301', '311'].includes(sMovementType)) {
+    if (sMovementType && !['201', '301', '311'].includes(sMovementType)) {
       const err = new Error(`Invalid movement type '${sMovementType}'`);
       err.status = 400;
       throw err;
@@ -154,20 +153,15 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
       }
     }
 
-    // 1. Fetch Open Reservations in parallel for 201, 261, 301, 311
+    // 1. Fetch Open Reservations in parallel for 201, 301, 311
     let r201 = [];
-    let r261 = [];
     let r301 = [];
     let r311 = [];
     if (this.reservationsClient && typeof this.reservationsClient.getOpenReservations === 'function') {
       try {
-        [r201, r261, r301, r311] = await Promise.all([
+        [r201, r301, r311] = await Promise.all([
           this.reservationsClient.getOpenReservations('201', sPlant).catch((e) => {
             LOG.warn(`Failed reading open 201 reservations: ${e.message}`);
-            return [];
-          }),
-          this.reservationsClient.getOpenReservations('261', sPlant).catch((e) => {
-            LOG.warn(`Failed reading open 261 reservations: ${e.message}`);
             return [];
           }),
           this.reservationsClient.getOpenReservations('301', sPlant).catch((e) => {
@@ -186,17 +180,16 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
 
     // 2. Open pending reservation counts
     const openPending201 = r201 ? r201.length : 0;
-    const openPending261 = r261 ? r261.length : 0;
     const openPending301 = r301 ? r301.length : 0;
     const openPending311 = r311 ? r311.length : 0;
-    const openPendingOverall = openPending201 + openPending261 + openPending301 + openPending311;
+    const openPendingOverall = openPending201 + openPending301 + openPending311;
 
     // 3. All-time total counts. Prefer the SAP-side OData $count (returns only the number, no row
     //    transfer) over pulling every MATDOC row and counting in JS. Verified live that
     //    A_MaterialDocumentItem/$count by GoodsMovementType (+Plant) equals the MATDOC row count.
     //    Falls back to the RFC MATDOC/MSEG row-count if the OData $count is unavailable.
-    const countTypes = sMovementType ? [sMovementType] : ['201', '261', '301', '311'];
-    let allTimeTotals = { '201': 0, '261': 0, '301': 0, '311': 0, overall: 0 };
+    const countTypes = sMovementType ? [sMovementType] : ['201', '301', '311'];
+    let allTimeTotals = { '201': 0, '301': 0, '311': 0, overall: 0 };
     let countedViaOData = true;
     try {
       const counts = await Promise.all(countTypes.map((t) => this._countMovementTypeViaOData(t, sPlant)));
@@ -206,12 +199,12 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
       });
     } catch (odataErr) {
       countedViaOData = false;
-      allTimeTotals = { '201': 0, '261': 0, '301': 0, '311': 0, overall: 0 };
+      allTimeTotals = { '201': 0, '301': 0, '311': 0, overall: 0 };
       LOG.warn(`OData $count unavailable (${odataErr.message}); falling back to RFC MATDOC/MSEG row-count.`);
     }
 
     if (!countedViaOData) {
-      const totalWhere = [sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','261','301','311')"];
+      const totalWhere = [sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','301','311')"];
       if (sPlant) {
         totalWhere.push(`AND WERKS = '${sPlant}'`);
       }
@@ -254,7 +247,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     const startYMD = formatDateToYMD(startDateObj);
 
     const windowWhere = [
-      sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','261','301','311')",
+      sMovementType ? `BWART = '${sMovementType}'` : "BWART IN ('201','301','311')",
       `AND BUDAT >= '${startYMD}'`
     ];
     if (sPlant) {
@@ -289,7 +282,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     });
 
     // 5. Today's postings calculation
-    const todayCounts = { '201': 0, '261': 0, '301': 0, '311': 0, overall: 0 };
+    const todayCounts = { '201': 0, '301': 0, '311': 0, overall: 0 };
     for (const r of windowRows) {
       if (r.BUDAT === todayYMD) {
         if (todayCounts[r.BWART] !== undefined) {
@@ -301,7 +294,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
 
     // 6. Movement type distribution (based on all-time totals, or window rows if all-time is 0)
     const distTotal = allTimeTotals.overall > 0 ? allTimeTotals.overall : windowRows.length;
-    const distribution = ['201', '261', '301', '311'].map((mvt) => {
+    const distribution = ['201', '301', '311'].map((mvt) => {
       const count = allTimeTotals.overall > 0 ? (allTimeTotals[mvt] || 0) : windowRows.filter((r) => r.BWART === mvt).length;
       const percentage = distTotal > 0 ? Number(((count / distTotal) * 100).toFixed(2)) : 0;
       return {
@@ -324,7 +317,6 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
         PostingDate: iso,
         DateLabel: label,
         Count201: 0,
-        Count261: 0,
         Count301: 0,
         Count311: 0,
         Total: 0
@@ -336,7 +328,6 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
       if (trendMap.has(bdate)) {
         const item = trendMap.get(bdate);
         if (r.BWART === '201') item.Count201++;
-        else if (r.BWART === '261') item.Count261++;
         else if (r.BWART === '301') item.Count301++;
         else if (r.BWART === '311') item.Count311++;
         item.Total++;
@@ -350,7 +341,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     //    firing four extra movement-type-filtered getDashboardData calls (5 backend loads -> 1).
     const topRecent = windowRows.slice(0, 50);
 
-    const byType = { '201': [], '261': [], '301': [], '311': [] };
+    const byType = { '201': [], '301': [], '311': [] };
     if (!sMovementType) {
       for (const r of windowRows) {
         if (byType[r.BWART] && byType[r.BWART].length < 50) {
@@ -362,7 +353,7 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     // One batched description read (see _descriptions) covering the global slice and every per-type slice.
     const descMatnrs = topRecent.map((r) => r.MATNR);
     if (!sMovementType) {
-      ['201', '261', '301', '311'].forEach((t) => byType[t].forEach((r) => descMatnrs.push(r.MATNR)));
+      ['201', '301', '311'].forEach((t) => byType[t].forEach((r) => descMatnrs.push(r.MATNR)));
     }
     const descriptions = await this._descriptions(descMatnrs.filter(Boolean));
 
@@ -396,7 +387,6 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
     const recentDocuments = topRecent.map(mapRow);
     const recentByType = sMovementType ? undefined : {
       Mvt201: byType['201'].map(mapRow),
-      Mvt261: byType['261'].map(mapRow),
       Mvt301: byType['301'].map(mapRow),
       Mvt311: byType['311'].map(mapRow)
     };
@@ -407,11 +397,6 @@ class GoodsIssueDashboardClient extends BaseGoodsIssueClient {
           TotalCount: allTimeTotals['201'],
           OpenPendingCount: openPending201,
           TodayPostingsCount: todayCounts['201']
-        },
-        Mvt261: {
-          TotalCount: allTimeTotals['261'],
-          OpenPendingCount: openPending261,
-          TodayPostingsCount: todayCounts['261']
         },
         Mvt301: {
           TotalCount: allTimeTotals['301'],

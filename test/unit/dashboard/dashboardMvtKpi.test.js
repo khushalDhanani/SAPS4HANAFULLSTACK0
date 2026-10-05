@@ -2,7 +2,7 @@
  * Dashboard Movement-Type KPI Cards — Unit Tests
  *
  * Tests the Dashboard controller's _loadGiKpis() method that fetches
- * movement-type KPI data (201/261/301/311) from the Goods Issue dashboard
+ * movement-type KPI data (201/301/311) from the Goods Issue dashboard
  * backend endpoint and populates the view model.
  *
  * Also tests the GoodsIssueDashboardClient.getDashboardData() server-side
@@ -49,13 +49,12 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         });
     });
 
-    test('returns KPI structure with Mvt201, Mvt261, Mvt301, Mvt311 keys', async () => {
+    test('returns KPI structure with Mvt201, Mvt301, Mvt311 keys', async () => {
         const data = await client.getDashboardData({ days: 30, forceRefresh: true });
 
         expect(data).toBeDefined();
         expect(data.Kpis).toBeDefined();
         expect(data.Kpis.Mvt201).toBeDefined();
-        expect(data.Kpis.Mvt261).toBeDefined();
         expect(data.Kpis.Mvt301).toBeDefined();
         expect(data.Kpis.Mvt311).toBeDefined();
         expect(data.Kpis.Overall).toBeDefined();
@@ -64,7 +63,7 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
     test('each KPI item has TotalCount, OpenPendingCount, TodayPostingsCount', async () => {
         const data = await client.getDashboardData({ days: 7, forceRefresh: true });
 
-        ['Mvt201', 'Mvt261', 'Mvt301', 'Mvt311', 'Overall'].forEach((key) => {
+        ['Mvt201', 'Mvt301', 'Mvt311', 'Overall'].forEach((key) => {
             const item = data.Kpis[key];
             expect(typeof item.TotalCount).toBe('number');
             expect(typeof item.OpenPendingCount).toBe('number');
@@ -77,44 +76,39 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         const todayYMD = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
 
         // All-time counts now come from the SAP-side OData $count (per movement type).
-        mockClient.getText.mockImplementation(countByType({ '201': 2, '261': 3, '301': 1, '311': 1 }));
+        mockClient.getText.mockImplementation(countByType({ '201': 2, '301': 1, '311': 1 }));
         // Window rows still come from RFC MATDOC.
         mockRfc.readTable
             .mockResolvedValueOnce([ // Window MATDOC — includes today
-                { MBLNR: '5000001', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '1000000001', WERKS: '1000', LGORT: 'HS01', CHARG: '', MENGE: '100', MEINS: 'KG', BUDAT: todayYMD, USNAM: 'KHUSHAL', KOSTL: '', AUFNR: '', RSNUM: '', RSPOS: '', SHKZG: 'H' },
-                { MBLNR: '5000003', MJAHR: '2026', ZEILE: '0001', BWART: '261', MATNR: '1000000002', WERKS: '1000', LGORT: 'HS01', CHARG: '', MENGE: '50', MEINS: 'KG', BUDAT: todayYMD, USNAM: 'KHUSHAL', KOSTL: '', AUFNR: '1001', RSNUM: '', RSPOS: '', SHKZG: 'H' }
+                { MBLNR: '5000001', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '1000000001', WERKS: '1000', LGORT: 'HS01', CHARG: '', MENGE: '100', MEINS: 'KG', BUDAT: todayYMD, USNAM: 'KHUSHAL', KOSTL: '', AUFNR: '', RSNUM: '', RSPOS: '', SHKZG: 'H' }
             ]);
 
         const data = await client.getDashboardData({ days: 30, forceRefresh: true });
 
         expect(data.Kpis.Mvt201.TotalCount).toBe(2);
-        expect(data.Kpis.Mvt261.TotalCount).toBe(3);
         expect(data.Kpis.Mvt301.TotalCount).toBe(1);
         expect(data.Kpis.Mvt311.TotalCount).toBe(1);
-        expect(data.Kpis.Overall.TotalCount).toBe(7);
+        expect(data.Kpis.Overall.TotalCount).toBe(4);
 
         // Today's postings
         expect(data.Kpis.Mvt201.TodayPostingsCount).toBe(1);
-        expect(data.Kpis.Mvt261.TodayPostingsCount).toBe(1);
         expect(data.Kpis.Mvt301.TodayPostingsCount).toBe(0);
         expect(data.Kpis.Mvt311.TodayPostingsCount).toBe(0);
-        expect(data.Kpis.Overall.TodayPostingsCount).toBe(2);
+        expect(data.Kpis.Overall.TodayPostingsCount).toBe(1);
     });
 
     test('includes open reservation counts in OpenPendingCount', async () => {
         mockReservationsClient.getOpenReservations
             .mockResolvedValueOnce([{ ReservationNo: '1' }, { ReservationNo: '2' }])   // 201
-            .mockResolvedValueOnce([{ ReservationNo: '3' }])                            // 261
             .mockResolvedValueOnce([])                                                  // 301
             .mockResolvedValueOnce([{ ReservationNo: '4' }, { ReservationNo: '5' }, { ReservationNo: '6' }]); // 311
 
         const data = await client.getDashboardData({ days: 30, forceRefresh: true });
 
         expect(data.Kpis.Mvt201.OpenPendingCount).toBe(2);
-        expect(data.Kpis.Mvt261.OpenPendingCount).toBe(1);
         expect(data.Kpis.Mvt301.OpenPendingCount).toBe(0);
         expect(data.Kpis.Mvt311.OpenPendingCount).toBe(3);
-        expect(data.Kpis.Overall.OpenPendingCount).toBe(6);
+        expect(data.Kpis.Overall.OpenPendingCount).toBe(5);
     });
 
     test('caches results within TTL window', async () => {
@@ -142,14 +136,14 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         mockClient.getText.mockRejectedValue(new Error('OData $count not available'));
         mockRfc.readTable
             .mockRejectedValueOnce(new Error('MATDOC not authorized'))  // all-time
-            .mockResolvedValueOnce([{ MBLNR: '1', BWART: '261' }])     // MSEG fallback
+            .mockResolvedValueOnce([{ MBLNR: '1', BWART: '201' }])     // MSEG fallback
             .mockRejectedValueOnce(new Error('MATDOC not authorized'))  // window
             .mockResolvedValueOnce([]);                                 // MSEG fallback
 
         const data = await client.getDashboardData({ days: 7, forceRefresh: true });
 
         expect(data).toBeDefined();
-        expect(data.Kpis.Mvt261.TotalCount).toBe(1);
+        expect(data.Kpis.Mvt201.TotalCount).toBe(1);
     });
 
     test('returns LastUpdated timestamp', async () => {
@@ -174,7 +168,6 @@ describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', ()
 
     const GI_KPI_KEYS = [
         'mvt201Total', 'mvt201Today',
-        'mvt261Total', 'mvt261Today',
         'mvt301Total', 'mvt301Today',
         'mvt311Total', 'mvt311Today'
     ];
@@ -192,16 +185,14 @@ describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', ()
         const oModel = createMockModel();
         const oKpis = {
             Mvt201: { TotalCount: 54, OpenPendingCount: 3, TodayPostingsCount: 2 },
-            Mvt261: { TotalCount: 9671, OpenPendingCount: 120, TodayPostingsCount: 15 },
             Mvt301: { TotalCount: 3020, OpenPendingCount: 0, TodayPostingsCount: 0 },
             Mvt311: { TotalCount: 1052, OpenPendingCount: 5, TodayPostingsCount: 1 },
-            Overall: { TotalCount: 13797, OpenPendingCount: 128, TodayPostingsCount: 18 }
+            Overall: { TotalCount: 4126, OpenPendingCount: 8, TodayPostingsCount: 3 }
         };
 
         // Simulate the mapping logic from the controller
         const mMapping = {
             'Mvt201': { total: 'mvt201Total', today: 'mvt201Today' },
-            'Mvt261': { total: 'mvt261Total', today: 'mvt261Today' },
             'Mvt301': { total: 'mvt301Total', today: 'mvt301Today' },
             'Mvt311': { total: 'mvt311Total', today: 'mvt311Today' }
         };
@@ -223,8 +214,6 @@ describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', ()
 
         expect(oModel.data['/mvt201Total']).toBe(54);
         expect(oModel.data['/mvt201Today']).toBe(2);
-        expect(oModel.data['/mvt261Total']).toBe(9671);
-        expect(oModel.data['/mvt261Today']).toBe(15);
         expect(oModel.data['/mvt301Total']).toBe(3020);
         expect(oModel.data['/mvt301Today']).toBe(0);
         expect(oModel.data['/mvt311Total']).toBe(1052);

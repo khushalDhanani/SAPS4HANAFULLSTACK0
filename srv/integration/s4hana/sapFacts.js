@@ -37,7 +37,7 @@ const RFBSK = {
 const STATV = { '': 'Not Relevant', A: 'Not yet processed', B: 'Partially processed', C: 'Completely processed' };
 
 /** Header ReferenceDocument (MATDOC-XBLNR) proven persisted by a live read-back of app-created documents. */
-const REFERENCE_PERSISTED_MOVEMENT_TYPES = ['201', '261']; // 201: 4900049865; 261: 4900050018/24/28. 301/311 not proven.
+const REFERENCE_PERSISTED_MOVEMENT_TYPES = ['201']; // 201: 4900049865. 301/311 not proven.
 
 let offsetPromise = null;
 

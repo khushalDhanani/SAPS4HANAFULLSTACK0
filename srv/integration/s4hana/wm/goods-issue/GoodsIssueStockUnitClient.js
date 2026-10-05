@@ -60,7 +60,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
   constructor(options = {}) {
     super(options);
     this.batchesClient = options.batchesClient || (this.adapter && this.adapter.batches) || null;
-    this.issuedSuStore = options.issuedSuStore || (this.adapter && this.adapter.issuedSuStore) || null;
     this.stagingClient = options.stagingClient || (this.adapter && this.adapter.stagingClient) || null;
     this._huModelCache = null;
     this.rfc = options.rfc || new RfcClient();
@@ -71,13 +70,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    * @returns {Object|null}
    */
   _getIssuedSuStore() {
-    if (this.issuedSuStore) return this.issuedSuStore;
-    if (this.adapter && this.adapter.issuedSuStore) return this.adapter.issuedSuStore;
-    try {
-      return require('../../../../wm/goods-issue/GoodsIssueIssuedSuStore');
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   /**
@@ -753,9 +746,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const resbLgtyp = String(resbRow.LGTYP || '').trim();
     if (!resbLgtyp) {
       // The storage location IS WM-managed (this method only runs after a T320 hit), but the
-      // reservation item carries no staging type. The 261 posting path
-      // (GoodsIssuePhase6StagingClient) blocks this state, so the 261 LIST must not label it
-      // NOT_WM_MANAGED and show it postable. Barcode/serial resolution for flows without a
+      // reservation item carries no staging type. Barcode/serial resolution for flows without a
       // staging gate (301/311) keeps working, so this is a marker, not a hard UNKNOWN here.
       return {
         isStagingRequired: false,

@@ -3,7 +3,7 @@
  * Pure CAP-domain normalization PRIMITIVES + reversal normalization.
  *
  * NOTE: Per-movement-type posting normalization now lives in the isolated
- * goodsIssue201/261/301/311.normalize.js modules (Phase 2). This file holds only the
+ * goodsIssue201/301/311.normalize.js modules (Phase 2). This file holds only the
  * type-agnostic helpers they share and the (type-agnostic) reversal normalizer.
  */
 

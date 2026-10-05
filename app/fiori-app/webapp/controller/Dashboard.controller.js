@@ -58,14 +58,12 @@ sap.ui.define([
     // Movement-type KPI model property keys (loaded from GoodsIssueService.getDashboardData)
     var GI_KPI_KEYS = [
         "mvt201Total", "mvt201Today",
-        "mvt261Total", "mvt261Today",
         "mvt301Total", "mvt301Today",
         "mvt311Total", "mvt311Today"
     ];
 
     var mRoutes = {
         "201": "wmGoodsIssue201Pending",
-        "261": "wmGoodsIssue261Pending",
         "301": "wmGoodsIssue301Pending",
         "311": "wmGoodsIssue311Pending"
     };
@@ -306,10 +304,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("createSalesOrder");
         },
 
-        onNavigateToGoodsIssue: function () {
-            this.getOwnerComponent().getRouter().navTo("wmGoodsIssue261Pending");
-        },
-
         onNavigateToGoodsReceipt: function () {
             this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt");
         },
@@ -352,12 +346,12 @@ sap.ui.define([
         // ─── Movement-Type KPI Cards (EWM Tab) ───────────────────────────
 
         /**
-         * Loads Goods Issue KPI data (movement types 201/261/301/311) from
+         * Loads Goods Issue KPI data (movement types 201/301/311) from
          * GoodsIssueService.getDashboardData. The server uses a 60 s cache.
          *
          * Model properties set:
-         *   /mvt{201|261|301|311}Total  — all-time posting count (number|null|undefined)
-         *   /mvt{201|261|301|311}Today  — today's posting count (number|null|undefined)
+         *   /mvt{201|301|311}Total  — all-time posting count (number|null|undefined)
+         *   /mvt{201|301|311}Today  — today's posting count (number|null|undefined)
          *   /giKpiError                 — error string (empty when OK)
          *
          * @param {boolean} [bForceRefresh] - bypass server cache
@@ -388,7 +382,6 @@ sap.ui.define([
 
                     var mMapping = {
                         "Mvt201": { total: "mvt201Total", today: "mvt201Today" },
-                        "Mvt261": { total: "mvt261Total", today: "mvt261Today" },
                         "Mvt301": { total: "mvt301Total", today: "mvt301Today" },
                         "Mvt311": { total: "mvt311Total", today: "mvt311Today" }
                     };
@@ -436,15 +429,14 @@ sap.ui.define([
          * Opens the Goods Issue dashboard, which shows a dedicated recent-postings section per
          * movement type. No client filter is applied (the dashboard has none); the toast only
          * confirms which movement type the user opened.
-         * @param {string} sMvtType - "201", "261", "301", or "311"
+         * @param {string} sMvtType - "201", "301", or "311"
          * @private
          */
         _navigateToGiFiltered: function (sMvtType) {
             // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201, 261, 301, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow).
+            // 201, 301, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow).
             var mRoutes = {
                 "201": "wmGoodsIssue201Pending",
-                "261": "wmGoodsIssue261Pending",
                 "301": "wmGoodsIssue301Pending",
                 "311": "wmGoodsIssue311Pending"
             };
@@ -459,10 +451,6 @@ sap.ui.define([
 
         onMvt201TilePress: function () {
             this._navigateToGiFiltered("201");
-        },
-
-        onMvt261TilePress: function () {
-            this._navigateToGiFiltered("261");
         },
 
         onMvt301TilePress: function () {

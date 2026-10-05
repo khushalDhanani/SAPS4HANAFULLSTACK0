@@ -318,7 +318,6 @@ class GoodsIssueAttemptStore {
       return summary;
     }
 
-    const suStore = require('./GoodsIssueIssuedSuStore');
     const maxAge = GoodsIssueAttemptStore.unconfirmedMaxAgeMs();
 
     for (const attempt of unconfirmedAttempts) {
@@ -334,12 +333,6 @@ class GoodsIssueAttemptStore {
             MaterialDocYear: confYear,
             LastError: ''
           });
-          if (suStore && typeof suStore.clearUnconfirmedFlag === 'function') {
-            await suStore.clearUnconfirmedFlag(
-              verified.MaterialDocument || attempt.MaterialDocument,
-              confYear
-            );
-          }
           summary.Confirmed++;
         } else if (age >= maxAge) {
           const finding = `Document unconfirmed after maximum age (${Math.round(age / 60000)} min); marked needs-attention`;
@@ -353,14 +346,6 @@ class GoodsIssueAttemptStore {
       } catch (err) {
         LOG.warn(`Re-confirm job failed for attempt ${attempt.ReferenceDocument} (${attempt.MaterialDocument}): ${err.message}`);
         summary.Errors++;
-      }
-    }
-
-    if (suStore && typeof suStore.reconfirmUnconfirmed === 'function') {
-      try {
-        await suStore.reconfirmUnconfirmed(adapter, now);
-      } catch (suErr) {
-        LOG.warn(`SU store reconfirmUnconfirmed error: ${suErr.message}`);
       }
     }
 

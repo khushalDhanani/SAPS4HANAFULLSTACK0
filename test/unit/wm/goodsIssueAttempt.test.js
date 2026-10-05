@@ -11,7 +11,6 @@ const { ATTEMPT_ENTITY } = attempts;
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-const GoodsIssueIssuedSuStore = require('../../../srv/wm/goods-issue/GoodsIssueIssuedSuStore');
 
 const { SELECT, DELETE } = cds.ql;
 const MIN = 60000;
@@ -138,76 +137,10 @@ describe('unconfirmed documents and re-confirm job', () => {
   beforeEach(async () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     attempts.clearMemoryStore();
-    await GoodsIssueIssuedSuStore.clear();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
   });
 
-  test('unconfirmed documents promote SU claim to issued and are stored on attempt as unconfirmed', async () => {
-    const suPayload = {
-      MovementType: '261',
-      ReservationNo: '0000142001',
-      ReservationItem: '0001',
-      Material: '1000000514',
-      Plant: '1120',
-      StorageLocation: 'HS01',
-      IssueQty: 10,
-      Unit: 'KG',
-      PostingDate: '2026-10-02',
-      StorageUnits: ['SU9901']
-    };
-
-    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
-      ReservationNo: '0000142001',
-      ReservationItem: '0001',
-      Material: '1000000514',
-      Plant: '1120',
-      StorageLocation: 'HS01',
-      RequirementQuantity: 10,
-      WithdrawnQuantity: 0,
-      BaseUnit: 'KG',
-      OpenQty: 10
-    });
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
-    jest.spyOn(GoodsIssueAdapter, 'listStockUnitsForReservationItem').mockResolvedValue({
-      ReservationNo: '0000142001',
-      ReservationItem: '0001',
-      Material: '1000000514',
-      Plant: '1120',
-      StorageLocation: 'HS01',
-      StockUnits: [{
-        StorageUnit: 'SU9901',
-        AvailableStock: 50,
-        Unit: 'KG',
-        Material: '1000000514',
-        Plant: '1120',
-        StorageLocation: 'HS01'
-      }],
-      IsStagingRequired: false,
-      IsFullyStaged: true
-    });
-    jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockResolvedValue({
-      MaterialDocument: '4900099999',
-      MaterialDocYear: '2026',
-      Success: true,
-      Confirmed: false,
-      ConfirmationStatus: 'POSTED_CONFIRMATION_PENDING'
-    });
-
-    const res = await handlers.postGoodsIssue261(req(suPayload));
-    expect(res).toBeDefined();
-    expect(res.MaterialDocument).toBe('4900099999');
-    expect(res.Confirmed).toBe(false);
-
-    // Verify SU claim was promoted to issued with Confirmed: false
-    const activeSUs = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
-    const suClaim = activeSUs.find((r) => r.StorageUnit === 'SU9901');
-    expect(suClaim).toBeDefined();
-    expect(suClaim.Status).toBe('issued');
-    expect(suClaim.MaterialDocument).toBe('4900099999');
-    expect(suClaim.Confirmed).toBe(false);
-
-    // Verify attempt is recorded with Status: 'unconfirmed' and document number on 201
+  test('unconfirmed documents are stored on attempt as unconfirmed', async () => {
     jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockResolvedValue({
       MaterialDocument: '4900088888',
       MaterialDocYear: '2026',
@@ -220,11 +153,7 @@ describe('unconfirmed documents and re-confirm job', () => {
     expect(res201.Confirmed).toBe(false);
 
     const attList = await allAttempts();
-    const att261 = attList.find((a) => a.MovementType === '261');
     const att201 = attList.find((a) => a.MovementType === '201');
-    expect(att261).toBeDefined();
-    expect(att261.Status).toBe('unconfirmed');
-    expect(att261.MaterialDocument).toBe('4900099999');
     expect(att201).toBeDefined();
     expect(att201.Status).toBe('unconfirmed');
     expect(att201.MaterialDocument).toBe('4900088888');
@@ -236,9 +165,7 @@ describe('unconfirmed documents and re-confirm job', () => {
     const refDoc = 'GICONFIRM001';
     await attempts.create({
       ReferenceDocument: refDoc,
-      MovementType: '261',
-      ReservationNo: '0000142001',
-      ReservationItem: '0001',
+      MovementType: '201',
       Material: '1000000514',
       Plant: '1120',
       StorageLocation: 'HS01',
@@ -250,26 +177,7 @@ describe('unconfirmed documents and re-confirm job', () => {
       MaterialDocYear: '2026'
     });
 
-    // 2. Setup SU claim with Confirmed: false
-    const claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
-      reservationNo: '0000142001',
-      reservationItem: '0001',
-      material: '1000000514',
-      plant: '1120',
-      storageLocation: 'HS01',
-      referenceDocument: refDoc,
-      items: [{ storageUnit: 'SU9902', issuedQty: 10, preIssueStock: 50 }]
-    });
-    await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
-      materialDocument: '4900099999',
-      materialDocYear: '2026',
-      confirmed: false
-    });
-
-    const activeBefore = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
-    expect(activeBefore.find((r) => r.StorageUnit === 'SU9902').Confirmed).toBe(false);
-
-    // 3. Mock adapter.readBackDocument to confirm
+    // 2. Mock adapter.readBackDocument to confirm
     jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({
       MaterialDocument: '4900099999',
       MaterialDocYear: '2026',
@@ -277,22 +185,17 @@ describe('unconfirmed documents and re-confirm job', () => {
       Status: 'confirmed'
     });
 
-    // 4. Run reconfirmUnconfirmed job
+    // 3. Run reconfirmUnconfirmed job
     const summary = await attempts.reconfirmUnconfirmed(GoodsIssueAdapter);
     expect(summary.Checked).toBe(1);
     expect(summary.Confirmed).toBe(1);
 
-    // 5. Verify attempt is now 'posted'
+    // 4. Verify attempt is now 'posted'
     const updatedAttempt = await attempts.getByReference(refDoc);
     expect(updatedAttempt.Status).toBe('posted');
-
-    // 6. Verify SU claim has unconfirmed flag cleared (Confirmed: true)
-    const activeAfter = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
-    const updatedSu = activeAfter.find((r) => r.StorageUnit === 'SU9902');
-    expect(updatedSu.Confirmed).toBe(true);
   });
 
-  test('reconfirmUnconfirmed marks attempt and SU claims needs-attention past maximum age', async () => {
+  test('reconfirmUnconfirmed marks attempt needs-attention past maximum age', async () => {
     // 1. Setup attempt in 'unconfirmed' status
     const refDoc = 'GICONFIRM002';
     await attempts.create({
@@ -309,23 +212,7 @@ describe('unconfirmed documents and re-confirm job', () => {
       MaterialDocYear: '2026'
     });
 
-    // 2. Setup SU claim with Confirmed: false
-    const claimIds = await GoodsIssueIssuedSuStore.acquireClaims({
-      reservationNo: '0000142002',
-      reservationItem: '0001',
-      material: '1000000980',
-      plant: '1120',
-      storageLocation: 'HS01',
-      referenceDocument: refDoc,
-      items: [{ storageUnit: 'SU9903', issuedQty: 1, preIssueStock: 10 }]
-    });
-    await GoodsIssueIssuedSuStore.promoteClaims(claimIds, {
-      materialDocument: '4900088888',
-      materialDocYear: '2026',
-      confirmed: false
-    });
-
-    // 3. Mock adapter.readBackDocument to return unconfirmed (e.g. still commit lag or not found)
+    // 2. Mock adapter.readBackDocument to return unconfirmed (e.g. still commit lag or not found)
     jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({
       MaterialDocument: '4900088888',
       MaterialDocYear: '2026',
@@ -333,68 +220,46 @@ describe('unconfirmed documents and re-confirm job', () => {
       Status: 'posted, confirmation pending'
     });
 
-    // 4. Run reconfirmUnconfirmed job past max age (e.g. 35 minutes later)
+    // 3. Run reconfirmUnconfirmed job past max age (e.g. 35 minutes later)
     const maxAge = attempts.constructor.unconfirmedMaxAgeMs();
     const pastMaxAgeTime = Date.now() + maxAge + 5000;
     const summary = await attempts.reconfirmUnconfirmed(GoodsIssueAdapter, pastMaxAgeTime);
     expect(summary.Checked).toBe(1);
     expect(summary.MarkedNeedsAttention).toBe(1);
 
-    // 5. Verify attempt is now 'needs-attention'
+    // 4. Verify attempt is now 'needs-attention'
     const updatedAttempt = await attempts.getByReference(refDoc);
     expect(updatedAttempt.Status).toBe('needs-attention');
     expect(updatedAttempt.LastError).toContain('marked needs-attention');
-
-    // 6. Verify SU claim is also marked needs-attention
-    const activeAfter = await GoodsIssueIssuedSuStore.getActiveIssuedSUs();
-    const suClaim = activeAfter.find((r) => r.StorageUnit === 'SU9903');
-    expect(suClaim.Status).toBe('needs-attention');
-    expect(suClaim.NeedsAttention).toBe(true);
   });
 });
 
-describe('Movement 261 idempotent posting attempts', () => {
+describe('Movement 201 idempotent posting attempts and outcome mapping', () => {
   const handlers = fakeService();
-  const request = {
-    ReservationNo: '0000142001',
-    ReservationItem: '0001',
-    Material: '1000000514',
+  const request201 = {
+    MovementType: '201',
+    CostCenter: '1011101301',
+    Material: '8000006645',
     Plant: '1120',
     StorageLocation: 'HS01',
-    Batch: 'BATCH01',
-    IssueQty: 10,
-    Unit: 'KG',
+    IssueQty: 1,
+    Unit: 'NOS',
     PostingDate: '2026-10-03'
-  };
-  const reservationItem = {
-    ReservationNo: request.ReservationNo,
-    ReservationItem: request.ReservationItem,
-    Material: request.Material,
-    Plant: request.Plant,
-    StorageLocation: request.StorageLocation,
-    Batch: request.Batch,
-    OrderNo: '1002801',
-    RequiredQty: 100,
-    WithdrawnQty: 0,
-    BaseUnit: request.Unit,
-    OpenQty: 100
   };
 
   beforeEach(async () => {
     jest.restoreAllMocks();
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     attempts.clearMemoryStore();
-    await GoodsIssueIssuedSuStore.clear();
-    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue(reservationItem);
-    jest.spyOn(GoodsIssueAdapter, 'validateBatchForPosting').mockResolvedValue({ valid: true });
-    jest.spyOn(GoodsIssueAdapter, 'checkStagingForReservation').mockResolvedValue({ isVerified: true, isStaged: true });
+    jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
     jest.spyOn(GoodsIssueAdapter, 'isSerialManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
   });
   afterEach(() => jest.restoreAllMocks());
 
   test('an identical retry after posting returns the existing SAP document without reposting', async () => {
     const postPayloads = [];
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockImplementation(async (data) => {
       postPayloads.push({ ...data });
       return {
         MaterialDocument: '4900099911',
@@ -405,18 +270,15 @@ describe('Movement 261 idempotent posting attempts', () => {
       };
     });
 
-    const firstReq = req({ ...request });
-    const first = await handlers.postGoodsIssue261(firstReq);
+    const firstReq = req({ ...request201, ClientAttemptId: 'ATTEMPT-201-1' });
+    const first = await handlers.postGoodsIssue201(firstReq);
     expect(postPayloads).toHaveLength(1);
     const firstPostedPayload = postPayloads[0];
     const storedAttempts = await allAttempts();
     const persisted = storedAttempts.find((attempt) => attempt.ReferenceDocument === firstPostedPayload.ReferenceDocument);
-    const retry = await handlers.postGoodsIssue261(req({ ...request }));
+    const retry = await handlers.postGoodsIssue201(req({ ...request201, ClientAttemptId: 'ATTEMPT-201-1' }));
 
     expect(firstReq.error.mock.calls).toEqual([]);
-    // SAP requires ManufacturingOrder for 261: the order is backfilled from the
-    // authoritative reservation even though the client did not send one.
-    expect(firstPostedPayload.OrderNo).toBe('1002801');
     expect(storedAttempts.map((attempt) => attempt.ReferenceDocument)).toEqual([firstPostedPayload.ReferenceDocument]);
     expect(persisted).toMatchObject({
       ReferenceDocument: firstPostedPayload.ReferenceDocument,
@@ -432,13 +294,13 @@ describe('Movement 261 idempotent posting attempts', () => {
       PostingStatus: 'POSTED'
     });
     expect(postPayloads).toHaveLength(1);
-    expect((await allAttempts()).filter((attempt) => attempt.MovementType === '261')).toHaveLength(1);
+    expect((await allAttempts()).filter((attempt) => attempt.MovementType === '201')).toHaveLength(1);
   });
 
   test('two deliberate postings with distinct ClientAttemptId are separate attempts, same id replays', async () => {
     let docNo = 0;
     const postPayloads = [];
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockImplementation(async (data) => {
       postPayloads.push({ ...data });
       docNo += 1;
       return {
@@ -450,9 +312,9 @@ describe('Movement 261 idempotent posting attempts', () => {
       };
     });
 
-    const first = await handlers.postGoodsIssue261(req({ ...request, ClientAttemptId: 'GIA-ATTEMPT-1' }));
-    const second = await handlers.postGoodsIssue261(req({ ...request, ClientAttemptId: 'GIA-ATTEMPT-2' }));
-    const replay = await handlers.postGoodsIssue261(req({ ...request, ClientAttemptId: 'GIA-ATTEMPT-2' }));
+    const first = await handlers.postGoodsIssue201(req({ ...request201, ClientAttemptId: 'GIA-ATTEMPT-1' }));
+    const second = await handlers.postGoodsIssue201(req({ ...request201, ClientAttemptId: 'GIA-ATTEMPT-2' }));
+    const replay = await handlers.postGoodsIssue201(req({ ...request201, ClientAttemptId: 'GIA-ATTEMPT-2' }));
 
     // Same item/qty/day, different attempt ids: two real SAP posts with distinct references.
     expect(postPayloads).toHaveLength(2);
@@ -462,65 +324,6 @@ describe('Movement 261 idempotent posting attempts', () => {
     // Replaying the same attempt id must NOT post again.
     expect(replay).toMatchObject({ MaterialDocument: '4900099912', PostingStatus: 'POSTED' });
     expect(postPayloads).toHaveLength(2);
-  });
-
-  test('an identical retry during posting returns the existing pending attempt without reposting', async () => {
-    let signalStarted;
-    let releasePost;
-    const postPayloads = [];
-    const started = new Promise((resolve) => { signalStarted = resolve; });
-    const postGate = new Promise((resolve) => { releasePost = resolve; });
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
-      postPayloads.push({ ...data });
-      signalStarted();
-      await postGate;
-      return {
-        MaterialDocument: '4900099912',
-        MaterialDocYear: '2026',
-        Success: true,
-        Confirmed: true,
-        ConfirmationStatus: 'CONFIRMED'
-      };
-    });
-
-    const firstPromise = handlers.postGoodsIssue261(req({ ...request }));
-    await started;
-    const retry = await handlers.postGoodsIssue261(req({ ...request }));
-
-    expect(retry).toMatchObject({
-      Success: false,
-      Confirmed: false,
-      ConfirmationStatus: 'POSTING',
-      PostingStatus: 'UNKNOWN'
-    });
-    expect(postPayloads).toHaveLength(1);
-    releasePost();
-    await firstPromise;
-    expect((await allAttempts()).filter((attempt) => attempt.MovementType === '261')).toHaveLength(1);
-  });
-
-  test('a different payload for an open reservation remains blocked', async () => {
-    let signalStarted;
-    let releasePost;
-    const postPayloads = [];
-    const started = new Promise((resolve) => { signalStarted = resolve; });
-    const postGate = new Promise((resolve) => { releasePost = resolve; });
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue261').mockImplementation(async (data) => {
-      postPayloads.push({ ...data });
-      signalStarted();
-      await postGate;
-      return { MaterialDocument: '4900099913', MaterialDocYear: '2026', Success: true, Confirmed: true };
-    });
-
-    const firstPromise = handlers.postGoodsIssue261(req({ ...request }));
-    await started;
-    const duplicateRequest = req({ ...request, IssueQty: 9 });
-    await handlers.postGoodsIssue261(duplicateRequest);
-
-    expect(duplicateRequest.error).toHaveBeenCalledWith(409, expect.stringContaining('has a Goods Issue posting attempt pending confirmation'));
-    expect(postPayloads).toHaveLength(1);
-    releasePost();
-    await firstPromise;
   });
 
   test.each([
@@ -546,10 +349,10 @@ describe('Movement 261 idempotent posting attempts', () => {
     }
   });
 
-  test('returns POSTED only when the 261 SAP material document is confirmed', async () => {
+  test('returns POSTED only when the SAP material document is confirmed', async () => {
     const result = await PerTypeGoodsIssueHandler.postDirect(
       req({}),
-      { MovementType: '261' },
+      { MovementType: '201' },
       async () => ({ MaterialDocument: '4900000091', MaterialDocYear: '2026', Success: true, Confirmed: true })
     );
 
@@ -564,48 +367,30 @@ describe('Movement 261 idempotent posting attempts', () => {
   test('returns UNKNOWN rather than Success when SAP returned a document but read-back is pending', async () => {
     const result = await PerTypeGoodsIssueHandler.postDirect(
       req({}),
-      { MovementType: '261' },
-      async () => ({ MaterialDocument: '4900000092', MaterialDocYear: '2026', Success: true, Confirmed: false })
-    );
-
-    expect(result).toMatchObject({
-      PostingStatus: 'UNKNOWN',
-      Success: false,
-      Confirmed: false,
-      MaterialDocument: '4900000092'
-    });
-    expect(result.Message).toMatch(/read-back confirmation is pending.*do not post again/i);
-  });
-
-  test('keeps existing non-261 Success semantics while adding the outcome field', async () => {
-    const result = await PerTypeGoodsIssueHandler.postDirect(
-      req({}),
       { MovementType: '201' },
-      async () => ({ MaterialDocument: '4900000093', MaterialDocYear: '2026', Success: true, Confirmed: false })
+      async () => ({ MaterialDocument: '4900000092', MaterialDocYear: '2026', Success: true, Confirmed: false })
     );
 
     expect(result).toMatchObject({
       PostingStatus: 'UNKNOWN',
       Success: true,
       Confirmed: false,
-      MaterialDocument: '4900000093'
+      MaterialDocument: '4900000092'
     });
   });
 
   test.each([
-    [Object.assign(new Error('Deficit of stock'), { status: 422 }), 'GI_POSTING_FAILED'],
-    [Object.assign(new Error('timeout'), { status: 504 }), 'GI_POSTING_UNKNOWN']
-  ])('uses stable %s error status for a 261 SAP outcome', async (sapError, expectedCode) => {
+    [Object.assign(new Error('Deficit of stock'), { status: 422 }), 422, 'Deficit of stock'],
+    [Object.assign(new Error('timeout'), { status: 504 }), 504, 'timeout']
+  ])('uses stable status for an SAP outcome', async (sapError, expectedStatus, expectedSnippet) => {
     const request = req({});
     await PerTypeGoodsIssueHandler.postDirect(
       request,
-      { MovementType: '261' },
+      { MovementType: '201' },
       async () => { throw sapError; }
     );
 
-    expect(request.error).toHaveBeenCalledWith(expect.objectContaining({
-      code: expectedCode,
-      status: sapError.status
-    }));
+    expect(request.error).toHaveBeenCalledWith(expectedStatus, expect.stringContaining(expectedSnippet));
   });
 });
+

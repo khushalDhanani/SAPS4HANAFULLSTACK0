@@ -23,7 +23,6 @@ function makeClient({
   },
   lqua = [],
   batches = BATCHES,
-  issuedSuStore = null,
   // Default: a resolved static staging target matching the default quants' type/bin, so the
   // listing-mechanics tests run on a postable staging state. A WM item with blank RESB LGTYP
   // is fail-closed (UNKNOWN) and has its own tests.
@@ -51,7 +50,7 @@ function makeClient({
     }),
     getMaterialBatches: jest.fn().mockResolvedValue(batches)
   };
-  return { client: new GoodsIssueStockUnitClient({ adapter, rfc, issuedSuStore, stagingClient }), rfc };
+  return { client: new GoodsIssueStockUnitClient({ adapter, rfc, stagingClient }), rfc };
 }
 
 describe('GoodsIssueStockUnitClient – Storage Units for one reservation line', () => {
@@ -257,35 +256,6 @@ describe('GoodsIssueStockUnitClient – Storage Units for one reservation line',
     const res = await client.listStockUnitsForReservationItem('519366', '1');
     expect(res.StockUnits).toHaveLength(1);
     expect(res.StockUnits[0]).toMatchObject({ AvailableStock: 2000, QuantCount: 2 });
-  });
-
-  it('excludes only the current posting attempt claim during its final SAP stock revalidation', async () => {
-    const issuedSuStore = {
-      getActiveIssuedSUs: jest.fn().mockResolvedValue([
-        {
-          ReferenceDocument: 'CURRENT-ATTEMPT',
-          StorageUnit: '1000041635',
-          Status: 'claiming',
-          IssuedQty: 100,
-          PreIssueStock: 1620
-        },
-        {
-          ReferenceDocument: 'OTHER-ATTEMPT',
-          StorageUnit: '1000041635',
-          Status: 'claiming',
-          IssuedQty: 20,
-          PreIssueStock: 1620
-        }
-      ])
-    };
-    const { client } = makeClient({ lqua: [q()], issuedSuStore });
-
-    const result = await client.listStockUnitsForReservationItem('519366', '1', {
-      excludeReferenceDocument: 'CURRENT-ATTEMPT'
-    });
-
-    expect(result.StockUnits).toHaveLength(1);
-    expect(result.StockUnits[0].AvailableStock).toBe(1600);
   });
 
   it('says so when the material has no WM stock at all', async () => {

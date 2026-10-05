@@ -4,7 +4,6 @@
  */
 
 const { normalizeGoodsIssue201Payload } = require('../../../srv/wm/goods-issue/mapping/goodsIssue201.normalize');
-const { normalizeGoodsIssue261Payload } = require('../../../srv/wm/goods-issue/mapping/goodsIssue261.normalize');
 const { normalizeGoodsIssue301Payload } = require('../../../srv/wm/goods-issue/mapping/goodsIssue301.normalize');
 const { normalizeGoodsIssue311Payload } = require('../../../srv/wm/goods-issue/mapping/goodsIssue311.normalize');
 
@@ -37,15 +36,6 @@ test('201 normalize: keeps CostCenter; drops GLAccount/OrderNo/receiving', () =>
   expect(n.User).toBe('U');
 });
 
-test('261 normalize: keeps OrderNo + GLAccount; drops CostCenter/receiving', () => {
-  const n = normalizeGoodsIssue261Payload(kitchenSink, { user: 'U' });
-  expect(n.MovementType).toBe('261');
-  expect(n.OrderNo).toBe('1002743');
-  expect(n.GLAccount).toBe('400000');
-  expect(n.CostCenter).toBe('');
-  expect(n.ReceivingPlant).toBe('');
-  expect(n.ReceivingStorageLocation).toBe('');
-});
 
 test.each([
   ['301', normalizeGoodsIssue301Payload],

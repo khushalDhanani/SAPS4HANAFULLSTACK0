@@ -2,7 +2,7 @@
  * Structural isolation test for the per-movement-type Goods Issue stack (Phase 5 #2).
  * Proves every per-type module - BACKEND (validation / normalize / S/4 mapper) and FRONTEND
  * (controller / model / service) - imports NO other movement type's module. This is the
- * "posting 261 never touches 201's files" proof, done structurally rather than by hope.
+ * "posting 311 never touches 201's files" proof, done structurally rather than by hope.
  * Shared PURE infrastructure (common.js / s4common.js / goodsIssue.mapper) is allowed; another
  * movement type's file is not.
  */
@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const TYPES = ['201', '261', '301', '311'];
+const TYPES = ['201', '301', '311'];
 
 const BACKEND_FILES = [];
 const FRONTEND_FILES = [];
@@ -52,7 +52,7 @@ describe('per-type Goods Issue module isolation (Phase 5 #2)', () => {
     const others = TYPES.filter(t => t !== type);
     for (const dep of dependencyPaths(src)) {
       for (const other of others) {
-        // A dependency path must not reference another type's number (e.g. a 201 file depending on "...261...").
+        // A dependency path must not reference another type's number (e.g. a 201 file depending on "...311...").
         expect(dep.includes(other)).toBe(false);
       }
     }

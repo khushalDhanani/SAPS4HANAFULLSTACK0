@@ -136,8 +136,6 @@ sap.ui.define([
         _mGoodsIssueTitles: {
             wmGoodsIssue201Pending: "gi201OpenResvTitle",
             wmGoodsIssue201: "gi201PageTitle",
-            wmGoodsIssue261Pending: "gi261OpenResvTitle",
-            wmGoodsIssue261: "gi261PageTitle",
             wmGoodsIssue301Pending: "gi301OpenTransfersTitle",
             wmGoodsIssue301: "gi301PageTitle",
             wmGoodsIssue311Pending: "gi311OpenTransfersTitle",
@@ -205,8 +203,6 @@ sap.ui.define([
                     break;
                 case "wmGoodsIssue201Pending":
                 case "wmGoodsIssue201":
-                case "wmGoodsIssue261Pending":
-                case "wmGoodsIssue261":
                 case "wmGoodsIssue301Pending":
                 case "wmGoodsIssue301":
                 case "wmGoodsIssue311Pending":

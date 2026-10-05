@@ -50,7 +50,7 @@ service catalog alone. Where a fact was not measured, the cell says so.
 | `API_MATERIAL_DOCUMENT_SRV` | HTTP 403 carrying `/IWFND/MED/170` | Not registered on the hub. Not an authorisation fault. | Basis — `/IWFND/MAINT_SERVICE` |
 | `ZUI_GI_ORDER_RSV_O4` | HTTP 404 | Not published. | ABAP/Basis — `/IWFND/V4_ADMIN` |
 
-Either one unblocks goods issue movement 261. See `ticket-gateway-remediation-ds4.md`.
+Either one unblocks goods issue posting (e.g. 201, 301, 311). See `ticket-gateway-remediation-ds4.md`.
 
 ## EWM has no data
 
@@ -65,8 +65,8 @@ orders, warehouse resources and every `PICKCART_SRV` set return **0 rows**.
 
 The services respond; there is nothing behind them. The warehouse cockpit therefore cannot
 be validated against real data, and field mappings in `EwmMapper.js` are unverifiable by
-execution. AIL's live warehouse process is IM / Stock Room Management — movement 261 against
-reservations at plant 1120, storage location CS01 — which is a different component.
+execution. AIL's live warehouse process is IM / Stock Room Management — movement reservations
+at plant 1120, storage location CS01 — which is a different component.
 
 ## Declared but not called
 

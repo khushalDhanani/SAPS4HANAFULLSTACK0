@@ -1,7 +1,7 @@
 /**
  * s4common.js
  * Pure, type-agnostic S/4HANA API_MATERIAL_DOCUMENT_SRV OData V2 formatting helpers shared by the
- * per-movement-type mappers (GoodsIssue201/261/301/311Mapper.js). Pure OData mechanics
+ * per-movement-type mappers (GoodsIssue201/301/311Mapper.js). Pure OData mechanics
  * (date literals, deep-insert envelope, common item fields) - contains NO movement-type branching.
  */
 
@@ -42,7 +42,7 @@ function formatDateToODataV2(dateInput) {
  * (material, unit, quantity, plant, storage location, batch, reservation link, serials).
  * Type-specific fields (CostCenter, receiving plant/sloc, GLAccount) are added by the caller.
  * @param {Object} data - normalized CAP domain data
- * @param {string} goodsMovementType - '201'|'261'|'301'|'311'
+ * @param {string} goodsMovementType - '201'|'301'|'311'
  * @returns {Object}
  */
 function buildBaseItem(data, goodsMovementType) {

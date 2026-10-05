@@ -35,253 +35,7 @@ test('post201 → standard API with CostCenter, movement 201', async () => {
   expect(item.IssuingOrReceivingStorageLoc).toBeUndefined();
 });
 
-test('post261 → tries RAP ZUI_GI_ORDER_RSV_O4 first', async () => {
-  const { client, calls } = makeClient();
-  const res = await client.post261({ ...base, MovementType: '261', Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001' });
-  expect(res.Success).toBe(true);
-  expect(calls[0].path).toContain('zui_gi_order_rsv_o4');
-  expect(calls[0].path).toContain("ReservationNo='518023'");
-});
 
-test('post261 → falls back to standard API on 404 / service-not-found', async () => {
-  const { client, calls } = makeClient();
-  client._post = jest.fn(async (path, body) => {
-    calls.push({ path, body });
-    if (path.includes('zui_gi_order_rsv_o4')) {
-      const err = new Error('No service found for namespace, name ZUI_GI_ORDER_RSV_O4');
-      err.status = 404;
-      throw err;
-    }
-    return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
-  });
-  const res = await client.post261({
-    ...base,
-    Material: '1000001002',
-    ReservationNo: '518023',
-    ReservationItem: '0001',
-    ReferenceDocument: 'GI261RETRY001'
-  });
-  expect(res.MaterialDocument).toBe('4900088888');
-  expect(calls[1].path).toContain('A_MaterialDocumentHeader');
-  expect(calls[1].body.ReferenceDocument).toBe('GI261RETRY001');
-  expect(calls[1].body.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
-});
-
-test('post261 → does not fall back to standard API on Tier 1 timeout (prevents double posting)', async () => {
-  const { client, calls } = makeClient();
-  client._post = jest.fn(async (path, body) => {
-    calls.push({ path, body });
-    if (path.includes('zui_gi_order_rsv_o4')) {
-      const err = new Error('Gateway request timed out');
-      err.code = 'ETIMEDOUT';
-      err.status = 504;
-      throw err;
-    }
-    return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
-  });
-
-  await expect(client.post261({
-    ...base,
-    Material: '1000001002',
-    ReservationNo: '518023',
-    ReservationItem: '0001',
-    ReferenceDocument: 'GI261RETRY001'
-  })).rejects.toThrow('Gateway request timed out');
-
-  expect(calls).toHaveLength(1);
-  expect(calls[0].path).toContain('zui_gi_order_rsv_o4');
-});
-
-test('post261 → does not fall back to standard API on Tier 1 500 error (prevents double posting)', async () => {
-  const { client, calls } = makeClient();
-  client._post = jest.fn(async (path, body) => {
-    calls.push({ path, body });
-    if (path.includes('zui_gi_order_rsv_o4')) {
-      const err = new Error('Internal Server Error');
-      err.status = 500;
-      throw err;
-    }
-    return { MaterialDocument: '4900088888', MaterialDocumentYear: '2026' };
-  });
-
-  await expect(client.post261({
-    ...base,
-    Material: '1000001002',
-    ReservationNo: '518023',
-    ReservationItem: '0001'
-  })).rejects.toThrow('Internal Server Error');
-
-  expect(calls).toHaveLength(1);
-});
-
-describe('post261 unknown-outcome recovery (2xx without document / timeout)', () => {
-  const savedDelays = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
-  beforeAll(() => { process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0,0'; });
-  afterAll(() => {
-    if (savedDelays === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
-    else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = savedDelays;
-  });
-
-  const matdocRow = {
-    MBLNR: '4900012345', MJAHR: '2026', ZEILE: '0001', BWART: '261',
-    RSNUM: '0000518023', RSPOS: '0001', MENGE: '1.000',
-    STORNO: '', SMBLN: '', createdAt: new Date(Date.now() + 1000).toISOString()
-  };
-
-  const makeRecoveryClient = ({ tier2, matdocRows }) => {
-    // The lookup issues one equality-only read per movement type (the live RFC parser
-    // rejects OR-groups), so the mock must honor the BWART predicate.
-    const rfc = {
-      readTable: jest.fn(async (table, fields, where) => {
-        if (table !== 'MATDOC') return [];
-        const w = (where || []).join(' ');
-        return matdocRows.filter((r) => w.includes(`BWART = '${String(r.BWART).trim()}'`));
-      })
-    };
-    const client = new GoodsIssuePostingClient({ rfc });
-    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
-    client._post = jest.fn(async (path) => {
-      if (path.includes('zui_gi_order_rsv_o4')) {
-        const err = new Error('Not Found');
-        err.status = 404;
-        throw err;
-      }
-      return tier2();
-    });
-    return { client, rfc };
-  };
-
-  test('2xx with empty body and the document exists → POSTED via MATDOC read-back', async () => {
-    const { client, rfc } = makeRecoveryClient({ tier2: () => ({}), matdocRows: [matdocRow] });
-
-    const res = await client.post261({
-      ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001'
-    });
-
-    expect(res).toMatchObject({
-      Success: true,
-      Confirmed: true,
-      ConfirmationStatus: 'CONFIRMED',
-      MaterialDocument: '4900012345',
-      MaterialDocYear: '2026'
-    });
-    expect(res.Message).toContain('verified by reservation read-back');
-    expect(rfc.readTable).toHaveBeenCalledWith('MATDOC', expect.any(Array), expect.any(Array));
-  });
-
-  test('2xx with empty body and no document after retries → 504 GI_POSTING_UNCONFIRMED carrying the attempt ids', async () => {
-    const { client, rfc } = makeRecoveryClient({ tier2: () => ({}), matdocRows: [] });
-
-    await expect(client.post261({
-      ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001',
-      ClientAttemptId: 'GIA-TEST-1', ReferenceDocument: 'GIREF000000001'
-    })).rejects.toMatchObject({
-      status: 504,
-      code: 'GI_POSTING_UNCONFIRMED',
-      message: expect.stringMatching(/client attempt GIA-TEST-1.*reference GIREF000000001.*recheckPostingAttempts.*Do not post again/s)
-    });
-    // 2 configured delays -> 2 lookup attempts, each reading 261 and 262 rows separately.
-    expect(rfc.readTable.mock.calls.filter(([t]) => t === 'MATDOC')).toHaveLength(4);
-  });
-
-  test('findPosted261ByMatdoc throws (UNKNOWN) instead of returning null when RFC table access is unavailable', async () => {
-    const client = new GoodsIssuePostingClient({ rfc: {}, adapter: {} });
-    await expect(client.findPosted261ByMatdoc({ reservationNo: '520615', reservationItem: '0001' }))
-      .rejects.toMatchObject({ status: 502, message: expect.stringContaining('cannot verify') });
-  });
-
-  test('findPosted261ByMatdoc throws instead of returning null when both MATDOC and MSEG reads fail', async () => {
-    const rfc = { readTable: jest.fn().mockRejectedValue(Object.assign(new Error('ID:AD Type:E Number:718 MATDOC'), { code: 5 })) };
-    const client = new GoodsIssuePostingClient({ rfc });
-    await expect(client.findPosted261ByMatdoc({ reservationNo: '520615', reservationItem: '0001' }))
-      .rejects.toThrow('AD Type:E Number:718');
-  });
-
-  test('Tier 2 timeout and the document exists → POSTED via MATDOC read-back (no double post)', async () => {
-    const { client } = makeRecoveryClient({
-      tier2: () => { const err = new Error('Request timed out'); err.code = 'ETIMEDOUT'; throw err; },
-      matdocRows: [matdocRow]
-    });
-
-    const res = await client.post261({
-      ...base, Material: '1000001002', ReservationNo: '518023', ReservationItem: '0001'
-    });
-
-    expect(res).toMatchObject({ Success: true, Confirmed: true, MaterialDocument: '4900012345' });
-  });
-});
-
-test('unplanned post261 → sends its persisted reference on the standard API header', async () => {
-  const { client, calls } = makeClient();
-  await client.post261({
-    ...base,
-    Material: '1000001002',
-    OrderNo: '1000856',
-    ReferenceDocument: 'GI261UNPLAN01'
-  });
-
-  expect(calls).toHaveLength(1);
-  expect(calls[0].path).toContain('API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
-  expect(calls[0].body.ReferenceDocument).toBe('GI261UNPLAN01');
-});
-
-test('post261 → rejects an expired batch before any SAP POST', async () => {
-  const adapter = {
-    validateBatch: jest.fn().mockResolvedValue({ valid: true }),
-    validateBatchForPosting: jest.fn().mockResolvedValue({
-      valid: false,
-      status: 422,
-      reason: 'Batch EXPIRED01 has expired. Posting blocked.'
-    })
-  };
-  const client = new GoodsIssuePostingClient({ adapter });
-  client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
-  client._post = jest.fn();
-
-  await expect(client.post261({
-    ...base,
-    MovementType: '261',
-    Material: '1000001002',
-    ReservationNo: '518023',
-    ReservationItem: '0001',
-    Batch: 'EXPIRED01'
-  })).rejects.toMatchObject({
-    status: 422,
-    message: expect.stringContaining('has expired')
-  });
-
-  expect(adapter.validateBatchForPosting).toHaveBeenCalledWith(
-    '1000001002',
-    '1130',
-    'CS02',
-    'EXPIRED01',
-    1,
-    'KG'
-  );
-  expect(adapter.validateBatch).not.toHaveBeenCalled();
-  expect(client._post).not.toHaveBeenCalled();
-});
-
-test('submitGoodsIssueRequest → does not fall back to an API that would drop FinalIssue', async () => {
-  const { client, calls } = makeClient();
-  const rapError = Object.assign(new Error('RAP final-issue action unavailable'), { status: 503 });
-  client._post = jest.fn(async (path, body) => {
-    calls.push({ path, body });
-    throw rapError;
-  });
-
-  await expect(client.submitGoodsIssueRequest('518023', '', [{
-    ReservationItem: '0001',
-    Material: '1000001002',
-    IssueQty: 20,
-    Unit: 'KG',
-    FinalIssue: true
-  }])).rejects.toBe(rapError);
-
-  expect(calls).toHaveLength(1);
-  expect(calls[0].path).toContain('submitRequest');
-  expect(calls[0].body.Items[0].FinalIssue).toBe(true);
-});
 
 test.each([['301', '04'], ['311', '04']])('post%s → standard API with receiving, movement %s', async (type, gm) => {
   const { client, calls } = makeClient();
@@ -306,17 +60,16 @@ test('postByMovementType routes to the isolated method', async () => {
   expect(res.mvt).toBe('301');
 });
 
-test('postByMovementType routes 311 to post311 (not 301/261)', async () => {
+test('postByMovementType routes 311 to post311 (not 301)', async () => {
   const { client } = makeClient();
   client.post311 = jest.fn().mockResolvedValue({ Success: true, mvt: '311' });
   client.post301 = jest.fn();
-  client.post261 = jest.fn();
   const res = await client.postByMovementType({ ...base, MovementType: '311' });
   expect(client.post311).toHaveBeenCalled();
   expect(client.post301).not.toHaveBeenCalled();
-  expect(client.post261).not.toHaveBeenCalled();
   expect(res.mvt).toBe('311');
 });
+
 
 describe('readBackDocument & commit-lag handling', () => {
   test('returns SAP document marked "posted, confirmation pending" when readBackDocument finds nothing due to commit lag', async () => {
@@ -456,33 +209,6 @@ describe('readBackDocument & commit-lag handling', () => {
     expect(res.Message).toContain('(posted, confirmation pending)');
   });
 
-  test('hanging readBackDocument in post261 returns unconfirmed document and never produces 504', async () => {
-    const client = new GoodsIssuePostingClient({ readBackTimeoutMs: 50 });
-    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
-    client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900088888', MaterialDocYear: '2026' });
-    client.readBackDocument = jest.fn().mockResolvedValue({
-      MaterialDocument: '4900088888',
-      MaterialDocYear: '2026',
-      Confirmed: false,
-      Status: 'posted, confirmation pending'
-    });
-
-    const res = await client.post261({
-      MovementType: '261',
-      ReservationNo: '0000142001',
-      ReservationItem: '0001',
-      Material: '1000000514',
-      Plant: '1120',
-      StorageLocation: 'HS01',
-      IssueQty: 10,
-      Unit: 'NOS'
-    });
-    expect(res.Success).toBe(true);
-    expect(res.MaterialDocument).toBe('4900088888');
-    expect(res.Confirmed).toBe(false);
-    expect(res.ConfirmationStatus).toBe('POSTED_CONFIRMATION_PENDING');
-    expect(res.Message).toContain('(posted, confirmation pending)');
-  });
 
   test('readBackDocument passes abort signal if client supports abort', async () => {
     const mockHttpClient = {

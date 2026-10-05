@@ -11,12 +11,11 @@ const {
   GoodsIssueBatchesClient,
   GoodsIssueStockUnitClient,
   GoodsIssuePostingClient,
-  GoodsIssueDashboardClient,
-  GoodsIssuePhase6StagingClient
+  GoodsIssueDashboardClient
 } = require('./goods-issue');
 
 /**
- * Orchestrator and Facade for SAP S/4HANA Goods Issue (Movement 261).
+ * Orchestrator and Facade for SAP S/4HANA Goods Issue.
  * Decomposed into dedicated domain clients:
  * - GoodsIssueReservationsClient: Reservation queries & open items
  * - GoodsIssueBatchesClient: Batch master data, FEFO sort, SLED checks, MARM packaging units, stock revalidation
@@ -39,13 +38,10 @@ class GoodsIssueAdapter {
     this.destinationName = this.client.destinationName;
     this.rfc = options.rfc || new RfcClient();
 
-    this.issuedSuStore = options.issuedSuStore || null;
-
     // Instantiate domain clients
-    this.stagingClient = new GoodsIssuePhase6StagingClient({ adapter: this, client: this.client, rfc: this.rfc });
     this.batches = new GoodsIssueBatchesClient({ adapter: this, client: this.client });
     this.reservations = new GoodsIssueReservationsClient({ adapter: this, client: this.client, batchesClient: this.batches });
-    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, issuedSuStore: this.issuedSuStore, stagingClient: this.stagingClient, rfc: this.rfc });
+    this.stockUnits = new GoodsIssueStockUnitClient({ adapter: this, client: this.client, batchesClient: this.batches, rfc: this.rfc });
     this.posting = new GoodsIssuePostingClient({ adapter: this, client: this.client, batchesClient: this.batches, rfc: this.rfc });
     this.dashboard = new GoodsIssueDashboardClient({ adapter: this, client: this.client, reservationsClient: this.reservations, rfc: this.rfc });
   }
@@ -470,7 +466,7 @@ class GoodsIssueAdapter {
 
   /**
    * Read the authoritative open reservation item (Material/Plant/StorageLocation/open quantity) from
-   * SAP for server-side reconciliation before posting a reservation-based Goods Issue (261/301/311).
+   * SAP for server-side reconciliation before posting a reservation-based Goods Issue (301/311).
    * OpenQty uses the same base-unit formula as the reservations client (required - withdrawn).
    * Throws 404 when the item is not open, or 502 on a read failure — callers fail closed.
    * @returns {Promise<{Material:string,Plant:string,StorageLocation:string,Batch:string,Unit:string,RequiredQty:number,WithdrawnQty:number,OpenQty:number}>}
@@ -507,8 +503,6 @@ class GoodsIssueAdapter {
       ReceivingStorageLocation: String(recv.ReceivingStorageLocation || '').trim(),
       Batch: String(resvItem.Batch || '').trim(),
       Unit: String(resvItem.BaseUnit || resvItem.EntryUnit || resvItem.Unit || '').trim(),
-      // SAP requires ManufacturingOrder on 261 material-document items; the reservation
-      // carries its order, so posting must never depend on the client sending it.
       OrderNo: String(resvItem.OrderID || resvItem.OrderNo || '').trim(),
       MovementType: movementType,
       RequiredQty: reqQty,
@@ -524,7 +518,7 @@ class GoodsIssueAdapter {
   /**
    * Fetch distinct open reservations for Goods Issue directly from UI_RESERVATION_ITM_MNG_V2
    */
-  async getOpenReservations(movementType = '261', plant = '', options) {
+  async getOpenReservations(movementType = '', plant = '', options) {
     if (options !== undefined) {
       return this.reservations.getOpenReservations(movementType, plant, options);
     }
@@ -550,19 +544,6 @@ class GoodsIssueAdapter {
     return this.stockUnits.listStockUnitsForReservationItem(reservationNo, reservationItem, options);
   }
 
-  /** Check WM staging for reservation before posting */
-  async checkStagingForReservation(reservationNo, reservationItem, options = {}) {
-    if (this.stagingClient && typeof this.stagingClient.getStagingForReservation === 'function') {
-      return this.stagingClient.getStagingForReservation(reservationNo, reservationItem, options);
-    }
-    if (this.stockUnits && typeof this.stockUnits.checkStagingForReservation === 'function') {
-      return this.stockUnits.checkStagingForReservation(reservationNo, reservationItem);
-    }
-    const err = new Error('SAP WM staging verification is unavailable.');
-    err.status = 503;
-    throw err;
-  }
-
   /**
    * Post goods issue for a single reservation component line (Bound Action)
    */
@@ -579,18 +560,12 @@ class GoodsIssueAdapter {
   // Isolated per-movement-type posting passthroughs (Phase 1). Each takes the normalized
   // domain payload and delegates to the matching isolated posting-client method.
   async postGoodsIssue201(data) { return this.posting.post201(data); }
-  async postGoodsIssue261(data) { return this.posting.post261(data); }
   async postGoodsIssue301(data) { return this.posting.post301(data); }
   async postGoodsIssue311(data) { return this.posting.post311(data); }
 
   /** Material document already posted under an idempotency reference (read-only), or null. */
   async findPostedGoodsIssueByReference(referenceDocument, movementType, postingDate) {
     return this.posting.findPostedByReference(referenceDocument, movementType, postingDate);
-  }
-
-  /** Fallback lookup in MATDOC for 261 Goods Issue by reservation+item+user+date (exactly one match required). */
-  async findPosted261ByMatdoc(...args) {
-    return this.posting.findPosted261ByMatdoc(...args);
   }
 
   /** Outbound deliveries SAP created for a reservation item (LIKP/LIPS, read-only). */
@@ -660,13 +635,6 @@ class GoodsIssueAdapter {
    */
   async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
     return this.posting.reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason);
-  }
-
-  /**
-   * Submit Goods Issue batch in a single LUW
-   */
-  async submitGoodsIssueRequest(reservationNo, orderNo, items) {
-    return this.posting.submitGoodsIssueRequest(reservationNo, orderNo, items);
   }
 
   /**

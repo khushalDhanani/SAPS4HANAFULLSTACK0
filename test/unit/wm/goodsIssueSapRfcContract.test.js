@@ -3,7 +3,7 @@
  *
  * This release's RFC parser rejects specific fields with AD 718 (e.g. STORNO/XAUTO/ERFMG on
  * MATDOC, anything beyond a narrow list on MSEG/LTBP) and rejects parentheses in OPTIONS.
- * These tests run the exact field sets the 261 lookup and TR-item resolution depend on
+ * These tests run the exact field sets the reservation lookup and TR-item resolution depend on
  * against live SAP, so a system change cannot silently break the document/TR fallbacks again.
  *
  * Field acceptance is validated independently of data (an invalid field fails even for an
@@ -25,7 +25,7 @@ liveDescribe('SAP RFC_READ_TABLE field-set contract (live, read-only)', () => {
   // non-reservation row, so it must not be used as a "no match" key.
   const NO_MATCH_DOC = ["MBLNR = '9999999999'", "AND MJAHR = '1900'"];
 
-  test('MATDOC accepts the 13-field 261-lookup list', async () => {
+  test('MATDOC accepts the 13-field reservation-lookup list', async () => {
     await expect(rfc.readTable('MATDOC', [
       'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'RSNUM', 'RSPOS', 'USNAM', 'BUDAT',
       'CPUDT', 'CPUTM', 'MENGE', 'SMBLN', 'SJAHR'
