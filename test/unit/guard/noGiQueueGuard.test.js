@@ -31,6 +31,13 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
     'coverage'
   ]);
 
+  // Gitignored, regenerable raw dumps of SAP data (tools/refresh-catalog.sh). They echo SAP's own
+  // Gateway technical service names (this system prefixes registered standard APIs with Z), which is
+  // SAP state, not a repo artifact. Only repo-authored files are guarded.
+  const IGNORED_FILES = new Set([
+    'srv/external/all_catalog_services.json'
+  ]);
+
   const TEXT_FILE_EXTENSIONS = new Set([
     '.js', '.mjs', '.cjs', '.ts',
     '.cds', '.json', '.xml', '.properties',
@@ -95,6 +102,9 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
         }
 
         const relPath = path.relative(ROOT_DIR, filePath);
+        if (IGNORED_FILES.has(relPath.split(path.sep).join('/'))) {
+          continue;
+        }
         scannedRelativePaths.add(relPath);
         totalFilesScanned++;
         const content = fs.readFileSync(filePath, 'utf8');
