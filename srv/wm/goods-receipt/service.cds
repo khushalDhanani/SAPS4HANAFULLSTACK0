@@ -79,6 +79,9 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         Supplier             : String(10);
         SupplierName         : String(40);
         SupplierCityName     : String(40);
+        PackagingMaterial    : String(40);
+        StorageUnitType      : String(3);
+        WarehouseNumber      : String(3);
         LookupWarnings       : array of String(255);
     };
 
@@ -90,6 +93,17 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         Message          : String(255);
         DeliveryDocument : String(12);
         MaterialDocument : String(10);
+    };
+
+    type GRStorageUnitPostResult {
+        Success              : Boolean;
+        Message              : String(255);
+        MaterialDocument     : String(10);
+        MaterialDocumentYear : String(4);
+        DeliveryDocument     : String(12);
+        StorageUnit          : String(20);
+        Quantity             : Decimal(13, 3);
+        Unit                 : String(3);
     };
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -109,6 +123,23 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         GoodsMovementType    : String(3),
         DocumentItemText     : String(50)
     ) returns GRPostResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsReceiptWithStorageUnit(
+        StorageUnit          : String(20),
+        DeliveryDocument     : String(12),
+        DeliveryDocumentItem : String(6),
+        PurchaseOrder        : String(10),
+        PurchaseOrderItem    : String(5),
+        Material             : String(40),
+        Plant                : String(4),
+        StorageLocation      : String(4),
+        Batch                : String(10),
+        Quantity             : Decimal(13, 3),
+        Unit                 : String(3),
+        PackagingMaterial    : String(40),
+        ExpiryDate           : String(10)
+    ) returns GRStorageUnitPostResult;
 }
 
 // These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data.

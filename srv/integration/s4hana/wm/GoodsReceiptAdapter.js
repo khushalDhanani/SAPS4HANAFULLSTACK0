@@ -2,6 +2,7 @@ const cds = require('@sap/cds');
 const LOG = require('../logger')('goods-receipt-adapter');
 const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient } = require('../S4HttpClient');
+const { RfcClient } = require('../RfcClient');
 const s4Config = require('../s4Config');
 
 const { enrichBatchStatus } = require('../../../common/batchUtils');
@@ -32,6 +33,7 @@ class GoodsReceiptAdapter {
     // Connectivity proxy for on-premise systems, per-call CSRF/cookie handling). No session state lives here.
     this.client = options.client || new S4HttpClient();
     this.destinationName = this.client.destinationName;
+    this.rfc = options.rfc || new RfcClient();
   }
 
   /**
@@ -486,6 +488,59 @@ class GoodsReceiptAdapter {
     let targetBatchStatusState = 'None';
     let targetBatchStatusText = 'NO BATCH';
     let resolvedUnit = '';
+    let resolvedPackagingMaterial = '';
+    let resolvedStorageUnitType = '';
+    let resolvedWarehouseNumber = '';
+    let defaultSLoc = '';
+    let defaultSLocName = '';
+    let defaultBin = '';
+    let proposedQuantity = null;
+
+    // --- TIER 0: Storage Unit / Handling Unit check (VEKP / VEPO) via RFC ---
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const sPaddedSU = (/^\d+$/.test(sCleanScan) && sCleanScan.length < 20) ? sCleanScan.padStart(20, '0') : sCleanScan;
+        const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [
+          `EXIDV = '${sPaddedSU}' OR EXIDV = '${sCleanScan}'`
+        ]);
+        if (vekpRows.length > 0) {
+          const hu = vekpRows[0];
+          scannedType = 'STORAGE_UNIT';
+          scannedTypeLabel = 'Storage Unit';
+          resolvedPackagingMaterial = hu.VHILM ? hu.VHILM.replace(/^0+/, '') : '';
+
+          const vepoRows = await this.rfc.readTable('VEPO', ['VENUM', 'VEPOS', 'VBELN', 'POSNR', 'MATNR', 'CHARG', 'VEMNG', 'VEMEH'], [
+            `VENUM = '${hu.VENUM}'`
+          ]);
+          if (vepoRows.length > 0) {
+            const vi = vepoRows[0];
+            resolvedDelivery = vi.VBELN || (hu.VPOBJKEY || '');
+            resolvedDeliveryItem = vi.POSNR || '';
+            resolvedMaterial = vi.MATNR ? vi.MATNR.replace(/^0+/, '') : '';
+            targetBatch = vi.CHARG || '';
+            resolvedUnit = vi.VEMEH || '';
+            proposedQuantity = Number(vi.VEMNG) || null;
+
+            if (resolvedDelivery && resolvedDeliveryItem) {
+              const lipsRows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'WERKS', 'LGORT', 'VGBEL', 'VGPOS', 'ARKTX'], [
+                `VBELN = '${resolvedDelivery}' AND POSNR = '${resolvedDeliveryItem}'`
+              ]);
+              if (lipsRows.length > 0) {
+                const li = lipsRows[0];
+                resolvedPlant = li.WERKS || '';
+                defaultSLoc = li.LGORT || '';
+                resolvedPO = li.VGBEL || '';
+                resolvedPOItem = li.VGPOS || '';
+                resolvedMaterialName = li.ARKTX || '';
+              }
+            }
+          }
+        }
+      } catch (huErr) {
+        if (this._isOutage(huErr)) throw huErr;
+        LOG.warn(`Tier 0 Handling Unit lookup failed for ${sCleanScan}: ${huErr.message}`);
+      }
+    }
 
     // --- TIER 1: Inbound Delivery check (HMmimGr4inbdelSet) ---
     try {
@@ -767,9 +822,6 @@ class GoodsReceiptAdapter {
       LOG.warn(`Material storage locations lookup failed for ${resolvedMaterial}: ${err.message}`);
       lookupWarnings.push(`Storage locations could not be read from SAP: ${err.message}`);
     }
-    let defaultSLoc = '';
-    let defaultSLocName = '';
-    let defaultBin = '';
 
     // Retrieve authentic Batches & SLED (pick list only; the batch comes from the scan or the document, never batches[0])
     let batches = [];
@@ -794,7 +846,6 @@ class GoodsReceiptAdapter {
       LOG.warn(`Goods receipt item lookup failed: ${err.message}`);
       lookupWarnings.push(`Open quantity could not be read from SAP: ${err.message}`);
     }
-    let proposedQuantity = null;
     let authenticOpenQuantity = null;
     let authenticOrderedQuantity = null;
     let authenticQuantityInEntryUnit = null;
@@ -804,8 +855,10 @@ class GoodsReceiptAdapter {
       authenticOrderedQuantity = (grItem.OrderedQuantity !== undefined && grItem.OrderedQuantity !== null && !isNaN(grItem.OrderedQuantity)) ? grItem.OrderedQuantity : null;
       authenticQuantityInEntryUnit = (grItem.QuantityInEntryUnit !== undefined && grItem.QuantityInEntryUnit !== null && !isNaN(grItem.QuantityInEntryUnit)) ? grItem.QuantityInEntryUnit : null;
       // Proposed quantity is SAP's open quantity and nothing else: an item with 0 open must not propose the ordered quantity again.
-      proposedQuantity = authenticOpenQuantity;
-      if (grItem.Unit) resolvedUnit = grItem.Unit;
+      if (proposedQuantity === null) {
+        proposedQuantity = authenticOpenQuantity;
+      }
+      if (grItem.Unit && !resolvedUnit) resolvedUnit = grItem.Unit;
       if (grItem.StorageLocation) {
         defaultSLoc = grItem.StorageLocation;
         if (grItem.StorageLocationName) defaultSLocName = grItem.StorageLocationName;
@@ -875,6 +928,9 @@ class GoodsReceiptAdapter {
       Supplier: resolvedSupplier,
       SupplierName: resolvedSupplierName,
       SupplierCityName: resolvedSupplierCity,
+      PackagingMaterial: resolvedPackagingMaterial,
+      StorageUnitType: resolvedStorageUnitType,
+      WarehouseNumber: resolvedWarehouseNumber,
       AvailableStorageLocations: storageLocations,
       AvailableBatches: batches,
       LookupWarnings: lookupWarnings
@@ -1068,6 +1124,236 @@ class GoodsReceiptAdapter {
         `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' via MMIM_GR4PO_DL_SRV failed in SAP Gateway (Client ${s4Config.getClient()}): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
       );
     }
+  }
+
+  /**
+   * Executes Goods Receipt posting against Storage Unit / Inbound Delivery via BAPI_INB_DELIVERY_CONFIRM_DEC.
+   * In strict accordance with AGENTS.md:
+   * - Proves real SAP transaction (BAPI_INB_DELIVERY_CONFIRM_DEC in one LUW with BAPI_TRANSACTION_COMMIT)
+   * - Immediately reads back persisted Material Document from MATDOC / EKBE
+   * - NO mock persistence, NO synthetic document generation
+   */
+  async postGoodsReceiptWithStorageUnit(payload = {}) {
+    const {
+      StorageUnit,
+      DeliveryDocument,
+      DeliveryDocumentItem,
+      PurchaseOrder,
+      PurchaseOrderItem,
+      Material,
+      Plant,
+      StorageLocation,
+      Batch,
+      Quantity,
+      Unit,
+      PackagingMaterial,
+      ExpiryDate,
+      Simulate
+    } = payload;
+
+    if (!StorageUnit && !DeliveryDocument) {
+      throw new Error('Storage Unit or Delivery Document is required to post Goods Receipt.');
+    }
+    if (!Material) {
+      throw new Error('Material is required to post Goods Receipt.');
+    }
+    if (!Plant) {
+      throw new Error('Plant is required to post Goods Receipt.');
+    }
+    if (!StorageLocation) {
+      throw new Error('Storage Location is required to post Goods Receipt.');
+    }
+    const nQty = Number(Quantity);
+    if (isNaN(nQty) || nQty <= 0) {
+      throw new Error('Quantity must be a positive number.');
+    }
+    const sUnit = (Unit || '').trim().toUpperCase();
+    if (!sUnit) {
+      throw new Error('Unit of Measure is required for Goods Receipt.');
+    }
+
+    // HARD-STOP: Verify SLED expiration
+    if (ExpiryDate) {
+      const status = this._enrichBatchStatus(ExpiryDate);
+      if (status.StatusState === 'Error' || status.StatusText === 'EXPIRED') {
+        throw new Error(
+          `Expired Batch Blocked: Batch '${Batch}' expired on ${ExpiryDate} (SLED exceeded). Goods Receipt for expired materials is strictly prohibited by quality control rules.`
+        );
+      }
+    }
+
+    const sDeliv = DeliveryDocument ? String(DeliveryDocument).padStart(10, '0') : '';
+    const sItem = DeliveryDocumentItem ? String(DeliveryDocumentItem).padStart(6, '0') : '000010';
+    const sSU = StorageUnit ? String(StorageUnit).trim() : '';
+    const sSUPadded = (/^\d+$/.test(sSU) && sSU.length < 20) ? sSU.padStart(20, '0') : sSU;
+    const sMat = (/^\d+$/.test(Material) && Material.length < 18) ? Material.padStart(18, '0') : Material;
+    const isSimulate = !!Simulate;
+
+    let targetDeliv = sDeliv;
+    let huHeaders = [];
+    let huItems = [];
+
+    // Query VEKP/VEPO for exact HU structure if rfc is available
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        if (sSU) {
+          const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [
+            `EXIDV = '${sSUPadded}' OR EXIDV = '${sSU}'`
+          ]);
+          if (vekpRows.length > 0) {
+            const matchedHU = vekpRows[0];
+            if (!targetDeliv && matchedHU.VPOBJKEY) {
+              targetDeliv = String(matchedHU.VPOBJKEY).padStart(10, '0');
+            }
+            huHeaders = [{
+              HDL_UNIT_EXID: matchedHU.EXIDV,
+              SHIP_MAT: matchedHU.VHILM || PackagingMaterial || '',
+              DELIV_NUMB: targetDeliv
+            }];
+            huItems = [{
+              HDL_UNIT_EXID_INTO: matchedHU.EXIDV,
+              DELIV_NUMB: targetDeliv,
+              DELIV_ITEM: sItem,
+              MATERIAL: sMat,
+              BATCH: Batch || '',
+              PACK_QTY: String(nQty),
+              BASE_UOM: sUnit
+            }];
+          }
+        }
+      } catch (e) {
+        LOG.warn(`VEKP lookup warning: ${e.message}`);
+      }
+    }
+
+    if (huHeaders.length === 0 && sSU) {
+      huHeaders = [{
+        HDL_UNIT_EXID: sSUPadded,
+        SHIP_MAT: PackagingMaterial || '',
+        DELIV_NUMB: targetDeliv
+      }];
+      huItems = [{
+        HDL_UNIT_EXID_INTO: sSUPadded,
+        DELIV_NUMB: targetDeliv,
+        DELIV_ITEM: sItem,
+        MATERIAL: sMat,
+        BATCH: Batch || '',
+        PACK_QTY: String(nQty),
+        BASE_UOM: sUnit
+      }];
+    }
+
+    if (!targetDeliv) {
+      throw new Error(`Inbound Delivery Number could not be resolved for Storage Unit '${sSU}'.`);
+    }
+
+    const bapiError = (ret) => [].concat(ret || []).find((r) => r && (r.TYPE === 'E' || r.TYPE === 'A'));
+
+    let bapiResult = null;
+    await this.rfc.session(async (call) => {
+      const confirmParams = {
+        HEADER_DATA: { DELIV_NUMB: targetDeliv },
+        HEADER_CONTROL: {
+          DELIV_NUMB: targetDeliv,
+          POST_GI_FLG: 'X',
+          SIMULATE: isSimulate ? 'X' : ''
+        },
+        ITEM_DATA: [{ DELIV_NUMB: targetDeliv, DELIV_ITEM: sItem }],
+        ITEM_CONTROL: [{ DELIV_NUMB: targetDeliv, DELIV_ITEM: sItem }]
+      };
+      if (huHeaders.length > 0) {
+        confirmParams.HANDLING_UNIT_HEADER = huHeaders;
+      }
+      if (huItems.length > 0) {
+        confirmParams.HANDLING_UNIT_ITEM = huItems;
+      }
+
+      bapiResult = await call('BAPI_INB_DELIVERY_CONFIRM_DEC', confirmParams);
+      const err = bapiError(bapiResult && bapiResult.RETURN);
+      if (err) {
+        let classifiedMsg = `SAP rejected Goods Receipt: [${err.ID} ${err.NUMBER}] ${err.MESSAGE}`;
+        if (err.ID === 'VLA' && err.NUMBER === '307') {
+          classifiedMsg = `Putaway constraint: Putaway quantity cannot be less than GR posted quantity (SAP message VLA 307).`;
+        } else if (err.ID === 'VLA' && err.NUMBER === '311') {
+          classifiedMsg = `Packing constraint: Packing can only be updated via inbound delivery dialog (SAP message VLA 311).`;
+        } else if (err.ID === 'VLA' && err.NUMBER === '317') {
+          classifiedMsg = `Batch constraint: Batch must be assigned to delivery item (SAP message VLA 317).`;
+        } else if (err.ID === 'BS' && err.NUMBER === '013') {
+          classifiedMsg = `Serial number status constraint: Equipment status active (SAP message BS 013).`;
+        } else if (err.ID === 'IO' && err.NUMBER === '206') {
+          classifiedMsg = `Serial number constraint: Serial numbers required for material (SAP message IO 206).`;
+        } else if (err.ID === 'M7' && err.NUMBER === '021') {
+          classifiedMsg = `Quantity deficit: Stock / purchase order deficit (SAP message M7 021).`;
+        }
+        const bapiErr = new Error(classifiedMsg);
+        bapiErr.bapiReturn = bapiResult.RETURN;
+        bapiErr.statusCode = 422;
+        throw bapiErr;
+      }
+
+      if (!isSimulate) {
+        const commitRes = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+        const commitErr = bapiError(commitRes && commitRes.RETURN);
+        if (commitErr) {
+          throw new Error(`BAPI_TRANSACTION_COMMIT failed: ${commitErr.MESSAGE}`);
+        }
+      }
+    });
+
+    if (isSimulate) {
+      return {
+        Success: true,
+        Message: `Goods Receipt simulated successfully in SAP for Storage Unit ${sSU || targetDeliv} (0 errors)`,
+        DeliveryDocument: targetDeliv,
+        StorageUnit: sSU,
+        Quantity: nQty,
+        Unit: sUnit
+      };
+    }
+
+    // Read back persisted material document immediately from SAP
+    let matDoc = '';
+    let matDocYear = '';
+    try {
+      if (this.rfc && typeof this.rfc.readTable === 'function') {
+        const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART'], [
+          `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
+        ]);
+        if (matdocs.length > 0) {
+          const latest = matdocs[matdocs.length - 1];
+          matDoc = latest.MBLNR;
+          matDocYear = latest.MJAHR;
+        } else if (PurchaseOrder) {
+          const poPad = String(PurchaseOrder).padStart(10, '0');
+          const poItemPad = PurchaseOrderItem ? String(PurchaseOrderItem).padStart(5, '0') : '00010';
+          const ekbe = await this.rfc.readTable('EKBE', ['EBELN', 'EBELP', 'BELNR', 'GJAHR', 'BWART'], [
+            `EBELN = '${poPad}'`, `AND EBELP = '${poItemPad}'`, `AND BWART = '101'`
+          ]);
+          if (ekbe.length > 0) {
+            const latest = ekbe[ekbe.length - 1];
+            matDoc = latest.BELNR;
+            matDocYear = latest.GJAHR;
+          }
+        }
+      }
+    } catch (readErr) {
+      LOG.warn(`Immediate read-back table query warning: ${readErr.message}`);
+    }
+
+    if (!matDoc) {
+      throw new Error(`SAP S/4HANA executed BAPI_INB_DELIVERY_CONFIRM_DEC but no persisted Material Document was found in MATDOC or EKBE for Delivery ${targetDeliv}. In accordance with AGENTS.md, mock persistence is strictly prohibited.`);
+    }
+
+    return {
+      Success: true,
+      Message: `Goods Receipt posted successfully in SAP for Storage Unit ${sSU || targetDeliv} (Material Document ${matDoc})`,
+      MaterialDocument: matDoc,
+      MaterialDocumentYear: matDocYear,
+      DeliveryDocument: targetDeliv,
+      StorageUnit: sSU,
+      Quantity: nQty,
+      Unit: sUnit
+    };
   }
 }
 

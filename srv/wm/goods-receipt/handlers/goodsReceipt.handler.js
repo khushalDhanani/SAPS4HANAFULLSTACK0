@@ -151,6 +151,78 @@ const init = (srv) => {
             req.reject(err.statusCode || 500, err.message);
         }
     });
+
+    /**
+     * ACTION postGoodsReceiptWithStorageUnit
+     * Posts Goods Receipt (101) against Storage Unit / Inbound Delivery via BAPI_INB_DELIVERY_CONFIRM_DEC
+     */
+    srv.on('postGoodsReceiptWithStorageUnit', async (req) => {
+        const {
+            StorageUnit,
+            DeliveryDocument,
+            DeliveryDocumentItem,
+            PurchaseOrder,
+            PurchaseOrderItem,
+            Material,
+            Plant,
+            StorageLocation,
+            Batch,
+            Quantity,
+            Unit,
+            PackagingMaterial,
+            ExpiryDate,
+            Simulate
+        } = req.data;
+
+        if (!StorageUnit && !DeliveryDocument) {
+            return req.reject(400, 'Storage Unit or Delivery Document is required.');
+        }
+        if (!Material) {
+            return req.reject(400, 'Material is required.');
+        }
+        if (!Plant) {
+            return req.reject(400, 'Plant is required.');
+        }
+        if (!StorageLocation) {
+            return req.reject(400, 'Storage Location is required.');
+        }
+        if (!Quantity || Number(Quantity) <= 0) {
+            return req.reject(400, 'Quantity must be greater than zero.');
+        }
+        if (!Unit || !String(Unit).trim()) {
+            return req.reject(400, 'Unit of Measure is required.');
+        }
+
+        const formatErr = checkMaterial(Material, true)
+            || checkPlant(Plant, true)
+            || checkStorageLocation(StorageLocation, true)
+            || checkBatch(Batch);
+        if (formatErr) {
+            return req.reject(400, `${formatErr.field}: ${formatErr.message}`);
+        }
+
+        try {
+            return await GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit,
+                DeliveryDocument,
+                DeliveryDocumentItem,
+                PurchaseOrder,
+                PurchaseOrderItem,
+                Material,
+                Plant,
+                StorageLocation,
+                Batch,
+                Quantity,
+                Unit,
+                PackagingMaterial,
+                ExpiryDate,
+                Simulate
+            });
+        } catch (err) {
+            LOG.error('postGoodsReceiptWithStorageUnit failed:', err.message);
+            req.reject(err.statusCode || 500, err.message);
+        }
+    });
 };
 
 module.exports = init;

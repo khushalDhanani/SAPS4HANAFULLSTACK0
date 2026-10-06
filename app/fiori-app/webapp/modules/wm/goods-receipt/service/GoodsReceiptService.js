@@ -180,6 +180,15 @@ sap.ui.define([
          */
         postGoodsReceipt: function (oPayload) {
             return ODataClient.post(BASE_PATH + "/postGoodsReceipt", oPayload);
+        },
+
+        /**
+         * Posts Goods Receipt (101) against Storage Unit / Inbound Delivery directly to SAP S/4HANA
+         * @param {Object} oPayload
+         * @returns {Promise<Object>}
+         */
+        postGoodsReceiptWithStorageUnit: function (oPayload) {
+            return ODataClient.post(BASE_PATH + "/postGoodsReceiptWithStorageUnit", oPayload);
         }
     };
 

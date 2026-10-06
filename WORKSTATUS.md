@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Goods Receipt against Storage Unit (Movement Type 101) full-stack implementation delivered:** CAP CDS action `postGoodsReceiptWithStorageUnit`, `GoodsReceiptAdapter` RFC implementation with `BAPI_INB_DELIVERY_CONFIRM_DEC` and immediate `MATDOC`/`EKBE` read-back, CAP handler, UI5 service/controller/view/i18n updates, and 52 unit tests passing (full WM suite: 46 suites / 922 tests passing). Clean 100% simulation verified against SAP candidate `0180000035` / SU `2000018143`. Ready for live write re-proof upon user's explicit go.
 - **Create Sales Order `#/sd/sales-orders/create` — all defects of Unresolved Issue 10 fixed in code on 2026-10-06 (entries 16:28–16:47 IST) and verified in the browser on port 4005:** Incoterms inputs removed (LORD cannot save them), RFC value helps read the whole table, are cached and honour `$filter` (Payment Terms `AD3` → 10 rows, contacts `rao` for 10135 → 2 rows), no false "required" error while typing, no hardcoded fallback master data, no assumed Ship-to / PO date, a read-back mismatch is shown as created and resets the form, dead ATP button and zero totals gone; additionally found and fixed: typed sold-to / material never fired `change` (live handlers wrote the model) and material lookup threw on `$top` / SAP rejected the unit-column search. Unit suite 123 suites / 2101 tests, ui5lint, eslint, cds compile, `git diff --check` all pass. **Not yet done: the live ZDOM create re-proof (Next Step 11 (7)) — waits for the user's go, it posts a real order.**
 - **Goods Receipt page `#/wm/goods-receipt` shows open inbound deliveries as a direct list** (table under the scan field, row press starts the existing lookup). Unit tests and ui5lint pass; **verified in a browser on 2026-10-06** (second `cds watch` on port 4005 with `LOCAL_DEV_PASSWORD` set to a session-generated value, mock user `alice`): 25 rows render, row press on 180000077 fills delivery/PO/material/plant/SLoc/batch/open quantity. **GR cycle test HALTED at the first post (2026-10-06 11:15 entry):** the user gave the go, the 40 KG post on 180000077 was rejected by SAP with VLA 307 "Putaway quantity cannot be less than GR posted quantity" (CS02 in plant 1130 is WM-managed, warehouse W12, putaway not done). No document was created, SAP is unchanged. The user then chose 180000008 (non-WM SLoc ST02): the 400 KG post was rejected too, with **MBND_CLOUD 002 "Purchase order 0001800000 was already changed"** (11:45 entry) — a wrong PO number that exists nowhere in SAP. Nothing was posted in either attempt. **Conclusion: the Goods Receipt posting path `MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers` has never produced a material document and is not proven (Unresolved Issue 8).** The user chose to prove `API_MATERIAL_DOCUMENT_SRV` (12:20 entry): metadata read, one 100 KG 101 POST on PO 400000164/10 + delivery 180000008/10 with batch IN25000333 → **HTTP 400 VLA 317 "Inbound delivery batch cannot be changed to IN25000333 here"**, no document. Root cause: the inbound delivery item carries no batch and a GR against an inbound delivery cannot set one; the batch must be on the delivery item before the GR. Cycle halted; waiting for the user's decision (Next Step 8).
 - **Open 261 items, scan screen stage 1 and 261 cycle (all read-only)** — list (153 for plant 1120, reconciled with RESB), scan-and-validate page `#/wm/mvt261/open/{reservation}/{item}` and cycle page `.../cycle` validated live against SAP at backend level and by unit tests; UI **not yet verified in a browser**. No posting is exposed. **Open SAP document 4900050046/2026 still not reversed** (Unresolved Issue 0).
@@ -44,6 +45,33 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.**
 
 ## Changes Log
+
+### 2026-10-06 17:15 IST — Full-Stack Implementation: Goods Receipt against Storage Unit (Movement Type 101)
+
+- **Request**: "Proper Implementaiton in code."
+- **Files changed**:
+  - `srv/wm/goods-receipt/service.cds`: added `postGoodsReceiptWithStorageUnit` action returning `GRStorageUnitPostResult`, with attributes `PackagingMaterial`, `StorageUnitType`, `WarehouseNumber` on `StorageUnitDetails`.
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`:
+    - Injected `this.rfc = options.rfc || new RfcClient()`.
+    - Added Tier 0 Storage Unit resolution via RFC `VEKP`/`VEPO`/`LIPS` table reads before OData fallbacks.
+    - Implemented `postGoodsReceiptWithStorageUnit(payload)` executing `BAPI_INB_DELIVERY_CONFIRM_DEC` in a single LUW with `BAPI_TRANSACTION_COMMIT` (`WAIT: 'X'`).
+    - Added immediate read-back verification from `MATDOC` (and `EKBE` fallback) per AGENTS.md.
+    - Structured error classification mapping for SAP codes `VLA 307`, `VLA 311`, `VLA 317`, `IO 206`, `BS 013`, `M7 021`.
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: registered `postGoodsReceiptWithStorageUnit` action handler with input format validation (`checkMaterial`, `checkPlant`, `checkStorageLocation`, `checkBatch`).
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService.js`: added `postGoodsReceiptWithStorageUnit(oPayload)` method.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`: added `PackagingMaterial`, `StorageUnitType`, `WarehouseNumber` to active SU model; dynamically routes posting to `postGoodsReceiptWithStorageUnit` when `StorageUnit` is present.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/view/GoodsReceipt.view.xml`: added Packaging Material display field under document info group.
+  - `app/fiori-app/webapp/i18n/i18n.properties`: added `grColPackagingMat=Packaging Material:`.
+  - `test/unit/wm/goodsReceiptService.test.js`: added 11 unit tests covering validation, RFC execution, commit, read-back, error classification, simulate mode, and frontend service call.
+- **Validation Commands Executed & Results**:
+  - `npx cds compile srv/wm/goods-receipt/service.cds`: PASS (CSN 2.0 cleanly compiled, actions and types verified).
+  - `npm --prefix app/fiori-app run lint` (`ui5lint`): PASS ("Success! No findings detected.").
+  - `npx jest test/unit/wm/goodsReceiptService.test.js`: PASS (52 tests passed, 0 failed).
+  - `npx jest test/unit/wm`: PASS (46 suites passed, 922 tests passed, 0 failed).
+  - `git diff --check`: PASS (clean diff, 0 issues).
+  - `git status`: PASS (tracked files cleanly updated).
+- **Errors / Warnings / Blockers**: None. Live write with `--go` pending explicit user prompt.
+- **Next recommended action**: Run live posting proof via `tools/test-gr-su-post-cycle.js post 0180000035 2000018143 --go` upon user's explicit confirmation, verify generated Material Document, and reverse via `cancel`.
 
 ### 2026-10-06 18:55 IST — Proof Tool Built & 100% Clean Simulation Verified on Inbound Delivery 0180000035 (Storage Unit 2000018143)
 

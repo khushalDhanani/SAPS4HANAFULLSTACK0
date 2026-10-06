@@ -48,7 +48,10 @@ sap.ui.define([
                     Unit: "",
                     Supplier: "",
                     SupplierName: "",
-                    SupplierCityName: ""
+                    SupplierCityName: "",
+                    PackagingMaterial: "",
+                    StorageUnitType: "",
+                    WarehouseNumber: ""
                 }
             });
             this.getView().setModel(oModel, "grView");
@@ -282,7 +285,10 @@ sap.ui.define([
                         Unit: oSU.Unit || "",
                         Supplier: oSU.Supplier || "",
                         SupplierName: oSU.SupplierName || "",
-                        SupplierCityName: oSU.SupplierCityName || ""
+                        SupplierCityName: oSU.SupplierCityName || "",
+                        PackagingMaterial: oSU.PackagingMaterial || "",
+                        StorageUnitType: oSU.StorageUnitType || "",
+                        WarehouseNumber: oSU.WarehouseNumber || ""
                     });
 
                     oModel.setProperty("/availableStorageLocations", oSU.AvailableStorageLocations || []);
@@ -439,10 +445,15 @@ sap.ui.define([
                                 StorageLocation: oActive.StorageLocation,
                                 Batch: oActive.Batch,
                                 Quantity: nQty,
+                                PackagingMaterial: oActive.PackagingMaterial || "",
                                 ExpiryDate: oActive.ExpiryDate
                             };
 
-                            GoodsReceiptService.postGoodsReceipt(oPayload)
+                            var fnPost = (oActive.StorageUnit && typeof GoodsReceiptService.postGoodsReceiptWithStorageUnit === "function")
+                                ? GoodsReceiptService.postGoodsReceiptWithStorageUnit.bind(GoodsReceiptService)
+                                : GoodsReceiptService.postGoodsReceipt.bind(GoodsReceiptService);
+
+                            fnPost(oPayload)
                                 .then(function (oResult) {
                                     that._playBeep(true);
                                     var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : that.getText("grPostSuccessDefault");
@@ -508,7 +519,10 @@ sap.ui.define([
                 Unit: "",
                 Supplier: "",
                 SupplierName: "",
-                SupplierCityName: ""
+                SupplierCityName: "",
+                PackagingMaterial: "",
+                StorageUnitType: "",
+                WarehouseNumber: ""
             });
             MessageToast.show(this.getText("grWorkflowReset"));
         },

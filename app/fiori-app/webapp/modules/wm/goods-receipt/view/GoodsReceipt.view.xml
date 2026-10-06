@@ -160,6 +160,9 @@
                                 <Label text="{i18n>grColStorageUnit}" />
                                 <Text id="txtStorageUnit" text="{grView>/activeSU/StorageUnit}" class="fontBold" />
 
+                                <Label text="{i18n>grColPackagingMat}" visible="{= !!${grView>/activeSU/PackagingMaterial} }" />
+                                <Text id="txtPackagingMaterial" text="{grView>/activeSU/PackagingMaterial}" visible="{= !!${grView>/activeSU/PackagingMaterial} }" />
+
                                 <Label text="{i18n>grColDeliveryDoc}" />
                                 <Text id="txtDeliveryDoc" text="{grView>/activeSU/DeliveryDocument} (Item {grView>/activeSU/DeliveryDocumentItem})" />
 
