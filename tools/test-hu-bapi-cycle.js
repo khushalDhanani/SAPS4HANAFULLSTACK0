@@ -8,16 +8,22 @@
 //   node tools/test-hu-bapi-cycle.js pack   <HU> <material> <qty> <unit> <plant> <sloc> [batch] --go
 //   node tools/test-hu-bapi-cycle.js unpack <HU> <item> <material> <qty> <unit> <plant> <sloc> [batch] --go
 //   node tools/test-hu-bapi-cycle.js delete <HU> --go
+//   node tools/test-hu-bapi-cycle.js move   <HU> <material> <qty> <unit> <plant> <fromSloc> <toSloc> [batch] --go   # WRITE: 311 + HU via API_MATERIAL_DOCUMENT_SRV
+//   node tools/test-hu-bapi-cycle.js cancel <materialDocument> <year> --go                                          # WRITE: API Cancel (312)
 // --adapter routes the write through HandlingUnitAdapter.create/pack/unpack/remove instead of raw BAPI calls.
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
+const { S4HttpClient } = require('../srv/integration/s4hana/S4HttpClient');
 const HandlingUnitAdapter = require('../srv/integration/s4hana/wm/HandlingUnitAdapter');
+const { buildBaseItem, buildHeaderEnvelope } = require('../srv/integration/s4hana/wm/goods-issue/s4common');
+const MATDOC_API = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV';
 
 const flags = new Set(process.argv.slice(2).filter((a) => a.startsWith('--')));
 const [cmd, ...args] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const GO = flags.has('--go');
 const rfc = new RfcClient();
 const adapter = new HandlingUnitAdapter({ rfc });
+const http = new S4HttpClient();
 const raw = (label, v) => console.log(`${label}: ${JSON.stringify(v)}`);
 const stop = (msg) => { console.error(`\nSTOP: ${msg}`); process.exit(1); };
 const pad = (v, n) => (/^\d+$/.test(v) ? v.padStart(n, '0') : v);
@@ -80,7 +86,63 @@ async function bapiWrite(fm, params, keyAfter) {
   });
 }
 
+/** One OData POST to API_MATERIAL_DOCUMENT_SRV (CSRF handled by S4HttpClient). Prints request + response. */
+async function odataPost(path, data) {
+  raw(`  POST ${path} body`, data);
+  if (!GO) { console.log('DRY RUN (add --go to write)'); process.exit(0); }
+  try {
+    const res = await http.post(path, { data, csrfPath: `${MATDOC_API}/` });
+    raw(`  POST response HTTP ${res.status} sap-message`, res.headers?.['sap-message'] || null);
+    const body = res.data?.d || res.data || {};
+    raw('  POST response body', body);
+    return body;
+  } catch (e) {
+    stop(`POST failed HTTP ${e.status || '-'}: ${e.message}`);
+  }
+}
+
+/** Stock + HU location + material document rows after a movement (read-only). */
+async function stockBack(material, plant, slocs, hu, doc, year) {
+  for (const l of slocs) raw(`  MARD ${material} ${plant}/${l}`, await read('MARD', ['LABST', 'INSME', 'SPEME'], [`MATNR = '${pad(material, 18)}'`, `AND WERKS = '${plant}'`, `AND LGORT = '${l}'`]));
+  raw(`  VEKP ${hu} location`, await read('VEKP', ['VENUM', 'WERKS', 'LGORT', 'STATUS', 'VPOBJ'], [`EXIDV = '${pad(hu, 20)}'`]));
+  if (doc) {
+    raw(`  MKPF ${doc}/${year}`, await read('MKPF', ['MBLNR', 'MJAHR', 'BLART', 'BUDAT', 'USNAM', 'TCODE2'], [`MBLNR = '${doc}'`, `AND MJAHR = '${year}'`]));
+    raw(`  MSEG ${doc}/${year}`, await read('MSEG', ['ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'UMWRK', 'UMLGO', 'MENGE', 'MEINS', 'SMBLN', 'SJAHR'], [`MBLNR = '${doc}'`, `AND MJAHR = '${year}'`]));
+  }
+}
+
 const cmds = {
+  // 311 transfer posting of the HU's material into another storage location, referencing the HU
+  // (API_MATERIAL_DOCUMENT_SRV deep insert, goods movement code 04, item HandlingUnitExternalID). Target may be
+  // HU-managed: this is the "pack into an HU-managed SLoc" goods movement (HU event 0001 = movement type 311).
+  async move([hu, material, q, unit, plant, fromSloc, toSloc, batch]) {
+    if (!hu || !material || !q || !unit || !plant || !fromSloc || !toSloc) stop('usage: move <HU> <material> <qty> <unit> <plant> <fromSloc> <toSloc> [batch] --go');
+    console.log(`== MOVE HU ${hu} (${q} ${unit} of ${material}) ${plant}/${fromSloc} -> ${plant}/${toSloc} via 311 + HandlingUnitExternalID`);
+    console.log('[before]'); await stockBack(material, plant, [fromSloc, toSloc], hu);
+    const item = buildBaseItem({ Material: material, Unit: unit, IssueQty: q, Plant: plant, StorageLocation: fromSloc, Batch: batch }, '311');
+    item.IssuingOrReceivingPlant = plant;
+    item.IssuingOrReceivingStorageLoc = toSloc;
+    item.HandlingUnitExternalID = hu;
+    const payload = buildHeaderEnvelope({ gmCode: '04', headerText: `HU move proof ${hu}`.slice(0, 25), postingDate: new Date(), item });
+    const body = await odataPost(`${MATDOC_API}/A_MaterialDocumentHeader`, payload);
+    const doc = body.MaterialDocument, year = body.MaterialDocumentYear;
+    if (!doc) stop('no MaterialDocument in the response');
+    console.log(`\n[after] material document ${doc}/${year}`); await stockBack(material, plant, [fromSloc, toSloc], hu, doc, year);
+    await readBack(hu);
+    console.log(`\nRESULT: POSTED — material document ${doc}/${year}; verify MSEG 311 rows + VEKP LGORT above. Reverse with: cancel ${doc} ${year} --go`);
+  },
+
+  // Reverse one material document with the API's Cancel function import (SAP posts the reversal movement, e.g. 312).
+  async cancel([doc, year]) {
+    if (!doc || !year) stop('usage: cancel <materialDocument> <year> --go');
+    console.log(`== CANCEL material document ${doc}/${year}`);
+    const body = await odataPost(`${MATDOC_API}/Cancel?MaterialDocument='${doc}'&MaterialDocumentYear='${year}'`, {});
+    const rev = body.Cancel || body;
+    raw('  reversal document', { MaterialDocument: rev.MaterialDocument, MaterialDocumentYear: rev.MaterialDocumentYear });
+    if (rev.MaterialDocument) raw(`  MSEG ${rev.MaterialDocument}/${rev.MaterialDocumentYear}`, await read('MSEG', ['ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'UMWRK', 'UMLGO', 'MENGE', 'MEINS', 'SMBLN'], [`MBLNR = '${rev.MaterialDocument}'`, `AND MJAHR = '${rev.MaterialDocumentYear}'`]));
+    console.log('\nRESULT: reversal posted (check the MSEG rows above; then re-run `read <HU>` and MARD via `move` dry run)');
+  },
+
   async candidates([plant, sloc]) {
     if (!plant || !sloc) stop('usage: candidates <plant> <sloc>');
     raw('T001L', await read('T001L', ['WERKS', 'LGORT', 'LGOBE', 'XHUPF'], [`WERKS = '${plant}'`, `AND LGORT = '${sloc}'`]));
