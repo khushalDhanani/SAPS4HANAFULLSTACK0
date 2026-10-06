@@ -38,6 +38,31 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-06 — HU cockpit bug fixes + read-only polish
+
+- **Why:** a pasted debug/gap report flagged bugs + gaps. Verified each claim against the actual code and live SAP; fixed the 5 real bugs and added the read-only completeness that is provable now (user-approved scope). Print (FDP) and packing-instruction create stay deferred (unproven write/PDF paths).
+- **Verified bugs fixed:**
+  1. Back-nav from the detail page went to Dashboard — added the `wmHandlingUnitDetail → wmHandlingUnits` case in `controller/App.controller.js onNavButtonPressed`. (Back is owned by the ShellBar per the `uiConsistency` convention; the detail page stays header-less and the orphaned `onNavBack` was removed, not wired to a page button.)
+  2. (same as 1 — the project pattern is ShellBar-owned back, so no page header was added.)
+  3. Packing tree was empty on a direct link / F5 — `HandlingUnitAdapter.detail()` now resolves `HandlingUnitIDChar32` + `HandlingUnitOrigin` from `C_HANDLINGUNITMONITOR_CDS` and returns them; the detail controller uses the resolved id (query value still preferred when present).
+  4. Heavy unfiltered entry (5 serial calls / up to 1000 rows every visit) — the list no longer auto-queries on route match without a filter; it shows "enter a filter" and waits. Manual Go with no filter still allowed.
+  5. `" / "` artifact in the items reference cell — guarded (shows `ref`, appends `/ item` only when present, else `-`).
+- **Read-only polish:**
+  - Detail view now shows the dimensions/capacity the adapter already returned (L×W×H, max weight/volume, net/tare volume, shipping point) and a Shelf-Life Expiration column on the items table.
+  - TreeTable Expand All / Collapse All buttons.
+  - F4 type-ahead on the filter bar — new CAP `valueHelp(kind)` + adapter method over the 4 monitor value-help sets; added Status + Shipping Point as list filters (adapter + CAP `list` params) so all four F4s are usable.
+- **Files:** `srv/integration/s4hana/wm/HandlingUnitAdapter.js`, `srv/wm/handling-unit/service.cds`, `srv/wm/handling-unit/service.js`, `controller/App.controller.js`, `modules/wm/handling-unit/{view,controller}/HandlingUnits* + HandlingUnitDetail*`, `i18n/i18n.properties` + `i18n_en.properties`, `test/unit/wm/handlingUnitAdapter.test.js`.
+- **One self-inflicted bug caught in validation:** `valueHelp` uppercased then lowercased the kind, so camelCase `shippingPoint` missed the map → fixed by lowercasing the map key and kind; regression test added.
+- **Validation:**
+  - `npx cds compile srv --to csn` → OK (`key` is reserved in CDS → declared as `![key]`).
+  - `npx jest test/unit/wm/handlingUnitAdapter.test.js` → **12 passed**; `uiConsistency` → passed (page adds no title/back — ShellBar owns it).
+  - **Live (read-only, client 220):** `detail('1000000000')` with no warehouse/char32 → returns char32 `005056B4…`, follow-up `hierarchy` → 2 nodes (deep-link fix proven); `valueHelp` plant 30 / packaging 219 / status 5 / shippingPoint 60; `list({status:'B'})` → 7,584; shipping-point data present (HU 2000000000 → SP 1120).
+  - `npx ui5lint` on the whole HU module + App/Dashboard controllers → no findings.
+  - Full `npx jest` → 2114 passed; only the pre-existing `noGiQueueGuard.test.js` (Issue 6) fails, unrelated.
+  - `git diff --check` clean.
+- **Not validated:** browser rendering (needs the user's SAP login). **In Progress.**
+- **Result:** PASS (backend + static); browser verification pending.
+
 ### 2026-10-06 — HU cockpit data double-check + dead-field removal
 
 - **Why:** user reported "so many data is not proper or not coming." Verified field population live before changing anything.

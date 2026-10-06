@@ -15,6 +15,7 @@ module.exports = class HandlingUnitService extends cds.ApplicationService {
     this.on('list', run((data) => adapter.list(data)));
     this.on('detail', run((data) => adapter.detail(data)));
     this.on('hierarchy', run((data) => adapter.hierarchy(data)));
+    this.on('valueHelp', run((data) => adapter.valueHelp(data)));
     return super.init();
   }
 };

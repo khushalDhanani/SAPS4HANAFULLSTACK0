@@ -56,15 +56,26 @@ describe('HandlingUnitAdapter.list', () => {
 });
 
 describe('HandlingUnitAdapter.detail', () => {
+  // detail() reads items (nav), header (API), then resolves Char32/Origin from the monitor. Order: most specific first.
+  const detailRoutes = [
+    ['to_HandlingUnitItem', { results: [detailItem] }],
+    ['C_HANDLINGUNITMONITOR_CDS', { results: [{ HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0', HandlingUnitOrigin: 'ERP' }] }],
+    ['API_HANDLING_UNIT', detailHeader]
+  ];
+
   it('reads header plus items and maps weights and item material', async () => {
-    const { a } = adapter([
-      ['to_HandlingUnitItem', { results: [detailItem] }],
-      ['API_HANDLING_UNIT', detailHeader]
-    ]);
+    const { a } = adapter(detailRoutes);
     const r = await a.detail({ handlingUnitExternalID: '1000000000' });
     expect(r).toMatchObject({ HandlingUnitExternalID: '1000000000', GrossWeight: 209.2, TareWeight: 9.2, PackingObjectKey: '000002000000' });
     expect(r.Items).toHaveLength(1);
     expect(r.Items[0]).toMatchObject({ HandlingUnitItem: '1', Material: '4000000002', Quantity: 200, Unit: 'KG' });
+  });
+
+  it('resolves HandlingUnitIDChar32 / Origin from the monitor so the tree loads on a deep link', async () => {
+    const { a, calls } = adapter(detailRoutes);
+    const r = await a.detail({ handlingUnitExternalID: '1000000000' });
+    expect(r).toMatchObject({ HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0', HandlingUnitOrigin: 'ERP' });
+    expect(calls.some((c) => c.path.includes('C_HANDLINGUNITMONITOR_CDS') && c.query.includes("HandlingUnitExternalID eq '1000000000'"))).toBe(true);
   });
 
   it('404 when the handling unit is not found', async () => {
@@ -91,5 +102,32 @@ describe('HandlingUnitAdapter.hierarchy', () => {
   it('400 on a malformed char32 id', async () => {
     const { a } = adapter([]);
     await expect(a.hierarchy({ handlingUnitIDChar32: 'nothex' })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('HandlingUnitAdapter.valueHelp', () => {
+  it('maps the plant value-help set to key/text (plant codes kept unstripped)', async () => {
+    const { a, calls } = adapter([['C_PlantVH', { results: [{ Plant: '0001', PlantName: 'Werk 0001' }, { Plant: '1120', PlantName: 'Plant 1120' }] }]]);
+    const r = await a.valueHelp({ kind: 'plant' });
+    expect(r.Items).toEqual([{ key: '0001', text: 'Werk 0001' }, { key: '1120', text: 'Plant 1120' }]);
+    expect(calls[0].path).toContain('C_PlantVH');
+  });
+
+  it('maps the status value-help set with its own field names', async () => {
+    const { a } = adapter([['C_HandlingUnitStatusVH', { results: [{ HandlingUnitStat: 'A', HandlingUnitStatusName: 'Planned' }] }]]);
+    const r = await a.valueHelp({ kind: 'status' });
+    expect(r.Items).toEqual([{ key: 'A', text: 'Planned' }]);
+  });
+
+  it('accepts a mixed-case kind (shippingPoint) — case is normalized', async () => {
+    const { a } = adapter([['C_ShippingPointVH', { results: [{ ShippingPoint: '0001', ShippingPointName: 'SP 0001' }] }]]);
+    const r = await a.valueHelp({ kind: 'shippingPoint' });
+    expect(r.Items).toEqual([{ key: '0001', text: 'SP 0001' }]);
+  });
+
+  it('400 on an unknown value-help kind, before any SAP call', async () => {
+    const { a, calls } = adapter([]);
+    await expect(a.valueHelp({ kind: 'bogus' })).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(0);
   });
 });

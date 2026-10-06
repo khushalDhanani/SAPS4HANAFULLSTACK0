@@ -4,6 +4,7 @@
     xmlns="sap.m"
     xmlns:core="sap.ui.core"
     xmlns:table="sap.ui.table"
+    xmlns:form="sap.ui.layout.form"
     xmlns:f="sap.f"
     displayBlock="true">
 
@@ -32,6 +33,25 @@
                     </statuses>
                 </ObjectHeader>
 
+                <Panel id="huDimPanel" headerText="{i18n>huDimTitle}" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                    <form:SimpleForm id="huDimForm" layout="ResponsiveGridLayout" columnsM="2" columnsL="3" columnsXL="3" editable="false">
+                        <form:content>
+                            <Label text="{i18n>huDimDimensions}" />
+                            <Text text="{= ${huDetail>/header/Length} + ' × ' + ${huDetail>/header/Width} + ' × ' + ${huDetail>/header/Height} + ' ' + (${huDetail>/header/DimensionUnit} || '') }" />
+                            <Label text="{i18n>huDimMaxWeight}" />
+                            <Text text="{= ${huDetail>/header/MaxWeight} + ' ' + (${huDetail>/header/WeightUnit} || '') }" />
+                            <Label text="{i18n>huDimMaxVolume}" />
+                            <Text text="{= ${huDetail>/header/MaxVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '') }" />
+                            <Label text="{i18n>huDimNetVolume}" />
+                            <Text text="{= ${huDetail>/header/NetVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '') }" />
+                            <Label text="{i18n>huDimTareVolume}" />
+                            <Text text="{= ${huDetail>/header/TareVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '') }" />
+                            <Label text="{i18n>huDimShippingPoint}" />
+                            <Text text="{= ${huDetail>/header/ShippingPoint} || '-' }" />
+                        </form:content>
+                    </form:SimpleForm>
+                </Panel>
+
                 <Panel id="huItemsPanel" headerText="{= ${i18n>huItemsTitle} + ' (' + ${huDetail>/items}.length + ')' }" expandable="true" expanded="true" class="sapUiSmallMarginTop">
                     <Table id="huItemsTable" items="{huDetail>/items}" noDataText="{i18n>huNoItems}">
                         <columns>
@@ -40,6 +60,7 @@
                             <Column hAlign="End"><Text text="{i18n>huItemQuantity}" /></Column>
                             <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huItemReference}" /></Column>
                             <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huItemGrDate}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huItemShelfLife}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -47,15 +68,24 @@
                                     <Text text="{huDetail>HandlingUnitItem}" />
                                     <Text text="{huDetail>Material}" />
                                     <ObjectNumber number="{huDetail>Quantity}" unit="{huDetail>Unit}" emphasized="false" />
-                                    <Text text="{= ${huDetail>ReferenceDocument} + ' / ' + ${huDetail>ReferenceDocumentItem} }" />
-                                    <Text text="{huDetail>GoodsReceiptDate}" />
+                                    <Text text="{= ${huDetail>ReferenceDocument} ? (${huDetail>ReferenceDocument} + (${huDetail>ReferenceDocumentItem} ? ' / ' + ${huDetail>ReferenceDocumentItem} : '')) : '-' }" />
+                                    <Text text="{= ${huDetail>GoodsReceiptDate} || '-' }" />
+                                    <Text text="{= ${huDetail>ShelfLifeExpirationDate} || '-' }" />
                                 </cells>
                             </ColumnListItem>
                         </items>
                     </Table>
                 </Panel>
 
-                <Panel id="huTreePanel" headerText="{i18n>huTreeTitle}" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                <Panel id="huTreePanel" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title text="{i18n>huTreeTitle}" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="huTreeExpand" icon="sap-icon://expand-group" text="{i18n>huTreeExpandAll}" press=".onExpandAll" />
+                            <Button id="huTreeCollapse" icon="sap-icon://collapse-group" text="{i18n>huTreeCollapseAll}" press=".onCollapseAll" />
+                        </OverflowToolbar>
+                    </headerToolbar>
                     <table:TreeTable
                         id="huTree"
                         rows="{path: 'huDetail>/tree', parameters: {arrayNames: ['children']}}"

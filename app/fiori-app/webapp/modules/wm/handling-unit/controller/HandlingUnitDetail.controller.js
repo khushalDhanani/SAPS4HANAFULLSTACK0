@@ -58,11 +58,15 @@ sap.ui.define([
                     oModel.setProperty("/messageType", "Error");
                     oModel.setProperty("/message", (oError && oError.message) || this.getText("huLoadError"));
                 }.bind(this)).then(function () {
-                    if (!oQuery.char32) {
+                    // char32 the packing tree needs: from the URL query on navigation, else resolved by detail()
+                    // from the monitor so a direct link / refresh still loads the tree.
+                    var sChar32 = oQuery.char32 || oModel.getProperty("/header/HandlingUnitIDChar32");
+                    var sOrigin = oQuery.origin || oModel.getProperty("/header/HandlingUnitOrigin") || "ERP";
+                    if (!sChar32) {
                         oModel.setProperty("/busy", false);
                         return null;
                     }
-                    return ODataClient.get(BASE_PATH + "/hierarchy(handlingUnitIDChar32=" + q(oQuery.char32) + ",handlingUnitOrigin=" + q(oQuery.origin || "ERP") + ")")
+                    return ODataClient.get(BASE_PATH + "/hierarchy(handlingUnitIDChar32=" + q(sChar32) + ",handlingUnitOrigin=" + q(sOrigin) + ")")
                         .then(function (oHier) {
                             oModel.setProperty("/tree", buildTree(oHier.Nodes));
                         }).catch(function () {
@@ -73,8 +77,13 @@ sap.ui.define([
                 });
         },
 
-        onNavBack: function () {
-            this.getRouter().navTo("wmHandlingUnits");
+        onExpandAll: function () {
+            this.byId("huTree").expandToLevel(99);
+        },
+
+        onCollapseAll: function () {
+            this.byId("huTree").collapseAll();
         }
+        // Back navigation is owned by the ShellBar (App.controller.onNavButtonPressed → wmHandlingUnits).
     });
 });

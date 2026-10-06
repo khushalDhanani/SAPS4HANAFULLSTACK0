@@ -51,6 +51,8 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
 
     type HandlingUnitDetail {
         HandlingUnitExternalID : String(20);
+        HandlingUnitIDChar32   : String(32);
+        HandlingUnitOrigin     : String(10);
         Warehouse              : String(4);
         PackagingMaterial      : String(40);
         PackagingMaterialType  : String(4);
@@ -111,7 +113,9 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
         storageLocation        : String(4),
         warehouse              : String(4),
         packagingMaterial      : String(40),
-        handlingUnitExternalID : String(20)
+        handlingUnitExternalID : String(20),
+        status                 : String(1),
+        shippingPoint          : String(4)
     ) returns HandlingUnitListResult;
 
     // Read-only: header, weights, dimensions and packed items of one handling unit.
@@ -121,4 +125,11 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
     // Read-only: recursive packing tree of one handling unit. origin defaults to ERP.
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function hierarchy(handlingUnitIDChar32 : String(32), handlingUnitOrigin : String(10)) returns HandlingUnitHierarchyResult;
+
+    type ValueHelpItem { ![key] : String(40); text : String(60); };
+    type ValueHelpResult { Items : array of ValueHelpItem; };
+
+    // Read-only: filter-bar value help. kind = plant | packaging | status | shippingPoint.
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function valueHelp(kind : String(20)) returns ValueHelpResult;
 }

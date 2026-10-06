@@ -306,6 +306,8 @@ sap.ui.define([
                 this.onNavBack("customerReturns");
             } else if (/^wmGoodsIssue\d{3}$/.test(sRoute)) {
                 this.onNavBack(sRoute + "Pending");
+            } else if (sRoute === "wmHandlingUnitDetail") {
+                this.onNavBack("wmHandlingUnits");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {

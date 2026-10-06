@@ -14,13 +14,25 @@
                     <form:content>
                         <core:Title text="{i18n>huFilters}" />
                         <Label text="{i18n>huPlant}" labelFor="huPlant" />
-                        <Input id="huPlant" value="{huView>/plant}" maxLength="4" submit=".onGo" />
+                        <Input id="huPlant" value="{huView>/plant}" maxLength="4" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhPlant}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
                         <Label text="{i18n>huStorageLocation}" labelFor="huSloc" />
                         <Input id="huSloc" value="{huView>/storageLocation}" maxLength="4" submit=".onGo" />
+                        <Label text="{i18n>huStatus}" labelFor="huStatus" />
+                        <Input id="huStatus" value="{huView>/status}" maxLength="1" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhStatus}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
 
                         <core:Title text="{i18n>huOptions}" />
                         <Label text="{i18n>huPackagingMaterial}" labelFor="huPkgMat" />
-                        <Input id="huPkgMat" value="{huView>/packagingMaterial}" maxLength="40" submit=".onGo" />
+                        <Input id="huPkgMat" value="{huView>/packagingMaterial}" maxLength="40" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhPackaging}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huShippingPoint}" labelFor="huShipPoint" />
+                        <Input id="huShipPoint" value="{huView>/shippingPoint}" maxLength="4" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhShippingPoint}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
                         <Label text="{i18n>huExternalId}" labelFor="huExtId" />
                         <Input id="huExtId" value="{huView>/handlingUnitExternalID}" maxLength="20" submit=".onGo" />
                         <Label />

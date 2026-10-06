@@ -6,6 +6,9 @@ sap.ui.define([
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
+    var FILTER_FIELDS = ["plant", "storageLocation", "packagingMaterial", "handlingUnitExternalID", "status", "shippingPoint"];
+    // Value-help input kind -> model path for its suggestion list.
+    var VALUE_HELPS = { plant: "/vhPlant", packaging: "/vhPackaging", status: "/vhStatus", shippingpoint: "/vhShippingPoint" };
 
     return BaseController.extend("saps4hana.fiori.modules.wm.handling-unit.controller.HandlingUnits", {
 
@@ -13,16 +16,50 @@ sap.ui.define([
             this.setModel(new JSONModel({
                 plant: "",
                 storageLocation: "",
-                warehouse: "",
                 packagingMaterial: "",
                 handlingUnitExternalID: "",
+                status: "",
+                shippingPoint: "",
                 busy: false,
                 message: "",
                 messageType: "Information",
-                items: []
+                items: [],
+                vhPlant: [],
+                vhPackaging: [],
+                vhStatus: [],
+                vhShippingPoint: []
             }), "huView");
             this.getModel("huView").setSizeLimit(2000);
-            this.getRouter().getRoute("wmHandlingUnits").attachPatternMatched(this.onGo, this);
+            this._loadValueHelps();
+            this.getRouter().getRoute("wmHandlingUnits").attachPatternMatched(this.onRouteMatched, this);
+        },
+
+        _loadValueHelps: function () {
+            var oModel = this.getModel("huView");
+            Object.keys(VALUE_HELPS).forEach(function (sKind) {
+                ODataClient.get(BASE_PATH + "/valueHelp(kind='" + sKind + "')").then(function (oResult) {
+                    oModel.setProperty(VALUE_HELPS[sKind], (oResult && oResult.Items) || []);
+                }).catch(function () {
+                    // A value-help failure must not break the filter bar; the input stays a plain text field.
+                });
+            });
+        },
+
+        _hasFilter: function () {
+            var o = this.getModel("huView").getData();
+            return FILTER_FIELDS.some(function (sField) { return (o[sField] || "").trim() !== ""; });
+        },
+
+        // Entry via route: only query when a filter is set, so a visit does not trigger a full 17k-row scan.
+        onRouteMatched: function () {
+            if (this._hasFilter()) {
+                this.onGo();
+            } else {
+                var oModel = this.getModel("huView");
+                oModel.setProperty("/items", []);
+                oModel.setProperty("/messageType", "Information");
+                oModel.setProperty("/message", this.getText("huEnterFilter"));
+            }
         },
 
         onGo: function () {
@@ -30,8 +67,9 @@ sap.ui.define([
             var o = oModel.getData();
             var q = function (s) { return "'" + encodeURIComponent((s || "").trim().replace(/'/g, "''")) + "'"; };
             var sUrl = BASE_PATH + "/list(plant=" + q(o.plant) + ",storageLocation=" + q(o.storageLocation) +
-                ",warehouse=" + q(o.warehouse) + ",packagingMaterial=" + q(o.packagingMaterial) +
-                ",handlingUnitExternalID=" + q(o.handlingUnitExternalID) + ")";
+                ",warehouse=" + q("") + ",packagingMaterial=" + q(o.packagingMaterial) +
+                ",handlingUnitExternalID=" + q(o.handlingUnitExternalID) + ",status=" + q(o.status) +
+                ",shippingPoint=" + q(o.shippingPoint) + ")";
 
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");

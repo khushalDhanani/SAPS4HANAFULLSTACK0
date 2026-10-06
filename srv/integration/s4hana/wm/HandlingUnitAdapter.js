@@ -34,8 +34,20 @@ const RE = {
   material: /^[A-Z0-9][A-Z0-9_./-]{0,39}$/,
   hu: /^[A-Z0-9]{1,20}$/,
   char32: /^[0-9A-F]{32}$/,
-  origin: /^[A-Z]{1,10}$/
+  origin: /^[A-Z]{1,10}$/,
+  status: /^[A-Z0-9]$/,
+  vhKind: /^[A-Z]+$/i
 };
+
+/** Filter-bar value helps: the monitor value-help set and its key/text fields. kind is the only input. */
+const VALUE_HELP = {
+  plant: { set: 'C_PlantVH', key: 'Plant', text: 'PlantName' },
+  packaging: { set: 'C_PackagingMaterialVH', key: 'PackagingMaterial', text: 'PackagingMaterialName' },
+  status: { set: 'C_HandlingUnitStatusVH', key: 'HandlingUnitStat', text: 'HandlingUnitStatusName' },
+  shippingpoint: { set: 'C_ShippingPointVH', key: 'ShippingPoint', text: 'ShippingPointName' }
+};
+const VH_BASE = '/sap/opu/odata/sap/C_HANDLINGUNITMONITOR_CDS';
+const VH_TOP = 500;
 
 const strip = (v) => String(v ?? '').replace(/^0+(?=.)/, '');
 const num = (v) => (v === null || v === undefined || v === '' ? 0 : Number(v));
@@ -72,6 +84,8 @@ class HandlingUnitAdapter {
     const warehouse = clean(input.warehouse, 'Warehouse', RE.warehouse);
     const material = clean(input.packagingMaterial, 'Packaging material', RE.material);
     const hu = clean(input.handlingUnitExternalID, 'Handling unit', RE.hu);
+    const status = clean(input.status, 'Status', RE.status);
+    const shippingPoint = clean(input.shippingPoint, 'Shipping point', RE.plant);
 
     const filter = [];
     if (plant) filter.push(`Plant eq '${plant}'`);
@@ -79,6 +93,8 @@ class HandlingUnitAdapter {
     if (warehouse) filter.push(`Warehouse eq '${warehouse}'`);
     if (material) filter.push(`PackagingMaterial eq '${material}'`);
     if (hu) filter.push(`HandlingUnitExternalID eq '${hu}'`);
+    if (status) filter.push(`HandlingUnitProcessStatus eq '${status}'`);
+    if (shippingPoint) filter.push(`ShippingPoint eq '${shippingPoint}'`);
 
     const params = {
       $orderby: 'CreationDateTime desc,HandlingUnitExternalID desc',
@@ -137,6 +153,16 @@ class HandlingUnitAdapter {
     if (!h.HandlingUnitExternalID) throw httpError(404, `Handling unit ${hu} not found`);
     const i = await this._results(`${DETAIL}(${key})/to_HandlingUnitItem`, { $format: 'json' }, `Read items of handling unit ${hu}`);
 
+    // API_HANDLING_UNIT does not return the Char32 id the packing tree needs; resolve it from the monitor so
+    // the detail page (and a deep link / refresh) can always load the hierarchy without a URL query param.
+    const m = await this._results(MONITOR, {
+      $filter: `HandlingUnitExternalID eq '${hu}'`,
+      $select: 'HandlingUnitIDChar32,HandlingUnitOrigin',
+      $top: 1,
+      $format: 'json'
+    }, `Resolve id of handling unit ${hu}`);
+    const monitor = (m.results || [])[0] || {};
+
     const Items = (i.results || []).map((it) => ({
       HandlingUnitItem: strip(it.HandlingUnitItem),
       Material: strip(it.Material),
@@ -150,6 +176,8 @@ class HandlingUnitAdapter {
 
     return {
       HandlingUnitExternalID: strip(h.HandlingUnitExternalID),
+      HandlingUnitIDChar32: monitor.HandlingUnitIDChar32 || '',
+      HandlingUnitOrigin: monitor.HandlingUnitOrigin || '',
       Warehouse: h.Warehouse || '',
       PackagingMaterial: strip(h.PackagingMaterial),
       PackagingMaterialType: h.PackagingMaterialType || '',
@@ -206,6 +234,22 @@ class HandlingUnitAdapter {
       ReferenceDocument: strip(r.HandlingUnitReferenceDocument)
     }));
     return { TotalCount: Nodes.length, Nodes };
+  }
+
+  /** Filter-bar value help: distinct key/text pairs from the monitor's value-help set for `kind`. Read-only. */
+  async valueHelp(input = {}) {
+    const kind = clean(input.kind, 'Value help kind', RE.vhKind).toLowerCase();
+    const vh = VALUE_HELP[kind];
+    if (!vh) throw httpError(400, `Unknown value help '${input.kind}'`);
+    const d = await this._results(`${VH_BASE}/${vh.set}`, {
+      $select: `${vh.key},${vh.text}`,
+      $top: VH_TOP,
+      $format: 'json'
+    }, `Read ${kind} value help`);
+    return {
+      // Keys go straight into a $filter eq, so keep SAP's stored format (e.g. plant '0001') — do not strip.
+      Items: (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' })).filter((x) => x.key)
+    };
   }
 }
 
