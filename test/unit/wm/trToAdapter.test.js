@@ -194,4 +194,23 @@ describe('RfcClient', () => {
     await expect(c.readTable('LQUA', ['LGTYP', 'LGPLA'], ["LGNUM = 'W01'"])).resolves.toEqual([{ LGTYP: 'RM1', LGPLA: 'ONHOLD' }]);
     expect(client.close).toHaveBeenCalled();
   });
+
+  it('session runs several calls on one connection and closes it once', async () => {
+    const client = { open: jest.fn(), close: jest.fn(), call: jest.fn(async (fm) => ({ fm })) };
+    const Client = jest.fn(() => client);
+    const c = new RfcClient(env, () => ({ Client }));
+    const out = await c.session(async (call) => [await call('BAPI_HU_CREATE', { A: 1 }), await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' })]);
+    expect(out.map((r) => r.fm)).toEqual(['BAPI_HU_CREATE', 'BAPI_TRANSACTION_COMMIT']);
+    expect(Client).toHaveBeenCalledTimes(1);
+    expect(client.open).toHaveBeenCalledTimes(1);
+    expect(client.close).toHaveBeenCalledTimes(1);
+    expect(client.call.mock.calls).toEqual([['BAPI_HU_CREATE', { A: 1 }], ['BAPI_TRANSACTION_COMMIT', { WAIT: 'X' }]]);
+  });
+
+  it('session closes the connection when the callback throws', async () => {
+    const client = { open: jest.fn(), close: jest.fn(), call: jest.fn() };
+    const c = new RfcClient(env, () => ({ Client: jest.fn(() => client) }));
+    await expect(c.session(async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    expect(client.close).toHaveBeenCalledTimes(1);
+  });
 });

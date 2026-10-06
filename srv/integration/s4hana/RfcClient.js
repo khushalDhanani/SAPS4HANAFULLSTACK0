@@ -4,7 +4,8 @@
  * Minimal SAP RFC client (node-rfc). Used where no OData service exists yet.
  * ponytail: node-rfc is marked unsupported by SAP (github.com/SAP/node-rfc/issues/329);
  * swap this file for an OData client once the ABAP side publishes a service.
- * ponytail: one connection per call; move to noderfc.Pool if call volume grows.
+ * ponytail: one connection per call/session; move to noderfc.Pool if call volume grows.
+ * A session is one SAP LUW: a BAPI and its BAPI_TRANSACTION_COMMIT must run inside the same session().
  */
 const REQUIRED_ENV = ['S4_DESTINATION_URL', 'S4_RFC_SYSNR', 'S4_CLIENT', 'S4_USERNAME', 'S4_PASSWORD'];
 
@@ -32,7 +33,12 @@ class RfcClient {
     };
   }
 
-  async call(fm, params = {}) {
+  /**
+   * Run several function modules on ONE connection (= one ABAP session / LUW), e.g.
+   * `session(async (call) => { await call('BAPI_HU_CREATE', ...); await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' }); })`.
+   * The connection is closed afterwards even when fn throws; an uncommitted LUW is then discarded by SAP.
+   */
+  async session(fn) {
     let noderfc;
     try {
       noderfc = this.loader();
@@ -43,10 +49,15 @@ class RfcClient {
     const client = new noderfc.Client(this.connectionParams());
     await client.open();
     try {
-      return await client.call(fm, params);
+      return await fn((fm, params = {}) => client.call(fm, params));
     } finally {
       await client.close();
     }
+  }
+
+  /** One function module on its own connection. */
+  call(fm, params = {}) {
+    return this.session((call) => call(fm, params));
   }
 
   /**
