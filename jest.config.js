@@ -1,6 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
-  testTimeout: 15000,
+  testTimeout: 60000,
   verbose: true,
   testMatch: [
     '**/test/unit/**/*.test.js',

@@ -41,6 +41,7 @@
                 <Panel
                     id="panelStorageUnitScan"
                     headerText="{i18n>grScanPanelHeader}"
+                    visible="{= !${grView>/isDetail} }"
                     expandable="false"
                     expanded="true"
                     class="sapUiSmallMarginBottom">

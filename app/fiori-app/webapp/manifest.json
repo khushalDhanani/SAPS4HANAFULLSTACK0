@@ -307,6 +307,11 @@
           "target": "TargetGoodsReceipt"
         },
         {
+          "name": "wmGoodsReceiptDetail",
+          "pattern": "wm/goods-receipt/{delivery}",
+          "target": "TargetGoodsReceipt"
+        },
+        {
           "name": "ordersDueForDelivery",
           "pattern": "le/orders-due",
           "target": "TargetOrdersDueForDelivery"

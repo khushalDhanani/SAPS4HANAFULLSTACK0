@@ -16,6 +16,7 @@ sap.ui.define([
                 storageUnitBarcode: "",
                 selectedDelivery: "",
                 hasActiveSU: false,
+                isDetail: false,
                 audioEnabled: true,
                 isPosting: false,
                 openDeliveries: [],
@@ -66,8 +67,37 @@ sap.ui.define([
             };
             BarcodeScanService.attachHardwareScanner(this._scannerHandler);
 
+            // List route shows the open deliveries; detail route resolves one document on its own page
+            var oRouter = this.getRouter();
+            if (oRouter) {
+                oRouter.getRoute("wmGoodsReceipt").attachPatternMatched(this._onListRouteMatched, this);
+                oRouter.getRoute("wmGoodsReceiptDetail").attachPatternMatched(this._onDetailRouteMatched, this);
+            }
+
             // Fetch open inbound deliveries for selection list
             this._loadOpenDeliveries();
+        },
+
+        _onListRouteMatched: function () {
+            this._resetState();
+            this.getView().getModel("grView").setProperty("/isDetail", false);
+            this._loadOpenDeliveries();
+        },
+
+        _onDetailRouteMatched: function (oEvent) {
+            var oArgs = oEvent && oEvent.getParameter("arguments");
+            var oModel = this.getView().getModel("grView");
+            this._resetState();
+            oModel.setProperty("/isDetail", true);
+            oModel.setProperty("/storageUnitBarcode", (oArgs && oArgs.delivery) || "");
+            return this.onScanStorageUnit();
+        },
+
+        /**
+         * Open the selected document on its own page (wm/goods-receipt/{delivery})
+         */
+        _openDetail: function (sKey) {
+            this.getRouter().navTo("wmGoodsReceiptDetail", { delivery: sKey });
         },
 
         onExit: function () {
@@ -234,8 +264,7 @@ sap.ui.define([
             var oCtx = oEvent.getSource().getBindingContext("grView");
             var sKey = oCtx && oCtx.getProperty("DeliveryDocument");
             if (sKey) {
-                this.getView().getModel("grView").setProperty("/storageUnitBarcode", sKey);
-                this.onScanStorageUnit();
+                this._openDetail(sKey);
             }
         },
 
@@ -249,6 +278,11 @@ sap.ui.define([
             if (!sBarcode) {
                 this._playBeep(false);
                 MessageBox.error(this.getText("grScanRequired"));
+                return Promise.resolve();
+            }
+
+            if (!oModel.getProperty("/isDetail")) {
+                this._openDetail(sBarcode);
                 return Promise.resolve();
             }
 
@@ -486,6 +520,14 @@ sap.ui.define([
          * Reset form and workflow state
          */
         onResetWorkflow: function () {
+            this._resetState();
+            MessageToast.show(this.getText("grWorkflowReset"));
+            if (this.getView().getModel("grView").getProperty("/isDetail")) {
+                this.getRouter().navTo("wmGoodsReceipt");
+            }
+        },
+
+        _resetState: function () {
             var oModel = this.getView().getModel("grView");
             oModel.setProperty("/storageUnitBarcode", "");
             oModel.setProperty("/selectedDelivery", "");
@@ -524,7 +566,6 @@ sap.ui.define([
                 StorageUnitType: "",
                 WarehouseNumber: ""
             });
-            MessageToast.show(this.getText("grWorkflowReset"));
         },
 
         /**

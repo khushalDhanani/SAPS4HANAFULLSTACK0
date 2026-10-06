@@ -225,6 +225,7 @@ sap.ui.define([
                     bShowNav = true;
                     break;
                 case "wmGoodsReceipt":
+                case "wmGoodsReceiptDetail":
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
                     bShowNav = true;
                     break;
@@ -318,6 +319,8 @@ sap.ui.define([
                 this.onNavBack("customerReturns");
             } else if (/^wmGoodsIssue\d{3}$/.test(sRoute)) {
                 this.onNavBack(sRoute + "Pending");
+            } else if (sRoute === "wmGoodsReceiptDetail") {
+                this.onNavBack("wmGoodsReceipt");
             } else if (sRoute === "wmHandlingUnitDetail") {
                 this.onNavBack("wmHandlingUnits");
             } else if (sRoute === "wmPackingInstructionDetail") {
