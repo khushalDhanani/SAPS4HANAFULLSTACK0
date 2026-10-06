@@ -1,8 +1,10 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "saps4hana/fiori/service/ODataClient"
-], function (BaseController, JSONModel, ODataClient) {
+    "saps4hana/fiori/service/ODataClient",
+    "sap/ui/core/Fragment",
+    "sap/m/MessageToast"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -39,6 +41,7 @@ sap.ui.define([
                 kpis: []
             }), "huView");
             this.getModel("huView").setSizeLimit(2000);
+            this.setModel(new JSONModel({ packagingMaterial: "", plant: "", storageLocation: "", content: "", busy: false, error: "" }), "huCreate");
             this._loadValueHelps();
             this._loadKpis();
             this.getRouter().getRoute("wmHandlingUnits").attachPatternMatched(this.onRouteMatched, this);
@@ -112,6 +115,52 @@ sap.ui.define([
                 hu: encodeURIComponent(o.HandlingUnitExternalID),
                 "?query": { wh: o.Warehouse || "", char32: o.HandlingUnitIDChar32 || "", origin: o.HandlingUnitOrigin || "ERP" }
             });
+        },
+
+        // Create HU (CAP action create -> BAPI_HU_CREATE + commit). Plant / SLoc / packaging prefilled from the filter bar.
+        onOpenCreate: function () {
+            var oView = this.getView();
+            var o = this.getModel("huView").getData();
+            this.getModel("huCreate").setData({
+                packagingMaterial: o.packagingMaterial || "", plant: o.plant || "", storageLocation: o.storageLocation || "",
+                content: "", busy: false, error: ""
+            });
+            if (!this._pCreateDialog) {
+                this._pCreateDialog = Fragment.load({
+                    id: oView.getId(),
+                    name: "saps4hana.fiori.modules.wm.handling-unit.view.CreateHandlingUnitDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    oView.addDependent(oDialog);
+                    return oDialog;
+                });
+            }
+            this._pCreateDialog.then(function (oDialog) { oDialog.open(); });
+        },
+
+        onCancelCreate: function () {
+            this._pCreateDialog.then(function (oDialog) { oDialog.close(); });
+        },
+
+        onSubmitCreate: function () {
+            var oModel = this.getModel("huCreate");
+            var o = oModel.getData();
+            oModel.setProperty("/busy", true);
+            oModel.setProperty("/error", "");
+            ODataClient.post(BASE_PATH + "/create", { packagingMaterial: o.packagingMaterial, plant: o.plant, storageLocation: o.storageLocation, content: o.content })
+                .then(function (oResult) {
+                    MessageToast.show(this.getText("huCreateOk", [oResult.HandlingUnitExternalID]));
+                    this._pCreateDialog.then(function (oDialog) { oDialog.close(); });
+                    // detail() resolves the monitor key itself, so no char32 is needed for a fresh HU
+                    this.getRouter().navTo("wmHandlingUnitDetail", {
+                        hu: encodeURIComponent(oResult.HandlingUnitExternalID),
+                        "?query": { wh: "", char32: "", origin: "ERP" }
+                    });
+                }.bind(this))
+                .catch(function (oError) {
+                    oModel.setProperty("/error", (oError && oError.message) || this.getText("huCreateError"));
+                }.bind(this))
+                .then(function () { oModel.setProperty("/busy", false); });
         },
 
         onExport: function () {

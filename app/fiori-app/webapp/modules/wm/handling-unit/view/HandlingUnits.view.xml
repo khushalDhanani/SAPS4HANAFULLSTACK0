@@ -67,6 +67,7 @@
                         <OverflowToolbar>
                             <Title id="huCount" text="{= ${i18n>huListTitle} + ' (' + ${huView>/items}.length + ')' }" level="H2" />
                             <ToolbarSpacer />
+                            <Button id="huCreateBtn" icon="sap-icon://add" text="{i18n>huCreate}" type="Emphasized" press=".onOpenCreate" enabled="{= !${huView>/busy} }" />
                             <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
                         </OverflowToolbar>
                     </headerToolbar>

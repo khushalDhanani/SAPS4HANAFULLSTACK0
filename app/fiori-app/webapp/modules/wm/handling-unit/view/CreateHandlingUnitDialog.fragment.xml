@@ -1,0 +1,37 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog id="huCreateDialog" title="{i18n>huCreateTitle}" contentWidth="32rem" busy="{huCreate>/busy}">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip id="huCreateError" visible="{= !!${huCreate>/error} }" text="{huCreate>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
+                <form:SimpleForm id="huCreateForm" editable="true" layout="ResponsiveGridLayout" columnsM="1" columnsL="1" labelSpanL="4">
+                    <form:content>
+                        <Label text="{i18n>huPackagingMaterial}" required="true" />
+                        <Input id="huCreatePkgMat" value="{huCreate>/packagingMaterial}" maxLength="40" showSuggestion="true" suggestionItems="{huView>/vhPackaging}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huPlant}" required="true" />
+                        <Input id="huCreatePlant" value="{huCreate>/plant}" maxLength="4" showSuggestion="true" suggestionItems="{huView>/vhPlant}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huStorageLocation}" required="true" />
+                        <Input id="huCreateSloc" value="{huCreate>/storageLocation}" maxLength="4" showSuggestion="true" suggestionItems="{huView>/vhStorageLocation}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huCreateContent}" />
+                        <Input id="huCreateContent" value="{huCreate>/content}" maxLength="40" />
+                    </form:content>
+                </form:SimpleForm>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button id="huCreateSubmit" text="{i18n>huCreateSubmit}" type="Emphasized" press=".onSubmitCreate"
+                enabled="{= !${huCreate>/busy} &amp;&amp; !!${huCreate>/packagingMaterial} &amp;&amp; !!${huCreate>/plant} &amp;&amp; !!${huCreate>/storageLocation} }" />
+        </beginButton>
+        <endButton>
+            <Button id="huCreateCancel" text="{i18n>huCreateCancel}" press=".onCancelCreate" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

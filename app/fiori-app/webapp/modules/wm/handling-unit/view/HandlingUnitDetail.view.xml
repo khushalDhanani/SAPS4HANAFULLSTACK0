@@ -14,6 +14,14 @@
 
                 <MessageStrip id="huDetailMessage" visible="{= !!${huDetail>/message} }" text="{huDetail>/message}" type="{huDetail>/messageType}" showIcon="true" class="sapUiSmallMarginBottom" />
 
+                <OverflowToolbar id="huActionBar" class="sapUiSmallMarginBottom">
+                    <ToolbarSpacer />
+                    <Button id="huPackBtn" icon="sap-icon://add" text="{i18n>huPackItem}" type="Emphasized" press=".onOpenPack"
+                        enabled="{= !${huDetail>/busy} &amp;&amp; !!${huDetail>/header/HandlingUnitExternalID} }" />
+                    <Button id="huDeleteBtn" icon="sap-icon://delete" text="{i18n>huDeleteHu}" type="Reject" press=".onDelete" tooltip="{i18n>huDeleteHint}"
+                        enabled="{= !${huDetail>/busy} &amp;&amp; !!${huDetail>/header/HandlingUnitExternalID} &amp;&amp; ${huDetail>/items}.length === 0 }" />
+                </OverflowToolbar>
+
                 <ObjectHeader
                     id="huDetailHeader"
                     title="{= ${i18n>huDetailTitle} + ' ' + ${huDetail>/header/HandlingUnitExternalID} }"
@@ -64,6 +72,7 @@
                             <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huItemReference}" /></Column>
                             <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huItemGrDate}" /></Column>
                             <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huItemShelfLife}" /></Column>
+                            <Column hAlign="End" width="4rem"><Text text="" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -76,6 +85,7 @@
                                     <Text text="{= ${huDetail>ReferenceDocument} ? (${huDetail>ReferenceDocument} + (${huDetail>ReferenceDocumentItem} ? ' / ' + ${huDetail>ReferenceDocumentItem} : '')) : '-' }" />
                                     <Text text="{= ${huDetail>GoodsReceiptDate} || '-' }" />
                                     <Text text="{= ${huDetail>ShelfLifeExpirationDate} || '-' }" />
+                                    <Button icon="sap-icon://decline" type="Transparent" tooltip="{i18n>huUnpack}" press=".onUnpack" enabled="{= !${huDetail>/busy} }" />
                                 </cells>
                             </ColumnListItem>
                         </items>
