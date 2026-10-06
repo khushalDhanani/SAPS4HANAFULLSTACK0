@@ -176,7 +176,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
             expect(oModel.getProperty('/audioEnabled')).toBe(true);
             expect(mockBarcodeScanService.attachHardwareScanner).toHaveBeenCalled();
-            expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).toHaveBeenCalled();
+            // the list is loaded by the list route, never by a detail page load
+            expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).not.toHaveBeenCalled();
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceipt');
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceiptDetail');
         });
@@ -339,7 +340,16 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
         });
 
+        it('should ignore a list row press while a detail page is open', () => {
+            const mockEvent = {
+                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '180000021' }) })
+            };
+            controller.onSelectInboundDelivery(mockEvent);
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
+        });
+
         it('should navigate to the detail route on Inbound Delivery list row press instead of resolving inline', () => {
+            controller.getView().getModel('grView').setProperty('/isDetail', false);
             const mockEvent = {
                 getSource: () => ({ getBindingContext: () => ({ getProperty: (p) => (p === 'DeliveryDocument' ? '180000001' : null) }) })
             };

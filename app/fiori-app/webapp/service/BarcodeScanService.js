@@ -49,10 +49,12 @@ sap.ui.define([
             if (_sKeyBuffer.length >= 3) {
                 var sScanned = _sKeyBuffer.trim();
                 _sKeyBuffer = "";
-                // If focus is not inside an active input, prevent standard enter navigation
+                // If focus is not inside an active input, the scan suffix Enter must not also act on the focused
+                // control (e.g. press a focused list row): consume it completely.
                 var oActive = document.activeElement;
                 if (!oActive || oActive.tagName !== "INPUT") {
                     oEvent.preventDefault();
+                    oEvent.stopPropagation();
                 }
                 try {
                     _fnHardwareCallback(sScanned, "ZEBRA_KEYSTROKE_WEDGE");

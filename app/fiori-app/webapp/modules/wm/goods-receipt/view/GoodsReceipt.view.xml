@@ -155,17 +155,21 @@
                                 <!-- Core Identifiers -->
                                 <core:Title text="{i18n>grGroupDocumentInfo}" />
 
-                                <Label text="{i18n>grColScannedObject}" />
-                                <Text id="txtScannedObject" text="{grView>/activeSU/ScannedBarcode} ({grView>/activeSU/ScannedTypeLabel})" class="fontBold" />
+                                <!-- Scanned object / storage unit only when they differ from the delivery number (no triple repeat) -->
+                                <Label text="{i18n>grColScannedObject}" visible="{= ${grView>/activeSU/ScannedBarcode} !== ${grView>/activeSU/DeliveryDocument} }" />
+                                <Text id="txtScannedObject" text="{grView>/activeSU/ScannedBarcode} ({grView>/activeSU/ScannedTypeLabel})" class="fontBold" visible="{= ${grView>/activeSU/ScannedBarcode} !== ${grView>/activeSU/DeliveryDocument} }" />
 
-                                <Label text="{i18n>grColStorageUnit}" />
-                                <Text id="txtStorageUnit" text="{grView>/activeSU/StorageUnit}" class="fontBold" />
+                                <Label text="{i18n>grColStorageUnit}" visible="{= ${grView>/activeSU/StorageUnit} !== ${grView>/activeSU/DeliveryDocument} }" />
+                                <Text id="txtStorageUnit" text="{grView>/activeSU/StorageUnit}" class="fontBold" visible="{= ${grView>/activeSU/StorageUnit} !== ${grView>/activeSU/DeliveryDocument} }" />
 
                                 <Label text="{i18n>grColPackagingMat}" visible="{= !!${grView>/activeSU/PackagingMaterial} }" />
                                 <Text id="txtPackagingMaterial" text="{grView>/activeSU/PackagingMaterial}" visible="{= !!${grView>/activeSU/PackagingMaterial} }" />
 
                                 <Label text="{i18n>grColDeliveryDoc}" />
-                                <Text id="txtDeliveryDoc" text="{grView>/activeSU/DeliveryDocument} (Item {grView>/activeSU/DeliveryDocumentItem})" />
+                                <Text id="txtDeliveryDoc" text="{grView>/activeSU/DeliveryDocument} (Item {grView>/activeSU/DeliveryDocumentItem})" class="fontBold" />
+
+                                <Label text="{i18n>grColDeliveryDate}" visible="{= !!${grView>/activeSU/DeliveryDate} }" />
+                                <Text id="txtDeliveryDate" text="{grView>/activeSU/DeliveryDate}" visible="{= !!${grView>/activeSU/DeliveryDate} }" />
 
                                 <Label text="{i18n>grColPurchaseOrder}" />
                                 <Text id="txtPurchaseOrder" text="{grView>/activeSU/PurchaseOrder} (Item {grView>/activeSU/PurchaseOrderItem})" />
@@ -185,10 +189,14 @@
                                 <Label text="{i18n>grColPlant}" />
                                 <Text id="txtPlant" text="{grView>/activeSU/Plant} - {grView>/activeSU/PlantName}" />
 
+                                <Label text="{i18n>grColWarehouse}" visible="{= !!${grView>/activeSU/WarehouseNumber} || !!${grView>/activeSU/WarehouseStorageBin} }" />
+                                <Text id="txtWarehouse" text="{grView>/activeSU/WarehouseNumber}{= ${grView>/activeSU/WarehouseStorageBin} ? ' / ' + ${grView>/activeSU/WarehouseStorageBin} : '' }" visible="{= !!${grView>/activeSU/WarehouseNumber} || !!${grView>/activeSU/WarehouseStorageBin} }" />
+
                                 <Label text="{i18n>grColStorageLocation}" required="true" />
                                 <Select
                                     id="selectStorageLocation"
                                     selectedKey="{grView>/activeSU/StorageLocation}"
+                                    forceSelection="false"
                                     items="{grView>/availableStorageLocations}"
                                     change=".onStorageLocationChange"
                                     width="100%">
@@ -201,6 +209,7 @@
                                 <Select
                                     id="selectBatch"
                                     selectedKey="{grView>/activeSU/Batch}"
+                                    forceSelection="false"
                                     items="{grView>/availableBatches}"
                                     change=".onBatchChange"
                                     width="100%">
@@ -227,6 +236,10 @@
                                         width="9rem"
                                         class="sapUiTinyMarginEnd" />
                                     <Text id="txtUnit" text="{grView>/activeSU/Unit}" class="fontBold sapUiSmallMarginEnd" />
+                                    <Text
+                                        id="txtDeliveryQty"
+                                        text="{= ${grView>/activeSU/DeliveryQuantity} !== null ? ${i18n>grQtyDelivery} + ': ' + ${grView>/activeSU/DeliveryQuantity} + ' ' + ${grView>/activeSU/Unit} : '' }"
+                                        class="textMuted" />
                                     <Text
                                         id="txtOpenQty"
                                         text="{= ${grView>/activeSU/OpenQuantity} !== null &amp;&amp; ${grView>/activeSU/OpenQuantity} !== '' ? ' / Open: ' + ${grView>/activeSU/OpenQuantity} + ' ' + ${grView>/activeSU/Unit} : '' }"

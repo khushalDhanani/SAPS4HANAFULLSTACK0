@@ -82,6 +82,9 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         PackagingMaterial    : String(40);
         StorageUnitType      : String(3);
         WarehouseNumber      : String(3);
+        DeliveryQuantity     : Decimal(13, 3);
+        DeliveryDate         : Date;
+        GoodsMovementStatus  : String(1);
         LookupWarnings       : array of String(255);
     };
 

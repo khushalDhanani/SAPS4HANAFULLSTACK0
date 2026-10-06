@@ -21,6 +21,8 @@ const GR_MOVEMENT_TYPE = '101';
  * - Strict compliance with AGENTS.md SAP API Discovery Protocol:
  *   NO dummy fallback data, NO mock persistence, NO synthetic document generation.
  */
+const toNum = (v) => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? null : Number(v);
+
 class GoodsReceiptAdapter {
   /**
    * Gateway entity set that reliably issues a CSRF token and session cookies on this system; used for
@@ -303,48 +305,100 @@ class GoodsReceiptAdapter {
    * from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items and GR4PO_DL_Headers.
    * Eliminates hardcoded quantities in strict compliance with AGENTS.md.
    */
+  /**
+   * Delivery item facts from LIPS/LIKP (read-only RFC_READ_TABLE): the authoritative quantity, unit, storage
+   * location, batch, warehouse number/bin, goods movement status and delivery date of an inbound delivery item.
+   * Returns null when RFC is unavailable or the item does not exist.
+   */
+  async _readDeliveryItemFacts(deliveryDocument, deliveryItem) {
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') return null;
+    const vbeln = /^\d+$/.test(deliveryDocument) ? deliveryDocument.padStart(10, '0') : deliveryDocument;
+    try {
+      const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'LGNUM', 'LGPLA', 'WBSTA'], [
+        `VBELN = '${vbeln}' AND POSNR = '${deliveryItem}'`
+      ]);
+      if (!rows.length) return null;
+      const li = rows[0];
+      const likp = await this.rfc.readTable('LIKP', ['VBELN', 'LFDAT'], [`VBELN = '${vbeln}'`]);
+      const lfdat = (likp[0] && likp[0].LFDAT) || '';
+      return {
+        StorageLocation: li.LGORT || '',
+        Batch: li.CHARG || '',
+        DeliveryQuantity: toNum(li.LFIMG),
+        Unit: li.VRKME || li.MEINS || '',
+        WarehouseNumber: li.LGNUM || '',
+        WarehouseStorageBin: li.LGPLA || '',
+        GoodsMovementStatus: li.WBSTA || '',
+        DeliveryDate: /^\d{8}$/.test(lfdat) && lfdat !== '00000000' ? `${lfdat.slice(0, 4)}-${lfdat.slice(4, 6)}-${lfdat.slice(6, 8)}` : ''
+      };
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Delivery item read (LIPS/LIKP) failed for ${vbeln}/${deliveryItem}: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Retrieves authentic Goods Receipt item data (OpenQuantity, OrderedQuantity, UnitOfMeasure, EntryUnit, etc.)
+   * from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items and GR4PO_DL_Headers, completed with the delivery item itself (LIPS/LIKP).
+   * Eliminates hardcoded quantities in strict compliance with AGENTS.md.
+   */
   async getGoodsReceiptItem(deliveryDocument = '', deliveryItem = '', purchaseOrder = '', purchaseOrderItem = '') {
-    // 1. Try Inbound Delivery via GR4PO_DL_Items key lookup (SourceOfGR='INBDELIV')
+    // 1. Inbound Delivery: GR4PO_DL_Items key lookup (SourceOfGR='INBDELIV') + LIPS/LIKP facts.
+    //    Live finding (180000006): the OData item comes back as an empty shell (no material, no unit, 0.000 quantities),
+    //    so the delivery item in LIPS is the source for SLoc, batch, quantity, unit and WM data.
     if (deliveryDocument) {
       const delivDoc = String(deliveryDocument).trim();
       const sItem = deliveryItem ? String(deliveryItem).padStart(6, '0') : '000010';
+      let odata = null;
       try {
         const itemKey = `InboundDelivery='${delivDoc}',DeliveryDocumentItem='${sItem}',SourceOfGR='INBDELIV',AccountAssignmentNumber='',ReferenceLineID=''`;
         const res = await this._get(
           `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Items(${itemKey})`,
           '$format=json'
         );
-        const it = Array.isArray(res) ? res[0] : res;
-        if (it) {
-          const openQty = (it.OpenQuantity !== undefined && it.OpenQuantity !== null && it.OpenQuantity !== '') ? Number(it.OpenQuantity) : null;
-          const ordQty = (it.OrderedQuantity !== undefined && it.OrderedQuantity !== null && it.OrderedQuantity !== '') ? Number(it.OrderedQuantity) : null;
-          const entryQty = (it.QuantityInEntryUnit !== undefined && it.QuantityInEntryUnit !== null && it.QuantityInEntryUnit !== '') ? Number(it.QuantityInEntryUnit) : null;
-          const unit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
-          if ((openQty !== null && openQty > 0) || (ordQty !== null && ordQty > 0) || (unit && unit.trim())) {
-            return {
-              SourceOfGR: 'INBDELIV',
-              InboundDelivery: it.InboundDelivery || delivDoc,
-              DeliveryDocumentItem: it.DeliveryDocumentItem || sItem,
-              OpenQuantity: openQty !== null && !isNaN(openQty) ? openQty : null,
-              OrderedQuantity: ordQty !== null && !isNaN(ordQty) ? ordQty : null,
-              QuantityInEntryUnit: entryQty !== null && !isNaN(entryQty) ? entryQty : null,
-              Unit: unit ? unit.trim().toUpperCase() : '',
-              StorageLocation: it.StorageLocation || '',
-              StorageLocationName: it.StorageLocationName || '',
-              WarehouseStorageBin: it.WarehouseStorageBin || '',
-              Batch: it.Batch || '',
-              Material: it.Material || '',
-              MaterialName: it.MaterialName || it.PurchaseOrderItemText || '',
-              Plant: it.Plant || '',
-              PlantName: it.PlantName || ''
-            };
-          }
-        }
+        odata = (Array.isArray(res) ? res[0] : res) || null;
       } catch (err) {
         if (this._isOutage(err)) {
           throw err;
         }
         LOG.warn(`Goods receipt item lookup failed for delivery ${delivDoc}: ${err.message}`);
+      }
+      const facts = await this._readDeliveryItemFacts(delivDoc, sItem);
+      const it = odata || {};
+      const openQty = toNum(it.OpenQuantity);
+      const ordQty = toNum(it.OrderedQuantity);
+      const entryQty = toNum(it.QuantityInEntryUnit);
+      const odataUnit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
+      const hasODataItem = (openQty !== null && openQty > 0) || (ordQty !== null && ordQty > 0) || !!(odataUnit && odataUnit.trim());
+      if (hasODataItem || facts) {
+        const unit = odataUnit || (facts && facts.Unit) || '';
+        // ponytail: a partially received item (status B) is not netted against EKBE; open = delivery quantity until status C.
+        let open = openQty;
+        if (!(openQty !== null && openQty > 0) && facts) {
+          open = facts.GoodsMovementStatus === 'C' ? 0 : facts.DeliveryQuantity;
+        }
+        return {
+          SourceOfGR: 'INBDELIV',
+          InboundDelivery: it.InboundDelivery || delivDoc,
+          DeliveryDocumentItem: it.DeliveryDocumentItem || sItem,
+          OpenQuantity: open,
+          OrderedQuantity: ordQty,
+          QuantityInEntryUnit: entryQty,
+          Unit: unit ? unit.trim().toUpperCase() : '',
+          StorageLocation: it.StorageLocation || (facts && facts.StorageLocation) || '',
+          StorageLocationName: it.StorageLocationName || '',
+          WarehouseStorageBin: it.WarehouseStorageBin || (facts && facts.WarehouseStorageBin) || '',
+          WarehouseNumber: (facts && facts.WarehouseNumber) || '',
+          Batch: it.Batch || (facts && facts.Batch) || '',
+          DeliveryQuantity: facts ? facts.DeliveryQuantity : null,
+          DeliveryDate: (facts && facts.DeliveryDate) || '',
+          GoodsMovementStatus: (facts && facts.GoodsMovementStatus) || '',
+          Material: it.Material || '',
+          MaterialName: it.MaterialName || it.PurchaseOrderItemText || '',
+          Plant: it.Plant || '',
+          PlantName: it.PlantName || ''
+        };
       }
     }
 
@@ -849,6 +903,9 @@ class GoodsReceiptAdapter {
     let authenticOpenQuantity = null;
     let authenticOrderedQuantity = null;
     let authenticQuantityInEntryUnit = null;
+    let deliveryQuantity = null;
+    let deliveryDate = '';
+    let goodsMovementStatus = '';
 
     if (grItem) {
       authenticOpenQuantity = (grItem.OpenQuantity !== undefined && grItem.OpenQuantity !== null && !isNaN(grItem.OpenQuantity)) ? grItem.OpenQuantity : null;
@@ -864,6 +921,10 @@ class GoodsReceiptAdapter {
         if (grItem.StorageLocationName) defaultSLocName = grItem.StorageLocationName;
       }
       if (grItem.WarehouseStorageBin && !defaultBin) defaultBin = grItem.WarehouseStorageBin;
+      if (grItem.WarehouseNumber && !resolvedWarehouseNumber) resolvedWarehouseNumber = grItem.WarehouseNumber;
+      deliveryQuantity = (grItem.DeliveryQuantity !== undefined && grItem.DeliveryQuantity !== null && !isNaN(grItem.DeliveryQuantity)) ? grItem.DeliveryQuantity : null;
+      deliveryDate = grItem.DeliveryDate || '';
+      goodsMovementStatus = grItem.GoodsMovementStatus || '';
       if (grItem.Batch && !selectedBatch) {
         selectedBatch = grItem.Batch;
         const docBatch = batches.find(b => b.Batch === grItem.Batch);
@@ -931,6 +992,9 @@ class GoodsReceiptAdapter {
       PackagingMaterial: resolvedPackagingMaterial,
       StorageUnitType: resolvedStorageUnitType,
       WarehouseNumber: resolvedWarehouseNumber,
+      DeliveryQuantity: deliveryQuantity,
+      DeliveryDate: deliveryDate,
+      GoodsMovementStatus: goodsMovementStatus,
       AvailableStorageLocations: storageLocations,
       AvailableBatches: batches,
       LookupWarnings: lookupWarnings

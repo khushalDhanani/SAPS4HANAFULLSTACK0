@@ -52,7 +52,10 @@ sap.ui.define([
                     SupplierCityName: "",
                     PackagingMaterial: "",
                     StorageUnitType: "",
-                    WarehouseNumber: ""
+                    WarehouseNumber: "",
+                    DeliveryQuantity: null,
+                    DeliveryDate: "",
+                    GoodsMovementStatus: ""
                 }
             });
             this.getView().setModel(oModel, "grView");
@@ -74,8 +77,8 @@ sap.ui.define([
                 oRouter.getRoute("wmGoodsReceiptDetail").attachPatternMatched(this._onDetailRouteMatched, this);
             }
 
-            // Fetch open inbound deliveries for selection list
-            this._loadOpenDeliveries();
+            // The open deliveries are loaded by the list route only (see _onListRouteMatched); a detail page
+            // must never hold a list whose row press would navigate away from the document that was opened.
         },
 
         _onListRouteMatched: function () {
@@ -261,6 +264,9 @@ sap.ui.define([
          * Handle row press in the open Inbound Deliveries list
          */
         onSelectInboundDelivery: function (oEvent) {
+            if (this.getView().getModel("grView").getProperty("/isDetail")) {
+                return;
+            }
             var oCtx = oEvent.getSource().getBindingContext("grView");
             var sKey = oCtx && oCtx.getProperty("DeliveryDocument");
             if (sKey) {
@@ -322,7 +328,10 @@ sap.ui.define([
                         SupplierCityName: oSU.SupplierCityName || "",
                         PackagingMaterial: oSU.PackagingMaterial || "",
                         StorageUnitType: oSU.StorageUnitType || "",
-                        WarehouseNumber: oSU.WarehouseNumber || ""
+                        WarehouseNumber: oSU.WarehouseNumber || "",
+                        DeliveryQuantity: (oSU.DeliveryQuantity !== undefined && oSU.DeliveryQuantity !== null && !isNaN(Number(oSU.DeliveryQuantity))) ? Number(oSU.DeliveryQuantity) : null,
+                        DeliveryDate: oSU.DeliveryDate || "",
+                        GoodsMovementStatus: oSU.GoodsMovementStatus || ""
                     });
 
                     oModel.setProperty("/availableStorageLocations", oSU.AvailableStorageLocations || []);
@@ -564,7 +573,10 @@ sap.ui.define([
                 SupplierCityName: "",
                 PackagingMaterial: "",
                 StorageUnitType: "",
-                WarehouseNumber: ""
+                WarehouseNumber: "",
+                DeliveryQuantity: null,
+                DeliveryDate: "",
+                GoodsMovementStatus: ""
             });
         },
 

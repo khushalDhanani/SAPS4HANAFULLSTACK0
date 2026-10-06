@@ -781,6 +781,64 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             getSpy.mockRestore();
         });
 
+        it('should complete an empty GR4PO_DL_Items shell with the delivery item facts from LIPS/LIKP (live case 180000006)', async () => {
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce({
+                InboundDelivery: '180000006', DeliveryDocumentItem: '000010', Material: '', Plant: '', StorageLocation: '', Batch: '',
+                OpenQuantity: '0.000', OrderedQuantity: '0.000', QuantityInEntryUnit: '0.000', UnitOfMeasure: '', EntryUnit: '', OrderedQuantityUnit: ''
+            });
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table, fields, where) => {
+                    if (table === 'LIPS') {
+                        expect(where).toEqual(["VBELN = '0180000006' AND POSNR = '000010'"]);
+                        return [{ VBELN: '0180000006', POSNR: '000010', LGORT: 'CS01', CHARG: '', LFIMG: '10000.000', MEINS: 'KG', VRKME: 'KG', LGNUM: 'W13', LGPLA: '', WBSTA: 'A' }];
+                    }
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000006', LFDAT: '20251103' }];
+                    }
+                    return [];
+                })
+            };
+
+            const item = await GoodsReceiptAdapter.getGoodsReceiptItem('180000006', '000010', '300001405', '00010');
+            expect(item).toEqual(expect.objectContaining({
+                SourceOfGR: 'INBDELIV',
+                StorageLocation: 'CS01',
+                Batch: '',
+                Unit: 'KG',
+                DeliveryQuantity: 10000,
+                OpenQuantity: 10000,
+                OrderedQuantity: 0,
+                WarehouseNumber: 'W13',
+                DeliveryDate: '2025-11-03',
+                GoodsMovementStatus: 'A'
+            }));
+
+            getSpy.mockRestore();
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should keep the GR4PO_DL_Items values when present and report 0 open for a fully received delivery item', async () => {
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce({
+                InboundDelivery: '180000001', DeliveryDocumentItem: '000010', Material: '1000000045', Plant: '1120', StorageLocation: 'ST02', Batch: 'B1',
+                OpenQuantity: '0.000', OrderedQuantity: '0.000', QuantityInEntryUnit: '0.000', UnitOfMeasure: 'KG', EntryUnit: 'KG', OrderedQuantityUnit: 'KG'
+            });
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIPS') return [{ VBELN: '0180000001', POSNR: '000010', LGORT: 'CS01', CHARG: 'B9', LFIMG: '500.000', MEINS: 'KG', VRKME: 'KG', LGNUM: '', LGPLA: '', WBSTA: 'C' }];
+                    if (table === 'LIKP') return [{ VBELN: '0180000001', LFDAT: '00000000' }];
+                    return [];
+                })
+            };
+
+            const item = await GoodsReceiptAdapter.getGoodsReceiptItem('180000001', '000010');
+            expect(item).toEqual(expect.objectContaining({ StorageLocation: 'ST02', Batch: 'B1', Unit: 'KG', OpenQuantity: 0, DeliveryQuantity: 500, DeliveryDate: '', GoodsMovementStatus: 'C' }));
+
+            getSpy.mockRestore();
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
         it('should return null quantities when item read fails or returns no item', async () => {
             const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce([
                 {

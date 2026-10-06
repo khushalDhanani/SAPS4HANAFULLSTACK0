@@ -117,11 +117,11 @@ describe('BarcodeScanService Unit Tests', () => {
             // Simulate rapid keystrokes from laser engine: "RM-4520"
             const keys = ['R', 'M', '-', '4', '5', '2', '0'];
             keys.forEach(k => {
-                onKeyDown({ key: k, preventDefault: jest.fn() });
+                onKeyDown({ key: k, preventDefault: jest.fn(), stopPropagation: jest.fn() });
             });
 
             // Finish with Enter
-            onKeyDown({ key: 'Enter', preventDefault: jest.fn() });
+            onKeyDown({ key: 'Enter', preventDefault: jest.fn(), stopPropagation: jest.fn() });
 
             expect(mockCb).toHaveBeenCalledWith('RM-4520', 'ZEBRA_KEYSTROKE_WEDGE');
         });
@@ -132,13 +132,13 @@ describe('BarcodeScanService Unit Tests', () => {
             const onKeyDown = windowEventListeners['keydown'];
 
             // Type "AB"
-            onKeyDown({ key: 'A', preventDefault: jest.fn() });
-            onKeyDown({ key: 'B', preventDefault: jest.fn() });
+            onKeyDown({ key: 'A', preventDefault: jest.fn(), stopPropagation: jest.fn() });
+            onKeyDown({ key: 'B', preventDefault: jest.fn(), stopPropagation: jest.fn() });
 
             // Wait 70ms (longer than 50ms laser interval) to simulate slow human typing
             setTimeout(() => {
-                onKeyDown({ key: 'C', preventDefault: jest.fn() });
-                onKeyDown({ key: 'Enter', preventDefault: jest.fn() });
+                onKeyDown({ key: 'C', preventDefault: jest.fn(), stopPropagation: jest.fn() });
+                onKeyDown({ key: 'Enter', preventDefault: jest.fn(), stopPropagation: jest.fn() });
 
                 // Buffer was reset, only "C" remained which is < 3 characters, so not treated as laser scan
                 expect(mockCb).not.toHaveBeenCalled();
