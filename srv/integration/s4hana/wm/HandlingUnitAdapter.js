@@ -28,6 +28,22 @@ const LIST_SELECT = [
   'HandlingUnitReferenceDocument', 'CreatedByUser', 'CreationDateTime'
 ].join(',');
 
+const DETAIL_MONITOR_SELECT = [
+  'HandlingUnitExternalID', 'HandlingUnitIDChar32', 'HandlingUnitOrigin', 'Warehouse', 'WarehouseName',
+  'PackagingMaterial', 'PackagingMaterialName', 'PackagingMaterialType', 'PackagingMaterialTypeName',
+  'Plant', 'PlantName', 'StorageLocation', 'StorageLocationName', 'StorageType', 'StorageBin', 'ShippingPoint',
+  'ParentHandlingUnitNumber', 'HandlingUnitProcessStatus', 'HandlingUnitProcessStatusText',
+  'HandlingUnitReferenceDocument', 'HandlingUnitReferenceDocName', 'DeliveryDocument',
+  'CreatedByUser', 'CreationDateTime', 'LastChangedByUser', 'LastChangeDateTime',
+  'PackingInstructionNumber', 'HandlingUnitProductName'
+].join(',');
+
+const DETAIL_ITEM_SELECT = [
+  'HandlingUnitItem', 'Material', 'MaterialName', 'Batch', 'Plant', 'StorageLocation',
+  'HandlingUnitQuantity', 'HandlingUnitQuantityUnit', 'HandlingUnitReferenceDocument',
+  'HandlingUnitRefDocumentItem', 'ShelfLifeExpirationDate', 'HandlingUnitGoodsReceiptDate'
+].join(',');
+
 const RE = {
   plant: /^[A-Z0-9]{1,4}$/,
   warehouse: /^[A-Z0-9]{1,4}$/,
@@ -152,21 +168,48 @@ class HandlingUnitAdapter {
 
     const h = await this._results(`${DETAIL}(${key})`, { $format: 'json' }, `Read handling unit ${hu}`);
     if (!h.HandlingUnitExternalID) throw httpError(404, `Handling unit ${hu} not found`);
-    const i = await this._results(`${DETAIL}(${key})/to_HandlingUnitItem`, { $format: 'json' }, `Read items of handling unit ${hu}`);
 
-    // API_HANDLING_UNIT does not return the Char32 id the packing tree needs; resolve it from the monitor so
-    // the detail page (and a deep link / refresh) can always load the hierarchy without a URL query param.
-    const m = await this._results(MONITOR, {
-      $filter: `HandlingUnitExternalID eq '${hu}'`,
-      $select: 'HandlingUnitIDChar32,HandlingUnitOrigin',
-      $top: 1,
-      $format: 'json'
-    }, `Resolve id of handling unit ${hu}`);
-    const monitor = (m.results || [])[0] || {};
+    // Fetch items with enrichment (MaterialName, Batch, Plant, SLoc) from MONITOR combined items.
+    // Fall back to API_HANDLING_UNIT to_HandlingUnitItem if MONITOR items query is empty or fails.
+    let itemRows = [];
+    try {
+      const monItems = await this._results(`${MONITOR}(${key})/to_HandlingUnitItem`, {
+        $select: DETAIL_ITEM_SELECT,
+        $format: 'json'
+      }, `Read monitor items of handling unit ${hu}`);
+      if (Array.isArray(monItems.results) && monItems.results.length) {
+        itemRows = monItems.results;
+      }
+    } catch {
+      // Fallback below
+    }
 
-    const Items = (i.results || []).map((it) => ({
+    if (!itemRows.length) {
+      const apiItems = await this._results(`${DETAIL}(${key})/to_HandlingUnitItem`, { $format: 'json' }, `Read items of handling unit ${hu}`);
+      itemRows = apiItems.results || [];
+    }
+
+    // Resolve enriched metadata from C_HANDLINGUNITMONITOR_CDS (PackagingMaterialName, StatusText, RefDocName, Char32, etc.)
+    let monitor = {};
+    try {
+      const m = await this._results(MONITOR, {
+        $filter: `HandlingUnitExternalID eq '${hu}'`,
+        $select: DETAIL_MONITOR_SELECT,
+        $top: 1,
+        $format: 'json'
+      }, `Resolve metadata of handling unit ${hu}`);
+      monitor = (m.results || [])[0] || {};
+    } catch {
+      // Keep monitor as {} if query fails
+    }
+
+    const Items = itemRows.map((it) => ({
       HandlingUnitItem: strip(it.HandlingUnitItem),
       Material: strip(it.Material),
+      MaterialName: it.MaterialName || '',
+      Plant: it.Plant || '',
+      StorageLocation: it.StorageLocation || '',
+      Batch: it.Batch || '',
       Quantity: num(it.HandlingUnitQuantity),
       Unit: it.HandlingUnitQuantityUnit || '',
       ReferenceDocument: strip(it.HandlingUnitReferenceDocument),
@@ -176,38 +219,46 @@ class HandlingUnitAdapter {
     }));
 
     return {
-      HandlingUnitExternalID: strip(h.HandlingUnitExternalID),
+      HandlingUnitExternalID: strip(h.HandlingUnitExternalID || monitor.HandlingUnitExternalID),
       HandlingUnitIDChar32: monitor.HandlingUnitIDChar32 || '',
       HandlingUnitOrigin: monitor.HandlingUnitOrigin || '',
-      Warehouse: h.Warehouse || '',
-      PackagingMaterial: strip(h.PackagingMaterial),
-      PackagingMaterialType: h.PackagingMaterialType || '',
-      Plant: h.Plant || '',
-      StorageLocation: h.StorageLocation || '',
-      StorageType: h.StorageType || '',
-      StorageBin: strip(h.StorageBin),
-      ShippingPoint: h.ShippingPoint || '',
-      ParentHandlingUnit: strip(h.ParentHandlingUnitNumber),
-      GrossWeight: num(h.GrossWeight),
-      NetWeight: num(h.NetWeight),
-      TareWeight: num(h.HandlingUnitTareWeight),
-      MaxWeight: num(h.HandlingUnitMaxWeight),
-      WeightUnit: h.WeightUnit || '',
-      GrossVolume: num(h.GrossVolume),
-      NetVolume: num(h.HandlingUnitNetVolume),
-      TareVolume: num(h.HandlingUnitTareVolume),
-      MaxVolume: num(h.HandlingUnitMaxVolume),
-      VolumeUnit: h.VolumeUnit || '',
-      Length: num(h.HandlingUnitLength),
-      Width: num(h.HandlingUnitWidth),
-      Height: num(h.HandlingUnitHeight),
-      DimensionUnit: h.UnitOfMeasureDimension || '',
+      Warehouse: h.Warehouse || monitor.Warehouse || '',
+      WarehouseName: monitor.WarehouseName || '',
+      PackagingMaterial: strip(h.PackagingMaterial || monitor.PackagingMaterial),
+      PackagingMaterialName: monitor.PackagingMaterialName || '',
+      PackagingMaterialType: h.PackagingMaterialType || monitor.PackagingMaterialType || '',
+      PackagingMaterialTypeName: monitor.PackagingMaterialTypeName || '',
+      Plant: h.Plant || monitor.Plant || (Items[0] && Items[0].Plant) || '',
+      PlantName: monitor.PlantName || '',
+      StorageLocation: h.StorageLocation || monitor.StorageLocation || (Items[0] && Items[0].StorageLocation) || '',
+      StorageLocationName: monitor.StorageLocationName || '',
+      StorageType: h.StorageType || monitor.StorageType || '',
+      StorageBin: strip(h.StorageBin || monitor.StorageBin),
+      ShippingPoint: h.ShippingPoint || monitor.ShippingPoint || '',
+      ParentHandlingUnit: strip(h.ParentHandlingUnitNumber || monitor.ParentHandlingUnitNumber),
+      GrossWeight: num(h.GrossWeight ?? monitor.GrossWeight),
+      NetWeight: num(h.NetWeight ?? monitor.NetWeight),
+      TareWeight: num(h.HandlingUnitTareWeight ?? monitor.HandlingUnitTareWeight),
+      MaxWeight: num(h.HandlingUnitMaxWeight ?? monitor.HandlingUnitMaxWeight),
+      WeightUnit: h.WeightUnit || monitor.WeightUnit || '',
+      GrossVolume: num(h.GrossVolume ?? monitor.GrossVolume),
+      NetVolume: num(h.HandlingUnitNetVolume ?? monitor.HandlingUnitNetVolume),
+      TareVolume: num(h.HandlingUnitTareVolume ?? monitor.HandlingUnitTareVolume),
+      MaxVolume: num(h.HandlingUnitMaxVolume ?? monitor.HandlingUnitMaxVolume),
+      VolumeUnit: h.VolumeUnit || monitor.VolumeUnit || '',
+      Length: num(h.HandlingUnitLength ?? monitor.HandlingUnitLength),
+      Width: num(h.HandlingUnitWidth ?? monitor.HandlingUnitWidth),
+      Height: num(h.HandlingUnitHeight ?? monitor.HandlingUnitHeight),
+      DimensionUnit: h.UnitOfMeasureDimension || monitor.UnitOfMeasureDimension || '',
       PackingObjectKey: h.HandlingUnitPackingObjectKey || '',
-      ReferenceDocument: strip(h.HandlingUnitReferenceDocument),
-      Status: h.HandlingUnitProcessStatus || '',
-      CreatedByUser: h.CreatedByUser || '',
-      CreationDateTime: formatDateToYMD(h.CreationDateTime),
-      LastChangedByUser: h.LastChangedByUser || '',
+      ReferenceDocument: strip(h.HandlingUnitReferenceDocument || monitor.HandlingUnitReferenceDocument),
+      ReferenceDocumentType: monitor.HandlingUnitReferenceDocName || '',
+      DeliveryDocument: strip(monitor.DeliveryDocument),
+      Status: h.HandlingUnitProcessStatus || monitor.HandlingUnitProcessStatus || '',
+      StatusText: monitor.HandlingUnitProcessStatusText || '',
+      CreatedByUser: h.CreatedByUser || monitor.CreatedByUser || '',
+      CreationDateTime: formatDateToYMD(monitor.CreationDateTime) || formatDateToYMD(h.CreationDateTime),
+      LastChangedByUser: h.LastChangedByUser || monitor.LastChangedByUser || '',
       Items
     };
   }

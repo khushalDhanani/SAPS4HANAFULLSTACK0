@@ -13,7 +13,8 @@ const detailHeader = {
   HandlingUnitPackingObjectKey: '000002000000', CreatedByUser: 'ADAPHALE', CreationDateTime: '/Date(1747886400000)/'
 };
 const detailItem = {
-  HandlingUnitItem: '000001', Material: '000000000004000000002', HandlingUnitQuantity: '200.000', HandlingUnitQuantityUnit: 'KG',
+  HandlingUnitItem: '000001', Material: '000000000004000000002', MaterialName: 'HEEP', Plant: '1130',
+  StorageLocation: 'FG01', Batch: 'HE1P250001', HandlingUnitQuantity: '200.000', HandlingUnitQuantityUnit: 'KG',
   HandlingUnitReferenceDocument: '', HandlingUnitGoodsReceiptDate: null
 };
 const hierRows = [
@@ -59,16 +60,39 @@ describe('HandlingUnitAdapter.detail', () => {
   // detail() reads items (nav), header (API), then resolves Char32/Origin from the monitor. Order: most specific first.
   const detailRoutes = [
     ['to_HandlingUnitItem', { results: [detailItem] }],
-    ['C_HANDLINGUNITMONITOR_CDS', { results: [{ HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0', HandlingUnitOrigin: 'ERP' }] }],
+    ['C_HANDLINGUNITMONITOR_CDS', { results: [{
+      HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0',
+      HandlingUnitOrigin: 'ERP',
+      PackagingMaterialName: 'Pallet',
+      HandlingUnitProcessStatusText: 'Active',
+      HandlingUnitReferenceDocName: 'Inbound Delivery'
+    }] }],
     ['API_HANDLING_UNIT', detailHeader]
   ];
 
-  it('reads header plus items and maps weights and item material', async () => {
+  it('reads header plus items and maps weights, item material and enriched fields', async () => {
     const { a } = adapter(detailRoutes);
     const r = await a.detail({ handlingUnitExternalID: '1000000000' });
-    expect(r).toMatchObject({ HandlingUnitExternalID: '1000000000', GrossWeight: 209.2, TareWeight: 9.2, PackingObjectKey: '000002000000' });
+    expect(r).toMatchObject({
+      HandlingUnitExternalID: '1000000000',
+      GrossWeight: 209.2,
+      TareWeight: 9.2,
+      PackingObjectKey: '000002000000',
+      PackagingMaterialName: 'Pallet',
+      StatusText: 'Active',
+      ReferenceDocumentType: 'Inbound Delivery'
+    });
     expect(r.Items).toHaveLength(1);
-    expect(r.Items[0]).toMatchObject({ HandlingUnitItem: '1', Material: '4000000002', Quantity: 200, Unit: 'KG' });
+    expect(r.Items[0]).toMatchObject({
+      HandlingUnitItem: '1',
+      Material: '4000000002',
+      MaterialName: 'HEEP',
+      Plant: '1130',
+      StorageLocation: 'FG01',
+      Batch: 'HE1P250001',
+      Quantity: 200,
+      Unit: 'KG'
+    });
   });
 
   it('resolves HandlingUnitIDChar32 / Origin from the monitor so the tree loads on a deep link', async () => {

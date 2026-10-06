@@ -20,16 +20,17 @@
                     responsive="true"
                     numberState="None">
                     <attributes>
-                        <ObjectAttribute title="{i18n>huPackagingMaterial}" text="{= (${huDetail>/header/PackagingMaterial} || '-') + ' ' + ${huDetail>/header/PackagingMaterialType} }" />
+                        <ObjectAttribute title="{i18n>huPackagingMaterial}" text="{= (${huDetail>/header/PackagingMaterial} || '-') + (${huDetail>/header/PackagingMaterialName} ? ' (' + ${huDetail>/header/PackagingMaterialName} + ')' : '') + (${huDetail>/header/PackagingMaterialTypeName} ? ' · ' + ${huDetail>/header/PackagingMaterialTypeName} : (${huDetail>/header/PackagingMaterialType} ? ' · ' + ${huDetail>/header/PackagingMaterialType} : '')) }" />
                         <ObjectAttribute title="{i18n>huColPlantSloc}" text="{= (${huDetail>/header/Plant} || '-') + ' / ' + (${huDetail>/header/StorageLocation} || '-') }" />
-                        <ObjectAttribute title="{i18n>huColReference}" text="{= ${huDetail>/header/ReferenceDocument} || '-' }" />
-                        <ObjectAttribute title="{i18n>huCreatedBy}" text="{= ${huDetail>/header/CreatedByUser} + ' · ' + ${huDetail>/header/CreationDateTime} }" />
+                        <ObjectAttribute title="{i18n>huColReference}" text="{= (${huDetail>/header/ReferenceDocument} || '-') + (${huDetail>/header/ReferenceDocumentType} ? ' (' + ${huDetail>/header/ReferenceDocumentType} + ')' : '') }" />
+                        <ObjectAttribute title="{i18n>huCreatedBy}" text="{= (${huDetail>/header/CreatedByUser} || '-') + (${huDetail>/header/CreationDateTime} ? ' · ' + ${huDetail>/header/CreationDateTime} : '') }" />
                     </attributes>
                     <statuses>
                         <ObjectStatus title="{i18n>huColGrossWeight}" text="{= ${huDetail>/header/GrossWeight} + ' ' + ${huDetail>/header/WeightUnit} }" />
                         <ObjectStatus title="{i18n>huNetWeight}" text="{= ${huDetail>/header/NetWeight} + ' ' + ${huDetail>/header/WeightUnit} }" />
-                        <ObjectStatus title="{i18n>huTareWeight}" text="{= ${huDetail>/header/TareWeight} + ' ' + ${huDetail>/header/WeightUnit} }" />
-                        <ObjectStatus title="{i18n>huGrossVolume}" text="{= ${huDetail>/header/GrossVolume} + ' ' + ${huDetail>/header/VolumeUnit} }" />
+                        <ObjectStatus title="{i18n>huTareWeight}" text="{= ${huDetail>/header/TareWeight} > 0 ? (${huDetail>/header/TareWeight} + ' ' + ${huDetail>/header/WeightUnit}) : '-' }" />
+                        <ObjectStatus title="{i18n>huGrossVolume}" text="{= ${huDetail>/header/GrossVolume} > 0 ? (${huDetail>/header/GrossVolume} + ' ' + ${huDetail>/header/VolumeUnit}) : '-' }" />
+                        <ObjectStatus title="{i18n>huColStatus}" text="{= ${huDetail>/header/StatusText} || ${huDetail>/header/Status} || '-' }" state="{= ${huDetail>/header/Status} === 'B' ? 'Success' : (${huDetail>/header/Status} === 'A' ? 'Information' : 'None') }" />
                     </statuses>
                 </ObjectHeader>
 
@@ -37,15 +38,15 @@
                     <form:SimpleForm id="huDimForm" layout="ResponsiveGridLayout" columnsM="2" columnsL="3" columnsXL="3" editable="false">
                         <form:content>
                             <Label text="{i18n>huDimDimensions}" />
-                            <Text text="{= ${huDetail>/header/Length} + ' × ' + ${huDetail>/header/Width} + ' × ' + ${huDetail>/header/Height} + ' ' + (${huDetail>/header/DimensionUnit} || '') }" />
+                            <Text text="{= (${huDetail>/header/Length} > 0 || ${huDetail>/header/Width} > 0 || ${huDetail>/header/Height} > 0) ? (${huDetail>/header/Length} + ' × ' + ${huDetail>/header/Width} + ' × ' + ${huDetail>/header/Height} + ' ' + (${huDetail>/header/DimensionUnit} || '')) : '-' }" />
                             <Label text="{i18n>huDimMaxWeight}" />
-                            <Text text="{= ${huDetail>/header/MaxWeight} + ' ' + (${huDetail>/header/WeightUnit} || '') }" />
+                            <Text text="{= ${huDetail>/header/MaxWeight} > 0 ? (${huDetail>/header/MaxWeight} + ' ' + (${huDetail>/header/WeightUnit} || '')) : '-' }" />
                             <Label text="{i18n>huDimMaxVolume}" />
-                            <Text text="{= ${huDetail>/header/MaxVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '') }" />
+                            <Text text="{= ${huDetail>/header/MaxVolume} > 0 ? (${huDetail>/header/MaxVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '')) : '-' }" />
                             <Label text="{i18n>huDimNetVolume}" />
-                            <Text text="{= ${huDetail>/header/NetVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '') }" />
+                            <Text text="{= ${huDetail>/header/NetVolume} > 0 ? (${huDetail>/header/NetVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '')) : '-' }" />
                             <Label text="{i18n>huDimTareVolume}" />
-                            <Text text="{= ${huDetail>/header/TareVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '') }" />
+                            <Text text="{= ${huDetail>/header/TareVolume} > 0 ? (${huDetail>/header/TareVolume} + ' ' + (${huDetail>/header/VolumeUnit} || '')) : '-' }" />
                             <Label text="{i18n>huDimShippingPoint}" />
                             <Text text="{= ${huDetail>/header/ShippingPoint} || '-' }" />
                         </form:content>
@@ -55,8 +56,10 @@
                 <Panel id="huItemsPanel" headerText="{= ${i18n>huItemsTitle} + ' (' + ${huDetail>/items}.length + ')' }" expandable="true" expanded="true" class="sapUiSmallMarginTop">
                     <Table id="huItemsTable" items="{huDetail>/items}" noDataText="{i18n>huNoItems}">
                         <columns>
-                            <Column><Text text="{i18n>huItemCol}" /></Column>
+                            <Column width="4rem"><Text text="{i18n>huItemCol}" /></Column>
                             <Column><Text text="{i18n>huItemMaterial}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColPlantSloc}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huItemBatch}" /></Column>
                             <Column hAlign="End"><Text text="{i18n>huItemQuantity}" /></Column>
                             <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huItemReference}" /></Column>
                             <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huItemGrDate}" /></Column>
@@ -66,7 +69,9 @@
                             <ColumnListItem>
                                 <cells>
                                     <Text text="{huDetail>HandlingUnitItem}" />
-                                    <Text text="{huDetail>Material}" />
+                                    <ObjectIdentifier title="{huDetail>Material}" text="{huDetail>MaterialName}" />
+                                    <Text text="{= (${huDetail>Plant} || '-') + ' / ' + (${huDetail>StorageLocation} || '-') }" />
+                                    <Text text="{= ${huDetail>Batch} || '-' }" />
                                     <ObjectNumber number="{huDetail>Quantity}" unit="{huDetail>Unit}" emphasized="false" />
                                     <Text text="{= ${huDetail>ReferenceDocument} ? (${huDetail>ReferenceDocument} + (${huDetail>ReferenceDocumentItem} ? ' / ' + ${huDetail>ReferenceDocumentItem} : '')) : '-' }" />
                                     <Text text="{= ${huDetail>GoodsReceiptDate} || '-' }" />
