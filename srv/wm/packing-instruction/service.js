@@ -14,6 +14,7 @@ module.exports = class PackingInstructionService extends cds.ApplicationService 
     };
     this.on('list', run((data) => adapter.list(data)));
     this.on('get', run((data) => adapter.get(data)));
+    this.on('create', run((data) => adapter.create(data)));
     return super.init();
   }
 };

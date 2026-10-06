@@ -33,6 +33,8 @@
                     <headerToolbar>
                         <OverflowToolbar>
                             <Title id="piCount" text="{= ${i18n>piListTitle} + ' (' + ${piView>/items}.length + ')' }" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="piCreateBtn" icon="sap-icon://add" text="{i18n>piCreate}" type="Emphasized" press=".onOpenCreate" />
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>

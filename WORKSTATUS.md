@@ -53,6 +53,16 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - `npx cds compile srv --to csn` → OK.
 - **Result:** PASS.
 
+### 2026-10-06 — Packing Instruction CREATE unblocked (deep insert) and shipped
+
+- **Why:** the earlier create block (`PI_RAP/003 "Incomplete data"`) is resolved. Root cause (user's ABAP trace of `CL_LO_HU_PI_MANAGE`, independently confirmed by me): a PI cannot be created header-only — SAP needs a **deep insert** with ≥1 component, at least one category `P` (load carrier/packaging). `sap:creatable="false"` on the child only blocks a standalone child POST, not composition-create via the header nav.
+- **Proof I verified:** read back the user's docs **52** (`TEST_PI_DISCOVERY`) and **53** (`TEST_PI_FULL`) — both exist, created by KHUSHAL, 2 components each (item 10 `P` 2000000041; item 20 `M` 4000000002), doc 53 with 1 EN text. Then my own live create via the adapter → **doc 54** (`ZCLAUDE_PI_TEST`, UUID `89e4c19e-a7c1-1fe1-b0aa-fb053fe93880`), read back: item 10 P 1 NOS + item 20 M 7 KG + EN text. HTTP 201, persisted.
+- **Contract (shipped):** header `PackingInstructionExternalName` (req) + `HandlingUnitWeightUnit`; `to_PackingInstructionComponent` (≥1, ≥1 `P`) each with `PackingInstructionItem`, `PackingInstructionItemCategory` (P|M), `Material`, `PackingInstructionItmTargetQty` (string), `BaseUnitofMeasure`/`UnitOfMeasure`; optional `to_PackingInstructionText`. Do NOT send `PackingInstructionNumber`/`LoadCarrierSystUUID` (SAP generates).
+- **Files:** `PackingInstructionAdapter.js` (+CSRF `_post`, +`create` deep insert with fail-fast validation, read-back by UUID), `srv/wm/packing-instruction/service.cds` (+`PackingInstructionComponentInput`, +`create` action) + `service.js` (+binding), `modules/wm/packing-instruction/view/PackingInstructions.view.xml` (+Create button) + `view/CreatePackingInstructionDialog.fragment.xml` (new) + `controller/PackingInstructions.controller.js` (dialog open/add-row/submit; packaging F4 reuses HU `valueHelp('packaging')`), `i18n` (`piCreate*`), `test/unit/wm/packingInstructionAdapter.test.js` (create tests).
+- **Validation:** `cds compile` OK; `npx jest` PI adapter (8) + uiConsistency (7) green; **live create proven (doc 54)**; `ui5lint` PI module → no findings; full `npx jest` → 2124 passed, only pre-existing `noGiQueueGuard` (Issue 6) fails; `git diff --check` clean.
+- **Not validated:** browser rendering of the create dialog (needs the user's SAP login). Test docs 52/53/54 remain in client 220 (no delete API exposed).
+- **Result:** PASS — PI create is proven and shipped (backend + UI). Browser verification pending.
+
 ### 2026-10-06 — Stop RFC trace-file spam (RfcClient trace off by default)
 
 - **Why:** the project root accumulated ~38 MB of `rfc*.trc` files (plus `_noderfc.log`, `dev_rfc.log`), regenerated on every RFC connection by the NW RFC SDK's default trace. All gitignored (`.gitignore:55,57`) but cluttering the working tree.

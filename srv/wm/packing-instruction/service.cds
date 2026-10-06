@@ -49,8 +49,22 @@ service PackingInstructionService @(path: '/odata/v4/packing-instruction') {
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function get(systemUUID : String(36)) returns PackingInstruction;
 
-    // NOTE: a create action was NOT exposed. A live POST proof (2026-10-06, client 220) failed with
-    // PI_RAP/003 "Incomplete data" for every informed payload (name, HandlingUnitType, units, external
-    // number, LoadCarrierSystUUID); the required RAP field set is not discoverable from the service, so
-    // per AGENTS.md no create path is shipped. See WORKSTATUS. Read-only until the required fields are known.
+    type PackingInstructionComponentInput {
+        item     : String(6);
+        category : String(1); // P = load carrier / packaging, M = packed material
+        material : String(40);
+        targetQty : Decimal(15, 3);
+        unit     : String(3);
+    };
+
+    // Create a packing instruction via deep insert (header + components [+ texts]). SAP requires >=1
+    // component with at least one category 'P'; the number and load-carrier UUID are server-generated.
+    // Proven live 2026-10-06 (client 220, docs 52/53). Returns the read-back document.
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action create(
+        externalName : String(20),
+        weightUnit   : String(3),
+        components    : array of PackingInstructionComponentInput,
+        texts         : array of PackingInstructionText
+    ) returns PackingInstruction;
 }

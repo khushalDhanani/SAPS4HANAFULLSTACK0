@@ -26,7 +26,11 @@ const HEADER_SELECT = [
 
 const RE = {
   uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-  extName: /^[A-Za-z0-9 _./-]{1,20}$/
+  extName: /^[A-Za-z0-9 _./-]{1,20}$/,
+  unit: /^[A-Z0-9]{1,3}$/,
+  item: /^\d{1,6}$/,
+  category: /^[PM]$/,
+  material: /^[A-Z0-9][A-Z0-9_./-]{0,39}$/
 };
 
 const strip = (v) => String(v ?? '').replace(/^0+(?=.)/, '');
@@ -117,9 +121,64 @@ class PackingInstructionAdapter {
     });
   }
 
-  // Create is intentionally NOT implemented: a live POST proof (2026-10-06, client 220) returned
-  // PI_RAP/003 "Incomplete data" for every informed payload, and the required RAP field set is not
-  // discoverable from this service's metadata/errors. Per AGENTS.md, no unproven create path is shipped.
+  async _post(path, data, context) {
+    try {
+      const res = await this.client.post(path, { data, csrfPath: `${API}/` });
+      return res.data?.d || res.data || {};
+    } catch (e) {
+      LOG.error(`${context}: ${e.message}`);
+      throw httpError(e.status || 502, `${context}: ${e.message}`);
+    }
+  }
+
+  /**
+   * Create one packing instruction by OData V2 DEEP INSERT (proven 2026-10-06, client 220: docs 52/53).
+   * SAP rejects a header-only POST (PI_RAP/003 "Incomplete data"); it needs >=1 component and at least one
+   * category 'P' (load carrier / packaging material). PackingInstructionNumber and LoadCarrierSystUUID are
+   * server-generated and must NOT be sent. Components/texts go through the composition navs even though the
+   * child sets are sap:creatable="false" (that only blocks standalone child POSTs). POST -> read back by UUID.
+   */
+  async create(input = {}) {
+    const externalName = clean(input.externalName, 'External name', RE.extName, true);
+    const weightUnit = clean(input.weightUnit, 'Weight unit', RE.unit, true);
+    const components = Array.isArray(input.components) ? input.components : [];
+    if (!components.length) throw httpError(422, 'A packing instruction needs at least one component');
+    if (!components.some((c) => String(c.category || '').toUpperCase() === 'P')) {
+      throw httpError(422, 'A packing instruction needs a packaging component (category P)');
+    }
+
+    const to_PackingInstructionComponent = components.map((c, i) => {
+      const item = clean(c.item, `Component ${i + 1} item`, RE.item, true);
+      const category = clean(c.category, `Component ${i + 1} category`, RE.category, true);
+      const material = clean(c.material, `Component ${i + 1} material`, RE.material, true);
+      const unit = clean(c.unit, `Component ${i + 1} unit`, RE.unit, true);
+      const qty = Number(c.targetQty);
+      if (!(qty > 0)) throw httpError(422, `Component ${i + 1} target quantity must be greater than zero`);
+      return {
+        PackingInstructionItem: item,
+        PackingInstructionItemCategory: category,
+        Material: material,
+        PackingInstructionItmTargetQty: String(qty),
+        BaseUnitofMeasure: unit,
+        UnitOfMeasure: unit
+      };
+    });
+
+    const body = { PackingInstructionExternalName: externalName, HandlingUnitWeightUnit: weightUnit, to_PackingInstructionComponent };
+    const texts = (Array.isArray(input.texts) ? input.texts : []).filter((t) => t && t.text);
+    if (texts.length) {
+      body.to_PackingInstructionText = texts.map((t) => ({
+        Language: clean(t.language || 'EN', 'Text language', /^[A-Z]{1,2}$/, true),
+        PackingInstructionText: String(t.text).slice(0, 255)
+      }));
+    }
+
+    const created = await this._post(HEADER, body, `Create packing instruction '${externalName}'`);
+    const uuid = created.PackingInstructionSystemUUID;
+    if (!uuid) throw httpError(502, 'SAP did not return a packing instruction id; nothing was created');
+    // Read the persisted document back so the caller shows SAP's result, not the POST echo.
+    return this.get({ systemUUID: uuid });
+  }
 }
 
 module.exports = PackingInstructionAdapter;

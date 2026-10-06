@@ -10,14 +10,18 @@ const headerRow = {
 };
 const componentRow = { PackingInstructionItem: '000001', Material: '000000000004000000002', PackingInstructionItmTargetQty: '50.000', BaseUnitofMeasure: 'EA' };
 
-/** Fake S4HttpClient: routes GET by path substring. (Read-only adapter; create is not implemented — see WORKSTATUS.) */
-function adapter(getRoutes) {
-  const calls = { get: [] };
+/** Fake S4HttpClient: routes GET by path substring, records POST bodies. */
+function adapter(getRoutes, postResult) {
+  const calls = { get: [], post: [] };
   const client = {
     get: async (path, { query } = {}) => {
       calls.get.push({ path, query: query ? decodeURIComponent(query) : '' });
       for (const [match, d] of getRoutes) if (path.includes(match)) return { data: { d } };
       return { data: { d: {} } };
+    },
+    post: async (path, { data, csrfPath } = {}) => {
+      calls.post.push({ path, data, csrfPath });
+      return { data: { d: postResult || {} } };
     }
   };
   return { a: new PackingInstructionAdapter({ client }), calls };
@@ -62,8 +66,55 @@ describe('PackingInstructionAdapter.get', () => {
   });
 });
 
-// Create is intentionally not implemented (live POST proof failed with PI_RAP/003; required RAP fields
-// undiscoverable). The adapter exposes no createHeader — see WORKSTATUS.
-test('adapter exposes no create path (unproven against SAP)', () => {
-  expect(typeof new PackingInstructionAdapter({}).createHeader).toBe('undefined');
+describe('PackingInstructionAdapter.create (deep insert)', () => {
+  const readBackRoutes = [
+    ['to_PackingInstructionComponent', { results: [componentRow] }],
+    ['to_PackingInstructionText', { results: [] }],
+    ['PackingInstructionHeader(guid', headerRow]
+  ];
+  const input = {
+    externalName: 'BOX_MAT4000_10KG', weightUnit: 'KG',
+    components: [
+      { item: '10', category: 'P', material: '2000000041', targetQty: 1, unit: 'NOS' },
+      { item: '20', category: 'M', material: '4000000002', targetQty: 10, unit: 'KG' }
+    ],
+    texts: []
+  };
+
+  it('deep-inserts header + components (texts omitted when empty), then reads back the persisted doc', async () => {
+    const { a, calls } = adapter(readBackRoutes, { PackingInstructionSystemUUID: '005056b4-0af6-1fe0-8dc1-fa4bb9c857ee' });
+    const r = await a.create(input);
+    const body = calls.post[0].data;
+    expect(body).toMatchObject({ PackingInstructionExternalName: 'BOX_MAT4000_10KG', HandlingUnitWeightUnit: 'KG' });
+    expect(body.to_PackingInstructionComponent).toEqual([
+      { PackingInstructionItem: '10', PackingInstructionItemCategory: 'P', Material: '2000000041', PackingInstructionItmTargetQty: '1', BaseUnitofMeasure: 'NOS', UnitOfMeasure: 'NOS' },
+      { PackingInstructionItem: '20', PackingInstructionItemCategory: 'M', Material: '4000000002', PackingInstructionItmTargetQty: '10', BaseUnitofMeasure: 'KG', UnitOfMeasure: 'KG' }
+    ]);
+    expect(body.to_PackingInstructionText).toBeUndefined();
+    expect(calls.post[0].csrfPath).toContain('API_PACKINGINSTRUCTION');
+    expect(r.PackingInstructionNumber).toBe('PI-2000000041'); // read-back, not the POST echo
+  });
+
+  it('includes texts when provided', async () => {
+    const { a, calls } = adapter(readBackRoutes, { PackingInstructionSystemUUID: '005056b4-0af6-1fe0-8dc1-fa4bb9c857ee' });
+    await a.create({ ...input, texts: [{ language: 'EN', text: 'standard box' }] });
+    expect(calls.post[0].data.to_PackingInstructionText).toEqual([{ Language: 'EN', PackingInstructionText: 'standard box' }]);
+  });
+
+  it('422 before any POST when there is no component or no P item; 502 when SAP persists nothing', async () => {
+    const noComp = adapter([], {});
+    await expect(noComp.a.create({ externalName: 'X', weightUnit: 'KG', components: [] })).rejects.toMatchObject({ status: 422 });
+    expect(noComp.calls.post).toHaveLength(0);
+    const noP = adapter([], {});
+    await expect(noP.a.create({ externalName: 'X', weightUnit: 'KG', components: [{ item: '10', category: 'M', material: '4000000002', targetQty: 1, unit: 'KG' }] })).rejects.toMatchObject({ status: 422 });
+    expect(noP.calls.post).toHaveLength(0);
+    const noPersist = adapter(readBackRoutes, {});
+    await expect(noPersist.a.create(input)).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('400 on an unsafe field, before any POST', async () => {
+    const { a, calls } = adapter([], {});
+    await expect(a.create({ externalName: 'X', weightUnit: 'KG', components: [{ item: '10', category: 'P', material: "x' or '1'='1", targetQty: 1, unit: 'NOS' }] })).rejects.toMatchObject({ status: 400 });
+    expect(calls.post).toHaveLength(0);
+  });
 });
