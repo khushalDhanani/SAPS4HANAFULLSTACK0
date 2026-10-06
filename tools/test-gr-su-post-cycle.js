@@ -82,12 +82,28 @@ async function inspectDelivery(delivNo) {
       const suPad = pad(suArg, 20);
       const matched = data.vekp.find(h => h.EXIDV === suPad || h.EXIDV.replace(/^0+/, '') === suArg.replace(/^0+/, ''));
       if (!matched) stop(`Storage Unit ${suArg} not found on delivery ${d}`);
+      if (matched.STATUS === '0060') {
+        stop(`Storage Unit ${suArg} is already in status '0060' (Goods Receipt Posted) in SAP warehouse. Duplicate posting is prevented.`);
+      }
       targetHUs = [matched];
       targetItems = data.vepo.filter(p => p.VENUM === matched.VENUM);
     }
 
+    if (data.likp.WBSTK === 'C') {
+      const matdocs = await rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
+        `VBELN_IM = '${d}'`, `AND BWART = '101'`
+      ]).catch(() => []);
+      const docInfo = matdocs.length ? `${matdocs[matdocs.length - 1].MBLNR}/${matdocs[matdocs.length - 1].MJAHR}` : 'persisted in SAP';
+      stop(`Inbound Delivery ${d} is already completely goods-receipted (WBSTK = 'C'). Existing Material Document: ${docInfo}. Duplicate posting is prevented (SAP HUDIALOG 018).`);
+    }
+
+    const targetQty = targetItems.reduce((acc, p) => acc + (Number(p.VEMNG) || 0), 0);
+
     console.log(`\n== ${isSimulate ? 'SIMULATING' : 'EXECUTING LIVE POST'} for Delivery ${d} ==`);
     console.log(`Target Storage Units (${targetHUs.length}): ${targetHUs.map(h => h.EXIDV.replace(/^0+/, '')).join(', ')}`);
+    if (targetQty > 0) {
+      console.log(`Target Quantity to Receive: ${targetQty} ${item.MEINS} (out of delivery total ${Number(item.LFIMG)} ${item.MEINS})`);
+    }
 
     const huHeaders = targetHUs.map(h => ({
       HDL_UNIT_EXID: h.EXIDV,
@@ -116,8 +132,17 @@ async function inspectDelivery(delivNo) {
           POST_GI_FLG: 'X',
           SIMULATE: isSimulate ? 'X' : ''
         },
-        ITEM_DATA: [{ DELIV_NUMB: d, DELIV_ITEM: item.POSNR }],
-        ITEM_CONTROL: [{ DELIV_NUMB: d, DELIV_ITEM: item.POSNR }],
+        ITEM_DATA: [{
+          DELIV_NUMB: d,
+          DELIV_ITEM: item.POSNR,
+          DLV_QTY: String(targetQty || item.LFIMG),
+          DLV_QTY_IMUNIT: String(targetQty || item.LFIMG)
+        }],
+        ITEM_CONTROL: [{
+          DELIV_NUMB: d,
+          DELIV_ITEM: item.POSNR,
+          CHG_DELQTY: targetQty ? 'X' : ''
+        }],
         HANDLING_UNIT_HEADER: huHeaders,
         HANDLING_UNIT_ITEM: huItems
       });
@@ -125,7 +150,13 @@ async function inspectDelivery(delivNo) {
       const err = bapiError(res.RETURN);
       if (err) {
         raw('BAPI_INB_DELIVERY_CONFIRM_DEC FAILED', res.RETURN);
-        stop(`SAP rejected posting: [${err.ID} ${err.NUMBER}] ${err.MESSAGE}`);
+        let detailMsg = `[${err.ID} ${err.NUMBER}] ${err.MESSAGE}`;
+        if (err.ID === 'HUDIALOG' && err.NUMBER === '018') {
+          detailMsg = `Inbound Delivery ${d} only allows display mode because Goods Receipt is already completed (HUDIALOG 018).`;
+        } else if (err.ID === 'M7' && err.NUMBER === '006') {
+          detailMsg = `Material ${err.MESSAGE_V1} not maintained in plant ${err.MESSAGE_V2} storage location ${err.MESSAGE_V3} (M7 006).`;
+        }
+        stop(`SAP rejected posting: ${detailMsg}`);
       }
 
       if (!isSimulate) {

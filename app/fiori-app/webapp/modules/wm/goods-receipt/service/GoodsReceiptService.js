@@ -179,6 +179,7 @@ sap.ui.define([
          * @returns {Promise<Object>}
          */
         postGoodsReceipt: function (oPayload) {
+            window.__evlog && window.__evlog.push([Math.round(performance.now() - window.__evT0), 'POSTCALL postGoodsReceipt', JSON.stringify(oPayload).slice(0, 120), new Error().stack.split('\n').slice(1, 25).join(' <- ')].join('|')); return Promise.reject(new Error('GRDBG-TEMP posting blocked during debugging')); // GRDBG-TEMP
             return ODataClient.post(BASE_PATH + "/postGoodsReceipt", oPayload);
         },
 

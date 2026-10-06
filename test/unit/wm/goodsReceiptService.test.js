@@ -960,6 +960,12 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(mockCall).toHaveBeenCalledWith('BAPI_INB_DELIVERY_CONFIRM_DEC', expect.objectContaining({
                 HEADER_DATA: { DELIV_NUMB: '0180000035' },
                 HEADER_CONTROL: expect.objectContaining({ DELIV_NUMB: '0180000035', POST_GI_FLG: 'X' }),
+                ITEM_DATA: expect.arrayContaining([
+                    expect.objectContaining({ DELIV_NUMB: '0180000035', DELIV_ITEM: '000010', DLV_QTY: '200' })
+                ]),
+                ITEM_CONTROL: expect.arrayContaining([
+                    expect.objectContaining({ DELIV_NUMB: '0180000035', DELIV_ITEM: '000010', CHG_DELQTY: 'X' })
+                ]),
                 HANDLING_UNIT_HEADER: expect.arrayContaining([
                     expect.objectContaining({ HDL_UNIT_EXID: '00000000002000018143', DELIV_NUMB: '0180000035' })
                 ]),
@@ -1037,6 +1043,100 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Quantity: 200,
                 Unit: 'KG'
             })).rejects.toThrow(/Batch constraint/);
+
+            // HUDIALOG 018
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'HUDIALOG', NUMBER: '018', MESSAGE: 'Delivery status only allows display mode' }]
+                }))),
+                readTable: jest.fn().mockResolvedValue([])
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Delivery status constraint.*HUDIALOG 018/);
+
+            // M7 006
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '006', MESSAGE: 'Material does not exist', MESSAGE_V1: '1000000421', MESSAGE_V2: '1130', MESSAGE_V3: 'HU01' }]
+                }))),
+                readTable: jest.fn().mockResolvedValue([])
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000421',
+                Plant: '1130',
+                StorageLocation: 'HU01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Master data constraint.*M7 006/);
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should pre-validate and reject immediately if Delivery is already completely goods-receipted (WBSTK = C)', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockSession = jest.fn();
+            GoodsReceiptAdapter.rfc = {
+                session: mockSession,
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000035', WBSTK: 'C', KOSTK: 'C' }];
+                    }
+                    if (table === 'MATDOC') {
+                        return [{ MBLNR: '5000005654', MJAHR: '2026', BWART: '101' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Delivery already completed.*5000005654\/2026/);
+
+            // Ensure BAPI session was never called due to fast-fail pre-check
+            expect(mockSession).not.toHaveBeenCalled();
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should pre-validate and reject immediately if Storage Unit is already in status 0060 (GR Posted)', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockSession = jest.fn();
+            GoodsReceiptAdapter.rfc = {
+                session: mockSession,
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'VEKP') {
+                        return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', STATUS: '0060', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Storage Unit already received.*status '0060'/);
+
+            expect(mockSession).not.toHaveBeenCalled();
 
             GoodsReceiptAdapter.rfc = origRfc;
         });

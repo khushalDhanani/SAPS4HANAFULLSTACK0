@@ -115,6 +115,7 @@ sap.ui.define([
          * Open the selected document on its own page (wm/goods-receipt/{delivery})
          */
         _openDetail: function (sKey) {
+            window.__evpush && window.__evpush("CTRL _openDetail active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             this.getRouter().navTo("wmGoodsReceiptDetail", { delivery: sKey });
         },
 
@@ -160,6 +161,7 @@ sap.ui.define([
          * Toggle audio cues
          */
         onToggleAudio: function () {
+            window.__evpush && window.__evpush("CTRL onToggleAudio active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oModel = this.getView().getModel("grView");
             var bCurrent = oModel.getProperty("/audioEnabled");
             oModel.setProperty("/audioEnabled", !bCurrent);
@@ -198,6 +200,7 @@ sap.ui.define([
          * Trigger camera scan
          */
         onCameraScanStorageUnit: function () {
+            window.__evpush && window.__evpush("CTRL onCameraScanStorageUnit active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var that = this;
             BarcodeScanService.openCameraScanner("Scan Inbound Delivery / PO Barcode", function (sScanned) {
                 if (sScanned && sScanned.trim()) {
@@ -211,6 +214,7 @@ sap.ui.define([
          * Storage Unit / Inbound Delivery Value Help Dialog
          */
         onStorageUnitValueHelp: function () {
+            window.__evpush && window.__evpush("CTRL onStorageUnitValueHelp active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oView = this.getView();
             var oModel = oView.getModel("grView");
             var that = this;
@@ -278,6 +282,7 @@ sap.ui.define([
         },
 
         onRefreshDeliveries: function () {
+            window.__evpush && window.__evpush("CTRL onRefreshDeliveries active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             this._loadOpenDeliveries();
         },
 
@@ -285,6 +290,7 @@ sap.ui.define([
          * Handle row press in the open Inbound Deliveries list
          */
         onSelectInboundDelivery: function (oEvent) {
+            window.__evpush && window.__evpush("CTRL onSelectInboundDelivery active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             if (this.getView().getModel("grView").getProperty("/isDetail") || Date.now() - this._lastUserInputTs > 2000) {
                 return;
             }
@@ -299,6 +305,7 @@ sap.ui.define([
          * Primary Handler: Resolve Storage Unit Number into authentic SAP details
          */
         onScanStorageUnit: function () {
+            window.__evpush && window.__evpush("CTRL onScanStorageUnit active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oModel = this.getView().getModel("grView");
             var sBarcode = (oModel.getProperty("/storageUnitBarcode") || "").trim();
 
@@ -408,6 +415,7 @@ sap.ui.define([
          * Handle change of destination Storage Location from dropdown
          */
         onStorageLocationChange: function (oEvent) {
+            window.__evpush && window.__evpush("CTRL onStorageLocationChange active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oSelectedItem = oEvent.getParameter("selectedItem");
             if (!oSelectedItem) return;
 
@@ -427,6 +435,7 @@ sap.ui.define([
          * Handle selection of batch from available usable batches
          */
         onBatchChange: function (oEvent) {
+            window.__evpush && window.__evpush("CTRL onBatchChange active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oSelectedItem = oEvent.getParameter("selectedItem");
             if (!oSelectedItem) return;
 
@@ -457,6 +466,7 @@ sap.ui.define([
          * Execute Goods Receipt (101) Transaction in SAP
          */
         onPostGoodsReceipt: function () {
+            window.__evpush && window.__evpush("CTRL onPostGoodsReceipt active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oModel = this.getView().getModel("grView");
             var oActive = oModel.getProperty("/activeSU");
 
@@ -550,6 +560,7 @@ sap.ui.define([
          * Reset form and workflow state
          */
         onResetWorkflow: function () {
+            window.__evpush && window.__evpush("CTRL onResetWorkflow active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             this._resetState();
             MessageToast.show(this.getText("grWorkflowReset"));
             if (this.getView().getModel("grView").getProperty("/isDetail")) {
@@ -605,6 +616,7 @@ sap.ui.define([
          * Navigation back
          */
         onNavBack: function () {
+            window.__evpush && window.__evpush("CTRL onNavBack active=" + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + " args=" + (arguments[0] && arguments[0].getSource ? arguments[0].getSource().getId() : "") + " :: " + new Error().stack.split("\n").slice(1, 22).join(" <- ")); // GRDBG-TEMP
             var oHistory = History.getInstance();
             var sPreviousHash = oHistory.getPreviousHash();
             if (sPreviousHash !== undefined && typeof window !== "undefined" && window.history && typeof window.history.go === "function") {

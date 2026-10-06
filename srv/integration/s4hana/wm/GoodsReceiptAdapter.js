@@ -1258,7 +1258,7 @@ class GoodsReceiptAdapter {
     let huHeaders = [];
     let huItems = [];
 
-    // Query VEKP/VEPO for exact HU structure if rfc is available
+    // Query VEKP/VEPO for exact HU structure and pre-validate status if rfc is available
     if (this.rfc && typeof this.rfc.readTable === 'function') {
       try {
         if (sSU) {
@@ -1267,6 +1267,13 @@ class GoodsReceiptAdapter {
           ]);
           if (vekpRows.length > 0) {
             const matchedHU = vekpRows[0];
+            if (matchedHU.STATUS === '0060') {
+              const err = new Error(
+                `Storage Unit already received: Storage Unit '${sSU}' is already in status '0060' (Goods Receipt Posted) in SAP warehouse. Duplicate posting is prevented.`
+              );
+              err.statusCode = 409;
+              throw err;
+            }
             if (!targetDeliv && matchedHU.VPOBJKEY) {
               targetDeliv = String(matchedHU.VPOBJKEY).padStart(10, '0');
             }
@@ -1287,6 +1294,7 @@ class GoodsReceiptAdapter {
           }
         }
       } catch (e) {
+        if (e.statusCode === 409) throw e;
         LOG.warn(`VEKP lookup warning: ${e.message}`);
       }
     }
@@ -1312,6 +1320,34 @@ class GoodsReceiptAdapter {
       throw new Error(`Inbound Delivery Number could not be resolved for Storage Unit '${sSU}'.`);
     }
 
+    // Pre-check Inbound Delivery status in LIKP to prevent rejected duplicate posts
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const likpRows = await this.rfc.readTable('LIKP', ['VBELN', 'WBSTK', 'KOSTK'], [
+          `VBELN = '${targetDeliv}'`
+        ]);
+        if (likpRows.length > 0 && likpRows[0].WBSTK === 'C') {
+          let existingDoc = '';
+          try {
+            const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
+              `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
+            ]);
+            if (matdocs.length > 0) {
+              const latest = matdocs[matdocs.length - 1];
+              existingDoc = `${latest.MBLNR}/${latest.MJAHR}`;
+            }
+          } catch (_) {}
+          const errMsg = `Delivery already completed: Goods Receipt has already been completely processed for Inbound Delivery '${targetDeliv}' (Status: Completed)${existingDoc ? `. Existing Material Document: ${existingDoc}` : ''}. Duplicate posting is prevented (SAP HUDIALOG 018).`;
+          const conflictErr = new Error(errMsg);
+          conflictErr.statusCode = 409;
+          throw conflictErr;
+        }
+      } catch (e) {
+        if (e.statusCode === 409) throw e;
+        LOG.warn(`LIKP pre-check warning: ${e.message}`);
+      }
+    }
+
     const bapiError = (ret) => [].concat(ret || []).find((r) => r && (r.TYPE === 'E' || r.TYPE === 'A'));
 
     let bapiResult = null;
@@ -1323,8 +1359,17 @@ class GoodsReceiptAdapter {
           POST_GI_FLG: 'X',
           SIMULATE: isSimulate ? 'X' : ''
         },
-        ITEM_DATA: [{ DELIV_NUMB: targetDeliv, DELIV_ITEM: sItem }],
-        ITEM_CONTROL: [{ DELIV_NUMB: targetDeliv, DELIV_ITEM: sItem }]
+        ITEM_DATA: [{
+          DELIV_NUMB: targetDeliv,
+          DELIV_ITEM: sItem,
+          DLV_QTY: String(nQty),
+          DLV_QTY_IMUNIT: String(nQty)
+        }],
+        ITEM_CONTROL: [{
+          DELIV_NUMB: targetDeliv,
+          DELIV_ITEM: sItem,
+          CHG_DELQTY: 'X'
+        }]
       };
       if (huHeaders.length > 0) {
         confirmParams.HANDLING_UNIT_HEADER = huHeaders;
@@ -1337,7 +1382,11 @@ class GoodsReceiptAdapter {
       const err = bapiError(bapiResult && bapiResult.RETURN);
       if (err) {
         let classifiedMsg = `SAP rejected Goods Receipt: [${err.ID} ${err.NUMBER}] ${err.MESSAGE}`;
-        if (err.ID === 'VLA' && err.NUMBER === '307') {
+        if (err.ID === 'HUDIALOG' && err.NUMBER === '018') {
+          classifiedMsg = `Delivery status constraint: Inbound Delivery '${targetDeliv}' only allows display mode because Goods Receipt has already been completed (SAP message HUDIALOG 018).`;
+        } else if (err.ID === 'M7' && err.NUMBER === '006') {
+          classifiedMsg = `Master data constraint: Material '${err.MESSAGE_V1 || Material}' is not maintained in plant '${err.MESSAGE_V2 || Plant}' storage location '${err.MESSAGE_V3 || StorageLocation}' (SAP message M7 006).`;
+        } else if (err.ID === 'VLA' && err.NUMBER === '307') {
           classifiedMsg = `Putaway constraint: Putaway quantity cannot be less than GR posted quantity (SAP message VLA 307).`;
         } else if (err.ID === 'VLA' && err.NUMBER === '311') {
           classifiedMsg = `Packing constraint: Packing can only be updated via inbound delivery dialog (SAP message VLA 311).`;
