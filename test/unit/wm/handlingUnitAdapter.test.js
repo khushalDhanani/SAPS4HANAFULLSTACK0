@@ -201,3 +201,91 @@ describe('HandlingUnitAdapter.serials', () => {
     expect(r.calls).toHaveLength(0);
   });
 });
+
+describe('HandlingUnitAdapter writes (BAPI_HU_* + commit on one RFC session)', () => {
+  // Shapes as returned live 2026-10-06 (client 220, test HU 2000020166).
+  const KEY = '00000000002000020166';
+  const VEKP = { VENUM: '0000021400', EXIDV: KEY, VHILM: '000000002000000043', WERKS: '1120', LGORT: 'HU01', STATUS: '0020', INHALT: 'CLAUDE HU BAPI PROOF' };
+  const VEPO = { VEPOS: '000001', VELIN: '1', MATNR: '000000002000000255', CHARG: '', VEMNG: '1.000', VEMEH: 'NOS', WERKS: '1120', LGORT: 'HU01' };
+
+  /** Fake RfcClient: session() hands the same call() to the adapter; readTable answers VEKP / VEPO. */
+  function rfc({ ret = [], vekp = [VEKP], vepo = [VEPO], commitRet = { TYPE: '', ID: '', NUMBER: '000' }, fail } = {}) {
+    const call = jest.fn(async (fm) => {
+      if (fail) throw fail;
+      if (fm === 'BAPI_TRANSACTION_COMMIT') return { RETURN: commitRet };
+      return { RETURN: ret, HUKEY: KEY };
+    });
+    const readTable = jest.fn(async (table) => (table === 'VEKP' ? vekp : vepo));
+    return { call, readTable, session: async (fn) => fn(call) };
+  }
+  const fms = (r) => r.call.mock.calls.map(([fm]) => fm);
+
+  it('create sends the padded packaging material, commits with WAIT X and returns the committed HU', async () => {
+    const r = rfc();
+    const out = await new HandlingUnitAdapter({ rfc: r }).create({ packagingMaterial: '2000000043', plant: '1120', storageLocation: 'hu01', content: 'CLAUDE HU BAPI PROOF' });
+    expect(r.call.mock.calls[0]).toEqual(['BAPI_HU_CREATE', { HEADERPROPOSAL: { PACK_MAT: '000000002000000043', PLANT: '1120', STGE_LOC: 'HU01', CONTENT: 'CLAUDE HU BAPI PROOF' } }]);
+    expect(fms(r)).toEqual(['BAPI_HU_CREATE', 'BAPI_TRANSACTION_COMMIT']);
+    expect(r.call.mock.calls[1][1]).toEqual({ WAIT: 'X' });
+    expect(r.readTable.mock.calls[0][2]).toEqual([`EXIDV = '${KEY}'`]);
+    expect(out).toMatchObject({ HandlingUnitExternalID: '2000020166', HandlingUnitInternalNumber: '0000021400', PackagingMaterial: '2000000043', Plant: '1120', StorageLocation: 'HU01', Status: '0020', Deleted: false });
+    expect(out.Items).toEqual([{ HandlingUnitItem: '1', Material: '2000000255', Batch: '', Quantity: 1, Unit: 'NOS', Plant: '1120', StorageLocation: 'HU01' }]);
+  });
+
+  it('does not commit and answers 422 with SAP\'s text when RETURN has an E message', async () => {
+    const r = rfc({ ret: [{ TYPE: 'E', ID: 'HUFUNCTIONS', NUMBER: '123', MESSAGE: 'Packaging material 2000000043 does not exist in plant 9999' }] });
+    await expect(new HandlingUnitAdapter({ rfc: r }).create({ packagingMaterial: '2000000043', plant: '9999', storageLocation: 'HU01' }))
+      .rejects.toMatchObject({ status: 422, message: /Packaging material 2000000043 does not exist/ });
+    expect(fms(r)).toEqual(['BAPI_HU_CREATE']);
+    expect(r.readTable).not.toHaveBeenCalled();
+  });
+
+  it('pack sends HUKEY as the 20-char string and a type-1 material item with a decimal quantity string', async () => {
+    const r = rfc();
+    const out = await new HandlingUnitAdapter({ rfc: r }).pack({ handlingUnitExternalID: '2000020166', material: '2000000255', quantity: 1, unit: 'nos', plant: '1120', storageLocation: 'HU01' });
+    expect(r.call.mock.calls[0]).toEqual(['BAPI_HU_PACK', { HUKEY: KEY, ITEMPROPOSAL: { HU_ITEM_TYPE: '1', MATERIAL: '000000002000000255', PACK_QTY: '1.000', BASE_UNIT_QTY: 'NOS', PLANT: '1120', STGE_LOC: 'HU01' } }]);
+    expect(fms(r)).toEqual(['BAPI_HU_PACK', 'BAPI_TRANSACTION_COMMIT']);
+    expect(out.Items).toHaveLength(1);
+  });
+
+  it('pack passes an optional batch through', async () => {
+    const r = rfc();
+    await new HandlingUnitAdapter({ rfc: r }).pack({ handlingUnitExternalID: '2000020166', material: '4000000033', quantity: 2.5, unit: 'KG', batch: 'PMEP250156', plant: '1120', storageLocation: 'HU01' });
+    expect(r.call.mock.calls[0][1].ITEMPROPOSAL).toMatchObject({ PACK_QTY: '2.500', BATCH: 'PMEP250156' });
+  });
+
+  it('unpack sends the 6-digit HU item number and returns the emptied HU', async () => {
+    const r = rfc({ vepo: [] });
+    const out = await new HandlingUnitAdapter({ rfc: r }).unpack({ handlingUnitExternalID: '2000020166', item: '1', material: '2000000255', quantity: '1', unit: 'NOS', plant: '1120', storageLocation: 'HU01' });
+    expect(r.call.mock.calls[0]).toEqual(['BAPI_HU_UNPACK', { HUKEY: KEY, ITEMUNPACK: { HU_ITEM_TYPE: '1', HU_ITEM_NUMBER: '000001', MATERIAL: '000000002000000255', PACK_QTY: '1.000', BASE_UNIT_QTY: 'NOS', PLANT: '1120', STGE_LOC: 'HU01' } }]);
+    expect(out.Items).toEqual([]);
+  });
+
+  it('remove treats SAP\'s S message as success and reports Deleted when the VEKP row is gone', async () => {
+    const r = rfc({ ret: [{ TYPE: 'S', ID: 'HUDIALOG', NUMBER: '202', MESSAGE: '' }], vekp: [] });
+    const out = await new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166' });
+    expect(r.call.mock.calls[0]).toEqual(['BAPI_HU_DELETE', { HUKEY: KEY }]);
+    expect(fms(r)).toEqual(['BAPI_HU_DELETE', 'BAPI_TRANSACTION_COMMIT']);
+    expect(out).toEqual({ HandlingUnitExternalID: '2000020166', Deleted: true, Items: [] });
+  });
+
+  it('remove answers 502 when the HU still exists after the commit', async () => {
+    const r = rfc();
+    await expect(new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166' })).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('rejects invalid input with 400 before any RFC call', async () => {
+    const r = rfc();
+    const a = new HandlingUnitAdapter({ rfc: r });
+    await expect(a.pack({ handlingUnitExternalID: '2000020166', material: '2000000255', quantity: 0, unit: 'NOS', plant: '1120', storageLocation: 'HU01' })).rejects.toMatchObject({ status: 400, message: /Quantity/ });
+    await expect(a.create({ packagingMaterial: '2000000043', plant: "11'20", storageLocation: 'HU01' })).rejects.toMatchObject({ status: 400, message: /Plant/ });
+    await expect(a.create({ packagingMaterial: '2000000043', plant: '1120', storageLocation: 'HU01', content: 'x'.repeat(41) })).rejects.toMatchObject({ status: 400, message: /Content/ });
+    await expect(a.unpack({ handlingUnitExternalID: '2000020166', item: 'abc', material: '2000000255', quantity: 1, unit: 'NOS', plant: '1120', storageLocation: 'HU01' })).rejects.toMatchObject({ status: 400, message: /Item/ });
+    await expect(a.remove({ handlingUnitExternalID: '' })).rejects.toMatchObject({ status: 400 });
+    expect(r.call).not.toHaveBeenCalled();
+  });
+
+  it('maps an RFC transport error to 502', async () => {
+    const r = rfc({ fail: new Error('RFC_COMMUNICATION_FAILURE') });
+    await expect(new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166' })).rejects.toMatchObject({ status: 502, message: /RFC_COMMUNICATION_FAILURE/ });
+  });
+});

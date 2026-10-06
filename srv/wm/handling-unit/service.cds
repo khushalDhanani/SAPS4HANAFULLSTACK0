@@ -160,4 +160,32 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
     // Read-only: serial numbers assigned to one handling unit (RFC SER06 -> OBJK by HU internal number).
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function serials(handlingUnitInternalNumber : String(10)) returns SerialNumberResult;
+
+    // Committed state read back from VEKP / VEPO after a write. Deleted is true only after remove().
+    type HandlingUnitWriteResult {
+        HandlingUnitExternalID     : String(20);
+        HandlingUnitInternalNumber : String(10);
+        PackagingMaterial          : String(40);
+        Plant                      : String(4);
+        StorageLocation            : String(4);
+        Status                     : String(4);
+        Content                    : String(40);
+        Deleted                    : Boolean;
+        Items                      : array of HandlingUnitItem;
+    };
+
+    // Writes over RFC: BAPI_HU_CREATE / PACK / UNPACK / DELETE + BAPI_TRANSACTION_COMMIT on one connection (one LUW).
+    // Proven live 2026-10-06 (client 220, test HU 2000020166: create -> pack -> unpack -> delete, each read back).
+    // Material items can only be packed into HUs in non-HU-managed storage locations; SAP's rejection returns 422.
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action create(packagingMaterial : String(40), plant : String(4), storageLocation : String(4), content : String(40)) returns HandlingUnitWriteResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action pack(handlingUnitExternalID : String(20), material : String(40), quantity : Decimal(15, 3), unit : String(3), batch : String(10), plant : String(4), storageLocation : String(4)) returns HandlingUnitWriteResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action unpack(handlingUnitExternalID : String(20), item : String(6), material : String(40), quantity : Decimal(15, 3), unit : String(3), batch : String(10), plant : String(4), storageLocation : String(4)) returns HandlingUnitWriteResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action remove(handlingUnitExternalID : String(20)) returns HandlingUnitWriteResult;
 }

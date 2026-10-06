@@ -1,7 +1,7 @@
 const cds = require('@sap/cds');
 const HandlingUnitAdapter = require('../../integration/s4hana/wm/HandlingUnitAdapter');
 
-/** Thin CAP binding; validation and the SAP query live in HandlingUnitAdapter. Read-only. */
+/** Thin CAP binding; validation, the SAP reads and the BAPI writes live in HandlingUnitAdapter. */
 module.exports = class HandlingUnitService extends cds.ApplicationService {
   async init() {
     const adapter = new HandlingUnitAdapter();
@@ -18,6 +18,10 @@ module.exports = class HandlingUnitService extends cds.ApplicationService {
     this.on('valueHelp', run((data) => adapter.valueHelp(data)));
     this.on('statusKpis', run(() => adapter.statusKpis()));
     this.on('serials', run((data) => adapter.serials(data)));
+    this.on('create', run((data) => adapter.create(data)));
+    this.on('pack', run((data) => adapter.pack(data)));
+    this.on('unpack', run((data) => adapter.unpack(data)));
+    this.on('remove', run((data) => adapter.remove(data)));
     return super.init();
   }
 };

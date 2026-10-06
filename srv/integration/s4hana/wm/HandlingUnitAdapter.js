@@ -6,7 +6,7 @@ const { RfcClient } = require('../RfcClient');
 const { formatDateToYMD } = require('../../../common/dateUtils');
 
 /**
- * Read-only Handling Unit cockpit. GET only — proven live 2026-10-06 against client 220:
+ * Handling Unit cockpit. Reads are OData V2 GETs — proven live 2026-10-06 against client 220:
  *  - C_HANDLINGUNITMONITOR_CDS/HandlingUnit : list / KPIs (17,440 HUs). Plain entity set, $filter/$top.
  *  - API_HANDLING_UNIT/HandlingUnit(HandlingUnitExternalID,Warehouse) + to_HandlingUnitItem : header, weights,
  *    dimensions, reference document and the packed items. Metadata: both entity sets sap:creatable/updatable/
@@ -14,6 +14,16 @@ const { formatDateToYMD } = require('../../../common/dateUtils');
  *  - UI_HANDLINGUNITHIERNODE/C_HandlingUnitHierarchyNode(P_HandlingUnitOrigin,P_HandlingUnitIDChar32)/Set :
  *    recursive packing tree (Node / ParentNode / HierarchyLevel).
  * SAP applies the plant / warehouse authorizations of the calling user in every service.
+ *
+ * Writes go over RFC (API_HANDLING_UNIT is read-only here): BAPI_HU_CREATE / BAPI_HU_PACK / BAPI_HU_UNPACK /
+ * BAPI_HU_DELETE followed by BAPI_TRANSACTION_COMMIT on the SAME connection (one LUW, RfcClient.session), then a
+ * read-back from VEKP / VEPO. Proven live 2026-10-06 (client 220, test HU 2000020166: create -> pack -> unpack ->
+ * delete). Contract: HUKEY is a bare 20-char zero-padded string, materials 18-char zero-padded, quantities as
+ * decimal strings, RETURN TYPE E/A = failure (no commit). BAPI_HU_GETLIST's full read returns empty headers on this
+ * system, so VEKP/VEPO are the read-back.
+ * ponytail: material items pack only into HUs in non-HU-managed storage locations (an HU-managed SLoc needs a goods
+ * movement; HU_CREATE_GOODS_MOVEMENT is not RFC-enabled here) — SAP's rejection surfaces as 422. SERIALNUMBERS are
+ * not sent. No explicit BAPI_TRANSACTION_ROLLBACK: closing the connection discards an uncommitted LUW.
  */
 const MONITOR = '/sap/opu/odata/sap/C_HANDLINGUNITMONITOR_CDS/HandlingUnit';
 const DETAIL = '/sap/opu/odata/sap/API_HANDLING_UNIT/HandlingUnit';
@@ -54,7 +64,11 @@ const RE = {
   origin: /^[A-Z]{1,10}$/,
   status: /^[A-Z0-9]$/,
   vhKind: /^[A-Z]+$/i,
-  venum: /^\d{1,10}$/
+  venum: /^\d{1,10}$/,
+  sloc: /^[A-Z0-9]{1,4}$/,
+  unit: /^[A-Z0-9]{1,3}$/,
+  batch: /^[A-Z0-9_./-]{1,10}$/,
+  item: /^\d{1,6}$/
 };
 
 /** Filter-bar value helps: the monitor value-help set and its key/text fields. kind is the only input. */
@@ -79,6 +93,19 @@ function clean(value, label, re, mandatory) {
   if (!re.test(s)) throw httpError(400, `${label} is missing or invalid`);
   return s;
 }
+
+/** Free text for SAP (kept as typed, no upper-casing); length-capped and without quoting characters. */
+function text(value, label, max) {
+  const s = String(value ?? '').trim();
+  if (s.length > max || /['"<>&]/.test(s)) throw httpError(400, `${label} is invalid`);
+  return s;
+}
+
+// RFC key formats proven live 2026-10-06: numeric material -> 18 chars, numeric HU external id -> 20 chars.
+const pad18 = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
+const huKey = (h) => (/^\d+$/.test(h) ? h.padStart(20, '0') : h);
+// BAPIRET2: the BAPIs return a table, BAPI_TRANSACTION_COMMIT a structure; S/I/W are not failures.
+const bapiError = (ret) => [].concat(ret || []).find((r) => r && (r.TYPE === 'E' || r.TYPE === 'A'));
 
 class HandlingUnitAdapter {
   constructor(options = {}) {
@@ -364,6 +391,100 @@ class HandlingUnitAdapter {
       }
     }
     return { Items };
+  }
+
+  /** One BAPI + BAPI_TRANSACTION_COMMIT on one connection; on RETURN E/A nothing is committed (422). */
+  async _bapi(context, fn, keyAfter) {
+    let key;
+    try {
+      await this.rfc.session(async (call) => {
+        const res = await fn(call);
+        const err = bapiError(res.RETURN);
+        if (err) throw httpError(422, `${context}: ${err.MESSAGE || `${err.ID} ${err.NUMBER}`}`);
+        key = (typeof res.HUKEY === 'string' && res.HUKEY) || keyAfter;
+        const commit = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+        const cerr = bapiError(commit.RETURN);
+        if (cerr) throw httpError(502, `${context}: commit failed: ${cerr.MESSAGE}`);
+      });
+      return await this._readBack(key);
+    } catch (e) {
+      if (e.status) throw e;
+      LOG.error(`${context}: ${e.message}`);
+      throw httpError(502, `${context}: ${e.message}`);
+    }
+  }
+
+  /** Committed state from VEKP / VEPO (what SAP persisted). Deleted = no VEKP row for the key. */
+  async _readBack(key) {
+    const [vekp] = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'WERKS', 'LGORT', 'STATUS', 'INHALT'], [`EXIDV = '${key}'`]);
+    if (!vekp) return { HandlingUnitExternalID: strip(key), Deleted: true, Items: [] };
+    const vepo = await this.rfc.readTable('VEPO', ['VEPOS', 'VELIN', 'MATNR', 'CHARG', 'VEMNG', 'VEMEH', 'WERKS', 'LGORT'], [`VENUM = '${vekp.VENUM}'`]);
+    return {
+      HandlingUnitExternalID: strip(vekp.EXIDV),
+      HandlingUnitInternalNumber: vekp.VENUM,
+      PackagingMaterial: strip(vekp.VHILM),
+      Plant: vekp.WERKS,
+      StorageLocation: vekp.LGORT,
+      Status: vekp.STATUS,
+      Content: vekp.INHALT,
+      Deleted: false,
+      Items: vepo.map((r) => ({
+        HandlingUnitItem: strip(r.VEPOS), Material: strip(r.MATNR), Batch: r.CHARG, Quantity: num(r.VEMNG),
+        Unit: r.VEMEH, Plant: r.WERKS, StorageLocation: r.LGORT
+      }))
+    };
+  }
+
+  /** Material item fields shared by pack / unpack (BAPIHUITMPROPOSAL / BAPIHUITMUNPACK). */
+  _itemFields(input) {
+    const material = clean(input.material, 'Material', RE.material, true);
+    const quantity = Number(input.quantity);
+    if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
+    const batch = clean(input.batch, 'Batch', RE.batch, false);
+    return {
+      MATERIAL: pad18(material),
+      PACK_QTY: quantity.toFixed(3),
+      BASE_UNIT_QTY: clean(input.unit, 'Unit', RE.unit, true),
+      PLANT: clean(input.plant, 'Plant', RE.plant, true),
+      STGE_LOC: clean(input.storageLocation, 'Storage location', RE.sloc, true),
+      ...(batch ? { BATCH: batch } : {})
+    };
+  }
+
+  /** Create an empty handling unit; SAP assigns the external number. */
+  async create(input = {}) {
+    const header = {
+      PACK_MAT: pad18(clean(input.packagingMaterial, 'Packaging material', RE.material, true)),
+      PLANT: clean(input.plant, 'Plant', RE.plant, true),
+      STGE_LOC: clean(input.storageLocation, 'Storage location', RE.sloc, true)
+    };
+    const content = text(input.content, 'Content', 40);
+    if (content) header.CONTENT = content;
+    const r = await this._bapi('Create handling unit', (call) => call('BAPI_HU_CREATE', { HEADERPROPOSAL: header }));
+    if (r.Deleted) throw httpError(502, 'Create handling unit: SAP committed but the handling unit could not be read back');
+    return r;
+  }
+
+  /** Pack one material item (loose stock of the HU's plant / storage location) into the handling unit. */
+  async pack(input = {}) {
+    const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
+    const item = { HU_ITEM_TYPE: '1', ...this._itemFields(input) };
+    return this._bapi('Pack handling unit item', (call) => call('BAPI_HU_PACK', { HUKEY: key, ITEMPROPOSAL: item }), key);
+  }
+
+  /** Unpack one material item (by HU item number) from the handling unit. */
+  async unpack(input = {}) {
+    const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
+    const item = { HU_ITEM_TYPE: '1', HU_ITEM_NUMBER: clean(input.item, 'Item', RE.item, true).padStart(6, '0'), ...this._itemFields(input) };
+    return this._bapi('Unpack handling unit item', (call) => call('BAPI_HU_UNPACK', { HUKEY: key, ITEMUNPACK: item }), key);
+  }
+
+  /** Delete a handling unit (SAP removes the VEKP row; packed items make SAP refuse). */
+  async remove(input = {}) {
+    const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
+    const r = await this._bapi('Delete handling unit', (call) => call('BAPI_HU_DELETE', { HUKEY: key }), key);
+    if (!r.Deleted) throw httpError(502, 'Delete handling unit: SAP did not delete the handling unit');
+    return r;
   }
 }
 
