@@ -46,6 +46,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-06 17:55 IST — Adapter Wrapper Enhanced: Delivery Status Pre-Validation, Exact SU Quantity Isolation & Error Classification
+
+- **Request**: "Make Wrapper above rfc and post in SAP."
+- **User Decision**: Keep Material Document `5000005654/2026` as live proof (delivery `0180000035` fully received); enhance the Node.js/CAP `GoodsReceiptAdapter` wrapper above RFC with pre-checks and exact SU quantity control.
+- **Files changed**:
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`:
+    - Added fast-fail pre-check on `LIKP`: checks `WBSTK === 'C'`. If completed, immediately queries `MATDOC` for existing document number and rejects with HTTP 409 conflict, avoiding cryptic `HUDIALOG 018` rejection from backend.
+    - Added fast-fail pre-check on `VEKP`: checks if `STATUS === '0060'` (GR Posted). If already received into warehouse stock, rejects with HTTP 409 conflict.
+    - Added exact SU quantity isolation in `confirmParams`: sets `DLV_QTY: String(nQty)`, `DLV_QTY_IMUNIT: String(nQty)` on `ITEM_DATA` and `CHG_DELQTY: 'X'` on `ITEM_CONTROL` to ensure single-SU postings only confirm the scanned pallet's quantity rather than defaulting to the full delivery balance.
+    - Added structured error mapping for SAP message codes `HUDIALOG 018` ("Delivery status constraint") and `M7 006` ("Master data constraint: Material not maintained in plant/SLoc").
+  - `tools/test-gr-su-post-cycle.js`:
+    - Added pre-check for `data.likp.WBSTK === 'C'`, stopping gracefully with existing Material Document info before BAPI call.
+    - Added pre-check for SU `matched.STATUS === '0060'`.
+    - Added exact SU target quantity passing (`DLV_QTY`, `DLV_QTY_IMUNIT`, `CHG_DELQTY: 'X'`).
+    - Added error message classification for `HUDIALOG 018` and `M7 006`.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService.js`:
+    - Removed temporary `window.__evlog` debug statement that threw `ReferenceError: window is not defined` in Node test environments.
+  - `test/unit/wm/goodsReceiptService.test.js`:
+    - Added assertions for `DLV_QTY` and `CHG_DELQTY` on `ITEM_DATA` and `ITEM_CONTROL`.
+    - Added 4 new test cases covering fast-fail pre-checks for completed delivery (`WBSTK = 'C'`) and already-received SU (`STATUS = '0060'`), plus error mappings for `HUDIALOG 018` and `M7 006`.
+- **Validation Commands Executed & Results**:
+  - `node tools/test-gr-su-post-cycle.js simulate 0180000035 2000018143`: PASS (gracefully stops before RFC write: "Inbound Delivery 0180000035 is already completely goods-receipted (WBSTK = 'C'). Existing Material Document: 5000005654/2026. Duplicate posting is prevented (SAP HUDIALOG 018).").
+  - `npx jest test/unit/wm/goodsReceiptService.test.js`: PASS (56/56 tests passed).
+  - `npx jest test/unit/controller/uiConsistency.test.js`: PASS (7/7 tests passed).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 errors).
+  - `npx jest test/unit/wm`: PASS (46 suites / 932 tests passed).
+  - `git diff --check`: PASS (clean diff, 0 issues).
+  - `git status`: PASS.
+- **Status**: Complete. Delivery status pre-checks, SU status verification, exact quantity isolation, and error mappings are verified and tested.
+
 ### 2026-10-06 17:40 IST — Live Proof Analysis: Material Document 5000005654/2026 Persisted & HUDIALOG 018 Root Cause Identified
 
 - **User Command / Error**:
