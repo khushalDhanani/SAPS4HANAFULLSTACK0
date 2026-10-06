@@ -318,11 +318,11 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
         });
 
-        it('should handle Inbound Delivery dropdown selection and trigger resolve', () => {
+        it('should handle Inbound Delivery list row press and trigger resolve', () => {
             mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
 
             const mockEvent = {
-                getParameter: (p) => (p === 'selectedItem' ? { getKey: () => '180000001' } : null)
+                getSource: () => ({ getBindingContext: () => ({ getProperty: (p) => (p === 'DeliveryDocument' ? '180000001' : null) }) })
             };
 
             controller.onSelectInboundDelivery(mockEvent);

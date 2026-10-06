@@ -75,23 +75,44 @@
                                 press=".onScanStorageUnit" />
                         </HBox>
 
-                        <HBox alignItems="Center" class="sapUiSmallMarginTop">
-                            <Label text="{i18n>grOrSelectDelivery}:" class="sapUiTinyMarginEnd textMuted" />
-                            <Select
-                                id="selectInboundDelivery"
-                                forceSelection="false"
-                                items="{
-                                    path: 'grView>/openDeliveries',
-                                    sorter: { path: 'DeliveryDocument' }
-                                }"
-                                change=".onSelectInboundDelivery"
-                                width="21rem"
-                                maxWidth="100%">
-                                <core:Item
-                                    key="{grView>DeliveryDocument}"
-                                    text="{grView>DeliveryDocument} - {grView>MaterialName} ({grView>SupplierName})" />
-                            </Select>
-                        </HBox>
+                        <Table
+                            id="tblOpenDeliveries"
+                            items="{
+                                path: 'grView>/openDeliveries',
+                                sorter: { path: 'DeliveryDocument' }
+                            }"
+                            growing="true"
+                            growingThreshold="50"
+                            noDataText="{i18n>grVHNoData}"
+                            class="sapUiSmallMarginTop"
+                            width="auto">
+                            <headerToolbar>
+                                <OverflowToolbar>
+                                    <Title id="ttlOpenDeliveries" text="{= ${i18n>grOpenDeliveriesTitle} + ' (' + (${grView>/openDeliveries}.length || 0) + ')' }" level="H3" />
+                                    <ToolbarSpacer />
+                                    <Button id="btnGrRefreshDeliveries" icon="sap-icon://refresh" tooltip="{i18n>btnRefresh}" press=".onRefreshDeliveries" />
+                                </OverflowToolbar>
+                            </headerToolbar>
+                            <columns>
+                                <Column id="colGrDelivery"><Text text="{i18n>grListColDelivery}" /></Column>
+                                <Column id="colGrMaterial"><Text text="{i18n>colMaterial}" /></Column>
+                                <Column id="colGrSupplier" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>colSupplier}" /></Column>
+                                <Column id="colGrPlant" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>grListColPlant}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem type="Navigation" press=".onSelectInboundDelivery">
+                                    <cells>
+                                        <ObjectIdentifier title="{grView>DeliveryDocument}" text="{= ${grView>PurchaseOrder} ? 'PO ' + ${grView>PurchaseOrder} : '' }" />
+                                        <VBox>
+                                            <Text text="{grView>Material}" />
+                                            <Text text="{grView>MaterialName}" class="sapUiTinyMarginTop" visible="{= !!${grView>MaterialName} }" />
+                                        </VBox>
+                                        <Text text="{= ${grView>SupplierName} ? ${grView>SupplierName} : '-' }" />
+                                        <Text text="{= ${grView>Plant} ? ${grView>Plant} : '-' }" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
                     </VBox>
                 </Panel>
 

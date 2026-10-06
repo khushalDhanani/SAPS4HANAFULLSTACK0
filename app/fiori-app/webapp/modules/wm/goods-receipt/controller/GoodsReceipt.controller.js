@@ -220,14 +220,16 @@ sap.ui.define([
             });
         },
 
+        onRefreshDeliveries: function () {
+            this._loadOpenDeliveries();
+        },
+
         /**
-         * Handle Inbound Delivery dropdown selection
+         * Handle row press in the open Inbound Deliveries list
          */
         onSelectInboundDelivery: function (oEvent) {
-            var oSelectedItem = oEvent.getParameter("selectedItem");
-            if (!oSelectedItem) return;
-
-            var sKey = oSelectedItem.getKey();
+            var oCtx = oEvent.getSource().getBindingContext("grView");
+            var sKey = oCtx && oCtx.getProperty("DeliveryDocument");
             if (sKey) {
                 this.getView().getModel("grView").setProperty("/storageUnitBarcode", sKey);
                 this.onScanStorageUnit();

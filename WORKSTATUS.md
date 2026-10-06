@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Goods Receipt page `#/wm/goods-receipt` shows open inbound deliveries as a direct list** (table under the scan field, row press starts the existing lookup). Unit tests and ui5lint pass; **not yet verified in a browser** (login needs the user's credentials; `LOCAL_DEV_PASSWORD` is not set, so the mock users are disabled).
 - **Open 261 items, scan screen stage 1 and 261 cycle (all read-only)** — list (153 for plant 1120, reconciled with RESB), scan-and-validate page `#/wm/mvt261/open/{reservation}/{item}` and cycle page `.../cycle` validated live against SAP at backend level and by unit tests; UI **not yet verified in a browser**. No posting is exposed. **Open SAP document 4900050046/2026 still not reversed** (Unresolved Issue 0).
 - **First Goods Issue 261 finder (read-only)** — backend complete and validated live against SAP; UI built, statically validated, **not yet verified in a browser** (login needs the user's SAP credentials).
 
@@ -16,12 +17,15 @@ The previous log was removed in commit `b741337`; this file restarts it.
 3. "Show a message if authorization removes rows" cannot be detected: SAP filters unauthorized plants / movement types silently inside the OData services. The UI shows a static note instead.
 4. Archived material documents are not read (UI shows the SARI / MM_MATBEL hint).
 5. The pasted spec ended at "6. Performance:"; later sections were never received.
+6. `test/unit/guard/noGiQueueGuard.test.js` fails: the gitignored `srv/external/all_catalog_services.json` (refreshed 2026-10-05 18:31, see the 10:05 entry) contains the SAP catalog entry `ZAPI_MATERIAL_DOCUMENT_SRV_0001`, which matches the guard's forbidden pattern. Pre-existing, not caused by the goods-receipt change. Status: **Open**.
 
 ## Next Steps
 
 0. User to decide: reverse 4900050046/2026 with the API Cancel action (then verify ENMNG, KZEAR, stock and the WM transfer requirement), and whether to run test 2 (418011/4, 1 KG, needs a batch decision).
 1. Log in locally, open the dashboard tile "First Goods Issue 261" (WM tab) and confirm the page with plant 1120.
 2. Decide whether the ABAP RAP variant is still wanted.
+3. Log in locally and open `#/wm/goods-receipt`: confirm the open-deliveries table renders and a row press resolves the delivery.
+4. Decide how to treat the catalog export in the repo guard (exclude `srv/external/*.json` from the scan, or accept the SAP catalog entry).
 
 ## Changes Log
 
@@ -269,3 +273,17 @@ The previous log was removed in commit `b741337`; this file restarts it.
   4. `tools/build-creatable-xlsx.py`: regenerated `creatable-services.xlsx` (496 services across 19 module sheets, `API_MATERIAL_DOCUMENT_SRV` mapped to `MM - Inventory`).
 - **Validation:** `git diff --check` clean. Rebuilt workbook verified via openpyxl.
 - **Result:** PASS. Next action: user to assign System Alias `LOCAL` to the 6 HU services in `/IWFND/MAINT_SERVICE` if they need to be called over OData.
+
+### 2026-10-06 10:20 IST — Goods Receipt: open inbound deliveries shown as a direct list
+
+- **Trigger:** user request "`/index.html#/wm/goods-receipt` — here I want to show direct list".
+- **Files:** `app/fiori-app/webapp/modules/wm/goods-receipt/view/GoodsReceipt.view.xml`, `.../controller/GoodsReceipt.controller.js`, `app/fiori-app/webapp/i18n/i18n.properties`, `app/fiori-app/webapp/i18n/i18n_en.properties` (`grOpenDeliveriesTitle`, `grListColDelivery`, `grListColPlant`), `test/unit/wm/goodsReceiptController.test.js`.
+- **Change:** the "Or select open Inbound Delivery" `Select` dropdown is replaced by a `sap.m.Table` (`tblOpenDeliveries`) bound to the already loaded `grView>/openDeliveries` (columns: Inbound Delivery + PO, Material & Description, Supplier, Plant; growing 50; refresh button). Row press (`onSelectInboundDelivery`) now reads `DeliveryDocument` from the row's binding context and runs the unchanged `onScanStorageUnit` lookup. New handler `onRefreshDeliveries` re-calls `_loadOpenDeliveries`. Scan input, camera, value help, details panel and posting are untouched. No backend or service change.
+- **Validation:**
+  - `npx jest test/unit/wm/goodsReceiptController.test.js test/unit/controller/uiConsistency.test.js` → 2 suites, 27 tests passed (dropdown test rewritten for the row-press event).
+  - `cd app/fiori-app && npx ui5lint "webapp/modules/wm/goods-receipt/**"` → no findings.
+  - `npx eslint` on the test file → clean (the controller is in the ESLint ignore list, as before).
+  - `git diff --check` → clean.
+  - `npm test` (full) → 130 suites passed, 1 failed; 2,102 tests passed, 1 failed. The failure is `test/unit/guard/noGiQueueGuard.test.js` (Unresolved Issue 6, pre-existing, unrelated).
+  - Local OData read (`GET /odata/v4/goods-receipt/OpenInboundDeliveries?$top=2`, mocked user, running `cds watch` on port 4004) → HTTP 200 with populated DeliveryDocument, Material, MaterialName, SupplierName, Plant, so the table has live data to show.
+- **Not validated:** browser rendering of `#/wm/goods-receipt` — the app redirects to `#/login`; `LOCAL_DEV_PASSWORD` is not set, so the mock users are disabled, and the agent must not enter the user's S/4 credentials. **In Progress.**
