@@ -10,6 +10,17 @@
         <content>
             <VBox class="sapUiResponsiveMargin" width="auto">
 
+                <HBox id="huKpiRow" wrap="Wrap" class="sapUiSmallMarginBottom" visible="{= ${huView>/kpiTotal} > 0 }">
+                    <GenericTile id="huKpiTotal" header="{i18n>huKpiTotal}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                        <TileContent><NumericContent value="{huView>/kpiTotal}" valueColor="Neutral" /></TileContent>
+                    </GenericTile>
+                    <HBox items="{huView>/kpis}">
+                        <GenericTile header="{huView>name}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                            <TileContent><NumericContent value="{huView>count}" valueColor="Neutral" /></TileContent>
+                        </GenericTile>
+                    </HBox>
+                </HBox>
+
                 <form:SimpleForm id="huFilterForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
                     <form:content>
                         <core:Title text="{i18n>huFilters}" />

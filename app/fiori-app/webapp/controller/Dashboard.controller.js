@@ -324,6 +324,10 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmHandlingUnits");
         },
 
+        onNavigateToPackingInstructions: function () {
+            this.getOwnerComponent().getRouter().navTo("wmPackingInstructions");
+        },
+
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },

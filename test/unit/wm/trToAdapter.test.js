@@ -178,6 +178,11 @@ describe('RfcClient', () => {
     expect(() => new RfcClient({}).connectionParams()).toThrow(/S4_RFC_SYSNR/);
   });
 
+  it('defaults RFC trace off (no rfc*.trc spam) and honours S4_RFC_TRACE', () => {
+    expect(new RfcClient(env).connectionParams().trace).toBe('0');
+    expect(new RfcClient({ ...env, S4_RFC_TRACE: '2' }).connectionParams().trace).toBe('2');
+  });
+
   it('returns 503 when node-rfc is not installed', async () => {
     const c = new RfcClient(env, () => { throw new Error("Cannot find module 'node-rfc'"); });
     await expect(c.call('X')).rejects.toMatchObject({ status: 503 });

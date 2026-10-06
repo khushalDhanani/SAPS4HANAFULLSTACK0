@@ -1,0 +1,62 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.packing-instruction.controller.PackingInstructions"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="piListPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <form:SimpleForm id="piFilterForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>piFilters}" />
+                        <Label text="{i18n>piExternalName}" labelFor="piExtName" />
+                        <Input id="piExtName" value="{piView>/externalName}" maxLength="20" submit=".onGo" />
+                        <Label />
+                        <Button id="piGo" text="{i18n>piGo}" type="Emphasized" icon="sap-icon://search" press=".onGo" enabled="{= !${piView>/busy} }" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="piMessage" visible="{= !!${piView>/message} }" text="{piView>/message}" type="{piView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table
+                    id="piTable"
+                    items="{piView>/items}"
+                    busy="{piView>/busy}"
+                    growing="true"
+                    growingThreshold="50"
+                    noDataText="{i18n>piNoData}"
+                    class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title id="piCount" text="{= ${i18n>piListTitle} + ' (' + ${piView>/items}.length + ')' }" level="H2" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column><Text text="{i18n>piColNumber}" /></Column>
+                        <Column><Text text="{i18n>piColExternalName}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>piColHuType}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>piColDimensions}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>piColGrossWeight}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>piColCreated}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Navigation" press=".onOpenDetail">
+                            <cells>
+                                <ObjectIdentifier title="{piView>PackingInstructionNumber}" />
+                                <Text text="{= ${piView>PackingInstructionExternalName} || '-' }" />
+                                <Text text="{= ${piView>HandlingUnitType} || '-' }" />
+                                <Text text="{= ${piView>Length} + ' × ' + ${piView>Width} + ' × ' + ${piView>Height} + ' ' + (${piView>DimensionUnit} || '') }" />
+                                <ObjectNumber number="{piView>GrossWeight}" unit="{piView>WeightUnit}" emphasized="false" />
+                                <Text text="{= ${piView>CreatedByUser} + ' · ' + ${piView>CreationDate} }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

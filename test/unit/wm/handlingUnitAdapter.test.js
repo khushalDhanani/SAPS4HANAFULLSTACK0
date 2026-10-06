@@ -131,3 +131,15 @@ describe('HandlingUnitAdapter.valueHelp', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('HandlingUnitAdapter.statusKpis', () => {
+  it('returns the total and one count per status code', async () => {
+    const client = {
+      get: async () => ({ data: { d: { results: [{ HandlingUnitStat: 'A', HandlingUnitStatusName: 'Planned' }, { HandlingUnitStat: 'B', HandlingUnitStatusName: 'Active' }] } } }),
+      getText: async (path, { query } = {}) => (!query ? '17462' : /'A'/.test(decodeURIComponent(query)) ? '1124' : '7588')
+    };
+    const r = await new HandlingUnitAdapter({ client }).statusKpis();
+    expect(r.Total).toBe(17462);
+    expect(r.Items).toEqual([{ code: 'A', name: 'Planned', count: 1124 }, { code: 'B', name: 'Active', count: 7588 }]);
+  });
+});

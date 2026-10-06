@@ -25,7 +25,10 @@ class RfcClient {
       client: this.env.S4_CLIENT,
       user: this.env.S4_USERNAME,
       passwd: this.env.S4_PASSWORD,
-      lang: 'EN'
+      lang: 'EN',
+      // NW RFC SDK trace level. Default '0' (off): otherwise the SDK drops an rfc*.trc file per connection
+      // into the project root (38 MB seen). Set S4_RFC_TRACE=1..3 to re-enable while debugging RFC calls.
+      trace: this.env.S4_RFC_TRACE || '0'
     };
   }
 

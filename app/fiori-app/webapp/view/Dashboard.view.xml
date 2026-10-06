@@ -663,6 +663,11 @@
                                             <NumericContent icon="sap-icon://pallet" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tilePackingInstructions" header="{i18n>piTitle}" subheader="{i18n>piTileSub}" press=".onNavigateToPackingInstructions" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>huTileUnit}">
+                                            <NumericContent icon="sap-icon://product" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                 </HBox>
                             </VBox>
                         </IconTabFilter>

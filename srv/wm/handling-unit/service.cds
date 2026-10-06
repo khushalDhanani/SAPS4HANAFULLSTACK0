@@ -129,7 +129,14 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
     type ValueHelpItem { ![key] : String(40); text : String(60); };
     type ValueHelpResult { Items : array of ValueHelpItem; };
 
-    // Read-only: filter-bar value help. kind = plant | packaging | status | shippingPoint.
+    // Read-only: filter-bar value help. kind = plant | packaging | status | shippingPoint | storagelocation.
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function valueHelp(kind : String(20)) returns ValueHelpResult;
+
+    type StatusKpi { code : String(4); name : String(60); count : Integer; };
+    type StatusKpiResult { Total : Integer; Items : array of StatusKpi; };
+
+    // Read-only: handling-unit count per process status (for the KPI cards above the filter bar).
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function statusKpis() returns StatusKpiResult;
 }

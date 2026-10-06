@@ -66,6 +66,10 @@ sap.ui.define([
                 this._updateShell("wmHandlingUnitDetail");
             } else if (sHash.indexOf("wm/handling-unit") === 0) {
                 this._updateShell("wmHandlingUnits");
+            } else if (sHash.indexOf("wm/packing-instruction/") === 0) {
+                this._updateShell("wmPackingInstructionDetail");
+            } else if (sHash.indexOf("wm/packing-instruction") === 0) {
+                this._updateShell("wmPackingInstructions");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
@@ -252,6 +256,14 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("huDetailTitle") : "Handling Unit";
                     bShowNav = true;
                     break;
+                case "wmPackingInstructions":
+                    sTitle = oBundle ? oBundle.getText("piTitle") : "Packing Instructions";
+                    bShowNav = true;
+                    break;
+                case "wmPackingInstructionDetail":
+                    sTitle = oBundle ? oBundle.getText("piDetailTitle") : "Packing Instruction";
+                    bShowNav = true;
+                    break;
                 case "ordersDueForDelivery":
                     sTitle = oBundle ? oBundle.getText("ordersDueForDeliveryTitle") : "Orders Due for Delivery";
                     bShowNav = true;
@@ -308,6 +320,8 @@ sap.ui.define([
                 this.onNavBack(sRoute + "Pending");
             } else if (sRoute === "wmHandlingUnitDetail") {
                 this.onNavBack("wmHandlingUnits");
+            } else if (sRoute === "wmPackingInstructionDetail") {
+                this.onNavBack("wmPackingInstructions");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {

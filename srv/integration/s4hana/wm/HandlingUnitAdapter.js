@@ -254,6 +254,32 @@ class HandlingUnitAdapter {
       .filter((x) => x.key && !seen.has(x.key) && seen.add(x.key));
     return { Items };
   }
+
+  /** HandlingUnit/$count for a $filter (or all when none). Returns a number. */
+  async _count(filter) {
+    const query = filter ? `$filter=${encodeURIComponent(filter)}` : '';
+    try {
+      const text = await this.client.getText(`${MONITOR}/$count`, { query, accept: 'text/plain' });
+      const n = Number(String(text).trim());
+      return Number.isFinite(n) ? n : 0;
+    } catch (e) {
+      LOG.error(`Count handling units: ${e.message}`);
+      throw httpError(e.status || 502, `Count handling units: ${e.message}`);
+    }
+  }
+
+  /** Status-distribution KPIs for the cards above the filter bar: total + one count per status code. Read-only. */
+  async statusKpis() {
+    const { Items: statuses } = await this.valueHelp({ kind: 'status' });
+    const Total = await this._count('');
+    const Items = [];
+    for (const s of statuses) {
+      const code = clean(s.key, 'Status', RE.status);
+      if (!code) continue;
+      Items.push({ code, name: s.text, count: await this._count(`HandlingUnitProcessStatus eq '${code}'`) });
+    }
+    return { Total, Items };
+  }
 }
 
 module.exports = HandlingUnitAdapter;

@@ -34,11 +34,24 @@ sap.ui.define([
                 vhPackaging: [],
                 vhStatus: [],
                 vhShippingPoint: [],
-                vhStorageLocation: []
+                vhStorageLocation: [],
+                kpiTotal: 0,
+                kpis: []
             }), "huView");
             this.getModel("huView").setSizeLimit(2000);
             this._loadValueHelps();
+            this._loadKpis();
             this.getRouter().getRoute("wmHandlingUnits").attachPatternMatched(this.onRouteMatched, this);
+        },
+
+        _loadKpis: function () {
+            var oModel = this.getModel("huView");
+            ODataClient.get(BASE_PATH + "/statusKpis()").then(function (oResult) {
+                oModel.setProperty("/kpiTotal", (oResult && oResult.Total) || 0);
+                oModel.setProperty("/kpis", (oResult && oResult.Items) || []);
+            }).catch(function () {
+                // KPI cards are informational; a failure must not break the list.
+            });
         },
 
         _loadValueHelps: function () {

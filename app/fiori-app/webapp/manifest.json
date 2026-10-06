@@ -360,6 +360,16 @@
           "name": "wmHandlingUnits",
           "pattern": "wm/handling-unit",
           "target": "TargetHandlingUnits"
+        },
+        {
+          "name": "wmPackingInstructionDetail",
+          "pattern": "wm/packing-instruction/{systemUUID}",
+          "target": "TargetPackingInstructionDetail"
+        },
+        {
+          "name": "wmPackingInstructions",
+          "pattern": "wm/packing-instruction",
+          "target": "TargetPackingInstructions"
         }
       ],
       "targets": {
@@ -505,6 +515,16 @@
           "id": "handlingUnitDetail",
           "name": "HandlingUnitDetail",
           "path": "saps4hana.fiori.modules.wm.handling-unit.view"
+        },
+        "TargetPackingInstructions": {
+          "id": "packingInstructions",
+          "name": "PackingInstructions",
+          "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetPackingInstructionDetail": {
+          "id": "packingInstructionDetail",
+          "name": "PackingInstructionDetail",
+          "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
         }
       }
     }
