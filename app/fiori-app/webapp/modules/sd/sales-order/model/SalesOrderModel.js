@@ -8,8 +8,6 @@ sap.ui.define([
 
     var INCOMPLETION_HEADER_FIELDS = [
         { field: "PaymentTerms", label: "Payment Terms" },
-        { field: "IncotermsClassification", label: "Incoterms" },
-        { field: "IncotermsLocation1", label: "Incoterms Location" },
         { field: "ContactPerson", label: "Contact Person" }
     ];
 
@@ -71,7 +69,7 @@ sap.ui.define([
                     ShipToPartyName: "",
                     PurchaseOrderNumber: "",
                     PurchaseOrderByCustomer: "",
-                    CustomerPurchaseOrderDate: today,
+                    CustomerPurchaseOrderDate: "",
                     SalesOrderDate: today,
                     RequestedDeliveryDate: "",
                     TransactionCurrency: "",
@@ -82,8 +80,6 @@ sap.ui.define([
                     ContactPerson: "",
                     PaymentTerms: "",
                     PaymentTermCode: "",
-                    IncotermsClassification: "",
-                    IncotermsLocation1: "",
                     CreatedByUser: sUser || "alice",
                     StatusText: "In Progress",
                     StatusState: "Warning",
@@ -105,9 +101,7 @@ sap.ui.define([
                 ],
                 errors: {
                     ContactPerson: { state: "None", text: "" },
-                    PaymentTerms: { state: "None", text: "" },
-                    IncotermsClassification: { state: "None", text: "" },
-                    IncotermsLocation1: { state: "None", text: "" }
+                    PaymentTerms: { state: "None", text: "" }
                 },
                 errorList: [],
                 errorCount: 0,
@@ -319,20 +313,6 @@ sap.ui.define([
                         sError = "Payment Terms cannot exceed 4 characters";
                     }
                     break;
-                case "IncotermsClassification":
-                    if (!vVal || String(vVal).trim() === "") {
-                        sError = "Incoterms are required";
-                    } else if (String(vVal).trim().length > 3) {
-                        sError = "Incoterms cannot exceed 3 characters";
-                    }
-                    break;
-                case "IncotermsLocation1":
-                    if (!vVal || String(vVal).trim() === "") {
-                        sError = "Incoterms Location is required";
-                    } else if (String(vVal).trim().length > 28) {
-                        sError = "Incoterms Location cannot exceed 28 characters";
-                    }
-                    break;
                 case "ContactPerson":
                     if (!vVal || String(vVal).trim() === "") {
                         sError = "Contact Person is required";
@@ -369,8 +349,6 @@ sap.ui.define([
                 "SoldToParty",
                 "TransactionCurrency",
                 "PaymentTerms",
-                "IncotermsClassification",
-                "IncotermsLocation1",
                 "ContactPerson"
             ];
 
@@ -592,13 +570,6 @@ sap.ui.define([
                 oCleanHeader.PaymentTerms = String(oHeader.PaymentTermCode).trim();
                 oCleanHeader.PaymentTermCode = String(oHeader.PaymentTermCode).trim();
             }
-            // Incoterms: optional, entered by user
-            if (oHeader.IncotermsClassification && String(oHeader.IncotermsClassification).trim() !== "") {
-                oCleanHeader.IncotermsClassification = String(oHeader.IncotermsClassification).trim().toUpperCase();
-            }
-            if (oHeader.IncotermsLocation1 && String(oHeader.IncotermsLocation1).trim() !== "") {
-                oCleanHeader.IncotermsLocation1 = String(oHeader.IncotermsLocation1).trim();
-            }
 
             if (oHeader.CustomerName) {
                 oCleanHeader.CustomerName = String(oHeader.CustomerName).trim();
@@ -614,11 +585,7 @@ sap.ui.define([
             }
             INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
                 if (oHeader[f.field] && String(oHeader[f.field]).trim() !== "") {
-                    if (f.field === "IncotermsClassification") {
-                        oCleanHeader[f.field] = String(oHeader[f.field]).trim().toUpperCase();
-                    } else {
-                        oCleanHeader[f.field] = String(oHeader[f.field]).trim();
-                    }
+                    oCleanHeader[f.field] = String(oHeader[f.field]).trim();
                 }
             });
 

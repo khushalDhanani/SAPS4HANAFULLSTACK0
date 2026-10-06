@@ -2,7 +2,8 @@ const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquir
 const purchaseOrderAdapter = require('../../../integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 
 /**
- * Sales Order Value Help entity mappings against SD_F1873_SO_WL_SRV, SD_F2370_INQY_WL_SRV, and MM_PUR_PO_MAINT_V2_SRV
+ * Sales Order Value Help entity mappings against SD_F1873_SO_WL_SRV, SD_F2370_INQY_WL_SRV, MM_PUR_PO_MAINT_V2_SRV
+ * and the RFC table reads (T052U payment terms, KNVK contact persons), which are filtered in memory.
  */
 const SO_VALUE_HELP_ENTITIES = [
     'SalesOrderTypeVH',
@@ -17,7 +18,6 @@ const SO_VALUE_HELP_ENTITIES = [
     'CurrencyVH',
     'PlantVH',
     'PaymentTermsVH',
-    'IncotermsClassificationVH',
     'ContactPersonVH'
 ];
 
@@ -64,15 +64,9 @@ const soValueHelpConfig = [
         }
     },
     {
-        entities: ['IncotermsClassificationVH'],
-        read: (query) => salesInquiryAdapter.getIncoterms(query),
-        entityDeduplicateBy: {
-            IncotermsClassificationVH: 'IncotermsClassification'
-        }
-    },
-    {
         entities: ['PaymentTermsVH'],
         read: (query) => salesInquiryAdapter.getPaymentTerms(query),
+        filterInMemory: true,
         entityDeduplicateBy: {
             PaymentTermsVH: 'PaymentTerms'
         }
@@ -80,6 +74,7 @@ const soValueHelpConfig = [
     {
         entities: ['ContactPersonVH'],
         read: (query) => salesInquiryAdapter.getContactPersons(query),
+        filterInMemory: true,
         entityDeduplicateBy: {
             ContactPersonVH: 'ContactPerson'
         }

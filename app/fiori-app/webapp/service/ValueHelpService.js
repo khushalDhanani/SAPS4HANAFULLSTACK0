@@ -31,7 +31,8 @@ sap.ui.define([
         "/CurrencyVH": { title: "Select Currency", key: "Currency", desc: "Currency_Text" },
         "/IncotermsClassificationVH": { title: "Select Incoterms", key: "IncotermsClassification", desc: "IncotermsClassificationName" },
         "/PaymentTermsVH": { title: "Select Payment Terms", key: "PaymentTerms", desc: "PaymentTermsName" },
-        "/MaterialVH": { title: "Select Material", key: "Material", desc: "MaterialName", descAlt: "Material_Text", info: "MaterialBaseUnit" },
+        // searchInfo false: the unit of measure is shown but never searched (SAP rejects contains() on a 3-char unit field)
+        "/MaterialVH": { title: "Select Material", key: "Material", desc: "MaterialName", descAlt: "Material_Text", info: "MaterialBaseUnit", searchInfo: false },
         "/MaterialGroupVH": { title: "Select Material Group", key: "MaterialGroup", desc: "MaterialGroupName" },
         "/PlantVH": { title: "Select Plant", key: "Plant", desc: "PlantName", info: "PurchasingOrganization" },
         "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName", info: "Plant" },
@@ -643,7 +644,7 @@ sap.ui.define([
                 if (oConf.descAlt) {
                     aOrFilters.push(new Filter(oConf.descAlt, FilterOperator.Contains, sValue));
                 }
-                if (oConf.info) {
+                if (oConf.info && oConf.searchInfo !== false) {
                     aOrFilters.push(new Filter(oConf.info, FilterOperator.Contains, sValue));
                 }
                 aFilters.push(new Filter({

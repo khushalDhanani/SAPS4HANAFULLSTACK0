@@ -68,8 +68,14 @@ sap.ui.define([
             });
         }
 
-        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters, mParameters);
-        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
+        // $top is not a V4 list-binding parameter (UI5 throws "System query option $top is not supported");
+        // it is the number of contexts requested instead.
+        var iLength = (mParameters && mParameters.$top) ? Number(mParameters.$top) : Infinity;
+        var mBindingParameters = Object.assign({}, mParameters);
+        delete mBindingParameters.$top;
+        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters,
+            Object.keys(mBindingParameters).length ? mBindingParameters : undefined);
+        return oListBinding.requestContexts(0, iLength).then(function (aContexts) {
             return aContexts.map(function (oCtx) { return oCtx.getObject(); });
         });
     }
@@ -130,9 +136,7 @@ sap.ui.define([
                 "PortOfDischarge",
                 "ContactPerson",
                 "PaymentTerms",
-                "PaymentTermCode",
-                "IncotermsClassification",
-                "IncotermsLocation1"
+                "PaymentTermCode"
             ];
 
             var ALLOWED_ITEM_FIELDS = [
@@ -390,24 +394,6 @@ sap.ui.define([
         getMaterialUnit: function (oModelOrMaterial, sMaterial) {
             return this.getMaterialDetails(oModelOrMaterial, sMaterial).then(function (oMaterial) {
                 return (oMaterial && (oMaterial.MaterialBaseUnit || oMaterial.BaseUnit || oMaterial.OrderQuantityUnit)) || null;
-            });
-        },
-
-        /**
-         * Calls CheckATP action in CAP service to check Availability to Promise.
-         *
-         * @param {string} sSalesOrderId - Existing Sales Document ID (10 chars)
-         * @param {string} sItemId - Item ID (e.g. "10")
-         * @returns {Promise<{ RequestedQty: number, ConfirmedQty: number, ReqDlvDate: string, CnfDlvDate: string, SalesUnit: string }>}
-         */
-        checkATP: function (sSalesOrderId, sItemId) {
-            var sUrl = SERVICE_BASE + "/checkATP";
-            var oPayload = {
-                SalesOrderID: String(sSalesOrderId || "").trim(),
-                ItemID: String(sItemId || "10").trim()
-            };
-            return ODataClient.post(sUrl, oPayload).then(function (result) {
-                return result || {};
             });
         }
     };

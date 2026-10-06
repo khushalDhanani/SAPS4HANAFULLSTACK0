@@ -563,9 +563,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
                     data: {
                         d: {
                             SalesOrderID: '5000471',
-                            PaymentTermCode: 'PT01', // mismatch from PT11
-                            IncotermsClassification: 'FOB',
-                            IncotermsLocation1: 'Mumbai'
+                            PaymentTermCode: 'PT01' // mismatch from PT11
                         }
                     }
                 });
@@ -576,9 +574,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 DistributionChannel: '10',
                 OrganizationDivision: '52',
                 SoldToParty: '10135',
-                PaymentTerms: 'PT11',
-                IncotermsClassification: 'FOB',
-                IncotermsLocation1: 'Mumbai'
+                PaymentTerms: 'PT11'
             };
 
             await expect(
@@ -957,31 +953,26 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(terms).toHaveLength(2);
             expect(terms[0].PaymentTerms).toBe('0001');
             expect(terms[0].PaymentTermsName).toBe('Payable immediately');
-            expect(adapter.rfc.readTable).toHaveBeenCalledWith('T052U', ['ZTERM', 'TEXT1'], ["SPRAS = 'E'"], 50);
+            // whole table (no 50-row cap): the CAP value-help handler filters in memory
+            expect(adapter.rfc.readTable).toHaveBeenCalledWith('T052U', ['ZTERM', 'TEXT1'], ["SPRAS = 'E'"], 0);
         });
 
-        test('getPaymentTerms falls back to defaults when RFC readTable fails', async () => {
+        test('getPaymentTerms serves the second call from the 5-minute cache', async () => {
+            adapter.rfc = {
+                readTable: jest.fn().mockResolvedValue([{ ZTERM: '0001', TEXT1: 'Payable immediately' }])
+            };
+
+            await adapter.getPaymentTerms();
+            await adapter.getPaymentTerms();
+            expect(adapter.rfc.readTable).toHaveBeenCalledTimes(1);
+        });
+
+        test('getPaymentTerms fails with 503 instead of serving a local list when RFC readTable fails', async () => {
             adapter.rfc = {
                 readTable: jest.fn().mockRejectedValue(new Error('RFC connection failed'))
             };
 
-            const terms = await adapter.getPaymentTerms();
-            expect(terms.length).toBeGreaterThan(0);
-            expect(terms.some((t) => t.PaymentTerms === '0001')).toBe(true);
-        });
-
-        test('getIncoterms returns valid incoterms via RFC readTable', async () => {
-            adapter.rfc = {
-                readTable: jest.fn().mockResolvedValue([
-                    { INCO1: 'CIF', BEZEI: 'Costs, insurance & freight' },
-                    { INCO1: 'FOB', BEZEI: 'Free on board' }
-                ])
-            };
-
-            const incoterms = await adapter.getIncoterms();
-            expect(incoterms).toHaveLength(2);
-            expect(incoterms[0].IncotermsClassification).toBe('CIF');
-            expect(incoterms[0].IncotermsClassificationName).toBe('Costs, insurance & freight');
+            await expect(adapter.getPaymentTerms()).rejects.toMatchObject({ status: 503, message: expect.stringContaining('T052U') });
         });
 
         test('getContactPersons filters by Customer and formats FullName', async () => {
@@ -1005,20 +996,20 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 'KNVK',
                 ['PARNR', 'KUNNR', 'NAME1', 'NAMEV', 'TELF1'],
                 ["KUNNR = '0000010514'"],
-                50
+                0
             );
+            // Customer is returned without leading zeros so the client's `Customer eq '10514'` matches in memory
+            expect(contacts[0].Customer).toBe('10514');
         });
 
-        test('getContactPersons falls back to mock contacts when RFC is unavailable', async () => {
+        test('getContactPersons fails with 503 instead of serving local contacts when RFC is unavailable', async () => {
             adapter.rfc = {
                 readTable: jest.fn().mockRejectedValue(new Error('RFC not available'))
             };
 
-            const contacts = await adapter.getContactPersons({
+            await expect(adapter.getContactPersons({
                 SELECT: { where: [{ ref: ['Customer'] }, '=', { val: '10514' }] }
-            });
-            expect(contacts.length).toBeGreaterThan(0);
-            expect(contacts[0].ContactPerson).toBe('0000025799');
+            })).rejects.toMatchObject({ status: 503 });
         });
     });
 });

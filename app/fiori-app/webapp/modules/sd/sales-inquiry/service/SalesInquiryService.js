@@ -68,8 +68,14 @@ sap.ui.define([
             });
         }
 
-        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters, mParameters);
-        return oListBinding.requestContexts(0, Infinity).then(function (aContexts) {
+        // $top is not a V4 list-binding parameter (UI5 throws "System query option $top is not supported");
+        // it is the number of contexts requested instead.
+        var iLength = (mParameters && mParameters.$top) ? Number(mParameters.$top) : Infinity;
+        var mBindingParameters = Object.assign({}, mParameters);
+        delete mBindingParameters.$top;
+        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters,
+            Object.keys(mBindingParameters).length ? mBindingParameters : undefined);
+        return oListBinding.requestContexts(0, iLength).then(function (aContexts) {
             return aContexts.map(function (oCtx) { return oCtx.getObject(); });
         });
     }

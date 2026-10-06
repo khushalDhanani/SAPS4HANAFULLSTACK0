@@ -67,7 +67,6 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity CurrencyVH as projection on externalWL.I_CurrencyStdVH;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity UnitOfMeasureVH as projection on externalPO.I_UnitOfMeasure;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity PlantVH as projection on maint.C_MM_PlantValueHelp;
-    @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity IncotermsClassificationVH as projection on maint.C_MM_IncotermValueHelp;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity PaymentTermsVH as projection on maint.C_MM_PaymentTermValueHelp;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity ContactPersonVH {
         key ContactPerson : String(10);
@@ -115,8 +114,6 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         ContactPerson: String;
         PaymentTerms: String;
         PaymentTermCode: String;
-        IncotermsClassification: String;
-        IncotermsLocation1: String;
     }
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])

@@ -74,7 +74,8 @@ function normalizeSalesDocumentData(data, options = {}) {
         SalesGroupName: rawHeader.SalesGroupName ? String(rawHeader.SalesGroupName).trim() : '',
         SoldToParty: rawHeader.SoldToParty ? String(rawHeader.SoldToParty).trim() : '',
         CustomerName: rawHeader.CustomerName ? String(rawHeader.CustomerName).trim() : '',
-        ShipToParty: rawHeader.ShipToParty ? String(rawHeader.ShipToParty).trim() : (rawHeader.SoldToParty ? String(rawHeader.SoldToParty).trim() : ''),
+        // Never defaulted to the sold-to: SAP partner determination sets the ship-to when it is left blank.
+        ShipToParty: rawHeader.ShipToParty ? String(rawHeader.ShipToParty).trim() : '',
         ShipToPartyName: rawHeader.ShipToPartyName ? String(rawHeader.ShipToPartyName).trim() : '',
         PurchaseOrderByCustomer: description,
         PurchaseOrderNumber: description,
@@ -94,9 +95,7 @@ function normalizeSalesDocumentData(data, options = {}) {
         PortOfDischarge: rawHeader.PortOfDischarge ? String(rawHeader.PortOfDischarge).trim() : '',
         ContactPerson: rawHeader.ContactPerson ? String(rawHeader.ContactPerson).trim() : '',
         PaymentTerms: rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : (rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : ''),
-        PaymentTermCode: rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : (rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : ''),
-        IncotermsClassification: rawHeader.IncotermsClassification ? String(rawHeader.IncotermsClassification).trim().toUpperCase() : '',
-        IncotermsLocation1: rawHeader.IncotermsLocation1 ? String(rawHeader.IncotermsLocation1).trim() : ''
+        PaymentTermCode: rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : (rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : '')
     };
 
     return {

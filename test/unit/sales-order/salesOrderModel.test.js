@@ -77,6 +77,8 @@ describe("SalesOrderModel - Initial State and User Resolution", () => {
         expect(header.DistributionChannel).toBe("");
         expect(header.OrganizationDivision).toBe("");
         expect(header.TransactionCurrency).toBe("");
+        // No customer PO date is assumed: it is sent to SAP only when the user enters one.
+        expect(header.CustomerPurchaseOrderDate).toBe("");
         expect(header.CreatedByUser).toBe("john");
 
         expect(items).toHaveLength(1);
@@ -200,8 +202,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "FOB");
-        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
         oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/Plant", "1120");
@@ -228,8 +228,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
             });
             oModel.setProperty("/header/SoldToParty", "10135");
             oModel.setProperty("/header/PaymentTerms", "0001");
-            oModel.setProperty("/header/IncotermsClassification", "FOB");
-            oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
             oModel.setProperty("/header/ContactPerson", "25116");
             oModel.setProperty("/items/0/Material", "4000000001");
             oModel.setProperty("/items/0/Plant", "1120");
@@ -240,8 +238,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
 
         const requiredFields = [
             { field: "PaymentTerms", expectedError: "Payment Terms are required" },
-            { field: "IncotermsClassification", expectedError: "Incoterms are required" },
-            { field: "IncotermsLocation1", expectedError: "Incoterms Location is required" },
             { field: "ContactPerson", expectedError: "Contact Person is required" }
         ];
 
@@ -270,8 +266,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "FOB");
-        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
         oModel.setProperty("/header/ContactPerson", "25116");
 
         // Explicitly leave all hidden fields empty
@@ -297,20 +291,16 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         const oModel = SalesOrderModel.createInitialModel();
         const gaps = SalesOrderModel.getIncompletionGaps(oModel);
         expect(gaps).toContain("Payment Terms");
-        expect(gaps).toContain("Incoterms");
-        expect(gaps).toContain("Incoterms Location");
         expect(gaps).toContain("Contact Person");
 
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "CIF");
-        oModel.setProperty("/header/IncotermsLocation1", "London");
         oModel.setProperty("/header/ContactPerson", "12345");
 
         const noGaps = SalesOrderModel.getIncompletionGaps(oModel);
         expect(noGaps).toHaveLength(0);
     });
 
-    test("buildPayload constructs clean API-compliant payload with four commercial fields", () => {
+    test("buildPayload constructs clean API-compliant payload with the two commercial fields", () => {
         const oModel = SalesOrderModel.createInitialModel("sales_rep");
         SalesOrderModel.applyServerDefaults(oModel, {
             SalesOrderType: "ZDOM",
@@ -322,8 +312,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-99988");
         oModel.setProperty("/header/PaymentTerms", "PT11");
-        oModel.setProperty("/header/IncotermsClassification", "fob");
-        oModel.setProperty("/header/IncotermsLocation1", "Nhava Sheva");
         oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/OrderQuantity", "10.000");
@@ -339,8 +327,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.header.PurchaseOrderNumber).toBe("PO-99988");
         expect(payload.header.PaymentTerms).toBe("PT11");
         expect(payload.header.PaymentTermCode).toBe("PT11");
-        expect(payload.header.IncotermsClassification).toBe("FOB");
-        expect(payload.header.IncotermsLocation1).toBe("Nhava Sheva");
         expect(payload.header.ContactPerson).toBe("25116");
         expect(payload.header.TotalNetAmount).toBe(500);
 

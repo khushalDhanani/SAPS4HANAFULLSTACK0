@@ -223,10 +223,12 @@ sap.ui.define([
             });
         },
 
+        // Live-change handlers only clear error states. They must not write the bound value into the model:
+        // two-way binding would call setValue(), UI5 would record it as the committed value, and the
+        // `change` event (customer defaults, material details, validation) would never fire on blur.
         onSoldToPartyLiveChange: function (oEvent) {
             var sVal = oEvent.getParameter("value");
             var oModel = this.getView().getModel("newOrder");
-            oModel.setProperty("/header/SoldToParty", sVal);
             if (sVal && sVal.trim() !== "") {
                 oModel.setProperty("/errors/SoldToParty", { state: "None", text: "" });
             }
@@ -288,18 +290,6 @@ sap.ui.define([
             SalesOrderModel.updateStatus(oModel);
         },
 
-        onIncotermsSelect: function (oEvent) {
-            var oItem = oEvent.getParameter("selectedItem");
-            if (!oItem) return;
-            var sKey = oItem.getKey() || oItem.getText();
-            var oModel = this.getView().getModel("newOrder");
-            oModel.setProperty("/header/IncotermsClassification", sKey ? sKey.toUpperCase() : "");
-            oModel.setProperty("/modifiedFields/IncotermsClassification", true);
-            oModel.setProperty("/isModified", true);
-            SalesOrderModel.validateSingleField(oModel, "IncotermsClassification");
-            SalesOrderModel.updateStatus(oModel);
-        },
-
         onContactPersonSelect: function (oEvent) {
             var oItem = oEvent.getParameter("selectedItem");
             if (!oItem) return;
@@ -332,9 +322,6 @@ sap.ui.define([
         onContactPersonLiveChange: function (oEvent) {
             var sVal = oEvent.getParameter("value");
             var oModel = this.getView().getModel("newOrder");
-            oModel.setProperty("/header/ContactPerson", sVal);
-            oModel.setProperty("/modifiedFields/ContactPerson", true);
-            oModel.setProperty("/isModified", true);
             // Clear error while the user is still typing so it isn't distracting
             if (!sVal || String(sVal).trim() === "") {
                 oModel.setProperty("/errors/ContactPerson", { state: "None", text: "" });
@@ -470,7 +457,6 @@ sap.ui.define([
             var oModel = this.getView().getModel("newOrder");
             var sPath = oContext.getPath();
 
-            oModel.setProperty(sPath + "/Material", sVal);
             if (sVal && sVal.trim() !== "") {
                 oModel.setProperty(sPath + "/errors/Material", { state: "None", text: "" });
             }
@@ -619,7 +605,6 @@ sap.ui.define([
             var oModel = this.getView().getModel("newOrder");
             var sPath = oContext.getPath();
 
-            oModel.setProperty(sPath + "/Plant", sVal ? sVal.toUpperCase() : "");
             if (sVal && sVal.trim() !== "") {
                 if (sVal.trim().length <= 4) {
                     oModel.setProperty(sPath + "/errors/Plant", { state: "None", text: "" });
@@ -790,12 +775,6 @@ sap.ui.define([
                     oModel.setProperty("/isModified", true);
                     SalesOrderModel.validateSingleField(oModel, "PaymentTerms");
                     SalesOrderModel.updateStatus(oModel);
-                } else if (sId.indexOf("inIncotermsClassification") !== -1) {
-                    oModel.setProperty("/header/IncotermsClassification", sKey ? sKey.toUpperCase() : "");
-                    oModel.setProperty("/modifiedFields/IncotermsClassification", true);
-                    oModel.setProperty("/isModified", true);
-                    SalesOrderModel.validateSingleField(oModel, "IncotermsClassification");
-                    SalesOrderModel.updateStatus(oModel);
                 } else if (sId.indexOf("inContactPerson") !== -1) {
                     oModel.setProperty("/header/ContactPerson", sKey);
                     oModel.setProperty("/modifiedFields/ContactPerson", true);
@@ -813,50 +792,6 @@ sap.ui.define([
                 MessageToast.show("Document is complete. No incompletions detected.");
             } else {
                 this.onMessageButtonPress();
-            }
-        },
-
-        onCheckAvailability: function () {
-            var oModel = this.getView().getModel("newOrder");
-            var aItems = oModel.getProperty("/items") || [];
-
-            if (aItems.length === 0 || !aItems[0].Material) {
-                MessageBox.warning("Please enter at least one line item with a Material to check ATP availability.");
-                return;
-            }
-
-            var firstItem = aItems[0];
-            var sDocId = oModel.getProperty("/header/PurchaseOrderNumber") || "";
-
-            // Check if user provided an existing document number for CheckATP
-            if (sDocId && /^\d+$/.test(sDocId.trim())) {
-                BusyIndicator.show(0);
-                SalesOrderService.checkATP(sDocId.trim(), firstItem.SalesOrderItem || "10").then(function (res) {
-                    BusyIndicator.hide();
-                    MessageBox.information(
-                        "ATP Availability for Document " + sDocId.trim() + " Item " + (firstItem.SalesOrderItem || "10") + ":\n\n" +
-                        "• Requested Quantity: " + res.RequestedQty + " " + (res.SalesUnit || firstItem.OrderQuantityUnit) + "\n" +
-                        "• Confirmed Quantity: " + res.ConfirmedQty + " " + (res.SalesUnit || firstItem.OrderQuantityUnit) + "\n" +
-                        "• Requested Delivery Date: " + (res.ReqDlvDate || "Default") + "\n" +
-                        "• Confirmed Delivery Date: " + (res.CnfDlvDate || "Pending Scheduling"),
-                        { title: "S/4HANA ATP Check Result" }
-                    );
-                }).catch(function (err) {
-                    BusyIndicator.hide();
-                    MessageBox.error("ATP Check error: " + (err.message || err));
-                });
-            } else {
-                // Draft check notice explaining SAP S/4HANA LORD_ODATA_ORDER_SRV ATP scheduling
-                MessageBox.information(
-                    "ATP Availability Check (SAP S/4HANA):\n\n" +
-                    "• Material: " + firstItem.Material + (firstItem.SalesOrderItemText ? " (" + firstItem.SalesOrderItemText + ")" : "") + "\n" +
-                    "• Requested Quantity: " + firstItem.OrderQuantity + " " + firstItem.OrderQuantityUnit + "\n" +
-                    "• Delivering Plant: " + firstItem.Plant + "\n" +
-                    "• Requested Delivery Date: " + (firstItem.RequestedDeliveryDate || oModel.getProperty("/header/RequestedDeliveryDate")) + "\n\n" +
-                    "Notice: In SAP S/4HANA, ATP schedule lines are dynamically generated and confirmed when the sales order is submitted.\n" +
-                    "(To check live ATP against an existing document, enter the document number in PO Reference).",
-                    { title: "Check Availability" }
-                );
             }
         },
 
@@ -910,6 +845,27 @@ sap.ui.define([
                 // Strip double-prefix added by the CAP handler + this catch block
                 var PREFIX = "Failed to create Sales Order: ";
                 var sErrMsg = sRaw.startsWith(PREFIX) ? sRaw.slice(PREFIX.length) : sRaw;
+
+                // The order exists in SAP but a read-back value did not match: report it as created and
+                // reset the form, so the same order is never submitted a second time.
+                var aCreated = (error && error.code === "SALES_ORDER_CREATED_VERIFICATION_FAILED") ? sErrMsg.match(/Sales Order (\d+)/) : null;
+                if (aCreated) {
+                    var sCreatedMsg = (typeof that.getText === "function" && that.getText("msgOrderCreatedVerificationFailed", [aCreated[1], sErrMsg])) ||
+                        ("Sales Order " + aCreated[1] + " was created in SAP S/4HANA, but the read-back check failed: " + sErrMsg +
+                            " Do not create it again; check the order in SAP (VA03).");
+                    MessageBox.warning(sCreatedMsg, {
+                        title: "Sales Order Created with Warnings",
+                        actions: ["Worklist", "Close"],
+                        emphasizedAction: "Worklist",
+                        onClose: function (sAction) {
+                            that._resetModel(true);
+                            if (sAction === "Worklist") {
+                                that.getOwnerComponent().getRouter().navTo("salesOrders");
+                            }
+                        }
+                    });
+                    return;
+                }
 
                 oModel.setProperty("/errorMessage", sErrMsg);
                 oModel.setProperty("/hasError", true);

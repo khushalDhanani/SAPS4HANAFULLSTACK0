@@ -167,6 +167,26 @@ describe('Unit: SalesOrderService Handler', () => {
             await handlers.createSalesOrder(req);
             expect(req.error).toHaveBeenCalledWith(500, expect.stringContaining('Failed to create Sales Order: SAP communication timeout'));
         });
+
+        test('signals a created-but-unverified order with a dedicated code so the UI never re-submits it', async () => {
+            const err = new Error("Sales Order 5000999 created, but read-back verification failed: Payment Terms expected 'PT11' but found 'PT01'");
+            err.status = 502;
+            err.SalesOrder = '5000999';
+            salesInquiryAdapter.createSalesOrder.mockRejectedValue(err);
+
+            const req = {
+                data: validOrderPayload,
+                user: { id: 'salesrep1' },
+                error: jest.fn()
+            };
+
+            await handlers.createSalesOrder(req);
+            expect(req.error).toHaveBeenCalledWith(expect.objectContaining({
+                status: 502,
+                code: 'SALES_ORDER_CREATED_VERIFICATION_FAILED',
+                message: expect.stringContaining('5000999')
+            }));
+        });
     });
 
     describe('READ: SalesOrders', () => {
@@ -236,6 +256,16 @@ describe('Unit: SalesOrderService Handler', () => {
             const result = await handlers.getCustomerDefaults(req);
             expect(result).toEqual(mockDefaults);
             expect(salesInquiryAdapter.getCustomerDefaults).toHaveBeenCalledWith('10135', '1000', '10', '52');
+        });
+
+        test('getCustomerDefaults returns the adapter error with its status instead of a generic 500', async () => {
+            const err = new Error('Customer master read failed');
+            err.status = 503;
+            salesInquiryAdapter.getCustomerDefaults.mockRejectedValue(err);
+
+            const req = { data: { Customer: '10135' }, error: jest.fn() };
+            await handlers.getCustomerDefaults(req);
+            expect(req.error).toHaveBeenCalledWith(503, 'Customer master read failed');
         });
 
         test('getSalesOrderDefaults delegates to adapter', async () => {

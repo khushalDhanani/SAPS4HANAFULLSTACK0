@@ -34,7 +34,7 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(result.header.SalesInquiryType).toBe('ZIN');
             expect(result.header.SalesOrganization).toBe('1000');
             expect(result.header.TransactionCurrency).toBe('INR');
-            expect(result.header.ShipToParty).toBe('10135'); // Defaulted to SoldTo
+            expect(result.header.ShipToParty).toBe(''); // Not defaulted to the sold-to: SAP partner determination sets it
             expect(result.header.TotalNetAmount).toBe(6000); // 10*500 + 5*200
 
             expect(result.items).toHaveLength(2);

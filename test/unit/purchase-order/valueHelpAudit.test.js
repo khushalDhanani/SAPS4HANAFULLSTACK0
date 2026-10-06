@@ -143,6 +143,34 @@ describe('Unit: Value Help Deduplication and Context Scoping', () => {
         });
     });
 
+    describe('2b. Suggestion filter never searches the material unit column', () => {
+        // MockFilter keeps a filter group's { filters, and } config in sPath
+        const innerFilters = (oGroup) => oGroup.aFilters || (oGroup.sPath && oGroup.sPath.filters) || [];
+
+        it('applySuggestionFilter searches key / description for MaterialVH but not MaterialBaseUnit (SAP rejects contains() on a unit)', () => {
+            const oBinding = { getPath: () => '/MaterialVH', filter: jest.fn() };
+            const oInput = { getBinding: (sName) => (sName === 'suggestionRows' ? oBinding : null) };
+
+            ValueHelpService.applySuggestionFilter(oInput, '4000000001', []);
+
+            expect(oBinding.filter).toHaveBeenCalledTimes(1);
+            const aFilters = oBinding.filter.mock.calls[0][0];
+            expect(aFilters).toHaveLength(1);
+            const aPaths = innerFilters(aFilters[0]).map((f) => f.sPath);
+            expect(aPaths).toEqual(['Material', 'MaterialName', 'Material_Text']);
+        });
+
+        it('applySuggestionFilter still searches the info column for value helps that allow it', () => {
+            const oBinding = { getPath: () => '/PlantVH', filter: jest.fn() };
+            const oInput = { getBinding: (sName) => (sName === 'suggestionItems' ? oBinding : null) };
+
+            ValueHelpService.applySuggestionFilter(oInput, '11', []);
+
+            const aPaths = innerFilters(oBinding.filter.mock.calls[0][0][0]).map((f) => f.sPath);
+            expect(aPaths).toEqual(['Plant', 'PlantName', 'PurchasingOrganization']);
+        });
+    });
+
     describe('3. ValueHelpService Configuration Audit', () => {
         it('should configure info columns for composite key value helps', () => {
             const supplierConf = ValueHelpService.getConfig('/SupplierVH');

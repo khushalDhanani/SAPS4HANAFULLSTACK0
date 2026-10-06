@@ -1,4 +1,4 @@
-const { applyPaging } = require('../common/filterUtils');
+const { applyPaging, applyWhere } = require('../common/filterUtils');
 
 /**
  * Generic Value Help Handler Registration
@@ -7,7 +7,8 @@ const { applyPaging } = require('../common/filterUtils');
  * against backend data readers with query dispatch, deduplication, and count support.
  *
  * @param {import('@sap/cds').Service} srv - The CAP service instance
- * @param {Array<{ entities: string[], read: Function, deduplicateBy?: string }>} [groups] - Value help entity groups
+ * @param {Array<{ entities: string[], read: Function, deduplicateBy?: string, filterInMemory?: boolean }>} [groups] - Value help entity groups;
+ *   `filterInMemory` applies the OData $filter here for readers that return a whole SAP table (RFC reads).
  */
 function registerValueHelpHandlers(srv, groups) {
     // If groups not provided, fall back to MM Purchase Order value help configuration
@@ -32,6 +33,11 @@ function registerValueHelpHandlers(srv, groups) {
                 results = await read(req.query);
             } catch (err) {
                 return req.error(err.status || 502, err.message);
+            }
+
+            // RFC-backed readers return the whole SAP table; apply the client's $filter here.
+            if (group.filterInMemory && Array.isArray(results)) {
+                results = applyWhere(results, req.query?.SELECT?.where);
             }
 
             // Safety guard: For Purchase Order DocumentTypeVH, ensure category 'F'
