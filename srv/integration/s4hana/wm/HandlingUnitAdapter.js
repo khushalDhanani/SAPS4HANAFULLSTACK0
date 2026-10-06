@@ -44,7 +44,8 @@ const VALUE_HELP = {
   plant: { set: 'C_PlantVH', key: 'Plant', text: 'PlantName' },
   packaging: { set: 'C_PackagingMaterialVH', key: 'PackagingMaterial', text: 'PackagingMaterialName' },
   status: { set: 'C_HandlingUnitStatusVH', key: 'HandlingUnitStat', text: 'HandlingUnitStatusName' },
-  shippingpoint: { set: 'C_ShippingPointVH', key: 'ShippingPoint', text: 'ShippingPointName' }
+  shippingpoint: { set: 'C_ShippingPointVH', key: 'ShippingPoint', text: 'ShippingPointName' },
+  storagelocation: { set: 'I_StorageLocationStdVH', key: 'StorageLocation', text: 'StorageLocationName' }
 };
 const VH_BASE = '/sap/opu/odata/sap/C_HANDLINGUNITMONITOR_CDS';
 const VH_TOP = 500;
@@ -246,10 +247,12 @@ class HandlingUnitAdapter {
       $top: VH_TOP,
       $format: 'json'
     }, `Read ${kind} value help`);
-    return {
-      // Keys go straight into a $filter eq, so keep SAP's stored format (e.g. plant '0001') — do not strip.
-      Items: (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' })).filter((x) => x.key)
-    };
+    // Keys go straight into a $filter eq, so keep SAP's stored format (e.g. plant '0001') — do not strip.
+    // Dedupe by key: some sets (storage location) repeat a code across plants.
+    const seen = new Set();
+    const Items = (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' }))
+      .filter((x) => x.key && !seen.has(x.key) && seen.add(x.key));
+    return { Items };
   }
 }
 

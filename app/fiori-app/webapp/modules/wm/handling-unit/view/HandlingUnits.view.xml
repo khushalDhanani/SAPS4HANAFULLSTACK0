@@ -18,7 +18,9 @@
                             <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
                         </Input>
                         <Label text="{i18n>huStorageLocation}" labelFor="huSloc" />
-                        <Input id="huSloc" value="{huView>/storageLocation}" maxLength="4" submit=".onGo" />
+                        <Input id="huSloc" value="{huView>/storageLocation}" maxLength="4" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhStorageLocation}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
                         <Label text="{i18n>huStatus}" labelFor="huStatus" />
                         <Input id="huStatus" value="{huView>/status}" maxLength="1" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhStatus}">
                             <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
@@ -53,6 +55,8 @@
                     <headerToolbar>
                         <OverflowToolbar>
                             <Title id="huCount" text="{= ${i18n>huListTitle} + ' (' + ${huView>/items}.length + ')' }" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>

@@ -8,7 +8,13 @@ sap.ui.define([
     var BASE_PATH = "/odata/v4/handling-unit";
     var FILTER_FIELDS = ["plant", "storageLocation", "packagingMaterial", "handlingUnitExternalID", "status", "shippingPoint"];
     // Value-help input kind -> model path for its suggestion list.
-    var VALUE_HELPS = { plant: "/vhPlant", packaging: "/vhPackaging", status: "/vhStatus", shippingpoint: "/vhShippingPoint" };
+    var VALUE_HELPS = { plant: "/vhPlant", packaging: "/vhPackaging", status: "/vhStatus", shippingpoint: "/vhShippingPoint", storagelocation: "/vhStorageLocation" };
+    // Export columns: i18n label key -> result property (-> type), in table order. Same shape as Open261.
+    var EXPORT_COLUMNS = [
+        ["huColHandlingUnit", "HandlingUnitExternalID"], ["huColPackaging", "PackagingMaterial"], ["huPackagingMaterial", "PackagingMaterialName"],
+        ["huPlant", "Plant"], ["huStorageLocation", "StorageLocation"], ["huColGrossWeight", "GrossWeight", "Number"], ["huColGrossWeight", "WeightUnit"],
+        ["huColStatus", "StatusText"], ["huColReference", "ReferenceDocument"], ["huCreatedBy", "CreatedByUser"], ["huColCreated", "CreationDateTime"]
+    ];
 
     return BaseController.extend("saps4hana.fiori.modules.wm.handling-unit.controller.HandlingUnits", {
 
@@ -27,7 +33,8 @@ sap.ui.define([
                 vhPlant: [],
                 vhPackaging: [],
                 vhStatus: [],
-                vhShippingPoint: []
+                vhShippingPoint: [],
+                vhStorageLocation: []
             }), "huView");
             this.getModel("huView").setSizeLimit(2000);
             this._loadValueHelps();
@@ -91,6 +98,22 @@ sap.ui.define([
             this.getRouter().navTo("wmHandlingUnitDetail", {
                 hu: encodeURIComponent(o.HandlingUnitExternalID),
                 "?query": { wh: o.Warehouse || "", char32: o.HandlingUnitIDChar32 || "", origin: o.HandlingUnitOrigin || "ERP" }
+            });
+        },
+
+        onExport: function () {
+            var that = this;
+            sap.ui.require(["sap/ui/export/Spreadsheet"], function (Spreadsheet) {
+                var oSheet = new Spreadsheet({
+                    workbook: {
+                        columns: EXPORT_COLUMNS.map(function (a) {
+                            return { label: that.getText(a[0]), property: a[1], type: a[2] || "String" };
+                        })
+                    },
+                    dataSource: that.getModel("huView").getProperty("/items"),
+                    fileName: that.getText("huExportFile") + ".xlsx"
+                });
+                oSheet.build().finally(function () { oSheet.destroy(); });
             });
         }
     });
