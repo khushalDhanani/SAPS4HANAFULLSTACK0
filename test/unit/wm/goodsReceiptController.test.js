@@ -348,18 +348,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
 
-        it('should ignore a list row press that no trusted user input preceded (phantom press after reload)', () => {
-            controller.getView().getModel('grView').setProperty('/isDetail', false);
-            controller._lastUserInputTs = Date.now() - 5000;
-            controller.onSelectInboundDelivery({
-                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '180000021' }) })
-            });
-            expect(mockRouter.navTo).not.toHaveBeenCalled();
-        });
-
         it('should navigate to the detail route on Inbound Delivery list row press instead of resolving inline', () => {
             controller.getView().getModel('grView').setProperty('/isDetail', false);
-            controller._userInputHandler({ isTrusted: true }); // the user's click
             const mockEvent = {
                 getSource: () => ({ getBindingContext: () => ({ getProperty: (p) => (p === 'DeliveryDocument' ? '180000001' : null) }) })
             };

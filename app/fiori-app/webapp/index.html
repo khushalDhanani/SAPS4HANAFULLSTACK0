@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAPS4HANA Fiori</title>
-    <script>/* GRDBG-TEMP */ (function () { var T0 = performance.now(); var KEY = "__evlog"; function push(line) { try { var a = JSON.parse(sessionStorage.getItem(KEY) || "[]"); a.push(Math.round(performance.now() - T0) + "|" + line); if (a.length > 400) a = a.slice(-400); sessionStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {} } window.__evpush = push; push("LOAD " + location.hash); ["click","mousedown","mouseup","pointerdown","pointerup","touchstart","touchend","keydown","keyup","keypress","submit","hashchange","popstate","pageshow","pagehide","beforeunload"].forEach(function (t) { window.addEventListener(t, function (e) { var tg = e.target && (e.target.id || e.target.tagName || String(e.target)); push([t, tg, e.isTrusted, e.key || "", e.clientX || "", e.clientY || "", e.detail && e.detail.data ? "detail=" + e.detail.data : ""].join("|")); }, true); }); window.addEventListener("hashchange", function () { push("HASH " + location.hash); }); })();</script>
 
     <script id="sap-ui-bootstrap" src="https://ui5.sap.com/1.136.22/resources/sap-ui-core.js" data-sap-ui-theme="sap_fiori_3"
         data-sap-ui-async="true" data-sap-ui-compat-version="edge"
