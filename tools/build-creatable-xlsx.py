@@ -16,6 +16,7 @@ OVERRIDES = {  # exact service name -> module
     'UI_INTERNALORDER_MANAGE': 'CO - Controlling', 'UI_INTORDSETTLRULE_MANAGE': 'CO - Controlling',
     'UI_MANAGEINHREPAIRS': 'SD - Sales', 'UI_RETURNPROCESSING': 'SD - Sales', 'UI_SUPLRUSRDFNDCRITRA': 'MM - Purchasing',
     'OCI_ITEM_PROPOSAL_SRV': 'MM - Purchasing', 'BILLOFMATERIALV2_SRV': 'PP - Production',
+    'API_MATERIAL_DOCUMENT_SRV': 'MM - Inventory',
 }
 RULES = [  # order matters: first hit wins
  ('EWM - Warehouse',        r'/SCWM|WAREHOUSE|WHSE|^PICK|^PACK_|SIMPLE_(INB|OUTB)_DLV'),

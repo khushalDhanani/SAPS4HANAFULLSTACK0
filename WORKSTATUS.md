@@ -250,3 +250,22 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Live FIFO tests NOT run:** "oldest first", "newer first", "until covered then one more" need at least two available storage units; 375064/7 has none. Per the task no other item was substituted; these cases are covered by unit tests on constructed rows only. **UNVERIFIED against live data.**
 - **Tests:** `npm test` → 131 suites, 2,103 tests passed; ESLint clean; `npx ui5lint "webapp/modules/wm/mvt261/**"` no findings; `cds compile` OK; `git diff --check` clean. No write sent to SAP; document 4900050046/2026 and TR 1000744 untouched.
 - **Not validated:** browser rendering. **In Progress.**
+
+### 2026-10-06 10:05 IST — Refresh API Catalog & Rebuild Creatable Services Workbook
+
+- **Trigger:** user request "Refresh API Cataloug".
+- **Files:** `srv/external/all_catalog_services.json` (refreshed), `catalog-audit.csv` (re-probed), `catalog-creatable.csv` (regenerated), `tools/build-creatable-xlsx.py` (added override for `API_MATERIAL_DOCUMENT_SRV` to `MM - Inventory`), `creatable-services.xlsx` (rebuilt).
+- **Execution & Findings:**
+  1. `tools/refresh-catalog.sh`: pulled Gateway catalog from `/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection`. Services increased from 1,345 to 1,352 (+7 new services).
+     - Newly added services: `API_HANDLING_UNIT`, `API_MATERIAL_DOCUMENT_SRV`, `API_PACKINGINSTRUCTION`, `C_HANDLINGUNITMONITOR_CDS`, `FDP_HU_SHIPPINGLABEL_SRV`, `FDP_LOHUM_HU_PACKINGLIST_SRV`, `UI_HANDLINGUNITHIERNODE`.
+  2. `tools/audit-catalog.sh`: audited all 1,352 services via live HTTP probes.
+     - 1,237 answered HTTP 200 (including `API_MATERIAL_DOCUMENT_SRV`).
+     - 89 answered HTTP 500. The 6 newly added HU services return HTTP 500 with `/IWFND/CM_COS/064`: "No System Alias found for Service 'ZAPI_HANDLING_UNIT_0001' and user 'KHUSHAL'". Root cause: services were added in `/IWFND/MAINT_SERVICE` on SAP, but no System Alias (`LOCAL`) has been assigned to them yet in the System Aliases configuration pane.
+  3. `tools/find-creatable.py`: scanned live `$metadata` across 1,237 accessible services.
+     - 496 services have >= 1 creatable entity set.
+     - 524 services have >= 1 POST function import.
+     - 635 services can write (either).
+     - `API_MATERIAL_DOCUMENT_SRV` verified: 1 creatable set (`A_MaterialDocumentHeader`), 2 POST function imports (`Cancel`, `CancelItem`).
+  4. `tools/build-creatable-xlsx.py`: regenerated `creatable-services.xlsx` (496 services across 19 module sheets, `API_MATERIAL_DOCUMENT_SRV` mapped to `MM - Inventory`).
+- **Validation:** `git diff --check` clean. Rebuilt workbook verified via openpyxl.
+- **Result:** PASS. Next action: user to assign System Alias `LOCAL` to the 6 HU services in `/IWFND/MAINT_SERVICE` if they need to be called over OData.
