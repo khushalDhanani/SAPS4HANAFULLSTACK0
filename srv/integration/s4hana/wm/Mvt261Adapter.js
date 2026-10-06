@@ -4,6 +4,7 @@ const LOG = require('../logger')('mvt261-adapter');
 const { S4HttpClient } = require('../S4HttpClient');
 const { formatDateToYMD } = require('../../../common/dateUtils');
 const { RfcClient } = require('../RfcClient');
+const s4Config = require('../s4Config');
 const { parseSapNumber } = require('../sapFacts');
 const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 
@@ -63,6 +64,18 @@ const RE = {
 const ORDER_STATUS = { I0001: 'CRTD', I0002: 'REL', I0043: 'LKD', I0045: 'TECO', I0046: 'CLSD', I0076: 'DLFL' };
 const ORDER_BLOCKERS = { LKD: 'order is locked', TECO: 'order is technically completed', CLSD: 'order is closed', DLFL: 'order has the deletion flag' };
 
+/** Why a reservation item / its order cannot take a goods issue; shared by the cycle and the scan checks. */
+function blockers(resb, aufk, statuses) {
+  const orderBlockers = statuses.filter((st) => ORDER_BLOCKERS[st]).map((st) => ORDER_BLOCKERS[st]);
+  if (aufk && aufk.LOEKZ === 'X' && !statuses.includes('DLFL')) orderBlockers.push(ORDER_BLOCKERS.DLFL);
+  if (aufk && !statuses.includes('REL')) orderBlockers.unshift('order is not released');
+  const resvBlockers = [resb.XLOEK === 'X' && 'item is deleted', resb.KZEAR === 'X' && 'final issue is set', resb.XWAOK !== 'X' && 'goods movement is not allowed for the item'].filter(Boolean);
+  return { resvBlockers, orderBlockers };
+}
+
+/** LQUA block flags checked on a scanned storage unit (R3), in SAP field names. */
+const QUANT_BLOCK_FLAGS = ['SKZUA', 'SKZUE', 'SKZSA', 'SKZSE', 'SKZSI', 'SPGRU'];
+
 const strip = (v) => String(v || '').replace(/^0+(?=.)/, '');
 const sapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
 
@@ -85,6 +98,9 @@ class Mvt261Adapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.rfc = options.rfc || new RfcClient();
+    // Storage type / bin combinations whose stock is not ready to issue (R4). Configuration, not SAP data:
+    // cds.env.s4.mvt261NotReadyBins = [{ storageType, bin, reason }]. Empty list = rule switched off.
+    this.notReadyBins = options.notReadyBins || s4Config._getRaw('mvt261NotReadyBins') || [];
   }
 
   async _results(path, params, context) {
@@ -203,13 +219,28 @@ class Mvt261Adapter {
       };
     }).filter((i) => input.includeFullyWithdrawn || i.OpenQuantity > 0);
 
-    // Order status is an extra column: the list stays usable when RFC is not available.
+    // Order status and scan readiness are extra columns: the plain list stays usable when RFC is not
+    // available, but "scan possible only" cannot be answered without them and then fails loudly.
     try {
       const statuses = await this._orderStatuses(Items.map((i) => i.ProductionOrder));
-      Items.forEach((i) => { i.OrderStatus = (statuses[strip(i.ProductionOrder)] || []).sort().join(' '); });
+      const ready = await this._readyStorageUnits(plant);
+      Items.forEach((i) => {
+        const st = (statuses[strip(i.ProductionOrder)] || []).sort();
+        const su = ready[`${strip(i.Material)}|${i.Plant}`] || { count: 0, quantity: 0 };
+        i.OrderStatus = st.join(' ');
+        i.ReadyStorageUnits = su.count;
+        i.ReadyQuantity = Math.round(su.quantity * 1000) / 1000;
+        // Same conditions the scan page applies before it accepts a scan.
+        i.ScanPossible = i.OpenQuantity > 0 && i.MovementAllowed && st.includes('REL') && !st.some((x) => ORDER_BLOCKERS[x]) && su.count > 0;
+      });
     } catch (e) {
-      LOG.warn(`Order statuses not read: ${e.message}`);
-      Items.forEach((i) => { i.OrderStatus = ''; });
+      if (input.scanPossibleOnly) throw e;
+      LOG.warn(`Order statuses / storage-unit stock not read: ${e.message}`);
+      Items.forEach((i) => Object.assign(i, { OrderStatus: '', ReadyStorageUnits: 0, ReadyQuantity: 0, ScanPossible: false }));
+    }
+    if (input.scanPossibleOnly) {
+      const scannable = Items.filter((i) => i.ScanPossible);
+      return { TotalCount: scannable.length, SapOpenCount: sapCount, Truncated: rows.length < sapCount, Items: scannable };
     }
 
     return { TotalCount: Items.length, SapOpenCount: sapCount, Truncated: rows.length < sapCount, Items };
@@ -277,10 +308,7 @@ class Mvt261Adapter {
     const effective261 = History.filter((h) => h.MovementType === '261' && !h.IsReversed);
 
     // Steps: a blocked step carries the reason; nothing here posts or changes data.
-    const orderBlockers = statuses.filter((st) => ORDER_BLOCKERS[st]).map((st) => ORDER_BLOCKERS[st]);
-    if (aufk && aufk.LOEKZ === 'X' && !statuses.includes('DLFL')) orderBlockers.push(ORDER_BLOCKERS.DLFL);
-    if (aufk && !statuses.includes('REL')) orderBlockers.unshift('order is not released');
-    const resvBlockers = [resb.XLOEK === 'X' && 'item is deleted', resb.KZEAR === 'X' && 'final issue is set', resb.XWAOK !== 'X' && 'goods movement is not allowed for the item'].filter(Boolean);
+    const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses);
     const step = (Step, Status, Reason = '') => ({ Step, Status, Reason });
     const blockedBefore = [...resvBlockers, ...orderBlockers];
     const openTr = TransferRequirements.filter((t) => !t.Completed);
@@ -314,6 +342,130 @@ class Mvt261Adapter {
       Quants: lqua.map((q) => ({ Warehouse: q.LGNUM, StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, Batch: q.CHARG, AvailableQuantity: parseSapNumber(q.VERME), StorageUnit: strip(q.LENUM) })),
       TransferRequirements, TransferOrders, History
     };
+  }
+
+  /** Why a quant cannot be issued (R3 block flags / pending transfer order, R4 not-ready bins): [reason, value1, value2] or null. */
+  _quantNotReady(q) {
+    const flags = QUANT_BLOCK_FLAGS.filter((f) => q[f]);
+    if (flags.length) return ['blocked', flags.map((f) => `${f}=${q[f]}`).join(', ')];
+    // Stock category (LQUA-BESTQ, domain BESTQ verified live): Q quality control, S blocked, R returns.
+    if (q.BESTQ) return ['stockCategory', q.BESTQ];
+    if (parseSapNumber(q.AUSME) > 0) return ['inTransferOrder', `${parseSapNumber(q.AUSME)} ${q.MEINS}`, 'AUSME'];
+    if (parseSapNumber(q.EINME) > 0) return ['inTransferOrder', `${parseSapNumber(q.EINME)} ${q.MEINS}`, 'EINME'];
+    const bin = this.notReadyBins.find((b) => (!b.storageType || b.storageType === q.LGTYP) && (!b.bin || b.bin === q.LGPLA));
+    return bin ? [bin.reason, q.LGTYP, q.LGPLA] : null;
+  }
+
+  /**
+   * Storage units ready to issue per "material|plant": { count, quantity }. Same rules as a scan.
+   * ponytail: reads every storage-unit quant of the plant (or of all plants) in one call - tens of
+   * thousands of rows; restrict by material or cache it if the list gets slow.
+   */
+  async _readyStorageUnits(plant) {
+    const quants = await this._table('LQUA',
+      ['MATNR', 'WERKS', 'LGTYP', 'LGPLA', 'BESTQ', 'VERME', 'EINME', 'AUSME', 'MEINS', ...QUANT_BLOCK_FLAGS],
+      ["LENUM <> ''", 'AND VERME > 0'].concat(plant ? [`AND WERKS = '${plant}'`] : []), 'Read storage-unit stock');
+    const out = {};
+    for (const q of quants) {
+      if (this._quantNotReady(q)) continue;
+      const e = out[`${strip(q.MATNR)}|${q.WERKS}`] = out[`${strip(q.MATNR)}|${q.WERKS}`] || { count: 0, quantity: 0 };
+      e.count++;
+      e.quantity += parseSapNumber(q.VERME);
+    }
+    return out;
+  }
+
+  /**
+   * Scan screen, page load: the cycle's header and block checks plus material text, batch management
+   * and whether the material has storage-unit stock in the plant at all. Read-only.
+   */
+  async scanContext(input = {}) {
+    const c = await this.cycle(input);
+    const matnr = c.Material.padStart(18, '0');
+    const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for material ${c.Material}`);
+    const [makt] = await read('MAKT', ['MAKTX'], [`MATNR = '${matnr}'`, "AND SPRAS = 'E'"]);
+    const [marc] = await read('MARC', ['XCHPF'], [`MATNR = '${matnr}'`, `AND WERKS = '${c.Plant}'`]);
+    const quants = await read('LQUA',
+      ['LENUM', 'LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'BESTQ', 'VERME', 'EINME', 'AUSME', 'MEINS', 'WDATU', ...QUANT_BLOCK_FLAGS],
+      [`MATNR = '${matnr}'`, `AND WERKS = '${c.Plant}'`, 'AND VERME > 0']);
+    const gi = c.Steps.find((st) => st.Step === 'GoodsIssue');
+
+    // FIFO list: storage units in the reservation's storage location (all of the plant if it names none),
+    // oldest goods-receipt date first (LQUA-WDATU, "Date of Goods Receipt"), then batch, then storage unit.
+    // Units without a goods-receipt date cannot be ranked by age and go last.
+    const here = quants.filter((q) => !c.StorageLocation || q.LGORT === c.StorageLocation);
+    const key = (q) => `${sapDate(q.WDATU) || '9999-99-99'}|${q.CHARG}|${q.LENUM}`;
+    const today = Date.parse(new Date().toISOString().slice(0, 10));
+    let toCover = gi.Status === 'open' ? c.OpenQuantity : 0;
+    const Units = here.filter((q) => q.LENUM).sort((x, y) => key(x).localeCompare(key(y))).map((q, i) => {
+      const notReady = this._quantNotReady(q);
+      const date = sapDate(q.WDATU);
+      const quantity = parseSapNumber(q.VERME);
+      const Suggested = !notReady && toCover > 0;
+      if (Suggested) toCover -= quantity;
+      return {
+        Rank: i + 1, StorageUnit: strip(q.LENUM), Batch: q.CHARG, Quantity: quantity, Unit: q.MEINS, Warehouse: q.LGNUM,
+        StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, GoodsReceiptDate: date,
+        AgeDays: date ? Math.round((today - Date.parse(date)) / 86400000) : null,
+        Status: !notReady ? 'Available' : this.notReadyBins.some((b) => b.reason === notReady[0]) ? 'OnHold' : 'Blocked',
+        Reason: notReady ? notReady[0] : '', Value1: notReady ? String(notReady[1] || '') : '', Value2: notReady ? String(notReady[2] || '') : '',
+        Suggested
+      };
+    });
+    const noUnit = here.filter((q) => !q.LENUM);
+    return {
+      Reservation: c.Reservation, ReservationItem: c.ReservationItem, ProductionOrder: c.ProductionOrder, OrderStatus: c.OrderStatus,
+      Material: c.Material, MaterialName: makt ? makt.MAKTX : '', BatchManaged: !!marc && marc.XCHPF === 'X',
+      Plant: c.Plant, StorageLocation: c.StorageLocation, RequiredQuantity: c.RequiredQuantity, WithdrawnQuantity: c.WithdrawnQuantity,
+      OpenQuantity: c.OpenQuantity, Unit: c.Unit,
+      Blocked: gi.Status !== 'open', BlockReason: gi.Status === 'open' ? '' : (gi.Reason || 'nothing left to issue'),
+      QuantCount: quants.length, StorageUnitQuantCount: quants.filter((q) => q.LENUM).length,
+      NoUnitQuantCount: noUnit.length, NoUnitQuantity: Math.round(noUnit.reduce((t, q) => t + parseSapNumber(q.VERME), 0) * 1000) / 1000,
+      Units
+    };
+  }
+
+  /**
+   * Scan screen, one scan: check a storage unit (LQUA by LENUM) against a reservation item. Read-only.
+   * Rejections carry a reason code and the two values to show; session rules (already scanned,
+   * quantity caps) live in the UI because scanned rows exist only there.
+   */
+  async checkStorageUnit(input = {}) {
+    const rsnum = clean(input.reservation, 'Reservation', /^\d{1,10}$/, true).padStart(10, '0');
+    const rspos = clean(input.item, 'Reservation item', /^\d{1,4}$/, true).padStart(4, '0');
+    const su = clean(input.storageUnit, 'Storage unit', /^\d{1,20}$/, true);
+    const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for storage unit ${su}`);
+    const reject = (Reason, Value1 = '', Value2 = '') => ({ StorageUnit: strip(su), Accepted: false, Reason, Value1: String(Value1), Value2: String(Value2), Rows: [] });
+
+    const [resb] = await read('RESB', ['AUFNR', 'MATNR', 'WERKS', 'LGORT', 'XLOEK', 'KZEAR', 'XWAOK'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
+    if (!resb) throw httpError(404, `Reservation ${strip(rsnum)} item ${strip(rspos)} with movement type 261 not found`);
+    const [aufk] = resb.AUFNR ? await read('AUFK', ['AUFNR', 'LOEKZ'], [`AUFNR = '${resb.AUFNR}'`]) : [];
+    const statuses = resb.AUFNR ? ((await this._orderStatuses([resb.AUFNR]))[strip(resb.AUFNR)] || []) : [];
+    const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses);
+    if (!aufk) orderBlockers.push('no order on the reservation item');
+    if (resvBlockers.length || orderBlockers.length) return reject('itemBlocked', [...resvBlockers, ...orderBlockers].join('; '));
+
+    const all = await read('LQUA',
+      ['LGNUM', 'LGTYP', 'LGPLA', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BESTQ', 'VERME', 'EINME', 'AUSME', 'MEINS', ...QUANT_BLOCK_FLAGS],
+      [`LENUM = '${su.padStart(20, '0')}'`]);
+    if (!all.length) return reject('notFound');
+    const other = all.find((q) => q.MATNR !== resb.MATNR || q.WERKS !== resb.WERKS);
+    const quants = all.filter((q) => q.MATNR === resb.MATNR && q.WERKS === resb.WERKS);
+    if (!quants.length) return reject('wrongMaterialOrPlant', `${strip(other.MATNR)} / ${other.WERKS}`, `${strip(resb.MATNR)} / ${resb.WERKS}`);
+    if (!quants.some((q) => parseSapNumber(q.VERME) > 0)) return reject('noStock');
+
+    const orderBin = resb.AUFNR.slice(-10);
+    const Rows = [];
+    for (const q of quants) {
+      const notReady = this._quantNotReady(q);
+      if (notReady) return reject(...notReady);
+      Rows.push({
+        Warehouse: q.LGNUM, StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, Batch: q.CHARG,
+        Quantity: parseSapNumber(q.VERME), Unit: q.MEINS,
+        Warnings: [q.LGORT !== resb.LGORT && 'storageLocationDiffers', q.LGPLA !== orderBin && 'notInOrderBin'].filter(Boolean)
+      });
+    }
+    return { StorageUnit: strip(su), Accepted: true, Reason: '', Value1: '', Value2: '', Rows: Rows.filter((r) => r.Quantity > 0) };
   }
 
   async _post(path, data, context) {

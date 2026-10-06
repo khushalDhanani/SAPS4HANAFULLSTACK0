@@ -48,6 +48,9 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         Unit              : String(3);
         MovementAllowed   : Boolean;
         OrderStatus       : String(40);
+        ScanPossible      : Boolean;
+        ReadyStorageUnits : Integer;
+        ReadyQuantity     : Decimal(15, 3);
     };
 
     // SapOpenCount = items SAP holds as open (not deleted, not final-issued); TotalCount = items returned.
@@ -67,7 +70,8 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         reservation           : String(10),
         dateFrom              : String(10),
         dateTo                : String(10),
-        includeFullyWithdrawn : Boolean
+        includeFullyWithdrawn : Boolean,
+        scanPossibleOnly      : Boolean
     ) returns Open261Result;
 
     type CycleStep { Step : String(20); Status : String(8); Reason : String(255); };
@@ -105,6 +109,38 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     // Read-only: the 261 cycle of one reservation item. Nothing is posted.
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function cycle(reservation : String(10), item : String(4)) returns Cycle261;
+
+    // FIFO list row. Status: Available | Blocked | OnHold. Reason / Value1 / Value2 as in ScanResult.
+    type ScanUnit {
+        Rank : Integer; StorageUnit : String(20); Batch : String(10); Quantity : Decimal(13, 3); Unit : String(3);
+        Warehouse : String(3); StorageType : String(3); StorageBin : String(10); StorageLocation : String(4);
+        GoodsReceiptDate : Date; AgeDays : Integer; Status : String(10); Reason : String(30); Value1 : String(255); Value2 : String(60);
+        Suggested : Boolean;
+    };
+    type ScanContext {
+        Reservation : String(10); ReservationItem : String(4); ProductionOrder : String(12); OrderStatus : String(40);
+        Material : String(40); MaterialName : String(40); BatchManaged : Boolean; Plant : String(4); StorageLocation : String(4);
+        RequiredQuantity : Decimal(13, 3); WithdrawnQuantity : Decimal(13, 3); OpenQuantity : Decimal(13, 3); Unit : String(3);
+        Blocked : Boolean; BlockReason : String(255); QuantCount : Integer; StorageUnitQuantCount : Integer;
+        NoUnitQuantCount : Integer; NoUnitQuantity : Decimal(15, 3); Units : array of ScanUnit;
+    };
+    // Warnings: storageLocationDiffers | notInOrderBin
+    type ScanRow {
+        Warehouse : String(3); StorageType : String(3); StorageBin : String(10); StorageLocation : String(4); Batch : String(10);
+        Quantity : Decimal(13, 3); Unit : String(3); Warnings : array of String(30);
+    };
+    // Reason: itemBlocked | notFound | wrongMaterialOrPlant | noStock | blocked | stockCategory | inTransferOrder | <configured not-ready reason>
+    type ScanResult {
+        StorageUnit : String(20); Accepted : Boolean; Reason : String(30); Value1 : String(255); Value2 : String(60);
+        Rows : array of ScanRow;
+    };
+
+    // Read-only: scan screen. Nothing is posted; scanned rows are kept by the UI session only.
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function scanContext(reservation : String(10), item : String(4)) returns ScanContext;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function checkStorageUnit(reservation : String(10), item : String(4), storageUnit : String(20)) returns ScanResult;
 
     // Read-only: first goods movement of movement type 261. definition A | B | C, dates YYYY-MM-DD.
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])

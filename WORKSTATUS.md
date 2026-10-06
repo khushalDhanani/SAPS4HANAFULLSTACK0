@@ -5,7 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Open 261 items + 261 cycle (read-only)** — list (153 for plant 1120 = user's reference, reconciled with RESB) and click-through cycle page validated live against SAP at backend level; UI pages `#/wm/mvt261/open` and `#/wm/mvt261/open/{reservation}/{item}` statically validated, **not yet verified in a browser**. Posting (261, 262, transfer orders) **not built — Blocked** on test reservations and explicit approval.
+- **Open 261 items, scan screen stage 1 and 261 cycle (all read-only)** — list (153 for plant 1120, reconciled with RESB), scan-and-validate page `#/wm/mvt261/open/{reservation}/{item}` and cycle page `.../cycle` validated live against SAP at backend level and by unit tests; UI **not yet verified in a browser**. No posting is exposed. **Open SAP document 4900050046/2026 still not reversed** (Unresolved Issue 0).
 - **First Goods Issue 261 finder (read-only)** — backend complete and validated live against SAP; UI built, statically validated, **not yet verified in a browser** (login needs the user's SAP credentials).
 
 ## Unresolved Issues
@@ -185,8 +185,68 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Findings (live):** RESB 24685/2: 261, order 1000109, material 8300000159 (AESOL-CN HB CUT, batch-managed), plant **1130**, CS01, BDMNG 510.000, ENMNG 509.000 (open 1 KG), not deleted, not final-issued. Order status "LKD REL" → the app blocks goods issue. MARD: CS01 7,377.036, PT01 7,972.518. LQUA (warehouse W12): 17 quants in CS01, only 2 carry a storage unit (1000033499, 1000033500, type FG1, 200 KG each, batch IN25002833); 15 are in interim type 901 / bin WE-ZONE without storage unit. No block flags set on any quant. Existing 261 documents for the item (4900012536, 397 + 112 KG) were issued from **PT01**, not from the reservation's CS01. No transfer requirement for the reservation.
 - **Still open:** document 4900050046/2026 from live test 1 is NOT reversed (see Unresolved Issues).
 
-### 2026-10-06 00:50 IST — Positive test-case search for the SU-scan screen (no code change, read-only)
+### 2026-10-06 01:10 IST — Handling Unit services catalog discovery (no code change, read-only)
 
-- **Why:** relayed request for a released, unlocked order with storage-unit stock in the reservation's own storage location, spanning 2–3 drums. Nothing posted, nothing built. The relayed text did not contain a user go-ahead for the reversal, so 4900050046/2026 was NOT reversed.
-- **Findings (live, all plants):** 344 open 261 items with storage location and movement allowed; 308 on REL orders without LKD/TECO/CLSD/DLFL; 125 of those have SU stock (LQUA with LENUM, available, not blocked) in the reservation plant/storage location; 72 covered by one SU, 18 fully covered needing ≥ 2 SUs, 35 with SU stock that does not cover the open quantity. Candidates: 519944/1 (plant 1130, CS02, 600 KG), 512835/3 and 512851/3 (1130, CS02, 800 KG), 471326/1 and 471327/1 (1600, CS01, 500 KG), 512830/1 (1120, CS01, 400 KG — its SUs sit in storage type OH1, bin ONHOLD).
-- **Still open:** document 4900050046/2026 not reversed (Unresolved Issue 0).
+- **Why:** user requested discovery of Handling Unit services from the Gateway catalog.
+- **Scope & Method:** analyzed `srv/external/all_catalog_services.json`, `catalog-creatable.csv`, `catalog-data-reality.csv`, `creatable-services.xlsx`, live Gateway endpoints, and SAP backend TADIR objects (`IWSV`/`IWSG`).
+- **Findings (live & catalog):**
+  - **Active / Registered Catalog Services with HU capabilities:**
+    - `UI_SHIPMENTCONTAINERPACKG` (`/sap/opu/odata/sap/UI_SHIPMENTCONTAINERPACKG`): LE - Shipping; live data in client 220 (`C_HandlingUnitVH` 16,442 rows, `C_FldLogsShptItemHandlingUnit` 16,567 rows, `I_FldLogsShptHandlingUnitItem` 32,223 rows); action `PackToContainer`.
+    - `/SCWM/SIMPLE_INB_DLV_SRV` (`/sap/opu/odata/scwm/SIMPLE_INB_DLV_SRV`): EWM Inbound; `HUHeadSet`, `HUItemSet`, `HUSingleItemSet`; actions `AutoPack`, `CreateTask`, `GoodsReceipt`, `ReverseGoodsReceipt`.
+    - `/SCWM/SIMPLE_INB_PO_SRV` (`/sap/opu/odata/scwm/SIMPLE_INB_PO_SRV`): EWM Inbound PO; `HUSingleItemSet`.
+    - `ZPACK_OUTBDLV_SRV` (`/sap/opu/odata/scwm/PACK_OUTBDLV_SRV`): EWM Outbound Packing; `HUSet`, `HUIDENTCollection`, `HUItemWeightSet`, `PackMatSet`, `PackingStationSet`; actions `Pack`, `UnPack`, `Close`, `ChangePackMat`.
+    - `ZUI_RETURNSINITIATION` (`/sap/opu/odata/sap/UI_RETURNSINITIATION`): Returns HU; `C_HandlingUnitVH` (16,442 rows); actions `CreateEWMHandlingUnit`, `CreatePackHandlingUnit`, `DeleteHandlingUnit`, `PreviewHandlingUnitLabel`.
+    - `ZUI_RETURNPROCESSING` (`/sap/opu/odata/sap/UI_RETURNPROCESSING`): `C_HandlingUnitVH` (16,442 rows); actions `DeleteHandlingUnit`, `DistributeHandlingUnitItmToOrd`, `ReverseHandlingUnitReceipt`, `SendHandlingUnitOutput`.
+    - `ZAPI_WAREHOUSE_ORDER_TASK` (`/sap/opu/odata/sap/API_WAREHOUSE_ORDER_TASK`): action `ConfirmWarehouseTaskHU`.
+    - `ZPICKCART_SRV`, `ZPICKLIST_PAPER_SRV`, `ZRECORD_INVENTORY_SRV`, `ZCUSTOMER_RETURNS_SRV`, `ZUI_WAREHOUSEDOCUMENT`.
+  - **Standard S/4HANA HU Backend Services (in TADIR `IWSV`, NOT activated in Gateway):**
+    - `API_HANDLING_UNIT` (Package `ODATA_LO_HU_API_HU`) — standard ERP Handling Unit API; returns `/IWFND/MED/170` (service not activated in `/IWFND/MAINT_SERVICE` on client 220).
+    - `API_PACKINGINSTRUCTION` (Package `ODATA_LO_HU_API_PI`) — standard Packing Instructions API; not activated in Gateway.
+    - `UI_HANDLINGUNITHIERNODE` / `C_HANDLINGUNITMONITOR_CDS` (Package `ODATA_LO_HU_FIORI_HUMO`) — Handling Unit Monitor (HUMO); not activated in Gateway.
+    - `FDP_HU_SHIPPINGLABEL_SRV` / `FDP_LOHUM_HU_PACKINGLIST_SRV` (Package `ODATA_LO_HU_OM`) — HU shipping label & packing list forms.
+  - **Database Reality:** VEKP (HU Header) and VEPO (HU Item) exist and are populated in SAP client 220.
+- **Result:** PASS (discovery complete).
+
+
+### 2026-10-06 02:10 IST — Adapter + CAP: scan screen stage 1, read-only (`scanContext`, `checkStorageUnit`)
+
+- **Trigger:** task "Stage 1 of the SU scan screen: scan and validate only, no posting".
+- **Files:** `srv/integration/s4hana/wm/Mvt261Adapter.js` (`scanContext`, `checkStorageUnit`, shared `blockers()` now used by `cycle` too, `notReadyBins`), `srv/wm/mvt261/service.cds` (types `ScanContext`, `ScanRow`, `ScanResult`; functions `scanContext`, `checkStorageUnit`), `srv/wm/mvt261/service.js`, `package.json` (`cds.s4.mvt261NotReadyBins`: OH1/ONHOLD → onHold, 901/WE-ZONE → goodsReceiptZone), `tools/check-261-scan.js` (new, read-only).
+- **Change:** `scanContext` = cycle header and block checks + MAKT text, MARC batch flag, LQUA quant counts (with / without storage unit). `checkStorageUnit` re-checks the item's blockers (RESB, AUFK, JEST) and refuses before any storage-unit lookup when blocked; otherwise reads LQUA by LENUM and applies R1 (not found / no stock), R2 (material + plant), R3 (SKZUA, SKZUE, SKZSA, SKZSE, SKZSI, SPGRU; AUSME / EINME > 0), R4 (configured not-ready bins), R7 (batch from quant), R8 (storage location warning), R9 (order-bin warning). CAP exposes functions only (GET); POST → 405.
+- **Validation (live, read-only, raw output in the session report):**
+  - 512851/3: open 800 KG, REL; SUs 2000018193–2000018196 each accepted, 200 KG, batch INHU100005, IP1/0001002707, no warnings.
+  - 471327/1: open 500 KG, REL; 1000053753 → 120 KG PTRA260007, 1000053758 → 380 KG PTRA260008 (both GS1/0002000589); 1000053755 (GS1/TRANSFER, 400 KG) accepted with `notInOrderBin`.
+  - 519944/1: 2000019210, 2000019211 → rejected `onHold` (OH1 / ONHOLD).
+  - 24685/2: context Blocked "order is locked", open 1 KG; scan of 1000033499 → `itemBlocked`.
+  - 512851/3 with 1000053753 → `wrongMaterialOrPlant` (8400000034 / 1600 vs 1000001001 / 1130); 9999999999 → `notFound`.
+  - Local `cds-serve`: both functions answer over HTTP; POST on them → 405; `/postGoodsIssue` → 404 (not exposed).
+- **Result:** PASS. No write was sent to SAP. Material document 4900050046/2026 and transfer requirement 1000744 were not touched.
+
+### 2026-10-06 02:40 IST — UI5 scan page and session rules; cycle page moved to a sub-route
+
+- **Files:** `app/fiori-app/webapp/modules/wm/mvt261/model/ScanSession.js` (new), `.../controller/Scan261.controller.js` (new), `.../view/Scan261.view.xml` (new), `Open261.controller.js` (row opens the scan page), `manifest.json` (route `wmScan261` = `wm/mvt261/open/{reservation}/{item}`; `wmCycle261` moved to `.../cycle`), `controller/App.controller.js` (shell titles), both i18n bundles (`scan261*`).
+- **Change:** header, progress (quantity and drum count), scan field (Enter submits, clears, refocuses; the value is used as the raw storage unit number, no barcode parsing; wedge scans outside the field arrive through the existing `BarcodeScanService`), scanned list with editable quantity, remove, clear all, message strip, states Loaded / Scanning / Quantity covered / Blocked, link to the cycle page. Session rules R5 (already scanned), R6 (default = quant quantity, capped at quant and remaining open quantity, "open quantity already covered"). No Post button exists.
+- **Tests:** `test/unit/wm/mvt261Scan.test.js` (new, 11 tests): T1–T7, R3, R6, R10 and the no-write assertions (HTTP double throws on any call, RFC double has no function-call method, UI sources contain no write call or post handler, service defines no action). `npm test` → 131 suites, 2,096 tests passed. ESLint clean, `npx ui5lint "webapp/modules/wm/mvt261/**"` no findings, `cds compile` OK, `git diff --check` clean, `tools/reconcile-open-261.js 1120` 7/7 PASS.
+- **Not validated:** browser rendering, focus handling, keyboard-only use and a real scanner (login needs the user's SAP credentials). **In Progress.**
+- **UNVERIFIED:** the two not-ready bin rules (OH1/ONHOLD seen on real stock; 901/WE-ZONE seen on real stock; neither confirmed as a business rule); order-bin pattern (two cases); storage unit numbers being digits only; over-quantity fifth drum (constructed row — no fifth staged drum exists in SAP); block-flag and pending-transfer-order rejections (constructed rows — no such quant found for the test materials).
+- **Note:** `postGoodsIssue` / `reverse` from the approved live test remain in the adapter and in `tools/test-261-post-cycle.js`; they are not reachable from the service or the UI and were not called.
+
+### 2026-10-06 03:20 IST — Open 261 list: show only items where scanning is possible
+
+- **Trigger:** user: the list at `/wm/mvt261/open` shows too many items; show only where a scan is possible.
+- **Files:** `srv/integration/s4hana/wm/Mvt261Adapter.js` (`_quantNotReady` shared with `checkStorageUnit`, `_readyStorageUnits`, `openItems` adds `ScanPossible`, `ReadyStorageUnits`, `ReadyQuantity` and the `scanPossibleOnly` filter), `srv/wm/mvt261/service.cds`, `Open261.view.xml` + `Open261.controller.js` (switch "Only where scanning is possible", default on; column and export "Ready storage units"), both i18n bundles, `test/unit/wm/mvt261Scan.test.js` (2 tests).
+- **Rule:** scan possible = open quantity > 0, movement allowed, order released and not locked / technically completed / closed / deletion-flagged, and at least one storage unit of the material in the plant that passes the scan rules R3 and R4 (no block flag, no pending transfer order, not in a not-ready bin). Read-only (RESB via OData, JEST and LQUA via RFC).
+- **Validation (live):** plant 1120: 152 open items → 49 where scanning is possible (about 1.2–2.1 s); all plants: 392 → 144. 512851/3 and 471327/1 are in, 24685/2 (locked order) is out. Plant 1120 open count is 152, one less than before, because live test 1 final-issued 278650/1. `npm test` → 131 suites, 2,098 tests passed; ESLint and UI5 lint clean; `tools/reconcile-open-261.js 1120` 7/7 PASS.
+- **Not validated:** the switch and column in a browser. **In Progress.**
+- **Known limits:** readiness is per material and plant, not per storage location or order bin; it does not check that the ready quantity covers the open quantity (519944/1 counts as possible through 25 KG drums in 920/TRANSFER while its 250 KG drums are on hold).
+
+### 2026-10-06 04:30 IST — Scan screen: FIFO storage-unit list, FIFO check, stock-category rule (read-only)
+
+- **Trigger:** task "SU scan screen, Stage 1 (read-only, no posting)" for route `/wm/mvt261/open/375064/7`.
+- **Files:** `srv/integration/s4hana/wm/Mvt261Adapter.js` (`scanContext` returns `Units`, `NoUnitQuantCount`, `NoUnitQuantity`; `_quantNotReady` rejects a filled LQUA-BESTQ), `srv/wm/mvt261/service.cds` (type `ScanUnit`), `app/fiori-app/webapp/modules/wm/mvt261/model/ScanSession.js` (`olderAvailable`, `deviations`, `units`), `Scan261.controller.js`, `Scan261.view.xml` (FIFO table, deviation count, note on stock without storage unit), both i18n bundles, `test/unit/wm/mvt261Scan.test.js` (5 tests).
+- **FIFO field:** LQUA-WDATU, data element LVS_WDATU, text "Date of Goods Receipt" (read live from DD03L / DD04T). Sort: WDATU, batch, storage unit; units without a date last. FIFO warning only when an available, unscanned unit has a strictly earlier date.
+- **New rule (agent's addition, flagged to the user):** LQUA-BESTQ filled (domain values read live: Q "Stock in Quality Control", S "Blocked Stock", R "Returns Stock") → status Blocked, scan rejected `stockCategory`. Effect on the "scan possible" list: plant 1120 49 → 35, all plants 144 → 123.
+- **Validation (live, read-only) for 375064/7:** RESB: order 1001944, material 1000000236 (NACOL 18-94, batch-managed), plant 2100, CS01, BDMNG 1335.000, ENMNG 0.000, not deleted / final-issued; order status REL → not blocked. LQUA (warehouse W26, 6 quants): exactly **one** storage unit, 1000032202 (RM1 / 0-L0001-00, batch IN25000346, 10,000 KG, BESTQ = Q, WDATU 00000000); the 1,335 KG staged for the order sit in IP1 / 0001001944 (batch IN26002959, WDATU 2026-06-20) **without a storage unit**; 4 more quants without storage unit. Scans: 1000032202 → rejected `stockCategory` Q; 9999999999 → `notFound`; 2000018193 → `wrongMaterialOrPlant`.
+- **Live FIFO tests NOT run:** "oldest first", "newer first", "until covered then one more" need at least two available storage units; 375064/7 has none. Per the task no other item was substituted; these cases are covered by unit tests on constructed rows only. **UNVERIFIED against live data.**
+- **Tests:** `npm test` → 131 suites, 2,103 tests passed; ESLint clean; `npx ui5lint "webapp/modules/wm/mvt261/**"` no findings; `cds compile` OK; `git diff --check` clean. No write sent to SAP; document 4900050046/2026 and TR 1000744 untouched.
+- **Not validated:** browser rendering. **In Progress.**

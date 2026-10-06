@@ -12,7 +12,7 @@ sap.ui.define([
         ["open261OrderDescription", "OrderDescription"], ["open261OrderStatus", "OrderStatus"], ["mvt261Material", "Material"], ["open261MaterialName", "MaterialName"],
         ["mvt261Plant", "Plant"], ["open261Sloc", "StorageLocation"], ["open261RequirementDate", "RequirementDate"],
         ["open261Required", "RequiredQuantity", "Number"], ["open261Withdrawn", "WithdrawnQuantity", "Number"],
-        ["open261Open", "OpenQuantity", "Number"], ["open261Unit", "Unit"], ["open261MovementAllowed", "MovementAllowed", "Boolean"]
+        ["open261Open", "OpenQuantity", "Number"], ["open261ReadyUnits", "ReadyStorageUnits", "Number"], ["open261ReadyQuantity", "ReadyQuantity", "Number"], ["open261Unit", "Unit"], ["open261MovementAllowed", "MovementAllowed", "Boolean"]
     ];
 
     function ymd(oDate) {
@@ -33,6 +33,7 @@ sap.ui.define([
                 dateFrom: null,
                 dateTo: null,
                 includeFullyWithdrawn: false,
+                scanPossibleOnly: true,
                 busy: false,
                 message: "",
                 messageType: "Information",
@@ -49,14 +50,14 @@ sap.ui.define([
             var sUrl = BASE_PATH + "/openItems(plant=" + q(o.plant) + ",material=" + q(o.material) +
                 ",productionOrder=" + q(o.productionOrder) + ",reservation=" + q(o.reservation) +
                 ",dateFrom=" + q(ymd(o.dateFrom)) + ",dateTo=" + q(ymd(o.dateTo)) +
-                ",includeFullyWithdrawn=" + !!o.includeFullyWithdrawn + ")";
+                ",includeFullyWithdrawn=" + !!o.includeFullyWithdrawn + ",scanPossibleOnly=" + !!o.scanPossibleOnly + ")";
 
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
             ODataClient.get(sUrl).then(function (oResult) {
                 oModel.setProperty("/items", oResult.Items || []);
                 oModel.setProperty("/messageType", oResult.Truncated ? "Warning" : "Information");
-                oModel.setProperty("/message", this.getText(oResult.Truncated ? "open261Truncated" : "open261Summary",
+                oModel.setProperty("/message", this.getText(oResult.Truncated ? "open261Truncated" : (o.scanPossibleOnly ? "open261SummaryScan" : "open261Summary"),
                     [oResult.TotalCount, oResult.SapOpenCount]));
             }.bind(this)).catch(function (oError) {
                 oModel.setProperty("/items", []);
@@ -69,7 +70,7 @@ sap.ui.define([
 
         onOpenCycle: function (oEvent) {
             var o = oEvent.getSource().getBindingContext("open261View").getObject();
-            this.getRouter().navTo("wmCycle261", { reservation: o.Reservation, item: o.ReservationItem });
+            this.getRouter().navTo("wmScan261", { reservation: o.Reservation, item: o.ReservationItem });
         },
 
         onExport: function () {

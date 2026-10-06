@@ -25,6 +25,8 @@
                         <Input id="open261Reservation" value="{open261View>/reservation}" maxLength="10" submit=".onGo" />
                         <Label text="{i18n>open261RequirementDate}" labelFor="open261Dates" />
                         <DateRangeSelection id="open261Dates" dateValue="{open261View>/dateFrom}" secondDateValue="{open261View>/dateTo}" />
+                        <Label text="{i18n>open261ScanPossibleOnly}" labelFor="open261ScanPossibleOnly" />
+                        <Switch id="open261ScanPossibleOnly" state="{open261View>/scanPossibleOnly}" change=".onGo" />
                         <Label text="{i18n>open261IncludeWithdrawn}" labelFor="open261IncludeWithdrawn" />
                         <Switch id="open261IncludeWithdrawn" state="{open261View>/includeFullyWithdrawn}" />
                         <Label />
@@ -59,6 +61,7 @@
                         <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Required}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Withdrawn}" /></Column>
                         <Column hAlign="End"><Text text="{i18n>open261Open}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>open261ReadyUnits}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>open261MovementAllowed}" /></Column>
                     </columns>
                     <items>
@@ -73,6 +76,7 @@
                                 <ObjectNumber number="{open261View>RequiredQuantity}" unit="{open261View>Unit}" emphasized="false" />
                                 <ObjectNumber number="{open261View>WithdrawnQuantity}" unit="{open261View>Unit}" emphasized="false" />
                                 <ObjectNumber number="{open261View>OpenQuantity}" unit="{open261View>Unit}" state="{= ${open261View>OpenQuantity} > 0 ? 'None' : 'Warning' }" />
+                                <ObjectNumber number="{open261View>ReadyStorageUnits}" unit="{open261View>ReadyQuantity} {open261View>Unit}" state="{= ${open261View>ScanPossible} ? 'Success' : 'None' }" emphasized="false" />
                                 <ObjectStatus text="{= ${open261View>MovementAllowed} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" state="{= ${open261View>MovementAllowed} ? 'None' : 'Warning' }" />
                             </cells>
                         </ColumnListItem>

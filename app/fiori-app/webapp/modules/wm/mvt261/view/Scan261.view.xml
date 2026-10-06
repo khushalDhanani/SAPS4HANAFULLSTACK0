@@ -1,0 +1,128 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.mvt261.controller.Scan261"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    displayBlock="true">
+
+    <Page id="scan261Page" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <MessageStrip id="scan261Error" visible="{= !!${scan261View>/error} }" text="{scan261View>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
+                <MessageStrip id="scan261Blocked" visible="{= !!${scan261View>/ctx/Blocked} }" text="{i18n>scan261BlockedPrefix} {scan261View>/ctx/BlockReason}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
+                <MessageStrip id="scan261NoSu" visible="{scan261View>/noSuStock}" text="{i18n>scan261NoSuStock}" type="Warning" showIcon="true" class="sapUiSmallMarginBottom" />
+
+                <ObjectHeader
+                    id="scan261Header"
+                    visible="{= !!${scan261View>/ctx} }"
+                    title="{scan261View>/ctx/Reservation} / {scan261View>/ctx/ReservationItem}"
+                    number="{scan261View>/ctx/OpenQuantity}"
+                    numberUnit="{scan261View>/ctx/Unit}"
+                    backgroundDesign="Transparent">
+                    <attributes>
+                        <ObjectAttribute title="{i18n>mvt261Order}" text="{scan261View>/ctx/ProductionOrder} ({scan261View>/ctx/OrderStatus})" />
+                        <ObjectAttribute title="{i18n>mvt261Material}" text="{scan261View>/ctx/Material} {scan261View>/ctx/MaterialName}" />
+                        <ObjectAttribute title="{i18n>mvt261PlantSloc}" text="{scan261View>/ctx/Plant} / {scan261View>/ctx/StorageLocation}" />
+                        <ObjectAttribute title="{i18n>open261Required}" text="{scan261View>/ctx/RequiredQuantity} {scan261View>/ctx/Unit}" />
+                        <ObjectAttribute title="{i18n>open261Withdrawn}" text="{scan261View>/ctx/WithdrawnQuantity} {scan261View>/ctx/Unit}" />
+                    </attributes>
+                    <statuses>
+                        <ObjectStatus
+                            id="scan261State"
+                            title="{i18n>cycle261Status}"
+                            text="{= ${scan261View>/state} === 'Blocked' ? ${i18n>scan261State_Blocked} : ${scan261View>/state} === 'Covered' ? ${i18n>scan261State_Covered} : ${scan261View>/state} === 'Scanning' ? ${i18n>scan261State_Scanning} : ${i18n>scan261State_Loaded} }"
+                            state="{= ${scan261View>/state} === 'Blocked' ? 'Error' : ${scan261View>/state} === 'Covered' ? 'Success' : 'Information' }" />
+                    </statuses>
+                </ObjectHeader>
+
+                <ProgressIndicator
+                    id="scan261Progress"
+                    visible="{= !!${scan261View>/ctx} }"
+                    percentValue="{scan261View>/percent}"
+                    displayValue="{scan261View>/total} / {scan261View>/ctx/OpenQuantity} {scan261View>/ctx/Unit} · {scan261View>/drums} {i18n>scan261Drums} · {scan261View>/deviations} {i18n>scan261Deviations}"
+                    state="{= ${scan261View>/state} === 'Covered' ? 'Success' : 'Information' }"
+                    showValue="true"
+                    class="sapUiSmallMarginTop" />
+
+                <Label text="{i18n>scan261ScanLabel}" labelFor="scan261Input" class="sapUiSmallMarginTop" />
+                <Input
+                    id="scan261Input"
+                    value="{scan261View>/scan}"
+                    placeholder="{i18n>scan261ScanPlaceholder}"
+                    maxLength="20"
+                    submit=".onScan"
+                    enabled="{= !!${scan261View>/ctx} &amp;&amp; !${scan261View>/ctx/Blocked} }"
+                    busy="{scan261View>/busy}" />
+
+                <MessageStrip id="scan261Message" visible="{= !!${scan261View>/message} }" text="{scan261View>/message}" type="{scan261View>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table id="scan261Rows" items="{scan261View>/rows}" noDataText="{i18n>scan261NoRows}" class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title id="scan261RowsTitle" text="{i18n>scan261RowsTitle}" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="scan261ShowCycle" text="{i18n>scan261ShowCycle}" press=".onShowCycle" />
+                            <Button id="scan261ClearAll" text="{i18n>scan261ClearAll}" icon="sap-icon://clear-all" press=".onClearAll" enabled="{= ${scan261View>/rows}.length > 0 }" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column><Text text="{i18n>cycle261StorageUnit}" /></Column>
+                        <Column><Text text="{i18n>cycle261Batch}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>mvt261Quantity}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261TypeBin}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>scan261Notes}" /></Column>
+                        <Column><Text text="{i18n>cycle261Status}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>scan261Remove}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem highlight="{= ${scan261View>Accepted} ? (${scan261View>Warnings}.length || ${scan261View>FifoDeviation} ? 'Warning' : 'Success') : 'Error' }">
+                            <cells>
+                                <ObjectIdentifier title="{scan261View>StorageUnit}" />
+                                <Text text="{scan261View>Batch}" />
+                                <HBox alignItems="Center" justifyContent="End">
+                                    <Input value="{scan261View>Quantity}" type="Number" width="6rem" textAlign="End" visible="{scan261View>Accepted}" change=".onQuantityChange" ariaLabelledBy="scan261RowsTitle" />
+                                    <Text text="{scan261View>Unit}" class="sapUiTinyMarginBegin" visible="{scan261View>Accepted}" />
+                                </HBox>
+                                <Text text="{= ${scan261View>Accepted} ? ${scan261View>StorageType} + ' / ' + ${scan261View>StorageBin} : '' }" />
+                                <Text text="{parts: ['scan261View>Accepted', 'scan261View>Warnings', 'scan261View>StorageLocation', 'scan261View>StorageBin', 'scan261View>Reason', 'scan261View>Value1', 'scan261View>Value2', 'scan261View>FifoDeviation', 'scan261View>OlderUnit', 'scan261View>OlderDate', 'scan261View>OlderQuantity', 'scan261View>Unit'], formatter: '.formatNotes'}" />
+                                <ObjectStatus text="{= !${scan261View>Accepted} ? ${i18n>scan261Rejected_short} : ${scan261View>FifoDeviation} ? ${i18n>scan261FifoDeviation} : ${i18n>scan261Accepted_short} }" state="{= !${scan261View>Accepted} ? 'Error' : ${scan261View>FifoDeviation} ? 'Warning' : 'Success' }" />
+                                <Button icon="sap-icon://decline" type="Transparent" tooltip="{i18n>scan261Remove}" press=".onRemove" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+
+                <MessageStrip id="scan261NoUnitStock" visible="{= ${scan261View>/ctx/NoUnitQuantCount} > 0 }" text="{i18n>scan261NoUnitStockPrefix} {scan261View>/ctx/NoUnitQuantCount} / {scan261View>/ctx/NoUnitQuantity} {scan261View>/ctx/Unit}" type="Information" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table id="scan261Units" items="{scan261View>/units}" noDataText="{i18n>scan261NoUnits}" headerText="{i18n>scan261UnitsTitle}" growing="true" growingThreshold="50" class="sapUiSmallMarginTop">
+                    <columns>
+                        <Column><Text text="{i18n>scan261Fifo}" /></Column>
+                        <Column><Text text="{i18n>cycle261StorageUnit}" /></Column>
+                        <Column><Text text="{i18n>cycle261Batch}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>mvt261Quantity}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261TypeBin}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>scan261GrDate}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>scan261Age}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>scan261BlockStatus}" /></Column>
+                        <Column><Text text="{i18n>cycle261Status}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem highlight="{= ${scan261View>DisplayStatus} === 'Scanned' ? 'Information' : ${scan261View>Suggested} ? 'Success' : 'None' }">
+                            <cells>
+                                <ObjectIdentifier title="{scan261View>Rank}" text="{= ${scan261View>Suggested} ? ${i18n>scan261Suggested} : '' }" />
+                                <Text text="{scan261View>StorageUnit}" />
+                                <Text text="{scan261View>Batch}" />
+                                <ObjectNumber number="{scan261View>Quantity}" unit="{scan261View>Unit}" emphasized="false" />
+                                <Text text="{scan261View>StorageType} / {scan261View>StorageBin}" />
+                                <Text text="{scan261View>GoodsReceiptDate}" />
+                                <Text text="{scan261View>AgeDays}" />
+                                <Text text="{parts: ['scan261View>Reason', 'scan261View>Value1', 'scan261View>Value2'], formatter: '.formatReason'}" />
+                                <ObjectStatus text="{path: 'scan261View>DisplayStatus', formatter: '.formatUnitStatus'}" state="{path: 'scan261View>DisplayStatus', formatter: '.formatUnitState'}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

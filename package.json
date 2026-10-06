@@ -217,6 +217,18 @@
       "salesMaterialTypes": [
         "ZFRT",
         "FERT"
+      ],
+      "mvt261NotReadyBins": [
+        {
+          "storageType": "OH1",
+          "bin": "ONHOLD",
+          "reason": "onHold"
+        },
+        {
+          "storageType": "901",
+          "bin": "WE-ZONE",
+          "reason": "goodsReceiptZone"
+        }
       ]
     }
   },
