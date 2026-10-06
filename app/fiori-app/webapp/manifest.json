@@ -350,6 +350,16 @@
           "name": "wmMvt261",
           "pattern": "wm/mvt261",
           "target": "TargetMvt261"
+        },
+        {
+          "name": "wmHandlingUnitDetail",
+          "pattern": "wm/handling-unit/{hu}:?query:",
+          "target": "TargetHandlingUnitDetail"
+        },
+        {
+          "name": "wmHandlingUnits",
+          "pattern": "wm/handling-unit",
+          "target": "TargetHandlingUnits"
         }
       ],
       "targets": {
@@ -485,6 +495,16 @@
           "id": "mvt261",
           "name": "Mvt261",
           "path": "saps4hana.fiori.modules.wm.mvt261.view"
+        },
+        "TargetHandlingUnits": {
+          "id": "handlingUnits",
+          "name": "HandlingUnits",
+          "path": "saps4hana.fiori.modules.wm.handling-unit.view"
+        },
+        "TargetHandlingUnitDetail": {
+          "id": "handlingUnitDetail",
+          "name": "HandlingUnitDetail",
+          "path": "saps4hana.fiori.modules.wm.handling-unit.view"
         }
       }
     }

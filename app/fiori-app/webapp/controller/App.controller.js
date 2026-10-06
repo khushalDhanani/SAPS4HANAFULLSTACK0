@@ -62,6 +62,10 @@ sap.ui.define([
                 this._updateShell("wmOpen261");
             } else if (sHash.indexOf("wm/mvt261") === 0) {
                 this._updateShell("wmMvt261");
+            } else if (sHash.indexOf("wm/handling-unit/") === 0) {
+                this._updateShell("wmHandlingUnitDetail");
+            } else if (sHash.indexOf("wm/handling-unit") === 0) {
+                this._updateShell("wmHandlingUnits");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
@@ -238,6 +242,14 @@ sap.ui.define([
                     break;
                 case "wmMvt261":
                     sTitle = oBundle ? oBundle.getText("mvt261Title") : "First Goods Issue 261";
+                    bShowNav = true;
+                    break;
+                case "wmHandlingUnits":
+                    sTitle = oBundle ? oBundle.getText("huTitle") : "Handling Unit Cockpit";
+                    bShowNav = true;
+                    break;
+                case "wmHandlingUnitDetail":
+                    sTitle = oBundle ? oBundle.getText("huDetailTitle") : "Handling Unit";
                     bShowNav = true;
                     break;
                 case "ordersDueForDelivery":

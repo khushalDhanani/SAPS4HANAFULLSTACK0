@@ -1,0 +1,84 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.handling-unit.controller.HandlingUnitDetail"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:table="sap.ui.table"
+    xmlns:f="sap.f"
+    displayBlock="true">
+
+    <Page id="huDetailPage" class="sapUiSizeCompact" showHeader="false">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto" busy="{huDetail>/busy}">
+
+                <MessageStrip id="huDetailMessage" visible="{= !!${huDetail>/message} }" text="{huDetail>/message}" type="{huDetail>/messageType}" showIcon="true" class="sapUiSmallMarginBottom" />
+
+                <ObjectHeader
+                    id="huDetailHeader"
+                    title="{= ${i18n>huDetailTitle} + ' ' + ${huDetail>/header/HandlingUnitExternalID} }"
+                    responsive="true"
+                    numberState="None">
+                    <attributes>
+                        <ObjectAttribute title="{i18n>huPackagingMaterial}" text="{= (${huDetail>/header/PackagingMaterial} || '-') + ' ' + ${huDetail>/header/PackagingMaterialType} }" />
+                        <ObjectAttribute title="{i18n>huColPlantSloc}" text="{= (${huDetail>/header/Plant} || '-') + ' / ' + (${huDetail>/header/StorageLocation} || '-') }" />
+                        <ObjectAttribute title="{i18n>huColReference}" text="{= ${huDetail>/header/ReferenceDocument} || '-' }" />
+                        <ObjectAttribute title="{i18n>huCreatedBy}" text="{= ${huDetail>/header/CreatedByUser} + ' · ' + ${huDetail>/header/CreationDateTime} }" />
+                    </attributes>
+                    <statuses>
+                        <ObjectStatus title="{i18n>huColGrossWeight}" text="{= ${huDetail>/header/GrossWeight} + ' ' + ${huDetail>/header/WeightUnit} }" />
+                        <ObjectStatus title="{i18n>huNetWeight}" text="{= ${huDetail>/header/NetWeight} + ' ' + ${huDetail>/header/WeightUnit} }" />
+                        <ObjectStatus title="{i18n>huTareWeight}" text="{= ${huDetail>/header/TareWeight} + ' ' + ${huDetail>/header/WeightUnit} }" />
+                        <ObjectStatus title="{i18n>huGrossVolume}" text="{= ${huDetail>/header/GrossVolume} + ' ' + ${huDetail>/header/VolumeUnit} }" />
+                    </statuses>
+                </ObjectHeader>
+
+                <Panel id="huItemsPanel" headerText="{= ${i18n>huItemsTitle} + ' (' + ${huDetail>/items}.length + ')' }" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                    <Table id="huItemsTable" items="{huDetail>/items}" noDataText="{i18n>huNoItems}">
+                        <columns>
+                            <Column><Text text="{i18n>huItemCol}" /></Column>
+                            <Column><Text text="{i18n>huItemMaterial}" /></Column>
+                            <Column hAlign="End"><Text text="{i18n>huItemQuantity}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huItemReference}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huItemGrDate}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{huDetail>HandlingUnitItem}" />
+                                    <Text text="{huDetail>Material}" />
+                                    <ObjectNumber number="{huDetail>Quantity}" unit="{huDetail>Unit}" emphasized="false" />
+                                    <Text text="{= ${huDetail>ReferenceDocument} + ' / ' + ${huDetail>ReferenceDocumentItem} }" />
+                                    <Text text="{huDetail>GoodsReceiptDate}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <Panel id="huTreePanel" headerText="{i18n>huTreeTitle}" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                    <table:TreeTable
+                        id="huTree"
+                        rows="{path: 'huDetail>/tree', parameters: {arrayNames: ['children']}}"
+                        selectionMode="None"
+                        enableColumnReordering="false"
+                        rowMode="Auto">
+                        <table:columns>
+                            <table:Column width="16rem"><table:label><Text text="{i18n>huTreeNode}" /></table:label>
+                                <table:template><Text text="{huDetail>Name}" wrapping="false" /></table:template>
+                            </table:Column>
+                            <table:Column><table:label><Text text="{i18n>huTreeProduct}" /></table:label>
+                                <table:template><Text text="{= ${huDetail>Product} ? (${huDetail>Product} + ' ' + ${huDetail>ProductName}) : (${huDetail>PackagingMaterial} + ' ' + ${huDetail>PackagingMaterialName}) }" wrapping="false" /></table:template>
+                            </table:Column>
+                            <table:Column hAlign="End"><table:label><Text text="{i18n>huTreeQuantity}" /></table:label>
+                                <table:template><ObjectNumber number="{huDetail>Quantity}" unit="{huDetail>Unit}" emphasized="false" /></table:template>
+                            </table:Column>
+                            <table:Column><table:label><Text text="{i18n>huTreeBatch}" /></table:label>
+                                <table:template><Text text="{huDetail>Batch}" wrapping="false" /></table:template>
+                            </table:Column>
+                        </table:columns>
+                    </table:TreeTable>
+                </Panel>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

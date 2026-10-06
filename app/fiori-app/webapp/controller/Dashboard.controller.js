@@ -320,6 +320,10 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmMvt261");
         },
 
+        onNavigateToHandlingUnits: function () {
+            this.getOwnerComponent().getRouter().navTo("wmHandlingUnits");
+        },
+
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },

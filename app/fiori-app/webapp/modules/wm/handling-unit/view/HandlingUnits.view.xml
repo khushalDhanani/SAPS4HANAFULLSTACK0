@@ -1,0 +1,72 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.handling-unit.controller.HandlingUnits"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="huListPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <form:SimpleForm id="huFilterForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>huFilters}" />
+                        <Label text="{i18n>huPlant}" labelFor="huPlant" />
+                        <Input id="huPlant" value="{huView>/plant}" maxLength="4" submit=".onGo" />
+                        <Label text="{i18n>huStorageLocation}" labelFor="huSloc" />
+                        <Input id="huSloc" value="{huView>/storageLocation}" maxLength="4" submit=".onGo" />
+
+                        <core:Title text="{i18n>huOptions}" />
+                        <Label text="{i18n>huPackagingMaterial}" labelFor="huPkgMat" />
+                        <Input id="huPkgMat" value="{huView>/packagingMaterial}" maxLength="40" submit=".onGo" />
+                        <Label text="{i18n>huExternalId}" labelFor="huExtId" />
+                        <Input id="huExtId" value="{huView>/handlingUnitExternalID}" maxLength="20" submit=".onGo" />
+                        <Label />
+                        <Button id="huGo" text="{i18n>huGo}" type="Emphasized" icon="sap-icon://search" press=".onGo" enabled="{= !${huView>/busy} }" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="huMessage" visible="{= !!${huView>/message} }" text="{huView>/message}" type="{huView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table
+                    id="huTable"
+                    items="{huView>/items}"
+                    busy="{huView>/busy}"
+                    growing="true"
+                    growingThreshold="50"
+                    noDataText="{i18n>huNoData}"
+                    class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title id="huCount" text="{= ${i18n>huListTitle} + ' (' + ${huView>/items}.length + ')' }" level="H2" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column><Text text="{i18n>huColHandlingUnit}" /></Column>
+                        <Column><Text text="{i18n>huColPackaging}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColPlantSloc}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>huColGrossWeight}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColStatus}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColReference}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColCreated}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Navigation" press=".onOpenDetail">
+                            <cells>
+                                <ObjectIdentifier title="{huView>HandlingUnitExternalID}" text="{huView>ParentHandlingUnit}" />
+                                <ObjectIdentifier title="{huView>PackagingMaterial}" text="{huView>PackagingMaterialName}" />
+                                <Text text="{= (${huView>Plant} || '-') + ' / ' + (${huView>StorageLocation} || '-') }" />
+                                <ObjectNumber number="{huView>GrossWeight}" unit="{huView>WeightUnit}" emphasized="false" />
+                                <Text text="{huView>StatusText}" />
+                                <Text text="{huView>ReferenceDocument}" />
+                                <Text text="{= ${huView>CreatedByUser} + ' · ' + ${huView>CreationDateTime} }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

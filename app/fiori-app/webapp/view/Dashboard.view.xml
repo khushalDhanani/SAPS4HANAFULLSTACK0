@@ -658,6 +658,11 @@
                                             <NumericContent icon="sap-icon://list" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tileHandlingUnits" header="{i18n>huTitle}" subheader="{i18n>huTileSub}" press=".onNavigateToHandlingUnits" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>huTileUnit}">
+                                            <NumericContent icon="sap-icon://pallet" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                 </HBox>
                             </VBox>
                         </IconTabFilter>
