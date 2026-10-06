@@ -49,6 +49,30 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-06 18:25 IST — Root Cause Resolution for `VLBAPI 004`, Elimination of Dummy HUs & Putaway Pre-Validation
+
+- **Request**: UI Goods Receipt failed with `POST http://localhost:4004/odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit 422 (Unprocessable Entity)`: `SAP rejected Goods Receipt: [VLBAPI 004]`.
+- **Root Cause & Forensic Findings (client 220)**:
+  1. **Dummy HU Invention Eliminated**: When an Inbound Delivery was passed (or user scanned a delivery number in the StorageUnit field), `GoodsReceiptAdapter` previously fell back to inventing a dummy Handling Unit (`HDL_UNIT_EXID = deliveryNumber`) when `VEKP` had no match, and sent `ITEM_CONTROL.CHG_DELQTY = 'X'`. In SAP `T100`, `VLBAPI 004` indicates *"Error in document &1 item &2 (quantity consistency check)"* caused by packing consistency validation rejecting the non-existent HU.
+  2. **Delivery vs SU Field Normalization**: When `StorageUnit === DeliveryDocument` (or unpadded match), the adapter now normalizes `cleanSU = ''`, guaranteeing delivery numbers are never treated as HUs or queried in `VEKP`.
+  3. **Strict Storage Unit Validation (HTTP 404)**: If an explicit Storage Unit is provided that does not exist in `VEKP`, the adapter immediately rejects with HTTP 404: *"Storage Unit not found: Storage Unit '<SU>' does not exist in SAP warehouse records (VEKP). Please verify the scanned Storage Unit / Handling Unit number."* Dummy HUs are never invented.
+  4. **Putaway Pre-Check (`LIKP-KOSTK === 'A'`)**: Inbound Delivery `0180000077` in plant `1130` / SLoc `CS02` (Warehouse `W12`) requires putaway (`KOSTK = 'A'`). SAP blocks Goods Receipt until transfer orders are created and confirmed. The adapter now checks `KOSTK === 'A'` and fast-fails with HTTP 422 explaining putaway must be confirmed before posting Goods Receipt.
+  5. **Selective Quantity Modification**: `ITEM_CONTROL.CHG_DELQTY = 'X'` is only sent when genuine `huHeaders` exist (isolating individual SU quantity). For plain delivery items, `CHG_DELQTY` is omitted.
+  6. **Enhanced SAP Error Classification**: Added mappings for `VLBAPI 004` (Quantity consistency check), `VLMOVE 029` (Delivery has not yet been put away), `VL 608` (Delivery has not yet been completely processed by WM), and `12 008` (SLED shelf-life exceeded).
+- **Files changed**:
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Delivery normalization, eliminated dummy HU generation, added `KOSTK = 'A'` check, added unknown SU 404 error, and expanded error classification.
+  - `tools/test-gr-su-post-cycle.js`: Added `KOSTK = 'A'` check and error classification mappings.
+  - `test/unit/wm/goodsReceiptService.test.js`: Added unit tests for `KOSTK = 'A'` putaway check, 404 on missing SU, and new error mappings.
+- **Validation Commands Executed & Results**:
+  - `node tools/test-gr-su-post-cycle.js simulate 0180000077`: PASS (gracefully halts with putaway required message: `Putaway required: Inbound Delivery '0180000077' has not yet been put away in the warehouse (Putaway Status KOSTK = 'A')`).
+  - `npx jest test/unit/wm/goodsReceiptService.test.js`: PASS (59/59 tests passed).
+  - `npx jest test/unit/wm/goodsReceiptController.test.js`: PASS (25/25 tests passed).
+  - `npx jest test/unit/wm`: PASS (46 suites / 934 tests passed).
+  - `npm test`: PASS (134 suites / 2175 tests passed).
+  - `npm --prefix app/fiori-app run lint`: PASS (0 errors, 0 warnings).
+  - Live negative test: Unknown SU `9999999999` cleanly rejected with HTTP 404: *"Storage Unit not found: Storage Unit '9999999999' does not exist in SAP warehouse records (VEKP). Please verify the scanned Storage Unit / Handling Unit number."*
+- **Status**: Complete and verified.
+
 ### 2026-10-06 17:55 IST — Adapter Wrapper Enhanced: Delivery Status Pre-Validation, Exact SU Quantity Isolation & Error Classification
 
 - **Request**: "Make Wrapper above rfc and post in SAP."

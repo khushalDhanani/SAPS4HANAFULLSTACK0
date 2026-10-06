@@ -3,11 +3,15 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
     "sap/ui/core/Fragment",
-    "sap/m/MessageToast"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast) {
+    "sap/m/MessageToast",
+    "sap/m/MessageBox",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, HuLabelPrinter) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
+    var MAX_PRINT = 20; // bulk label print: each HU costs a detail (+ serials) read
+    var q = function (s) { return "'" + encodeURIComponent((s || "").trim().replace(/'/g, "''")) + "'"; };
     var FILTER_FIELDS = ["plant", "storageLocation", "packagingMaterial", "handlingUnitExternalID", "status", "shippingPoint"];
     // Value-help input kind -> model path for its suggestion list.
     var VALUE_HELPS = { plant: "/vhPlant", packaging: "/vhPackaging", status: "/vhStatus", shippingpoint: "/vhShippingPoint", storagelocation: "/vhStorageLocation" };
@@ -32,6 +36,7 @@ sap.ui.define([
                 message: "",
                 messageType: "Information",
                 items: [],
+                selectedCount: 0,
                 vhPlant: [],
                 vhPackaging: [],
                 vhStatus: [],
@@ -94,6 +99,7 @@ sap.ui.define([
                 ",handlingUnitExternalID=" + q(o.handlingUnitExternalID) + ",status=" + q(o.status) +
                 ",shippingPoint=" + q(o.shippingPoint) + ")";
 
+            oModel.setProperty("/selectedCount", 0);
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
             ODataClient.get(sUrl).then(function (oResult) {
@@ -107,6 +113,51 @@ sap.ui.define([
             }.bind(this)).then(function () {
                 oModel.setProperty("/busy", false);
             });
+        },
+
+        onSelectionChange: function (oEvent) {
+            this.getModel("huView").setProperty("/selectedCount", oEvent.getSource().getSelectedItems().length);
+        },
+
+        /** Prints one label page per selected handling unit; detail (+ serials) is read per HU, capped at MAX_PRINT. */
+        onPrintSelected: function () {
+            var oModel = this.getModel("huView");
+            var aRows = this.byId("huTable").getSelectedItems().map(function (i) { return i.getBindingContext("huView").getObject(); });
+            if (!aRows.length) {
+                return;
+            }
+            if (aRows.length > MAX_PRINT) {
+                MessageBox.warning(this.getText("huPrintTooMany", [MAX_PRINT]));
+                return;
+            }
+            var oWin = HuLabelPrinter.openWindow(); // before any async work, or the browser blocks the popup
+            if (!oWin) {
+                MessageBox.warning(this.getText("huPrintBlocked"));
+                return;
+            }
+            oModel.setProperty("/busy", true);
+            Promise.all(aRows.map(function (o) {
+                return ODataClient.get(BASE_PATH + "/detail(handlingUnitExternalID=" + q(o.HandlingUnitExternalID) + ",warehouse=" + q(o.Warehouse) + ")")
+                    .then(function (h) {
+                        var p = h.HandlingUnitInternalNumber
+                            ? ODataClient.get(BASE_PATH + "/serials(handlingUnitInternalNumber=" + q(h.HandlingUnitInternalNumber) + ")").catch(function () { return {}; })
+                            : Promise.resolve({});
+                        return p.then(function (s) { return { header: h, items: h.Items || [], serials: s.Items || [] }; });
+                    });
+            }))
+                .then(function (aLabels) { HuLabelPrinter.print(oWin, aLabels, this._labelTexts()); }.bind(this))
+                .catch(function (oError) {
+                    oWin.close();
+                    oModel.setProperty("/messageType", "Error");
+                    oModel.setProperty("/message", (oError && oError.message) || this.getText("huLoadError"));
+                }.bind(this))
+                .then(function () { oModel.setProperty("/busy", false); });
+        },
+
+        _labelTexts: function () {
+            var m = {};
+            HuLabelPrinter.TEXT_KEYS.forEach(function (k) { m[k] = this.getText(k); }, this);
+            return m;
         },
 
         onOpenDetail: function (oEvent) {

@@ -4,8 +4,9 @@ sap.ui.define([
     "saps4hana/fiori/service/ODataClient",
     "sap/ui/core/Fragment",
     "sap/m/MessageToast",
-    "sap/m/MessageBox"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox) {
+    "sap/m/MessageBox",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, HuLabelPrinter) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -38,11 +39,29 @@ sap.ui.define([
                 messageType: "Information",
                 header: {},
                 items: [],
-                tree: []
+                tree: [],
+                serials: []
             }), "huDetail");
             this.getModel("huDetail").setSizeLimit(5000);
             this.setModel(new JSONModel({ material: "", quantity: "", unit: "", batch: "", plant: "", storageLocation: "", busy: false, error: "" }), "huPack");
             this.getRouter().getRoute("wmHandlingUnitDetail").attachPatternMatched(this.onRouteMatched, this);
+        },
+
+        /** Prints the loaded handling unit as a browser-rendered label (barcode, facts, items, serials). */
+        onPrint: function () {
+            var oWin = HuLabelPrinter.openWindow();
+            if (!oWin) {
+                MessageBox.warning(this.getText("huPrintBlocked"));
+                return;
+            }
+            var o = this.getModel("huDetail").getData();
+            HuLabelPrinter.print(oWin, [{ header: o.header, items: o.items, serials: o.serials || [] }], this._labelTexts());
+        },
+
+        _labelTexts: function () {
+            var m = {};
+            HuLabelPrinter.TEXT_KEYS.forEach(function (k) { m[k] = this.getText(k); }, this);
+            return m;
         },
 
         onRouteMatched: function (oEvent) {

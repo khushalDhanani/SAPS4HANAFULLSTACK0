@@ -18,6 +18,8 @@
                     <ToolbarSpacer />
                     <Button id="huPackBtn" icon="sap-icon://add" text="{i18n>huPackItem}" type="Emphasized" press=".onOpenPack"
                         enabled="{= !${huDetail>/busy} &amp;&amp; !!${huDetail>/header/HandlingUnitExternalID} }" />
+                    <Button id="huPrintBtn" icon="sap-icon://print" text="{i18n>huPrint}" press=".onPrint"
+                        enabled="{= !${huDetail>/busy} &amp;&amp; !!${huDetail>/header/HandlingUnitExternalID} }" />
                     <Button id="huDeleteBtn" icon="sap-icon://delete" text="{i18n>huDeleteHu}" type="Reject" press=".onDelete" tooltip="{i18n>huDeleteHint}"
                         enabled="{= !${huDetail>/busy} &amp;&amp; !!${huDetail>/header/HandlingUnitExternalID} &amp;&amp; ${huDetail>/items}.length === 0 }" />
                 </OverflowToolbar>

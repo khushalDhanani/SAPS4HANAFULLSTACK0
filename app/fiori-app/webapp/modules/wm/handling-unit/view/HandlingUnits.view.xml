@@ -58,6 +58,8 @@
                 <Table
                     id="huTable"
                     items="{huView>/items}"
+                    mode="MultiSelect"
+                    selectionChange=".onSelectionChange"
                     busy="{huView>/busy}"
                     growing="true"
                     growingThreshold="50"
@@ -69,6 +71,7 @@
                             <ToolbarSpacer />
                             <Button id="huCreateBtn" icon="sap-icon://add" text="{i18n>huCreate}" type="Emphasized" press=".onOpenCreate" enabled="{= !${huView>/busy} }" />
                             <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
+                            <Button id="huPrintSelected" icon="sap-icon://print" text="{i18n>huPrintSelected}" press=".onPrintSelected" enabled="{= !${huView>/busy} &amp;&amp; ${huView>/selectedCount} > 0 }" />
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
