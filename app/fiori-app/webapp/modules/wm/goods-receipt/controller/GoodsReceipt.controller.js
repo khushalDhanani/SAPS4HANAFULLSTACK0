@@ -70,6 +70,21 @@ sap.ui.define([
             };
             BarcodeScanService.attachHardwareScanner(this._scannerHandler);
 
+            // A list row press is honoured only when a trusted pointer/keyboard event happened just before it.
+            // ponytail: after some page reloads UI5 fired a row press with no user input (source not identified,
+            // WORKSTATUS 2026-10-06 17:38 / 18:10); this blocks it, a real click or Enter always passes.
+            this._lastUserInputTs = 0;
+            this._userInputHandler = function (oEvent) {
+                if (oEvent.isTrusted !== false) {
+                    that._lastUserInputTs = Date.now();
+                }
+            };
+            if (typeof window !== "undefined" && window.addEventListener) {
+                ["pointerdown", "mousedown", "touchstart", "keydown"].forEach(function (sType) {
+                    window.addEventListener(sType, that._userInputHandler, true);
+                });
+            }
+
             // List route shows the open deliveries; detail route resolves one document on its own page
             var oRouter = this.getRouter();
             if (oRouter) {
@@ -106,6 +121,12 @@ sap.ui.define([
         onExit: function () {
             if (this._scannerHandler) {
                 BarcodeScanService.detachHardwareScanner(this._scannerHandler);
+            }
+            if (this._userInputHandler && typeof window !== "undefined" && window.removeEventListener) {
+                var fnHandler = this._userInputHandler;
+                ["pointerdown", "mousedown", "touchstart", "keydown"].forEach(function (sType) {
+                    window.removeEventListener(sType, fnHandler, true);
+                });
             }
             if (this._oSUValueHelpDialog) {
                 this._oSUValueHelpDialog.destroy();
@@ -264,7 +285,7 @@ sap.ui.define([
          * Handle row press in the open Inbound Deliveries list
          */
         onSelectInboundDelivery: function (oEvent) {
-            if (this.getView().getModel("grView").getProperty("/isDetail")) {
+            if (this.getView().getModel("grView").getProperty("/isDetail") || Date.now() - this._lastUserInputTs > 2000) {
                 return;
             }
             var oCtx = oEvent.getSource().getBindingContext("grView");

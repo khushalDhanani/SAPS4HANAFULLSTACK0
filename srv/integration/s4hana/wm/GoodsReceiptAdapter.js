@@ -153,7 +153,8 @@ class GoodsReceiptAdapter {
     if (plant) {
       filter = `Plant eq ${odataString(plant)}`;
     }
-    const query = `${filter ? `$filter=${encodeURIComponent(filter)}&` : ''}$top=50&$format=json`;
+    // No $top: the set is the open-GR worklist and must not be silently truncated; the CAP handler pages on request.
+    const query = `${filter ? `$filter=${encodeURIComponent(filter)}&` : ''}$format=json`;
 
     try {
       const results = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet', query);
