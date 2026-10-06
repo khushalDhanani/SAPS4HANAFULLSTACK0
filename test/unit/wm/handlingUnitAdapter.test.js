@@ -107,6 +107,15 @@ describe('HandlingUnitAdapter.detail', () => {
     await expect(a.detail({ handlingUnitExternalID: '9999999999' })).rejects.toMatchObject({ status: 404 });
   });
 
+  it('turns SAP\'s technical 404 (deleted HU) into a clear 404 message', async () => {
+    // Live shape after a delete (HU 2000020251, 2026-10-06): S4HttpClient rejects with status 404 and SAP's segment text.
+    const client = { get: async () => { throw Object.assign(new Error("S/4HANA GET … failed: HTTP 404 - Resource not found for segment 'HandlingUnitType'"), { status: 404 }); } };
+    const a = new HandlingUnitAdapter({ client });
+    await expect(a.detail({ handlingUnitExternalID: '2000020251' })).rejects.toMatchObject({
+      status: 404, message: 'Handling unit 2000020251 was not found in SAP (it may have been deleted)'
+    });
+  });
+
   it('400 when the handling unit id is missing', async () => {
     const { a } = adapter([]);
     await expect(a.detail({})).rejects.toMatchObject({ status: 400 });

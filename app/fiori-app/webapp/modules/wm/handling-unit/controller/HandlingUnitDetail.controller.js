@@ -177,7 +177,8 @@ sap.ui.define([
                     ODataClient.post(BASE_PATH + "/remove", { handlingUnitExternalID: that._sHu }).then(function () {
                         MessageToast.show(that.getText("huDeleteOk", [that._sHu]));
                         that.getModel("huDetail").setProperty("/busy", false);
-                        that.getRouter().navTo("wmHandlingUnits");
+                        // replace the history entry: browser Back must not reopen the deleted HU (SAP would answer 404)
+                        that.getRouter().navTo("wmHandlingUnits", {}, true);
                     }).catch(that._writeError.bind(that));
                 }
             });

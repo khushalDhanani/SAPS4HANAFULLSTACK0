@@ -42,6 +42,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-06 16:05 IST — HU detail: clear 404 for a deleted / unknown HU; delete no longer leaves the deleted HU in browser history
+
+- **Trigger:** user pasted `Read handling unit 2000020251: S/4HANA GET /sap/opu/odata/sap/API_HANDLING_UNIT/HandlingUnit(HandlingUnitExternalID='2000020251',Warehouse='') failed: HTTP 404 - Resource not found for segment 'HandlingUnitType'`. 2000020251 is the test HU deleted in the UI proof (15:13), so the 404 is correct; the text was SAP's technical OData message passed through unchanged, and the detail route of a deleted HU stayed reachable via browser Back.
+- **Root cause:** `HandlingUnitAdapter.detail()` only mapped an *empty* header to 404; an HTTP 404 from `API_HANDLING_UNIT` went through `_results` as `${context}: ${e.message}`. The UI shows the backend message verbatim in the page MessageStrip (by design), so the segment text reached the user.
+- **Files:** `srv/integration/s4hana/wm/HandlingUnitAdapter.js` (`detail()`: a 404 from the header read → `Handling unit <id> was not found in SAP (it may have been deleted)`; the empty-header case uses the same text), `test/unit/wm/handlingUnitAdapter.test.js` (+1 test with the live 404 shape), `app/fiori-app/webapp/modules/wm/handling-unit/controller/HandlingUnitDetail.controller.js` (`onDelete` success → `navTo("wmHandlingUnits", {}, true)` replaces the history entry so Back does not reopen the deleted HU).
+- **Validation:** `npx jest test/unit/wm/handlingUnitAdapter.test.js test/unit/controller/uiConsistency.test.js` → 33 passed; `npx eslint` adapter + test → clean; `cd app/fiori-app && npx ui5lint "webapp/modules/wm/handling-unit/**"` → no findings; **live (read-only):** `tools/test-hu-bapi-cycle.js read 2000020251` → `adapter.detail()` now fails with 404 "Handling unit 2000020251 was not found in SAP (it may have been deleted)"; `git diff --check` clean; full `npx jest` → **133 suites, 2141 tests passed, 0 failed**.
+- **Result:** PASS. Uncommitted (3 files + this log) for review.
+
 ### 2026-10-06 15:50 IST — Discovery: HU-managed storage locations need an HU goods movement; RFC-enabled path exists (no code change, read-only)
 
 - **Trigger:** user "Do" on the open item "packing into HU-managed storage locations is not supported". Read-only RFC reads (TFDIR, DD40L, DD03L, DD07T, VEKP); nothing written.

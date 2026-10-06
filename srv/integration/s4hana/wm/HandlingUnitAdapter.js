@@ -196,8 +196,12 @@ class HandlingUnitAdapter {
     const warehouse = clean(input.warehouse, 'Warehouse', RE.warehouse);
     const key = `HandlingUnitExternalID='${hu}',Warehouse='${warehouse}'`;
 
-    const h = await this._results(`${DETAIL}(${key})`, { $format: 'json' }, `Read handling unit ${hu}`);
-    if (!h.HandlingUnitExternalID) throw httpError(404, `Handling unit ${hu} not found`);
+    // SAP answers a missing key with HTTP 404 and a technical text ("Resource not found for segment
+    // 'HandlingUnitType'"); say what it means instead — the HU does not exist (any more), e.g. after a delete.
+    const notFound = () => httpError(404, `Handling unit ${hu} was not found in SAP (it may have been deleted)`);
+    const h = await this._results(`${DETAIL}(${key})`, { $format: 'json' }, `Read handling unit ${hu}`)
+      .catch((e) => { if (e.status === 404) throw notFound(); throw e; });
+    if (!h.HandlingUnitExternalID) throw notFound();
 
     // Fetch items with enrichment (MaterialName, Batch, Plant, SLoc) from MONITOR combined items.
     // Fall back to API_HANDLING_UNIT to_HandlingUnitItem if MONITOR items query is empty or fails.
