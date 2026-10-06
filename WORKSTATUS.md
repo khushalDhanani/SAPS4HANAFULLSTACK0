@@ -73,6 +73,16 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - `npx cds compile srv --to csn` → OK.
 - **Result:** PASS.
 
+### 2026-10-06 — Serial numbers on the Handling Unit detail (RFC SER06 → OBJK)
+
+- **Why:** user asked to show a handling unit's serial numbers on the detail page. The serial OData service `UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber` is material/plant/stock-level and has **no HU field**, so it cannot answer "which serials are in HU X". The real linkage is `VEKP → SER06 (VENUM) → OBKNR → OBJK (SERNR, MATNR, EQUNR)`, read over RFC.
+- **Proof (live, client 220):** `2000019997` → monitor `HandlingUnitInternalOrig='0000021192'` → `SER06` OBKNR `48066` → `OBJK` serial `SR-01` (material 8000007113, equipment 10015824), matching the report; `2000019990` → 0 serials. Proven again through the full adapter path.
+- **Files:** `HandlingUnitAdapter.js` (+`RfcClient`, +`HandlingUnitInternalNumber` from the monitor in `detail()`, +`serials()` RFC SER06→OBJK with 40-key OR batching and leading-zero VENUM padding), `srv/wm/handling-unit/service.cds` (+`HandlingUnitInternalNumber`, +`serials` function + types) + `service.js` (+binding), `modules/wm/handling-unit/controller/HandlingUnitDetail.controller.js` (loads serials in parallel with the tree, resilient to an RFC outage), `.../view/HandlingUnitDetail.view.xml` (+Serial Numbers panel, shown only when serials exist), `i18n` (`huSerials*`), `test/unit/wm/handlingUnitAdapter.test.js` (serials mapping / empty-SER06 skip / 400 guard).
+- **Why RFC, not OData:** `API_HANDLING_UNIT` has only HandlingUnit + HandlingUnitItem (no serial); `C_MaterialSerialNumber` has no HU key; the FDP label SerialNumber set is EWM-only and blank for these LE HUs. SER06/OBJK over the existing `RfcClient` is the only path, and it degrades gracefully (detail page still renders if RFC is unavailable).
+- **Validation:** `cds compile` OK; `npx jest` HU adapter + uiConsistency → 23 passed (incl. 3 new serials tests); **live serials proven** (2000019997 = SR-01; 2000019990 = none); `ui5lint` HU module → no findings; full `npx jest` → 2128 passed, only pre-existing `noGiQueueGuard` (Issue 6) fails; `git diff --check` clean.
+- **Not validated:** browser rendering (needs the user's SAP login).
+- **Result:** PASS (backend + static); browser verification pending.
+
 ### 2026-10-06 — Packing Instruction CREATE unblocked (deep insert) and shipped
 
 - **Why:** the earlier create block (`PI_RAP/003 "Incomplete data"`) is resolved. Root cause (user's ABAP trace of `CL_LO_HU_PI_MANAGE`, independently confirmed by me): a PI cannot be created header-only — SAP needs a **deep insert** with ≥1 component, at least one category `P` (load carrier/packaging). `sap:creatable="false"` on the child only blocks a standalone child POST, not composition-create via the header nav.

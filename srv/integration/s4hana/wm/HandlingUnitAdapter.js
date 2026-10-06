@@ -2,6 +2,7 @@
 
 const LOG = require('../logger')('handling-unit-adapter');
 const { S4HttpClient } = require('../S4HttpClient');
+const { RfcClient } = require('../RfcClient');
 const { formatDateToYMD } = require('../../../common/dateUtils');
 
 /**
@@ -35,7 +36,7 @@ const DETAIL_MONITOR_SELECT = [
   'ParentHandlingUnitNumber', 'HandlingUnitProcessStatus', 'HandlingUnitProcessStatusText',
   'HandlingUnitReferenceDocument', 'HandlingUnitReferenceDocName', 'DeliveryDocument',
   'CreatedByUser', 'CreationDateTime', 'LastChangedByUser', 'LastChangeDateTime',
-  'PackingInstructionNumber', 'HandlingUnitProductName'
+  'PackingInstructionNumber', 'HandlingUnitProductName', 'HandlingUnitInternalOrig'
 ].join(',');
 
 const DETAIL_ITEM_SELECT = [
@@ -52,7 +53,8 @@ const RE = {
   char32: /^[0-9A-F]{32}$/,
   origin: /^[A-Z]{1,10}$/,
   status: /^[A-Z0-9]$/,
-  vhKind: /^[A-Z]+$/i
+  vhKind: /^[A-Z]+$/i,
+  venum: /^\d{1,10}$/
 };
 
 /** Filter-bar value helps: the monitor value-help set and its key/text fields. kind is the only input. */
@@ -81,6 +83,7 @@ function clean(value, label, re, mandatory) {
 class HandlingUnitAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
+    this.rfc = options.rfc || new RfcClient();
   }
 
   async _results(path, params, context) {
@@ -222,6 +225,7 @@ class HandlingUnitAdapter {
       HandlingUnitExternalID: strip(h.HandlingUnitExternalID || monitor.HandlingUnitExternalID),
       HandlingUnitIDChar32: monitor.HandlingUnitIDChar32 || '',
       HandlingUnitOrigin: monitor.HandlingUnitOrigin || '',
+      HandlingUnitInternalNumber: monitor.HandlingUnitInternalOrig || '',
       Warehouse: h.Warehouse || monitor.Warehouse || '',
       WarehouseName: monitor.WarehouseName || '',
       PackagingMaterial: strip(h.PackagingMaterial || monitor.PackagingMaterial),
@@ -330,6 +334,36 @@ class HandlingUnitAdapter {
       Items.push({ code, name: s.text, count: await this._count(`HandlingUnitProcessStatus eq '${code}'`) });
     }
     return { Total, Items };
+  }
+
+  /**
+   * Serial numbers assigned to one handling unit, via RFC (no OData path exists: C_MaterialSerialNumber is
+   * material/stock-level, API_HANDLING_UNIT has no serial). Chain proven live 2026-10-06 (client 220):
+   * SER06 (VENUM = HU internal number) -> OBKNR -> OBJK (SERNR, MATNR, EQUNR). Most HUs have none -> [].
+   * ponytail: one RFC read of SER06 plus (when serials exist) one of OBJK; the detail page tolerates an RFC
+   * outage (it catches and shows no serials) rather than failing the whole page.
+   */
+  async serials(input = {}) {
+    const venum = clean(input.handlingUnitInternalNumber, 'Handling unit internal number', RE.venum, true).padStart(10, '0');
+    const read = (table, fields, where) => this.rfc.readTable(table, fields, where).catch((e) => {
+      LOG.error(`Read ${table} serials for HU ${venum}: ${e.message}`);
+      throw httpError(e.status || 502, `Read ${table} serials for HU ${venum}: ${e.message}`);
+    });
+
+    const ser06 = await read('SER06', ['OBKNR', 'VENUM'], [`VENUM = '${venum}'`]);
+    const obknrs = [...new Set(ser06.map((r) => r.OBKNR).filter(Boolean))];
+    if (!obknrs.length) return { Items: [] };
+
+    const Items = [];
+    for (let i = 0; i < obknrs.length; i += 40) {
+      const or = obknrs.slice(i, i + 40).map((o, n) => `${n ? 'OR ' : '( '}OBKNR = '${o}'`);
+      const rows = await read('OBJK', ['OBKNR', 'SERNR', 'MATNR', 'EQUNR'], [...or, ')']);
+      for (const r of rows) {
+        if (!r.SERNR) continue;
+        Items.push({ SerialNumber: r.SERNR, Material: strip(r.MATNR), Equipment: strip(r.EQUNR) });
+      }
+    }
+    return { Items };
   }
 }
 

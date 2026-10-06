@@ -48,7 +48,7 @@ sap.ui.define([
             var oModel = this.getModel("huDetail");
             var q = function (s) { return "'" + encodeURIComponent((s || "").trim().replace(/'/g, "''")) + "'"; };
 
-            oModel.setData({ busy: true, message: "", messageType: "Information", header: {}, items: [], tree: [] });
+            oModel.setData({ busy: true, message: "", messageType: "Information", header: {}, items: [], tree: [], serials: [] });
 
             ODataClient.get(BASE_PATH + "/detail(handlingUnitExternalID=" + q(sHu) + ",warehouse=" + q(oQuery.wh) + ")")
                 .then(function (oResult) {
@@ -58,22 +58,24 @@ sap.ui.define([
                     oModel.setProperty("/messageType", "Error");
                     oModel.setProperty("/message", (oError && oError.message) || this.getText("huLoadError"));
                 }.bind(this)).then(function () {
+                    var oHeader = oModel.getProperty("/header") || {};
                     // char32 the packing tree needs: from the URL query on navigation, else resolved by detail()
                     // from the monitor so a direct link / refresh still loads the tree.
-                    var sChar32 = oQuery.char32 || oModel.getProperty("/header/HandlingUnitIDChar32");
-                    var sOrigin = oQuery.origin || oModel.getProperty("/header/HandlingUnitOrigin") || "ERP";
-                    if (!sChar32) {
-                        oModel.setProperty("/busy", false);
-                        return null;
+                    var sChar32 = oQuery.char32 || oHeader.HandlingUnitIDChar32;
+                    var sOrigin = oQuery.origin || oHeader.HandlingUnitOrigin || "ERP";
+                    var sVenum = oHeader.HandlingUnitInternalNumber;
+                    var aTasks = [];
+                    if (sChar32) {
+                        aTasks.push(ODataClient.get(BASE_PATH + "/hierarchy(handlingUnitIDChar32=" + q(sChar32) + ",handlingUnitOrigin=" + q(sOrigin) + ")")
+                            .then(function (oHier) { oModel.setProperty("/tree", buildTree(oHier.Nodes)); })
+                            .catch(function () { /* tree failure must not blank the page */ }));
                     }
-                    return ODataClient.get(BASE_PATH + "/hierarchy(handlingUnitIDChar32=" + q(sChar32) + ",handlingUnitOrigin=" + q(sOrigin) + ")")
-                        .then(function (oHier) {
-                            oModel.setProperty("/tree", buildTree(oHier.Nodes));
-                        }).catch(function () {
-                            // Header already shown; a tree failure must not blank the page.
-                        }).then(function () {
-                            oModel.setProperty("/busy", false);
-                        });
+                    if (sVenum) {
+                        aTasks.push(ODataClient.get(BASE_PATH + "/serials(handlingUnitInternalNumber=" + q(sVenum) + ")")
+                            .then(function (oSer) { oModel.setProperty("/serials", oSer.Items || []); })
+                            .catch(function () { /* serials via RFC are optional; detail stays usable without them */ }));
+                    }
+                    return Promise.all(aTasks).then(function () { oModel.setProperty("/busy", false); });
                 });
         },
 

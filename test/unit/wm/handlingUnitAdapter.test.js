@@ -167,3 +167,37 @@ describe('HandlingUnitAdapter.statusKpis', () => {
     expect(r.Items).toEqual([{ code: 'A', name: 'Planned', count: 1124 }, { code: 'B', name: 'Active', count: 7588 }]);
   });
 });
+
+describe('HandlingUnitAdapter.serials', () => {
+  // SER06 (VENUM) -> OBKNR -> OBJK (SERNR, MATNR, EQUNR). VENUM is left-padded to 10 before the read.
+  function rfc(ser06, objk) {
+    const calls = [];
+    return {
+      calls,
+      readTable: async (table, fields, where) => {
+        calls.push({ table, where: where.join(' ') });
+        return table === 'SER06' ? ser06 : objk;
+      }
+    };
+  }
+
+  it('maps serials for a handling unit (SER06 -> OBJK)', async () => {
+    const r = rfc([{ OBKNR: '48066', VENUM: '0000021192' }], [{ OBKNR: '48066', SERNR: 'SR-01', MATNR: '000000008000007113', EQUNR: '000000000010015824' }]);
+    const out = await new HandlingUnitAdapter({ rfc: r }).serials({ handlingUnitInternalNumber: '21192' });
+    expect(out.Items).toEqual([{ SerialNumber: 'SR-01', Material: '8000007113', Equipment: '10015824' }]);
+    expect(r.calls[0]).toMatchObject({ table: 'SER06', where: "VENUM = '0000021192'" });
+  });
+
+  it('returns no serials (and skips OBJK) when SER06 is empty', async () => {
+    const r = rfc([], [{ OBKNR: 'x', SERNR: 'NOPE' }]);
+    const out = await new HandlingUnitAdapter({ rfc: r }).serials({ handlingUnitInternalNumber: '21184' });
+    expect(out.Items).toEqual([]);
+    expect(r.calls).toHaveLength(1); // only SER06 was read
+  });
+
+  it('400 on a non-numeric internal number, before any RFC', async () => {
+    const r = rfc([], []);
+    await expect(new HandlingUnitAdapter({ rfc: r }).serials({ handlingUnitInternalNumber: 'abc' })).rejects.toMatchObject({ status: 400 });
+    expect(r.calls).toHaveLength(0);
+  });
+});

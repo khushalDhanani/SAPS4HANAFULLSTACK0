@@ -57,6 +57,7 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
         HandlingUnitExternalID    : String(20);
         HandlingUnitIDChar32      : String(32);
         HandlingUnitOrigin        : String(10);
+        HandlingUnitInternalNumber : String(10);
         Warehouse                 : String(4);
         WarehouseName             : String(40);
         PackagingMaterial         : String(40);
@@ -152,4 +153,11 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
     // Read-only: handling-unit count per process status (for the KPI cards above the filter bar).
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function statusKpis() returns StatusKpiResult;
+
+    type SerialNumber { SerialNumber : String(30); Material : String(40); Equipment : String(18); };
+    type SerialNumberResult { Items : array of SerialNumber; };
+
+    // Read-only: serial numbers assigned to one handling unit (RFC SER06 -> OBJK by HU internal number).
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function serials(handlingUnitInternalNumber : String(10)) returns SerialNumberResult;
 }
