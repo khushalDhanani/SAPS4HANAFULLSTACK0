@@ -1250,7 +1250,6 @@ class GoodsReceiptAdapter {
     const sDeliv = DeliveryDocument ? String(DeliveryDocument).padStart(10, '0') : '';
     const sItem = DeliveryDocumentItem ? String(DeliveryDocumentItem).padStart(6, '0') : '000010';
     const sSU = StorageUnit ? String(StorageUnit).trim() : '';
-    const sSUPadded = (/^\d+$/.test(sSU) && sSU.length < 20) ? sSU.padStart(20, '0') : sSU;
     const sMat = (/^\d+$/.test(Material) && Material.length < 18) ? Material.padStart(18, '0') : Material;
     const isSimulate = !!Simulate;
 
@@ -1258,93 +1257,98 @@ class GoodsReceiptAdapter {
     let huHeaders = [];
     let huItems = [];
 
-    // Query VEKP/VEPO for exact HU structure and pre-validate status if rfc is available
-    if (this.rfc && typeof this.rfc.readTable === 'function') {
-      try {
-        if (sSU) {
-          const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [
-            `EXIDV = '${sSUPadded}' OR EXIDV = '${sSU}'`
-          ]);
-          if (vekpRows.length > 0) {
-            const matchedHU = vekpRows[0];
-            if (matchedHU.STATUS === '0060') {
-              const err = new Error(
-                `Storage Unit already received: Storage Unit '${sSU}' is already in status '0060' (Goods Receipt Posted) in SAP warehouse. Duplicate posting is prevented.`
-              );
-              err.statusCode = 409;
-              throw err;
-            }
-            if (!targetDeliv && matchedHU.VPOBJKEY) {
-              targetDeliv = String(matchedHU.VPOBJKEY).padStart(10, '0');
-            }
-            huHeaders = [{
-              HDL_UNIT_EXID: matchedHU.EXIDV,
-              SHIP_MAT: matchedHU.VHILM || PackagingMaterial || '',
-              DELIV_NUMB: targetDeliv
-            }];
-            huItems = [{
-              HDL_UNIT_EXID_INTO: matchedHU.EXIDV,
-              DELIV_NUMB: targetDeliv,
-              DELIV_ITEM: sItem,
-              MATERIAL: sMat,
-              BATCH: Batch || '',
-              PACK_QTY: String(nQty),
-              BASE_UOM: sUnit
-            }];
-          }
-        }
-      } catch (e) {
-        if (e.statusCode === 409) throw e;
-        LOG.warn(`VEKP lookup warning: ${e.message}`);
-      }
-    }
-
-    if (huHeaders.length === 0 && sSU) {
-      huHeaders = [{
-        HDL_UNIT_EXID: sSUPadded,
-        SHIP_MAT: PackagingMaterial || '',
-        DELIV_NUMB: targetDeliv
-      }];
-      huItems = [{
-        HDL_UNIT_EXID_INTO: sSUPadded,
-        DELIV_NUMB: targetDeliv,
-        DELIV_ITEM: sItem,
-        MATERIAL: sMat,
-        BATCH: Batch || '',
-        PACK_QTY: String(nQty),
-        BASE_UOM: sUnit
-      }];
-    }
+    // Distinguish real Storage Unit from Inbound Delivery number passed in StorageUnit field
+    const isDelivMatch = sSU && targetDeliv && (
+      sSU === targetDeliv ||
+      sSU.replace(/^0+/, '') === targetDeliv.replace(/^0+/, '')
+    );
+    const cleanSU = isDelivMatch ? '' : sSU;
+    const sSUPadded = (/^\d+$/.test(cleanSU) && cleanSU.length < 20) ? cleanSU.padStart(20, '0') : cleanSU;
 
     if (!targetDeliv) {
-      throw new Error(`Inbound Delivery Number could not be resolved for Storage Unit '${sSU}'.`);
+      throw new Error(`Inbound Delivery Number could not be resolved for Goods Receipt.`);
     }
 
-    // Pre-check Inbound Delivery status in LIKP to prevent rejected duplicate posts
+    // Pre-check Inbound Delivery status in LIKP to prevent rejected duplicate posts or putaway violations
     if (this.rfc && typeof this.rfc.readTable === 'function') {
       try {
         const likpRows = await this.rfc.readTable('LIKP', ['VBELN', 'WBSTK', 'KOSTK'], [
           `VBELN = '${targetDeliv}'`
         ]);
-        if (likpRows.length > 0 && likpRows[0].WBSTK === 'C') {
-          let existingDoc = '';
-          try {
-            const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
-              `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
-            ]);
-            if (matdocs.length > 0) {
-              const latest = matdocs[matdocs.length - 1];
-              existingDoc = `${latest.MBLNR}/${latest.MJAHR}`;
-            }
-          } catch (_) {}
-          const errMsg = `Delivery already completed: Goods Receipt has already been completely processed for Inbound Delivery '${targetDeliv}' (Status: Completed)${existingDoc ? `. Existing Material Document: ${existingDoc}` : ''}. Duplicate posting is prevented (SAP HUDIALOG 018).`;
-          const conflictErr = new Error(errMsg);
-          conflictErr.statusCode = 409;
-          throw conflictErr;
+        if (likpRows.length > 0) {
+          const likp = likpRows[0];
+          if (likp.WBSTK === 'C') {
+            let existingDoc = '';
+            try {
+              const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
+                `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
+              ]);
+              if (matdocs.length > 0) {
+                const latest = matdocs[matdocs.length - 1];
+                existingDoc = `${latest.MBLNR}/${latest.MJAHR}`;
+              }
+            } catch (_) {}
+            const errMsg = `Delivery already completed: Goods Receipt has already been completely processed for Inbound Delivery '${targetDeliv}' (Status: Completed)${existingDoc ? `. Existing Material Document: ${existingDoc}` : ''}. Duplicate posting is prevented (SAP HUDIALOG 018).`;
+            const conflictErr = new Error(errMsg);
+            conflictErr.statusCode = 409;
+            throw conflictErr;
+          }
+          if (likp.KOSTK === 'A') {
+            const errMsg = `Putaway required: Inbound Delivery '${targetDeliv}' has not yet been put away in the warehouse (Putaway Status KOSTK = 'A'). In SAP Warehouse Management, transfer orders must be created and confirmed for putaway before Goods Receipt can be posted (SAP message VLMOVE 029 / VLA 307).`;
+            const putawayErr = new Error(errMsg);
+            putawayErr.statusCode = 422;
+            throw putawayErr;
+          }
         }
       } catch (e) {
-        if (e.statusCode === 409) throw e;
+        if (e.statusCode === 409 || e.statusCode === 422) throw e;
         LOG.warn(`LIKP pre-check warning: ${e.message}`);
+      }
+    }
+
+    // Query VEKP/VEPO for exact HU structure and pre-validate status if rfc is available
+    if (cleanSU && this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [
+          `EXIDV = '${sSUPadded}' OR EXIDV = '${cleanSU}'`
+        ]);
+        if (vekpRows.length > 0) {
+          const matchedHU = vekpRows[0];
+          if (matchedHU.STATUS === '0060') {
+            const err = new Error(
+              `Storage Unit already received: Storage Unit '${cleanSU}' is already in status '0060' (Goods Receipt Posted) in SAP warehouse. Duplicate posting is prevented.`
+            );
+            err.statusCode = 409;
+            throw err;
+          }
+          if (!targetDeliv && matchedHU.VPOBJKEY) {
+            targetDeliv = String(matchedHU.VPOBJKEY).padStart(10, '0');
+          }
+          huHeaders = [{
+            HDL_UNIT_EXID: matchedHU.EXIDV,
+            SHIP_MAT: matchedHU.VHILM || PackagingMaterial || '',
+            DELIV_NUMB: targetDeliv
+          }];
+          huItems = [{
+            HDL_UNIT_EXID_INTO: matchedHU.EXIDV,
+            DELIV_NUMB: targetDeliv,
+            DELIV_ITEM: sItem,
+            MATERIAL: sMat,
+            BATCH: Batch || '',
+            PACK_QTY: String(nQty),
+            BASE_UOM: sUnit
+          }];
+        } else {
+          // Explicit Storage Unit was requested but does not exist in VEKP — never invent dummy HUs
+          const notFoundErr = new Error(
+            `Storage Unit not found: Storage Unit '${cleanSU}' does not exist in SAP warehouse records (VEKP). Please verify the scanned Storage Unit / Handling Unit number.`
+          );
+          notFoundErr.statusCode = 404;
+          throw notFoundErr;
+        }
+      } catch (e) {
+        if (e.statusCode === 409 || e.statusCode === 404) throw e;
+        LOG.warn(`VEKP lookup warning: ${e.message}`);
       }
     }
 
@@ -1352,6 +1356,14 @@ class GoodsReceiptAdapter {
 
     let bapiResult = null;
     await this.rfc.session(async (call) => {
+      const itemControl = {
+        DELIV_NUMB: targetDeliv,
+        DELIV_ITEM: sItem
+      };
+      if (huHeaders.length > 0) {
+        itemControl.CHG_DELQTY = 'X';
+      }
+
       const confirmParams = {
         HEADER_DATA: { DELIV_NUMB: targetDeliv },
         HEADER_CONTROL: {
@@ -1365,11 +1377,7 @@ class GoodsReceiptAdapter {
           DLV_QTY: String(nQty),
           DLV_QTY_IMUNIT: String(nQty)
         }],
-        ITEM_CONTROL: [{
-          DELIV_NUMB: targetDeliv,
-          DELIV_ITEM: sItem,
-          CHG_DELQTY: 'X'
-        }]
+        ITEM_CONTROL: [itemControl]
       };
       if (huHeaders.length > 0) {
         confirmParams.HANDLING_UNIT_HEADER = huHeaders;
@@ -1384,6 +1392,14 @@ class GoodsReceiptAdapter {
         let classifiedMsg = `SAP rejected Goods Receipt: [${err.ID} ${err.NUMBER}] ${err.MESSAGE}`;
         if (err.ID === 'HUDIALOG' && err.NUMBER === '018') {
           classifiedMsg = `Delivery status constraint: Inbound Delivery '${targetDeliv}' only allows display mode because Goods Receipt has already been completed (SAP message HUDIALOG 018).`;
+        } else if (err.ID === 'VLBAPI' && err.NUMBER === '004') {
+          classifiedMsg = `Quantity consistency check failed: The quantity for Inbound Delivery '${targetDeliv}' item '${sItem}' is inconsistent with putaway or packing status (SAP message VLBAPI 004).`;
+        } else if (err.ID === 'VLMOVE' && err.NUMBER === '029') {
+          classifiedMsg = `Putaway required: Inbound Delivery '${targetDeliv}' has not yet been put away in the warehouse (SAP message VLMOVE 029).`;
+        } else if (err.ID === 'VL' && err.NUMBER === '608') {
+          classifiedMsg = `Warehouse processing incomplete: Inbound Delivery '${targetDeliv}' has not yet been completely processed by WM (SAP message VL 608).`;
+        } else if (err.ID === '12' && err.NUMBER === '008') {
+          classifiedMsg = `Shelf life expiration date constraint: Material shelf life / expiration check failed (${err.MESSAGE || 'SLED validation failed'}, SAP message 12 008).`;
         } else if (err.ID === 'M7' && err.NUMBER === '006') {
           classifiedMsg = `Master data constraint: Material '${err.MESSAGE_V1 || Material}' is not maintained in plant '${err.MESSAGE_V2 || Plant}' storage location '${err.MESSAGE_V3 || StorageLocation}' (SAP message M7 006).`;
         } else if (err.ID === 'VLA' && err.NUMBER === '307') {
@@ -1417,9 +1433,9 @@ class GoodsReceiptAdapter {
     if (isSimulate) {
       return {
         Success: true,
-        Message: `Goods Receipt simulated successfully in SAP for Storage Unit ${sSU || targetDeliv} (0 errors)`,
+        Message: `Goods Receipt simulated successfully in SAP for ${cleanSU ? 'Storage Unit ' + cleanSU : 'Inbound Delivery ' + targetDeliv} (0 errors)`,
         DeliveryDocument: targetDeliv,
-        StorageUnit: sSU,
+        StorageUnit: cleanSU,
         Quantity: nQty,
         Unit: sUnit
       };
@@ -1460,11 +1476,11 @@ class GoodsReceiptAdapter {
 
     return {
       Success: true,
-      Message: `Goods Receipt posted successfully in SAP for Storage Unit ${sSU || targetDeliv} (Material Document ${matDoc})`,
+      Message: `Goods Receipt posted successfully in SAP for ${cleanSU ? 'Storage Unit ' + cleanSU : 'Inbound Delivery ' + targetDeliv} (Material Document ${matDoc})`,
       MaterialDocument: matDoc,
       MaterialDocumentYear: matDocYear,
       DeliveryDocument: targetDeliv,
-      StorageUnit: sSU,
+      StorageUnit: cleanSU,
       Quantity: nQty,
       Unit: sUnit
     };

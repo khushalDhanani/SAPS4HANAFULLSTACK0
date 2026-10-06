@@ -986,7 +986,12 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const origRfc = GoodsReceiptAdapter.rfc;
             GoodsReceiptAdapter.rfc = {
                 session: jest.fn(async (cb) => cb(mockCall)),
-                readTable: jest.fn().mockResolvedValue([])
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'VEKP') {
+                        return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', STATUS: '0010', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                    }
+                    return [];
+                })
             };
 
             const result = await GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
@@ -1009,13 +1014,19 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
 
         it('should map specific SAP error codes VLA 307, VLA 311, VLA 317 into structured messages', async () => {
             const origRfc = GoodsReceiptAdapter.rfc;
+            const mockVEKP = async (table) => {
+                if (table === 'VEKP') {
+                    return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', STATUS: '0010', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                }
+                return [];
+            };
 
             // VLA 307
             GoodsReceiptAdapter.rfc = {
                 session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
                     RETURN: [{ TYPE: 'E', ID: 'VLA', NUMBER: '307', MESSAGE: 'Putaway qty cannot be less' }]
                 }))),
-                readTable: jest.fn().mockResolvedValue([])
+                readTable: jest.fn().mockImplementation(mockVEKP)
             };
             await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
                 StorageUnit: '2000018143',
@@ -1032,7 +1043,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
                     RETURN: [{ TYPE: 'E', ID: 'VLA', NUMBER: '317', MESSAGE: 'Batch required' }]
                 }))),
-                readTable: jest.fn().mockResolvedValue([])
+                readTable: jest.fn().mockImplementation(mockVEKP)
             };
             await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
                 StorageUnit: '2000018143',
@@ -1049,7 +1060,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
                     RETURN: [{ TYPE: 'E', ID: 'HUDIALOG', NUMBER: '018', MESSAGE: 'Delivery status only allows display mode' }]
                 }))),
-                readTable: jest.fn().mockResolvedValue([])
+                readTable: jest.fn().mockImplementation(mockVEKP)
             };
             await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
                 StorageUnit: '2000018143',
@@ -1066,7 +1077,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
                     RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '006', MESSAGE: 'Material does not exist', MESSAGE_V1: '1000000421', MESSAGE_V2: '1130', MESSAGE_V3: 'HU01' }]
                 }))),
-                readTable: jest.fn().mockResolvedValue([])
+                readTable: jest.fn().mockImplementation(mockVEKP)
             };
             await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
                 StorageUnit: '2000018143',
@@ -1077,6 +1088,120 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Quantity: 200,
                 Unit: 'KG'
             })).rejects.toThrow(/Master data constraint.*M7 006/);
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should fast-fail and reject if Putaway is required (KOSTK = A)', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockSession = jest.fn();
+            GoodsReceiptAdapter.rfc = {
+                session: mockSession,
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'A' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Putaway required.*KOSTK = 'A'/);
+
+            expect(mockSession).not.toHaveBeenCalled();
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should reject with 404 if Storage Unit is not found in VEKP', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000035', WBSTK: 'A', KOSTK: 'C' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '9999999999',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Storage Unit not found.*VEKP/);
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should map VLBAPI 004, VLMOVE 029, VL 608 to structured business messages', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+
+            // VLBAPI 004
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VLBAPI', NUMBER: '004', MESSAGE_V1: '0180000077', MESSAGE_V2: '000010' }]
+                }))),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'C' }];
+                    return [];
+                })
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Quantity consistency check failed.*VLBAPI 004/);
+
+            // VLMOVE 029
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VLMOVE', NUMBER: '029', MESSAGE: 'Delivery has not yet been put away' }]
+                }))),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'C' }];
+                    return [];
+                })
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Putaway required.*VLMOVE 029/);
+
+            // VL 608
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VL', NUMBER: '608', MESSAGE: 'WM processing incomplete' }]
+                }))),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'C' }];
+                    return [];
+                })
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Warehouse processing incomplete.*VL 608/);
 
             GoodsReceiptAdapter.rfc = origRfc;
         });

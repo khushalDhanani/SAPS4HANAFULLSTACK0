@@ -477,7 +477,7 @@ sap.ui.define([
                             oModel.setProperty("/isPosting", true);
 
                             var oPayload = {
-                                StorageUnit: oActive.StorageUnit,
+                                StorageUnit: oActive.StorageUnit || "",
                                 DeliveryDocument: oActive.DeliveryDocument,
                                 DeliveryDocumentItem: oActive.DeliveryDocumentItem,
                                 PurchaseOrder: oActive.PurchaseOrder,

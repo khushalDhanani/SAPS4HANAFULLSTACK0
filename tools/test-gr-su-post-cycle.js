@@ -97,6 +97,10 @@ async function inspectDelivery(delivNo) {
       stop(`Inbound Delivery ${d} is already completely goods-receipted (WBSTK = 'C'). Existing Material Document: ${docInfo}. Duplicate posting is prevented (SAP HUDIALOG 018).`);
     }
 
+    if (data.likp.KOSTK === 'A') {
+      stop(`Inbound Delivery ${d} has not yet been put away in the warehouse (Putaway Status KOSTK = 'A'). In SAP Warehouse Management, transfer orders must be created and confirmed for putaway before Goods Receipt can be posted (SAP message VLMOVE 029 / VLA 307).`);
+    }
+
     const targetQty = targetItems.reduce((acc, p) => acc + (Number(p.VEMNG) || 0), 0);
 
     console.log(`\n== ${isSimulate ? 'SIMULATING' : 'EXECUTING LIVE POST'} for Delivery ${d} ==`);
@@ -153,6 +157,12 @@ async function inspectDelivery(delivNo) {
         let detailMsg = `[${err.ID} ${err.NUMBER}] ${err.MESSAGE}`;
         if (err.ID === 'HUDIALOG' && err.NUMBER === '018') {
           detailMsg = `Inbound Delivery ${d} only allows display mode because Goods Receipt is already completed (HUDIALOG 018).`;
+        } else if (err.ID === 'VLBAPI' && err.NUMBER === '004') {
+          detailMsg = `Quantity consistency check failed for Inbound Delivery ${d} item ${err.MESSAGE_V2 || item.POSNR}. Putaway or packing quantity does not match delivery quantity (VLBAPI 004).`;
+        } else if (err.ID === 'VLMOVE' && err.NUMBER === '029') {
+          detailMsg = `Inbound Delivery ${d} has not yet been put away in the warehouse (VLMOVE 029).`;
+        } else if (err.ID === 'VL' && err.NUMBER === '608') {
+          detailMsg = `Inbound Delivery ${d} has not yet been completely processed by WM (VL 608).`;
         } else if (err.ID === 'M7' && err.NUMBER === '006') {
           detailMsg = `Material ${err.MESSAGE_V1} not maintained in plant ${err.MESSAGE_V2} storage location ${err.MESSAGE_V3} (M7 006).`;
         }
