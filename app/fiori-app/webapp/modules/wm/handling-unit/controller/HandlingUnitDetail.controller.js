@@ -47,15 +47,13 @@ sap.ui.define([
             this.getRouter().getRoute("wmHandlingUnitDetail").attachPatternMatched(this.onRouteMatched, this);
         },
 
-        /** Prints the loaded handling unit as a browser-rendered label (barcode, facts, items, serials). */
+        /** Prints the loaded handling unit as a browser-rendered 4x4 label (via a hidden iframe). */
         onPrint: function () {
-            var oWin = HuLabelPrinter.openWindow();
-            if (!oWin) {
-                MessageBox.warning(this.getText("huPrintBlocked"));
-                return;
-            }
             var o = this.getModel("huDetail").getData();
-            HuLabelPrinter.print(oWin, [{ header: o.header, items: o.items, serials: o.serials || [] }], this._labelTexts());
+            HuLabelPrinter.printRecords([{ header: o.header, items: o.items, serials: o.serials || [] }], this._labelTexts())
+                .catch(function (oError) {
+                    MessageBox.error((oError && oError.message) || this.getText("huLoadError"));
+                }.bind(this));
         },
 
         _labelTexts: function () {

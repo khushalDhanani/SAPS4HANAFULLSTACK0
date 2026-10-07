@@ -71,7 +71,15 @@
                             <ToolbarSpacer />
                             <Button id="huCreateBtn" icon="sap-icon://add" text="{i18n>huCreate}" type="Emphasized" press=".onOpenCreate" enabled="{= !${huView>/busy} }" />
                             <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
-                            <Button id="huPrintSelected" icon="sap-icon://print" text="{i18n>huPrintSelected}" press=".onPrintSelected" enabled="{= !${huView>/busy} &amp;&amp; ${huView>/selectedCount} > 0 }" />
+                            <MenuButton id="huPrintMenu" icon="sap-icon://print" text="{i18n>huPrintMenu}" enabled="{= !${huView>/busy} &amp;&amp; ${huView>/items}.length > 0 }">
+                                <menu>
+                                    <Menu>
+                                        <MenuItem text="{i18n>huPrintAll}" icon="sap-icon://print" press=".onPrintAll" />
+                                        <MenuItem text="{i18n>huPrintSelectedOnly}" icon="sap-icon://print" press=".onPrintSelected" enabled="{= ${huView>/selectedCount} > 0 }" />
+                                        <MenuItem text="{i18n>huPrintCurrentPage}" icon="sap-icon://print" press=".onPrintCurrentPage" />
+                                    </Menu>
+                                </menu>
+                            </MenuButton>
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
