@@ -54,6 +54,25 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-07 17:45 IST — Movement Type 261: Root Cause & Resolution of Warehouse Mismatch (W13 vs W01)
+
+Investigated SAP error `HTTP 400 - Transmitted warehouse number is W13; determined warehouse number is W01` on reservation `418011/2`:
+
+- **Root Cause Analysis:**
+  - Production Order `1002034` / Reservation `418011` was stored with `RESB-LGNUM = 'W13'`.
+  - Configuration table `T320` maps Plant `1120` / SLoc `CS01` to Warehouse `W01`.
+  - During posting, SAP's standard material document engine compares the reservation's transmitted warehouse number (`W13`) against the determined storage location warehouse number (`W01`), rejecting the post with HTTP 400.
+- **Resolution & Fully Aligned Candidate:**
+  - Scanned for reservation items where `RESB-LGNUM == T320-LGNUM`.
+  - Discovered **`490788/2`**: Order `1002668` (REL), Material `1000000159` (exact same material), Plant `1120`, SLoc `CS01`.
+    - `RESB-LGNUM = 'W01'` matches `T320-LGNUM = 'W01'` (0 mismatch).
+    - `LQUA` in interim bin `IP5 / 0001002668` (Warehouse `W01`) holds `2600.000 KG` with batch **`IN26001003`**.
+    - `MCHB` unrestricted stock has `10,400.000 KG` for batch `IN26001003`.
+    - All cycle steps (`Availability`, `WmStaging`, `Reservation`, `ProductionOrder`) are `done`, `GoodsIssue: open`.
+  - Also identified **`490788/4`** (`1000000318`, 2145 KG, batch `IN26001010` in `IP5/0001002668` W01) and **`520615/1`** (`3000000415`, 100 KG, batch `INWS260004` in `GFL/0002000623` W12).
+- **Validation:**
+  - Verified `T320`, `RESB-LGNUM`, and `LQUA` records over RFC; `git diff --check` clean.
+
 ### 2026-10-07 17:35 IST — Movement Type 261: Postability Discovery & Interim Bin Root Cause Analysis
 
 Investigated the SAP posting rejection `HTTP 400 - Available stock shortfall of 480.000 KG in interim storage bin` on reservation `480960/1` and scanned all open 261 reservation items across SAP S/4HANA (client 220) to identify actually postable items.
