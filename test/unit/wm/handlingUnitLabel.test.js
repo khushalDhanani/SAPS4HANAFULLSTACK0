@@ -186,7 +186,7 @@ describe('Barcode.bars (geometry shared with toSvg and the PDF renderer)', () =>
 describe('HuLabelPdf.generate (size-aware mm PDF, one page per label)', () => {
     const labels = (n) => Printer.prepare(Array.from({ length: n }, (_, i) => ({ huNumber: String(2000019990 + i), materialName: 'Pump Assembly 24V Industrial Grade High-Flow ' + i, createdDate: '2026-10-06', srNo: 'SR-' + i }))).labels;
     it('makes one page per label at the chosen size in mm (no blank trailing page)', () => {
-        [['A', 50, 25], ['B', 100, 50], ['C', 150, 100], ['D', 200, 100]].forEach(([k, w, h]) => {
+        [['A', 50, 25], ['B', 100, 50], ['E', 100, 100], ['C', 150, 100], ['D', 200, 100]].forEach(([k, w, h]) => {
             const doc = Pdf.generate(jsPDF, labels(3), k);
             expect(doc.getNumberOfPages()).toBe(3);
             const p = doc.internal.pageSize;
@@ -202,7 +202,15 @@ describe('HuLabelPdf.generate (size-aware mm PDF, one page per label)', () => {
     it('draws a label with blank srNo / "-" fallbacks without throwing (every size)', () => {
         const clean = Printer.prepare([{ huNumber: '0012' }]).labels; // no material/date/serial
         expect(clean[0]).toMatchObject({ huNumber: '0012', materialName: '-', createdDate: '-', srNo: '' });
-        ['A', 'B', 'C', 'D'].forEach((k) => expect(() => Pdf.generate(jsPDF, clean, k)).not.toThrow());
+        ['A', 'B', 'E', 'C', 'D'].forEach((k) => expect(() => Pdf.generate(jsPDF, clean, k)).not.toThrow());
+    });
+    it('truncates an overlong serial / long material to the box so it cannot overrun (every size)', () => {
+        const labels = Printer.prepare([{ huNumber: '2000050002', materialName: 'M'.repeat(152), createdDate: '2026-10-06', srNo: 'S'.repeat(40) }]).labels;
+        ['A', 'B', 'E', 'C', 'D'].forEach((k) => {
+            const doc = Pdf.generate(jsPDF, labels, k);
+            expect(doc.getNumberOfPages()).toBe(1); // one page, no overflow page
+            expect(() => doc.output('arraybuffer')).not.toThrow();
+        });
     });
     it('download([]) rejects (nothing to download)', async () => {
         await expect(Pdf.download([], 'x.pdf')).rejects.toThrow(/No labels/);

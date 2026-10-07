@@ -8,6 +8,18 @@ sap.ui.define([
     function ascentMm(pt) { return pt * PT2MM * 0.8; }      // ~cap/ascent fraction for Helvetica
     function lineHeightMm(pt) { return pt * PT2MM * 1.15; }  // same 1.15 factor as the HTML line-height
 
+    /**
+     * Truncate sText (at the font already set on doc) to at most wMm, adding "…" when it would overflow.
+     * The HTML label clips single-line fields with overflow:hidden; jsPDF has no clip box, so a pathological
+     * value (e.g. a very long serial) would otherwise overrun its half and collide with the neighbour field.
+     */
+    function fitText(doc, sText, wMm) {
+        if (!sText || doc.getTextWidth(sText) <= wMm) { return sText; }
+        var s = String(sText);
+        while (s.length > 1 && doc.getTextWidth(s + "…") > wMm) { s = s.slice(0, -1); }
+        return s + "…";
+    }
+
     var _pJsPdf = null;
 
     /** Lazily load the locally bundled jsPDF (UMD global `jspdf.jsPDF`) on first use; never on app startup. */
@@ -55,14 +67,16 @@ sap.ui.define([
             doc.text(d.huNumber, L.page.wMm / 2, L.huNumber.yTop + ascentMm(f.huNumber), { align: "center" });
         }
 
-        // CREATED DATE (left) + SR NO (right); each omitted when blank (mirrors the HTML label)
+        // CREATED DATE (left) + SR NO (right); each omitted when blank (mirrors the HTML label).
+        // Values are fit to their half-width so a long serial can't overrun into the neighbour field.
+        var halfW = L.innerW / 2;
         if (d.createdDate) {
             if (L.showCaptions && L.meta.captionY !== null) { doc.setFont("helvetica", "bold").setFontSize(f.caption); doc.text("CREATED DATE", L.meta.date.x, L.meta.captionY + ascentMm(f.caption)); }
-            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(d.createdDate, L.meta.date.x, L.meta.valueY + ascentMm(f.meta));
+            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(fitText(doc, d.createdDate, halfW), L.meta.date.x, L.meta.valueY + ascentMm(f.meta));
         }
         if (d.srNo) {
             if (L.showCaptions && L.meta.captionY !== null) { doc.setFont("helvetica", "bold").setFontSize(f.caption); doc.text("SR NO", L.meta.srNo.x, L.meta.captionY + ascentMm(f.caption), { align: "right" }); }
-            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(d.srNo, L.meta.srNo.x, L.meta.valueY + ascentMm(f.meta), { align: "right" });
+            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(fitText(doc, d.srNo, halfW), L.meta.srNo.x, L.meta.valueY + ascentMm(f.meta), { align: "right" });
         }
     }
 

@@ -10,10 +10,10 @@ global.sap.ui.define = (deps, f) => { Layout = f(Barcode); };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelLayout.js');
 
 describe('HuLabelLayout config', () => {
-    it('exposes four sizes A-D with B as the default', () => {
-        expect(Layout.ORDER).toEqual(['A', 'B', 'C', 'D']);
+    it('exposes the stock sizes (A,B,E,C,D) with B as the default', () => {
+        expect(Layout.ORDER).toEqual(['A', 'B', 'E', 'C', 'D']);
         expect(Layout.DEFAULT).toBe('B');
-        expect(Object.keys(Layout.SIZES)).toEqual(['A', 'B', 'C', 'D']);
+        expect(Object.keys(Layout.SIZES)).toEqual(['A', 'B', 'E', 'C', 'D']);
     });
     it('byKey falls back to the default for an unknown key', () => {
         expect(Layout.byKey('A')).toBe('A');
@@ -23,11 +23,12 @@ describe('HuLabelLayout config', () => {
     it('each size descriptor carries its mm dims and i18n keys', () => {
         expect(Layout.SIZES.A).toMatchObject({ key: 'A', widthMm: 50, heightMm: 25, nameKey: 'huSizeA', descKey: 'huSizeADesc' });
         expect(Layout.SIZES.D).toMatchObject({ key: 'D', widthMm: 200, heightMm: 100, nameKey: 'huSizeD', descKey: 'huSizeDDesc' });
+        expect(Layout.SIZES.E).toMatchObject({ key: 'E', widthMm: 100, heightMm: 100, nameKey: 'huSizeE', descKey: 'huSizeEDesc' });
     });
 });
 
 describe('HuLabelLayout.layout (geometry matches the spec table)', () => {
-    const PAGES = { A: [50, 25], B: [100, 50], C: [150, 100], D: [200, 100] };
+    const PAGES = { A: [50, 25], B: [100, 50], E: [100, 100], C: [150, 100], D: [200, 100] };
     it('page size, padding and inner box per size', () => {
         Object.keys(PAGES).forEach((k) => {
             const L = Layout.layout(k);
@@ -44,6 +45,16 @@ describe('HuLabelLayout.layout (geometry matches the spec table)', () => {
         expect(Layout.layout('A').fonts).toEqual({ caption: 0, material: 6, huNumber: 8, meta: 6 });
         // D reuses the high huNumber ratio on a 100mm label -> 32pt distance number
         expect(Layout.layout('D').fonts.huNumber).toBe(32);
+        // E square 100mm tall: same vertical scale as C
+        expect(Layout.layout('E').fonts).toEqual({ caption: 7, material: 11, huNumber: 18, meta: 11 });
+    });
+    it('E is square (100x100), narrower than C, and points at C (wider) when too dense', () => {
+        const e = Layout.layout('E');
+        expect([e.page.wMm, e.page.hMm]).toEqual([100, 100]);
+        expect(e.barcode.w).toBe(90); // innerW = 100 - 2*5
+        expect(e.barcode.w).toBeLessThan(Layout.layout('C').barcode.w); // C (140) is wider -> a valid next-larger
+        expect(e.nextLarger).toBe('C');
+        expect(e.material.maxLines).toBe(3);
     });
     it('A has no captions and one material line; C has three', () => {
         expect(Layout.layout('A').showCaptions).toBe(false);

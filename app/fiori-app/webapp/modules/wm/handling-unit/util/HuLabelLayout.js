@@ -12,7 +12,8 @@ sap.ui.define([
         A: { caption: 0, material: 0.24, huNumber: 0.32, meta: 0.24 },
         B: { caption: 0.12, material: 0.18, huNumber: 0.26, meta: 0.18 },
         C: { caption: 0.07, material: 0.11, huNumber: 0.18, meta: 0.11 },
-        D: { caption: 0.07, material: 0.11, huNumber: 0.32, meta: 0.09 } // D: big distance-reading HU number
+        D: { caption: 0.07, material: 0.11, huNumber: 0.32, meta: 0.09 }, // D: big distance-reading HU number
+        E: { caption: 0.07, material: 0.11, huNumber: 0.18, meta: 0.11 } // E: square, same vertical scale as C
     };
 
     // Baked per-size geometry (mm). yTop values are the top of each block; captions sit at *.yTop / meta.captionY.
@@ -20,10 +21,12 @@ sap.ui.define([
         A: { widthMm: 50, heightMm: 25, pad: 1.5, showCaptions: false, materialYTop: 1.5, materialLines: 1, barcodeYTop: 5, barcodeH: 10, huNumberYTop: 15.5, metaCaptionY: null, metaValueY: 19, minBarMm: 0.25, nextLarger: "B" },
         B: { widthMm: 100, heightMm: 50, pad: 3, showCaptions: true, materialYTop: 6, materialLines: 2, barcodeYTop: 16, barcodeH: 18, huNumberYTop: 35, metaCaptionY: 42, metaValueY: 44, minBarMm: 0.25, nextLarger: "C" },
         C: { widthMm: 150, heightMm: 100, pad: 5, showCaptions: true, materialYTop: 9, materialLines: 3, barcodeYTop: 27, barcodeH: 37, huNumberYTop: 66, metaCaptionY: 77, metaValueY: 81, minBarMm: 0.33, nextLarger: "D" },
-        D: { widthMm: 200, heightMm: 100, pad: 5, showCaptions: true, materialYTop: 9, materialLines: 2, barcodeYTop: 23, barcodeH: 45, huNumberYTop: 69, metaCaptionY: 83, metaValueY: 86, minBarMm: 0.40, nextLarger: null }
+        D: { widthMm: 200, heightMm: 100, pad: 5, showCaptions: true, materialYTop: 9, materialLines: 2, barcodeYTop: 23, barcodeH: 45, huNumberYTop: 69, metaCaptionY: 83, metaValueY: 86, minBarMm: 0.40, nextLarger: null },
+        // E Square 100x100: same width class as B (innerW 90), so a barcode too dense for it points at C (wider), not back to B.
+        E: { widthMm: 100, heightMm: 100, pad: 5, showCaptions: true, materialYTop: 9, materialLines: 3, barcodeYTop: 27, barcodeH: 37, huNumberYTop: 66, metaCaptionY: 77, metaValueY: 81, minBarMm: 0.25, nextLarger: "C" }
     };
 
-    var ORDER = ["A", "B", "C", "D"];
+    var ORDER = ["A", "B", "E", "C", "D"];
     var DEFAULT = "B";
 
     // i18n-ready size descriptors for the picker dialog.
