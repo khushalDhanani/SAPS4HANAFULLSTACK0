@@ -18,6 +18,7 @@ module.exports = class HandlingUnitService extends cds.ApplicationService {
     this.on('valueHelp', run((data) => adapter.valueHelp(data)));
     this.on('statusKpis', run(() => adapter.statusKpis()));
     this.on('serials', run((data) => adapter.serials(data)));
+    this.on('labels', run((data) => adapter.labels(data)));
     this.on('create', run((data) => adapter.create(data)));
     this.on('pack', run((data) => adapter.pack(data)));
     this.on('unpack', run((data) => adapter.unpack(data)));

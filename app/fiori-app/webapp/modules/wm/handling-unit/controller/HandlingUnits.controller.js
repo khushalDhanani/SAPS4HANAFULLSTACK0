@@ -6,8 +6,9 @@ sap.ui.define([
     "sap/m/MessageToast",
     "sap/m/MessageBox",
     "sap/m/BusyDialog",
-    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuBatchReader"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuBatchReader) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -114,48 +115,50 @@ sap.ui.define([
             return aItems.map(function (i) { return i.getBindingContext("huView").getObject(); });
         },
 
-        /** Reads detail (+ serials) for one HU row -> a { header, items, serials } label; serials/materialName live only on the HU, not the list row. */
-        _readLabel: function (o) {
-            return ODataClient.get(BASE_PATH + "/detail(handlingUnitExternalID=" + q(o.HandlingUnitExternalID) + ",warehouse=" + q(o.Warehouse) + ")")
-                .then(function (h) {
-                    var p = h.HandlingUnitInternalNumber
-                        ? ODataClient.get(BASE_PATH + "/serials(handlingUnitInternalNumber=" + q(h.HandlingUnitInternalNumber) + ")").catch(function () { return {}; })
-                        : Promise.resolve({});
-                    return p.then(function (s) { return { header: h, items: h.Items || [], serials: s.Items || [] }; });
-                });
-        },
-
-        _withTimeout: function (oPromise, nMs) {
-            return new Promise(function (resolve, reject) {
-                var t = setTimeout(function () { reject(new Error("Read timed out after " + (nMs / 1000) + "s")); }, nMs);
-                oPromise.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
-            });
-        },
-
-        /** One HU read with a timeout and a single retry; a second failure rejects (the whole job then aborts, nothing prints). */
-        _readLabelRetry: function (o) {
+        /** Fast path: one batched labels() action returns materialName + srNo for every chosen HU (no per-HU detail/serials). */
+        _readLabelRecords: function (aRows, fnProgress, fnCancelled) {
             var self = this;
-            return self._withTimeout(self._readLabel(o), READ_TIMEOUT)
-                .catch(function () { return self._withTimeout(self._readLabel(o), READ_TIMEOUT); });
-        },
-
-        /** Reads all rows in chunks of READ_CHUNK (bounded concurrency); reports progress and stops when fnCancelled() turns true. */
-        _readLabels: function (aRows, fnProgress, fnCancelled) {
-            var self = this;
-            var aOut = [];
-            function next(i) {
-                if (fnCancelled() || i >= aRows.length) { return Promise.resolve(aOut); }
-                return Promise.all(aRows.slice(i, i + READ_CHUNK).map(self._readLabelRetry.bind(self)))
-                    .then(function (a) {
-                        aOut = aOut.concat(a);
-                        fnProgress(aOut.length);
-                        return next(i + READ_CHUNK);
+            var aIds = aRows.map(function (o) { return o.HandlingUnitExternalID; });
+            return ODataClient.post(BASE_PATH + "/labels", { handlingUnitExternalIDs: aIds })
+                .then(function (oResult) {
+                    var aItems = (oResult && oResult.Items) || [];
+                    if (!aItems.length) { return self._fallback(aRows, fnProgress, fnCancelled, "labels() returned no data"); }
+                    var mByHu = {};
+                    aItems.forEach(function (x) { mByHu[x.HandlingUnitExternalID] = x; });
+                    fnProgress(aRows.length);
+                    return aRows.map(function (o) {
+                        var l = mByHu[o.HandlingUnitExternalID] || {};
+                        return { huNumber: o.HandlingUnitExternalID, createdDate: o.CreationDateTime, materialName: l.MaterialName || "", srNo: l.SerialNumber || "" };
                     });
-            }
-            return next(0);
+                })
+                .catch(function (oErr) { return self._fallback(aRows, fnProgress, fnCancelled, (oErr && oErr.message) || "labels() request failed"); });
         },
 
-        /** Reads every chosen HU (progress + cancel + timeout/retry), validates, then prints one 4x4 page per valid HU via a hidden iframe. */
+        /** Fallback is never silent: warn with the reason and tell the user before the slow per-HU path runs. */
+        _fallback: function (aRows, fnProgress, fnCancelled, sReason) {
+            // eslint-disable-next-line no-console
+            console.warn("[HU print] fast label service unavailable (" + sReason + "); using slow per-HU mode");
+            MessageToast.show(this.getText("huPrintFallback"));
+            return this._readLabelRecordsFallback(aRows, fnProgress, fnCancelled);
+        },
+
+        /** Fallback (labels() unavailable): the old per-HU detail(+serials) reads, chunked, then reduced to records. */
+        _readLabelRecordsFallback: function (aRows, fnProgress, fnCancelled) {
+            var fnRead = function (o) {
+                return ODataClient.get(BASE_PATH + "/detail(handlingUnitExternalID=" + q(o.HandlingUnitExternalID) + ",warehouse=" + q(o.Warehouse) + ")")
+                    .then(function (h) {
+                        var p = h.HandlingUnitInternalNumber
+                            ? ODataClient.get(BASE_PATH + "/serials(handlingUnitInternalNumber=" + q(h.HandlingUnitInternalNumber) + ")").catch(function () { return {}; })
+                            : Promise.resolve({});
+                        return p.then(function (s) { return { header: h, items: h.Items || [], serials: s.Items || [] }; });
+                    });
+            };
+            return HuBatchReader.read(aRows, fnRead, {
+                chunk: READ_CHUNK, timeoutMs: READ_TIMEOUT, retries: 1, onProgress: fnProgress, isCancelled: fnCancelled
+            }).then(function (aWrappers) { return aWrappers.map(HuLabelPrinter.toRecord); });
+        },
+
+        /** Reads every chosen HU (progress + cancel), validates, then prints one 4x4 page per valid HU via a hidden iframe. */
         _printRows: function (aRows) {
             if (!aRows.length) { return; }
             var self = this;
@@ -169,19 +172,20 @@ sap.ui.define([
             });
             oDialog.open();
             var tFetch = performance.now();
-            this._readLabels(aRows, function (nDone) {
+            this._readLabelRecords(aRows, function (nDone) {
                 oDialog.setText(self.getText("huPrintProgress", [nDone, nTotal]));
             }, function () { return bCancel; })
-                .then(function (aWrappers) {
+                .then(function (aRecords) {
                     oDialog.close();
                     if (bCancel) { MessageToast.show(self.getText("huPrintCancelled")); return undefined; }
                     // eslint-disable-next-line no-console
                     console.log("[HU print] fetch " + Math.round(performance.now() - tFetch) + "ms for " + nTotal + " HUs");
+                    var oPrep = HuLabelPrinter.prepare(aRecords);
                     var tPrint = performance.now();
-                    return HuLabelPrinter.printRecords(aWrappers, self._labelTexts()).then(function (oRes) {
+                    return HuLabelPrinter.print(oPrep.labels, self._labelTexts()).then(function () {
                         // eslint-disable-next-line no-console
-                        console.log("[HU print] validate+render+dialog " + Math.round(performance.now() - tPrint) + "ms, " + oRes.printed + " labels");
-                        self._showPrintSummary(oRes, nTotal);
+                        console.log("[HU print] validate+render+dialog " + Math.round(performance.now() - tPrint) + "ms, " + oPrep.labels.length + " labels");
+                        self._showPrintSummary({ printed: oPrep.labels.length, skipped: oPrep.skipped, duplicatesRemoved: oPrep.duplicatesRemoved }, nTotal);
                     });
                 })
                 .catch(function (oError) {

@@ -161,6 +161,14 @@ service HandlingUnitService @(path: '/odata/v4/handling-unit') {
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function serials(handlingUnitInternalNumber : String(10)) returns SerialNumberResult;
 
+    type LabelRow { HandlingUnitExternalID : String(20); MaterialName : String(40); SerialNumber : String(30); };
+    type LabelResult { Items : array of LabelRow; };
+
+    // Read-only: label fields (first item material name + first serial number) for many HUs in one batched join -
+    // the bulk equivalent of detail() + serials() per HU, used by label printing. Action so the id array rides the body.
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action labels(handlingUnitExternalIDs : array of String(20)) returns LabelResult;
+
     // Committed state read back from VEKP / VEPO after a write. Deleted is true only after remove().
     type HandlingUnitWriteResult {
         HandlingUnitExternalID     : String(20);

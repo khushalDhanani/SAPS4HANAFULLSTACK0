@@ -211,6 +211,84 @@ describe('HandlingUnitAdapter.serials', () => {
   });
 });
 
+describe('HandlingUnitAdapter.labels (batched material + first serial join)', () => {
+  // Combined-item rows (I_HandlingUnitItemCombined) + SER06/OBJK, as the live join returns them.
+  const items = [
+    { HandlingUnitExternalID: 'A', HandlingUnitItem: '000002', Material: 'M2', MaterialName: 'Valve', HandlingUnitNumberOfSerialNumb: '0', HandlingUnitInternalID: '0000000001' },
+    { HandlingUnitExternalID: 'A', HandlingUnitItem: '000001', Material: 'M1', MaterialName: 'Pump', HandlingUnitNumberOfSerialNumb: '0', HandlingUnitInternalID: '0000000001' },
+    { HandlingUnitExternalID: 'B', HandlingUnitItem: '000001', Material: 'M3', MaterialName: 'Motor', HandlingUnitNumberOfSerialNumb: '1', HandlingUnitInternalID: '0000021496' }
+  ];
+  function build() {
+    const calls = { client: [], rfc: [] };
+    const client = {
+      get: async (path, { query } = {}) => {
+        calls.client.push({ path, query: query ? decodeURIComponent(query) : '' });
+        return { data: { d: { results: items } } };
+      }
+    };
+    const rfc = {
+      readTable: async (table, fields, where) => {
+        calls.rfc.push({ table, where: where.join(' ') });
+        if (table === 'SER06') return [{ OBKNR: 'OB1', VENUM: '0000021496' }];
+        return [{ OBKNR: 'OB1', SERNR: 'SR-B' }]; // OBJK
+      }
+    };
+    return { a: new HandlingUnitAdapter({ client, rfc }), calls };
+  }
+
+  it('returns first-item material (+N more) and first serial, reading serials only for HUs that have them', async () => {
+    const { a, calls } = build();
+    const out = await a.labels({ handlingUnitExternalIDs: ['A', 'B', 'C'] });
+    expect(out.Items).toEqual([
+      { HandlingUnitExternalID: 'A', MaterialName: 'Pump +1 more', SerialNumber: '' }, // first by item no., 2 items
+      { HandlingUnitExternalID: 'B', MaterialName: 'Motor', SerialNumber: 'SR-B' },     // serial from SER06->OBJK
+      { HandlingUnitExternalID: 'C', MaterialName: '', SerialNumber: '' }               // no items
+    ]);
+    // one batched combined-item query (<=50 ids), filtered by the HU ids
+    expect(calls.client).toHaveLength(1);
+    expect(calls.client[0].path).toContain('I_HandlingUnitItemCombined');
+    expect(calls.client[0].query).toContain("HandlingUnitExternalID eq 'A'");
+    // serials read only for the one HU with a serial count > 0 (VENUM 0000021496), via SER06 then OBJK
+    expect(calls.rfc.map((c) => c.table)).toEqual(['SER06', 'OBJK']);
+    expect(calls.rfc[0].where).toContain("VENUM = '0000021496'");
+  });
+
+  it('returns no items and makes no SAP calls for an empty / invalid id list', async () => {
+    const { a, calls } = build();
+    expect(await a.labels({ handlingUnitExternalIDs: [] })).toEqual({ Items: [] });
+    expect(await a.labels({})).toEqual({ Items: [] });
+    expect(calls.client).toHaveLength(0);
+    expect(calls.rfc).toHaveLength(0);
+  });
+
+  // Authorization: labels() reads I_HandlingUnitItemCombined in the SAME auth-enforced service as list(); SAP filters
+  // out HUs the user may not see, so a restricted id simply comes back with no rows -> empty label, no serial read.
+  it('returns no data for an HU the user is not authorized to see (SAP filters it out)', async () => {
+    const rfcCalls = [];
+    const client = {
+      // Mimics SAP DCL: only rows whose HU id is in the $filter AND is authorized ('B') are returned; 'RESTRICTED' is filtered out.
+      get: async (path, { query } = {}) => {
+        const q = decodeURIComponent(query || '');
+        const rows = items.filter((r) => q.includes(`HandlingUnitExternalID eq '${r.HandlingUnitExternalID}'`));
+        return { data: { d: { results: rows } } };
+      }
+    };
+    const rfc = {
+      readTable: async (table, fields, where) => {
+        rfcCalls.push({ table, where: where.join(' ') });
+        return table === 'SER06' ? [{ OBKNR: 'OB1', VENUM: '0000021496' }] : [{ OBKNR: 'OB1', SERNR: 'SR-B' }];
+      }
+    };
+    const out = await new HandlingUnitAdapter({ client, rfc }).labels({ handlingUnitExternalIDs: ['B', 'RESTRICTED'] });
+    expect(out.Items).toEqual([
+      { HandlingUnitExternalID: 'B', MaterialName: 'Motor', SerialNumber: 'SR-B' },
+      { HandlingUnitExternalID: 'RESTRICTED', MaterialName: '', SerialNumber: '' } // filtered out by SAP -> no data
+    ]);
+    // the restricted HU never reaches the serial read; only authorized 'B' (VENUM 0000021496) does
+    expect(rfcCalls[0].where).toBe("( VENUM = '0000021496' )");
+  });
+});
+
 describe('HandlingUnitAdapter writes (BAPI_HU_* + commit on one RFC session)', () => {
   // Shapes as returned live 2026-10-06 (client 220, test HU 2000020166).
   const KEY = '00000000002000020166';
