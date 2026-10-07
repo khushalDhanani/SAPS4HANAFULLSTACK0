@@ -36,6 +36,8 @@ const LABEL_HU_CHUNK = 50;
 const SERIAL_RFC_CHUNK = 40;
 const MAX_LABEL_IDS = 2000; // cap per labels() call: the UI sends <=200/POST, so this only blocks direct-API abuse/enumeration
 const LABEL_ITEM_SELECT = 'HandlingUnitExternalID,HandlingUnitItem,Material,MaterialName,HandlingUnitNumberOfSerialNumb,HandlingUnitInternalID,Plant';
+// Plant/SLoc live on the HU item (stock), not always on the monitor header; used to fill blank list rows.
+const LIST_ITEM_PLANT_SELECT = 'HandlingUnitExternalID,HandlingUnitItem,Plant,StorageLocation';
 
 const LIST_SELECT = [
   'HandlingUnitExternalID', 'Warehouse', 'WarehouseName', 'HandlingUnitIDChar32', 'HandlingUnitOrigin',
@@ -218,7 +220,50 @@ class HandlingUnitAdapter {
       CreatedByUser: r.CreatedByUser || '',
       CreationDateTime: formatDateToYMD(r.CreationDateTime)
     }));
+
+    // The monitor header carries Plant/StorageLocation only for HUs assigned at header level; for the rest
+    // (e.g. freshly created HUs) those fields are blank there but set on the HU item (stock). Fill the blanks
+    // from the first item via the same combined-item view labels() uses, so the list shows Plant / SLoc.
+    const needItem = Items.filter((i) => !i.Plant || !i.StorageLocation).map((i) => i.HandlingUnitExternalID);
+    if (needItem.length) {
+      const byHu = await this._firstItemPlantSloc(needItem);
+      for (const it of Items) {
+        const m = byHu[it.HandlingUnitExternalID];
+        if (!m) continue;
+        if (!it.Plant) it.Plant = m.Plant;
+        if (!it.StorageLocation) it.StorageLocation = m.StorageLocation;
+      }
+    }
+
     return { TotalCount: Items.length, SapCount: sapCount, Truncated: rows.length < sapCount, Items };
+  }
+
+  /**
+   * First item's Plant/StorageLocation per HU external id, from I_HandlingUnitItemCombined (OR-batched, first
+   * = lowest HandlingUnitItem). Used to fill list rows whose monitor header has no Plant/SLoc. Read failures are
+   * swallowed (the list still renders, just with "-" for those rows). @returns {Promise<Object<string,{Plant,StorageLocation}>>}
+   */
+  async _firstItemPlantSloc(ids) {
+    const grouped = {};
+    for (let i = 0; i < ids.length; i += LABEL_HU_CHUNK) {
+      const slice = ids.slice(i, i + LABEL_HU_CHUNK);
+      const filter = '(' + slice.map((id) => `HandlingUnitExternalID eq '${id}'`).join(' or ') + ')';
+      let d;
+      try {
+        d = await this._results(ITEM_COMBINED, { $filter: filter, $select: LIST_ITEM_PLANT_SELECT, $top: 5000, $format: 'json' }, 'Read handling unit items for plant/sloc');
+      } catch (_e) { continue; } // best-effort enrichment; keep the list usable on a per-chunk failure
+      for (const r of d.results || []) {
+        const h = strip(r.HandlingUnitExternalID);
+        (grouped[h] = grouped[h] || []).push(r);
+      }
+    }
+    const out = {};
+    for (const h of Object.keys(grouped)) {
+      grouped[h].sort((a, b) => strip(a.HandlingUnitItem).localeCompare(strip(b.HandlingUnitItem)));
+      const first = grouped[h][0];
+      out[h] = { Plant: first.Plant || '', StorageLocation: first.StorageLocation || '' };
+    }
+    return out;
   }
 
   /** Header, weights, dimensions and packed items of one handling unit. Read-only. */

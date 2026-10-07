@@ -52,6 +52,21 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-07 — HU list: Plant / Storage Location showed "- / -" — root-caused to blank monitor header, fixed by item enrichment
+
+- **Symptom**: in `#/wm/handling-unit` the "Plant / Storage Location" column showed "- / -" for many HUs (notably recently created ones).
+- **Debug (live, read-only, AGENTS.md discovery — SAP reachable at the dump host, app creds from `.env.local`, values never printed)**:
+  1. Ruled out the UI: reproduced in a backend-less `ui5 serve` with a stub — the cell renders `1120 / CS01` when the row has data, `- / -` only when `Plant`/`StorageLocation` are empty. UI binding, the CDS `HandlingUnitListItem` type (declares both fields), and the adapter mapping are all correct.
+  2. `$metadata` of `C_HANDLINGUNITMONITOR_CDS`: entity `HandlingUnitType` **does** expose `Plant`/`PlantName`/`StorageLocation`/`StorageLocationName` (so `$select` is valid; the list read never failed).
+  3. Live sample reads: the monitor **header** returns `Plant`/`StorageLocation` **blank** for many HUs (0/15 in default order; 0/15 among the most-recent HUs) — but a header `$filter=Plant eq '1120'` returns 253 rows *with* Plant/SLoc set, i.e. the header is populated only for HUs assigned at header level. The real plant/sloc for the blank ones live on the HU **item**: `I_HandlingUnitItemCombined` for HU 2000020330 → `Plant 1120 / SLoc CS02`.
+  - **Root cause**: `list()` read only the monitor header, so HUs without header-level plant/sloc rendered "- / -".
+- **Fix** (`srv/integration/s4hana/wm/HandlingUnitAdapter.js`): after the header read, for rows whose `Plant` or `StorageLocation` is blank, enrich from the first HU item (lowest `HandlingUnitItem`) via the same `I_HandlingUnitItemCombined` view `labels()` already uses — new `_firstItemPlantSloc(ids)` (OR-batched by `LABEL_HU_CHUNK`=50, best-effort: a chunk read failure leaves "-", list still renders) + `LIST_ITEM_PLANT_SELECT`. Header-populated values are left untouched; the extra read runs only when something is blank (so a plant-scoped user, whose rows all passed the header `Plant eq` filter, incurs no extra read).
+- **Validation**:
+  - **End-to-end live**: ran the real `HandlingUnitAdapter.list({})` against SAP — **962/1000 rows now have Plant/SLoc** (was blank for the recent ones); the first 10 recent HUs now show `1120 / CS02`, `1130 / FG01`, … The ~38 still blank are HUs with no items (empty packaging HUs) — correctly "-".
+  - Unit: 2 new adapter tests (blank header filled from the first item incl. lowest-item ordering; no item read when the header already has both). `npx jest test/unit` **128 suites / 2216 tests pass**; `npx cds compile srv` OK; `eslint` clean; `git diff --check` clean.
+- **Known follow-up (not in this fix)**: a plant-scoped (non-Admin) user still won't *see* an HU whose monitor **header** plant is blank even if its **item** plant is their plant, because `list()` filters on the header `Plant` field. Making plant scoping item-aware is a separate authorization change (and the enrichment above deliberately does not widen what rows are returned). Noted for a later decision.
+- Files: `srv/integration/s4hana/wm/HandlingUnitAdapter.js`, `test/unit/wm/handlingUnitAdapter.test.js`.
+
 ### 2026-10-07 — HU labels: add a 5th stock size E = Square 100×100 mm
 
 - Added size **E "Square" 100×100 mm** to the single source of truth `util/HuLabelLayout.js` (new `R.E`, `GEOM.E`, and `E` inserted into `ORDER` as `["A","B","E","C","D"]` so the picker lists it between Medium and Large by size). `SIZES`/the picker dialog are data-driven off `ORDER`, so no dialog/controller change was needed — the picker now shows 5 rows with a square 40×40 preview. Existing A/B/C/D keys, filenames and remembered choices are unchanged.

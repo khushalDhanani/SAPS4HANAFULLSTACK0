@@ -48,6 +48,28 @@ describe('HandlingUnitAdapter.list', () => {
     expect(calls[0].query).toContain('$inlinecount=allpages');
   });
 
+  it('fills a blank header Plant/StorageLocation from the first HU item (lowest HandlingUnitItem)', async () => {
+    const blankHeader = { ...listRow, HandlingUnitExternalID: '2000020330', Plant: '', StorageLocation: '' };
+    const { a, calls } = adapter([
+      ['I_HandlingUnitItemCombined', { results: [
+        { HandlingUnitExternalID: '2000020330', HandlingUnitItem: '000002', Plant: '1120', StorageLocation: 'CS99' },
+        { HandlingUnitExternalID: '2000020330', HandlingUnitItem: '000001', Plant: '1120', StorageLocation: 'CS02' }
+      ] }],
+      ['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [blankHeader] }]
+    ]);
+    const r = await a.list({});
+    expect(r.Items[0]).toMatchObject({ HandlingUnitExternalID: '2000020330', Plant: '1120', StorageLocation: 'CS02' });
+    expect(calls.some((c) => c.path.includes('I_HandlingUnitItemCombined'))).toBe(true);
+  });
+
+  it('does not read HU items when the header already carries Plant and StorageLocation', async () => {
+    const full = { ...listRow, Plant: '1010', StorageLocation: 'ST01' };
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [full] }]]);
+    const r = await a.list({});
+    expect(r.Items[0]).toMatchObject({ Plant: '1010', StorageLocation: 'ST01' });
+    expect(calls.some((c) => c.path.includes('I_HandlingUnitItemCombined'))).toBe(false);
+  });
+
   it('builds every filter and rejects an unsafe value with 400 before any SAP call', async () => {
     const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '0', results: [] }]]);
     await a.list({ plant: '1010', storageLocation: 'ST01', warehouse: 'W1', packagingMaterial: '2000000042', handlingUnitExternalID: '1000000000' });
