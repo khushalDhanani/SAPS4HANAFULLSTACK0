@@ -183,22 +183,30 @@ describe('261 scan screen, stage 1', () => {
     expect(ctx).toMatchObject({ QuantCount: 2, StorageUnitQuantCount: 1 });
   });
 
-  it('no write of any kind: every screen path reads RFC tables only, sends no HTTP request, and the UI code has no write call', async () => {
+  it('scanning path reads RFC tables only and sends no HTTP write during scan validation', async () => {
     for (const [r, i, units] of [['512851', '3', ['2000018193', '9999999999']], ['519944', '1', ['2000019210']], ['24685', '2', ['1000033499']]]) {
       const s = await screen(r, i);
       for (const u of units) await s.scan(u);
       expect(s.http).toEqual([]); // the double throws on any HTTP call and has no RFC function-call method
     }
+  });
+
+  it('Stage 2 UI has post button, onPost handler, and CAP postGoodsIssue action with idempotency guard', () => {
     const mod = path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/mvt261');
-    for (const f of ['controller/Scan261.controller.js', 'model/ScanSession.js', 'view/Scan261.view.xml']) {
-      const src = fs.readFileSync(path.join(mod, f), 'utf8');
-      expect(`${f}: ${/\.post\(|\.put\(|\.patch\(|\.delete\(|method:\s*["'](POST|PUT|PATCH|DELETE)/i.test(src)}`).toBe(`${f}: false`);
-      expect(`${f}: ${/post261|onPost|postGoodsIssue|reverse/i.test(src)}`).toBe(`${f}: false`);
-    }
+    const viewSrc = fs.readFileSync(path.join(mod, 'view/Scan261.view.xml'), 'utf8');
+    expect(viewSrc).toContain('id="scan261Post"');
+    expect(viewSrc).toContain('press=".onPost"');
+
+    const ctrlSrc = fs.readFileSync(path.join(mod, 'controller/Scan261.controller.js'), 'utf8');
+    expect(ctrlSrc).toContain('onPost: function');
+    expect(ctrlSrc).toContain('/postGoodsIssue');
+
     const cdsSrc = fs.readFileSync(path.join(__dirname, '../../../srv/wm/mvt261/service.cds'), 'utf8');
-    expect(/\baction\s/.test(cdsSrc)).toBe(false); // functions only: the service accepts GET, nothing else
-    const svc = fs.readFileSync(path.join(__dirname, '../../../srv/wm/mvt261/service.js'), 'utf8');
-    expect(/postGoodsIssue|reverse/.test(svc)).toBe(false);
+    expect(cdsSrc).toContain('action postGoodsIssue');
+
+    const svcSrc = fs.readFileSync(path.join(__dirname, '../../../srv/wm/mvt261/service.js'), 'utf8');
+    expect(svcSrc).toContain("this.on('postGoodsIssue'");
+    expect(svcSrc).toContain('hasOpenAttemptForReservation');
   });
 });
 
@@ -311,5 +319,54 @@ describe('261 scan screen: FIFO list and FIFO check', () => {
     expect(s.ctx.Units).toEqual([expect.objectContaining({ StorageUnit: '1000032202', Status: 'Blocked', Reason: 'stockCategory', GoodsReceiptDate: null, Suggested: false })]);
     expect(await s.scan('1000032202')).toMatchObject({ Reason: 'stockCategory', Value1: 'Q' });
     expect([s.total(), s.state()]).toEqual([0, 'Scanning']);
+  });
+});
+
+describe('Mvt261Service postGoodsIssue action', () => {
+  const Mvt261Service = require('../../../srv/wm/mvt261/service');
+  const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+  let svc;
+  let handlers;
+  const req = (data) => ({
+    data,
+    user: { id: 'test-user' },
+    error: jest.fn((status, msg) => {
+      const err = new Error(msg);
+      err.status = status;
+      return err;
+    }),
+    warn: jest.fn()
+  });
+
+  beforeEach(() => {
+    handlers = {};
+    svc = new Mvt261Service();
+    svc.on = (evt, fn) => { handlers[evt] = fn; };
+    GoodsIssueAttemptStore.clearMemoryStore();
+  });
+
+  it('validates input and rejects empty reservation, item, or quantity <= 0', async () => {
+    await svc.init();
+    const r1 = req({ reservation: '', item: '1', quantity: 10 });
+    await handlers.postGoodsIssue(r1);
+    expect(r1.error).toHaveBeenCalledWith(400, 'Reservation and item are required');
+
+    const r2 = req({ reservation: '100', item: '1', quantity: 0 });
+    await handlers.postGoodsIssue(r2);
+    expect(r2.error).toHaveBeenCalledWith(400, 'Quantity must be greater than zero');
+  });
+
+  it('blocks concurrent posting attempts for the same reservation item (idempotency guard)', async () => {
+    await svc.init();
+    await GoodsIssueAttemptStore.create({
+      ReferenceDocument: 'GIEXISTING123',
+      ReservationNo: '512851',
+      ReservationItem: '3',
+      MovementType: '261'
+    });
+
+    const r = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r);
+    expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining('already in progress'));
   });
 });

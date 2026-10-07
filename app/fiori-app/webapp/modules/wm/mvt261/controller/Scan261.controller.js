@@ -3,16 +3,16 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
     "saps4hana/fiori/service/BarcodeScanService",
-    "saps4hana/fiori/modules/wm/mvt261/model/ScanSession"
-], function (BaseController, JSONModel, ODataClient, BarcodeScanService, ScanSession) {
+    "saps4hana/fiori/modules/wm/mvt261/model/ScanSession",
+    "sap/m/MessageBox"
+], function (BaseController, JSONModel, ODataClient, BarcodeScanService, ScanSession, MessageBox) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/mvt261";
     var q = function (s) { return "'" + encodeURIComponent(String(s)) + "'"; };
 
     /**
-     * 261 scan screen, stage 1: scan and validate storage units against a reservation item.
-     * Display and session state only - this controller sends GET requests exclusively.
+     * 261 scan screen: scan and validate storage units against a reservation item, and post goods issue.
      */
     return BaseController.extend("saps4hana.fiori.modules.wm.mvt261.controller.Scan261", {
 
@@ -166,6 +166,52 @@ sap.ui.define([
 
         onShowCycle: function () {
             this.getRouter().navTo("wmCycle261", this._args);
+        },
+
+        onPost: function () {
+            var oModel = this.getModel("scan261View");
+            var oCtx = oModel.getProperty("/ctx");
+            var aRows = oModel.getProperty("/rows") || [];
+            var nTotal = ScanSession.total(aRows);
+            if (!oCtx || oCtx.Blocked || nTotal <= 0 || oModel.getProperty("/busy")) {
+                return;
+            }
+
+            var sBatch = "";
+            for (var i = 0; i < aRows.length; i++) {
+                if (aRows[i].Accepted && aRows[i].Batch) {
+                    sBatch = aRows[i].Batch;
+                    break;
+                }
+            }
+
+            var sConfirmMsg = this.getText("scan261PostConfirm", [nTotal, oCtx.Unit, oCtx.Reservation, oCtx.ReservationItem]);
+            MessageBox.confirm(sConfirmMsg, {
+                title: this.getText("scan261PostTitle"),
+                actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                emphasizedAction: MessageBox.Action.OK,
+                onClose: function (sAction) {
+                    if (sAction !== MessageBox.Action.OK) { return; }
+                    oModel.setProperty("/busy", true);
+                    ODataClient.post(BASE_PATH + "/postGoodsIssue", {
+                        reservation: String(oCtx.Reservation),
+                        item: String(oCtx.ReservationItem),
+                        quantity: nTotal,
+                        batch: sBatch || undefined
+                    }).then(function (oRes) {
+                        var sDoc = oRes.MaterialDocument + (oRes.MaterialDocumentYear ? "/" + oRes.MaterialDocumentYear : "");
+                        MessageBox.success(this.getText("scan261PostSuccess", [sDoc]), {
+                            onClose: function () {
+                                this.getRouter().navTo("wmOpen261");
+                            }.bind(this)
+                        });
+                    }.bind(this)).catch(function (oError) {
+                        MessageBox.error((oError && oError.message) || this.getText("scan261PostFailed"));
+                    }.bind(this)).then(function () {
+                        oModel.setProperty("/busy", false);
+                    });
+                }.bind(this)
+            });
         }
     });
 });

@@ -63,6 +63,7 @@
                             <ToolbarSpacer />
                             <Button id="scan261ShowCycle" text="{i18n>scan261ShowCycle}" press=".onShowCycle" />
                             <Button id="scan261ClearAll" text="{i18n>scan261ClearAll}" icon="sap-icon://clear-all" press=".onClearAll" enabled="{= ${scan261View>/rows}.length > 0 }" />
+                            <Button id="scan261Post" text="{i18n>scan261Post}" type="Emphasized" icon="sap-icon://paper-plane" press=".onPost" enabled="{= ${scan261View>/state} === 'Covered' &amp;&amp; !${scan261View>/busy} &amp;&amp; !${scan261View>/ctx/Blocked} }" />
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>

@@ -154,4 +154,19 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         excludeReversed : Boolean,
         manualOnly      : Boolean
     ) returns Mvt261Result;
+
+    type MaterialDocumentResult {
+        MaterialDocument     : String(10);
+        MaterialDocumentYear : String(4);
+        SapMessage           : String;
+    };
+
+    // Stage 2: post goods issue 261 against reservation item with idempotency guard.
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsIssue(
+        reservation : String(10),
+        item        : String(4),
+        quantity    : Decimal(13, 3),
+        batch       : String(10)
+    ) returns MaterialDocumentResult;
 }

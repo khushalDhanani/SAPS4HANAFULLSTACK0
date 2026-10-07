@@ -513,6 +513,7 @@ class Mvt261Adapter {
     const payload = buildHeaderEnvelope({
       gmCode: '03',
       headerText: `GI Resv ${c.Reservation}`,
+      referenceDocument: input.referenceDocument,
       item: buildBaseItem({
         Material: c.Material, Unit: unit, IssueQty: quantity, Plant: c.Plant, StorageLocation: c.StorageLocation,
         ReservationNo: c.Reservation, ReservationItem: c.ReservationItem, Batch: batch, OrderNo: c.ProductionOrder
