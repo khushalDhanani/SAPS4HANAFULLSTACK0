@@ -10,14 +10,22 @@
         <content>
             <VBox class="sapUiResponsiveMargin" width="auto">
 
-                <HBox id="huKpiRow" wrap="Wrap" class="sapUiSmallMarginBottom" visible="{= ${huView>/kpiTotal} > 0 }">
-                    <GenericTile id="huKpiTotal" header="{i18n>huKpiTotal}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                        <TileContent><NumericContent value="{huView>/kpiTotal}" valueColor="Neutral" /></TileContent>
-                    </GenericTile>
-                    <HBox items="{huView>/kpis}">
-                        <GenericTile header="{huView>name}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                            <TileContent><NumericContent value="{huView>count}" valueColor="Neutral" /></TileContent>
-                        </GenericTile>
+                <HBox id="huKpiRow"
+                      wrap="Wrap"
+                      alignItems="Baseline"
+                      class="huKpiStrip sapUiTinyMarginBottom"
+                      visible="{= ${huView>/kpiBusy} || ${huView>/kpiTotal} > 0 }"
+                      busy="{huView>/kpiBusy}"
+                      busyIndicatorDelay="0">
+                    <HBox id="huKpiTotal" alignItems="Baseline" class="huKpiItem" tooltip="{i18n>huKpiTotalTooltip}">
+                        <Label text="{i18n>huKpiTotal}" class="sapUiTinyText sapUiTinyMarginEnd textMuted" />
+                        <Text text="{path: 'huView>/kpiTotal', formatter: '.formatCount'}" class="fontBold" />
+                    </HBox>
+                    <HBox items="{huView>/kpis}" wrap="Wrap" alignItems="Baseline" class="huKpiGroup">
+                        <HBox alignItems="Baseline" class="huKpiItem" tooltip="{huView>name}">
+                            <Label text="{huView>name}" class="sapUiTinyText sapUiTinyMarginEnd textMuted" />
+                            <Text text="{path: 'huView>count', formatter: '.formatCount'}" class="fontBold" />
+                        </HBox>
                     </HBox>
                 </HBox>
 

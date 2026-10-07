@@ -170,3 +170,52 @@ describe('/printing busy flag (disables buttons during a job)', () => {
         expect(out).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('formatCount (KPI count formatting)', () => {
+    it('formats thousands with grouping separators', () => {
+        const s = subject();
+        expect(s.formatCount(17502)).toBe('17,502');
+        expect(s.formatCount(1076)).toBe('1,076');
+        expect(s.formatCount('7657')).toBe('7,657');
+    });
+
+    it('formats zero correctly', () => {
+        const s = subject();
+        expect(s.formatCount(0)).toBe('0');
+        expect(s.formatCount('0')).toBe('0');
+    });
+
+    it('returns "-" for missing, null, undefined, empty, or NaN values', () => {
+        const s = subject();
+        expect(s.formatCount(null)).toBe('-');
+        expect(s.formatCount(undefined)).toBe('-');
+        expect(s.formatCount('')).toBe('-');
+        expect(s.formatCount('abc')).toBe('-');
+        expect(s.formatCount(NaN)).toBe('-');
+    });
+});
+
+describe('_loadKpis (status KPI loading and busy toggle)', () => {
+    it('sets kpiBusy, loads statusKpis, updates kpiTotal and kpis, and clears kpiBusy', async () => {
+        ODataClient.get.mockResolvedValueOnce({
+            Total: 17502,
+            Items: [{ code: 'A', name: 'Planned', count: 1076 }, { code: 'B', name: 'Active', count: 7657 }]
+        });
+        const s = subject();
+        const p = s._loadKpis();
+        expect(s._model.getProperty('/kpiBusy')).toBe(true);
+        await p;
+        expect(s._model.getProperty('/kpiTotal')).toBe(17502);
+        expect(s._model.getProperty('/kpis')).toHaveLength(2);
+        expect(s._model.getProperty('/kpiBusy')).toBe(false);
+    });
+
+    it('clears kpiBusy even when statusKpis fails', async () => {
+        ODataClient.get.mockRejectedValueOnce(new Error('Network error'));
+        const s = subject();
+        const p = s._loadKpis();
+        expect(s._model.getProperty('/kpiBusy')).toBe(true);
+        await p;
+        expect(s._model.getProperty('/kpiBusy')).toBe(false);
+    });
+});

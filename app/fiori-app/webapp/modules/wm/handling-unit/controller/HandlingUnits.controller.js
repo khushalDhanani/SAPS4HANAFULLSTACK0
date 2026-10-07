@@ -52,7 +52,8 @@ sap.ui.define([
                 vhShippingPoint: [],
                 vhStorageLocation: [],
                 kpiTotal: 0,
-                kpis: []
+                kpis: [],
+                kpiBusy: false
             }), "huView");
             this.getModel("huView").setSizeLimit(2000);
             this.setModel(new JSONModel({ packagingMaterial: "", plant: "", storageLocation: "", content: "", busy: false, error: "" }), "huCreate");
@@ -61,13 +62,23 @@ sap.ui.define([
             this.getRouter().getRoute("wmHandlingUnits").attachPatternMatched(this.onRouteMatched, this);
         },
 
+        formatCount: function (v) {
+            if (v === null || v === undefined || v === "" || isNaN(v)) {
+                return "-";
+            }
+            return Number(v).toLocaleString();
+        },
+
         _loadKpis: function () {
             var oModel = this.getModel("huView");
-            ODataClient.get(BASE_PATH + "/statusKpis()").then(function (oResult) {
+            oModel.setProperty("/kpiBusy", true);
+            return ODataClient.get(BASE_PATH + "/statusKpis()").then(function (oResult) {
                 oModel.setProperty("/kpiTotal", (oResult && oResult.Total) || 0);
                 oModel.setProperty("/kpis", (oResult && oResult.Items) || []);
             }).catch(function () {
                 // KPI cards are informational; a failure must not break the list.
+            }).then(function () {
+                oModel.setProperty("/kpiBusy", false);
             });
         },
 
