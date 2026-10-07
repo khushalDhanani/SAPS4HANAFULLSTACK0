@@ -1,13 +1,12 @@
 sap.ui.define([
-    "saps4hana/fiori/modules/wm/handling-unit/util/Barcode"
-], function (Barcode) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/Barcode",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelLayout"
+], function (Barcode, Layout) {
     "use strict";
 
-    // 4x4 in label = 288 x 288 pt (72pt/in); 0.2in padding; 1.4in barcode. Same layout as the HTML print label.
-    var PT = 288;
-    var PAD = 14.4;
-    var INNER = PT - 2 * PAD;
-    var BARCODE_H = 100.8; // 1.4in
+    var PT2MM = 25.4 / 72; // jsPDF text y is the baseline; CSS top is the box top. Convert per font size.
+    function ascentMm(pt) { return pt * PT2MM * 0.8; }      // ~cap/ascent fraction for Helvetica
+    function lineHeightMm(pt) { return pt * PT2MM * 1.15; }  // same 1.15 factor as the HTML line-height
 
     var _pJsPdf = null;
 
@@ -27,66 +26,63 @@ sap.ui.define([
         return _pJsPdf;
     }
 
-    /** Draws one clean label (see HuLabelPrinter.prepare) onto the current jsPDF page as a 4x4 vector label. */
-    function drawLabel(doc, d) {
+    /** Draws one clean label onto the current jsPDF page (unit:mm) from the shared layout spec L — same geometry as the HTML. */
+    function drawLabel(doc, d, L) {
+        var f = L.fonts;
         doc.setTextColor(0, 0, 0);
-        var y = PAD;
 
-        // MATERIAL NAME (caption + up to 2 bold lines, clamped)
-        doc.setFont("helvetica", "bold").setFontSize(6.5);
-        doc.text("MATERIAL NAME", PAD, y + 6);
-        y += 11;
-        doc.setFont("helvetica", "bold").setFontSize(11);
-        var aLines = doc.splitTextToSize(d.materialName || "-", INNER);
-        if (aLines.length > 2) { aLines = aLines.slice(0, 2); aLines[1] = aLines[1].replace(/.$/, "…"); }
-        aLines.forEach(function (sLine, i) { doc.text(sLine, PAD, y + 10 + i * 13); });
-        y += 10 + aLines.length * 13 + 4;
+        // MATERIAL NAME (caption on B/C/D, then up to maxLines clamped bold lines)
+        if (d.materialName) {
+            var yVal = L.material.yTop;
+            if (L.showCaptions) {
+                doc.setFont("helvetica", "bold").setFontSize(f.caption);
+                doc.text("MATERIAL NAME", L.material.x, L.material.yTop + ascentMm(f.caption));
+                yVal = L.material.yTop + lineHeightMm(f.caption);
+            }
+            doc.setFont("helvetica", "bold").setFontSize(f.material);
+            var aLines = doc.splitTextToSize(d.materialName, L.material.w);
+            if (aLines.length > L.material.maxLines) { aLines = aLines.slice(0, L.material.maxLines); aLines[aLines.length - 1] = aLines[aLines.length - 1].replace(/.$/, "…"); }
+            aLines.forEach(function (s, i) { doc.text(s, L.material.x, yVal + ascentMm(f.material) + i * lineHeightMm(f.material)); });
+        }
 
-        // divider
-        doc.setLineWidth(0.5).line(PAD, y, PAD + INNER, y);
-        y += 8;
+        // Barcode (vector bars, fills innerW) + HU number
+        if (d.huNumber) {
+            var oBc = Barcode.bars(d.huNumber);
+            var fScale = L.barcode.w / oBc.total;
+            doc.setFillColor(0, 0, 0);
+            oBc.bars.forEach(function (b) { doc.rect(L.barcode.x + b.x * fScale, L.barcode.yTop, b.w * fScale, L.barcode.h, "F"); });
+            doc.setFont("helvetica", "bold").setFontSize(f.huNumber);
+            doc.text(d.huNumber, L.page.wMm / 2, L.huNumber.yTop + ascentMm(f.huNumber), { align: "center" });
+        }
 
-        // barcode (vector bars from the Code 128 geometry) + HU number
-        var oBc = Barcode.bars(d.huNumber);
-        var fScale = INNER / oBc.total;
-        doc.setFillColor(0, 0, 0);
-        oBc.bars.forEach(function (b) { doc.rect(PAD + b.x * fScale, y, b.w * fScale, BARCODE_H, "F"); });
-        y += BARCODE_H + 2;
-        doc.setFont("helvetica", "bold").setFontSize(14);
-        doc.text(d.huNumber, PT / 2, y + 13, { align: "center" });
-        y += 22;
-
-        // divider
-        doc.setLineWidth(0.5).line(PAD, y, PAD + INNER, y);
-        y += 8;
-
-        // CREATED DATE (left) + SR NO (right); SR NO omitted when blank (mirrors the HTML label)
-        doc.setFont("helvetica", "bold").setFontSize(6.5);
-        doc.text("CREATED DATE", PAD, y + 6);
-        doc.setFont("helvetica", "normal").setFontSize(10);
-        doc.text(d.createdDate || "-", PAD, y + 17);
+        // CREATED DATE (left) + SR NO (right); each omitted when blank (mirrors the HTML label)
+        if (d.createdDate) {
+            if (L.showCaptions && L.meta.captionY !== null) { doc.setFont("helvetica", "bold").setFontSize(f.caption); doc.text("CREATED DATE", L.meta.date.x, L.meta.captionY + ascentMm(f.caption)); }
+            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(d.createdDate, L.meta.date.x, L.meta.valueY + ascentMm(f.meta));
+        }
         if (d.srNo) {
-            doc.setFont("helvetica", "bold").setFontSize(6.5);
-            doc.text("SR NO", PAD + INNER, y + 6, { align: "right" });
-            doc.setFont("helvetica", "normal").setFontSize(10);
-            doc.text(d.srNo, PAD + INNER, y + 17, { align: "right" });
+            if (L.showCaptions && L.meta.captionY !== null) { doc.setFont("helvetica", "bold").setFontSize(f.caption); doc.text("SR NO", L.meta.srNo.x, L.meta.captionY + ascentMm(f.caption), { align: "right" }); }
+            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(d.srNo, L.meta.srNo.x, L.meta.valueY + ascentMm(f.meta), { align: "right" });
         }
     }
 
-    /** Builds a jsPDF document: one 288x288pt page per clean label, no trailing blank page. */
-    function generate(jsPDF, aLabels) {
-        var doc = new jsPDF({ unit: "pt", format: [PT, PT], compress: true });
+    /** Builds a jsPDF document (unit:mm): one page per clean label at the chosen size, no trailing blank page. */
+    function generate(jsPDF, aLabels, sizeOrKey) {
+        var L = Layout.layout(sizeOrKey);
+        // All stock sizes are landscape (width > height); set orientation explicitly so jsPDF does not swap W/H.
+        var sOrient = L.page.wMm >= L.page.hMm ? "landscape" : "portrait";
+        var doc = new jsPDF({ orientation: sOrient, unit: "mm", format: [L.page.wMm, L.page.hMm], compress: true });
         aLabels.forEach(function (d, i) {
-            if (i) { doc.addPage([PT, PT]); }
-            drawLabel(doc, d);
+            if (i) { doc.addPage([L.page.wMm, L.page.hMm], sOrient); }
+            drawLabel(doc, d, L);
         });
         return doc;
     }
 
-    /** Lazily loads jsPDF, renders the clean labels and saves <sFilename>.pdf. Resolves when the file is handed to the browser. */
-    function download(aLabels, sFilename) {
+    /** Lazily loads jsPDF, renders the clean labels at the chosen size and saves <sFilename>. */
+    function download(aLabels, sFilename, sizeOrKey) {
         if (!aLabels || !aLabels.length) { return Promise.reject(new Error("No labels to download")); }
-        return loadJsPdf().then(function (jsPDF) { generate(jsPDF, aLabels).save(sFilename); });
+        return loadJsPdf().then(function (jsPDF) { generate(jsPDF, aLabels, sizeOrKey).save(sFilename); });
     }
 
     return { download: download, generate: generate, loadJsPdf: loadJsPdf, drawLabel: drawLabel };

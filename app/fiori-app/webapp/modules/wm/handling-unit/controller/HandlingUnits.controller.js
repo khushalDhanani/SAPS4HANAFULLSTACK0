@@ -8,8 +8,10 @@ sap.ui.define([
     "sap/m/BusyDialog",
     "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter",
     "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPdf",
-    "saps4hana/fiori/modules/wm/handling-unit/util/HuBatchReader"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuLabelPdf, HuBatchReader) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuBatchReader",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelLayout",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelSizeDialog"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuLabelPdf, HuBatchReader, HuLabelLayout, HuLabelSizeDialog) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -201,8 +203,28 @@ sap.ui.define([
             }).then(function (aWrappers) { return aWrappers.map(HuLabelPrinter.toRecord); });
         },
 
+        /**
+         * Gate 1 (scannability): split prepared labels by whether their barcode stays above the chosen size's
+         * minimum narrow-bar width. Unscannable HUs become skipped entries naming the next-larger size.
+         * @returns {{fit: object[], skipped: {huNumber:string, reason:string}[]}}
+         */
+        _partitionByFit: function (aLabels, sizeKey) {
+            var self = this;
+            var aFit = [], aSkipped = [];
+            aLabels.forEach(function (l) {
+                var r = HuLabelLayout.fits(l.huNumber, sizeKey);
+                if (r.ok) { aFit.push(l); return; }
+                var sSizeName = self.getText(HuLabelLayout.SIZES[HuLabelLayout.byKey(sizeKey)].nameKey);
+                var sReason = r.nextLarger
+                    ? self.getText("huLabelTooSmall", [sSizeName, self.getText(HuLabelLayout.SIZES[r.nextLarger].nameKey)])
+                    : self.getText("huLabelTooSmallMax", [sSizeName]);
+                aSkipped.push({ huNumber: l.huNumber, reason: sReason });
+            });
+            return { fit: aFit, skipped: aSkipped };
+        },
+
         /** Shared bulk job (Print All/Selected/Current Page, Download Selected): progress + cancel dialog, batched read, validation, then fnOutput(labels). */
-        _runLabelJob: function (aRows, fnOutput, sSummaryKey) {
+        _runLabelJob: function (aRows, fnOutput, sSummaryKey, sizeKey) {
             if (!aRows.length) { return; }
             var self = this;
             var oModel = this.getModel("huView");
@@ -233,11 +255,17 @@ sap.ui.define([
                     // eslint-disable-next-line no-console
                     console.log("[HU labels] fetch " + Math.round(performance.now() - tFetch) + "ms for " + nTotal + " HUs");
                     var oPrep = HuLabelPrinter.prepare(aRecords);
+                    var oPart = self._partitionByFit(oPrep.labels, sizeKey);
+                    var aSkipped = oPrep.skipped.concat(oPart.skipped);
+                    if (!oPart.fit.length) { // nothing scannable at this size: report the skips, print nothing
+                        self._showJobSummary({ printed: 0, skipped: aSkipped, duplicatesRemoved: oPrep.duplicatesRemoved }, nTotal, sSummaryKey);
+                        return undefined;
+                    }
                     var tOut = performance.now();
-                    return Promise.resolve(fnOutput(oPrep.labels)).then(function () {
+                    return Promise.resolve(fnOutput(oPart.fit)).then(function () {
                         // eslint-disable-next-line no-console
-                        console.log("[HU labels] render/output " + Math.round(performance.now() - tOut) + "ms, " + oPrep.labels.length + " labels");
-                        self._showJobSummary({ printed: oPrep.labels.length, skipped: oPrep.skipped, duplicatesRemoved: oPrep.duplicatesRemoved }, nTotal, sSummaryKey);
+                        console.log("[HU labels] render/output " + Math.round(performance.now() - tOut) + "ms, " + oPart.fit.length + " labels");
+                        self._showJobSummary({ printed: oPart.fit.length, skipped: aSkipped, duplicatesRemoved: oPrep.duplicatesRemoved }, nTotal, sSummaryKey);
                     });
                 })
                 .catch(function (oError) {
@@ -248,7 +276,7 @@ sap.ui.define([
         },
 
         /** One-HU print/download from a row button: reads just that HU, busy-spins that button, no confirmation dialog. */
-        _runRowJob: function (oButton, fnOutput) {
+        _runRowJob: function (oButton, fnOutput, sizeKey) {
             if (oButton.getBusy()) { return undefined; } // ignore a rapid second click while this row's job runs (the busy spinner does not block the click itself)
             var self = this;
             var o = oButton.getBindingContext("huView").getObject(); // the row's HU from its context, never a row index
@@ -262,23 +290,15 @@ sap.ui.define([
                         MessageToast.show(self.getText("huPrintBadData", [sReason]));
                         return undefined;
                     }
-                    return fnOutput(oPrep.labels);
+                    var oPart = self._partitionByFit(oPrep.labels, sizeKey);
+                    if (!oPart.fit.length) { // barcode too dense for this size: name the next-larger size, print nothing
+                        MessageToast.show(self.getText("huPrintBadData", [oPart.skipped[0].reason]));
+                        return undefined;
+                    }
+                    return fnOutput(oPart.fit);
                 })
                 .catch(function (oError) { MessageBox.error((oError && oError.message) || self.getText("huLoadError")); })
                 .then(function () { oButton.setBusy(false); });
-        },
-
-        /** Confirms before a large job: always for Print All, otherwise only above the safety limit. fnGo runs on OK. */
-        _confirmCount: function (nCount, bAlwaysConfirm, fnGo) {
-            if (!nCount) { return; }
-            var fnOnClose = function (a) { if (a === MessageBox.Action.OK) { fnGo(); } };
-            if (nCount > PRINT_SAFE_LIMIT) {
-                MessageBox.warning(this.getText("huPrintAllLarge", [nCount, PRINT_SAFE_LIMIT]), { onClose: fnOnClose });
-            } else if (bAlwaysConfirm) {
-                MessageBox.confirm(this.getText("huPrintAllConfirm", [nCount]), { onClose: fnOnClose });
-            } else {
-                fnGo();
-            }
         },
 
         _fileStamp: function () {
@@ -320,46 +340,65 @@ sap.ui.define([
             setTimeout(function () { URL.revokeObjectURL(sUrl); }, 1000);
         },
 
-        _print: function (labels) { return HuLabelPrinter.print(labels, this._labelTexts()); },
+        _print: function (labels, sizeKey) { return HuLabelPrinter.print(labels, this._labelTexts(), sizeKey); },
 
-        /** Print All: every HU matching the current filters (the full /items set, server-capped at MAX_LIST), with a confirm. */
+        /** Opens the size picker for a bulk job, then runs it at the chosen size (Cancel = no-op, no read/print). */
+        _pickSizeThenBulk: function (aRows, sVerb, fnOutput, sSummaryKey) {
+            if (!aRows.length) { return undefined; }
+            var self = this;
+            return HuLabelSizeDialog.open(this, { verb: sVerb, count: aRows.length, limit: PRINT_SAFE_LIMIT }).then(function (sKey) {
+                if (!sKey) { return undefined; } // cancelled
+                return self._runLabelJob(aRows, function (labels) { return fnOutput(labels, sKey); }, sSummaryKey, sKey);
+            });
+        },
+
+        /** Print All: every HU matching the current filters (the full /items set, server-capped at MAX_LIST). */
         onPrintAll: function () {
             var self = this;
-            var aAll = this.getModel("huView").getProperty("/items") || [];
-            this._confirmCount(aAll.length, true, function () {
-                self._runLabelJob(aAll, self._print.bind(self), "huPrintSummary");
-            });
+            return this._pickSizeThenBulk(this.getModel("huView").getProperty("/items") || [], "print",
+                function (labels, sKey) { return self._print(labels, sKey); }, "huPrintSummary");
         },
 
         /** Print Selected: only the ticked rows. */
         onPrintSelected: function () {
-            this._runLabelJob(this._rowsToObjects(this.byId("huTable").getSelectedItems()), this._print.bind(this), "huPrintSummary");
+            var self = this;
+            return this._pickSizeThenBulk(this._rowsToObjects(this.byId("huTable").getSelectedItems()), "print",
+                function (labels, sKey) { return self._print(labels, sKey); }, "huPrintSummary");
         },
 
         /** Print Current Page: only the rows currently rendered (the current growing page). */
         onPrintCurrentPage: function () {
-            this._runLabelJob(this._rowsToObjects(this.byId("huTable").getItems()), this._print.bind(this), "huPrintSummary");
+            var self = this;
+            return this._pickSizeThenBulk(this._rowsToObjects(this.byId("huTable").getItems()), "print",
+                function (labels, sKey) { return self._print(labels, sKey); }, "huPrintSummary");
         },
 
-        /** Download Selected: one PDF (one 4x4 page per ticked HU), same 500 safety limit + progress/Cancel. */
+        /** Download Selected: one PDF (one page per ticked HU at the chosen size), same 500 safety warning + progress/Cancel. */
         onDownloadSelected: function () {
             var self = this;
-            var aRows = this._rowsToObjects(this.byId("huTable").getSelectedItems());
-            this._confirmCount(aRows.length, false, function () {
-                var sFile = "HU_labels_" + self._fileStamp() + ".pdf";
-                self._runLabelJob(aRows, function (labels) { return HuLabelPdf.download(labels, sFile); }, "huDownloadSummary");
+            return this._pickSizeThenBulk(this._rowsToObjects(this.byId("huTable").getSelectedItems()), "download",
+                function (labels, sKey) { return HuLabelPdf.download(labels, "HU_labels_" + self._fileStamp() + "_" + sKey + ".pdf", sKey); },
+                "huDownloadSummary");
+        },
+
+        /** Row Print: pick a size, then print just this row's HU (1 POST, one page). */
+        onRowPrint: function (oEvent) {
+            var self = this;
+            var oButton = oEvent.getSource();
+            return HuLabelSizeDialog.open(this, { verb: "print", count: 1 }).then(function (sKey) {
+                if (!sKey) { return undefined; }
+                return self._runRowJob(oButton, function (labels) { return self._print(labels, sKey); }, sKey);
             });
         },
 
-        /** Row Print: print just this row's HU (1 POST, one 4x4 page, no confirm). */
-        onRowPrint: function (oEvent) {
-            var self = this;
-            this._runRowJob(oEvent.getSource(), function (labels) { return self._print(labels); });
-        },
-
-        /** Row Download: PDF of just this row's HU as HU_<huNumber>.pdf. */
+        /** Row Download: pick a size, then PDF of just this row's HU as HU_<huNumber>_<size>.pdf. */
         onRowDownload: function (oEvent) {
-            this._runRowJob(oEvent.getSource(), function (labels) { return HuLabelPdf.download(labels, "HU_" + labels[0].huNumber + ".pdf"); });
+            var self = this;
+            var oButton = oEvent.getSource();
+            return HuLabelSizeDialog.open(this, { verb: "download", count: 1 }).then(function (sKey) {
+                if (!sKey) { return undefined; }
+                return self._runRowJob(oButton, function (labels) { return HuLabelPdf.download(labels, "HU_" + labels[0].huNumber + "_" + sKey + ".pdf", sKey); }, sKey);
+            });
         },
 
         _labelTexts: function () {

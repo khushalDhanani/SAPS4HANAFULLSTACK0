@@ -5,12 +5,14 @@
  */
 const P = '../../../app/fiori-app/webapp/modules/wm/handling-unit/util/';
 
-// Real Barcode + HuLabelPrinter (prepare() is pure); everything else is mocked.
-let Barcode, Printer;
+// Real Barcode + HuLabelPrinter + HuLabelLayout (all pure); everything else is mocked.
+let Barcode, Printer, Layout;
 global.window = global.window || {};
 global.sap = { ui: { define: (d, f) => { Barcode = f(); }, require: { toUrl: () => '' } } };
 require(P + 'Barcode.js');
-global.sap.ui.define = (d, f) => { Printer = f(Barcode); };
+global.sap.ui.define = (d, f) => { Layout = f(Barcode); };
+require(P + 'HuLabelLayout.js');
+global.sap.ui.define = (d, f) => { Printer = f(Barcode, Layout); };
 require(P + 'HuLabelPrinter.js');
 
 // Mocks shared across tests.
@@ -20,12 +22,13 @@ const HuBatchReader = { read: jest.fn(() => Promise.resolve([])) };
 const MessageToast = { show: jest.fn() };
 const MBox = { Action: { OK: 'OK', CANCEL: 'CANCEL' }, confirm: jest.fn(), warning: jest.fn(), error: jest.fn() };
 const BusyDialog = function () { return { open() {}, close() {}, setText() {}, destroy() {} }; };
+const HuLabelSizeDialog = { open: jest.fn(() => Promise.resolve('B')) }; // default: user picks B
 
 // Load the controller, capturing the methods object from BaseController.extend(name, obj).
 let ctrl;
 const BaseController = { extend: (name, obj) => { ctrl = obj; return obj; } };
 global.sap.ui.define = (deps, f) => {
-    f(BaseController, function () {}, ODataClient, {}, MessageToast, MBox, BusyDialog, Printer, HuLabelPdf, HuBatchReader);
+    f(BaseController, function () {}, ODataClient, {}, MessageToast, MBox, BusyDialog, Printer, HuLabelPdf, HuBatchReader, Layout, HuLabelSizeDialog);
 };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/controller/HandlingUnits.controller.js');
 
@@ -52,33 +55,43 @@ function rowButton(huId, extra) {
 
 beforeEach(() => { jest.clearAllMocks(); });
 
-describe('_confirmCount (button large-job thresholds)', () => {
-    it('above the safety limit: warns and only runs on OK', () => {
-        const go = jest.fn();
-        subject()._confirmCount(600, false, go);
-        expect(MBox.warning).toHaveBeenCalled();
-        expect(go).not.toHaveBeenCalled();
-        MBox.warning.mock.calls[0][1].onClose('OK');
-        expect(go).toHaveBeenCalled();
+describe('size picker wiring (dialog -> job at the chosen size)', () => {
+    it('onRowDownload downloads at the picked size with a _<size> filename suffix', async () => {
+        HuLabelSizeDialog.open.mockResolvedValueOnce('C');
+        ODataClient.post.mockResolvedValue({ Items: [{ HandlingUnitExternalID: 'HU9', MaterialName: 'Pump', SerialNumber: '' }] });
+        const btn = rowButton('HU9');
+        await subject().onRowDownload({ getSource: () => btn });
+        expect(HuLabelSizeDialog.open.mock.calls[0][1]).toMatchObject({ verb: 'download', count: 1 });
+        const [labels, file, size] = HuLabelPdf.download.mock.calls[0];
+        expect(file).toBe('HU_HU9_C.pdf');
+        expect(size).toBe('C');
+        expect(labels[0].huNumber).toBe('HU9');
     });
-    it('at/under the limit with alwaysConfirm (Print All): asks "Print N?"', () => {
-        const go = jest.fn();
-        subject()._confirmCount(10, true, go);
-        expect(MBox.confirm).toHaveBeenCalled();
-        MBox.confirm.mock.calls[0][1].onClose('OK');
-        expect(go).toHaveBeenCalled();
+    it('Cancel on the picker (null) runs no job — no read, no download', async () => {
+        HuLabelSizeDialog.open.mockResolvedValueOnce(null);
+        await subject().onRowDownload({ getSource: () => rowButton('HU9') });
+        expect(ODataClient.post).not.toHaveBeenCalled();
+        expect(HuLabelPdf.download).not.toHaveBeenCalled();
     });
-    it('at/under the limit without alwaysConfirm (Download Selected): runs straight away', () => {
-        const go = jest.fn();
-        subject()._confirmCount(10, false, go);
-        expect(MBox.confirm).not.toHaveBeenCalled();
-        expect(MBox.warning).not.toHaveBeenCalled();
-        expect(go).toHaveBeenCalledTimes(1);
+    it('onDownloadSelected names the bulk file HU_labels_<stamp>_<size>.pdf and passes the size', async () => {
+        HuLabelSizeDialog.open.mockResolvedValueOnce('A');
+        ODataClient.post.mockResolvedValue({ Items: [{ HandlingUnitExternalID: '1000', MaterialName: 'M', SerialNumber: '' }] });
+        const rows = [{ HandlingUnitExternalID: '1000', CreationDateTime: '2026-10-06' }];
+        const s = subject({ byId: () => ({ getSelectedItems: () => rows.map((o) => ({ getBindingContext: () => ({ getObject: () => o }) })) }) });
+        await s.onDownloadSelected();
+        const [, file, size] = HuLabelPdf.download.mock.calls[0];
+        expect(file).toMatch(/^HU_labels_\d{8}_\d{4}_A\.pdf$/);
+        expect(size).toBe('A');
     });
-    it('does nothing for zero', () => {
-        const go = jest.fn();
-        subject()._confirmCount(0, true, go);
-        expect(go).not.toHaveBeenCalled();
+});
+
+describe('_partitionByFit (Gate 1 routes dense barcodes to a larger size)', () => {
+    it('keeps a scannable HU and skips a too-dense one, naming the next size', () => {
+        const r = subject()._partitionByFit([{ huNumber: '2000019997' }, { huNumber: 'AB12CD34EF56GH78IJ90' }], 'A');
+        expect(r.fit.map((l) => l.huNumber)).toEqual(['2000019997']);
+        expect(r.skipped).toHaveLength(1);
+        expect(r.skipped[0].huNumber).toBe('AB12CD34EF56GH78IJ90');
+        expect(r.skipped[0].reason).toBe('huLabelTooSmall'); // getText stub returns the key
     });
 });
 

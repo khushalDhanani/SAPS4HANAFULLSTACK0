@@ -486,3 +486,10 @@
 .giFormValueText.sapMObjStatusNone .sapMObjStatusText {
     color: var(--sapTextColor, #232629) !important;
 }
+
+/* Label-size picker: proportional stock-size preview rectangle */
+.huSizePreview {
+    border: 1px solid var(--sapContent_ForegroundBorderColor, #878787);
+    background: var(--sapContent_ForegroundColor, #eeeeee);
+    flex-shrink: 0;
+}

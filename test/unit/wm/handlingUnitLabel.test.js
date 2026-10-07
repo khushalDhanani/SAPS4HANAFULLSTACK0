@@ -1,14 +1,16 @@
 /**
  * Unit tests for the HU label print utilities: Code 128 encoder, record validation/cleaning
- * (dedupe, date formatting, injection-safety), the 4x4 label HTML builder and the integrity check.
+ * (dedupe, date formatting, injection-safety), the size-aware label HTML builder and the integrity check.
  * The iframe print() / printRecords() paths need a DOM and are exercised in the browser, not here.
  */
-let Barcode, Printer, Pdf;
+let Barcode, Layout, Printer, Pdf;
 global.sap = { ui: { define: (deps, f) => { Barcode = f(); }, require: { toUrl: () => '' } } };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/Barcode.js');
-global.sap.ui.define = (deps, f) => { Printer = f(Barcode); };
+global.sap.ui.define = (deps, f) => { Layout = f(Barcode); };
+require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelLayout.js');
+global.sap.ui.define = (deps, f) => { Printer = f(Barcode, Layout); };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelPrinter.js');
-global.sap.ui.define = (deps, f) => { Pdf = f(Barcode); };
+global.sap.ui.define = (deps, f) => { Pdf = f(Barcode, Layout); };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelPdf.js');
 const { jsPDF } = require('../../../app/fiori-app/node_modules/jspdf');
 
@@ -99,17 +101,31 @@ describe('HuLabelPrinter.prepare (validate / clean / dedupe)', () => {
     });
 });
 
-describe('HuLabelPrinter.buildHtml (4x4 label, from clean labels)', () => {
-    it('builds one page: material name, created date + sr no, barcode + HU number - exact 4x4, zero margin', () => {
+describe('HuLabelPrinter.buildHtml (size-aware label, from clean labels)', () => {
+    it('builds one page at the default B size: material, date, sr no, barcode + HU number, 100x50mm, zero margin', () => {
         const html = Printer.buildHtml(clean({ header, items, serials }), {});
-        expect(html).toContain('@page{size:4in 4in;margin:0}');
-        expect(html).toContain(Barcode.toSvg('2000019997'));
-        expect(html).toContain('<div class="cap">MATERIAL NAME</div><div class="val name">Pump</div>');
-        expect(html).toContain('<div class="cap">CREATED DATE</div><div class="val">06-Oct-2026</div>');
-        expect(html).toContain('<div class="cap">SR NO</div><div class="val">SR-01</div>');
-        expect(html).toContain('<div class="hunum">2000019997</div>');
+        const L = Layout.layout('B');
+        expect(html).toContain('@page{size:100mm 50mm;margin:0}');
+        expect(html).toContain(Barcode.toSvg('2000019997', L.barcode.w, L.barcode.h));
+        expect(html).toContain('>MATERIAL NAME</div>');
+        expect(html).toContain('>Pump</div>');
+        expect(html).toContain('>CREATED DATE</div>');
+        expect(html).toContain('>06-Oct-2026</div>');
+        expect(html).toContain('>SR NO</div>');
+        expect(html).toContain('>SR-01</div>');
+        expect(html).toContain('>2000019997</div>');
         expect(html).toContain('<title>2000019997</title>');
         expect((html.match(/class="hu"/g) || []).length).toBe(1);
+    });
+    it('renders the chosen size: A is 50x25mm and drops captions', () => {
+        const html = Printer.buildHtml(clean({ header, items, serials }), {}, 'A');
+        expect(html).toContain('@page{size:50mm 25mm;margin:0}');
+        expect(html).not.toContain('MATERIAL NAME'); // A is caption-less (too tight)
+        expect(html).toContain('>Pump</div>');
+        expect(html).toContain('>2000019997</div>');
+    });
+    it('falls back to the default size for an unknown key', () => {
+        expect(Printer.buildHtml(clean({ header, items }), {}, 'A4')).toContain('@page{size:100mm 50mm;margin:0}');
     });
     it('drops unlisted detail: no facts, items table, material number or plant', () => {
         const html = Printer.buildHtml(clean({ header, items, serials }), {});
@@ -125,23 +141,24 @@ describe('HuLabelPrinter.buildHtml (4x4 label, from clean labels)', () => {
     });
     it('shows "-" for a missing material name and date (never blank/"undefined")', () => {
         const html = Printer.buildHtml(clean({ header: { HandlingUnitExternalID: '2000019997' }, items: [], serials: [] }), {});
-        expect(html).toContain('<div class="val name">-</div>');
-        expect(html).toContain('<div class="cap">CREATED DATE</div><div class="val">-</div>');
+        expect(html).toContain('>-</div>'); // material + date fall back to "-"
+        expect(html).toContain('>CREATED DATE</div>');
         expect(html).not.toContain('SR NO');
-        expect(html).toContain('<div class="hunum">2000019997</div>');
+        expect(html).toContain('>2000019997</div>');
     });
     it('escapes special characters to prevent HTML injection', () => {
         const html = Printer.buildHtml(clean({ header, items: [{ Material: 'X', MaterialName: '<b>Pump & "Co"' }] }), {});
         expect(html).toContain('&lt;b&gt;Pump &amp; &quot;Co&quot;');
         expect(html).not.toContain('<b>Pump');
     });
-    it('clamps the material name to two lines (no overflow)', () => {
+    it('clamps the material name to the size\'s line count (B = 2 lines)', () => {
         expect(Printer.buildHtml(clean({ header, items }), {})).toContain('-webkit-line-clamp:2');
+        expect(Printer.buildHtml(clean({ header, items }), {}, 'C')).toContain('-webkit-line-clamp:3');
     });
     it('falls back to the material number when no name', () => {
-        expect(Printer.buildHtml(clean({ header, items: [{ Material: '8000007113' }] }), {})).toContain('<div class="val name">8000007113</div>');
+        expect(Printer.buildHtml(clean({ header, items: [{ Material: '8000007113' }] }), {})).toContain('>8000007113</div>');
     });
-    it('prints one 4x4 page per label and a combined title', () => {
+    it('prints one page per label and a combined title', () => {
         const html = Printer.buildHtml(clean({ header, items }, { header: { HandlingUnitExternalID: '2000019990' } }), {});
         expect((html.match(/class="hu"/g) || []).length).toBe(2);
         expect(html).toContain('<title>Handling Units (2)</title>');
@@ -149,9 +166,6 @@ describe('HuLabelPrinter.buildHtml (4x4 label, from clean labels)', () => {
     it('page-breaks after every label except the last (no trailing blank page)', () => {
         const html = Printer.buildHtml(clean({ header, items }, { header: { HandlingUnitExternalID: '2000019990' } }), {});
         expect(html).toContain('.hu:last-child{break-after:auto;page-break-after:auto}');
-    });
-    it('supports a custom page size override', () => {
-        expect(Printer.buildHtml(clean({ header, items }), {}, 'A4')).toContain('@page{size:A4;margin:0}');
     });
     it('escapes values', () => {
         expect(Printer.esc(null)).toBe('');
@@ -169,21 +183,26 @@ describe('Barcode.bars (geometry shared with toSvg and the PDF renderer)', () =>
     });
 });
 
-describe('HuLabelPdf.generate (4x4 pt PDF, one page per label)', () => {
+describe('HuLabelPdf.generate (size-aware mm PDF, one page per label)', () => {
     const labels = (n) => Printer.prepare(Array.from({ length: n }, (_, i) => ({ huNumber: String(2000019990 + i), materialName: 'Pump Assembly 24V Industrial Grade High-Flow ' + i, createdDate: '2026-10-06', srNo: 'SR-' + i }))).labels;
-    it('makes one 288x288pt page per label (no blank trailing page)', () => {
-        [1, 3, 10].forEach((n) => {
-            const doc = Pdf.generate(jsPDF, labels(n));
-            expect(doc.getNumberOfPages()).toBe(n);
+    it('makes one page per label at the chosen size in mm (no blank trailing page)', () => {
+        [['A', 50, 25], ['B', 100, 50], ['C', 150, 100], ['D', 200, 100]].forEach(([k, w, h]) => {
+            const doc = Pdf.generate(jsPDF, labels(3), k);
+            expect(doc.getNumberOfPages()).toBe(3);
             const p = doc.internal.pageSize;
-            expect(Math.round(p.getWidth())).toBe(288);
-            expect(Math.round(p.getHeight())).toBe(288);
+            expect(Math.round(p.getWidth())).toBe(w);
+            expect(Math.round(p.getHeight())).toBe(h);
         });
     });
-    it('draws a label with blank srNo / "-" fallbacks without throwing', () => {
+    it('defaults to B (Medium, 100x50mm) when no size is given', () => {
+        const p = Pdf.generate(jsPDF, labels(1)).internal.pageSize;
+        expect(Math.round(p.getWidth())).toBe(100);
+        expect(Math.round(p.getHeight())).toBe(50);
+    });
+    it('draws a label with blank srNo / "-" fallbacks without throwing (every size)', () => {
         const clean = Printer.prepare([{ huNumber: '0012' }]).labels; // no material/date/serial
         expect(clean[0]).toMatchObject({ huNumber: '0012', materialName: '-', createdDate: '-', srNo: '' });
-        expect(() => Pdf.generate(jsPDF, clean)).not.toThrow();
+        ['A', 'B', 'C', 'D'].forEach((k) => expect(() => Pdf.generate(jsPDF, clean, k)).not.toThrow());
     });
     it('download([]) rejects (nothing to download)', async () => {
         await expect(Pdf.download([], 'x.pdf')).rejects.toThrow(/No labels/);

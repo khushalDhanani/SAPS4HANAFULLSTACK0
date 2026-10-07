@@ -64,12 +64,18 @@ sap.ui.define([], function () {
         return { total: x + QUIET, bars: aBars };
     }
 
-    /** Inline SVG of the barcode: one <rect> per bar, 10-module quiet zones, sized in mm for scanners. */
-    function toSvg(sText) {
+    /**
+     * Inline SVG of the barcode: one <rect> per bar, 10-module quiet zones. Sized in mm for scanners.
+     * wMm/hMm override the default (module width 0.4mm, height 15mm); preserveAspectRatio="none" stretches
+     * the modules to exactly fill wMm, so on-page narrow-bar width = wMm / total modules.
+     */
+    function toSvg(sText, wMm, hMm) {
         var o = bars(sText);
         var aRects = o.bars.map(function (b) { return '<rect x="' + b.x + '" y="0" width="' + b.w + '" height="1"/>'; });
+        var sW = (wMm === undefined || wMm === null) ? (o.total * MODULE_MM).toFixed(1) : wMm;
+        var sH = (hMm === undefined || hMm === null) ? HEIGHT_MM : hMm;
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + o.total + ' 1" preserveAspectRatio="none" shape-rendering="crispEdges" ' +
-            'width="' + (o.total * MODULE_MM).toFixed(1) + 'mm" height="' + HEIGHT_MM + 'mm" fill="#000">' + aRects.join("") + "</svg>";
+            'width="' + sW + 'mm" height="' + sH + 'mm" fill="#000">' + aRects.join("") + "</svg>";
     }
 
     return { encode: encode, toSvg: toSvg, bars: bars };

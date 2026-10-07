@@ -5,8 +5,9 @@ sap.ui.define([
     "sap/ui/core/Fragment",
     "sap/m/MessageToast",
     "sap/m/MessageBox",
-    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, HuLabelPrinter) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelSizeDialog"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, HuLabelPrinter, HuLabelSizeDialog) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -47,13 +48,15 @@ sap.ui.define([
             this.getRouter().getRoute("wmHandlingUnitDetail").attachPatternMatched(this.onRouteMatched, this);
         },
 
-        /** Prints the loaded handling unit as a browser-rendered 4x4 label (via a hidden iframe). */
+        /** Picks a label size, then prints the loaded handling unit at that size (via a hidden iframe). Cancel = no-op. */
         onPrint: function () {
             var o = this.getModel("huDetail").getData();
-            HuLabelPrinter.printRecords([{ header: o.header, items: o.items, serials: o.serials || [] }], this._labelTexts())
-                .catch(function (oError) {
-                    MessageBox.error((oError && oError.message) || this.getText("huLoadError"));
-                }.bind(this));
+            var self = this;
+            HuLabelSizeDialog.open(this, { verb: "print", count: 1 }).then(function (sKey) {
+                if (!sKey) { return; }
+                HuLabelPrinter.printRecords([{ header: o.header, items: o.items, serials: o.serials || [] }], self._labelTexts(), sKey)
+                    .catch(function (oError) { MessageBox.error((oError && oError.message) || self.getText("huLoadError")); });
+            });
         },
 
         _labelTexts: function () {
