@@ -7,8 +7,9 @@ sap.ui.define([
     "sap/m/MessageBox",
     "sap/m/BusyDialog",
     "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPdf",
     "saps4hana/fiori/modules/wm/handling-unit/util/HuBatchReader"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuBatchReader) {
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuLabelPdf, HuBatchReader) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -36,6 +37,7 @@ sap.ui.define([
                 status: "",
                 shippingPoint: "",
                 busy: false,
+                printing: false,
                 message: "",
                 messageType: "Information",
                 items: [],
@@ -158,47 +160,90 @@ sap.ui.define([
             }).then(function (aWrappers) { return aWrappers.map(HuLabelPrinter.toRecord); });
         },
 
-        /** Reads every chosen HU (progress + cancel), validates, then prints one 4x4 page per valid HU via a hidden iframe. */
-        _printRows: function (aRows) {
+        /** Shared bulk job (Print All/Selected/Current Page, Download Selected): progress + cancel dialog, batched read, validation, then fnOutput(labels). */
+        _runLabelJob: function (aRows, fnOutput, sSummaryKey) {
             if (!aRows.length) { return; }
             var self = this;
+            var oModel = this.getModel("huView");
             var nTotal = aRows.length;
             var bCancel = false;
+            oModel.setProperty("/printing", true); // disables every print/download button until the job ends
             var oDialog = new BusyDialog({
                 title: this.getText("huPrintMenu"),
                 text: this.getText("huPrintProgress", [0, nTotal]),
                 showCancelButton: true,
-                cancel: function () { bCancel = true; }
+                // BusyDialog has no 'cancel' event; the Cancel button fires 'close' with cancelPressed=true.
+                close: function (oEvent) { if (oEvent.getParameter("cancelPressed")) { bCancel = true; } }
             });
             oDialog.open();
             var tFetch = performance.now();
-            this._readLabelRecords(aRows, function (nDone) {
+            return this._readLabelRecords(aRows, function (nDone) {
                 oDialog.setText(self.getText("huPrintProgress", [nDone, nTotal]));
             }, function () { return bCancel; })
                 .then(function (aRecords) {
                     oDialog.close();
                     if (bCancel) { MessageToast.show(self.getText("huPrintCancelled")); return undefined; }
                     // eslint-disable-next-line no-console
-                    console.log("[HU print] fetch " + Math.round(performance.now() - tFetch) + "ms for " + nTotal + " HUs");
+                    console.log("[HU labels] fetch " + Math.round(performance.now() - tFetch) + "ms for " + nTotal + " HUs");
                     var oPrep = HuLabelPrinter.prepare(aRecords);
-                    var tPrint = performance.now();
-                    return HuLabelPrinter.print(oPrep.labels, self._labelTexts()).then(function () {
+                    var tOut = performance.now();
+                    return Promise.resolve(fnOutput(oPrep.labels)).then(function () {
                         // eslint-disable-next-line no-console
-                        console.log("[HU print] validate+render+dialog " + Math.round(performance.now() - tPrint) + "ms, " + oPrep.labels.length + " labels");
-                        self._showPrintSummary({ printed: oPrep.labels.length, skipped: oPrep.skipped, duplicatesRemoved: oPrep.duplicatesRemoved }, nTotal);
+                        console.log("[HU labels] render/output " + Math.round(performance.now() - tOut) + "ms, " + oPrep.labels.length + " labels");
+                        self._showJobSummary({ printed: oPrep.labels.length, skipped: oPrep.skipped, duplicatesRemoved: oPrep.duplicatesRemoved }, nTotal, sSummaryKey);
                     });
                 })
                 .catch(function (oError) {
                     oDialog.close();
                     MessageBox.error((oError && oError.message) || self.getText("huLoadError"));
                 })
-                .then(function () { oDialog.destroy(); });
+                .then(function () { oDialog.destroy(); oModel.setProperty("/printing", false); });
         },
 
-        /** "Printed X of Y" + removed-duplicates note + skipped list (with a CSV download when any were skipped). */
-        _showPrintSummary: function (oRes, nRequested) {
+        /** One-HU print/download from a row button: reads just that HU, busy-spins that button, no confirmation dialog. */
+        _runRowJob: function (oButton, fnOutput) {
+            if (oButton.getBusy()) { return undefined; } // ignore a rapid second click while this row's job runs (the busy spinner does not block the click itself)
+            var self = this;
+            var o = oButton.getBindingContext("huView").getObject(); // the row's HU from its context, never a row index
+            oButton.setBusyIndicatorDelay(0);
+            oButton.setBusy(true);
+            return this._readLabelRecords([o], function () { }, function () { return false; })
+                .then(function (aRecords) {
+                    var oPrep = HuLabelPrinter.prepare(aRecords);
+                    if (!oPrep.labels.length) {
+                        var sReason = (oPrep.skipped[0] && oPrep.skipped[0].reason) || self.getText("huNoData");
+                        MessageToast.show(self.getText("huPrintBadData", [sReason]));
+                        return undefined;
+                    }
+                    return fnOutput(oPrep.labels);
+                })
+                .catch(function (oError) { MessageBox.error((oError && oError.message) || self.getText("huLoadError")); })
+                .then(function () { oButton.setBusy(false); });
+        },
+
+        /** Confirms before a large job: always for Print All, otherwise only above the safety limit. fnGo runs on OK. */
+        _confirmCount: function (nCount, bAlwaysConfirm, fnGo) {
+            if (!nCount) { return; }
+            var fnOnClose = function (a) { if (a === MessageBox.Action.OK) { fnGo(); } };
+            if (nCount > PRINT_SAFE_LIMIT) {
+                MessageBox.warning(this.getText("huPrintAllLarge", [nCount, PRINT_SAFE_LIMIT]), { onClose: fnOnClose });
+            } else if (bAlwaysConfirm) {
+                MessageBox.confirm(this.getText("huPrintAllConfirm", [nCount]), { onClose: fnOnClose });
+            } else {
+                fnGo();
+            }
+        },
+
+        _fileStamp: function () {
+            var d = new Date();
+            var p = function (n) { return (n < 10 ? "0" : "") + n; };
+            return "" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes());
+        },
+
+        /** "Printed/Downloaded X of Y" + removed-duplicates note + skipped list (with a CSV download when any were skipped). */
+        _showJobSummary: function (oRes, nRequested, sSummaryKey) {
             var aSkipped = oRes.skipped || [];
-            var sMsg = this.getText("huPrintSummary", [oRes.printed, nRequested]);
+            var sMsg = this.getText(sSummaryKey || "huPrintSummary", [oRes.printed, nRequested]);
             if (oRes.duplicatesRemoved) { sMsg += "\n" + this.getText("huPrintDupes", [oRes.duplicatesRemoved]); }
             if (!aSkipped.length) {
                 if (oRes.duplicatesRemoved) { MessageToast.show(sMsg); }
@@ -228,27 +273,46 @@ sap.ui.define([
             setTimeout(function () { URL.revokeObjectURL(sUrl); }, 1000);
         },
 
+        _print: function (labels) { return HuLabelPrinter.print(labels, this._labelTexts()); },
+
         /** Print All: every HU matching the current filters (the full /items set, server-capped at MAX_LIST), with a confirm. */
         onPrintAll: function () {
+            var self = this;
             var aAll = this.getModel("huView").getProperty("/items") || [];
-            var n = aAll.length;
-            if (!n) { return; }
-            var fnConfirm = function (a) { if (a === MessageBox.Action.OK) { this._printRows(aAll); } }.bind(this);
-            if (n > PRINT_SAFE_LIMIT) {
-                MessageBox.warning(this.getText("huPrintAllLarge", [n, PRINT_SAFE_LIMIT]), { onClose: fnConfirm });
-            } else {
-                MessageBox.confirm(this.getText("huPrintAllConfirm", [n]), { onClose: fnConfirm });
-            }
+            this._confirmCount(aAll.length, true, function () {
+                self._runLabelJob(aAll, self._print.bind(self), "huPrintSummary");
+            });
         },
 
         /** Print Selected: only the ticked rows. */
         onPrintSelected: function () {
-            this._printRows(this._rowsToObjects(this.byId("huTable").getSelectedItems()));
+            this._runLabelJob(this._rowsToObjects(this.byId("huTable").getSelectedItems()), this._print.bind(this), "huPrintSummary");
         },
 
         /** Print Current Page: only the rows currently rendered (the current growing page). */
         onPrintCurrentPage: function () {
-            this._printRows(this._rowsToObjects(this.byId("huTable").getItems()));
+            this._runLabelJob(this._rowsToObjects(this.byId("huTable").getItems()), this._print.bind(this), "huPrintSummary");
+        },
+
+        /** Download Selected: one PDF (one 4x4 page per ticked HU), same 500 safety limit + progress/Cancel. */
+        onDownloadSelected: function () {
+            var self = this;
+            var aRows = this._rowsToObjects(this.byId("huTable").getSelectedItems());
+            this._confirmCount(aRows.length, false, function () {
+                var sFile = "HU_labels_" + self._fileStamp() + ".pdf";
+                self._runLabelJob(aRows, function (labels) { return HuLabelPdf.download(labels, sFile); }, "huDownloadSummary");
+            });
+        },
+
+        /** Row Print: print just this row's HU (1 POST, one 4x4 page, no confirm). */
+        onRowPrint: function (oEvent) {
+            var self = this;
+            this._runRowJob(oEvent.getSource(), function (labels) { return self._print(labels); });
+        },
+
+        /** Row Download: PDF of just this row's HU as HU_<huNumber>.pdf. */
+        onRowDownload: function (oEvent) {
+            this._runRowJob(oEvent.getSource(), function (labels) { return HuLabelPdf.download(labels, "HU_" + labels[0].huNumber + ".pdf"); });
         },
 
         _labelTexts: function () {

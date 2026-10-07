@@ -3,11 +3,14 @@
  * (dedupe, date formatting, injection-safety), the 4x4 label HTML builder and the integrity check.
  * The iframe print() / printRecords() paths need a DOM and are exercised in the browser, not here.
  */
-let Barcode, Printer;
-global.sap = { ui: { define: (deps, f) => { Barcode = f(); } } };
+let Barcode, Printer, Pdf;
+global.sap = { ui: { define: (deps, f) => { Barcode = f(); }, require: { toUrl: () => '' } } };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/Barcode.js');
 global.sap.ui.define = (deps, f) => { Printer = f(Barcode); };
 require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelPrinter.js');
+global.sap.ui.define = (deps, f) => { Pdf = f(Barcode); };
+require('../../../app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelPdf.js');
+const { jsPDF } = require('../../../app/fiori-app/node_modules/jspdf');
 
 const header = { HandlingUnitExternalID: '2000019997', CreationDateTime: '2026-10-06', Plant: '1120', GrossWeight: '12.5' };
 const items = [{ HandlingUnitItem: '000001', Material: '8000007113', MaterialName: 'Pump', Quantity: '1', Unit: 'NOS' }];
@@ -153,6 +156,37 @@ describe('HuLabelPrinter.buildHtml (4x4 label, from clean labels)', () => {
     it('escapes values', () => {
         expect(Printer.esc(null)).toBe('');
         expect(Printer.esc('a"b')).toBe('a&quot;b');
+    });
+});
+
+describe('Barcode.bars (geometry shared with toSvg and the PDF renderer)', () => {
+    it('returns bars + total consistent with toSvg rects', () => {
+        const g = Barcode.bars('2000019997');
+        expect(g.total).toBe(110); // matches viewBox "0 0 110 1"
+        expect(g.bars.length).toBe(25); // one bar per <rect> in toSvg
+        expect(g.bars[0]).toEqual({ x: 10, w: 2 }); // 10-module quiet zone, then the start bar
+        g.bars.forEach((b) => { expect(b.w).toBeGreaterThan(0); expect(b.x).toBeGreaterThanOrEqual(10); expect(b.x + b.w).toBeLessThanOrEqual(100); });
+    });
+});
+
+describe('HuLabelPdf.generate (4x4 pt PDF, one page per label)', () => {
+    const labels = (n) => Printer.prepare(Array.from({ length: n }, (_, i) => ({ huNumber: String(2000019990 + i), materialName: 'Pump Assembly 24V Industrial Grade High-Flow ' + i, createdDate: '2026-10-06', srNo: 'SR-' + i }))).labels;
+    it('makes one 288x288pt page per label (no blank trailing page)', () => {
+        [1, 3, 10].forEach((n) => {
+            const doc = Pdf.generate(jsPDF, labels(n));
+            expect(doc.getNumberOfPages()).toBe(n);
+            const p = doc.internal.pageSize;
+            expect(Math.round(p.getWidth())).toBe(288);
+            expect(Math.round(p.getHeight())).toBe(288);
+        });
+    });
+    it('draws a label with blank srNo / "-" fallbacks without throwing', () => {
+        const clean = Printer.prepare([{ huNumber: '0012' }]).labels; // no material/date/serial
+        expect(clean[0]).toMatchObject({ huNumber: '0012', materialName: '-', createdDate: '-', srNo: '' });
+        expect(() => Pdf.generate(jsPDF, clean)).not.toThrow();
+    });
+    it('download([]) rejects (nothing to download)', async () => {
+        await expect(Pdf.download([], 'x.pdf')).rejects.toThrow(/No labels/);
     });
 });
 

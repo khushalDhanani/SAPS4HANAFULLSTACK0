@@ -71,15 +71,18 @@
                             <ToolbarSpacer />
                             <Button id="huCreateBtn" icon="sap-icon://add" text="{i18n>huCreate}" type="Emphasized" press=".onOpenCreate" enabled="{= !${huView>/busy} }" />
                             <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
-                            <MenuButton id="huPrintMenu" icon="sap-icon://print" text="{i18n>huPrintMenu}" enabled="{= !${huView>/busy} &amp;&amp; ${huView>/items}.length > 0 }">
-                                <menu>
-                                    <Menu>
-                                        <MenuItem text="{i18n>huPrintAll}" icon="sap-icon://print" press=".onPrintAll" />
-                                        <MenuItem text="{i18n>huPrintSelectedOnly}" icon="sap-icon://print" press=".onPrintSelected" enabled="{= ${huView>/selectedCount} > 0 }" />
-                                        <MenuItem text="{i18n>huPrintCurrentPage}" icon="sap-icon://print" press=".onPrintCurrentPage" />
-                                    </Menu>
-                                </menu>
-                            </MenuButton>
+                            <Button id="huPrintAll" icon="sap-icon://print" text="{i18n>huPrintAll}" tooltip="{i18n>huPrintAllTip}" type="Emphasized" press=".onPrintAll" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="High" /></layoutData>
+                            </Button>
+                            <Button id="huPrintSelected" icon="sap-icon://print" text="{= ${i18n>huPrintSelectedOnly} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huPrintSelectedTip}" press=".onPrintSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="High" /></layoutData>
+                            </Button>
+                            <Button id="huPrintCurrentPage" icon="sap-icon://print" text="{i18n>huPrintCurrentPage}" tooltip="{i18n>huPrintCurrentPageTip}" press=".onPrintCurrentPage" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
+                            <Button id="huDownloadSelected" icon="sap-icon://download" text="{= ${i18n>huDownloadSelected} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huDownloadSelectedTip}" press=".onDownloadSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
                         </OverflowToolbar>
                     </headerToolbar>
                     <columns>
@@ -90,6 +93,7 @@
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColStatus}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColReference}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColCreated}" /></Column>
+                        <Column width="6rem" hAlign="Center"><Text text="{i18n>huColActions}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation" press=".onOpenDetail">
@@ -101,6 +105,10 @@
                                 <Text text="{huView>StatusText}" />
                                 <Text text="{huView>ReferenceDocument}" />
                                 <Text text="{= ${huView>CreatedByUser} + ' · ' + ${huView>CreationDateTime} }" />
+                                <HBox justifyContent="Center" renderType="Bare">
+                                    <Button icon="sap-icon://print" type="Transparent" tooltip="{i18n>huRowPrintTip}" press=".onRowPrint" enabled="{= !${huView>/printing} }" class="sapUiTinyMarginEnd" />
+                                    <Button icon="sap-icon://download" type="Transparent" tooltip="{i18n>huRowDownloadTip}" press=".onRowDownload" enabled="{= !${huView>/printing} }" />
+                                </HBox>
                             </cells>
                         </ColumnListItem>
                     </items>

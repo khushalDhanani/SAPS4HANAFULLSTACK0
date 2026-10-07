@@ -48,25 +48,29 @@ sap.ui.define([], function () {
         return [nStart].concat(aValues, [nSum % 103, STOP]);
     }
 
-    /** Inline SVG of the barcode: one <rect> per bar, 10-module quiet zones, sized in mm for scanners. */
-    function toSvg(sText) {
+    /** Bar geometry in module units: { total, bars:[{x,w}] } with 10-module quiet zones. Shared by toSvg and the PDF renderer. */
+    function bars(sText) {
         var aSymbols = encode(sText);
-        var aRects = [];
+        var aBars = [];
         var x = QUIET;
         aSymbols.forEach(function (v) {
             var sPattern = PATTERNS[v];
             for (var i = 0; i < sPattern.length; i++) {
                 var w = Number(sPattern.charAt(i));
-                if (i % 2 === 0) {
-                    aRects.push('<rect x="' + x + '" y="0" width="' + w + '" height="1"/>');
-                }
+                if (i % 2 === 0) { aBars.push({ x: x, w: w }); }
                 x += w;
             }
         });
-        var nTotal = x + QUIET;
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + nTotal + ' 1" preserveAspectRatio="none" shape-rendering="crispEdges" ' +
-            'width="' + (nTotal * MODULE_MM).toFixed(1) + 'mm" height="' + HEIGHT_MM + 'mm" fill="#000">' + aRects.join("") + "</svg>";
+        return { total: x + QUIET, bars: aBars };
     }
 
-    return { encode: encode, toSvg: toSvg };
+    /** Inline SVG of the barcode: one <rect> per bar, 10-module quiet zones, sized in mm for scanners. */
+    function toSvg(sText) {
+        var o = bars(sText);
+        var aRects = o.bars.map(function (b) { return '<rect x="' + b.x + '" y="0" width="' + b.w + '" height="1"/>'; });
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + o.total + ' 1" preserveAspectRatio="none" shape-rendering="crispEdges" ' +
+            'width="' + (o.total * MODULE_MM).toFixed(1) + 'mm" height="' + HEIGHT_MM + 'mm" fill="#000">' + aRects.join("") + "</svg>";
+    }
+
+    return { encode: encode, toSvg: toSvg, bars: bars };
 });
