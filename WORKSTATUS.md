@@ -51,6 +51,35 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-07 — HU authorization: close remaining gaps (missing-attr, hierarchy, write actions)
+
+- **1. Missing/empty/malformed Plant attribute**: extracted `srv/wm/handling-unit/plantScope.js` (pure, testable): Admin → `null`; a non-Admin with no / empty / blank Plant → `[]` (no access, never `null`); valid values trimmed+upper-cased; a malformed value is coerced (matches no real plant). `test/unit/wm/plantScope.test.js` covers all cases. **Live**: mock user `eve` (Viewer, no Plant) → list 0 rows, labels both BLANK, detail → 403.
+- **2. hierarchy()** now plant-scoped like list/detail: resolves the HU's plant by `HandlingUnitIDChar32` from the monitor and throws **403** if outside the user's scope. Unit test added. **Live**: bob (1120) hierarchy of a 1130 HU tree → 403; alice → 200.
+- **3. Write actions** — report + enforcement (role guards unchanged; plant scope added):
+  | Action | Plant checked before? | Now |
+  |---|---|---|
+  | `create(plant,…)` | No (role only) | `_assertPlantAllowed(input.plant)` → **403** if the target plant is outside scope (before any BAPI) |
+  | `pack(hu,…)` | No | `_assertHuInScope` reads `VEKP.WERKS` by EXIDV → **403** if the HU's plant is outside scope |
+  | `unpack(hu,…)` | No | same `VEKP` check → **403** |
+  | `remove(hu)` | No | same `VEKP` check → **403** |
+  Admin bypasses (`allowedPlants === null`). Unit tests: create/pack/remove 403 out-of-scope, pack proceeds in-scope. **Live** (mock `carol` = WarehouseClerk + Plant 1120, rejected before any SAP mutation): create(plant=1130) → 403, remove(1130 HU) → 403.
+- **Files**: `srv/wm/handling-unit/plantScope.js` (new) + `service.js` (uses it, passes scope to hierarchy + writes); `HandlingUnitAdapter.js` (hierarchy scope + `_assertPlantAllowed`/`_assertHuInScope` + write checks); `package.json` mock users `eve` (no Plant) + `carol` (clerk, 1120); tests.
+- **Validation**: two-user live re-test (bob/dave/alice) all correct; full unit suite **127 suites / 2199 tests pass**; `ui5lint` clean; `cds compile srv` OK; `git diff --check` clean.
+
+### 2026-10-07 — HU authorization: plant-scoped read paths (Option 1: XSUAA attribute + CAP filter) — RELEASE BLOCKER RESOLVED
+
+- **Step 1 (investigation, reported)**: confirmed the app uses a **single technical SAP user** in both local (`.env.local` BasicAuth) and deployed (`config/destinations/destination-service.json` `S4HANA_PO_API` = `BasicAuthentication`); `xs-security.json` had `attributes:[]`; no `@restrict` by plant; principal-propagation code exists but is unused by a BasicAuth destination. User chose **Option 1** (XSUAA `Plant` attribute + CAP server-side filter) — works with the existing destination and is locally testable.
+- **Step 2 (implemented)** — plant authorization on **all read paths**, server-side (never trusts a browser plant); `null`=Admin/all, `[]`=none, `[codes]`=those plants:
+  - `srv/wm/handling-unit/service.js`: `plantScope(req)` = `null` when `req.user.is('Admin')`, else `req.user.attr.Plant` (array, upper-cased); passed as `allowedPlants` to list/detail/serials/statusKpis/valueHelp/labels.
+  - `srv/integration/s4hana/wm/HandlingUnitAdapter.js`: `inPlantScope`/`plantClause` helpers; **list()** intersects the browser plant with allowed and adds a `(Plant eq …)` clause (empty scope → empty result, no SAP call); **labels()** reads `Plant` from `I_HandlingUnitItemCombined` and blanks material+serial (and skips the serial read) for out-of-scope HUs; **detail()** throws **403** for an HU outside scope; **serials()** checks `VEKP.WERKS` for the VENUM → `[]` if out of scope; **statusKpis()** scopes the `$count`s; **valueHelp(kind='plant')** returns only the user's plants. Writes unchanged (role-gated). `hierarchy()` left as-is (reached only from the now-gated detail page; noted as a residual direct-access gap).
+  - `xs-security.json`: added `Plant` attribute + `attribute-references:["Plant"]` on Viewer/WarehouseClerk/WarehouseManager (Admin bypasses in code).
+  - `package.json`: mock users `bob` (Viewer, Plant 1120) and `dave` (Viewer, Plant 1130) for local testing; alice/khushal stay Admin (all).
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`: synced 23 HU print/download keys that were missing from the English bundle (**fix for a pre-existing `uiConsistency` test failure** from earlier turns — the keys existed only in `i18n.properties`).
+  - `test/unit/wm/handlingUnitAdapter.test.js`: 8 plant-auth unit tests (list scope/empty/untrusted-browser-plant/Admin, labels blanks out-of-scope, detail 403, serials VEKP check, plant value-help).
+- **Live verification (cds watch, client 220)**: bob (1120) list() → **253 rows, all Plant 1120**; bob list(plant='1130') → **0** (browser plant not trusted); bob labels([1120-HU,1130-HU]) → 1120 "Tanker, MS 10KL", **1130 blank**; bob detail(1130) → **403**, detail(1120) → **200**; dave (1130) is the mirror (1120 blank, 1130 data); alice (Admin) → both have data; bob statusKpis Total **253** vs alice **17502**; bob plant VH → **["1120"]** only. The table / row buttons / Print Selected / Print All all call these now-enforced endpoints.
+- **Regression**: 500-label speed (admin) ~3s over HTTP (no slowdown — Admin scope is a no-op; the per-HU scope check is a boolean); **full unit suite 126 suites / 2189 tests pass** (incl. 8 new + the uiConsistency fix); `ui5lint` clean; `cds compile srv` OK; `git diff --check` clean.
+- **Residual notes**: enforcement is in CAP (the technical user still *can* read all from SAP — accepted, since CAP is the sole data path); `hierarchy()` direct access and the write actions' plant scoping are follow-ups; XSUAA role-collection `Plant` values must be assigned per user in the deployed subaccount (the attribute + references are now in `xs-security.json`).
+
 ### 2026-10-07 — HU print/download: final pre-release verification (live SAP) + id-cap fix + AUTH release blocker
 
 - **Setup**: restarted `cds watch` on 4006 (cold), live SAP client 220, in-app Chromium, instrumented adapter for SAP-call counts.

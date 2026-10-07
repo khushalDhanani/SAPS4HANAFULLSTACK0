@@ -35,7 +35,7 @@ const MAX_LIST = 1000;
 const LABEL_HU_CHUNK = 50;
 const SERIAL_RFC_CHUNK = 40;
 const MAX_LABEL_IDS = 2000; // cap per labels() call: the UI sends <=200/POST, so this only blocks direct-API abuse/enumeration
-const LABEL_ITEM_SELECT = 'HandlingUnitExternalID,HandlingUnitItem,Material,MaterialName,HandlingUnitNumberOfSerialNumb,HandlingUnitInternalID';
+const LABEL_ITEM_SELECT = 'HandlingUnitExternalID,HandlingUnitItem,Material,MaterialName,HandlingUnitNumberOfSerialNumb,HandlingUnitInternalID,Plant';
 
 const LIST_SELECT = [
   'HandlingUnitExternalID', 'Warehouse', 'WarehouseName', 'HandlingUnitIDChar32', 'HandlingUnitOrigin',
@@ -92,6 +92,20 @@ const strip = (v) => String(v ?? '').replace(/^0+(?=.)/, '');
 const num = (v) => (v === null || v === undefined || v === '' ? 0 : Number(v));
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
+/**
+ * Plant authorization (server-side; never trust a plant from the browser).
+ * allowed === null  -> Admin / unrestricted (all plants)
+ * allowed === []    -> no plants (sees nothing)
+ * allowed === [..]  -> only those plant codes (upper-cased).
+ */
+const inPlantScope = (allowed, plant) => !Array.isArray(allowed) || allowed.includes(String(plant ?? '').trim().toUpperCase());
+/** OData $filter sub-clause for a plant list, or '' when unrestricted. An empty list yields a never-match clause. */
+const plantClause = (allowed, field = 'Plant') => {
+  if (!Array.isArray(allowed)) return '';
+  if (!allowed.length) return `${field} eq '~none~'`;
+  return '(' + allowed.map((p) => `${field} eq '${p}'`).join(' or ') + ')';
+};
+
 /** Trust-boundary check: values go into an OData $filter or key, so only the listed characters pass. */
 function clean(value, label, re, mandatory) {
   const s = String(value ?? '').trim().toUpperCase();
@@ -140,8 +154,19 @@ class HandlingUnitAdapter {
     const status = clean(input.status, 'Status', RE.status);
     const shippingPoint = clean(input.shippingPoint, 'Shipping point', RE.plant);
 
+    // Plant authorization: intersect the (untrusted) browser plant with the user's allowed plants.
+    const allowed = input.allowedPlants;
+    let plantFilter = '';
+    if (Array.isArray(allowed)) {
+      const eff = plant ? (allowed.includes(plant) ? [plant] : []) : allowed;
+      if (!eff.length) return { TotalCount: 0, SapCount: 0, Truncated: false, Items: [] };
+      plantFilter = plantClause(eff);
+    } else if (plant) {
+      plantFilter = `Plant eq '${plant}'`;
+    }
+
     const filter = [];
-    if (plant) filter.push(`Plant eq '${plant}'`);
+    if (plantFilter) filter.push(plantFilter);
     if (storageLocation) filter.push(`StorageLocation eq '${storageLocation}'`);
     if (warehouse) filter.push(`Warehouse eq '${warehouse}'`);
     if (material) filter.push(`PackagingMaterial eq '${material}'`);
@@ -243,6 +268,12 @@ class HandlingUnitAdapter {
       // Keep monitor as {} if query fails
     }
 
+    // Plant authorization: reject an HU outside the user's plants (looks the same as "not found").
+    const huPlant = h.Plant || monitor.Plant || (itemRows[0] && itemRows[0].Plant) || '';
+    if (!inPlantScope(input.allowedPlants, huPlant)) {
+      throw httpError(403, `Not authorized to view handling unit ${hu}`);
+    }
+
     const Items = itemRows.map((it) => ({
       HandlingUnitItem: strip(it.HandlingUnitItem),
       Material: strip(it.Material),
@@ -308,6 +339,18 @@ class HandlingUnitAdapter {
   async hierarchy(input = {}) {
     const char32 = clean(input.handlingUnitIDChar32, 'Handling unit id', RE.char32, true);
     const origin = clean(input.handlingUnitOrigin || 'ERP', 'Handling unit origin', RE.origin, true);
+
+    // Plant authorization: resolve this HU's plant (by Char32) from the monitor and reject if outside the user's scope.
+    if (Array.isArray(input.allowedPlants)) {
+      const m = await this._results(MONITOR, {
+        $filter: `HandlingUnitIDChar32 eq '${char32}'`, $select: 'Plant', $top: 1, $format: 'json'
+      }, 'Resolve plant for packing tree').catch(() => ({}));
+      const row = (m.results || [])[0];
+      if (!inPlantScope(input.allowedPlants, row && row.Plant)) {
+        throw httpError(403, 'Not authorized to view this handling unit');
+      }
+    }
+
     const path = `${HIERNODE}(P_HandlingUnitOrigin='${origin}',P_HandlingUnitIDChar32='${char32}')/Set`;
     const d = await this._results(path, { $format: 'json' }, `Read packing tree of ${char32}`);
 
@@ -342,8 +385,13 @@ class HandlingUnitAdapter {
     // Keys go straight into a $filter eq, so keep SAP's stored format (e.g. plant '0001') — do not strip.
     // Dedupe by key: some sets (storage location) repeat a code across plants.
     const seen = new Set();
-    const Items = (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' }))
+    let Items = (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' }))
       .filter((x) => x.key && !seen.has(x.key) && seen.add(x.key));
+    // Plant authorization: the plant value help only offers the user's own plants (other VHs are generic master data).
+    if (kind === 'plant' && Array.isArray(input.allowedPlants)) {
+      const set = new Set(input.allowedPlants);
+      Items = Items.filter((x) => set.has(String(x.key).trim().toUpperCase()));
+    }
     return { Items };
   }
 
@@ -361,14 +409,16 @@ class HandlingUnitAdapter {
   }
 
   /** Status-distribution KPIs for the cards above the filter bar: total + one count per status code. Read-only. */
-  async statusKpis() {
+  async statusKpis(input = {}) {
     const { Items: statuses } = await this.valueHelp({ kind: 'status' });
-    const Total = await this._count('');
+    const sPlant = plantClause(input.allowedPlants); // '' when unrestricted; scopes counts to the user's plants
+    const withPlant = (f) => [sPlant, f].filter(Boolean).join(' and ');
+    const Total = await this._count(withPlant(''));
     const Items = [];
     for (const s of statuses) {
       const code = clean(s.key, 'Status', RE.status);
       if (!code) continue;
-      Items.push({ code, name: s.text, count: await this._count(`HandlingUnitProcessStatus eq '${code}'`) });
+      Items.push({ code, name: s.text, count: await this._count(withPlant(`HandlingUnitProcessStatus eq '${code}'`)) });
     }
     return { Total, Items };
   }
@@ -382,6 +432,11 @@ class HandlingUnitAdapter {
    */
   async serials(input = {}) {
     const venum = clean(input.handlingUnitInternalNumber, 'Handling unit internal number', RE.venum, true).padStart(10, '0');
+    // Plant authorization: the HU's plant is VEKP.WERKS for this VENUM; outside the user's plants -> no serials.
+    if (Array.isArray(input.allowedPlants)) {
+      const [vekp] = await this.rfc.readTable('VEKP', ['WERKS'], [`VENUM = '${venum}'`]).catch(() => []);
+      if (!inPlantScope(input.allowedPlants, vekp && vekp.WERKS)) { return { Items: [] }; }
+    }
     const read = (table, fields, where) => this.rfc.readTable(table, fields, where).catch((e) => {
       LOG.error(`Read ${table} serials for HU ${venum}: ${e.message}`);
       throw httpError(e.status || 502, `Read ${table} serials for HU ${venum}: ${e.message}`);
@@ -432,12 +487,14 @@ class HandlingUnitAdapter {
         (byHu[h] = byHu[h] || []).push(r);
       }
     }
-    // First item = lowest HandlingUnitItem; gather VENUMs of HUs that actually carry serials.
+    // First item = lowest HandlingUnitItem; gather VENUMs of in-scope HUs that actually carry serials.
+    // Plant authorization: an HU whose plant is outside the user's scope is treated as having no data.
+    const allowed = input.allowedPlants;
     const venums = new Set();
     for (const h of Object.keys(byHu)) {
       byHu[h].sort((a, b) => strip(a.HandlingUnitItem).localeCompare(strip(b.HandlingUnitItem)));
       const serialCount = byHu[h].reduce((s, r) => s + (Number(r.HandlingUnitNumberOfSerialNumb) || 0), 0);
-      if (serialCount > 0) venums.add(strip(byHu[h][0].HandlingUnitInternalID));
+      if (serialCount > 0 && inPlantScope(allowed, byHu[h][0].Plant)) venums.add(strip(byHu[h][0].HandlingUnitInternalID));
     }
 
     // 2. First serial per HU (only for HUs with serials) via SER06 -> OBJK.
@@ -446,11 +503,12 @@ class HandlingUnitAdapter {
     const Items = ids.map((id) => {
       const g = byHu[id] || [];
       const first = g[0] || {};
+      const ok = g.length && inPlantScope(allowed, first.Plant); // blank for HUs outside the user's plants
       const name = (first.MaterialName || strip(first.Material) || '') + (g.length > 1 ? ` +${g.length - 1} more` : '');
       return {
         HandlingUnitExternalID: id,
-        MaterialName: g.length ? name : '',
-        SerialNumber: g.length ? (serialByVenum[strip(first.HandlingUnitInternalID)] || '') : ''
+        MaterialName: ok ? name : '',
+        SerialNumber: ok ? (serialByVenum[strip(first.HandlingUnitInternalID)] || '') : ''
       };
     });
     return { Items };
@@ -518,6 +576,22 @@ class HandlingUnitAdapter {
     };
   }
 
+  /** Reject a target plant outside the user's scope (create). No-op for Admin (allowed === null). */
+  _assertPlantAllowed(plant, allowed) {
+    if (Array.isArray(allowed) && !inPlantScope(allowed, plant)) {
+      throw httpError(403, `Not authorized for plant ${plant}`);
+    }
+  }
+
+  /** Reject a write against an HU whose plant (VEKP.WERKS by EXIDV) is outside the user's scope (pack/unpack/remove). */
+  async _assertHuInScope(key, allowed) {
+    if (!Array.isArray(allowed)) return; // Admin: unrestricted
+    const [vekp] = await this.rfc.readTable('VEKP', ['WERKS'], [`EXIDV = '${key}'`]).catch(() => []);
+    if (!inPlantScope(allowed, vekp && vekp.WERKS)) {
+      throw httpError(403, `Not authorized to change handling unit ${strip(key)}`);
+    }
+  }
+
   /** Material item fields shared by pack / unpack (BAPIHUITMPROPOSAL / BAPIHUITMUNPACK). */
   _itemFields(input) {
     const material = clean(input.material, 'Material', RE.material, true);
@@ -536,9 +610,11 @@ class HandlingUnitAdapter {
 
   /** Create an empty handling unit; SAP assigns the external number. */
   async create(input = {}) {
+    const plant = clean(input.plant, 'Plant', RE.plant, true);
+    this._assertPlantAllowed(plant, input.allowedPlants); // cannot create in a plant outside the user's scope
     const header = {
       PACK_MAT: pad18(clean(input.packagingMaterial, 'Packaging material', RE.material, true)),
-      PLANT: clean(input.plant, 'Plant', RE.plant, true),
+      PLANT: plant,
       STGE_LOC: clean(input.storageLocation, 'Storage location', RE.sloc, true)
     };
     const content = text(input.content, 'Content', 40);
@@ -551,6 +627,7 @@ class HandlingUnitAdapter {
   /** Pack one material item (loose stock of the HU's plant / storage location) into the handling unit. */
   async pack(input = {}) {
     const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
+    await this._assertHuInScope(key, input.allowedPlants); // cannot pack into an HU outside the user's plants
     const item = { HU_ITEM_TYPE: '1', ...this._itemFields(input) };
     return this._bapi('Pack handling unit item', (call) => call('BAPI_HU_PACK', { HUKEY: key, ITEMPROPOSAL: item }), key);
   }
@@ -558,6 +635,7 @@ class HandlingUnitAdapter {
   /** Unpack one material item (by HU item number) from the handling unit. */
   async unpack(input = {}) {
     const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
+    await this._assertHuInScope(key, input.allowedPlants); // cannot unpack from an HU outside the user's plants
     const item = { HU_ITEM_TYPE: '1', HU_ITEM_NUMBER: clean(input.item, 'Item', RE.item, true).padStart(6, '0'), ...this._itemFields(input) };
     return this._bapi('Unpack handling unit item', (call) => call('BAPI_HU_UNPACK', { HUKEY: key, ITEMUNPACK: item }), key);
   }
@@ -565,6 +643,7 @@ class HandlingUnitAdapter {
   /** Delete a handling unit (SAP removes the VEKP row; packed items make SAP refuse). */
   async remove(input = {}) {
     const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
+    await this._assertHuInScope(key, input.allowedPlants); // cannot delete an HU outside the user's plants
     const r = await this._bapi('Delete handling unit', (call) => call('BAPI_HU_DELETE', { HUKEY: key }), key);
     if (!r.Deleted) throw httpError(502, 'Delete handling unit: SAP did not delete the handling unit');
     return r;

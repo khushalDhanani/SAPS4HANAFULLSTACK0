@@ -36,13 +36,23 @@
       "description": "Manage warehouse operations, tasks and resources"
     }
   ],
-  "attributes": [],
+  "attributes": [
+    {
+      "name": "Plant",
+      "description": "Plants (WERKS) the user may access; empty for a non-Admin means no handling-unit data",
+      "valueType": "string",
+      "valueRequired": false
+    }
+  ],
   "role-templates": [
     {
       "name": "Viewer",
       "description": "Read-only access",
       "scope-references": [
         "$XSAPPNAME.Viewer"
+      ],
+      "attribute-references": [
+        "Plant"
       ]
     },
     {
@@ -98,6 +108,9 @@
       "scope-references": [
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.WarehouseClerk"
+      ],
+      "attribute-references": [
+        "Plant"
       ]
     },
     {
@@ -107,6 +120,9 @@
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.WarehouseClerk",
         "$XSAPPNAME.WarehouseManager"
+      ],
+      "attribute-references": [
+        "Plant"
       ]
     }
   ],

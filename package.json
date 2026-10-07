@@ -64,7 +64,32 @@
             "bob": {
               "roles": [
                 "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
+            },
+            "dave": {
+              "roles": [
+                "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1130"]
+              }
+            },
+            "eve": {
+              "roles": [
+                "Viewer"
               ]
+            },
+            "carol": {
+              "roles": [
+                "Viewer",
+                "WarehouseClerk"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
             },
             "khushal": {
               "roles": [
@@ -98,7 +123,32 @@
             "bob": {
               "roles": [
                 "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
+            },
+            "dave": {
+              "roles": [
+                "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1130"]
+              }
+            },
+            "eve": {
+              "roles": [
+                "Viewer"
               ]
+            },
+            "carol": {
+              "roles": [
+                "Viewer",
+                "WarehouseClerk"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
             },
             "khushal": {
               "roles": [

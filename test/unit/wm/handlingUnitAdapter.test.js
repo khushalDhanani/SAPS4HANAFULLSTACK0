@@ -297,6 +297,78 @@ describe('HandlingUnitAdapter.labels (batched material + first serial join)', ()
   });
 });
 
+describe('HandlingUnitAdapter plant authorization (all read paths)', () => {
+  it('list: scopes the monitor $filter to the user plants', async () => {
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [listRow] }]]);
+    await a.list({ allowedPlants: ['1010', '1120'] });
+    expect(calls[0].query).toContain("(Plant eq '1010' or Plant eq '1120')");
+  });
+  it('list: empty plant scope returns nothing and makes no SAP call', async () => {
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { results: [listRow] }]]);
+    const r = await a.list({ allowedPlants: [] });
+    expect(r).toMatchObject({ TotalCount: 0, Items: [] });
+    expect(calls).toHaveLength(0);
+  });
+  it('list: a browser plant outside the scope is not trusted -> no rows, no SAP call', async () => {
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { results: [listRow] }]]);
+    const r = await a.list({ plant: '9999', allowedPlants: ['1010'] });
+    expect(r.Items).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+  it('list: Admin (allowedPlants null) is unrestricted', async () => {
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [listRow] }]]);
+    await a.list({ allowedPlants: null });
+    expect(calls[0].query).not.toContain('Plant eq');
+  });
+  it('labels: blanks HUs outside the user plants, keeps in-scope ones', async () => {
+    const items = [
+      { HandlingUnitExternalID: 'A', HandlingUnitItem: '000001', Material: 'M', MaterialName: 'InScope', HandlingUnitNumberOfSerialNumb: '0', HandlingUnitInternalID: '1', Plant: '1120' },
+      { HandlingUnitExternalID: 'B', HandlingUnitItem: '000001', Material: 'M', MaterialName: 'OutScope', HandlingUnitNumberOfSerialNumb: '1', HandlingUnitInternalID: '2', Plant: '1130' }
+    ];
+    const rfcCalls = [];
+    const client = { get: async () => ({ data: { d: { results: items } } }) };
+    const rfc = { readTable: async (t, f, w) => { rfcCalls.push(w.join(' ')); return t === 'SER06' ? [{ OBKNR: 'O', VENUM: '0000000002' }] : [{ OBKNR: 'O', SERNR: 'S-B' }]; } };
+    const out = await new HandlingUnitAdapter({ client, rfc }).labels({ handlingUnitExternalIDs: ['A', 'B'], allowedPlants: ['1120'] });
+    expect(out.Items).toEqual([
+      { HandlingUnitExternalID: 'A', MaterialName: 'InScope', SerialNumber: '' },
+      { HandlingUnitExternalID: 'B', MaterialName: '', SerialNumber: '' } // out of scope -> blank, and its serial was never read
+    ]);
+    expect(rfcCalls).toHaveLength(0);
+  });
+  it('detail: 403 for an HU in a plant outside the user scope', async () => {
+    const client = { get: async (path) => {
+      if (path.includes('to_HandlingUnitItem')) return { data: { d: { results: [] } } };
+      if (path.includes('C_HANDLINGUNITMONITOR_CDS')) return { data: { d: { results: [{ HandlingUnitExternalID: 'X', Plant: '1130' }] } } };
+      return { data: { d: { HandlingUnitExternalID: 'X', Plant: '1130' } } };
+    } };
+    await expect(new HandlingUnitAdapter({ client }).detail({ handlingUnitExternalID: 'X', warehouse: '', allowedPlants: ['1120'] }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+  it('serials: no serials for an HU whose VEKP plant is out of scope', async () => {
+    const rfc = { readTable: async (t) => (t === 'VEKP' ? [{ WERKS: '1130' }] : [{ OBKNR: 'O', VENUM: '0000021192' }]) };
+    const out = await new HandlingUnitAdapter({ rfc }).serials({ handlingUnitInternalNumber: '21192', allowedPlants: ['1120'] });
+    expect(out.Items).toEqual([]);
+  });
+  it('valueHelp plant: only offers the user plants', async () => {
+    const client = { get: async () => ({ data: { d: { results: [{ Plant: '1010', PlantName: 'P10' }, { Plant: '1120', PlantName: 'P120' }] } } }) };
+    const out = await new HandlingUnitAdapter({ client }).valueHelp({ kind: 'plant', allowedPlants: ['1120'] });
+    expect(out.Items).toEqual([{ key: '1120', text: 'P120' }]);
+  });
+  it('hierarchy: 403 for an HU tree in a plant outside the user scope', async () => {
+    const client = { get: async (path) => (path.includes('C_HANDLINGUNITMONITOR_CDS/HandlingUnit')
+      ? { data: { d: { results: [{ Plant: '1130' }] } } }
+      : { data: { d: { results: [] } } }) };
+    await expect(new HandlingUnitAdapter({ client }).hierarchy({ handlingUnitIDChar32: 'A'.repeat(32), handlingUnitOrigin: 'ERP', allowedPlants: ['1120'] }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+  it('create: 403 when the target plant is outside the user scope (before any BAPI)', async () => {
+    const rfc = { session: jest.fn() };
+    await expect(new HandlingUnitAdapter({ client: {}, rfc }).create({ packagingMaterial: '2000000043', plant: '9999', storageLocation: 'HU01', allowedPlants: ['1120'] }))
+      .rejects.toMatchObject({ status: 403 });
+    expect(rfc.session).not.toHaveBeenCalled();
+  });
+});
+
 describe('HandlingUnitAdapter writes (BAPI_HU_* + commit on one RFC session)', () => {
   // Shapes as returned live 2026-10-06 (client 220, test HU 2000020166).
   const KEY = '00000000002000020166';
@@ -382,5 +454,24 @@ describe('HandlingUnitAdapter writes (BAPI_HU_* + commit on one RFC session)', (
   it('maps an RFC transport error to 502', async () => {
     const r = rfc({ fail: new Error('RFC_COMMUNICATION_FAILURE') });
     await expect(new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166' })).rejects.toMatchObject({ status: 502, message: /RFC_COMMUNICATION_FAILURE/ });
+  });
+
+  // Plant authorization on writes (VEKP.WERKS of the test HU is '1120'); role guards are unchanged.
+  it('pack: 403 when the HU plant is outside the user scope (before any BAPI)', async () => {
+    const r = rfc(); // VEKP.WERKS = '1120'
+    await expect(new HandlingUnitAdapter({ rfc: r }).pack({ handlingUnitExternalID: '2000020166', material: '2000000255', quantity: 1, unit: 'NOS', plant: '1120', storageLocation: 'HU01', allowedPlants: ['1130'] }))
+      .rejects.toMatchObject({ status: 403 });
+    expect(r.call).not.toHaveBeenCalled(); // never reached the BAPI
+  });
+  it('remove: 403 when the HU plant is outside the user scope', async () => {
+    const r = rfc();
+    await expect(new HandlingUnitAdapter({ rfc: r }).remove({ handlingUnitExternalID: '2000020166', allowedPlants: ['1130'] }))
+      .rejects.toMatchObject({ status: 403 });
+    expect(r.call).not.toHaveBeenCalled();
+  });
+  it('pack: proceeds to the BAPI when the HU plant is within the user scope', async () => {
+    const r = rfc(); // VEKP.WERKS = '1120'
+    await new HandlingUnitAdapter({ rfc: r }).pack({ handlingUnitExternalID: '2000020166', material: '2000000255', quantity: 1, unit: 'NOS', plant: '1120', storageLocation: 'HU01', allowedPlants: ['1120'] });
+    expect(fms(r)).toEqual(['BAPI_HU_PACK', 'BAPI_TRANSACTION_COMMIT']); // scope check passed, write proceeded
   });
 });
