@@ -3,7 +3,7 @@ sap.ui.define([
 ], function (Barcode) {
     "use strict";
 
-    var PAGE_SIZE = "100mm 100mm"; // 4x4 label (101.6mm x 101.6mm)
+    var PAGE_SIZE = "4in 4in"; // 4x4 label (101.6mm x 101.6mm / 4in x 4in)
     var WINDOW_NAME = "huLabelPrint";
     // i18n keys used on the label; the controller resolves them, this module never touches the bundle.
     var TEXT_KEYS = ["huDetailTitle", "huPackagingMaterial", "huLabelPlant", "huLabelSloc", "huColPlantSloc", "huLabelWarehouse", "huLabelBin", "huColStatus",
