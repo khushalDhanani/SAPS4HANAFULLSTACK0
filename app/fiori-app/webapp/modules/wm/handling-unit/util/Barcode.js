@@ -11,6 +11,7 @@ sap.ui.define([], function () {
         "114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112").split(" ");
     var START_B = 104;
     var START_C = 105;
+    var CODE_B = 100; // switch-to-Code-B symbol (used inside Code C for a trailing odd digit)
     var STOP = 106;
     var MODULE_MM = 0.4;
     var HEIGHT_MM = 15;
@@ -18,8 +19,8 @@ sap.ui.define([], function () {
 
     /**
      * Code 128 symbol values for a text: start, data, checksum, stop.
-     * Code C for an even-length digit string (HU numbers), Code B otherwise.
-     * ponytail: no A/B/C switching inside one text; HU ids are numeric or short alphanumeric. Add it when a mixed id shows up.
+     * All-digit strings use subset C (two digits per symbol, ~half the modules → wider bars); an odd trailing
+     * digit switches to Code B for that one digit. Any non-digit content uses subset B throughout.
      */
     function encode(sText) {
         var s = String(sText === undefined || sText === null ? "" : sText);
@@ -28,10 +29,15 @@ sap.ui.define([], function () {
         }
         var aValues = [];
         var nStart;
-        if (/^\d+$/.test(s) && s.length % 2 === 0) {
+        if (/^\d+$/.test(s) && s.length >= 2) {
             nStart = START_C;
-            for (var i = 0; i < s.length; i += 2) {
+            var nEven = s.length - (s.length % 2); // digits encoded as Code C pairs
+            for (var i = 0; i < nEven; i += 2) {
                 aValues.push(Number(s.substr(i, 2)));
+            }
+            if (s.length % 2 === 1) { // trailing odd digit: switch to Code B for it
+                aValues.push(CODE_B);
+                aValues.push(s.charCodeAt(s.length - 1) - 32);
             }
         } else {
             nStart = START_B;

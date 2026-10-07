@@ -52,6 +52,43 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-07 — HU labels: snap the Code 128 barcode to whole printer dots (203 dpi) + odd-digit subset C
+
+Made every narrow bar an integer number of printer dots so bar/space ratios don't distort when the printer rounds, improving scan reliability on cheap thermal scanners. Barcode-only change; `labels()`, chunking, plant scoping, size picker, typography/type scale, file names and jsPDF lazy-loading untouched.
+
+- **STEP 1 (measured, before):** narrow bars were non-whole everywhere @203 dpi — A 3.41, B 6.83, E 6.54, C 10.17, D 13.80 dots (10-digit HU); worst A 20-digit 2.28 dots. Subset C was already used for **even**-length all-digit; **odd**-length fell back to all-Code-B (~2× modules).
+- **STEP 2 — `Barcode.js`:** extended subset C to **all-digit strings of any length** — pairs in Code C, a trailing odd digit switches to Code B (new `CODE_B=100`), correct checksum/start/stop. zxing decoded **20/20** mixed HUs (even, odd, leading zeros `0012`/`000000`, 1-digit, alphanumeric) @300 dpi — value == input every time.
+- **STEP 3 — dot snapping (`HuLabelLayout.js` + both renderers):** single config `TARGET_DPI=203` (allowed 203/300), `DOT_MM`, `MIN_DOTS={A:3,B:3,E:3,C:3,D:4}`. New shared `snapBarcode(L,totalModules)` → `narrowDots=floor(innerW/DOT_MM/total)`, `narrowMm=narrowDots*DOT_MM`, `widthMm=narrowMm*total` (≤innerW), left edge centred then snapped to a whole dot so **every** bar edge lands on a dot. Both `HuLabelPrinter.section` and `HuLabelPdf.drawLabel` use it (identical x/width). `fits()` now requires `narrowDots >= MIN_DOTS[size]` **and** `narrowMm >= minBarMm`; too dense reuses the existing `huLabelTooSmall` skip → nextLarger. Barcode height + vertical layout unchanged (barcode block just narrower, centred; other elements don't move).
+- **Measured after (10-digit HU):** whole narrow bars A 3 / B 6 / E 6 / C 10 / D 13 dots; widths ≤ innerW, centred. **Bar-edge error = 0.0000 dots** on all 5 sizes (PDF rendered at exactly 203 and 300 dpi); zxing decode OK on all 5 at **both 203 and 300 dpi**; page sizes unchanged (A 141.7×70.9 … D 566.9×283.5 pt).
+- **A-size limitation (reported, not silently relaxed):** with `MIN_DOTS=3`, **A now prints all-digit HUs up to 12 digits** (121 modules → 3 dots) at 203 dpi; a **20-digit HU no longer fits A** (165 modules → 2 dots) and routes to **B** (4 dots). Options if 20-digit on A is required: use B/E (next size), raise A's inner width, or accept sub-3-dot bars (not recommended). At 300 dpi A reaches further (more dots per mm).
+- **Validation:** full `npx jest test/unit` **128 suites / 2230 tests**; `ui5lint` clean; `git diff --check` clean. Updated tests: odd-digit subset C encoding, dot-snapped `fits()` (A 12-digit ok / 20-digit → B), `snapBarcode` whole-dot invariants, buildHtml barcode width = snapped width.
+- **Report-only:** A (3 dots) / D (4 dots) sit at their MIN_DOTS floor for a 10-digit HU — fine, but least margin.
+- **Manual checklist:** on the real 203 dpi thermal printer, scan ≥10 labels per size (especially **A at 3 dots** and **D at 4 dots**); confirm a 12-digit HU scans on A and that a 20-digit HU correctly routes to B; verify the centred (narrower) barcode leaves adequate quiet zone on your stock.
+- Files: `util/Barcode.js`, `util/HuLabelLayout.js`, `util/HuLabelPrinter.js`, `util/HuLabelPdf.js`, `test/unit/wm/huLabelLayout.test.js`, `test/unit/wm/handlingUnitLabel.test.js`.
+
+### 2026-10-07 — HU labels: typographic hierarchy + font-size overhaul (all 5 sizes), one shared wrap engine
+
+Replaced height-only font scaling with a deliberate 4-level hierarchy and a stack-based vertical rhythm, driven from the one shared spec so print (HTML) and PDF stay identical. Barcode, `labels()`, chunking, plant scoping, the size picker, `minBarMm`, file names and jsPDF lazy-loading untouched (verified).
+
+- **Spec rewrite** (`util/HuLabelLayout.js`): removed the `R` ratio table + `fontPt()`; added explicit per-size `TYPE` scale (pt + weight per role) and a **stack model** that computes yTop positions (material → barcode → HU number → meta), spreading leftover evenly into the two flexible gaps (HU hugs the barcode via a 1.0 mm tight gap), bottom slack = pad. Added a shared **Helvetica/Helvetica-Bold AFM** text engine — `measureMm` / `wrap` / `ellipsize` / `huNumberPt` / `srNoText` — so both renderers break lines identically. `fonts.<role>` now carries `{pt, weight}`; weights (HU/material bold, meta regular, caption bold) and pure `#000` live in the spec. `fits()` now also fails when the HU number can't fit at its 6.5 pt floor (reuses the existing skip path — no controller change).
+- **Renderers**: `HuLabelPrinter.section` emits one div per shared-`wrap` line (no more `-webkit-line-clamp`) + a 0.065em baseline calibration so HTML/PDF baselines align; `HuLabelPdf.drawLabel` draws the same `wrap` lines and uses `ellipsize` (dropped the jsPDF-only `fitText`/`splitTextToSize`). Size A (captions hidden) prefixes a bare serial with "SR ".
+- **Measured before → after (typical data; real PDF font sizes via pdfplumber):**
+
+  | size | HU→MAT→META→CAP pt (before) | HU→MAT→META→CAP pt (after) | HU/MAT | MAT/META | bottom slack mm (before→after) |
+  |---|---|---|---|---|---|
+  | A | 8 / 6 / 6 / – | **9 / 7 / 6 / –** | 1.33→1.29 | **1.00→1.17** | 3.9→1.7 |
+  | B | 13 / 9 / 9 / 6 | **14 / 10 / 8 / 6.5** | 1.44→1.40 | **1.00→1.25** | 2.8→3.3 |
+  | E | 18 / 11 / 11 / 7 | **20 / 13 / 10 / 7.5** | 1.64→1.54 | **1.00→1.30** | 15.1→5.3 |
+  | C | 18 / 11 / 11 / 7 | **26 / 14 / 11 / 8** | 1.64→1.86 | **1.00→1.27** | 15.1→5.4 |
+  | D | 32 / 11 / 9 / 7 | **36 / 16 / 12 / 8.5** | 2.91→2.25 | 1.22→**1.33** | 10.8→5.4 |
+
+  Fixes: meta is now a real secondary level everywhere (MAT/META ≥1.15, was 1.00); C ≠ E; D material 11→16 pt; bottom slack evened (C/E were 15 mm). Smallest x-height @203 dpi: A 8.85 dots (meta 6 pt, floor — only on A); B/E/C/D rose to 9.6/11.1/11.8/12.5 dots (captions larger).
+- **Verification (measured):** unit invariants (hierarchy ratios, weights, stack gaps ≥0.8 mm, bottom slack ∈[0.5, pad+1.5], wrap/huNumberPt/measure) on all 5 sizes; **0 overflow / 0 placeholders / 1 page / empty→"-"** across 5 sizes × {typical, worst 152-char+20-digit+34-serial, empty}; barcode untouched — `pdfinfo` A 141.7×70.9 / B 283.5×141.7 / **E 283.5×283.5** / C 425.2×283.5 / D 566.9×283.5 pt, `zxing` decode OK on all 5 at **300 and 203 dpi**; print-vs-PDF parity — font sizes + line breaks identical, vertical position ≤0.16 mm on 14/15 role-points (lone outlier: A date 0.365 mm, a Chrome PDF-export rounding artifact on 6 pt text — the material line on the same label is 0.023 mm with identical code). Full `npx jest test/unit` **128 suites / 2229 tests**; `ui5lint` clean; `git diff --check` clean.
+- **Report-only flags (bar logic unchanged):** A (3.41) and E (6.54) narrow-bar widths aren't whole dots @203 dpi.
+- **Decisions:** leftover space → even gaps (per the instruction), so square E has airy rhythm; A serial prefix "SR "; HU-overflow reuses the barcode-worded `huLabelTooSmall` message.
+- Files: `util/HuLabelLayout.js`, `util/HuLabelPrinter.js`, `util/HuLabelPdf.js`, `test/unit/wm/huLabelLayout.test.js`, `test/unit/wm/handlingUnitLabel.test.js`.
+- **For physical stock:** confirm the A (50×25, 6 pt meta) and the 3.41/6.54-dot narrow bars scan on the actual thermal printer at 203 dpi; verify the "SR " serial prefix and the D 36 pt HU number read at distance.
+
 ### 2026-10-07 — HU list: Plant / Storage Location showed "- / -" — root-caused to blank monitor header, fixed by item enrichment
 
 - **Symptom**: in `#/wm/handling-unit` the "Plant / Storage Location" column showed "- / -" for many HUs (notably recently created ones).

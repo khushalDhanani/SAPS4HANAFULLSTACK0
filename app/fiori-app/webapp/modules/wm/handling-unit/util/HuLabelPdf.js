@@ -5,20 +5,7 @@ sap.ui.define([
     "use strict";
 
     var PT2MM = 25.4 / 72; // jsPDF text y is the baseline; CSS top is the box top. Convert per font size.
-    function ascentMm(pt) { return pt * PT2MM * 0.8; }      // ~cap/ascent fraction for Helvetica
-    function lineHeightMm(pt) { return pt * PT2MM * 1.15; }  // same 1.15 factor as the HTML line-height
-
-    /**
-     * Truncate sText (at the font already set on doc) to at most wMm, adding "…" when it would overflow.
-     * The HTML label clips single-line fields with overflow:hidden; jsPDF has no clip box, so a pathological
-     * value (e.g. a very long serial) would otherwise overrun its half and collide with the neighbour field.
-     */
-    function fitText(doc, sText, wMm) {
-        if (!sText || doc.getTextWidth(sText) <= wMm) { return sText; }
-        var s = String(sText);
-        while (s.length > 1 && doc.getTextWidth(s + "…") > wMm) { s = s.slice(0, -1); }
-        return s + "…";
-    }
+    function ascentMm(pt) { return pt * PT2MM * 0.8; } // ~cap/ascent fraction for Helvetica
 
     var _pJsPdf = null;
 
@@ -38,45 +25,45 @@ sap.ui.define([
         return _pJsPdf;
     }
 
-    /** Draws one clean label onto the current jsPDF page (unit:mm) from the shared layout spec L — same geometry as the HTML. */
+    /** Draws one clean label onto the current jsPDF page (unit:mm) from the shared layout spec L — same geometry + wrap as the HTML. */
     function drawLabel(doc, d, L) {
         var f = L.fonts;
         doc.setTextColor(0, 0, 0);
 
-        // MATERIAL NAME (caption on B/C/D, then up to maxLines clamped bold lines)
+        // MATERIAL NAME (caption where shown) + bold lines from the shared wrap (identical breaks to the HTML)
         if (d.materialName) {
-            var yVal = L.material.yTop;
-            if (L.showCaptions) {
-                doc.setFont("helvetica", "bold").setFontSize(f.caption);
-                doc.text("MATERIAL NAME", L.material.x, L.material.yTop + ascentMm(f.caption));
-                yVal = L.material.yTop + lineHeightMm(f.caption);
+            if (L.material.captionY !== null) {
+                doc.setFont("helvetica", f.caption.weight).setFontSize(f.caption.pt);
+                doc.text("MATERIAL NAME", L.material.x, L.material.captionY + ascentMm(f.caption.pt));
             }
-            doc.setFont("helvetica", "bold").setFontSize(f.material);
-            var aLines = doc.splitTextToSize(d.materialName, L.material.w);
-            if (aLines.length > L.material.maxLines) { aLines = aLines.slice(0, L.material.maxLines); aLines[aLines.length - 1] = aLines[aLines.length - 1].replace(/.$/, "…"); }
-            aLines.forEach(function (s, i) { doc.text(s, L.material.x, yVal + ascentMm(f.material) + i * lineHeightMm(f.material)); });
+            doc.setFont("helvetica", f.material.weight).setFontSize(f.material.pt);
+            var oWrap = Layout.wrap(d.materialName, L.material.w, f.material.pt, L.material.maxLines, f.material.weight === "bold");
+            var mlh = f.material.pt * PT2MM * L.material.lh;
+            oWrap.lines.forEach(function (s, i) { doc.text(s, L.material.x, L.material.valueY + ascentMm(f.material.pt) + i * mlh); });
         }
 
-        // Barcode (vector bars, fills innerW) + HU number
+        // Barcode (vector bars, snapped to whole printer dots, centered in innerW) + HU number (fit-to-width, centered)
         if (d.huNumber) {
             var oBc = Barcode.bars(d.huNumber);
-            var fScale = L.barcode.w / oBc.total;
+            var snap = Layout.snapBarcode(L, oBc.total);
             doc.setFillColor(0, 0, 0);
-            oBc.bars.forEach(function (b) { doc.rect(L.barcode.x + b.x * fScale, L.barcode.yTop, b.w * fScale, L.barcode.h, "F"); });
-            doc.setFont("helvetica", "bold").setFontSize(f.huNumber);
-            doc.text(d.huNumber, L.page.wMm / 2, L.huNumber.yTop + ascentMm(f.huNumber), { align: "center" });
+            oBc.bars.forEach(function (b) { doc.rect(snap.xMm + b.x * snap.narrowMm, L.barcode.yTop, b.w * snap.narrowMm, L.barcode.h, "F"); });
+            var huPt = Layout.huNumberPt(d.huNumber, f.huNumber.pt, L.huNumber.usableMm).pt;
+            doc.setFont("helvetica", f.huNumber.weight).setFontSize(huPt);
+            doc.text(d.huNumber, L.page.wMm / 2, L.huNumber.yTop + ascentMm(huPt), { align: "center" });
         }
 
-        // CREATED DATE (left) + SR NO (right); each omitted when blank (mirrors the HTML label).
-        // Values are fit to their half-width so a long serial can't overrun into the neighbour field.
+        // CREATED DATE (left) + SR NO (right); shared ellipsize keeps a long value inside its half. A gets a "SR " prefix.
         var halfW = L.innerW / 2;
         if (d.createdDate) {
-            if (L.showCaptions && L.meta.captionY !== null) { doc.setFont("helvetica", "bold").setFontSize(f.caption); doc.text("CREATED DATE", L.meta.date.x, L.meta.captionY + ascentMm(f.caption)); }
-            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(fitText(doc, d.createdDate, halfW), L.meta.date.x, L.meta.valueY + ascentMm(f.meta));
+            if (L.meta.captionY !== null) { doc.setFont("helvetica", f.caption.weight).setFontSize(f.caption.pt); doc.text("CREATED DATE", L.meta.date.x, L.meta.captionY + ascentMm(f.caption.pt)); }
+            doc.setFont("helvetica", f.meta.weight).setFontSize(f.meta.pt);
+            doc.text(Layout.ellipsize(d.createdDate, halfW, f.meta.pt, false), L.meta.date.x, L.meta.valueY + ascentMm(f.meta.pt));
         }
         if (d.srNo) {
-            if (L.showCaptions && L.meta.captionY !== null) { doc.setFont("helvetica", "bold").setFontSize(f.caption); doc.text("SR NO", L.meta.srNo.x, L.meta.captionY + ascentMm(f.caption), { align: "right" }); }
-            doc.setFont("helvetica", "normal").setFontSize(f.meta); doc.text(fitText(doc, d.srNo, halfW), L.meta.srNo.x, L.meta.valueY + ascentMm(f.meta), { align: "right" });
+            if (L.meta.captionY !== null) { doc.setFont("helvetica", f.caption.weight).setFontSize(f.caption.pt); doc.text("SR NO", L.meta.srNo.x, L.meta.captionY + ascentMm(f.caption.pt), { align: "right" }); }
+            doc.setFont("helvetica", f.meta.weight).setFontSize(f.meta.pt);
+            doc.text(Layout.ellipsize(Layout.srNoText(L, d.srNo), halfW, f.meta.pt, false), L.meta.srNo.x, L.meta.valueY + ascentMm(f.meta.pt), { align: "right" });
         }
     }
 

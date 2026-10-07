@@ -96,12 +96,17 @@ sap.ui.define([
         return { labels: aLabels, skipped: aSkipped, duplicatesRemoved: nDup };
     }
 
-    /** One absolutely-positioned field div (coordinates in mm, font in pt) — same geometry the PDF renderer uses. */
-    function fieldDiv(xMm, yMm, wMm, fontPt, bBold, sAlign, nClampLines, sText, bCaption) {
-        var sStyle = "position:absolute;left:" + xMm + "mm;top:" + yMm + "mm;width:" + wMm + "mm;" +
-            "font-size:" + fontPt + "pt;line-height:1.15;" + (bBold ? "font-weight:bold;" : "") +
-            (sAlign ? "text-align:" + sAlign + ";" : "") +
-            (nClampLines ? "display:-webkit-box;-webkit-line-clamp:" + nClampLines + ";-webkit-box-orient:vertical;overflow:hidden;word-break:break-word;" : "white-space:nowrap;overflow:hidden;");
+    // jsPDF draws text at baseline = boxTop + 0.8em; a CSS line box puts the baseline ~0.065em lower, and the
+    // gap grows with font size. Lift the HTML box top by 0.065em so both baselines land together (<0.3mm, any size).
+    var PT2MM_H = 25.4 / 72;
+    var BASELINE_EM = 0.065;
+    function topAdj(yMm, fontPt) { return +(yMm - BASELINE_EM * fontPt * PT2MM_H).toFixed(3); }
+
+    /** One absolutely-positioned single-line field div (mm coords, pt font) — same geometry the PDF renderer uses. */
+    function fieldDiv(xMm, yMm, wMm, fontPt, sWeight, sAlign, sText, bCaption) {
+        var sStyle = "position:absolute;left:" + xMm + "mm;top:" + topAdj(yMm, fontPt) + "mm;width:" + wMm + "mm;color:#000;" +
+            "font-size:" + fontPt + "pt;line-height:1.1;font-weight:" + (sWeight === "bold" ? "bold" : "normal") + ";" +
+            (sAlign ? "text-align:" + sAlign + ";" : "") + "white-space:nowrap;overflow:hidden;";
         return '<div class="' + (bCaption ? "cap" : "fld") + '" style="' + sStyle + '">' + esc(sText) + "</div>";
     }
 
@@ -110,30 +115,34 @@ sap.ui.define([
         var f = L.fonts;
         var PT2MM = 25.4 / 72;
         var out = "";
-        // MATERIAL NAME (caption on B/C/D, clamped value)
+        // MATERIAL NAME (caption where shown) + one div per shared-wrap line (identical breaks to the PDF)
         if (d.materialName) {
-            var yMatVal = L.material.yTop;
-            if (L.showCaptions) {
-                out += fieldDiv(L.material.x, L.material.yTop, L.material.w, f.caption, true, "left", 0, "MATERIAL NAME", true);
-                yMatVal = L.material.yTop + f.caption * PT2MM * 1.15;
+            if (L.material.captionY !== null) {
+                out += fieldDiv(L.material.x, L.material.captionY, L.material.w, f.caption.pt, f.caption.weight, "left", "MATERIAL NAME", true);
             }
-            out += fieldDiv(L.material.x, yMatVal, L.material.w, f.material, true, "left", L.material.maxLines, d.materialName);
+            var oWrap = Layout.wrap(d.materialName, L.material.w, f.material.pt, L.material.maxLines, f.material.weight === "bold");
+            var mlh = f.material.pt * PT2MM * L.material.lh;
+            oWrap.lines.forEach(function (s, i) {
+                out += fieldDiv(L.material.x, L.material.valueY + i * mlh, L.material.w, f.material.pt, f.material.weight, "left", s, false);
+            });
         }
-        // Barcode (full width) + HU number (centered)
+        // Barcode (snapped to whole printer dots, centered in innerW) + HU number (fit-to-width pt, centered)
         if (d.huNumber) {
-            out += '<div style="position:absolute;left:' + L.barcode.x + "mm;top:" + L.barcode.yTop + "mm;width:" + L.barcode.w + "mm;height:" + L.barcode.h + 'mm">' +
-                Barcode.toSvg(d.huNumber, L.barcode.w, L.barcode.h) + "</div>";
-            out += '<div class="fld" style="position:absolute;left:0;top:' + L.huNumber.yTop + "mm;width:" + L.page.wMm + "mm;font-size:" + f.huNumber + "pt;line-height:1.05;font-weight:bold;text-align:center;overflow:hidden;white-space:nowrap\">" + esc(d.huNumber) + "</div>";
+            var snap = Layout.snapBarcode(L, Barcode.bars(d.huNumber).total);
+            out += '<div style="position:absolute;left:' + snap.xMm + "mm;top:" + L.barcode.yTop + "mm;width:" + snap.widthMm + "mm;height:" + L.barcode.h + 'mm">' +
+                Barcode.toSvg(d.huNumber, snap.widthMm, L.barcode.h) + "</div>";
+            var huPt = Layout.huNumberPt(d.huNumber, f.huNumber.pt, L.huNumber.usableMm).pt;
+            out += '<div class="fld" style="position:absolute;left:0;top:' + topAdj(L.huNumber.yTop, huPt) + "mm;width:" + L.page.wMm + "mm;font-size:" + huPt + "pt;line-height:1.05;font-weight:bold;color:#000;text-align:center;overflow:hidden;white-space:nowrap\">" + esc(d.huNumber) + "</div>";
         }
-        // Meta row: CREATED DATE (left half) | SR NO (right half)
+        // Meta row: CREATED DATE (left half) | SR NO (right half); shared ellipsize + "SR " prefix on A
         var halfW = L.innerW / 2;
         if (d.createdDate) {
-            if (L.showCaptions && L.meta.captionY !== null) { out += fieldDiv(L.meta.date.x, L.meta.captionY, halfW, f.caption, true, "left", 0, "CREATED DATE", true); }
-            out += fieldDiv(L.meta.date.x, L.meta.valueY, halfW, f.meta, false, "left", 0, d.createdDate);
+            if (L.meta.captionY !== null) { out += fieldDiv(L.meta.date.x, L.meta.captionY, halfW, f.caption.pt, f.caption.weight, "left", "CREATED DATE", true); }
+            out += fieldDiv(L.meta.date.x, L.meta.valueY, halfW, f.meta.pt, f.meta.weight, "left", Layout.ellipsize(d.createdDate, halfW, f.meta.pt, false), false);
         }
         if (d.srNo) {
-            if (L.showCaptions && L.meta.captionY !== null) { out += fieldDiv(L.meta.srNo.x - halfW, L.meta.captionY, halfW, f.caption, true, "right", 0, "SR NO", true); }
-            out += fieldDiv(L.meta.srNo.x - halfW, L.meta.valueY, halfW, f.meta, false, "right", 0, d.srNo);
+            if (L.meta.captionY !== null) { out += fieldDiv(L.meta.srNo.x - halfW, L.meta.captionY, halfW, f.caption.pt, f.caption.weight, "right", "SR NO", true); }
+            out += fieldDiv(L.meta.srNo.x - halfW, L.meta.valueY, halfW, f.meta.pt, f.meta.weight, "right", Layout.ellipsize(Layout.srNoText(L, d.srNo), halfW, f.meta.pt, false), false);
         }
         return '<section class="hu">' + out + "</section>";
     }

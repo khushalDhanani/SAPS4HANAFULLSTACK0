@@ -28,8 +28,11 @@ describe('Barcode (Code 128)', () => {
     it('encodes text in Code B with the right checksum', () => {
         expect(Barcode.encode('HU1')).toEqual([104, 40, 53, 17, 95, 106]);
     });
-    it('falls back to Code B for odd-length digits', () => {
-        expect(Barcode.encode('20001')[0]).toBe(104);
+    it('encodes odd-length digits in subset C with the trailing digit switched to Code B', () => {
+        const sym = Barcode.encode('20001'); // START_C, pair 20, pair 00, CODE_B(100), digit 1, checksum, STOP
+        expect(sym[0]).toBe(105);            // START C
+        expect(sym).toContain(100);          // CODE_B switch for the odd trailing digit
+        expect(sym[sym.length - 1]).toBe(106); // STOP
     });
     it('rejects characters outside Code 128 B and empty text', () => {
         expect(() => Barcode.encode('ü')).toThrow();
@@ -106,7 +109,8 @@ describe('HuLabelPrinter.buildHtml (size-aware label, from clean labels)', () =>
         const html = Printer.buildHtml(clean({ header, items, serials }), {});
         const L = Layout.layout('B');
         expect(html).toContain('@page{size:100mm 50mm;margin:0}');
-        expect(html).toContain(Barcode.toSvg('2000019997', L.barcode.w, L.barcode.h));
+        const snap = Layout.snapBarcode(L, Barcode.bars('2000019997').total); // dot-snapped, centered in innerW
+        expect(html).toContain(Barcode.toSvg('2000019997', snap.widthMm, L.barcode.h));
         expect(html).toContain('>MATERIAL NAME</div>');
         expect(html).toContain('>Pump</div>');
         expect(html).toContain('>CREATED DATE</div>');
@@ -151,9 +155,17 @@ describe('HuLabelPrinter.buildHtml (size-aware label, from clean labels)', () =>
         expect(html).toContain('&lt;b&gt;Pump &amp; &quot;Co&quot;');
         expect(html).not.toContain('<b>Pump');
     });
-    it('clamps the material name to the size\'s line count (B = 2 lines)', () => {
-        expect(Printer.buildHtml(clean({ header, items }), {})).toContain('-webkit-line-clamp:2');
-        expect(Printer.buildHtml(clean({ header, items }), {}, 'C')).toContain('-webkit-line-clamp:3');
+    it('wraps the material name to the size line count via the shared wrap (no line-clamp) — same lines as the spec/PDF', () => {
+        const longMat = 'Hydraulic Pump Assembly 24V Industrial Grade High Flow Heavy Duty Model X';
+        const htmlB = Printer.buildHtml(clean({ header, items: [{ Material: 'X', MaterialName: longMat }] }), {}, 'B');
+        expect(htmlB).not.toContain('-webkit-line-clamp');
+        const Lb = Layout.layout('B');
+        const wb = Layout.wrap(longMat, Lb.material.w, Lb.fonts.material.pt, Lb.material.maxLines, true);
+        expect(wb.lines.length).toBeLessThanOrEqual(2);
+        wb.lines.forEach((line) => expect(htmlB).toContain('>' + line + '</div>')); // each wrapped line = one material div
+        const Lc = Layout.layout('C');
+        const wc = Layout.wrap(longMat, Lc.material.w, Lc.fonts.material.pt, Lc.material.maxLines, true);
+        expect(wc.lines.length).toBeLessThanOrEqual(3);
     });
     it('falls back to the material number when no name', () => {
         expect(Printer.buildHtml(clean({ header, items: [{ Material: '8000007113' }] }), {})).toContain('>8000007113</div>');
