@@ -34,6 +34,7 @@ const MAX_LIST = 1000;
 // Batched label join: HU ids per combined-item $filter (URL-length safe), OR terms per RFC_READ_TABLE.
 const LABEL_HU_CHUNK = 50;
 const SERIAL_RFC_CHUNK = 40;
+const MAX_LABEL_IDS = 2000; // cap per labels() call: the UI sends <=200/POST, so this only blocks direct-API abuse/enumeration
 const LABEL_ITEM_SELECT = 'HandlingUnitExternalID,HandlingUnitItem,Material,MaterialName,HandlingUnitNumberOfSerialNumb,HandlingUnitInternalID';
 
 const LIST_SELECT = [
@@ -411,8 +412,11 @@ class HandlingUnitAdapter {
    * SAP calls vs ~79s / 200 calls the per-HU way. Read-only.
    */
   async labels(input = {}) {
-    const ids = [...new Set([].concat(input.handlingUnitExternalIDs || [])
-      .map((h) => clean(h, 'Handling unit', RE.hu)).filter(Boolean))];
+    const aInput = [].concat(input.handlingUnitExternalIDs || []);
+    if (aInput.length > MAX_LABEL_IDS) {
+      throw httpError(400, `Too many handling units requested (${aInput.length}); the maximum is ${MAX_LABEL_IDS} per call`);
+    }
+    const ids = [...new Set(aInput.map((h) => clean(h, 'Handling unit', RE.hu)).filter(Boolean))];
     if (!ids.length) return { Items: [] };
 
     // 1. First material name per HU (+ item count, serial count, internal number) from the combined item view.

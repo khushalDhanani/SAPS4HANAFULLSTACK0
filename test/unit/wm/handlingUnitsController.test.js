@@ -88,7 +88,8 @@ describe('_runRowJob (row button -> that row\'s HU, from the binding context)', 
         const out = jest.fn(() => Promise.resolve());
         const btn = rowButton('HU9');
         await subject()._runRowJob(btn, out);
-        expect(ODataClient.post).toHaveBeenCalledWith('/odata/v4/handling-unit/labels', { handlingUnitExternalIDs: ['HU9'] });
+        expect(ODataClient.post.mock.calls[0][0]).toBe('/odata/v4/handling-unit/labels');
+        expect(ODataClient.post.mock.calls[0][1]).toEqual({ handlingUnitExternalIDs: ['HU9'] });
         expect(out).toHaveBeenCalledTimes(1);
         const labels = out.mock.calls[0][0];
         expect(labels).toEqual([{ huNumber: 'HU9', materialName: 'Pump', createdDate: '06-Oct-2026', srNo: 'S9' }]);
@@ -112,6 +113,35 @@ describe('_runRowJob (row button -> that row\'s HU, from the binding context)', 
         await subject()._runRowJob(rowButton('HÜ'), out);
         expect(out).not.toHaveBeenCalled();
         expect(MessageToast.show).toHaveBeenCalled();
+    });
+});
+
+describe('_readLabelRecords (chunked parallel labels())', () => {
+    const rows = (n, base = 1000) => Array.from({ length: n }, (_, i) => ({ HandlingUnitExternalID: String(base + i), Warehouse: '', CreationDateTime: '2026-10-06' }));
+    const echo = (u, b) => Promise.resolve({ Items: b.handlingUnitExternalIDs.map((id) => ({ HandlingUnitExternalID: id, MaterialName: 'M' + id, SerialNumber: '' })) });
+
+    it('splits into 200-id chunks and keeps results in the original order', async () => {
+        ODataClient.post.mockImplementation(echo);
+        const r = rows(450);
+        const out = await subject()._readLabelRecords(r, () => {}, () => false, []);
+        expect(ODataClient.post).toHaveBeenCalledTimes(3); // 200 + 200 + 50
+        expect(out.map((x) => x.huNumber)).toEqual(r.map((x) => x.HandlingUnitExternalID)); // order preserved across chunks
+        // each POST carries at most 200 ids
+        ODataClient.post.mock.calls.forEach((c) => expect(c[1].handlingUnitExternalIDs.length).toBeLessThanOrEqual(200));
+    });
+
+    it('aborts the whole job (rejects, no partial) when a chunk fails after retry and fallback', async () => {
+        ODataClient.post.mockRejectedValue(new Error('labels down'));      // labels() fails (and its retry)
+        HuBatchReader.read.mockRejectedValueOnce(new Error('slow path down')); // the per-HU fallback also fails
+        await expect(subject()._readLabelRecords(rows(150), () => {}, () => false, [])).rejects.toThrow(/slow path down|labels down/);
+    });
+
+    it('stops launching chunks once cancelled (cancel checked between chunks)', async () => {
+        ODataClient.post.mockImplementation(echo);
+        let progressTicks = 0; let cancelled = false;
+        await subject()._readLabelRecords(rows(800), () => { progressTicks++; if (progressTicks >= 1) { cancelled = true; } }, () => cancelled, []);
+        // 4 chunks total; concurrency 3 fire first, then cancel -> the 4th chunk is never requested
+        expect(ODataClient.post).toHaveBeenCalledTimes(3);
     });
 });
 

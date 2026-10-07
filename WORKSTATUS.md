@@ -51,6 +51,34 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-07 — HU print/download: final pre-release verification (live SAP) + id-cap fix + AUTH release blocker
+
+- **Setup**: restarted `cds watch` on 4006 (cold), live SAP client 220, in-app Chromium, instrumented adapter for SAP-call counts.
+- **A. Cold vs warm (older HUs, oldest-first)**: labels() backend — 500: cold 1735ms / warm 1723ms / 10 SAP calls; 1000: 3634/3505ms / 20; 2000: 7348/6967ms / 40. Cold ≈ warm (no app/SAP cache effect). **500 cold 1.7s « 10s target — PASS.** UI click→ready (chunked, 3-parallel): 500 ~2.5s / 3 POSTs, 1000 ~2.3s / 5 POSTs. Bottleneck is the OData combined-item read (~1 GET/50 HUs); these HUs had 0 serials so no RFC.
+- **B. AUTHORIZATION — RELEASE BLOCKER**: `S4_CONNECTION_TYPE=abap_catalog` + `BasicAuthentication` (S4HttpClient.js:196) = **single technical SAP user** for all app calls in local dev. Principal propagation code exists (userJwt) but is inactive without a JWT/XSUAA destination. **No `@restrict` by plant** anywhere in the HU service — only `@requires` role guards. So **per-user plant/warehouse authorization is NOT enforced** by SAP in this setup; every authenticated app user gets the technical user's full access. No plant-restricted SAP identity available to demonstrate restriction (bob = fewer CAP roles, same SAP user). **Marked FAIL / not enforceable.** Enforcement would need either a principal-propagation destination (per-user SAP auth) or CAP `@restrict: [{ grant:'*', where:'Plant in $user.plants' }]` + a user→plants mapping — neither present.
+- **B10 enumeration — FAIL → FIXED**: `labels()` accepted **5000 ids** (18s, 106 SAP calls); no cap, no rate limit; malformed ids correctly rejected (400 via `RE.hu`). Fix: added `MAX_LABEL_IDS=2000` cap in `HandlingUnitAdapter.labels` (rejects >2000 with 400 before any SAP call); the UI only ever sends ≤200/POST. Re-tested live: labels(2001) → 400, labels(200) → 200; unit test added. Rate limiting still recommended at the gateway (not a code fix).
+- **C. Concurrency**: 5 concurrent Print-All-500 (15 parallel POSTs) → 974ms total, 795–974ms/user, **0 errors, no throttling** (0-serial HUs). C12: `/printing` blocks a second click in the same tab (verified); it is a per-page client flag, so **two tabs can run two jobs** — recommend a per-user/server lock only if SAP load matters (read-only + 2000 cap make it low-risk).
+- **D. Files**: row PDF decodes to its HU (B8); **Download Selected of 20 HUs → 20/20 barcodes decode in order, 20 pages @ 288×288** (D13). Filenames `HU_<id>.pdf` / `HU_labels_<yyyymmdd_hhmm>.pdf`; HU ids are constrained to `[A-Z0-9]` by `RE.hu` (a `/`-style id is rejected 400), so filenames are safe by construction (D14). Empty-HU label shows "-" for material+date, no undefined/null/gap (D15, screenshot); long data (152-char material / 20-digit HU / 34-char serial) stays 1 page, no overflow (D16, screenshot).
+- **E. Regression**: auto-loads without Go; Go filters; **exactly 1 `list()` per route entry** (no duplicate). Full suite **49 suites / 991 tests**, ui5lint clean, `git diff --check` clean.
+- **Files changed this round**: `srv/integration/s4hana/wm/HandlingUnitAdapter.js` (id cap) + `test/unit/wm/handlingUnitAdapter.test.js` (cap test).
+- **Release blockers**: (1) **B — per-user authorization not enforced** (single technical SAP user, no `@restrict` by plant). Must be resolved or explicitly accepted before release.
+
+### 2026-10-07 — HU labels: chunked parallel labels() (200/chunk, 3 parallel) with abortable Cancel
+
+- **Request**: Print All / Download Selected felt slow and Cancel was delayed because `labels()` was one POST for all HUs. Split into 200-id chunks, 3 in parallel, keep order, per-chunk fallback, abort in-flight on Cancel, abort whole job on a chunk failure, never print a partial set.
+- **Files changed**:
+  - `app/fiori-app/webapp/service/ODataClient.js`: `post(url, body, headers, options)` now forwards `options` (e.g. `{signal}`) to `request`, and `request` passes `options.signal` to `fetch` — enabling cancellable requests. Backward-compatible (existing callers pass no options).
+  - `.../controller/HandlingUnits.controller.js`: rewrote `_readLabelRecords` to split rows into `LABEL_CHUNK=200` chunks run `LABEL_CONCURRENCY=3` at a time via a small worker pool; results stored by chunk index and flattened in original order; progress fires after each chunk; a chunk that fails after retry + fallback sets a stop flag, aborts all in-flight controllers and rejects (whole job aborts — no partial print). New `_readLabelChunk` (labels() with one retry + an `AbortController` signal; empty/err → per-chunk fallback; AbortError/cancel → discard) and `_fallbackChunk` (console.warn per chunk, one toast per job, then the slow per-HU path for that chunk). `_runLabelJob` keeps an `aAbort` array and, on Cancel (`close` + `cancelPressed`), aborts every in-flight chunk. Removed the old single-POST `_readLabelRecords`/`_fallback`.
+  - `test/unit/wm/handlingUnitsController.test.js`: added chunk-order (450 rows → 3 POSTs, order preserved, ≤200 ids/POST), partial-failure-aborts (labels + fallback fail → rejects), and cancel-between-chunks (800 rows, cancel after first progress → 4th chunk never requested = 3 POSTs) tests; updated the row-job POST assertion for the new 4-arg signature.
+- **Measured on live SAP (cds watch, client 220, in-app Chromium)**:
+  | Job | POSTs | Click→ready | vs single-POST |
+  |---|---|---|---|
+  | Print All 1000 | **5** | **~2.3 s** | was ~19 s (~8× faster) |
+  | Print Selected 500 | **3** | **~2.5 s** | well under the 15 s target |
+  | Cancel during 1000 | 3 in-flight aborted | **~0.5 s** click→stop, no print | was bounded by the single ~6–8 s POST |
+  Order preserved (500/1000 printed correctly); per-chunk fallback verified (blocked `labels()` → one toast + slow path produced the 3 labels).
+- **Validation**: **500-label PDF = 500 pages @ 288×288 pt**; WM unit regression **49 suites / 990 tests pass**; full `ui5lint` clean; `git diff --check` clean.
+
 ### 2026-10-07 — HU print UI: live browser verification (cds watch on live SAP) + 2 bug fixes
 
 - **Setup**: ran `cds watch` on port 4006 against **live SAP** (client 220, mock user `alice` via `LOCAL_DEV_PASSWORD`); drove the app in the in-app Chromium browser (no Playwright/Puppeteer available). Verified print/download end to end against real HUs, capturing iframe print pages, jsPDF blobs (decoded with pdfinfo + zxing-cpp) and the `/labels` network calls.

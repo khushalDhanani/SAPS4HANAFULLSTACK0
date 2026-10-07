@@ -14,8 +14,10 @@ sap.ui.define([
 
     var BASE_PATH = "/odata/v4/handling-unit";
     var PRINT_SAFE_LIMIT = 500; // Print All asks for extra confirmation above this many labels
-    var READ_CHUNK = 8; // each label costs a detail (+ serials) read; cap concurrent reads
+    var READ_CHUNK = 8; // fallback path: each label costs a detail (+ serials) read; cap concurrent reads
     var READ_TIMEOUT = 30000; // ms per HU read before one retry, then abort
+    var LABEL_CHUNK = 200; // fast path: HU ids per labels() POST
+    var LABEL_CONCURRENCY = 3; // fast path: labels() chunks in flight at once
     var q = function (s) { return "'" + encodeURIComponent((s || "").trim().replace(/'/g, "''")) + "'"; };
     // Value-help input kind -> model path for its suggestion list.
     var VALUE_HELPS = { plant: "/vhPlant", packaging: "/vhPackaging", status: "/vhStatus", shippingpoint: "/vhShippingPoint", storagelocation: "/vhStorageLocation" };
@@ -117,31 +119,70 @@ sap.ui.define([
             return aItems.map(function (i) { return i.getBindingContext("huView").getObject(); });
         },
 
-        /** Fast path: one batched labels() action returns materialName + srNo for every chosen HU (no per-HU detail/serials). */
-        _readLabelRecords: function (aRows, fnProgress, fnCancelled) {
+        /** Fast path: labels() in parallel chunks of LABEL_CHUNK ids, LABEL_CONCURRENCY at a time; results kept in original table order. */
+        _readLabelRecords: function (aRows, fnProgress, fnCancelled, aAbort) {
             var self = this;
-            var aIds = aRows.map(function (o) { return o.HandlingUnitExternalID; });
-            return ODataClient.post(BASE_PATH + "/labels", { handlingUnitExternalIDs: aIds })
+            var aChunks = [];
+            for (var i = 0; i < aRows.length; i += LABEL_CHUNK) { aChunks.push(aRows.slice(i, i + LABEL_CHUNK)); }
+            var aResults = new Array(aChunks.length); // index -> records, preserves order on flatten
+            var oState = { warned: false, stop: false };
+            var nDone = 0;
+            var iNext = 0;
+            function abortAll() { (aAbort || []).forEach(function (c) { try { c.abort(); } catch (e) { /* already settled */ } }); }
+            function stopped() { return oState.stop || fnCancelled(); }
+            function runNext() {
+                if (stopped() || iNext >= aChunks.length) { return Promise.resolve(); }
+                var idx = iNext++;
+                return self._readLabelChunk(aChunks[idx], oState, aAbort, stopped).then(function (aRecs) {
+                    aResults[idx] = aRecs;
+                    nDone += aChunks[idx].length;
+                    fnProgress(nDone); // progress after each chunk
+                    return runNext();
+                }, function (oErr) {
+                    oState.stop = true; abortAll(); // a chunk failed after retry + fallback -> abort the whole job (never a partial print)
+                    throw oErr;
+                });
+            }
+            var aWorkers = [];
+            for (var w = 0; w < Math.min(LABEL_CONCURRENCY, aChunks.length); w++) { aWorkers.push(runNext()); }
+            return Promise.all(aWorkers).then(function () {
+                var aOut = [];
+                aResults.forEach(function (a) { if (a) { aOut = aOut.concat(a); } });
+                return aOut;
+            });
+        },
+
+        /** One labels() chunk with a retry and an AbortSignal; on failure, the per-chunk fallback runs the slow per-HU path. */
+        _readLabelChunk: function (aChunkRows, oState, aAbort, fnStopped) {
+            var self = this;
+            var aIds = aChunkRows.map(function (o) { return o.HandlingUnitExternalID; });
+            var oCtrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+            if (oCtrl && aAbort) { aAbort.push(oCtrl); }
+            var oOpts = oCtrl ? { signal: oCtrl.signal } : undefined;
+            var fnPost = function () { return ODataClient.post(BASE_PATH + "/labels", { handlingUnitExternalIDs: aIds }, undefined, oOpts); };
+            return fnPost()
+                .catch(function (e) { if (fnStopped() || (e && e.name === "AbortError")) { throw e; } return fnPost(); }) // one retry, never on cancel
                 .then(function (oResult) {
                     var aItems = (oResult && oResult.Items) || [];
-                    if (!aItems.length) { return self._fallback(aRows, fnProgress, fnCancelled, "labels() returned no data"); }
+                    if (!aItems.length) { return self._fallbackChunk(aChunkRows, oState, fnStopped, "labels() returned no data"); }
                     var mByHu = {};
                     aItems.forEach(function (x) { mByHu[x.HandlingUnitExternalID] = x; });
-                    fnProgress(aRows.length);
-                    return aRows.map(function (o) {
+                    return aChunkRows.map(function (o) {
                         var l = mByHu[o.HandlingUnitExternalID] || {};
                         return { huNumber: o.HandlingUnitExternalID, createdDate: o.CreationDateTime, materialName: l.MaterialName || "", srNo: l.SerialNumber || "" };
                     });
-                })
-                .catch(function (oErr) { return self._fallback(aRows, fnProgress, fnCancelled, (oErr && oErr.message) || "labels() request failed"); });
+                }, function (oErr) {
+                    if (fnStopped() || (oErr && oErr.name === "AbortError")) { return []; } // cancelled/aborting: discard, do not fall back or fail
+                    return self._fallbackChunk(aChunkRows, oState, fnStopped, (oErr && oErr.message) || "labels() request failed");
+                });
         },
 
-        /** Fallback is never silent: warn with the reason and tell the user before the slow per-HU path runs. */
-        _fallback: function (aRows, fnProgress, fnCancelled, sReason) {
+        /** Per-chunk fallback: console.warn per chunk, one toast per job, then the slow per-HU path for this chunk. */
+        _fallbackChunk: function (aChunkRows, oState, fnStopped, sReason) {
             // eslint-disable-next-line no-console
             console.warn("[HU print] fast label service unavailable (" + sReason + "); using slow per-HU mode");
-            MessageToast.show(this.getText("huPrintFallback"));
-            return this._readLabelRecordsFallback(aRows, fnProgress, fnCancelled);
+            if (!oState.warned) { oState.warned = true; MessageToast.show(this.getText("huPrintFallback")); }
+            return this._readLabelRecordsFallback(aChunkRows, function () { }, fnStopped);
         },
 
         /** Fallback (labels() unavailable): the old per-HU detail(+serials) reads, chunked, then reduced to records. */
@@ -167,19 +208,25 @@ sap.ui.define([
             var oModel = this.getModel("huView");
             var nTotal = aRows.length;
             var bCancel = false;
+            var aAbort = []; // AbortControllers of in-flight labels() chunks, aborted on Cancel
             oModel.setProperty("/printing", true); // disables every print/download button until the job ends
             var oDialog = new BusyDialog({
                 title: this.getText("huPrintMenu"),
                 text: this.getText("huPrintProgress", [0, nTotal]),
                 showCancelButton: true,
                 // BusyDialog has no 'cancel' event; the Cancel button fires 'close' with cancelPressed=true.
-                close: function (oEvent) { if (oEvent.getParameter("cancelPressed")) { bCancel = true; } }
+                close: function (oEvent) {
+                    if (oEvent.getParameter("cancelPressed")) {
+                        bCancel = true;
+                        aAbort.forEach(function (c) { try { c.abort(); } catch (e) { /* settled */ } });
+                    }
+                }
             });
             oDialog.open();
             var tFetch = performance.now();
             return this._readLabelRecords(aRows, function (nDone) {
                 oDialog.setText(self.getText("huPrintProgress", [nDone, nTotal]));
-            }, function () { return bCancel; })
+            }, function () { return bCancel; }, aAbort)
                 .then(function (aRecords) {
                     oDialog.close();
                     if (bCancel) { MessageToast.show(self.getText("huPrintCancelled")); return undefined; }

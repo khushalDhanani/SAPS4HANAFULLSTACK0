@@ -253,6 +253,14 @@ describe('HandlingUnitAdapter.labels (batched material + first serial join)', ()
     expect(calls.rfc[0].where).toContain("VENUM = '0000021496'");
   });
 
+  it('rejects more than 2000 ids per call (enumeration/DoS guard), before any SAP call', async () => {
+    const { a, calls } = build();
+    const tooMany = Array.from({ length: 2001 }, (_, i) => String(i));
+    await expect(a.labels({ handlingUnitExternalIDs: tooMany })).rejects.toMatchObject({ status: 400 });
+    expect(calls.client).toHaveLength(0);
+    expect(calls.rfc).toHaveLength(0);
+  });
+
   it('returns no items and makes no SAP calls for an empty / invalid id list', async () => {
     const { a, calls } = build();
     expect(await a.labels({ handlingUnitExternalIDs: [] })).toEqual({ Items: [] });
