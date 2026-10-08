@@ -206,7 +206,7 @@ describe('261 scan screen, stage 1', () => {
 
     const svcSrc = fs.readFileSync(path.join(__dirname, '../../../srv/wm/mvt261/service.js'), 'utf8');
     expect(svcSrc).toContain("this.on('postGoodsIssue'");
-    expect(svcSrc).toContain('hasOpenAttemptForReservation');
+    expect(svcSrc).toContain('createOrGet'); // atomic idempotency claim (F3)
   });
 });
 
@@ -217,6 +217,10 @@ describe('open 261 list: only where scanning is possible', () => {
   });
   const list = (input) => {
     const s = sap();
+    // The list rows all sit in CS02; make it warehouse-managed so readiness is counted per warehouse
+    // (the scan-screen rule), exactly as the open list now does.
+    const orig = s.adapter.rfc.readTable;
+    s.adapter.rfc.readTable = async (table, fields, where) => (table === 'T320' ? [{ LGORT: 'CS02', LGNUM: 'W12' }] : orig(table, fields, where));
     s.adapter.client.get = async () => ({ data: { d: { __count: '4', results: [
       item('512851', '3', '1002707', '1000001001', '1130', '800.000', '0.000'), // released, 5 ready drums
       item('519944', '1', '1002760', '1000001003', '1130', '600.000', '0.000'), // released, drums only on hold
@@ -365,15 +369,19 @@ describe('Mvt261Service postGoodsIssue action', () => {
     warn: jest.fn()
   });
 
+  const cycleOf = (over = {}) => ({ Material: '1000001001', Plant: '1130', StorageLocation: 'CS02', Unit: 'KG', Batch: '', OpenQuantity: 800, ...over });
+
   beforeEach(() => {
     handlers = {};
     svc = new Mvt261Service();
     svc.on = (evt, fn) => { handlers[evt] = fn; };
     GoodsIssueAttemptStore.clearMemoryStore();
   });
+  afterEach(() => jest.restoreAllMocks());
 
-  it('validates input and rejects empty reservation, item, or quantity <= 0', async () => {
+  it('validates input and rejects empty reservation, item, or quantity <= 0 before reading SAP', async () => {
     await svc.init();
+    const cycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle');
     const r1 = req({ reservation: '', item: '1', quantity: 10 });
     await handlers.postGoodsIssue(r1);
     expect(r1.error).toHaveBeenCalledWith(400, 'Reservation and item are required');
@@ -381,19 +389,304 @@ describe('Mvt261Service postGoodsIssue action', () => {
     const r2 = req({ reservation: '100', item: '1', quantity: 0 });
     await handlers.postGoodsIssue(r2);
     expect(r2.error).toHaveBeenCalledWith(400, 'Quantity must be greater than zero');
+    expect(cycleSpy).not.toHaveBeenCalled();
   });
 
-  it('blocks concurrent posting attempts for the same reservation item (idempotency guard)', async () => {
+  it('F3: two concurrent posts - exactly one reaches the adapter, the other gets 409', async () => {
     await svc.init();
-    await GoodsIssueAttemptStore.create({
-      ReferenceDocument: 'GIEXISTING123',
-      ReservationNo: '512851',
-      ReservationItem: '3',
-      MovementType: '261'
-    });
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    let release;
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+      .mockImplementation(() => new Promise((res) => { release = () => res({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false }); }));
+
+    const r1 = req({ reservation: '512851', item: '3', quantity: 200 });
+    const p1 = handlers.postGoodsIssue(r1);                 // claims the key, then the adapter call hangs
+    await new Promise((r) => setImmediate(r));              // let p1 reach the hanging post with the attempt recorded
+    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r2);                      // same key -> createOrGet does not create -> 409
+
+    expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+    expect(postSpy).toHaveBeenCalledTimes(1);
+    release();
+    await p1;
+    expect(postSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('F3: fails closed when the attempt store cannot be written (503, no post)', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue');
+    jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('db down'));
 
     const r = req({ reservation: '512851', item: '3', quantity: 200 });
     await handlers.postGoodsIssue(r);
-    expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining('already in progress'));
+    expect(r.error).toHaveBeenCalledWith(503, expect.stringContaining('NOT posted'));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('F3: allows consecutive partial posts (distinct open quantity -> distinct key)', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle')
+      .mockResolvedValueOnce(cycleOf({ OpenQuantity: 800 }))
+      .mockResolvedValueOnce(cycleOf({ OpenQuantity: 600 }));
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+      .mockResolvedValue({ MaterialDocument: 'X', MaterialDocumentYear: '2026', Pending: false });
+
+    const r1 = req({ reservation: '512851', item: '3', quantity: 200 });
+    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r1);
+    await handlers.postGoodsIssue(r2);
+
+    expect(r1.error).not.toHaveBeenCalled();
+    expect(r2.error).not.toHaveBeenCalled();
+    expect(postSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('F9: rejects a batch that does not match the batch-pinned reservation (422, no post)', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf({ Batch: 'IN26000333' }));
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue');
+
+    const r = req({ reservation: '512851', item: '3', quantity: 200, batch: 'IN26000999' });
+    await handlers.postGoodsIssue(r);
+    expect(r.error).toHaveBeenCalledWith(422, expect.stringContaining('does not match the reservation batch'));
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('F9: forces the reservation batch when none is supplied', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf({ Batch: 'IN26000333' }));
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+      .mockResolvedValue({ MaterialDocument: 'X', MaterialDocumentYear: '2026', Pending: false });
+
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));
+    expect(postSpy).toHaveBeenCalledWith(expect.objectContaining({ batch: 'IN26000333' }));
+  });
+
+  it("F11: records the WM delivery outcome as 'delivery_created', not 'not_posted'", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({
+      MaterialDocument: '', MaterialDocumentYear: '', DeliveryNumber: '0080000087', Pending: true, Message: 'delivery created'
+    });
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));
+    const statuses = statusSpy.mock.calls.map((c) => c[1]);
+    expect(statuses).toContain('delivery_created');
+    expect(statuses).not.toContain('not_posted');
+  });
+
+  it("A6: an unknown outcome (502 timeout) records 'unconfirmed' (recheck-eligible), and a blind retry is still 409", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockRejectedValue(Object.assign(new Error('… failed: timeout'), { status: 502 }));
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));
+    const statuses = statusSpy.mock.calls.map((c) => c[1]);
+    expect(statuses).toContain('unconfirmed');
+    expect(statuses).not.toContain('rejected');
+    // same key (same open qty) -> blind retry blocked
+    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r2);
+    expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+  });
+
+  it("A6: a definite SAP rejection (422) records 'rejected'", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockRejectedValue(Object.assign(new Error('Goods issue not possible: over-issue'), { status: 422 }));
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));
+    const statuses = statusSpy.mock.calls.map((c) => c[1]);
+    expect(statuses).toContain('rejected');
+    expect(statuses).not.toContain('unconfirmed');
+  });
+
+  it("re-claim: a 'rejected' post is re-claimable - fix the cause and the retry posts (new generation)", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+      .mockRejectedValueOnce(Object.assign(new Error('Goods issue not possible: staging shortfall'), { status: 422 }))
+      .mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false });
+
+    const r1 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r1);                    // -> rejected
+    expect(r1.error).toHaveBeenCalledWith(422, expect.anything());
+    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r2);                    // re-claim -> posts
+    expect(r2.error).not.toHaveBeenCalled();
+    expect(postSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-claim: a 'not_posted' post (recheck confirmed nothing posted) is re-claimable", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { status: 502 }))   // -> unconfirmed
+      .mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false });
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));  // -> unconfirmed
+    const gen0ref = statusSpy.mock.calls.find((c) => c[1] === 'unconfirmed')[0];
+    await GoodsIssueAttemptStore.setStatus(gen0ref, 'not_posted');                             // recheck outcome
+    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r2);                                                         // re-claim -> posts
+    expect(r2.error).not.toHaveBeenCalled();
+    expect(postSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-claim: a 'posted' attempt blocks a re-post of the same open quantity (409)", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({ MaterialDocument: 'X', MaterialDocumentYear: '2026', Pending: false });
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));   // -> posted
+    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r2);
+    expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+  });
+
+  it('re-claim: a re-claim already in flight blocks a concurrent re-claim (409 - exactly one wins)', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    let release;
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+      .mockRejectedValueOnce(Object.assign(new Error('rejected'), { status: 422 }))            // gen0 -> rejected
+      .mockImplementationOnce(() => new Promise((res) => { release = () => res({ MaterialDocument: 'X', MaterialDocumentYear: '2026', Pending: false }); })); // gen1 in flight
+
+    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));   // gen0 rejected
+    const p2 = handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 })); // gen1 re-claim, hangs ('sending')
+    await new Promise((r) => setImmediate(r));
+    const r3 = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r3);                                                         // gen1 still in flight -> 409
+    expect(r3.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+    expect(postSpy).toHaveBeenCalledTimes(2);                                                  // gen0 + gen1 only; r3 never posted
+    release();
+    await p2;
+  });
+});
+
+describe('Mvt261Service reverse action (F6)', () => {
+  const Mvt261Service = require('../../../srv/wm/mvt261/service');
+  const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+  let svc;
+  let handlers;
+  const req = (data) => ({
+    data,
+    user: { id: 'test-user', is: (r) => r === 'Admin' },
+    error: jest.fn((status, msg) => { const e = new Error(msg); e.status = status; return e; })
+  });
+  const cycleWith = (over = {}) => ({
+    Reservation: '512851', ReservationItem: '3', Material: '1000001001', Plant: '1130', StorageLocation: 'CS02', Unit: 'KG',
+    History: [{ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', MaterialDocumentItem: '0001', MovementType: '261', IsReversed: false, Quantity: 200, Batch: 'B1' }],
+    ...over
+  });
+  const input = { reservation: '512851', item: '3', materialDocument: '4900050046', materialDocumentYear: '2026', materialDocumentItem: '1' };
+
+  beforeEach(() => {
+    handlers = {};
+    svc = new Mvt261Service();
+    svc.on = (evt, fn) => { handlers[evt] = fn; };
+    GoodsIssueAttemptStore.clearMemoryStore();
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('reverses a 261 document item and returns the SAP 262 document', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse').mockResolvedValue({ MaterialDocument: '4900050099', MaterialDocumentYear: '2026' });
+    const r = req(input);
+    const res = await handlers.reverse(r);
+    expect(r.error).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ MaterialDocument: '4900050099' });
+    expect(revSpy).toHaveBeenCalledWith(expect.objectContaining({ materialDocument: '4900050046', materialDocumentYear: '2026', materialDocumentItem: '1' }));
+  });
+
+  it('refuses an already-reversed document (422), no SAP call', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith({
+      History: [{ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', MaterialDocumentItem: '0001', MovementType: '261', IsReversed: true }]
+    }));
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse');
+    const r = req(input);
+    await handlers.reverse(r);
+    expect(r.error).toHaveBeenCalledWith(422, expect.stringContaining('already reversed'));
+    expect(revSpy).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the document is not a 261 of this reservation item (422)', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith({ History: [] }));
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse');
+    const r = req(input);
+    await handlers.reverse(r);
+    expect(r.error).toHaveBeenCalledWith(422, expect.stringContaining('not a movement type 261'));
+    expect(revSpy).not.toHaveBeenCalled();
+  });
+
+  it('two concurrent reversals: one reaches the adapter, the other 409', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    let release;
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse')
+      .mockImplementation(() => new Promise((res) => { release = () => res({ MaterialDocument: '4900050099', MaterialDocumentYear: '2026' }); }));
+    const p1 = handlers.reverse(req(input));
+    await new Promise((r) => setImmediate(r));
+    const r2 = req(input);
+    await handlers.reverse(r2);
+    expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+    expect(revSpy).toHaveBeenCalledTimes(1);
+    release();
+    await p1;
+  });
+
+  it('fails closed when the attempt store cannot be written (503, no reversal)', async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse');
+    jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('db down'));
+    const r = req(input);
+    await handlers.reverse(r);
+    expect(r.error).toHaveBeenCalledWith(503, expect.stringContaining('NOT posted'));
+    expect(revSpy).not.toHaveBeenCalled();
+  });
+
+  it("maps SAP's already-cancelled error to 422", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    jest.spyOn(Mvt261Adapter.prototype, 'reverse').mockRejectedValue(Object.assign(new Error('Document 4900050046 is already cancelled'), { status: 500 }));
+    const r = req(input);
+    await handlers.reverse(r);
+    expect(r.error).toHaveBeenCalledWith(422, expect.stringContaining('already reversed'));
+  });
+
+  it("re-claim: a 'rejected' reversal is re-claimable (e.g. a closed period, then reopened)", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse')
+      .mockRejectedValueOnce(Object.assign(new Error('Posting period 2026 is closed'), { status: 500 }))   // -> rejected
+      .mockResolvedValue({ MaterialDocument: '4900050099', MaterialDocumentYear: '2026' });
+
+    await handlers.reverse(req(input));                  // rejected
+    const r2 = req(input);
+    await handlers.reverse(r2);                          // re-claim -> posts
+    expect(r2.error).not.toHaveBeenCalled();
+    expect(revSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-claim: a 'not_posted' reversal is NOT re-claimable - still 409 (the 262 recheck can mislabel a posted reversal)", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse')
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { status: 502 }));   // -> unconfirmed
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+
+    await handlers.reverse(req(input));                  // unconfirmed
+    const gen0ref = statusSpy.mock.calls.find((c) => c[1] === 'unconfirmed')[0];
+    await GoodsIssueAttemptStore.setStatus(gen0ref, 'not_posted');
+    const r2 = req(input);
+    await handlers.reverse(r2);                          // reverse policy excludes not_posted -> 409
+    expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+    expect(revSpy).toHaveBeenCalledTimes(1);             // no second adapter call
   });
 });
