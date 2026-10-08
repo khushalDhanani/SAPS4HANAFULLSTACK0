@@ -17,7 +17,11 @@ const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient')
  *    StockChangeType '05' (9,940 rows = A_MaterialDocumentItem count for 261; 71 cancelled = 71 x 262).
  *  - API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem: the reversing 262 (SMBLN/SJAHR/SMBLP) of the
  *    rows shown, as evidence only.
- * SAP applies the plant / movement type authorizations of the calling user in both services.
+ * Authorization: the OData reads above enforce the end user's plant / movement-type authorizations
+ * only when the S/4 destination uses principal propagation. The RFC_READ_TABLE path used by the
+ * cycle / scan / open-list reads runs under the fixed technical user (S4_USERNAME in RfcClient), so
+ * it does NOT apply per-end-user plant authorization - the app role (service.cds @requires) is the
+ * gate there. See AUDIT_261.md F10.
  */
 const FIND_PATH = '/sap/opu/odata/sap/MMIM_MATDOC_OV_SRV/F_Mmim_Findmatdoc';
 const ITEM_PATH = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem';
@@ -73,7 +77,10 @@ function blockers(resb, aufk, statuses, configuredWarehouse) {
   const resvBlockers = [
     resb.XLOEK === 'X' && 'item is deleted',
     resb.KZEAR === 'X' && 'final issue is set',
-    resb.XWAOK !== 'X' && 'goods movement is not allowed for the item'
+    resb.XWAOK !== 'X' && 'goods movement is not allowed for the item',
+    // F5: a backflushed component is issued automatically at order confirmation (CO11N); a manual 261
+    // here would consume it a second time, so it is blocked outright.
+    isBackflush(resb.RGEKZ) && 'component is backflushed at order confirmation (CO11N); it is issued automatically there - do not issue it here, ask your supervisor if a manual issue is genuinely required'
   ].filter(Boolean);
   if (resb.LGNUM && configuredWarehouse !== undefined) {
     if (configuredWarehouse && resb.LGNUM !== configuredWarehouse) {
@@ -90,6 +97,9 @@ const QUANT_BLOCK_FLAGS = ['SKZUA', 'SKZUE', 'SKZSA', 'SKZSE', 'SKZSI', 'SPGRU']
 
 const strip = (v) => String(v || '').replace(/^0+(?=.)/, '');
 const sapDate = (v) => (/^\d{8}$/.test(v || '') && v !== '00000000' ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : null);
+const round = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+/** RESB-RGEKZ (backflush indicator): blank / '0' = no backflush; anything else = backflushed at order confirmation. */
+const isBackflush = (v) => { const s = String(v || '').trim(); return s !== '' && s !== '0'; };
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -133,6 +143,17 @@ class Mvt261Adapter {
       LOG.error(`${context}: ${e.message}`);
       throw httpError(e.status || 502, `${context}: ${e.message}`);
     }
+  }
+
+  /**
+   * Server-side plant authorization (F10). allowedPlants comes from plantScope(req.user):
+   *   undefined -> not scoped (direct/internal calls, tests); null -> Admin / all plants; [] -> none;
+   *   [..] -> exactly those. Throws 403 (not an empty result) when the plant is out of scope.
+   */
+  _scopeGuard(plant, allowedPlants) {
+    if (allowedPlants === undefined || allowedPlants === null) return;
+    const p = String(plant || '').trim().toUpperCase();
+    if (!allowedPlants.includes(p)) throw httpError(403, `Not authorized for plant ${p || '(none)'}`);
   }
 
   /** Active system statuses (short texts, e.g. "REL LKD") per order number, from JEST. */
@@ -185,8 +206,17 @@ class Mvt261Adapter {
     const to = clean(input.dateTo, 'Requirement date to', RE.date);
     if ((from || to) && (!from || !to || from > to)) throw httpError(400, 'Requirement date range needs a valid from and to date');
 
+    // F10: a user restricted to certain plants sees only those; a specific plant outside the scope is a
+    // 403 (never a silently empty list), and a user with no plant scope at all is a 403.
+    const allowed = input.allowedPlants;
+    if (Array.isArray(allowed)) {
+      if (plant && !allowed.includes(plant)) throw httpError(403, `Not authorized for plant ${plant}`);
+      if (!allowed.length) throw httpError(403, 'Not authorized for any plant');
+    }
+
     const filter = ["GoodsMovementType eq '261'", 'ReservationItemIsFinallyIssued eq false', 'ReservationItmIsMarkedForDeltn eq false'];
     if (plant) filter.push(`Plant eq '${plant}'`);
+    else if (Array.isArray(allowed) && allowed.length) filter.push(`(${allowed.map((p) => `Plant eq '${p}'`).join(' or ')})`);
     if (material) filter.push(`Product eq '${material}'`);
     if (order) filter.push(`OrderID eq '${order}'`);
     if (reservation) filter.push(`Reservation eq '${reservation}'`);
@@ -233,48 +263,65 @@ class Mvt261Adapter {
 
     // Order status and scan readiness are extra columns: the plain list stays usable when RFC is not
     // available, but "scan possible only" cannot be answered without them and then fails loudly.
+    // Readiness per reservation is the same _issuable rule the scan page and the posting gate use
+    // (per issue location / warehouse), not a plant-wide storage-unit count.
     try {
       const statuses = await this._orderStatuses(Items.map((i) => i.ProductionOrder));
-      const ready = await this._readyStorageUnits(plant);
-      const stagingShortfalls = await this._stagingShortfalls(Items);
+      const warehouses = await this._warehouses(Items);
+      const facts = await this._reservationFacts(Items);
+      const supplyLocs = await this._supplyAreaLocations(Items, facts);
+      const quantsByMat = await this._plantQuants(Items);
+      const stockByMat = await this._nonWmStock(Items, facts, warehouses);
       Items.forEach((i) => {
         const st = (statuses[strip(i.ProductionOrder)] || []).sort();
-        const su = ready[`${strip(i.Material)}|${i.Plant}`] || { count: 0, quantity: 0 };
-        i.OrderStatus = st.join(' ');
-        i.ReadyStorageUnits = su.count;
-        i.ReadyQuantity = Math.round(su.quantity * 1000) / 1000;
-        // Same conditions the scan page applies before it accepts a scan.
-        const orderBlocked = st.filter((x) => ORDER_BLOCKERS[x]).map((x) => ORDER_BLOCKERS[x]);
-        const stagingShort = stagingShortfalls[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`];
-        let blockReason = '';
-        if (i.OpenQuantity <= 0) {
-          blockReason = 'No open quantity remaining';
-        } else if (!i.MovementAllowed) {
-          blockReason = 'Movement not allowed';
-        } else if (!st.includes('REL')) {
-          blockReason = 'Order not released';
-        } else if (orderBlocked.length) {
-          blockReason = orderBlocked.join('; ');
-        } else if (stagingShort) {
-          // WM-PP interim staging: the scan page blocks these, so the list must too (same reason text).
-          blockReason = stagingShort;
-        } else if (su.count <= 0) {
-          blockReason = 'No ready storage units in stock';
+        const warehouse = warehouses[`${i.Plant}|${i.StorageLocation}`] || '';
+        const f = facts[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`];
+        const supplySloc = f && f.PRVBE ? (supplyLocs[`${i.Plant}|${f.PRVBE}`] || '') : '';
+        const quants = quantsByMat[`${strip(i.Material)}|${i.Plant}`] || [];
+        const locationStock = stockByMat[`${strip(i.Material)}|${i.Plant}`] || [];
+        const issuable = this._issuable(
+          { warehouse, storageLocation: i.StorageLocation, supplyAreaStorageLocation: supplySloc, batch: f ? f.CHARG : '', openQty: i.OpenQuantity, unit: i.Unit },
+          quants, locationStock);
+        // Interim staging (WM-PP), suppressed on a warehouse mismatch exactly as the cycle does.
+        let stagingShort = '';
+        if (f && f.LGTYP) {
+          const bin = f.LGPLA || (f.AUFNR ? strip(f.AUFNR).padStart(10, '0') : '');
+          const whMismatch = Boolean(f.LGNUM) && (warehouse ? f.LGNUM !== warehouse : true);
+          const s = this._stagingCore({ storageType: f.LGTYP, bin, warehouse: warehouse || f.LGNUM || '', batch: f.CHARG, openQty: i.OpenQuantity, unit: i.Unit }, quants);
+          if (s.shortfall > 0 && !whMismatch) stagingShort = s.reason;
         }
+        // Reuse blockers() for the order / reservation reasons (released, locked, movement, warehouse mismatch).
+        const resbLike = { XLOEK: '', KZEAR: '', XWAOK: i.MovementAllowed ? 'X' : '', LGNUM: f ? f.LGNUM : '', RGEKZ: f ? f.RGEKZ : '' };
+        const { resvBlockers, orderBlockers } = blockers(resbLike, i.ProductionOrder ? {} : undefined, st, warehouse);
+        const allBlockers = [...resvBlockers, ...orderBlockers];
+        let blockReason = '';
+        if (i.OpenQuantity <= 0) blockReason = 'No open quantity remaining';
+        else if (allBlockers.length) blockReason = allBlockers.join('; ');
+        else if (stagingShort) blockReason = stagingShort;
+        else if (issuable.blocked) blockReason = issuable.reason;
+        i.OrderStatus = st.join(' ');
+        i.Warehouse = warehouse;
+        i.Backflush = isBackflush(f ? f.RGEKZ : '');
+        i.ReadyStorageUnits = issuable.issuableUnits.length;
+        i.ReadyQuantity = round(issuable.issuableQty);
         i.ScanPossible = !blockReason;
         i.Blocked = !i.ScanPossible;
         i.BlockReason = blockReason;
+        i.PartialCoverage = !blockReason && issuable.partial;
       });
     } catch (e) {
       if (input.scanPossibleOnly) throw e;
-      LOG.warn(`Order statuses / storage-unit stock not read: ${e.message}`);
+      LOG.warn(`Order statuses / stock not read: ${e.message}`);
       Items.forEach((i) => Object.assign(i, {
         OrderStatus: '',
+        Warehouse: '',
+        Backflush: false,
         ReadyStorageUnits: 0,
         ReadyQuantity: 0,
         ScanPossible: false,
         Blocked: true,
-        BlockReason: 'Status/stock check failed'
+        BlockReason: 'Status/stock check failed',
+        PartialCoverage: false
       }));
     }
     if (input.scanPossibleOnly) {
@@ -297,9 +344,15 @@ class Mvt261Adapter {
     const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for reservation ${strip(rsnum)}/${strip(rspos)}`);
 
     const [resb] = await read('RESB',
-      ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'CHARG', 'BDTER', 'BDMNG', 'ENMNG', 'MEINS', 'XLOEK', 'KZEAR', 'XWAOK'],
+      ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'CHARG', 'PRVBE', 'RGEKZ', 'BDTER', 'BDMNG', 'ENMNG', 'MEINS', 'XLOEK', 'KZEAR', 'XWAOK'],
       [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
     if (!resb) throw httpError(404, `Reservation ${strip(rsnum)} item ${strip(rspos)} with movement type 261 not found`);
+    this._scopeGuard(resb.WERKS, input.allowedPlants);
+
+    // Production supply area storage location (PVBE by plant+PRVBE; live-verified field LGORT). Its stock
+    // is production-related for this order, so the scan list includes it alongside the reservation's LGORT.
+    const pvbe = resb.PRVBE ? await read('PVBE', ['LGORT'], [`WERKS = '${resb.WERKS}'`, `AND PRVBE = '${resb.PRVBE}'`]) : [];
+    const supplyAreaStorageLocation = pvbe[0] ? pvbe[0].LGORT : '';
 
     const required = parseSapNumber(resb.BDMNG);
     const withdrawn = parseSapNumber(resb.ENMNG);
@@ -312,7 +365,11 @@ class Mvt261Adapter {
     const mchb = await read('MCHB', ['LGORT', 'CHARG', 'CLABS'], [...matWhere, 'AND CLABS > 0']);
     const t320 = resb.LGORT ? await read('T320', ['LGNUM'], [`WERKS = '${resb.WERKS}'`, `AND LGORT = '${resb.LGORT}'`]) : [];
     const configuredWarehouse = t320[0] ? t320[0].LGNUM : '';
-    const lquaRaw = await read('LQUA', ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'VERME', 'LENUM'], [...matWhere, 'AND VERME > 0']);
+    // Warehouse-wide (material + plant, not restricted to the issue location) so _issuable can see the
+    // whole warehouse for a WM reservation, and the production-supply-area location for a non-WM one.
+    const lquaRaw = await read('LQUA',
+      ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'BESTQ', 'VERME', 'EINME', 'AUSME', 'MEINS', 'LENUM', ...QUANT_BLOCK_FLAGS],
+      [`MATNR = '${resb.MATNR}'`, `AND WERKS = '${resb.WERKS}'`, 'AND VERME > 0']);
     const lqua = configuredWarehouse ? lquaRaw.filter((q) => q.LGNUM === configuredWarehouse) : lquaRaw;
     const ltbk = await read('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'STATU'], [`RSNUM = '${rsnum}'`]);
     const TransferRequirements = [];
@@ -340,7 +397,6 @@ class Mvt261Adapter {
       ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'BUDAT', 'MENGE', 'MEINS', 'CHARG', 'LGORT', 'SMBLN', 'SJAHR', 'SMBLP', 'CANCELLED', 'USNAM'],
       [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND RECORD_TYPE = 'MDOC'", "AND ( BWART = '261' OR BWART = '262' )"]);
 
-    const stockAtLocation = mard.reduce((sum, r) => sum + parseSapNumber(r.LABST), 0);
     const History = docs.map((d) => ({
       MaterialDocument: d.MBLNR, MaterialDocumentYear: d.MJAHR, MaterialDocumentItem: d.ZEILE, MovementType: d.BWART,
       PostingDate: sapDate(d.BUDAT), Quantity: parseSapNumber(d.MENGE), Unit: d.MEINS, Batch: d.CHARG, StorageLocation: d.LGORT,
@@ -348,26 +404,37 @@ class Mvt261Adapter {
     })).sort((a, b) => `${a.MaterialDocumentYear}${a.MaterialDocument}${a.MaterialDocumentItem}`.localeCompare(`${b.MaterialDocumentYear}${b.MaterialDocument}${b.MaterialDocumentItem}`));
     const effective261 = History.filter((h) => h.MovementType === '261' && !h.IsReversed);
 
+    // One definition of issuable stock (shared with the scan page, the open list and the posting gate).
+    const stock = [
+      ...mard.map((r) => ({ StorageLocation: r.LGORT, Batch: '', Quantity: parseSapNumber(r.LABST) })),
+      ...mchb.map((r) => ({ StorageLocation: r.LGORT, Batch: r.CHARG, Quantity: parseSapNumber(r.CLABS) }))
+    ];
+    const issuable = this._issuable(
+      { warehouse: configuredWarehouse, storageLocation: resb.LGORT, supplyAreaStorageLocation, batch: resb.CHARG, openQty: open, unit: resb.MEINS },
+      lqua, stock);
+
     // Staging evaluation: if the reservation item specifies an interim storage type (WM-PP staging),
     // interim bin must hold sufficient stock, otherwise standard SAP 261 goods issue rejects with shortfall.
     const stagingRequired = Boolean(resb.LGTYP);
     const stagingBin = resb.LGPLA || (resb.AUFNR ? strip(resb.AUFNR).padStart(10, '0') : '');
     const stagingWarehouse = configuredWarehouse || resb.LGNUM || '';
-    const stagingQuants = stagingRequired ? lqua.filter((q) =>
-      q.LGTYP === resb.LGTYP &&
-      q.LGPLA === stagingBin &&
-      (!stagingWarehouse || q.LGNUM === stagingWarehouse)
-    ) : [];
-    const stagedStock = stagingQuants.reduce((sum, q) => sum + parseSapNumber(q.VERME), 0);
-    const stagingShortfall = stagingRequired && open > 0 && stagedStock < open;
-    const stagingBlocker = stagingShortfall
-      ? `available stock shortfall of ${Math.round((open - stagedStock) * 1000) / 1000} ${resb.MEINS} in interim storage bin ${resb.LGTYP}/${stagingBin}`
-      : null;
+    const staging = this._stagingCore({ storageType: resb.LGTYP, bin: stagingBin, warehouse: stagingWarehouse, batch: resb.CHARG, openQty: open, unit: resb.MEINS }, lqua);
+    const stagedStock = staging.stagedStock;
+    // A warehouse mismatch (RESB-LGNUM vs T320) is the root blocker; the staging check then runs in the
+    // determined warehouse, not the transmitted one, so its shortfall is derivative and misleading -
+    // suppress it until the warehouse is aligned, leaving the mismatch as the single actionable reason.
+    const warehouseMismatch = Boolean(resb.LGNUM) && (configuredWarehouse ? resb.LGNUM !== configuredWarehouse : true);
+    const stagingShortfall = staging.shortfall > 0 && !warehouseMismatch;
+    const stagingBlocker = stagingShortfall ? staging.reason : null;
 
     // Steps: a blocked step carries the reason; nothing here posts or changes data.
     const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses, configuredWarehouse);
     const step = (Step, Status, Reason = '') => ({ Step, Status, Reason });
     const blockedBefore = [...resvBlockers, ...orderBlockers, ...(stagingBlocker ? [stagingBlocker] : [])];
+    // A definite blocker (reservation / order / staging / warehouse mismatch) wins; only when there is
+    // none does "nothing issuable" block the goods issue. A partial cover (0 < issuable < open) never
+    // blocks - the issue proceeds for what is on hand.
+    const giBlockers = blockedBefore.length ? blockedBefore : (open > 0 && issuable.blocked ? [issuable.reason] : []);
     const openTr = TransferRequirements.filter((t) => !t.Completed);
     const openTo = TransferOrders.filter((t) => !t.Confirmed);
 
@@ -396,35 +463,44 @@ class Mvt261Adapter {
     const Steps = [
       step('Reservation', resvBlockers.length ? 'blocked' : 'done', resvBlockers.join('; ')),
       step('ProductionOrder', !aufk ? 'blocked' : orderBlockers.length ? 'blocked' : 'done', !aufk ? 'no order on the reservation item' : orderBlockers.join('; ')),
-      step('Availability', open === 0 ? 'done' : stockAtLocation >= open ? 'done' : 'blocked',
-        open > 0 && stockAtLocation < open ? `unrestricted stock ${stockAtLocation} ${resb.MEINS} is less than the open quantity ${open} ${resb.MEINS}` : ''),
+      step('Availability', open === 0 || issuable.issuableQty >= open ? 'done' : 'blocked',
+        open > 0 && issuable.issuableQty < open
+          ? (issuable.reason || `issuable stock ${issuable.issuableQty} ${resb.MEINS} is less than the open quantity ${open} ${resb.MEINS}`)
+          : ''),
       step('WmStaging', wmStagingStatus, wmStagingReason),
-      step('GoodsIssue', open === 0 ? 'done' : blockedBefore.length ? 'blocked' : 'open', open > 0 ? blockedBefore.join('; ') : ''),
+      step('GoodsIssue', open === 0 ? 'done' : giBlockers.length ? 'blocked' : 'open', open > 0 ? giBlockers.join('; ') : ''),
       step('DocumentHistory', History.length ? 'done' : 'open', History.length ? '' : 'no 261 or 262 document yet'),
       step('Reversal', effective261.length ? 'open' : 'done', effective261.length ? `${effective261.length} document(s) of movement type 261 can be reversed` : ''),
       step('Closure', open === 0 || resvBlockers.length ? 'done' : 'open', open === 0 ? '' : resvBlockers.length ? resvBlockers.join('; ') : `${open} ${resb.MEINS} still open`)
     ];
 
-    return {
+    const result = {
       Reservation: strip(resb.RSNUM), ReservationItem: strip(resb.RSPOS), ProductionOrder: strip(resb.AUFNR), OrderType: aufk ? aufk.AUART : '',
       OrderStatus: statuses.join(' '), Material: strip(resb.MATNR), Plant: resb.WERKS, StorageLocation: resb.LGORT, Batch: resb.CHARG,
+      SupplyArea: strip(resb.PRVBE || ''), SupplyAreaStorageLocation: supplyAreaStorageLocation,
       RequirementDate: sapDate(resb.BDTER), RequiredQuantity: required, WithdrawnQuantity: withdrawn, OpenQuantity: open, Unit: resb.MEINS,
       IsDeleted: resb.XLOEK === 'X', IsFinalIssue: resb.KZEAR === 'X', MovementAllowed: resb.XWAOK === 'X',
+      Backflush: isBackflush(resb.RGEKZ),
       Warehouse: configuredWarehouse,
       ReservationWarehouse: resb.LGNUM || '',
+      IssuableQuantity: issuable.issuableQty,
+      SupplyAreaStock: issuable.supplyAreaStock,
+      PartialCoverage: issuable.partial && giBlockers.length === 0,
       StagingRequired: stagingRequired,
       StagingStorageType: resb.LGTYP || '',
       StagingBin: stagingBin || '',
-      StagedQuantity: Math.round(stagedStock * 1000) / 1000,
-      StagingShortfall: stagingShortfall ? Math.round((open - stagedStock) * 1000) / 1000 : 0,
+      StagedQuantity: round(stagedStock),
+      StagingShortfall: stagingShortfall ? staging.shortfall : 0,
       Steps,
-      Stock: [
-        ...mard.map((r) => ({ StorageLocation: r.LGORT, Batch: '', Quantity: parseSapNumber(r.LABST) })),
-        ...mchb.map((r) => ({ StorageLocation: r.LGORT, Batch: r.CHARG, Quantity: parseSapNumber(r.CLABS) }))
-      ],
+      Stock: stock,
       Quants: lqua.map((q) => ({ Warehouse: q.LGNUM, StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, Batch: q.CHARG, AvailableQuantity: parseSapNumber(q.VERME), StorageUnit: strip(q.LENUM) })),
       TransferRequirements, TransferOrders, History
     };
+    // Same-process callers (scanContext, postGoodsIssue, openItems) reuse the raw stock the issuable
+    // decision was made from, so the posting gate uses the exact same data. Non-enumerable: the OData
+    // layer serializes only the declared Cycle261 fields, so this never leaves the service.
+    Object.defineProperty(result, '_raw', { value: { quants: lqua, stock }, enumerable: false });
+    return result;
   }
 
   /** Why a quant cannot be issued (R3 block flags / pending transfer order, R4 not-ready bins): [reason, value1, value2] or null. */
@@ -440,64 +516,150 @@ class Mvt261Adapter {
   }
 
   /**
-   * Storage units ready to issue per "material|plant": { count, quantity }. Same rules as a scan.
-   * ponytail: reads every storage-unit quant of the plant (or of all plants) in one call - tens of
-   * thousands of rows; restrict by material or cache it if the list gets slow.
+   * The single definition of "issuable stock" for a reservation item, shared by the cycle, the scan
+   * page, the open list and the posting gate. Pure (reads nothing from SAP).
+   *  - WM reservation (warehouse set): issuable = ready stock across the whole warehouse (every quant
+   *    of the material in that warehouse that passes _quantNotReady), batch-matched. issuableUnits is
+   *    the storage-unit (LENUM) subset, for the scan FIFO/suggest list; bulk quants still count toward
+   *    the quantity. Supply-area stock is in the warehouse, so it is already issuable (no stranded flag).
+   *  - Non-WM reservation: issuable = unrestricted stock in exactly the reservation's storage location
+   *    (MARD, or MCHB for the pinned batch). Stock in the production-supply-area location is reported as
+   *    supplyAreaStock and never counted - it needs a transfer first.
+   * @param {{warehouse,storageLocation,supplyAreaStorageLocation,batch,openQty,unit}} ctx
+   * @param {Array} quants       LQUA rows of the material in the plant (VERME > 0)
+   * @param {Array} locationStock [{StorageLocation, Batch, Quantity}] from MARD/MCHB
    */
-  async _readyStorageUnits(plant) {
-    const quants = await this._table('LQUA',
-      ['MATNR', 'WERKS', 'LGTYP', 'LGPLA', 'BESTQ', 'VERME', 'EINME', 'AUSME', 'MEINS', ...QUANT_BLOCK_FLAGS],
-      ["LENUM <> ''", 'AND VERME > 0'].concat(plant ? [`AND WERKS = '${plant}'`] : []), 'Read storage-unit stock');
+  _issuable(ctx, quants = [], locationStock = []) {
+    const batchOk = (v) => !ctx.batch || v === ctx.batch;
+    let issuableQty = 0;
+    let issuableUnits = [];
+    let supplyAreaStock = 0;
+    if (ctx.warehouse) {
+      const ready = quants.filter((q) => q.LGNUM === ctx.warehouse && batchOk(q.CHARG) && !this._quantNotReady(q));
+      issuableQty = ready.reduce((s, q) => s + parseSapNumber(q.VERME), 0);
+      issuableUnits = ready.filter((q) => q.LENUM);
+    } else {
+      const rows = locationStock.filter((st) => st.StorageLocation === ctx.storageLocation && (ctx.batch ? st.Batch === ctx.batch : !st.Batch));
+      issuableQty = rows.reduce((s, st) => s + (Number(st.Quantity) || 0), 0);
+      if (ctx.supplyAreaStorageLocation && ctx.supplyAreaStorageLocation !== ctx.storageLocation) {
+        supplyAreaStock = quants
+          .filter((q) => q.LGORT === ctx.supplyAreaStorageLocation && batchOk(q.CHARG))
+          .reduce((s, q) => s + parseSapNumber(q.VERME), 0);
+      }
+    }
+    issuableQty = round(issuableQty);
+    supplyAreaStock = round(supplyAreaStock);
+    const blocked = ctx.openQty > 0 && issuableQty <= 0;
+    const partial = issuableQty > 0 && issuableQty < ctx.openQty;
+    const reason = !blocked ? ''
+      : supplyAreaStock > 0
+        ? `${supplyAreaStock} ${ctx.unit} in supply area ${ctx.supplyAreaStorageLocation}; issue location ${ctx.storageLocation} is empty - transfer required`
+        : `no unrestricted stock in ${ctx.storageLocation || 'the issue location'}`;
+    return { issuableQty, issuableUnits, supplyAreaStock, blocked, partial, reason };
+  }
+
+  /**
+   * WM-PP interim-staging shortfall: staged stock (LQUA) in the interim storage type/bin of the
+   * warehouse, batch-matched, versus openQty. Shared by the cycle, the open list and the posting gate.
+   * No storage type -> nothing staged is required. Pure.
+   * @param {{storageType,bin,warehouse,batch,openQty,unit}} ctx
+   */
+  _stagingCore(ctx, quants = []) {
+    if (!ctx.storageType) return { stagedStock: 0, shortfall: 0, reason: null };
+    const staged = quants.filter((q) =>
+      q.LGTYP === ctx.storageType &&
+      q.LGPLA === ctx.bin &&
+      (!ctx.warehouse || q.LGNUM === ctx.warehouse) &&
+      (!ctx.batch || q.CHARG === ctx.batch));
+    const stagedStock = round(staged.reduce((s, q) => s + parseSapNumber(q.VERME), 0));
+    const shortfall = ctx.openQty > 0 && stagedStock < ctx.openQty ? round(ctx.openQty - stagedStock) : 0;
+    return {
+      stagedStock,
+      shortfall,
+      reason: shortfall > 0 ? `available stock shortfall of ${shortfall} ${ctx.unit} in interim storage bin ${ctx.storageType}/${ctx.bin}` : null
+    };
+  }
+
+  /**
+   * All LQUA quants (VERME > 0) of the listed plants, grouped "material|plant", so openItems can run
+   * the same _issuable rule per reservation as the scan page. One read per distinct plant.
+   * ponytail: reads every quant of the plant; restrict by material or cache it if the list gets slow.
+   */
+  async _plantQuants(items) {
+    const plants = [...new Set(items.map((i) => i.Plant).filter(Boolean))];
     const out = {};
-    for (const q of quants) {
-      if (this._quantNotReady(q)) continue;
-      const e = out[`${strip(q.MATNR)}|${q.WERKS}`] = out[`${strip(q.MATNR)}|${q.WERKS}`] || { count: 0, quantity: 0 };
-      e.count++;
-      e.quantity += parseSapNumber(q.VERME);
+    for (const p of plants) {
+      const quants = await this._table('LQUA',
+        ['LENUM', 'LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'MATNR', 'WERKS', 'CHARG', 'BESTQ', 'VERME', 'EINME', 'AUSME', 'MEINS', ...QUANT_BLOCK_FLAGS],
+        ['VERME > 0', `AND WERKS = '${p}'`], 'Read plant stock quants');
+      for (const q of quants) (out[`${strip(q.MATNR)}|${q.WERKS}`] = out[`${strip(q.MATNR)}|${q.WERKS}`] || []).push(q);
     }
     return out;
   }
 
   /**
-   * Per "reservation|item" the interim-staging shortfall reason, for the listed items that are
-   * WM-PP staged (RESB-LGTYP set), matching exactly what cycle()/the scan page block on: staged LQUA
-   * stock in LGTYP/bin (bin = RESB-LGPLA, else the order) is less than the open quantity. {} when no
-   * listed item needs staging. Two batch reads per distinct plant (RESB + LQUA), not one read per item.
+   * Per "reservation|item" the open 261 RESB facts the list needs (issue location, warehouse, interim
+   * staging type/bin, supply area, batch, movement allowed). One read per distinct plant. Keyed on the
+   * stripped reservation/item so it matches the OData list rows.
    */
-  async _stagingShortfalls(items) {
+  async _reservationFacts(items) {
     const plants = [...new Set(items.map((i) => i.Plant).filter(Boolean))];
-    if (!plants.length) return {};
-    const resbByKey = {};
+    const out = {};
     for (const p of plants) {
       const rows = await this._table('RESB',
-        ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA'],
-        [`WERKS = '${p}'`, "AND BWART = '261'", "AND XLOEK = ''", "AND KZEAR = ''", "AND LGTYP <> ''"], 'Read reservation staging bins');
-      for (const r of rows) resbByKey[`${strip(r.RSNUM)}|${strip(r.RSPOS)}`] = r;
+        ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'PRVBE', 'CHARG', 'RGEKZ', 'XWAOK'],
+        [`WERKS = '${p}'`, "AND BWART = '261'", "AND XLOEK = ''", "AND KZEAR = ''"], 'Read reservation facts');
+      for (const r of rows) out[`${strip(r.RSNUM)}|${strip(r.RSPOS)}`] = r;
     }
-    const staging = items.filter((i) => resbByKey[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`]);
-    if (!staging.length) return {};
+    return out;
+  }
 
-    const staged = {}; // "matnr|werks|lgtyp|bin" -> { warehouse: VERME sum }
-    for (const p of plants) {
-      const quants = await this._table('LQUA',
-        ['MATNR', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA', 'VERME'],
-        [`WERKS = '${p}'`, 'AND VERME > 0'], 'Read interim staging stock');
-      for (const q of quants) {
-        const k = `${strip(q.MATNR)}|${q.WERKS}|${q.LGTYP}|${q.LGPLA}`;
-        (staged[k] = staged[k] || {})[q.LGNUM] = (staged[k][q.LGNUM] || 0) + parseSapNumber(q.VERME);
-      }
-    }
-
+  /** Per "plant|supplyArea" the supply-area storage location (PVBE-LGORT), for the listed items. */
+  async _supplyAreaLocations(items, facts) {
+    const pairs = [...new Set(items
+      .map((i) => { const f = facts[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`]; return f && f.PRVBE ? `${i.Plant}|${f.PRVBE}` : ''; })
+      .filter(Boolean))];
     const out = {};
-    for (const i of staging) {
-      const r = resbByKey[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`];
-      const bin = r.LGPLA || (r.AUFNR ? strip(r.AUFNR).padStart(10, '0') : '');
-      const byWh = staged[`${strip(r.MATNR)}|${r.WERKS}|${r.LGTYP}|${bin}`] || {};
-      const stagedStock = r.LGNUM ? (byWh[r.LGNUM] || 0) : Object.values(byWh).reduce((a, b) => a + b, 0);
-      if (i.OpenQuantity > 0 && stagedStock < i.OpenQuantity) {
-        out[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`] =
-          `available stock shortfall of ${Math.round((i.OpenQuantity - stagedStock) * 1000) / 1000} ${i.Unit} in interim storage bin ${r.LGTYP}/${bin}`;
-      }
+    for (const key of pairs) {
+      const [p, prvbe] = key.split('|');
+      const rows = await this._table('PVBE', ['PRVBE', 'LGORT'], [`WERKS = '${p}'`, `AND PRVBE = '${prvbe}'`], 'Read supply-area storage location');
+      if (rows[0]) out[key] = rows[0].LGORT;
+    }
+    return out;
+  }
+
+  /**
+   * Per "material|plant" the unrestricted stock rows (MARD + MCHB) for the non-WM listed items, so the
+   * open list uses the same source as the posting gate for those items. One pair of reads per distinct
+   * non-WM material. WM items take their quantity from LQUA (_plantQuants) and are skipped here.
+   */
+  async _nonWmStock(items, facts, warehouses) {
+    const nonWm = items.filter((i) => !(warehouses[`${i.Plant}|${i.StorageLocation}`] || ''));
+    const mats = [...new Set(nonWm.map((i) => `${i.Material.padStart(18, '0')}|${i.Plant}`))];
+    const out = {};
+    for (const key of mats) {
+      const [m, p] = key.split('|');
+      const mard = await this._table('MARD', ['LGORT', 'LABST'], [`MATNR = '${m}'`, `AND WERKS = '${p}'`], 'Read non-WM location stock');
+      const mchb = await this._table('MCHB', ['LGORT', 'CHARG', 'CLABS'], [`MATNR = '${m}'`, `AND WERKS = '${p}'`, 'AND CLABS > 0'], 'Read non-WM batch stock');
+      out[`${strip(m)}|${p}`] = [
+        ...mard.map((r) => ({ StorageLocation: r.LGORT, Batch: '', Quantity: parseSapNumber(r.LABST) })),
+        ...mchb.map((r) => ({ StorageLocation: r.LGORT, Batch: r.CHARG, Quantity: parseSapNumber(r.CLABS) }))
+      ];
+    }
+    return out;
+  }
+
+  /**
+   * Per "plant|storageLocation" the configured warehouse (T320-LGNUM), for the listed items. Same
+   * source the cycle/scan screen uses for Warehouse. One T320 read per distinct plant; "" when the
+   * storage location is not warehouse-managed.
+   */
+  async _warehouses(items) {
+    const plants = [...new Set(items.map((i) => i.Plant).filter(Boolean))];
+    const out = {};
+    for (const p of plants) {
+      const rows = await this._table('T320', ['LGORT', 'LGNUM'], [`WERKS = '${p}'`], 'Read storage-location warehouses');
+      for (const r of rows) out[`${p}|${r.LGORT}`] = r.LGNUM;
     }
     return out;
   }
@@ -517,34 +679,51 @@ class Mvt261Adapter {
       [`MATNR = '${matnr}'`, `AND WERKS = '${c.Plant}'`, 'AND VERME > 0']);
     const gi = c.Steps.find((st) => st.Step === 'GoodsIssue');
 
-    // FIFO list: storage units in the reservation's storage location and warehouse (all of the plant if none),
-    // oldest goods-receipt date first (LQUA-WDATU, "Date of Goods Receipt"), then batch, then storage unit.
-    // Units without a goods-receipt date cannot be ranked by age and go last.
-    const here = quants.filter((q) => (!c.StorageLocation || q.LGORT === c.StorageLocation) && (!c.Warehouse || q.LGNUM === c.Warehouse));
+    // Production-related stock only: storage units of this component in the reservation's storage location
+    // OR the order's production supply area location (PVBE), within the order's warehouse, and - when the
+    // reservation item is batch-specific - that batch only. Goods issue is allowed for released orders
+    // only, so for a non-released order the list is empty and the UI shows an info message.
+    // Oldest goods-receipt date first (LQUA-WDATU), then batch, then storage unit; undated quants go last.
+    const released = String(c.OrderStatus || '').split(/\s+/).includes('REL');
+    const locations = [...new Set([c.StorageLocation, c.SupplyAreaStorageLocation].filter(Boolean))];
+    const here = quants.filter((q) =>
+      (!locations.length || locations.includes(q.LGORT)) &&
+      (!c.Warehouse || q.LGNUM === c.Warehouse) &&
+      (!c.Batch || q.CHARG === c.Batch));
     const key = (q) => `${sapDate(q.WDATU) || '9999-99-99'}|${q.CHARG}|${q.LENUM}`;
     const today = Date.parse(new Date().toISOString().slice(0, 10));
     let toCover = gi.Status === 'open' ? c.OpenQuantity : 0;
-    const Units = here.filter((q) => q.LENUM).sort((x, y) => key(x).localeCompare(key(y))).map((q, i) => {
-      const notReady = this._quantNotReady(q);
+    // The 261 posts from the reservation's own storage location. When it is warehouse-managed the
+    // warehouse is the gate (stock across its storage locations is issuable); when it is not, only stock
+    // in that exact storage location can be issued. Production-supply-area stock in a different storage
+    // location of a non-WM reservation is shown but flagged "in supply area" and never suggested, so it
+    // is not scanned by mistake and then rejected at posting for having no stock in the issue location.
+    const issuable = (q) => c.Warehouse ? true : q.LGORT === c.StorageLocation;
+    const Units = (released ? here.filter((q) => q.LENUM) : []).sort((x, y) => key(x).localeCompare(key(y))).map((q, i) => {
+      const blocker = this._quantNotReady(q) || (!issuable(q) ? ['inSupplyArea', q.LGORT, c.StorageLocation] : null);
       const date = sapDate(q.WDATU);
       const quantity = parseSapNumber(q.VERME);
-      const Suggested = !notReady && toCover > 0;
+      const Suggested = !blocker && toCover > 0;
       if (Suggested) toCover -= quantity;
       return {
         Rank: i + 1, StorageUnit: strip(q.LENUM), Batch: q.CHARG, Quantity: quantity, Unit: q.MEINS, Warehouse: q.LGNUM,
         StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, GoodsReceiptDate: date,
         AgeDays: date ? Math.round((today - Date.parse(date)) / 86400000) : null,
-        Status: !notReady ? 'Available' : this.notReadyBins.some((b) => b.reason === notReady[0]) ? 'OnHold' : 'Blocked',
-        Reason: notReady ? notReady[0] : '', Value1: notReady ? String(notReady[1] || '') : '', Value2: notReady ? String(notReady[2] || '') : '',
+        Status: !blocker ? 'Available' : (blocker[0] === 'inSupplyArea' || this.notReadyBins.some((b) => b.reason === blocker[0])) ? 'OnHold' : 'Blocked',
+        Reason: blocker ? blocker[0] : '', Value1: blocker ? String(blocker[1] || '') : '', Value2: blocker ? String(blocker[2] || '') : '',
         Suggested
       };
     });
     const noUnit = here.filter((q) => !q.LENUM);
+    // SupplyAreaStock (stock stranded in the supply area, non-WM) and the Blocked decision both come from
+    // cycle()/_issuable, so the scan page, the open list and the posting gate agree. Nothing recomputed here.
     return {
       Reservation: c.Reservation, ReservationItem: c.ReservationItem, ProductionOrder: c.ProductionOrder, OrderStatus: c.OrderStatus,
       Material: c.Material, MaterialName: makt ? makt.MAKTX : '', BatchManaged: !!marc && marc.XCHPF === 'X',
       Plant: c.Plant, StorageLocation: c.StorageLocation, Warehouse: c.Warehouse, RequiredQuantity: c.RequiredQuantity, WithdrawnQuantity: c.WithdrawnQuantity,
-      OpenQuantity: c.OpenQuantity, Unit: c.Unit,
+      OpenQuantity: c.OpenQuantity, Unit: c.Unit, Batch: c.Batch || '',
+      IssuableQuantity: c.IssuableQuantity, PartialCoverage: c.PartialCoverage, Backflush: c.Backflush,
+      SupplyArea: c.SupplyArea || '', SupplyAreaStorageLocation: c.SupplyAreaStorageLocation || '', SupplyAreaStock: c.SupplyAreaStock, OrderReleased: released,
       Blocked: gi.Status !== 'open', BlockReason: gi.Status === 'open' ? '' : (gi.Reason || 'nothing left to issue'),
       QuantCount: quants.length, StorageUnitQuantCount: quants.filter((q) => q.LENUM).length,
       NoUnitQuantCount: noUnit.length, NoUnitQuantity: Math.round(noUnit.reduce((t, q) => t + parseSapNumber(q.VERME), 0) * 1000) / 1000,
@@ -564,8 +743,9 @@ class Mvt261Adapter {
     const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for storage unit ${su}`);
     const reject = (Reason, Value1 = '', Value2 = '') => ({ StorageUnit: strip(su), Accepted: false, Reason, Value1: String(Value1), Value2: String(Value2), Rows: [] });
 
-    const [resb] = await read('RESB', ['AUFNR', 'MATNR', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'XLOEK', 'KZEAR', 'XWAOK'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
+    const [resb] = await read('RESB', ['AUFNR', 'MATNR', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'RGEKZ', 'XLOEK', 'KZEAR', 'XWAOK'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
     if (!resb) throw httpError(404, `Reservation ${strip(rsnum)} item ${strip(rspos)} with movement type 261 not found`);
+    this._scopeGuard(resb.WERKS, input.allowedPlants);
     const [aufk] = resb.AUFNR ? await read('AUFK', ['AUFNR', 'LOEKZ'], [`AUFNR = '${resb.AUFNR}'`]) : [];
     const statuses = resb.AUFNR ? ((await this._orderStatuses([resb.AUFNR]))[strip(resb.AUFNR)] || []) : [];
     const t320 = resb.LGORT ? await read('T320', ['LGNUM'], [`WERKS = '${resb.WERKS}'`, `AND LGORT = '${resb.LGORT}'`]) : [];
@@ -588,6 +768,12 @@ class Mvt261Adapter {
     }
     const whQuants = configuredWarehouse ? quants.filter((q) => q.LGNUM === configuredWarehouse) : quants;
     if (!whQuants.length) return reject('wrongWarehouse', quants[0].LGNUM, configuredWarehouse);
+
+    // Batch-specific reservation item: only the reserved batch may be issued.
+    if (resb.CHARG) {
+      const wrongBatch = whQuants.find((q) => q.CHARG !== resb.CHARG);
+      if (wrongBatch) return reject('wrongBatch', wrongBatch.CHARG, resb.CHARG);
+    }
 
     const orderBin = resb.AUFNR.slice(-10);
     const Rows = [];
@@ -637,22 +823,22 @@ class Mvt261Adapter {
     if (c.ReservationWarehouse && !c.Warehouse) {
       throw httpError(422, `Goods issue not possible: transmitted warehouse number is ${c.ReservationWarehouse}; storage location is not warehouse-managed`);
     }
+    const effBatch = batch || c.Batch || '';
     if (c.StagingRequired) {
-      const stagedQuants = c.Quants.filter((q) =>
-        q.StorageType === c.StagingStorageType &&
-        q.StorageBin === c.StagingBin &&
-        (!c.Warehouse || q.Warehouse === c.Warehouse) &&
-        (!batch || q.Batch === batch)
-      );
-      const stagedStock = stagedQuants.reduce((sum, q) => sum + q.AvailableQuantity, 0);
-      if (stagedStock < quantity) {
-        throw httpError(422, `Goods issue not possible: available stock shortfall of ${Math.round((quantity - stagedStock) * 1000) / 1000} ${c.Unit} in interim storage bin ${c.StagingStorageType}/${c.StagingBin}${batch ? ` for batch ${batch}` : ''}`);
-      }
+      const s = this._stagingCore(
+        { storageType: c.StagingStorageType, bin: c.StagingBin, warehouse: c.Warehouse || c.ReservationWarehouse || '', batch: effBatch, openQty: quantity, unit: c.Unit },
+        c._raw.quants);
+      if (s.shortfall > 0) throw httpError(422, `Goods issue not possible: ${s.reason}${effBatch ? ` for batch ${effBatch}` : ''}`);
     }
-    const batches = c.Stock.filter((st) => st.Batch);
-    if (batches.length && !batch) throw httpError(422, 'Goods issue not possible: the material has batch stock, a batch is required');
-    const stock = (batch ? batches.filter((st) => st.Batch === batch) : c.Stock.filter((st) => !st.Batch)).reduce((sum, st) => sum + st.Quantity, 0);
-    if (stock < quantity) throw httpError(422, `Goods issue not possible: unrestricted stock ${stock} ${c.Unit} is less than ${quantity} ${c.Unit}`);
+    const batchStock = c.Stock.filter((st) => st.Batch);
+    if (batchStock.length && !effBatch) throw httpError(422, 'Goods issue not possible: the material has batch stock, a batch is required');
+    // Same issuable-stock rule as the scan page and the open list (warehouse-wide for WM, issue location for non-WM).
+    const gate = this._issuable(
+      { warehouse: c.Warehouse, storageLocation: c.StorageLocation, supplyAreaStorageLocation: c.SupplyAreaStorageLocation, batch: effBatch, openQty: c.OpenQuantity, unit: c.Unit },
+      c._raw.quants, c._raw.stock);
+    if (gate.issuableQty < quantity) {
+      throw httpError(422, `Goods issue not possible: ${gate.reason || `issuable stock ${gate.issuableQty} ${c.Unit} is less than ${quantity} ${c.Unit}`}`);
+    }
 
     // Entry unit in external format, from the same service the list reads.
     const d = await this._results(RESV_PATH, {
@@ -690,12 +876,20 @@ class Mvt261Adapter {
     return { MaterialDocument: body.MaterialDocument, MaterialDocumentYear: body.MaterialDocumentYear, DeliveryNumber: '', Pending: false, SapMessage: sapMessage };
   }
 
-  /** Reverse one material document with the API's own Cancel action (SAP writes the 262 and SMBLN). */
+  /**
+   * Reverse ONE item of a material document with the API's CancelItem function import (verified live:
+   * params MaterialDocument/Year/Item, PostingDate optional, no reason required; SAP writes the 262 and
+   * the ReversedMaterialDocument back-reference). Referencing the exact item (not the whole document via
+   * Cancel) matches the single-item 261 postings this app creates. PostingDate is omitted so SAP defaults it.
+   */
   async reverse(input = {}) {
     const doc = clean(input.materialDocument, 'Material document', /^\d{10}$/, true);
     const year = clean(input.materialDocumentYear, 'Material document year', /^\d{4}$/, true);
-    const { body, sapMessage } = await this._post(`${MATDOC_API}/Cancel?MaterialDocument='${doc}'&MaterialDocumentYear='${year}'`, {}, `Reverse material document ${doc}/${year}`);
-    const rev = body.Cancel || body;
+    const item = clean(input.materialDocumentItem, 'Material document item', /^\d{1,4}$/, true).padStart(4, '0');
+    const { body, sapMessage } = await this._post(
+      `${MATDOC_API}/CancelItem?MaterialDocument='${doc}'&MaterialDocumentYear='${year}'&MaterialDocumentItem='${item}'`,
+      {}, `Reverse material document ${doc}/${year} item ${strip(item)}`);
+    const rev = body.CancelItem || body;
     if (!rev.MaterialDocument) throw httpError(502, `SAP did not return a reversal document. sap-message: ${sapMessage || '(none)'}`);
     return { MaterialDocument: rev.MaterialDocument, MaterialDocumentYear: rev.MaterialDocumentYear, SapMessage: sapMessage };
   }
@@ -708,6 +902,7 @@ class Mvt261Adapter {
     const to = clean(input.dateTo, 'Posting date to', RE.date);
     const definition = clean(input.definition || 'A', 'Definition', /^[ABC]$/, true);
     if ((from || to) && (!from || !to || from > to)) throw httpError(400, 'Posting date range needs a valid from and to date');
+    this._scopeGuard(plant, input.allowedPlants);
 
     const filter = ["GoodsMovementType eq '261'", "StockChangeType eq '05'", `Plant eq '${plant}'`];
     if (material) filter.push(`Material eq '${material}'`);

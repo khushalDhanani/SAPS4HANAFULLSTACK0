@@ -41,6 +41,7 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         MaterialName      : String(40);
         Plant             : String(4);
         StorageLocation   : String(4);
+        Warehouse         : String(3);
         RequirementDate   : Date;
         RequiredQuantity  : Decimal(13, 3);
         WithdrawnQuantity : Decimal(13, 3);
@@ -48,9 +49,11 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         Unit              : String(3);
         MovementAllowed   : Boolean;
         OrderStatus       : String(40);
+        Backflush         : Boolean;
         ScanPossible      : Boolean;
         Blocked           : Boolean;
         BlockReason       : String(100);
+        PartialCoverage   : Boolean;
         ReadyStorageUnits : Integer;
         ReadyQuantity     : Decimal(15, 3);
     };
@@ -107,6 +110,8 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         Plant                : String(4);
         StorageLocation      : String(4);
         Batch                : String(10);
+        SupplyArea                 : String(10);
+        SupplyAreaStorageLocation  : String(4);
         RequirementDate      : Date;
         RequiredQuantity     : Decimal(13, 3);
         WithdrawnQuantity    : Decimal(13, 3);
@@ -115,8 +120,12 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         IsDeleted            : Boolean;
         IsFinalIssue         : Boolean;
         MovementAllowed      : Boolean;
+        Backflush            : Boolean;
         Warehouse            : String(3);
         ReservationWarehouse : String(3);
+        IssuableQuantity     : Decimal(13, 3);
+        SupplyAreaStock      : Decimal(13, 3);
+        PartialCoverage      : Boolean;
         StagingRequired      : Boolean;
         StagingStorageType   : String(3);
         StagingBin           : String(10);
@@ -144,7 +153,8 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     type ScanContext {
         Reservation : String(10); ReservationItem : String(4); ProductionOrder : String(12); OrderStatus : String(40);
         Material : String(40); MaterialName : String(40); BatchManaged : Boolean; Plant : String(4); StorageLocation : String(4);
-        Warehouse : String(3);
+        Warehouse : String(3); Batch : String(10); SupplyArea : String(10); SupplyAreaStorageLocation : String(4); SupplyAreaStock : Decimal(13, 3); OrderReleased : Boolean;
+        IssuableQuantity : Decimal(13, 3); PartialCoverage : Boolean; Backflush : Boolean;
         RequiredQuantity : Decimal(13, 3); WithdrawnQuantity : Decimal(13, 3); OpenQuantity : Decimal(13, 3); Unit : String(3);
         Blocked : Boolean; BlockReason : String(255); QuantCount : Integer; StorageUnitQuantCount : Integer;
         NoUnitQuantCount : Integer; NoUnitQuantity : Decimal(15, 3); Units : array of ScanUnit;
@@ -190,11 +200,29 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     };
 
     // Stage 2: post goods issue 261 against reservation item with idempotency guard.
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    // Write action: the read-only Viewer role must not post goods issues (F4).
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsIssue(
         reservation : String(10),
         item        : String(4),
         quantity    : Decimal(13, 3),
         batch       : String(10)
     ) returns MaterialDocumentResult;
+
+    type ReversalResult {
+        MaterialDocument     : String(10);
+        MaterialDocumentYear : String(4);
+        SapMessage           : String;
+    };
+
+    // F6: reverse (262) one 261 material document item via the API CancelItem function import.
+    // Write action, managers/admin only (clerks excluded); rejects an already-reversed document.
+    @(requires: ['WarehouseManager', 'Admin'])
+    action reverse(
+        reservation          : String(10),
+        item                 : String(4),
+        materialDocument     : String(10),
+        materialDocumentYear : String(4),
+        materialDocumentItem : String(4)
+    ) returns ReversalResult;
 }
