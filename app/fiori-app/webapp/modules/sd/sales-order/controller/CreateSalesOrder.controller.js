@@ -290,6 +290,17 @@ sap.ui.define([
             SalesOrderModel.updateStatus(oModel);
         },
 
+        onIncotermsSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newOrder");
+            oModel.setProperty("/header/IncotermsClassification", sKey);
+            oModel.setProperty("/modifiedFields/IncotermsClassification", true);
+            oModel.setProperty("/isModified", true);
+            SalesOrderModel.updateStatus(oModel);
+        },
+
         onContactPersonSelect: function (oEvent) {
             var oItem = oEvent.getParameter("selectedItem");
             if (!oItem) return;
@@ -774,6 +785,11 @@ sap.ui.define([
                     oModel.setProperty("/modifiedFields/PaymentTerms", true);
                     oModel.setProperty("/isModified", true);
                     SalesOrderModel.validateSingleField(oModel, "PaymentTerms");
+                    SalesOrderModel.updateStatus(oModel);
+                } else if (sId.indexOf("inIncotermsClassification") !== -1) {
+                    oModel.setProperty("/header/IncotermsClassification", sKey);
+                    oModel.setProperty("/modifiedFields/IncotermsClassification", true);
+                    oModel.setProperty("/isModified", true);
                     SalesOrderModel.updateStatus(oModel);
                 } else if (sId.indexOf("inContactPerson") !== -1) {
                     oModel.setProperty("/header/ContactPerson", sKey);

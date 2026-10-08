@@ -77,6 +77,8 @@ sap.ui.define([
                     CustomerGroup2: "",
                     PortOfLoading: "",
                     PortOfDischarge: "",
+                    IncotermsClassification: "",
+                    IncotermsLocation1: "",
                     ContactPerson: "",
                     PaymentTerms: "",
                     PaymentTermCode: "",

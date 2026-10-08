@@ -193,6 +193,21 @@
                                     </suggestionItems>
                                 </Input>
 
+                                <Label text="{i18n>salesOrderLabelIncoterms}" />
+                                <Input id="inIncotermsClassification" value="{newOrder>/header/IncotermsClassification}" placeholder="{i18n>salesOrderPlaceholderIncoterms}" maxLength="3"
+                                    tooltip="{i18n>salesOrderTooltipIncoterms}"
+                                    change=".onHeaderFieldChange" suggestionItemSelected=".onIncotermsSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/IncotermsClassificationVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesOrder>IncotermsClassification}" text="{salesOrder>IncotermsClassification}" additionalText="{salesOrder>IncotermsClassificationName}" />
+                                    </suggestionItems>
+                                </Input>
+
+                                <Label text="{i18n>salesOrderLabelIncotermsLocation}" />
+                                <Input id="inIncotermsLocation" value="{newOrder>/header/IncotermsLocation1}" placeholder="{i18n>salesOrderPlaceholderIncotermsLocation}" maxLength="70"
+                                    tooltip="{i18n>salesOrderTooltipIncoterms}"
+                                    change=".onHeaderFieldChange" />
+
                                 <Label text="{i18n>salesOrderCustomerGroup2}" visible="false" />
                                 <Input id="inCustomerGroup2" value="{newOrder>/header/CustomerGroup2}" placeholder="{i18n>salesOrderPlaceholderCustomerGroup2}" maxLength="3" tooltip="{i18n>salesOrderTooltipExtensionField}" change=".onHeaderFieldChange" visible="false" />
 
@@ -241,10 +256,12 @@
                         <columns>
                             <Column width="3.5rem" importance="High"><Text text="{i18n>salesOrderColItem}" /></Column>
                             <Column importance="High"><Text text="{i18n>salesOrderColMaterialProduct}" /></Column>
-                            <Column minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" importance="Low" visible="false"><Text text="{i18n>salesOrderColDescription}" /></Column>
+                            <Column width="6rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline" importance="Low" visible="false"><Text text="{i18n>salesOrderColDescription}" /></Column>
                             <Column width="6rem" hAlign="End" importance="High"><Text text="{i18n>salesOrderColQuantity}" /></Column>
                             <Column width="5rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColUnit}" /></Column>
                             <Column width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Label text="{i18n>salesOrderColPlant}" required="true" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColNetPrice}" /></Column>
+                            <Column width="7rem" hAlign="End" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline" importance="Low"><Text text="{i18n>salesOrderColNetAmount}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -303,6 +320,8 @@
                                             <core:ListItem key="{salesOrder>Plant}" text="{salesOrder>Plant}" additionalText="{salesOrder>PlantName}" />
                                         </suggestionItems>
                                     </Input>
+                                    <Input value="{newOrder>NetPriceAmount}" type="Number" placeholder="0.00" textAlign="End" change=".onItemCalculationChange" liveChange=".onItemCalculationChange" />
+                                    <ObjectNumber number="{newOrder>NetAmount}" unit="{newOrder>/header/TransactionCurrency}" state="Success" />
                                 </cells>
                             </ColumnListItem>
                         </items>
