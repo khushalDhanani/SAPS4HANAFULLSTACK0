@@ -67,10 +67,13 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
           referenceDocument: refDoc
         });
 
-        await GoodsIssueAttemptStore.setStatus(refDoc, 'posted', {
+        // WM-managed outcome: SAP created an outbound delivery, not a material document. The goods
+        // issue is not yet posted, so the attempt is 'not_posted' (carrying the delivery), not 'posted'.
+        await GoodsIssueAttemptStore.setStatus(refDoc, result.Pending ? 'not_posted' : 'posted', {
           MaterialDocument: result.MaterialDocument,
           MaterialDocYear: result.MaterialDocumentYear,
-          LastError: ''
+          DeliveryNumber: result.DeliveryNumber || '',
+          LastError: result.Pending ? (result.Message || '') : ''
         }).catch(() => {});
 
         return result;

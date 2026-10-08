@@ -183,6 +183,9 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     type MaterialDocumentResult {
         MaterialDocument     : String(10);
         MaterialDocumentYear : String(4);
+        DeliveryNumber       : String(10);
+        Pending              : Boolean;
+        Message              : String;
         SapMessage           : String;
     };
 

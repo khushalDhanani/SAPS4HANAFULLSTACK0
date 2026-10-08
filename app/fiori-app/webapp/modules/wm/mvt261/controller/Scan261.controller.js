@@ -199,12 +199,16 @@ sap.ui.define([
                         quantity: nTotal,
                         batch: sBatch || undefined
                     }).then(function (oRes) {
+                        var fnDone = function () {
+                            this.getRouter().navTo("wmOpen261");
+                        }.bind(this);
+                        if (oRes && (oRes.Pending || (!oRes.MaterialDocument && oRes.DeliveryNumber))) {
+                            // WM-managed location: SAP created an outbound delivery; PGI still has to be posted.
+                            MessageBox.warning(oRes.Message || this.getText("scan261PostDelivery", [oRes.DeliveryNumber]), { onClose: fnDone });
+                            return;
+                        }
                         var sDoc = oRes.MaterialDocument + (oRes.MaterialDocumentYear ? "/" + oRes.MaterialDocumentYear : "");
-                        MessageBox.success(this.getText("scan261PostSuccess", [sDoc]), {
-                            onClose: function () {
-                                this.getRouter().navTo("wmOpen261");
-                            }.bind(this)
-                        });
+                        MessageBox.success(this.getText("scan261PostSuccess", [sDoc]), { onClose: fnDone });
                     }.bind(this)).catch(function (oError) {
                         MessageBox.error((oError && oError.message) || this.getText("scan261PostFailed"));
                     }.bind(this)).then(function () {

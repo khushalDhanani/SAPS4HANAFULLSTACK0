@@ -103,6 +103,31 @@ describe('Mvt261Adapter.openItems', () => {
     await adapter().openItems({ plant: '1120' });
     expect(calls[0]).toContain('$orderby=MatlCompRequirementDate desc,Reservation desc,ReservationItem desc');
   });
+
+  // A WM-PP staged item (RESB-LGTYP set) short in its interim bin must land in Blocked, not Open -
+  // the scan page blocks it, so the list has to carry the same reason instead of showing it scannable.
+  const staged = (over) => new Mvt261Adapter({
+    rfc: { readTable: async (table) => ({
+      JEST: [{ OBJNR: 'OR000001000086', STAT: 'I0002' }],
+      RESB: [{ RSNUM: '0000020808', RSPOS: '0008', AUFNR: '000001000086', MATNR: '000000001000000400', WERKS: '1120', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '' }],
+      LQUA: [{ MATNR: '000000001000000400', WERKS: '1120', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '0001000086', VERME: '488.000' }],
+      ...over
+    })[table] || [] },
+    client: { get: async () => ({ data: { d: { __count: '1', results: [row('8', '1200.000', '200.000')] } } }) }
+  });
+
+  it('classifies an interim-staging shortfall item as Blocked with the scan-page reason', async () => {
+    const r = await staged().openItems({ plant: '1120' });
+    expect(r.Items[0]).toMatchObject({
+      ScanPossible: false, Blocked: true,
+      BlockReason: 'available stock shortfall of 512 KG in interim storage bin IP1/0001000086'
+    });
+  });
+
+  it('leaves a staged item scannable when the interim bin holds enough', async () => {
+    const r = await staged({ LQUA: [{ MATNR: '000000001000000400', WERKS: '1120', LGNUM: 'W01', LGTYP: 'IP1', LGPLA: '0001000086', VERME: '1200.000' }] }).openItems({ plant: '1120' });
+    expect(r.Items[0]).toMatchObject({ ScanPossible: true, Blocked: false, BlockReason: '' });
+  });
 });
 
 describe('Mvt261Adapter proof cases', () => {
@@ -317,9 +342,15 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
     }
   });
 
-  it('treats a response without a material document, and a SAP error, as failures', async () => {
-    await expect(adapter(undefined, { status: 201, headers: { 'sap-message': 'L9/514 delivery created' }, data: { d: { MaterialDocument: '' } } }).postGoodsIssue(input))
-      .rejects.toMatchObject({ status: 502, message: expect.stringContaining('L9/514') });
+  it('returns the outbound delivery (not a 502) when SAP creates a delivery for a WM-managed location (L9/514)', async () => {
+    const sapMessage = JSON.stringify({ code: 'L9/514', message: 'Delivery 80000087 created', severity: 'success', details: [] });
+    await expect(adapter(undefined, { status: 201, headers: { 'sap-message': sapMessage }, data: { d: { MaterialDocument: '' } } }).postGoodsIssue(input))
+      .resolves.toMatchObject({ MaterialDocument: '', DeliveryNumber: '0080000087', Pending: true });
+  });
+
+  it('treats a response with neither a material document nor a delivery, and a SAP error, as failures', async () => {
+    await expect(adapter(undefined, { status: 201, headers: {}, data: { d: { MaterialDocument: '' } } }).postGoodsIssue(input))
+      .rejects.toMatchObject({ status: 502, message: expect.stringContaining('did not return a material document') });
     const failing = adapter();
     failing.client.post = async () => { throw Object.assign(new Error('HTTP 403 - No authorization for movement type 261'), { status: 403 }); };
     await expect(failing.postGoodsIssue(input)).rejects.toMatchObject({ status: 403 });

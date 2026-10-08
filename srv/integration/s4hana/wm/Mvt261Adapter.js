@@ -7,6 +7,7 @@ const { RfcClient } = require('../RfcClient');
 const s4Config = require('../s4Config');
 const { parseSapNumber } = require('../sapFacts');
 const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
+const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
 
 /**
  * Read-only finder for the FIRST goods movement of movement type 261 (GET only, no ABAP change).
@@ -235,6 +236,7 @@ class Mvt261Adapter {
     try {
       const statuses = await this._orderStatuses(Items.map((i) => i.ProductionOrder));
       const ready = await this._readyStorageUnits(plant);
+      const stagingShortfalls = await this._stagingShortfalls(Items);
       Items.forEach((i) => {
         const st = (statuses[strip(i.ProductionOrder)] || []).sort();
         const su = ready[`${strip(i.Material)}|${i.Plant}`] || { count: 0, quantity: 0 };
@@ -243,6 +245,7 @@ class Mvt261Adapter {
         i.ReadyQuantity = Math.round(su.quantity * 1000) / 1000;
         // Same conditions the scan page applies before it accepts a scan.
         const orderBlocked = st.filter((x) => ORDER_BLOCKERS[x]).map((x) => ORDER_BLOCKERS[x]);
+        const stagingShort = stagingShortfalls[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`];
         let blockReason = '';
         if (i.OpenQuantity <= 0) {
           blockReason = 'No open quantity remaining';
@@ -252,6 +255,9 @@ class Mvt261Adapter {
           blockReason = 'Order not released';
         } else if (orderBlocked.length) {
           blockReason = orderBlocked.join('; ');
+        } else if (stagingShort) {
+          // WM-PP interim staging: the scan page blocks these, so the list must too (same reason text).
+          blockReason = stagingShort;
         } else if (su.count <= 0) {
           blockReason = 'No ready storage units in stock';
         }
@@ -453,6 +459,50 @@ class Mvt261Adapter {
   }
 
   /**
+   * Per "reservation|item" the interim-staging shortfall reason, for the listed items that are
+   * WM-PP staged (RESB-LGTYP set), matching exactly what cycle()/the scan page block on: staged LQUA
+   * stock in LGTYP/bin (bin = RESB-LGPLA, else the order) is less than the open quantity. {} when no
+   * listed item needs staging. Two batch reads per distinct plant (RESB + LQUA), not one read per item.
+   */
+  async _stagingShortfalls(items) {
+    const plants = [...new Set(items.map((i) => i.Plant).filter(Boolean))];
+    if (!plants.length) return {};
+    const resbByKey = {};
+    for (const p of plants) {
+      const rows = await this._table('RESB',
+        ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA'],
+        [`WERKS = '${p}'`, "AND BWART = '261'", "AND XLOEK = ''", "AND KZEAR = ''", "AND LGTYP <> ''"], 'Read reservation staging bins');
+      for (const r of rows) resbByKey[`${strip(r.RSNUM)}|${strip(r.RSPOS)}`] = r;
+    }
+    const staging = items.filter((i) => resbByKey[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`]);
+    if (!staging.length) return {};
+
+    const staged = {}; // "matnr|werks|lgtyp|bin" -> { warehouse: VERME sum }
+    for (const p of plants) {
+      const quants = await this._table('LQUA',
+        ['MATNR', 'WERKS', 'LGNUM', 'LGTYP', 'LGPLA', 'VERME'],
+        [`WERKS = '${p}'`, 'AND VERME > 0'], 'Read interim staging stock');
+      for (const q of quants) {
+        const k = `${strip(q.MATNR)}|${q.WERKS}|${q.LGTYP}|${q.LGPLA}`;
+        (staged[k] = staged[k] || {})[q.LGNUM] = (staged[k][q.LGNUM] || 0) + parseSapNumber(q.VERME);
+      }
+    }
+
+    const out = {};
+    for (const i of staging) {
+      const r = resbByKey[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`];
+      const bin = r.LGPLA || (r.AUFNR ? strip(r.AUFNR).padStart(10, '0') : '');
+      const byWh = staged[`${strip(r.MATNR)}|${r.WERKS}|${r.LGTYP}|${bin}`] || {};
+      const stagedStock = r.LGNUM ? (byWh[r.LGNUM] || 0) : Object.values(byWh).reduce((a, b) => a + b, 0);
+      if (i.OpenQuantity > 0 && stagedStock < i.OpenQuantity) {
+        out[`${strip(i.Reservation)}|${strip(i.ReservationItem)}`] =
+          `available stock shortfall of ${Math.round((i.OpenQuantity - stagedStock) * 1000) / 1000} ${i.Unit} in interim storage bin ${r.LGTYP}/${bin}`;
+      }
+    }
+    return out;
+  }
+
+  /**
    * Scan screen, page load: the cycle's header and block checks plus material text, batch management
    * and whether the material has storage-unit stock in the plant at all. Read-only.
    */
@@ -556,7 +606,7 @@ class Mvt261Adapter {
   async _post(path, data, context) {
     try {
       const res = await this.client.post(path, { data, csrfPath: `${MATDOC_API}/` });
-      return { body: res.data?.d || res.data || {}, sapMessage: res.headers?.['sap-message'] || '' };
+      return { body: res.data?.d || res.data || {}, sapMessage: res.headers?.['sap-message'] || '', headers: res.headers || {} };
     } catch (e) {
       LOG.error(`${context}: ${e.message}`);
       throw httpError(e.status || 502, `${context}: ${e.message}`);
@@ -622,9 +672,22 @@ class Mvt261Adapter {
         ReservationNo: c.Reservation, ReservationItem: c.ReservationItem, Batch: batch, OrderNo: c.ProductionOrder
       }, '261')
     });
-    const { body, sapMessage } = await this._post(`${MATDOC_API}/A_MaterialDocumentHeader`, payload, `Post goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}`);
-    if (!body.MaterialDocument) throw httpError(502, `SAP did not return a material document for the goods issue. sap-message: ${sapMessage || '(none)'}`);
-    return { MaterialDocument: body.MaterialDocument, MaterialDocumentYear: body.MaterialDocumentYear, SapMessage: sapMessage };
+    const { body, sapMessage, headers } = await this._post(`${MATDOC_API}/A_MaterialDocumentHeader`, payload, `Post goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}`);
+    if (!body.MaterialDocument) {
+      // WM-managed location: SAP answers 201 with an empty MaterialDocument and turns the goods
+      // movement into an outbound delivery (sap-message L9/514). That is a definite SAP outcome, not a
+      // failure - but the stock is issued only when PGI is posted for that delivery in SAP.
+      const deliveryNo = GoodsIssuePostingClient.deliveryFromSapMessage(GoodsIssuePostingClient.parseSapMessage(headers));
+      if (deliveryNo) {
+        LOG.warn(`Goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}: SAP created outbound delivery ${deliveryNo} (L9/514) instead of a material document; PGI still required.`);
+        return {
+          MaterialDocument: '', MaterialDocumentYear: '', DeliveryNumber: deliveryNo, Pending: true, SapMessage: sapMessage,
+          Message: `WM-managed location: SAP created outbound delivery ${deliveryNo}. No material document yet - the goods issue completes only when PGI is posted for that delivery. Do not post again.`
+        };
+      }
+      throw httpError(502, `SAP did not return a material document for the goods issue. sap-message: ${sapMessage || '(none)'}`);
+    }
+    return { MaterialDocument: body.MaterialDocument, MaterialDocumentYear: body.MaterialDocumentYear, DeliveryNumber: '', Pending: false, SapMessage: sapMessage };
   }
 
   /** Reverse one material document with the API's own Cancel action (SAP writes the 262 and SMBLN). */
