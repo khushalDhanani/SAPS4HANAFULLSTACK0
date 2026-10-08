@@ -96,14 +96,36 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     // Step.Status: done | open | blocked. Steps in order: Reservation, ProductionOrder, Availability,
     // WmStaging, GoodsIssue, DocumentHistory, Reversal, Closure.
     type Cycle261 {
-        Reservation : String(10); ReservationItem : String(4); ProductionOrder : String(12); OrderType : String(4);
-        OrderStatus : String(40); Material : String(40); Plant : String(4); StorageLocation : String(4); Batch : String(10);
-        RequirementDate : Date; RequiredQuantity : Decimal(13, 3); WithdrawnQuantity : Decimal(13, 3);
-        OpenQuantity : Decimal(13, 3); Unit : String(3); IsDeleted : Boolean; IsFinalIssue : Boolean;
-        MovementAllowed : Boolean; Warehouse : String(3);
-        Steps : array of CycleStep; Stock : array of CycleStock; Quants : array of CycleQuant;
-        TransferRequirements : array of CycleTransferRequirement; TransferOrders : array of CycleTransferOrder;
-        History : array of CycleDocument;
+        Reservation          : String(10);
+        ReservationItem      : String(4);
+        ProductionOrder      : String(12);
+        OrderType            : String(4);
+        OrderStatus          : String(40);
+        Material             : String(40);
+        Plant                : String(4);
+        StorageLocation      : String(4);
+        Batch                : String(10);
+        RequirementDate      : Date;
+        RequiredQuantity     : Decimal(13, 3);
+        WithdrawnQuantity    : Decimal(13, 3);
+        OpenQuantity         : Decimal(13, 3);
+        Unit                 : String(3);
+        IsDeleted            : Boolean;
+        IsFinalIssue         : Boolean;
+        MovementAllowed      : Boolean;
+        Warehouse            : String(3);
+        ReservationWarehouse : String(3);
+        StagingRequired      : Boolean;
+        StagingStorageType   : String(3);
+        StagingBin           : String(10);
+        StagedQuantity       : Decimal(13, 3);
+        StagingShortfall     : Decimal(13, 3);
+        Steps                : array of CycleStep;
+        Stock                : array of CycleStock;
+        Quants               : array of CycleQuant;
+        TransferRequirements : array of CycleTransferRequirement;
+        TransferOrders       : array of CycleTransferOrder;
+        History              : array of CycleDocument;
     };
 
     // Read-only: the 261 cycle of one reservation item. Nothing is posted.
@@ -120,6 +142,7 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     type ScanContext {
         Reservation : String(10); ReservationItem : String(4); ProductionOrder : String(12); OrderStatus : String(40);
         Material : String(40); MaterialName : String(40); BatchManaged : Boolean; Plant : String(4); StorageLocation : String(4);
+        Warehouse : String(3);
         RequiredQuantity : Decimal(13, 3); WithdrawnQuantity : Decimal(13, 3); OpenQuantity : Decimal(13, 3); Unit : String(3);
         Blocked : Boolean; BlockReason : String(255); QuantCount : Integer; StorageUnitQuantCount : Integer;
         NoUnitQuantCount : Integer; NoUnitQuantity : Decimal(15, 3); Units : array of ScanUnit;
@@ -129,7 +152,7 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         Warehouse : String(3); StorageType : String(3); StorageBin : String(10); StorageLocation : String(4); Batch : String(10);
         Quantity : Decimal(13, 3); Unit : String(3); Warnings : array of String(30);
     };
-    // Reason: itemBlocked | notFound | wrongMaterialOrPlant | noStock | blocked | stockCategory | inTransferOrder | <configured not-ready reason>
+    // Reason: itemBlocked | notFound | wrongMaterialOrPlant | wrongWarehouse | noStock | blocked | stockCategory | inTransferOrder | <configured not-ready reason>
     type ScanResult {
         StorageUnit : String(20); Accepted : Boolean; Reason : String(30); Value1 : String(255); Value2 : String(60);
         Rows : array of ScanRow;

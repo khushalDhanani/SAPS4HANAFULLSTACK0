@@ -98,6 +98,11 @@ describe('Mvt261Adapter.openItems', () => {
     await expect(a.openItems({ reservation: "1' or '1" })).rejects.toMatchObject({ status: 400 });
     expect(calls).toHaveLength(1);
   });
+
+  it('requests open items ordered by requirement date and reservation descending', async () => {
+    await adapter().openItems({ plant: '1120' });
+    expect(calls[0]).toContain('$orderby=MatlCompRequirementDate desc,Reservation desc,ReservationItem desc');
+  });
 });
 
 describe('Mvt261Adapter proof cases', () => {
@@ -195,6 +200,63 @@ describe('Mvt261Adapter.cycle', () => {
     expect(c.Steps[6].Reason).toBe('1 document(s) of movement type 261 can be reversed');
   });
 
+  it('blocks reservation and goods issue on warehouse number mismatch or unmanaged location', async () => {
+    const mismatch = await cycle({ RESB: [{ ...base.RESB[0], LGNUM: 'W13' }], T320: [{ LGNUM: 'W01' }] });
+    expect(status(mismatch)).toMatchObject({ Reservation: 'blocked', GoodsIssue: 'blocked' });
+    expect(mismatch.Steps[0].Reason).toBe('transmitted warehouse number is W13; determined warehouse number is W01');
+    expect(mismatch.Steps[4].Reason).toContain('transmitted warehouse number is W13; determined warehouse number is W01');
+
+    const unmanaged = await cycle({ RESB: [{ ...base.RESB[0], LGNUM: 'W13' }], T320: [] });
+    expect(unmanaged.Steps[0].Reason).toBe('transmitted warehouse number is W13; storage location is not warehouse-managed');
+
+    const matched = await cycle({ RESB: [{ ...base.RESB[0], LGNUM: 'W01' }], T320: [{ LGNUM: 'W01' }] });
+    expect(matched.Steps[0].Status).toBe('done');
+    expect(matched.Warehouse).toBe('W01');
+    expect(matched.ReservationWarehouse).toBe('W01');
+  });
+
+  it('filters out quants in cycle when quant warehouse differs from configured storage location warehouse', async () => {
+    const c = await cycle({
+      RESB: [{ ...base.RESB[0], LGNUM: 'W01' }],
+      T320: [{ LGNUM: 'W01' }],
+      LQUA: [
+        { LGNUM: 'W01', LGTYP: 'IP5', LGPLA: '0001000086', LGORT: 'CS01', CHARG: '', VERME: '500.000', LENUM: '1000000001' },
+        { LGNUM: 'W13', LGTYP: 'IP5', LGPLA: '0001000086', LGORT: 'CS01', CHARG: '', VERME: '500.000', LENUM: '1000000002' }
+      ]
+    });
+    expect(c.Quants).toHaveLength(1);
+    expect(c.Quants[0].Warehouse).toBe('W01');
+    expect(c.Quants[0].StorageUnit).toBe('1000000001');
+  });
+
+  it('evaluates interim bin staging: shortfall blocks goods issue, staged stock satisfies requirement', async () => {
+    const shortfall = await cycle({
+      RESB: [{ ...base.RESB[0], LGTYP: 'IP1', BDMNG: '480.000', ENMNG: '0.000' }],
+      JEST: [{ OBJNR: 'OR000001000086', STAT: 'I0002' }],
+      MARD: [{ LGORT: 'CS01', LABST: '1000.000' }],
+      LQUA: []
+    });
+    expect(shortfall.StagingRequired).toBe(true);
+    expect(shortfall.StagingStorageType).toBe('IP1');
+    expect(shortfall.StagingBin).toBe('0001000086');
+    expect(shortfall.StagedQuantity).toBe(0);
+    expect(shortfall.StagingShortfall).toBe(480);
+    expect(status(shortfall)).toMatchObject({ GoodsIssue: 'blocked' });
+    expect(shortfall.Steps[4].Reason).toContain('available stock shortfall of 480 KG in interim storage bin IP1/0001000086');
+
+    const satisfied = await cycle({
+      RESB: [{ ...base.RESB[0], LGTYP: 'IP5', BDMNG: '1200.000', ENMNG: '0.000' }],
+      JEST: [{ OBJNR: 'OR000001000086', STAT: 'I0002' }],
+      MARD: [{ LGORT: 'CS01', LABST: '1200.000' }],
+      LTBK: [],
+      LQUA: [{ LGNUM: 'W01', LGTYP: 'IP5', LGPLA: '0001000086', LGORT: 'CS01', CHARG: '', VERME: '1200.000', LENUM: '' }]
+    });
+    expect(satisfied.StagingRequired).toBe(true);
+    expect(satisfied.StagingShortfall).toBe(0);
+    expect(satisfied.StagedQuantity).toBe(1200);
+    expect(status(satisfied)).toMatchObject({ WmStaging: 'done', GoodsIssue: 'open' });
+  });
+
   it('unknown reservation is 404, unsafe input 400, RFC failure is passed on', async () => {
     await expect(cycle({ RESB: [] })).rejects.toMatchObject({ status: 404 });
     await expect(new Mvt261Adapter({ rfc: {} }).cycle({ reservation: "1' OR '1", item: '1' })).rejects.toMatchObject({ status: 400 });
@@ -237,7 +299,7 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
     }]);
   });
 
-  it('refuses without any SAP call: over-issue, locked or unreleased order, already issued, no stock, missing batch, bad quantity', async () => {
+  it('refuses without any SAP call: over-issue, locked or unreleased order, already issued, no stock, missing batch, bad quantity, warehouse mismatch, staging shortfall', async () => {
     const cases = [
       [undefined, { ...input, quantity: 2 }, 422],
       [{ JEST: [{ OBJNR: 'OR004000033120', STAT: 'I0002' }, { OBJNR: 'OR004000033120', STAT: 'I0043' }] }, input, 422],
@@ -245,6 +307,8 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
       [{ RESB: [{ ...tables().RESB[0], ENMNG: '1.000', KZEAR: 'X' }] }, input, 422],
       [{ MARD: [{ LGORT: 'HS01', LABST: '0.000' }] }, input, 422],
       [{ MCHB: [{ LGORT: 'HS01', CHARG: 'B1', CLABS: '10.000' }] }, input, 422],
+      [{ RESB: [{ ...tables().RESB[0], LGNUM: 'W13' }], T320: [{ LGNUM: 'W01' }] }, input, 422],
+      [{ RESB: [{ ...tables().RESB[0], LGTYP: 'IP1' }], LQUA: [] }, input, 422],
       [undefined, { ...input, quantity: 0 }, 400]
     ];
     for (const [over, data, status] of cases) {
@@ -267,5 +331,78 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
     expect(posts[0].path).toBe("/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/Cancel?MaterialDocument='4900050046'&MaterialDocumentYear='2026'");
     await expect(a.reverse({ materialDocument: "1' or '1", materialDocumentYear: '2026' })).rejects.toMatchObject({ status: 400 });
     expect(posts).toHaveLength(1);
+  });
+});
+
+describe('Mvt261Adapter.checkStorageUnit', () => {
+  it('rejects with itemBlocked when reservation has warehouse mismatch against T320', async () => {
+    const a = new Mvt261Adapter({
+      rfc: {
+        readTable: async (table) => {
+          if (table === 'RESB') return [{ AUFNR: '004000033120', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01', LGNUM: 'W13', LGTYP: '', LGPLA: '', XLOEK: '', KZEAR: '', XWAOK: 'X' }];
+          if (table === 'AUFK') return [{ AUFNR: '004000033120', AUART: 'ZBDN', LOEKZ: '' }];
+          if (table === 'JEST') return [{ OBJNR: 'OR004000033120', STAT: 'I0002' }];
+          if (table === 'T320') return [{ LGNUM: 'W01' }];
+          return [];
+        }
+      }
+    });
+    const res = await a.checkStorageUnit({ reservation: '418011', item: '2', storageUnit: '1000000001' });
+    expect(res).toMatchObject({
+      Accepted: false,
+      Reason: 'itemBlocked',
+      Value1: expect.stringContaining('transmitted warehouse number is W13; determined warehouse number is W01')
+    });
+  });
+
+  it('rejects with wrongWarehouse when storage unit quants belong to warehouse W13 while storage location requires W01', async () => {
+    const a = new Mvt261Adapter({
+      rfc: {
+        readTable: async (table) => {
+          if (table === 'RESB') return [{ AUFNR: '004000033120', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01', LGNUM: 'W01', LGTYP: '', LGPLA: '', XLOEK: '', KZEAR: '', XWAOK: 'X' }];
+          if (table === 'AUFK') return [{ AUFNR: '004000033120', AUART: 'ZBDN', LOEKZ: '' }];
+          if (table === 'JEST') return [{ OBJNR: 'OR004000033120', STAT: 'I0002' }];
+          if (table === 'T320') return [{ LGNUM: 'W01' }];
+          if (table === 'LQUA') return [{
+            LGNUM: 'W13', LGTYP: 'RM1', LGPLA: '0-L0001-00', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01',
+            CHARG: 'B1', BESTQ: '', VERME: '200.000', EINME: '0.000', AUSME: '0.000', MEINS: 'KG',
+            SKZUA: '', SKZUE: '', SKZSA: '', SKZSE: '', SKZSI: '', SPGRU: ''
+          }];
+          return [];
+        }
+      }
+    });
+    const res = await a.checkStorageUnit({ reservation: '418011', item: '2', storageUnit: '1000033424' });
+    expect(res).toMatchObject({
+      Accepted: false,
+      Reason: 'wrongWarehouse',
+      Value1: 'W13',
+      Value2: 'W01'
+    });
+  });
+
+  it('accepts storage unit when storage unit quants match the configured storage location warehouse W01', async () => {
+    const a = new Mvt261Adapter({
+      rfc: {
+        readTable: async (table) => {
+          if (table === 'RESB') return [{ AUFNR: '004000033120', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01', LGNUM: 'W01', LGTYP: '', LGPLA: '', XLOEK: '', KZEAR: '', XWAOK: 'X' }];
+          if (table === 'AUFK') return [{ AUFNR: '004000033120', AUART: 'ZBDN', LOEKZ: '' }];
+          if (table === 'JEST') return [{ OBJNR: 'OR004000033120', STAT: 'I0002' }];
+          if (table === 'T320') return [{ LGNUM: 'W01' }];
+          if (table === 'LQUA') return [{
+            LGNUM: 'W01', LGTYP: 'RM1', LGPLA: '0-L0001-00', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01',
+            CHARG: 'B1', BESTQ: '', VERME: '200.000', EINME: '0.000', AUSME: '0.000', MEINS: 'KG',
+            SKZUA: '', SKZUE: '', SKZSA: '', SKZSE: '', SKZSI: '', SPGRU: ''
+          }];
+          return [];
+        }
+      }
+    });
+    const res = await a.checkStorageUnit({ reservation: '418011', item: '2', storageUnit: '1000000002' });
+    expect(res).toMatchObject({
+      Accepted: true,
+      Reason: '',
+      Rows: [expect.objectContaining({ Warehouse: 'W01', Quantity: 200 })]
+    });
   });
 });

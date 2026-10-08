@@ -22,6 +22,27 @@ sap.ui.define([
         return oDate.getFullYear() + "-" + String(oDate.getMonth() + 1).padStart(2, "0") + "-" + String(oDate.getDate()).padStart(2, "0");
     }
 
+    function sortItems(aItems, bDesc) {
+        return (aItems || []).slice().sort(function (a, b) {
+            var sDateA = a.RequirementDate || "";
+            var sDateB = b.RequirementDate || "";
+            var nDateCmp = sDateB.localeCompare(sDateA);
+            if (nDateCmp !== 0) {
+                return bDesc ? nDateCmp : -nDateCmp;
+            }
+            var sResA = String(a.Reservation || "").padStart(10, "0");
+            var sResB = String(b.Reservation || "").padStart(10, "0");
+            var nResCmp = sResB.localeCompare(sResA);
+            if (nResCmp !== 0) {
+                return bDesc ? nResCmp : -nResCmp;
+            }
+            var sItmA = String(a.ReservationItem || "").padStart(4, "0");
+            var sItmB = String(b.ReservationItem || "").padStart(4, "0");
+            var nItmCmp = sItmB.localeCompare(sItmA);
+            return bDesc ? nItmCmp : -nItmCmp;
+        });
+    }
+
     return BaseController.extend("saps4hana.fiori.modules.wm.mvt261.controller.Open261", {
 
         onInit: function () {
@@ -34,6 +55,7 @@ sap.ui.define([
                 dateTo: null,
                 includeFullyWithdrawn: false,
                 scanPossibleOnly: true,
+                sortDescending: true,
                 busy: false,
                 message: "",
                 messageType: "Information",
@@ -55,7 +77,9 @@ sap.ui.define([
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
             ODataClient.get(sUrl).then(function (oResult) {
-                oModel.setProperty("/items", oResult.Items || []);
+                var aItems = oResult.Items || [];
+                var bDesc = oModel.getProperty("/sortDescending");
+                oModel.setProperty("/items", sortItems(aItems, bDesc !== false));
                 oModel.setProperty("/messageType", oResult.Truncated ? "Warning" : "Information");
                 oModel.setProperty("/message", this.getText(oResult.Truncated ? "open261Truncated" : (o.scanPossibleOnly ? "open261SummaryScan" : "open261Summary"),
                     [oResult.TotalCount, oResult.SapOpenCount]));
@@ -66,6 +90,14 @@ sap.ui.define([
             }.bind(this)).then(function () {
                 oModel.setProperty("/busy", false);
             });
+        },
+
+        onToggleSort: function () {
+            var oModel = this.getModel("open261View");
+            var bNextDesc = !oModel.getProperty("/sortDescending");
+            oModel.setProperty("/sortDescending", bNextDesc);
+            var aItems = oModel.getProperty("/items");
+            oModel.setProperty("/items", sortItems(aItems, bNextDesc));
         },
 
         onOpenCycle: function (oEvent) {

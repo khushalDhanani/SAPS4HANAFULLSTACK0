@@ -65,11 +65,22 @@ const ORDER_STATUS = { I0001: 'CRTD', I0002: 'REL', I0043: 'LKD', I0045: 'TECO',
 const ORDER_BLOCKERS = { LKD: 'order is locked', TECO: 'order is technically completed', CLSD: 'order is closed', DLFL: 'order has the deletion flag' };
 
 /** Why a reservation item / its order cannot take a goods issue; shared by the cycle and the scan checks. */
-function blockers(resb, aufk, statuses) {
+function blockers(resb, aufk, statuses, configuredWarehouse) {
   const orderBlockers = statuses.filter((st) => ORDER_BLOCKERS[st]).map((st) => ORDER_BLOCKERS[st]);
   if (aufk && aufk.LOEKZ === 'X' && !statuses.includes('DLFL')) orderBlockers.push(ORDER_BLOCKERS.DLFL);
   if (aufk && !statuses.includes('REL')) orderBlockers.unshift('order is not released');
-  const resvBlockers = [resb.XLOEK === 'X' && 'item is deleted', resb.KZEAR === 'X' && 'final issue is set', resb.XWAOK !== 'X' && 'goods movement is not allowed for the item'].filter(Boolean);
+  const resvBlockers = [
+    resb.XLOEK === 'X' && 'item is deleted',
+    resb.KZEAR === 'X' && 'final issue is set',
+    resb.XWAOK !== 'X' && 'goods movement is not allowed for the item'
+  ].filter(Boolean);
+  if (resb.LGNUM && configuredWarehouse !== undefined) {
+    if (configuredWarehouse && resb.LGNUM !== configuredWarehouse) {
+      resvBlockers.push(`transmitted warehouse number is ${resb.LGNUM}; determined warehouse number is ${configuredWarehouse}`);
+    } else if (!configuredWarehouse) {
+      resvBlockers.push(`transmitted warehouse number is ${resb.LGNUM}; storage location is not warehouse-managed`);
+    }
+  }
   return { resvBlockers, orderBlockers };
 }
 
@@ -159,7 +170,7 @@ class Mvt261Adapter {
   }
 
   /**
-   * All open movement type 261 reservation items, earliest requirement first.
+   * All open movement type 261 reservation items, latest requirement first (DESC).
    * ponytail: SAP cannot compare required with withdrawn quantity in $filter, so the open-quantity rule
    * runs here over at most MAX_OPEN_ITEMS rows (Truncated says when that cut applies); push it into a
    * CDS view if the open list ever grows past that.
@@ -185,7 +196,7 @@ class Mvt261Adapter {
     do {
       const d = await this._results(RESV_PATH, {
         $filter: filter.join(' and '),
-        $orderby: 'MatlCompRequirementDate asc,Reservation asc,ReservationItem asc',
+        $orderby: 'MatlCompRequirementDate desc,Reservation desc,ReservationItem desc',
         $top: PAGE,
         $skip: rows.length,
         $inlinecount: 'allpages',
@@ -258,7 +269,7 @@ class Mvt261Adapter {
     const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for reservation ${strip(rsnum)}/${strip(rspos)}`);
 
     const [resb] = await read('RESB',
-      ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BDTER', 'BDMNG', 'ENMNG', 'MEINS', 'XLOEK', 'KZEAR', 'XWAOK'],
+      ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'CHARG', 'BDTER', 'BDMNG', 'ENMNG', 'MEINS', 'XLOEK', 'KZEAR', 'XWAOK'],
       [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
     if (!resb) throw httpError(404, `Reservation ${strip(rsnum)} item ${strip(rspos)} with movement type 261 not found`);
 
@@ -272,7 +283,9 @@ class Mvt261Adapter {
     const mard = await read('MARD', ['LGORT', 'LABST'], matWhere);
     const mchb = await read('MCHB', ['LGORT', 'CHARG', 'CLABS'], [...matWhere, 'AND CLABS > 0']);
     const t320 = resb.LGORT ? await read('T320', ['LGNUM'], [`WERKS = '${resb.WERKS}'`, `AND LGORT = '${resb.LGORT}'`]) : [];
-    const lqua = await read('LQUA', ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'VERME', 'LENUM'], [...matWhere, 'AND VERME > 0']);
+    const configuredWarehouse = t320[0] ? t320[0].LGNUM : '';
+    const lquaRaw = await read('LQUA', ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'VERME', 'LENUM'], [...matWhere, 'AND VERME > 0']);
+    const lqua = configuredWarehouse ? lquaRaw.filter((q) => q.LGNUM === configuredWarehouse) : lquaRaw;
     const ltbk = await read('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'STATU'], [`RSNUM = '${rsnum}'`]);
     const TransferRequirements = [];
     const TransferOrders = [];
@@ -307,21 +320,57 @@ class Mvt261Adapter {
     })).sort((a, b) => `${a.MaterialDocumentYear}${a.MaterialDocument}${a.MaterialDocumentItem}`.localeCompare(`${b.MaterialDocumentYear}${b.MaterialDocument}${b.MaterialDocumentItem}`));
     const effective261 = History.filter((h) => h.MovementType === '261' && !h.IsReversed);
 
+    // Staging evaluation: if the reservation item specifies an interim storage type (WM-PP staging),
+    // interim bin must hold sufficient stock, otherwise standard SAP 261 goods issue rejects with shortfall.
+    const stagingRequired = Boolean(resb.LGTYP);
+    const stagingBin = resb.LGPLA || (resb.AUFNR ? strip(resb.AUFNR).padStart(10, '0') : '');
+    const stagingWarehouse = configuredWarehouse || resb.LGNUM || '';
+    const stagingQuants = stagingRequired ? lqua.filter((q) =>
+      q.LGTYP === resb.LGTYP &&
+      q.LGPLA === stagingBin &&
+      (!stagingWarehouse || q.LGNUM === stagingWarehouse)
+    ) : [];
+    const stagedStock = stagingQuants.reduce((sum, q) => sum + parseSapNumber(q.VERME), 0);
+    const stagingShortfall = stagingRequired && open > 0 && stagedStock < open;
+    const stagingBlocker = stagingShortfall
+      ? `available stock shortfall of ${Math.round((open - stagedStock) * 1000) / 1000} ${resb.MEINS} in interim storage bin ${resb.LGTYP}/${stagingBin}`
+      : null;
+
     // Steps: a blocked step carries the reason; nothing here posts or changes data.
-    const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses);
+    const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses, configuredWarehouse);
     const step = (Step, Status, Reason = '') => ({ Step, Status, Reason });
-    const blockedBefore = [...resvBlockers, ...orderBlockers];
+    const blockedBefore = [...resvBlockers, ...orderBlockers, ...(stagingBlocker ? [stagingBlocker] : [])];
     const openTr = TransferRequirements.filter((t) => !t.Completed);
     const openTo = TransferOrders.filter((t) => !t.Confirmed);
+
+    let wmStagingStatus = 'done';
+    let wmStagingReason = '';
+    if (stagingRequired) {
+      if (stagingShortfall) {
+        wmStagingStatus = (openTr.length || openTo.length) ? 'open' : 'blocked';
+        wmStagingReason = `interim storage bin ${resb.LGTYP}/${stagingBin} has ${stagedStock} ${resb.MEINS} staged, shortfall of ${Math.round((open - stagedStock) * 1000) / 1000} ${resb.MEINS}`;
+        if (openTr.length || openTo.length) {
+          const pending = [openTr.length && `${openTr.length} transfer requirement item(s) not completed`, openTo.length && `${openTo.length} transfer order(s) not confirmed`].filter(Boolean).join('; ');
+          wmStagingReason = `${pending}; ${wmStagingReason}`;
+        }
+      } else if (openTr.length || openTo.length) {
+        wmStagingStatus = 'open';
+        wmStagingReason = [openTr.length && `${openTr.length} transfer requirement item(s) not completed`, openTo.length && `${openTo.length} transfer order(s) not confirmed`].filter(Boolean).join('; ');
+      }
+    } else if (openTr.length || openTo.length) {
+      wmStagingStatus = 'open';
+      wmStagingReason = openTr.length ? `${openTr.length} transfer requirement item(s) not completed` : `${openTo.length} transfer order(s) not confirmed`;
+    } else if (!t320.length && !ltbk.length) {
+      wmStagingStatus = 'done';
+      wmStagingReason = 'storage location is not WM-managed and no transfer requirement exists';
+    }
+
     const Steps = [
       step('Reservation', resvBlockers.length ? 'blocked' : 'done', resvBlockers.join('; ')),
       step('ProductionOrder', !aufk ? 'blocked' : orderBlockers.length ? 'blocked' : 'done', !aufk ? 'no order on the reservation item' : orderBlockers.join('; ')),
       step('Availability', open === 0 ? 'done' : stockAtLocation >= open ? 'done' : 'blocked',
         open > 0 && stockAtLocation < open ? `unrestricted stock ${stockAtLocation} ${resb.MEINS} is less than the open quantity ${open} ${resb.MEINS}` : ''),
-      step('WmStaging', openTr.length || openTo.length ? 'open' : 'done',
-        !t320.length && !ltbk.length ? 'storage location is not WM-managed and no transfer requirement exists'
-          : openTr.length ? `${openTr.length} transfer requirement item(s) not completed`
-            : openTo.length ? `${openTo.length} transfer order(s) not confirmed` : ''),
+      step('WmStaging', wmStagingStatus, wmStagingReason),
       step('GoodsIssue', open === 0 ? 'done' : blockedBefore.length ? 'blocked' : 'open', open > 0 ? blockedBefore.join('; ') : ''),
       step('DocumentHistory', History.length ? 'done' : 'open', History.length ? '' : 'no 261 or 262 document yet'),
       step('Reversal', effective261.length ? 'open' : 'done', effective261.length ? `${effective261.length} document(s) of movement type 261 can be reversed` : ''),
@@ -333,7 +382,13 @@ class Mvt261Adapter {
       OrderStatus: statuses.join(' '), Material: strip(resb.MATNR), Plant: resb.WERKS, StorageLocation: resb.LGORT, Batch: resb.CHARG,
       RequirementDate: sapDate(resb.BDTER), RequiredQuantity: required, WithdrawnQuantity: withdrawn, OpenQuantity: open, Unit: resb.MEINS,
       IsDeleted: resb.XLOEK === 'X', IsFinalIssue: resb.KZEAR === 'X', MovementAllowed: resb.XWAOK === 'X',
-      Warehouse: t320[0] ? t320[0].LGNUM : '',
+      Warehouse: configuredWarehouse,
+      ReservationWarehouse: resb.LGNUM || '',
+      StagingRequired: stagingRequired,
+      StagingStorageType: resb.LGTYP || '',
+      StagingBin: stagingBin || '',
+      StagedQuantity: Math.round(stagedStock * 1000) / 1000,
+      StagingShortfall: stagingShortfall ? Math.round((open - stagedStock) * 1000) / 1000 : 0,
       Steps,
       Stock: [
         ...mard.map((r) => ({ StorageLocation: r.LGORT, Batch: '', Quantity: parseSapNumber(r.LABST) })),
@@ -390,10 +445,10 @@ class Mvt261Adapter {
       [`MATNR = '${matnr}'`, `AND WERKS = '${c.Plant}'`, 'AND VERME > 0']);
     const gi = c.Steps.find((st) => st.Step === 'GoodsIssue');
 
-    // FIFO list: storage units in the reservation's storage location (all of the plant if it names none),
+    // FIFO list: storage units in the reservation's storage location and warehouse (all of the plant if none),
     // oldest goods-receipt date first (LQUA-WDATU, "Date of Goods Receipt"), then batch, then storage unit.
     // Units without a goods-receipt date cannot be ranked by age and go last.
-    const here = quants.filter((q) => !c.StorageLocation || q.LGORT === c.StorageLocation);
+    const here = quants.filter((q) => (!c.StorageLocation || q.LGORT === c.StorageLocation) && (!c.Warehouse || q.LGNUM === c.Warehouse));
     const key = (q) => `${sapDate(q.WDATU) || '9999-99-99'}|${q.CHARG}|${q.LENUM}`;
     const today = Date.parse(new Date().toISOString().slice(0, 10));
     let toCover = gi.Status === 'open' ? c.OpenQuantity : 0;
@@ -416,7 +471,7 @@ class Mvt261Adapter {
     return {
       Reservation: c.Reservation, ReservationItem: c.ReservationItem, ProductionOrder: c.ProductionOrder, OrderStatus: c.OrderStatus,
       Material: c.Material, MaterialName: makt ? makt.MAKTX : '', BatchManaged: !!marc && marc.XCHPF === 'X',
-      Plant: c.Plant, StorageLocation: c.StorageLocation, RequiredQuantity: c.RequiredQuantity, WithdrawnQuantity: c.WithdrawnQuantity,
+      Plant: c.Plant, StorageLocation: c.StorageLocation, Warehouse: c.Warehouse, RequiredQuantity: c.RequiredQuantity, WithdrawnQuantity: c.WithdrawnQuantity,
       OpenQuantity: c.OpenQuantity, Unit: c.Unit,
       Blocked: gi.Status !== 'open', BlockReason: gi.Status === 'open' ? '' : (gi.Reason || 'nothing left to issue'),
       QuantCount: quants.length, StorageUnitQuantCount: quants.filter((q) => q.LENUM).length,
@@ -437,11 +492,13 @@ class Mvt261Adapter {
     const read = (table, fields, where) => this._table(table, fields, where, `Read ${table} for storage unit ${su}`);
     const reject = (Reason, Value1 = '', Value2 = '') => ({ StorageUnit: strip(su), Accepted: false, Reason, Value1: String(Value1), Value2: String(Value2), Rows: [] });
 
-    const [resb] = await read('RESB', ['AUFNR', 'MATNR', 'WERKS', 'LGORT', 'XLOEK', 'KZEAR', 'XWAOK'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
+    const [resb] = await read('RESB', ['AUFNR', 'MATNR', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'XLOEK', 'KZEAR', 'XWAOK'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`, "AND BWART = '261'"]);
     if (!resb) throw httpError(404, `Reservation ${strip(rsnum)} item ${strip(rspos)} with movement type 261 not found`);
     const [aufk] = resb.AUFNR ? await read('AUFK', ['AUFNR', 'LOEKZ'], [`AUFNR = '${resb.AUFNR}'`]) : [];
     const statuses = resb.AUFNR ? ((await this._orderStatuses([resb.AUFNR]))[strip(resb.AUFNR)] || []) : [];
-    const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses);
+    const t320 = resb.LGORT ? await read('T320', ['LGNUM'], [`WERKS = '${resb.WERKS}'`, `AND LGORT = '${resb.LGORT}'`]) : [];
+    const configuredWarehouse = t320[0] ? t320[0].LGNUM : '';
+    const { resvBlockers, orderBlockers } = blockers(resb, aufk, statuses, configuredWarehouse);
     if (!aufk) orderBlockers.push('no order on the reservation item');
     if (resvBlockers.length || orderBlockers.length) return reject('itemBlocked', [...resvBlockers, ...orderBlockers].join('; '));
 
@@ -454,9 +511,15 @@ class Mvt261Adapter {
     if (!quants.length) return reject('wrongMaterialOrPlant', `${strip(other.MATNR)} / ${other.WERKS}`, `${strip(resb.MATNR)} / ${resb.WERKS}`);
     if (!quants.some((q) => parseSapNumber(q.VERME) > 0)) return reject('noStock');
 
+    if (configuredWarehouse && quants.every((q) => q.LGNUM !== configuredWarehouse)) {
+      return reject('wrongWarehouse', quants[0].LGNUM, configuredWarehouse);
+    }
+    const whQuants = configuredWarehouse ? quants.filter((q) => q.LGNUM === configuredWarehouse) : quants;
+    if (!whQuants.length) return reject('wrongWarehouse', quants[0].LGNUM, configuredWarehouse);
+
     const orderBin = resb.AUFNR.slice(-10);
     const Rows = [];
-    for (const q of quants) {
+    for (const q of whQuants) {
       const notReady = this._quantNotReady(q);
       if (notReady) return reject(...notReady);
       Rows.push({
@@ -496,6 +559,24 @@ class Mvt261Adapter {
     if (gi.Status !== 'open') throw httpError(422, `Goods issue not possible: ${gi.Reason || 'nothing left to issue'}`);
     if (quantity > c.OpenQuantity) throw httpError(422, `Quantity ${quantity} exceeds the open quantity ${c.OpenQuantity} ${c.Unit}`);
     if (!c.StorageLocation) throw httpError(422, 'Goods issue not possible: the reservation item has no storage location');
+    if (c.ReservationWarehouse && c.Warehouse && c.ReservationWarehouse !== c.Warehouse) {
+      throw httpError(422, `Goods issue not possible: transmitted warehouse number is ${c.ReservationWarehouse}; determined warehouse number is ${c.Warehouse}`);
+    }
+    if (c.ReservationWarehouse && !c.Warehouse) {
+      throw httpError(422, `Goods issue not possible: transmitted warehouse number is ${c.ReservationWarehouse}; storage location is not warehouse-managed`);
+    }
+    if (c.StagingRequired) {
+      const stagedQuants = c.Quants.filter((q) =>
+        q.StorageType === c.StagingStorageType &&
+        q.StorageBin === c.StagingBin &&
+        (!c.Warehouse || q.Warehouse === c.Warehouse) &&
+        (!batch || q.Batch === batch)
+      );
+      const stagedStock = stagedQuants.reduce((sum, q) => sum + q.AvailableQuantity, 0);
+      if (stagedStock < quantity) {
+        throw httpError(422, `Goods issue not possible: available stock shortfall of ${Math.round((quantity - stagedStock) * 1000) / 1000} ${c.Unit} in interim storage bin ${c.StagingStorageType}/${c.StagingBin}${batch ? ` for batch ${batch}` : ''}`);
+      }
+    }
     const batches = c.Stock.filter((st) => st.Batch);
     if (batches.length && !batch) throw httpError(422, 'Goods issue not possible: the material has batch stock, a batch is required');
     const stock = (batch ? batches.filter((st) => st.Batch === batch) : c.Stock.filter((st) => !st.Batch)).reduce((sum, st) => sum + st.Quantity, 0);

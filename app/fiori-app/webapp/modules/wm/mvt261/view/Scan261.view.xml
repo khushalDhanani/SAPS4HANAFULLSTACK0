@@ -32,6 +32,11 @@
                             title="{i18n>cycle261Status}"
                             text="{= ${scan261View>/state} === 'Blocked' ? ${i18n>scan261State_Blocked} : ${scan261View>/state} === 'Covered' ? ${i18n>scan261State_Covered} : ${scan261View>/state} === 'Scanning' ? ${i18n>scan261State_Scanning} : ${i18n>scan261State_Loaded} }"
                             state="{= ${scan261View>/state} === 'Blocked' ? 'Error' : ${scan261View>/state} === 'Covered' ? 'Success' : 'Information' }" />
+                        <ObjectStatus
+                            id="scan261Warehouse"
+                            title="{i18n>cycle261Warehouse}"
+                            text="{scan261View>/ctx/Warehouse}"
+                            visible="{= !!${scan261View>/ctx/Warehouse} }" />
                     </statuses>
                 </ObjectHeader>
 

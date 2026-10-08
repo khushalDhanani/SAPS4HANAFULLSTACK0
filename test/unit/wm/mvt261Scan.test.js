@@ -320,6 +320,33 @@ describe('261 scan screen: FIFO list and FIFO check', () => {
     expect(await s.scan('1000032202')).toMatchObject({ Reason: 'stockCategory', Value1: 'Q' });
     expect([s.total(), s.state()]).toEqual([0, 'Scanning']);
   });
+
+  it('excludes storage units from disparate warehouses (W13) from FIFO list when storage location is in W01', async () => {
+    const s = await screen('471327', '1', []);
+    s.adapter.rfc.readTable = async (table, fields, where) => {
+      if (table === 'T320') return [{ LGNUM: 'W01' }];
+      if (table === 'RESB') return RESB.filter((r) => r.RSNUM === '0000471327' && r.RSPOS === '0001');
+      if (table === 'AUFK') return [{ AUFNR: '000002000589', AUART: 'ZP01', LOEKZ: '' }];
+      if (table === 'JEST') return [{ OBJNR: 'OR000002000589', STAT: 'I0002' }];
+      if (table === 'MAKT') return [{ MAKTX: 'Test material' }];
+      if (table === 'MARC') return [{ XCHPF: 'X' }];
+      if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '99999.000' }];
+      if (table === 'LQUA') {
+        const w = where.join(' ');
+        if (w.includes('8400000034')) {
+          return [
+            quant('1000053753', '8400000034', '1600', 'CS01', 'W01', 'GS1', '0002000589', 'PTRA260007', '120.000'),
+            quant('1000033424', '8400000034', '1600', 'CS01', 'W13', 'RM1', '0-L0001-00', 'PTRA260008', '240.000')
+          ];
+        }
+      }
+      return [];
+    };
+    const ctx = await s.adapter.scanContext({ reservation: '471327', item: '1' });
+    expect(ctx.Warehouse).toBe('W01');
+    expect(ctx.Units.map((u) => u.StorageUnit)).toEqual(['1000053753']);
+    expect(ctx.Units.some((u) => u.StorageUnit === '1000033424')).toBe(false);
+  });
 });
 
 describe('Mvt261Service postGoodsIssue action', () => {
