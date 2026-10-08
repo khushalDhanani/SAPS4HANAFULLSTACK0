@@ -242,12 +242,34 @@ class Mvt261Adapter {
         i.ReadyStorageUnits = su.count;
         i.ReadyQuantity = Math.round(su.quantity * 1000) / 1000;
         // Same conditions the scan page applies before it accepts a scan.
-        i.ScanPossible = i.OpenQuantity > 0 && i.MovementAllowed && st.includes('REL') && !st.some((x) => ORDER_BLOCKERS[x]) && su.count > 0;
+        const orderBlocked = st.filter((x) => ORDER_BLOCKERS[x]).map((x) => ORDER_BLOCKERS[x]);
+        let blockReason = '';
+        if (i.OpenQuantity <= 0) {
+          blockReason = 'No open quantity remaining';
+        } else if (!i.MovementAllowed) {
+          blockReason = 'Movement not allowed';
+        } else if (!st.includes('REL')) {
+          blockReason = 'Order not released';
+        } else if (orderBlocked.length) {
+          blockReason = orderBlocked.join('; ');
+        } else if (su.count <= 0) {
+          blockReason = 'No ready storage units in stock';
+        }
+        i.ScanPossible = !blockReason;
+        i.Blocked = !i.ScanPossible;
+        i.BlockReason = blockReason;
       });
     } catch (e) {
       if (input.scanPossibleOnly) throw e;
       LOG.warn(`Order statuses / storage-unit stock not read: ${e.message}`);
-      Items.forEach((i) => Object.assign(i, { OrderStatus: '', ReadyStorageUnits: 0, ReadyQuantity: 0, ScanPossible: false }));
+      Items.forEach((i) => Object.assign(i, {
+        OrderStatus: '',
+        ReadyStorageUnits: 0,
+        ReadyQuantity: 0,
+        ScanPossible: false,
+        Blocked: true,
+        BlockReason: 'Status/stock check failed'
+      }));
     }
     if (input.scanPossibleOnly) {
       const scannable = Items.filter((i) => i.ScanPossible);

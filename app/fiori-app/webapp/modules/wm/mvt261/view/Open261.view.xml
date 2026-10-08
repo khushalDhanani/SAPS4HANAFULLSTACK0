@@ -25,8 +25,6 @@
                         <Input id="open261Reservation" value="{open261View>/reservation}" maxLength="10" submit=".onGo" />
                         <Label text="{i18n>open261RequirementDate}" labelFor="open261Dates" />
                         <DateRangeSelection id="open261Dates" dateValue="{open261View>/dateFrom}" secondDateValue="{open261View>/dateTo}" />
-                        <Label text="{i18n>open261ScanPossibleOnly}" labelFor="open261ScanPossibleOnly" />
-                        <Switch id="open261ScanPossibleOnly" state="{open261View>/scanPossibleOnly}" change=".onGo" />
                         <Label text="{i18n>open261IncludeWithdrawn}" labelFor="open261IncludeWithdrawn" />
                         <Switch id="open261IncludeWithdrawn" state="{open261View>/includeFullyWithdrawn}" />
                         <Label />
@@ -36,59 +34,99 @@
 
                 <MessageStrip id="open261Message" visible="{= !!${open261View>/message} }" text="{open261View>/message}" type="{open261View>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
 
-                <Table
-                    id="open261Table"
-                    items="{open261View>/items}"
-                    busy="{open261View>/busy}"
-                    growing="true"
-                    growingThreshold="50"
-                    noDataText="{i18n>open261NoData}"
+                <IconTabBar
+                    id="open261Tabs"
+                    select=".onTabSelect"
+                    selectedKey="{open261View>/selectedTab}"
+                    headerBackgroundDesign="Transparent"
                     class="sapUiSmallMarginTop">
-                    <headerToolbar>
-                        <OverflowToolbar>
-                            <Title id="open261Count" text="{= ${i18n>open261ListTitle} + ' (' + ${open261View>/items}.length + ')' }" level="H2" />
-                            <ToolbarSpacer />
-                            <Button
-                                id="open261Sort"
-                                icon="{= ${open261View>/sortDescending} ? 'sap-icon://sort-descending' : 'sap-icon://sort-ascending' }"
-                                text="{= ${open261View>/sortDescending} ? ${i18n>open261SortDesc} : ${i18n>open261SortAsc} }"
-                                tooltip="{i18n>open261SortTooltip}"
-                                press=".onToggleSort"
-                                enabled="{= ${open261View>/items}.length > 0 }" />
-                            <Button id="open261Export" icon="sap-icon://excel-attachment" text="{i18n>open261Export}" press=".onExport" enabled="{= ${open261View>/items}.length > 0 }" />
-                        </OverflowToolbar>
-                    </headerToolbar>
-                    <columns>
-                        <Column><Text text="{i18n>open261Reservation}" /></Column>
-                        <Column><Text text="{i18n>mvt261Order}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261OrderStatus}" /></Column>
-                        <Column><Text text="{i18n>mvt261Material}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261PlantSloc}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261RequirementDate}" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Required}" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Withdrawn}" /></Column>
-                        <Column hAlign="End"><Text text="{i18n>open261Open}" /></Column>
-                        <Column minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>open261ReadyUnits}" /></Column>
-                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>open261MovementAllowed}" /></Column>
-                    </columns>
                     <items>
-                        <ColumnListItem type="Navigation" press=".onOpenCycle">
-                            <cells>
-                                <ObjectIdentifier title="{open261View>Reservation}" text="{open261View>ReservationItem}" />
-                                <ObjectIdentifier title="{open261View>ProductionOrder}" text="{open261View>OrderDescription}" />
-                                <Text text="{open261View>OrderStatus}" />
-                                <ObjectIdentifier title="{open261View>Material}" text="{open261View>MaterialName}" />
-                                <Text text="{open261View>Plant} / {open261View>StorageLocation}" />
-                                <Text text="{open261View>RequirementDate}" />
-                                <ObjectNumber number="{open261View>RequiredQuantity}" unit="{open261View>Unit}" emphasized="false" />
-                                <ObjectNumber number="{open261View>WithdrawnQuantity}" unit="{open261View>Unit}" emphasized="false" />
-                                <ObjectNumber number="{open261View>OpenQuantity}" unit="{open261View>Unit}" state="{= ${open261View>OpenQuantity} > 0 ? 'None' : 'Warning' }" />
-                                <ObjectNumber number="{open261View>ReadyStorageUnits}" unit="{open261View>ReadyQuantity} {open261View>Unit}" state="{= ${open261View>ScanPossible} ? 'Success' : 'None' }" emphasized="false" />
-                                <ObjectStatus text="{= ${open261View>MovementAllowed} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" state="{= ${open261View>MovementAllowed} ? 'None' : 'Warning' }" />
-                            </cells>
-                        </ColumnListItem>
+                        <IconTabFilter
+                            id="open261TabOpen"
+                            key="open"
+                            text="{i18n>open261TabOpen}"
+                            count="{open261View>/openCount}"
+                            icon="sap-icon://sys-enter-2"
+                            iconColor="Positive" />
+                        <IconTabFilter
+                            id="open261TabBlocked"
+                            key="blocked"
+                            text="{i18n>open261TabBlocked}"
+                            count="{open261View>/blockedCount}"
+                            icon="sap-icon://error"
+                            iconColor="Negative" />
+                        <IconTabFilter
+                            id="open261TabAll"
+                            key="all"
+                            text="{i18n>open261TabAll}"
+                            count="{open261View>/allCount}"
+                            icon="sap-icon://list" />
                     </items>
-                </Table>
+                    <content>
+                        <Table
+                            id="open261Table"
+                            items="{open261View>/items}"
+                            busy="{open261View>/busy}"
+                            growing="true"
+                            growingThreshold="50"
+                            noDataText="{i18n>open261NoData}"
+                            class="sapUiSmallMarginTop">
+                            <headerToolbar>
+                                <OverflowToolbar>
+                                    <Title id="open261Count" text="{= ${i18n>open261ListTitle} + ' (' + ${open261View>/items}.length + ')' }" level="H2" />
+                                    <ToolbarSpacer />
+                                    <Button
+                                        id="open261Sort"
+                                        icon="{= ${open261View>/sortDescending} ? 'sap-icon://sort-descending' : 'sap-icon://sort-ascending' }"
+                                        text="{= ${open261View>/sortDescending} ? ${i18n>open261SortDesc} : ${i18n>open261SortAsc} }"
+                                        tooltip="{i18n>open261SortTooltip}"
+                                        press=".onToggleSort"
+                                        enabled="{= ${open261View>/items}.length > 0 }" />
+                                    <Button id="open261Export" icon="sap-icon://excel-attachment" text="{i18n>open261Export}" press=".onExport" enabled="{= ${open261View>/items}.length > 0 }" />
+                                </OverflowToolbar>
+                            </headerToolbar>
+                            <columns>
+                                <Column><Text text="{i18n>open261Reservation}" /></Column>
+                                <Column><Text text="{i18n>mvt261Order}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261OrderStatus}" /></Column>
+                                <Column><Text text="{i18n>mvt261Material}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261PlantSloc}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261RequirementDate}" /></Column>
+                                <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Required}" /></Column>
+                                <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Withdrawn}" /></Column>
+                                <Column hAlign="End"><Text text="{i18n>open261Open}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true" hAlign="End"><Text text="{i18n>open261ReadyUnits}" /></Column>
+                                <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>open261Status}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem type="Navigation" press=".onOpenCycle">
+                                    <cells>
+                                        <ObjectIdentifier title="{open261View>Reservation}" text="{open261View>ReservationItem}" />
+                                        <ObjectIdentifier title="{open261View>ProductionOrder}" text="{open261View>OrderDescription}" />
+                                        <Text text="{open261View>OrderStatus}" />
+                                        <ObjectIdentifier title="{open261View>Material}" text="{open261View>MaterialName}" />
+                                        <Text text="{open261View>Plant} / {open261View>StorageLocation}" />
+                                        <Text text="{open261View>RequirementDate}" />
+                                        <ObjectNumber number="{open261View>RequiredQuantity}" unit="{open261View>Unit}" emphasized="false" />
+                                        <ObjectNumber number="{open261View>WithdrawnQuantity}" unit="{open261View>Unit}" emphasized="false" />
+                                        <ObjectNumber number="{open261View>OpenQuantity}" unit="{open261View>Unit}" state="{= ${open261View>OpenQuantity} > 0 ? 'None' : 'Warning' }" />
+                                        <ObjectNumber number="{open261View>ReadyStorageUnits}" unit="{open261View>ReadyQuantity} {open261View>Unit}" state="{= ${open261View>ScanPossible} ? 'Success' : 'None' }" emphasized="false" />
+                                        <VBox>
+                                            <ObjectStatus
+                                                text="{= ${open261View>ScanPossible} ? ${i18n>open261Status_Open} : ${i18n>open261Status_Blocked} }"
+                                                state="{= ${open261View>ScanPossible} ? 'Success' : 'Error' }"
+                                                icon="{= ${open261View>ScanPossible} ? 'sap-icon://sys-enter-2' : 'sap-icon://error' }" />
+                                            <Text
+                                                text="{open261View>BlockReason}"
+                                                visible="{= !${open261View>ScanPossible} &amp;&amp; !!${open261View>BlockReason} }"
+                                                class="sapUiTinyText" />
+                                        </VBox>
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </content>
+                </IconTabBar>
             </VBox>
         </content>
     </Page>

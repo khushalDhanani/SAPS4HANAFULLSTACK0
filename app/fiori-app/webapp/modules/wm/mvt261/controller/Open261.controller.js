@@ -12,7 +12,8 @@ sap.ui.define([
         ["open261OrderDescription", "OrderDescription"], ["open261OrderStatus", "OrderStatus"], ["mvt261Material", "Material"], ["open261MaterialName", "MaterialName"],
         ["mvt261Plant", "Plant"], ["open261Sloc", "StorageLocation"], ["open261RequirementDate", "RequirementDate"],
         ["open261Required", "RequiredQuantity", "Number"], ["open261Withdrawn", "WithdrawnQuantity", "Number"],
-        ["open261Open", "OpenQuantity", "Number"], ["open261ReadyUnits", "ReadyStorageUnits", "Number"], ["open261ReadyQuantity", "ReadyQuantity", "Number"], ["open261Unit", "Unit"], ["open261MovementAllowed", "MovementAllowed", "Boolean"]
+        ["open261Open", "OpenQuantity", "Number"], ["open261ReadyUnits", "ReadyStorageUnits", "Number"], ["open261ReadyQuantity", "ReadyQuantity", "Number"], ["open261Unit", "Unit"], ["open261MovementAllowed", "MovementAllowed", "Boolean"],
+        ["open261Status", "StatusText"], ["open261BlockReason", "BlockReason"]
     ];
 
     function ymd(oDate) {
@@ -46,6 +47,8 @@ sap.ui.define([
     return BaseController.extend("saps4hana.fiori.modules.wm.mvt261.controller.Open261", {
 
         onInit: function () {
+            this._aAllItems = [];
+            this._oLastResult = null;
             this.setModel(new JSONModel({
                 plant: "",
                 productionOrder: "",
@@ -55,6 +58,10 @@ sap.ui.define([
                 dateTo: null,
                 includeFullyWithdrawn: false,
                 scanPossibleOnly: true,
+                selectedTab: "open",
+                openCount: 0,
+                blockedCount: 0,
+                allCount: 0,
                 sortDescending: true,
                 busy: false,
                 message: "",
@@ -72,19 +79,38 @@ sap.ui.define([
             var sUrl = BASE_PATH + "/openItems(plant=" + q(o.plant) + ",material=" + q(o.material) +
                 ",productionOrder=" + q(o.productionOrder) + ",reservation=" + q(o.reservation) +
                 ",dateFrom=" + q(ymd(o.dateFrom)) + ",dateTo=" + q(ymd(o.dateTo)) +
-                ",includeFullyWithdrawn=" + !!o.includeFullyWithdrawn + ",scanPossibleOnly=" + !!o.scanPossibleOnly + ")";
+                ",includeFullyWithdrawn=" + !!o.includeFullyWithdrawn + ",scanPossibleOnly=false)";
 
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
             ODataClient.get(sUrl).then(function (oResult) {
-                var aItems = oResult.Items || [];
-                var bDesc = oModel.getProperty("/sortDescending");
-                oModel.setProperty("/items", sortItems(aItems, bDesc !== false));
-                oModel.setProperty("/messageType", oResult.Truncated ? "Warning" : "Information");
-                oModel.setProperty("/message", this.getText(oResult.Truncated ? "open261Truncated" : (o.scanPossibleOnly ? "open261SummaryScan" : "open261Summary"),
-                    [oResult.TotalCount, oResult.SapOpenCount]));
+                var aItems = (oResult.Items || []).map(function (item) {
+                    item.StatusText = item.ScanPossible ? "Open" : "Blocked";
+                    return item;
+                });
+                this._aAllItems = aItems;
+                this._oLastResult = oResult;
+
+                var nOpen = 0;
+                var nBlocked = 0;
+                for (var i = 0; i < aItems.length; i++) {
+                    if (aItems[i].ScanPossible) {
+                        nOpen++;
+                    } else {
+                        nBlocked++;
+                    }
+                }
+                oModel.setProperty("/openCount", nOpen);
+                oModel.setProperty("/blockedCount", nBlocked);
+                oModel.setProperty("/allCount", aItems.length);
+                this._applyTabFilter();
             }.bind(this)).catch(function (oError) {
+                this._aAllItems = [];
+                this._oLastResult = null;
                 oModel.setProperty("/items", []);
+                oModel.setProperty("/openCount", 0);
+                oModel.setProperty("/blockedCount", 0);
+                oModel.setProperty("/allCount", 0);
                 oModel.setProperty("/messageType", "Error");
                 oModel.setProperty("/message", (oError && oError.message) || this.getText("mvt261LoadError"));
             }.bind(this)).then(function () {
@@ -92,12 +118,47 @@ sap.ui.define([
             });
         },
 
+        _applyTabFilter: function () {
+            var oModel = this.getModel("open261View");
+            var sTab = oModel.getProperty("/selectedTab") || "open";
+            var bDesc = oModel.getProperty("/sortDescending") !== false;
+            var aAll = this._aAllItems || [];
+            var aFiltered;
+            if (sTab === "open") {
+                aFiltered = aAll.filter(function (i) { return i.ScanPossible; });
+            } else if (sTab === "blocked") {
+                aFiltered = aAll.filter(function (i) { return !i.ScanPossible; });
+            } else {
+                aFiltered = aAll.slice();
+            }
+            var aSorted = sortItems(aFiltered, bDesc);
+            oModel.setProperty("/items", aSorted);
+
+            var oRes = this._oLastResult || {};
+            var nSapOpen = oRes.SapOpenCount || aAll.length;
+            oModel.setProperty("/messageType", oRes.Truncated ? "Warning" : "Information");
+            if (oRes.Truncated) {
+                oModel.setProperty("/message", this.getText("open261Truncated", [aSorted.length, nSapOpen]));
+            } else if (sTab === "open") {
+                oModel.setProperty("/message", this.getText("open261SummaryOpen", [aSorted.length, nSapOpen]));
+            } else if (sTab === "blocked") {
+                oModel.setProperty("/message", this.getText("open261SummaryBlocked", [aSorted.length]));
+            } else {
+                oModel.setProperty("/message", this.getText("open261Summary", [aSorted.length, nSapOpen]));
+            }
+        },
+
+        onTabSelect: function (oEvent) {
+            var sKey = oEvent.getParameter("key") || oEvent.getSource().getSelectedKey();
+            this.getModel("open261View").setProperty("/selectedTab", sKey);
+            this._applyTabFilter();
+        },
+
         onToggleSort: function () {
             var oModel = this.getModel("open261View");
             var bNextDesc = !oModel.getProperty("/sortDescending");
             oModel.setProperty("/sortDescending", bNextDesc);
-            var aItems = oModel.getProperty("/items");
-            oModel.setProperty("/items", sortItems(aItems, bNextDesc));
+            this._applyTabFilter();
         },
 
         onOpenCycle: function (oEvent) {

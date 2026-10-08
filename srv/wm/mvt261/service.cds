@@ -49,6 +49,8 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         MovementAllowed   : Boolean;
         OrderStatus       : String(40);
         ScanPossible      : Boolean;
+        Blocked           : Boolean;
+        BlockReason       : String(100);
         ReadyStorageUnits : Integer;
         ReadyQuantity     : Decimal(15, 3);
     };
