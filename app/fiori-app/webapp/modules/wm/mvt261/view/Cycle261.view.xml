@@ -10,6 +10,7 @@
 
                 <MessageStrip id="cycle261Error" visible="{= !!${cycle261View>/error} }" text="{cycle261View>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
                 <MessageStrip id="cycle261ReadOnly" text="{i18n>cycle261ReadOnly}" type="Information" showIcon="true" class="sapUiSmallMarginBottom" />
+                <MessageStrip id="cycle261Backflush" visible="{= ${cycle261View>/c/Backflush} === true }" text="{i18n>cycle261Backflush}" type="Warning" showIcon="true" class="sapUiSmallMarginBottom" />
 
                 <ObjectHeader
                     id="cycle261Header"
@@ -138,6 +139,7 @@
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261Batch}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>cycle261Reversal}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mvt261User}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>cycle261Action}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem>
@@ -149,6 +151,9 @@
                                 <Text text="{cycle261View>Batch}" />
                                 <ObjectStatus text="{= ${cycle261View>Reverses} ? ${i18n>cycle261Reverses} + ' ' + ${cycle261View>Reverses} : (${cycle261View>IsReversed} ? ${i18n>cycle261IsReversed} : '') }" state="{= ${cycle261View>IsReversed} ? 'Warning' : 'None' }" />
                                 <Text text="{cycle261View>CreatedByUser}" />
+                                <Button id="cycle261Reverse" icon="sap-icon://undo" text="{i18n>cycle261Reverse}" type="Transparent" press=".onReverse"
+                                    visible="{= ${cycle261View>MovementType} === '261' &amp;&amp; !${cycle261View>IsReversed} }"
+                                    enabled="{= !${cycle261View>/busy} }" />
                             </cells>
                         </ColumnListItem>
                     </items>

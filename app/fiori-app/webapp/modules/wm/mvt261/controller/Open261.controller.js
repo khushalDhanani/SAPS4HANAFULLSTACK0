@@ -84,8 +84,11 @@ sap.ui.define([
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
             ODataClient.get(sUrl).then(function (oResult) {
+                var that = this;
                 var aItems = (oResult.Items || []).map(function (item) {
-                    item.StatusText = item.ScanPossible ? "Open" : "Blocked";
+                    item.StatusText = item.ScanPossible
+                        ? (item.PartialCoverage ? that.getText("open261Status_Partial") : that.getText("open261Status_Open"))
+                        : that.getText("open261Status_Blocked");
                     return item;
                 });
                 this._aAllItems = aItems;

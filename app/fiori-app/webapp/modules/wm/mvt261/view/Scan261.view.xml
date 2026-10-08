@@ -11,6 +11,7 @@
                 <MessageStrip id="scan261Error" visible="{= !!${scan261View>/error} }" text="{scan261View>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
                 <MessageStrip id="scan261Blocked" visible="{= !!${scan261View>/ctx/Blocked} }" text="{i18n>scan261BlockedPrefix} {scan261View>/ctx/BlockReason}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
                 <MessageStrip id="scan261NoSu" visible="{scan261View>/noSuStock}" text="{i18n>scan261NoSuStock}" type="Warning" showIcon="true" class="sapUiSmallMarginBottom" />
+                <MessageStrip id="scan261Backflush" visible="{= ${scan261View>/ctx/Backflush} === true }" text="{i18n>scan261Backflush}" type="Warning" showIcon="true" class="sapUiSmallMarginBottom" />
 
                 <ObjectHeader
                     id="scan261Header"
@@ -98,9 +99,19 @@
                     </items>
                 </Table>
 
+                <MessageStrip id="scan261NotReleased" visible="{= !!${scan261View>/ctx} &amp;&amp; !${scan261View>/ctx/OrderReleased} }" text="{i18n>scan261OrderNotReleased}" type="Information" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <MessageStrip id="scan261ProdInfo" visible="{= !!${scan261View>/ctx} &amp;&amp; ${scan261View>/ctx/OrderReleased} }" text="{= ${i18n>scan261ProdStockInfo} + (${scan261View>/ctx/Batch} ? ' ' + ${i18n>scan261ProdStockBatch} + ' ' + ${scan261View>/ctx/Batch} : '') }" type="Information" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <MessageStrip id="scan261SupplyArea" visible="{= ${scan261View>/ctx/SupplyAreaStock} > 0 }" text="{parts: ['i18n>scan261SupplyAreaStock', 'scan261View>/ctx/SupplyAreaStock', 'scan261View>/ctx/Unit', 'scan261View>/ctx/SupplyAreaStorageLocation', 'scan261View>/ctx/StorageLocation'], formatter: '.formatMessage'}" type="Warning" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <MessageStrip id="scan261Partial" visible="{= ${scan261View>/ctx/PartialCoverage} === true }" text="{parts: ['i18n>scan261PartialCoverage', 'scan261View>/ctx/IssuableQuantity', 'scan261View>/ctx/Unit', 'scan261View>/ctx/OpenQuantity'], formatter: '.formatMessage'}" type="Warning" showIcon="true" class="sapUiSmallMarginTop" />
+
                 <MessageStrip id="scan261NoUnitStock" visible="{= ${scan261View>/ctx/NoUnitQuantCount} > 0 }" text="{i18n>scan261NoUnitStockPrefix} {scan261View>/ctx/NoUnitQuantCount} / {scan261View>/ctx/NoUnitQuantity} {scan261View>/ctx/Unit}" type="Information" showIcon="true" class="sapUiSmallMarginTop" />
 
-                <Table id="scan261Units" items="{scan261View>/units}" noDataText="{i18n>scan261NoUnits}" headerText="{i18n>scan261UnitsTitle}" growing="true" growingThreshold="50" class="sapUiSmallMarginTop">
+                <MessageStrip id="scan261Advisory" visible="{= !!${scan261View>/ctx} &amp;&amp; !${scan261View>/ctx/Blocked} }" text="{i18n>scan261Advisory}" type="Information" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table id="scan261Units" items="{scan261View>/units}" noDataText="{i18n>scan261NoProdStock}" headerText="{i18n>scan261UnitsTitle} ({scan261View>/ctx/OpenQuantity} {scan261View>/ctx/Unit})" growing="true" growingThreshold="50" class="sapUiSmallMarginTop">
                     <columns>
                         <Column><Text text="{i18n>scan261Fifo}" /></Column>
                         <Column><Text text="{i18n>cycle261StorageUnit}" /></Column>

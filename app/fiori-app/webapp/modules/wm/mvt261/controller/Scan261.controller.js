@@ -4,8 +4,9 @@ sap.ui.define([
     "saps4hana/fiori/service/ODataClient",
     "saps4hana/fiori/service/BarcodeScanService",
     "saps4hana/fiori/modules/wm/mvt261/model/ScanSession",
-    "sap/m/MessageBox"
-], function (BaseController, JSONModel, ODataClient, BarcodeScanService, ScanSession, MessageBox) {
+    "sap/m/MessageBox",
+    "sap/m/MessageToast"
+], function (BaseController, JSONModel, ODataClient, BarcodeScanService, ScanSession, MessageBox, MessageToast) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/mvt261";
@@ -53,12 +54,22 @@ sap.ui.define([
             return sReason ? this.getText("scan261Reject_" + sReason, [sValue1, sValue2]) : "";
         },
 
+        formatMessage: function (sKey, v1, v2, v3, v4) {
+            return sKey ? this.getText(sKey, [v1, v2, v3, v4]) : "";
+        },
+
         _onRoute: function (oEvent) {
-            var oArgs = oEvent.getParameter("arguments");
+            this._args = oEvent.getParameter("arguments");
+            this._load();
+        },
+
+        /** (Re)loads the scan context from SAP and resets the scanned rows. Used on route match and
+         *  after a successful post, so the open quantity and stock are always the live SAP values. */
+        _load: function () {
             var oModel = this.getModel("scan261View");
-            this._args = oArgs;
+            var oArgs = this._args;
             oModel.setData({ busy: true, error: "", ctx: null, rows: [], units: [], scan: "", state: "Loaded", total: 0, drums: 0, deviations: 0, percent: 0, noSuStock: false, message: "", messageType: "Information" });
-            ODataClient.get(BASE_PATH + "/scanContext(reservation=" + q(oArgs.reservation) + ",item=" + q(oArgs.item) + ")").then(function (oCtx) {
+            return ODataClient.get(BASE_PATH + "/scanContext(reservation=" + q(oArgs.reservation) + ",item=" + q(oArgs.item) + ")").then(function (oCtx) {
                 oModel.setProperty("/ctx", oCtx);
                 oModel.setProperty("/noSuStock", oCtx.QuantCount > 0 && oCtx.StorageUnitQuantCount === 0);
                 this._refresh();
@@ -177,45 +188,81 @@ sap.ui.define([
                 return;
             }
 
-            var sBatch = "";
+            // F13 guard: the post sends one batch for the whole quantity, so a scan spanning more than
+            // one batch would mis-post. Block it and tell the operator to post one batch at a time.
+            var aBatches = [];
             for (var i = 0; i < aRows.length; i++) {
-                if (aRows[i].Accepted && aRows[i].Batch) {
-                    sBatch = aRows[i].Batch;
-                    break;
+                if (aRows[i].Accepted) {
+                    var sB = aRows[i].Batch || "";
+                    if (aBatches.indexOf(sB) < 0) { aBatches.push(sB); }
                 }
             }
+            if (aBatches.length > 1) {
+                MessageBox.error(this.getText("scan261MultiBatch"));
+                return;
+            }
+            var sBatch = aBatches[0] || "";
 
-            var sConfirmMsg = this.getText("scan261PostConfirm", [nTotal, oCtx.Unit, oCtx.Reservation, oCtx.ReservationItem]);
-            MessageBox.confirm(sConfirmMsg, {
+            // Confirmation first; the actual post runs only after the operator confirms.
+            MessageBox.confirm(this.getText("scan261PostConfirm", [nTotal, oCtx.Unit, oCtx.Reservation, oCtx.ReservationItem]), {
                 title: this.getText("scan261PostTitle"),
                 actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
                 emphasizedAction: MessageBox.Action.OK,
                 onClose: function (sAction) {
-                    if (sAction !== MessageBox.Action.OK) { return; }
-                    oModel.setProperty("/busy", true);
-                    ODataClient.post(BASE_PATH + "/postGoodsIssue", {
-                        reservation: String(oCtx.Reservation),
-                        item: String(oCtx.ReservationItem),
-                        quantity: nTotal,
-                        batch: sBatch || undefined
-                    }).then(function (oRes) {
-                        var fnDone = function () {
-                            this.getRouter().navTo("wmOpen261");
-                        }.bind(this);
-                        if (oRes && (oRes.Pending || (!oRes.MaterialDocument && oRes.DeliveryNumber))) {
-                            // WM-managed location: SAP created an outbound delivery; PGI still has to be posted.
-                            MessageBox.warning(oRes.Message || this.getText("scan261PostDelivery", [oRes.DeliveryNumber]), { onClose: fnDone });
-                            return;
-                        }
-                        var sDoc = oRes.MaterialDocument + (oRes.MaterialDocumentYear ? "/" + oRes.MaterialDocumentYear : "");
-                        MessageBox.success(this.getText("scan261PostSuccess", [sDoc]), { onClose: fnDone });
-                    }.bind(this)).catch(function (oError) {
-                        MessageBox.error((oError && oError.message) || this.getText("scan261PostFailed"));
-                    }.bind(this)).then(function () {
-                        oModel.setProperty("/busy", false);
-                    });
+                    if (sAction === MessageBox.Action.OK) { this._doPost(nTotal, sBatch); }
                 }.bind(this)
             });
+        },
+
+        /** Posts the goods issue. The scan field and Post button are disabled via the busy flag while
+         *  the request is in flight; on success the context is reloaded so the next partial post is live. */
+        _doPost: function (nTotal, sBatch) {
+            var oModel = this.getModel("scan261View");
+            var oCtx = oModel.getProperty("/ctx");
+            oModel.setProperty("/busy", true);
+            ODataClient.post(BASE_PATH + "/postGoodsIssue", {
+                reservation: String(oCtx.Reservation),
+                item: String(oCtx.ReservationItem),
+                quantity: nTotal,
+                batch: sBatch || undefined
+            }).then(function (oRes) {
+                if (oRes && (oRes.Pending || (!oRes.MaterialDocument && oRes.DeliveryNumber))) {
+                    // WM-managed location: SAP created an outbound delivery; PGI still has to be posted.
+                    MessageBox.warning(oRes.Message || this.getText("scan261PostDelivery", [oRes.DeliveryNumber]), { onClose: function () { this._load(); }.bind(this) });
+                    return;
+                }
+                var sDoc = oRes.MaterialDocument + (oRes.MaterialDocumentYear ? "/" + oRes.MaterialDocumentYear : "");
+                MessageToast.show(this.getText("scan261PostSuccess", [sDoc]));
+                this._load();
+            }.bind(this)).catch(function (oError) {
+                this._handlePostError(oError);
+            }.bind(this)).then(function () {
+                oModel.setProperty("/busy", false);
+            });
+        },
+
+        /** Maps a failed post to the right dialog: 409 in-progress (info + refresh), 422 actionable
+         *  error, and an unknown outcome (network / timeout) that must NOT be blindly retried. */
+        _handlePostError: function (oError) {
+            var iStatus = oError && oError.status;
+            if (!iStatus || iStatus === 502 || iStatus === 504) {
+                // Unknown outcome: no HTTP status (browser/network drop) or a gateway/timeout status
+                // (502/504 = the CAP->SAP call timed out). The post may or may not have reached SAP -
+                // do not offer a blind retry; tell the operator to check the document list.
+                MessageBox.warning(this.getText("scan261PostUnknown"));
+                return;
+            }
+            if (iStatus === 409) {
+                var sRefresh = this.getText("scan261Refresh");
+                MessageBox.information(this.getText("scan261PostInProgress"), {
+                    actions: [sRefresh, MessageBox.Action.CLOSE],
+                    emphasizedAction: sRefresh,
+                    onClose: function (sAction) { if (sAction === sRefresh) { this._load(); } }.bind(this)
+                });
+                return;
+            }
+            // 422 (and any other server error): show the actionable reason the service returned.
+            MessageBox.error((oError && oError.message) || this.getText("scan261PostFailed"));
         }
     });
 });

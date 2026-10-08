@@ -90,7 +90,7 @@
                                 <Column><Text text="{i18n>mvt261Order}" /></Column>
                                 <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261OrderStatus}" /></Column>
                                 <Column><Text text="{i18n>mvt261Material}" /></Column>
-                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261PlantSloc}" /></Column>
+                                <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261PlantSlocWh}" /></Column>
                                 <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>open261RequirementDate}" /></Column>
                                 <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Required}" /></Column>
                                 <Column minScreenWidth="Desktop" demandPopin="true" hAlign="End"><Text text="{i18n>open261Withdrawn}" /></Column>
@@ -105,7 +105,7 @@
                                         <ObjectIdentifier title="{open261View>ProductionOrder}" text="{open261View>OrderDescription}" />
                                         <Text text="{open261View>OrderStatus}" />
                                         <ObjectIdentifier title="{open261View>Material}" text="{open261View>MaterialName}" />
-                                        <Text text="{open261View>Plant} / {open261View>StorageLocation}" />
+                                        <Text text="{open261View>Plant} / {open261View>StorageLocation} / {= ${open261View>Warehouse} || '-' }" />
                                         <Text text="{open261View>RequirementDate}" />
                                         <ObjectNumber number="{open261View>RequiredQuantity}" unit="{open261View>Unit}" emphasized="false" />
                                         <ObjectNumber number="{open261View>WithdrawnQuantity}" unit="{open261View>Unit}" emphasized="false" />
@@ -113,13 +113,18 @@
                                         <ObjectNumber number="{open261View>ReadyStorageUnits}" unit="{open261View>ReadyQuantity} {open261View>Unit}" state="{= ${open261View>ScanPossible} ? 'Success' : 'None' }" emphasized="false" />
                                         <VBox>
                                             <ObjectStatus
-                                                text="{= ${open261View>ScanPossible} ? ${i18n>open261Status_Open} : ${i18n>open261Status_Blocked} }"
-                                                state="{= ${open261View>ScanPossible} ? 'Success' : 'Error' }"
-                                                icon="{= ${open261View>ScanPossible} ? 'sap-icon://sys-enter-2' : 'sap-icon://error' }" />
+                                                text="{= ${open261View>ScanPossible} ? (${open261View>PartialCoverage} ? ${i18n>open261Status_Partial} : ${i18n>open261Status_Open}) : ${i18n>open261Status_Blocked} }"
+                                                state="{= ${open261View>ScanPossible} ? (${open261View>PartialCoverage} ? 'Warning' : 'Success') : 'Error' }"
+                                                icon="{= ${open261View>ScanPossible} ? (${open261View>PartialCoverage} ? 'sap-icon://alert' : 'sap-icon://sys-enter-2') : 'sap-icon://error' }" />
                                             <Text
                                                 text="{open261View>BlockReason}"
                                                 visible="{= !${open261View>ScanPossible} &amp;&amp; !!${open261View>BlockReason} }"
                                                 class="sapUiTinyText" />
+                                            <ObjectStatus
+                                                text="{i18n>open261Backflush}"
+                                                state="Warning"
+                                                icon="sap-icon://warning"
+                                                visible="{= ${open261View>Backflush} === true }" />
                                         </VBox>
                                     </cells>
                                 </ColumnListItem>
