@@ -2,7 +2,9 @@ jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter'
     const mockAdapter = {
         createSalesInquiry: jest.fn(),
         getSalesMetrics: jest.fn(),
-        getInquiryMetrics: jest.fn((opts) => mockAdapter.getSalesMetrics({ ...opts, entity: 'inquiry' }))
+        getInquiryMetrics: jest.fn((opts) => mockAdapter.getSalesMetrics({ ...opts, entity: 'inquiry' })),
+        getCustomerDefaults: jest.fn(),
+        getInquiryCreationCapabilities: jest.fn()
     };
     return mockAdapter;
 });
@@ -130,6 +132,49 @@ describe('Unit: createSalesInquiry handler', () => {
         expect(req.error).toHaveBeenCalledWith(502, message);
         expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('1000529'));
         expect(req.error).toHaveBeenCalledWith(502, expect.stringContaining('Do not retry'));
+    });
+
+    describe('getCustomerDefaults', () => {
+        test('delegates to adapter and returns defaults', async () => {
+            salesInquiryAdapter.getCustomerDefaults.mockResolvedValue({ Customer: '10135', Currency: 'INR' });
+            const req = { data: { Customer: '10135', SalesOrganization: '1000', DistributionChannel: '10', Division: '52' }, error: jest.fn() };
+            const result = await getAllHandlers().getCustomerDefaults(req);
+            expect(result).toEqual({ Customer: '10135', Currency: 'INR' });
+            expect(req.error).not.toHaveBeenCalled();
+        });
+
+        test('propagates adapter failure via req.error (502) instead of throwing', async () => {
+            const err = new Error('C_SoldToValueHelp unavailable'); err.status = 502;
+            salesInquiryAdapter.getCustomerDefaults.mockRejectedValue(err);
+            const req = { data: { Customer: '10135' }, error: jest.fn() };
+            await getAllHandlers().getCustomerDefaults(req);
+            expect(req.error).toHaveBeenCalledWith(502, 'C_SoldToValueHelp unavailable');
+        });
+
+        test('defaults to HTTP 502 when the adapter error has no status', async () => {
+            salesInquiryAdapter.getCustomerDefaults.mockRejectedValue(new Error('RFC unavailable'));
+            const req = { data: {}, error: jest.fn() };
+            await getAllHandlers().getCustomerDefaults(req);
+            expect(req.error).toHaveBeenCalledWith(502, 'RFC unavailable');
+        });
+    });
+
+    describe('getInquiryCreationCapabilities', () => {
+        test('delegates to adapter and returns capabilities', async () => {
+            const caps = { ContactPerson: true, Plant: true, service: 'LORD_ODATA_ORDER_SRV' };
+            salesInquiryAdapter.getInquiryCreationCapabilities.mockResolvedValue(caps);
+            const req = { error: jest.fn() };
+            const result = await getAllHandlers().getInquiryCreationCapabilities(req);
+            expect(result).toEqual(caps);
+            expect(req.error).not.toHaveBeenCalled();
+        });
+
+        test('propagates adapter failure via req.error (502) instead of throwing', async () => {
+            salesInquiryAdapter.getInquiryCreationCapabilities.mockRejectedValue(new Error('metadata read failed'));
+            const req = { error: jest.fn() };
+            await getAllHandlers().getInquiryCreationCapabilities(req);
+            expect(req.error).toHaveBeenCalledWith(502, 'metadata read failed');
+        });
     });
 
     describe('getSalesInquiryMetrics', () => {

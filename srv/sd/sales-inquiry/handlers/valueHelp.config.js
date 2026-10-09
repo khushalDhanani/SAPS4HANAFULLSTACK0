@@ -15,7 +15,8 @@ const SD_VALUE_HELP_ENTITIES = [
     'CustomerVH',
     'MaterialVH',
     'CurrencyVH',
-    'PlantVH'
+    'PlantVH',
+    'ContactPersonVH'
 ];
 
 const sdValueHelpConfig = [
@@ -58,6 +59,14 @@ const sdValueHelpConfig = [
         read: (query) => purchaseOrderAdapter.readMaintData(query),
         entityDeduplicateBy: {
             PlantVH: 'Plant'
+        }
+    },
+    {
+        entities: ['ContactPersonVH'],
+        read: (query) => salesInquiryAdapter.getContactPersons(query),
+        filterInMemory: true,
+        entityDeduplicateBy: {
+            ContactPersonVH: 'ContactPerson'
         }
     }
 ];

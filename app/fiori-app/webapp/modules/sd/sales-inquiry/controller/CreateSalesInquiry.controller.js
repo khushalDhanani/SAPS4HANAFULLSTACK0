@@ -56,6 +56,11 @@ sap.ui.define([
                     SalesInquiryModel.applyCapabilities(oModel, that._oCapabilities);
                 }
                 return that._oCapabilities;
+            }).catch(function (err) {
+                // Capabilities could not be determined (e.g. SAP/RFC unavailable): keep the safe
+                // default (fields stay disabled) instead of throwing an unhandled rejection.
+                console.warn("[CreateSalesInquiry] Error loading creation capabilities:", err);
+                return that._oCapabilities || null;
             });
         },
 
@@ -320,6 +325,16 @@ sap.ui.define([
             SalesInquiryModel.updateStatus(oModel);
         },
 
+        onContactPersonSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oModel = this.getView().getModel("newInquiry");
+            oModel.setProperty("/header/ContactPerson", sKey);
+            SalesInquiryModel.validateSingleField(oModel, "ContactPerson");
+            SalesInquiryModel.updateStatus(oModel);
+        },
+
         onAddItem: function () {
             var oModel = this.getView().getModel("newInquiry");
             SalesInquiryModel.addItem(oModel);
@@ -558,6 +573,9 @@ sap.ui.define([
                         actions: ["Display Inquiry " + sPartialInquiryId, "Close"],
                         emphasizedAction: "Display Inquiry " + sPartialInquiryId,
                         onClose: function (sAction) {
+                            // The inquiry already exists in SAP: clear the form so the identical
+                            // payload cannot be submitted again and create a duplicate.
+                            that._resetModel(true);
                             if (sAction && sAction.indexOf("Display Inquiry") === 0) {
                                 that.getOwnerComponent().getRouter().navTo("salesInquiryDetail", {
                                     SalesInquiry: sPartialInquiryId
@@ -673,6 +691,11 @@ sap.ui.define([
                 if (sChannel) {
                     aContextFilters.push(new Filter("DistributionChannel", FilterOperator.EQ, sChannel));
                 }
+            } else if (sId.indexOf("inContactPerson") !== -1) {
+                var sCustomerCp = oModel.getProperty("/header/SoldToParty");
+                if (sCustomerCp) {
+                    aContextFilters.push(new Filter("Customer", FilterOperator.EQ, sCustomerCp));
+                }
             }
 
             ValueHelpService.applySuggestionFilter(oInput, sValue, aContextFilters);
@@ -713,6 +736,11 @@ sap.ui.define([
                 }
                 if (sDivCust) {
                     aInitialFilters.push(new Filter("Division", FilterOperator.EQ, sDivCust));
+                }
+            } else if (sId.indexOf("inContactPerson") !== -1) {
+                var sCustCp = oModel.getProperty("/header/SoldToParty");
+                if (sCustCp) {
+                    aInitialFilters.push(new Filter("Customer", FilterOperator.EQ, sCustCp));
                 }
             }
 
@@ -785,6 +813,10 @@ sap.ui.define([
                     that.onHeaderFieldChange();
                 } else if (sId.indexOf("inCurrency") !== -1) {
                     that.onCurrencyChange();
+                } else if (sId.indexOf("inContactPerson") !== -1) {
+                    oModel.setProperty("/header/ContactPerson", sKey);
+                    SalesInquiryModel.validateSingleField(oModel, "ContactPerson");
+                    SalesInquiryModel.updateStatus(oModel);
                 }
             }, aInitialFilters);
         },

@@ -18,6 +18,7 @@ const SO_VALUE_HELP_ENTITIES = [
     'CurrencyVH',
     'PlantVH',
     'PaymentTermsVH',
+    'IncotermsClassificationVH',
     'ContactPersonVH'
 ];
 
@@ -57,10 +58,11 @@ const soValueHelpConfig = [
         read: (query) => purchaseOrderAdapter.readFsData(query)
     },
     {
-        entities: ['PlantVH'],
+        entities: ['PlantVH', 'IncotermsClassificationVH'],
         read: (query) => purchaseOrderAdapter.readMaintData(query),
         entityDeduplicateBy: {
-            PlantVH: 'Plant'
+            PlantVH: 'Plant',
+            IncotermsClassificationVH: 'IncotermsClassification'
         }
     },
     {
