@@ -4,6 +4,7 @@ const LOG = require('../logger')('handling-unit-adapter');
 const { S4HttpClient } = require('../S4HttpClient');
 const { RfcClient } = require('../RfcClient');
 const { formatDateToYMD } = require('../../../common/dateUtils');
+const TtlCache = require('../../../common/TtlCache');
 
 /**
  * Handling Unit cockpit. Reads are OData V2 GETs — proven live 2026-10-06 against client 220:
@@ -29,7 +30,7 @@ const MONITOR = '/sap/opu/odata/sap/C_HANDLINGUNITMONITOR_CDS/HandlingUnit';
 const ITEM_COMBINED = '/sap/opu/odata/sap/C_HANDLINGUNITMONITOR_CDS/I_HandlingUnitItemCombined';
 const DETAIL = '/sap/opu/odata/sap/API_HANDLING_UNIT/HandlingUnit';
 const HIERNODE = '/sap/opu/odata/sap/UI_HANDLINGUNITHIERNODE/C_HandlingUnitHierarchyNode';
-const PAGE = 200;
+const PAGE = 1000;
 const MAX_LIST = 1000;
 // Batched label join: HU ids per combined-item $filter (URL-length safe), OR terms per RFC_READ_TABLE.
 const LABEL_HU_CHUNK = 50;
@@ -133,6 +134,9 @@ class HandlingUnitAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.rfc = options.rfc || new RfcClient();
+    this.vhCache = new TtlCache({ defaultTtlMs: 10 * 60 * 1000, maxEntries: 20 });
+    this.kpiCache = new TtlCache({ defaultTtlMs: 30 * 1000, maxEntries: 10 });
+    this.huPlantSlocCache = new TtlCache({ defaultTtlMs: 10 * 60 * 1000, maxEntries: 5000 });
   }
 
   async _results(path, params, context) {
@@ -188,7 +192,8 @@ class HandlingUnitAdapter {
     const rows = [];
     let sapCount = 0;
     do {
-      const d = await this._results(MONITOR, { ...params, $skip: rows.length }, 'Read handling units');
+      const top = Math.min(PAGE, MAX_LIST - rows.length);
+      const d = await this._results(MONITOR, { ...params, $top: top, $skip: rows.length }, 'Read handling units');
       sapCount = Number(d.__count || 0);
       if (!(d.results || []).length) break;
       rows.push(...d.results);
@@ -240,28 +245,57 @@ class HandlingUnitAdapter {
 
   /**
    * First item's Plant/StorageLocation per HU external id, from I_HandlingUnitItemCombined (OR-batched, first
-   * = lowest HandlingUnitItem). Used to fill list rows whose monitor header has no Plant/SLoc. Read failures are
-   * swallowed (the list still renders, just with "-" for those rows). @returns {Promise<Object<string,{Plant,StorageLocation}>>}
+   * = lowest HandlingUnitItem). Cached and chunked across concurrent workers for sub-second enrichment.
+   * Read failures are swallowed (the list still renders, just with "-" for those rows).
+   * @returns {Promise<Object<string,{Plant,StorageLocation}>>}
    */
   async _firstItemPlantSloc(ids) {
-    const grouped = {};
-    for (let i = 0; i < ids.length; i += LABEL_HU_CHUNK) {
-      const slice = ids.slice(i, i + LABEL_HU_CHUNK);
-      const filter = '(' + slice.map((id) => `HandlingUnitExternalID eq '${id}'`).join(' or ') + ')';
-      let d;
-      try {
-        d = await this._results(ITEM_COMBINED, { $filter: filter, $select: LIST_ITEM_PLANT_SELECT, $top: 5000, $format: 'json' }, 'Read handling unit items for plant/sloc');
-      } catch (_e) { continue; } // best-effort enrichment; keep the list usable on a per-chunk failure
-      for (const r of d.results || []) {
-        const h = strip(r.HandlingUnitExternalID);
-        (grouped[h] = grouped[h] || []).push(r);
+    const out = {};
+    const missing = [];
+    for (const rawId of ids) {
+      const h = strip(rawId);
+      const cached = this.huPlantSlocCache.get(h);
+      if (cached) {
+        out[h] = cached;
+      } else {
+        missing.push(h);
       }
     }
-    const out = {};
+    if (!missing.length) return out;
+
+    const grouped = {};
+    const slices = [];
+    for (let i = 0; i < missing.length; i += LABEL_HU_CHUNK) {
+      slices.push(missing.slice(i, i + LABEL_HU_CHUNK));
+    }
+
+    const fetchChunk = async (slice) => {
+      const filter = '(' + slice.map((id) => `HandlingUnitExternalID eq '${id}'`).join(' or ') + ')';
+      try {
+        const d = await this._results(ITEM_COMBINED, { $filter: filter, $select: LIST_ITEM_PLANT_SELECT, $top: 5000, $format: 'json' }, 'Read handling unit items for plant/sloc');
+        for (const r of d.results || []) {
+          const h = strip(r.HandlingUnitExternalID);
+          (grouped[h] = grouped[h] || []).push(r);
+        }
+      } catch (_e) { /* best-effort enrichment; keep the list usable on a per-chunk failure */ }
+    };
+
+    const concurrency = 6;
+    let idx = 0;
+    const workers = Array.from({ length: Math.min(concurrency, slices.length) }, async () => {
+      while (idx < slices.length) {
+        const slice = slices[idx++];
+        await fetchChunk(slice);
+      }
+    });
+    await Promise.all(workers);
+
     for (const h of Object.keys(grouped)) {
       grouped[h].sort((a, b) => strip(a.HandlingUnitItem).localeCompare(strip(b.HandlingUnitItem)));
       const first = grouped[h][0];
-      out[h] = { Plant: first.Plant || '', StorageLocation: first.StorageLocation || '' };
+      const val = { Plant: first.Plant || '', StorageLocation: first.StorageLocation || '' };
+      out[h] = val;
+      this.huPlantSlocCache.set(h, val);
     }
     return out;
   }
@@ -417,27 +451,30 @@ class HandlingUnitAdapter {
     return { TotalCount: Nodes.length, Nodes };
   }
 
-  /** Filter-bar value help: distinct key/text pairs from the monitor's value-help set for `kind`. Read-only. */
+  /** Filter-bar value help: distinct key/text pairs from the monitor's value-help set for `kind`. Read-only. Cached in-memory. */
   async valueHelp(input = {}) {
     const kind = clean(input.kind, 'Value help kind', RE.vhKind).toLowerCase();
-    const vh = VALUE_HELP[kind];
-    if (!vh) throw httpError(400, `Unknown value help '${input.kind}'`);
-    const d = await this._results(`${VH_BASE}/${vh.set}`, {
-      $select: `${vh.key},${vh.text}`,
-      $top: VH_TOP,
-      $format: 'json'
-    }, `Read ${kind} value help`);
-    // Keys go straight into a $filter eq, so keep SAP's stored format (e.g. plant '0001') — do not strip.
-    // Dedupe by key: some sets (storage location) repeat a code across plants.
-    const seen = new Set();
-    let Items = (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' }))
-      .filter((x) => x.key && !seen.has(x.key) && seen.add(x.key));
-    // Plant authorization: the plant value help only offers the user's own plants (other VHs are generic master data).
-    if (kind === 'plant' && Array.isArray(input.allowedPlants)) {
-      const set = new Set(input.allowedPlants);
-      Items = Items.filter((x) => set.has(String(x.key).trim().toUpperCase()));
-    }
-    return { Items };
+    const cacheKey = `${kind}_${JSON.stringify(input.allowedPlants || null)}`;
+    return this.vhCache.getOrSet(cacheKey, async () => {
+      const vh = VALUE_HELP[kind];
+      if (!vh) throw httpError(400, `Unknown value help '${input.kind}'`);
+      const d = await this._results(`${VH_BASE}/${vh.set}`, {
+        $select: `${vh.key},${vh.text}`,
+        $top: VH_TOP,
+        $format: 'json'
+      }, `Read ${kind} value help`);
+      // Keys go straight into a $filter eq, so keep SAP's stored format (e.g. plant '0001') — do not strip.
+      // Dedupe by key: some sets (storage location) repeat a code across plants.
+      const seen = new Set();
+      let Items = (d.results || []).map((r) => ({ key: r[vh.key] || '', text: r[vh.text] || '' }))
+        .filter((x) => x.key && !seen.has(x.key) && seen.add(x.key));
+      // Plant authorization: the plant value help only offers the user's own plants (other VHs are generic master data).
+      if (kind === 'plant' && Array.isArray(input.allowedPlants)) {
+        const set = new Set(input.allowedPlants);
+        Items = Items.filter((x) => set.has(String(x.key).trim().toUpperCase()));
+      }
+      return { Items };
+    });
   }
 
   /** HandlingUnit/$count for a $filter (or all when none). Returns a number. */
@@ -453,19 +490,29 @@ class HandlingUnitAdapter {
     }
   }
 
-  /** Status-distribution KPIs for the cards above the filter bar: total + one count per status code. Read-only. */
+  /** Status-distribution KPIs for the cards above the filter bar: total + one count per status code. Read-only. Parallelized and cached. */
   async statusKpis(input = {}) {
-    const { Items: statuses } = await this.valueHelp({ kind: 'status' });
-    const sPlant = plantClause(input.allowedPlants); // '' when unrestricted; scopes counts to the user's plants
-    const withPlant = (f) => [sPlant, f].filter(Boolean).join(' and ');
-    const Total = await this._count(withPlant(''));
-    const Items = [];
-    for (const s of statuses) {
-      const code = clean(s.key, 'Status', RE.status);
-      if (!code) continue;
-      Items.push({ code, name: s.text, count: await this._count(withPlant(`HandlingUnitProcessStatus eq '${code}'`)) });
-    }
-    return { Total, Items };
+    const cacheKey = `statusKpis_${JSON.stringify(input.allowedPlants || null)}`;
+    return this.kpiCache.getOrSet(cacheKey, async () => {
+      const { Items: statuses } = await this.valueHelp({ kind: 'status', allowedPlants: input.allowedPlants });
+      const sPlant = plantClause(input.allowedPlants); // '' when unrestricted; scopes counts to the user's plants
+      const withPlant = (f) => [sPlant, f].filter(Boolean).join(' and ');
+      const [Total, ...counts] = await Promise.all([
+        this._count(withPlant('')),
+        ...statuses.map((s) => {
+          const code = clean(s.key, 'Status', RE.status);
+          return code ? this._count(withPlant(`HandlingUnitProcessStatus eq '${code}'`)) : Promise.resolve(0);
+        })
+      ]);
+      const Items = [];
+      for (let i = 0; i < statuses.length; i++) {
+        const s = statuses[i];
+        const code = clean(s.key, 'Status', RE.status);
+        if (!code) continue;
+        Items.push({ code, name: s.text, count: counts[i] || 0 });
+      }
+      return { Total, Items };
+    });
   }
 
   /**
@@ -666,6 +713,7 @@ class HandlingUnitAdapter {
     if (content) header.CONTENT = content;
     const r = await this._bapi('Create handling unit', (call) => call('BAPI_HU_CREATE', { HEADERPROPOSAL: header }));
     if (r.Deleted) throw httpError(502, 'Create handling unit: SAP committed but the handling unit could not be read back');
+    this.kpiCache.clear();
     return r;
   }
 
@@ -674,7 +722,9 @@ class HandlingUnitAdapter {
     const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
     await this._assertHuInScope(key, input.allowedPlants); // cannot pack into an HU outside the user's plants
     const item = { HU_ITEM_TYPE: '1', ...this._itemFields(input) };
-    return this._bapi('Pack handling unit item', (call) => call('BAPI_HU_PACK', { HUKEY: key, ITEMPROPOSAL: item }), key);
+    const res = await this._bapi('Pack handling unit item', (call) => call('BAPI_HU_PACK', { HUKEY: key, ITEMPROPOSAL: item }), key);
+    this.huPlantSlocCache.delete(strip(key));
+    return res;
   }
 
   /** Unpack one material item (by HU item number) from the handling unit. */
@@ -682,7 +732,9 @@ class HandlingUnitAdapter {
     const key = huKey(clean(input.handlingUnitExternalID, 'Handling unit', RE.hu, true));
     await this._assertHuInScope(key, input.allowedPlants); // cannot unpack from an HU outside the user's plants
     const item = { HU_ITEM_TYPE: '1', HU_ITEM_NUMBER: clean(input.item, 'Item', RE.item, true).padStart(6, '0'), ...this._itemFields(input) };
-    return this._bapi('Unpack handling unit item', (call) => call('BAPI_HU_UNPACK', { HUKEY: key, ITEMUNPACK: item }), key);
+    const res = await this._bapi('Unpack handling unit item', (call) => call('BAPI_HU_UNPACK', { HUKEY: key, ITEMUNPACK: item }), key);
+    this.huPlantSlocCache.delete(strip(key));
+    return res;
   }
 
   /** Delete a handling unit (SAP removes the VEKP row; packed items make SAP refuse). */
@@ -691,6 +743,8 @@ class HandlingUnitAdapter {
     await this._assertHuInScope(key, input.allowedPlants); // cannot delete an HU outside the user's plants
     const r = await this._bapi('Delete handling unit', (call) => call('BAPI_HU_DELETE', { HUKEY: key }), key);
     if (!r.Deleted) throw httpError(502, 'Delete handling unit: SAP did not delete the handling unit');
+    this.huPlantSlocCache.delete(strip(key));
+    this.kpiCache.clear();
     return r;
   }
 }

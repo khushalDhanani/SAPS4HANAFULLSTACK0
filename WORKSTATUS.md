@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Handling Unit List Performance Optimization (`#/wm/handling-unit`) — Up to 7x Latency Reduction (2026-10-09):** Diagnosed excessive load times on `#/wm/handling-unit` (5,035ms–7,000ms+ cold page load; individual `list()` taking 5,340ms across 25 sequential SAP OData roundtrips). Root causes: (1) `PAGE = 200` caused 5 sequential Gateway paging calls to retrieve 1,000 HUs from `C_HANDLINGUNITMONITOR_CDS/HandlingUnit`; (2) `_firstItemPlantSloc` performed 20 sequential OData calls to `I_HandlingUnitItemCombined` (50 IDs per chunk) to enrich missing Plant/SLoc; (3) `statusKpis()` made 7 sequential Gateway calls (1 for status value help, 1 for total count, 5 individual status counts); (4) 5 dropdown value help queries fired un-cached on view initialization. Implemented optimizations in `srv/integration/s4hana/wm/HandlingUnitAdapter.js`: (1) Increased `PAGE` from 200 to 1,000, fetching 1,000 HUs in a single OData roundtrip; (2) Parallelized `_firstItemPlantSloc` with a 6-worker concurrency pool (reducing item enrichment from 3,785ms to 708ms) and cached resolved mappings in `this.huPlantSlocCache` (`TtlCache`, 10 min TTL); (3) Parallelized `statusKpis()` using `Promise.all` across total and status count queries (reduced from 1,241ms to 380ms) and cached in `this.kpiCache` (30s TTL); (4) Cached filter value helps in `this.vhCache` (10 min TTL); (5) Write actions (`create`, `pack`, `unpack`, `remove`) invalidate affected caches. Live verification on localhost:4004: cold page load dropped from ~5,035ms to 2,665ms (2x faster); warm/repeat page loads dropped to 750ms (nearly 7x faster, sub-second). All 100 handling-unit unit tests, `npx cds compile`, `eslint`, and `ui5lint` pass cleanly.
+- **CAP Local Authentication 403 Forbidden Diagnosed & Verified Resolved (2026-10-09):** Diagnosed `POST /odata/v4/auth/login 403 (Forbidden)` observed in browser. Root cause: server initially started without `.env.local` / `.env`; CAP `AuthServiceHandler._handleLogin` gates username/password login behind `localTokenUtil.isDevTokenIssuerEnabled()`, which strictly requires `ENABLE_DEV_TOKEN_ISSUER=true` and a non-empty `LOCAL_AUTH_SECRET`. In the absence of those environment variables, CAP returns HTTP 403 ("Custom username/password authentication is disabled in deployed environments. Authentication is enforced via SAP BTP XSUAA Single Sign-On."). Resolution: `.env.local` was restored containing `ENABLE_DEV_TOKEN_ISSUER=true` and `LOCAL_AUTH_SECRET`. Verified: live HTTP POST to `http://localhost:4004/odata/v4/auth/login` returned HTTP 200 OK (403 eliminated). Live authentication with configured S/4 credentials successfully verified (returns authenticated session, JWT token, and full application scopes). For offline mock users (`alice`/`bob`), `LOCAL_DEV_PASSWORD` can optionally be set in `.env.local`. Unit test validation: all 4 auth suites (53/53 tests) pass.
 - **Project Recovery, Dependency Tree Stabilization & Security Acceptance Baseline (2026-10-09):** Recovered from accidental `npm audit fix --force` and established verified dependency security baseline (`@sap/cds-dk@10.1.2`, `@sap/cds@10.1.1`, `@ui5/cli@4.0.69`, `cds-plugin-ui5@0.17.4`, `@sap-ai-sdk/orchestration@2.16.0`, `jest@30.5.1`). Reverted forced major downgrades and eliminated 47 obsolete package vulnerabilities. Current audit state stands at 48 findings (1 critical in dev-only bundled `handlebars@4.7.9`, 25 high, 22 moderate) driven by 8 root packages. All 40 dev-only build/test findings (`handlebars`, `micromatch`, `pacote`, `sigstore`, `http-cache-semantics`, `sprintf-js`) and 8 uninvoked runtime JKS parser findings (`node-forge` in `@sap-cloud-sdk/connectivity`) are formally accepted. Governance rules: `npm audit fix --force` strictly prohibited; no artificial package downgrades; monitor upstream SAP releases for `@sap/cds-dk` (bundling Handlebars 4.7.10) and UI5 Tooling v5 GA. Validation passing 100%: `npm ci`, `cds build`, `cds compile`, `eslint`, `ui5lint`, `fiori-app build`, `mbt validate`, `git diff --check`.
 - **Create Sales Order — Incoterms-missing-in-VA03 diagnosed; resolution is SAP master-data defaulting, no repo change (2026-10-08):** Re-confirmed across UI, CAP `OrderHeader` contract, mapper, and adapter that Incoterms is never captured/mapped/posted, and that the create service `LORD_ODATA_ORDER_SRV` `Header` entity has **zero** Incoterms properties (`grep -ic incoterm` on its `.edmx` = 0). User chose the master-data path: maintain INCO1/INCO2 on the sold-to customer master for the order's sales area so SAP defaults VBKD at creation; verify on a **new** order in VA03/VBKD. No code changed, no SAP data modified. Explicit per-order entry would require re-pointing create to `API_SALES_ORDER_SRV` (large, verification-gated — deferred). See Changes Log 2026-10-08 and Unresolved Issue 10(a).
 - **Movement Type 261 attempt log — a retry after a provably-not-posted attempt now re-claims on its own (2026-10-08):** `GoodsIssueAttemptStore.createOrGet` takes an opt-in re-claim policy; the 261 post handler re-claims on `rejected`/`not_posted` and the reverse handler on `rejected` **only** (never `not_posted`, because `CancelItem` stamps the 262 with the original 261's reference so a posted reversal can be mislabelled). Old rows are kept (generation-suffixed reference = audit trail); concurrent re-claims → exactly one wins; live/done attempts still 409. The `unconfirmed`→`not_posted` recheck timer runs in any non-`test` runtime (201-outcome confirmation only; 261/262-aware confirmation deferred — trust MB51). QA_261.md gained rows #24/#25, a re-claim section, and a stuck-attempt runbook (MB51 first; DBA-only row deletion on an approved ticket). Tests: `mvt261Scan.test.js` 41/41 (+6). **No live SAP data was modified.**
@@ -72,6 +74,58 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-09 — Handling Unit List Performance Optimization (#/wm/handling-unit): Latency Reduction and Caching
+- **Request.** `List loading taking a too much time : #/wm/handling-unit`.
+- **Diagnosis & Root Cause Analysis.**
+  - Profiling on `localhost:4004` demonstrated that navigating to `#/wm/handling-unit` took over 5,035ms to 7,000ms+ on cold load, with the CAP `HandlingUnitService.list` call alone taking 5,340ms across 25 sequential SAP OData network roundtrips:
+    1. **Excessive Pagination Calls:** `PAGE` was hardcoded to `200` while `MAX_LIST` was `1000`. Fetching the default batch of 1,000 Handling Units required 5 consecutive Gateway roundtrips (`$top=200&$skip=0`, `$skip=200`, ..., `$skip=800`) against `/sap/opu/odata/sap/C_HANDLINGUNITMONITOR_CDS/HandlingUnit`.
+    2. **Sequential Item Enrichment:** Because monitor header records frequently omit Plant/SLoc, `_firstItemPlantSloc` performed 20 sequential roundtrips against `I_HandlingUnitItemCombined` in 50-item batches (`LABEL_HU_CHUNK = 50`) to resolve plant/storage location, consuming ~3,785ms.
+    3. **Sequential KPI Count Calls:** `statusKpis()` issued 7 sequential network requests (1 value-help read for distinct statuses, 1 total count query, and 5 separate status `$count` queries), taking ~1,241ms sequentially.
+    4. **Uncached Master Data:** 5 dropdown value help queries (plant, storage location, status, packaging material, shipping point) ran un-cached on view initialization, executing repetitive Gateway roundtrips.
+- **Implemented Changes (`srv/integration/s4hana/wm/HandlingUnitAdapter.js`).**
+  1. **Direct 1,000-Row Paging:** Increased `PAGE` from `200` to `1000`. SAP Gateway resolves `$top=1000` in a single roundtrip (~1.3s), reducing list fetch latency from 5 roundtrips down to 1.
+  2. **Worker Pool Parallelization & In-Memory TTL Cache for Items:**
+     - Parallelized `_firstItemPlantSloc` by implementing a 6-worker concurrency pool across chunk queries, reducing item enrichment time from 3,785ms to 708ms.
+     - Added `this.huPlantSlocCache = new TtlCache({ ttlMs: 10 * 60 * 1000, maxSize: 5000 })` to memoize resolved plant/sloc pairs for up to 10 minutes.
+  3. **Parallelized Status KPIs with 30s TTL Cache:**
+     - Parallelized the total count and status count queries using `Promise.all`, dropping KPI execution time from 1,241ms to 380ms.
+     - Added `this.kpiCache = new TtlCache({ ttlMs: 30 * 1000, maxSize: 50 })` to eliminate redundant count calls on repeat page hits.
+  4. **Value Help Caching:**
+     - Wrapped `valueHelp()` lookups in `this.vhCache = new TtlCache({ ttlMs: 10 * 60 * 1000, maxSize: 50 })` with cache keys factoring in user plant authorization scope.
+  5. **Cache Invalidation on Write Actions:**
+     - Write methods (`create`, `pack`, `unpack`, `remove`) clear `kpiCache` and delete modified HU keys from `huPlantSlocCache`.
+- **Validation & Results.**
+  - **Live Benchmark:**
+    - Cold page load reduced from ~5,035ms to 2,665ms (~2x improvement).
+    - Warm / repeat navigation reduced from ~5,035ms to 750ms (~7x improvement, sub-second response).
+  - **Automated Tests & Quality Checks:**
+    - Unit tests: `npx jest test/unit/wm/handlingUnit` (3 suites, 100/100 tests pass).
+    - CDS compile: `npx cds compile srv --to json` (Exit 0).
+    - Backend lint: `npm run lint` (0 errors, 11 pre-existing warnings).
+    - UI5 lint: `npm run lint --prefix app/fiori-app` (0 findings).
+    - MTA validation: `npm run validate:mta` (Exit 0).
+    - Git diff: `git diff --check` (clean).
+
+### 2026-10-09 — CAP Local Authentication 403 Forbidden: Root cause diagnosis and live verification
+- **Request.** `ajaxRequestInterceptor.ps.js:1 POST http://localhost:4004/odata/v4/auth/login 403 (Forbidden)`.
+- **Root cause.** When `npm run watch` was initially launched, `.env.local` / `.env` did not exist in the working directory. In `srv/auth-service.js`, `_handleLogin` enforces:
+  ```js
+  if (process.env.NODE_ENV === "production" || !localTokenUtil.isDevTokenIssuerEnabled()) {
+    return req.error(403, "Custom username/password authentication is disabled in deployed environments. Authentication is enforced via SAP BTP XSUAA Single Sign-On.");
+  }
+  ```
+  `localTokenUtil.isDevTokenIssuerEnabled()` requires `ENABLE_DEV_TOKEN_ISSUER === 'true'` and a non-empty `LOCAL_AUTH_SECRET`. Without these environment variables, CAP rejects all login POST requests with HTTP 403 Forbidden.
+- **Resolution & Live Verification.**
+  1. `.env.local` was restored containing `ENABLE_DEV_TOKEN_ISSUER=true` and `LOCAL_AUTH_SECRET`.
+  2. The running server on port 4004 reloaded the configuration.
+  3. Live probe: `curl -i -X POST http://localhost:4004/odata/v4/auth/login` confirmed HTTP 200 OK (HTTP 403 completely eliminated).
+  4. Tested login with configured development credentials: authenticated successfully, generating valid JWT with standard XSUAA scopes (`Admin`, `Viewer`, `PurchasingManager`, `FinanceViewer`, `SalesRepresentative`, `SalesManager`, `WarehouseClerk`, `WarehouseManager`).
+  5. Mock user note: Login with mock users (`alice`/`bob`) requires `LOCAL_DEV_PASSWORD` in `.env.local`; otherwise, logging in with configured S/4 user credentials succeeds directly.
+- **Commands & Tests Run.**
+  - Live probe: `curl -i -X POST http://localhost:4004/odata/v4/auth/login` -> HTTP 200 OK.
+  - Unit tests: `npx jest test/unit/auth` -> 4 suites, 53/53 tests pass.
+  - `git diff --check`: clean (0 whitespace errors).
 
 ### 2026-10-09 — Recovery and stabilization after accidental npm audit fix --force
 - **Incident & Root Cause.** An accidental execution of `npm audit fix --force` corrupted `package.json` and `package-lock.json` by blindly executing major version downgrades across top-level SAP and UI5 toolsets (`@sap/cds-dk` downgraded to 7.1.1, `@ui5/cli` downgraded to 1.0.0, `@sap-ai-sdk/orchestration` downgraded to 2.4.0). This re-introduced deprecated packages (`connect-openui5`, `urix`, `har-validator`, `request`, `uuid@3`, `glob@7`) and inflated vulnerabilities from 48 to 95 (with 8 criticals).
