@@ -13,13 +13,13 @@
  */
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local') });
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
-const hasSap = Boolean(process.env.S4_DESTINATION_URL && process.env.S4_USERNAME && process.env.S4_PASSWORD);
+const hasSap = Boolean(process.env.S4_DESTINATION_URL && process.env.S4_USERNAME && process.env.S4_PASSWORD && RfcClient.isAvailable());
 const liveDescribe = hasSap ? describe : describe.skip;
 
 liveDescribe('SAP RFC_READ_TABLE field-set contract (live, read-only)', () => {
   jest.setTimeout(60000);
-  const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
   const rfc = new RfcClient();
   // A document/TR number of all nines matches nothing; RSNUM of zeros would match every
   // non-reservation row, so it must not be used as a "no match" key.

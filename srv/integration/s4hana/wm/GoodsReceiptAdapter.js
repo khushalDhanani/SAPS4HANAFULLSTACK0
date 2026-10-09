@@ -70,6 +70,7 @@ class GoodsReceiptAdapter {
 
   static _isOutage(err) {
     if (!err) return false;
+    if (String(err.message || '').includes('node-rfc is not available')) return false;
     if (err.code === 'DESTINATION_NOT_CONFIGURED' || err.code === 'S4_DESTINATION_NOT_CONFIGURED') return true;
     const status = err.status || err.statusCode || err.response?.status;
     if (status && (status === 502 || status === 503 || status === 504 || status === 500 || status === 401 || status === 403)) {
@@ -552,7 +553,7 @@ class GoodsReceiptAdapter {
     let proposedQuantity = null;
 
     // --- TIER 0: Storage Unit / Handling Unit check (VEKP / VEPO) via RFC ---
-    if (this.rfc && typeof this.rfc.readTable === 'function') {
+    if (this.rfc && typeof this.rfc.readTable === 'function' && (!this.rfc.isAvailable || this.rfc.isAvailable())) {
       try {
         const sPaddedSU = (/^\d+$/.test(sCleanScan) && sCleanScan.length < 20) ? sCleanScan.padStart(20, '0') : sCleanScan;
         const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [

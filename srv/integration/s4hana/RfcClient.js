@@ -17,6 +17,25 @@ class RfcClient {
     this.loader = loader;
   }
 
+  /** Check if the native node-rfc module is available and can be loaded. */
+  isAvailable() {
+    try {
+      this.loader();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  static isAvailable() {
+    try {
+      require('node-rfc');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   connectionParams() {
     const missing = REQUIRED_ENV.filter((k) => !this.env[k]);
     if (missing.length) throw unavailable(`RFC connection not configured: set ${missing.join(', ')} in .env.local`);

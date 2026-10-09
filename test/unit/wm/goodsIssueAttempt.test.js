@@ -86,6 +86,14 @@ describe('Goods Issue 201 posting attempts', () => {
   });
 
   describe('re-check job', () => {
+    let delivSpy;
+    beforeEach(() => {
+      delivSpy = jest.spyOn(GoodsIssueAdapter, 'findDeliveryByReference').mockResolvedValue(null);
+    });
+    afterEach(() => {
+      if (delivSpy) delivSpy.mockRestore();
+    });
+
     const lookup = () => jest.spyOn(GoodsIssueAdapter, 'findPostedGoodsIssueByReference');
     const statusOf = async (ref) => (await attempts.getByReference(ref)).Status;
 

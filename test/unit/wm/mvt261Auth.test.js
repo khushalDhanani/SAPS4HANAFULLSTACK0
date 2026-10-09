@@ -12,12 +12,19 @@ const { POST, GET } = cds.test(__dirname + '/../../../');
 
 describe('Mvt261Service postGoodsIssue authorization (F4)', () => {
   let spy;
+  let cycleSpy;
   beforeEach(() => {
+    cycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue({
+      Reservation: '278650', ReservationItem: '1', Material: 'M', Plant: '1120', StorageLocation: 'CS01', Unit: 'KG', OpenQuantity: 1
+    });
     spy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({
       MaterialDocument: '4900050046', MaterialDocumentYear: '2026', DeliveryNumber: '', Pending: false, SapMessage: ''
     });
   });
-  afterEach(() => spy.mockRestore());
+  afterEach(() => {
+    spy.mockRestore();
+    cycleSpy.mockRestore();
+  });
 
   const call = (user) => POST('/odata/v4/mvt261/postGoodsIssue',
     { reservation: '278650', item: '1', quantity: 1 }, { auth: { username: user, password: '' } });
