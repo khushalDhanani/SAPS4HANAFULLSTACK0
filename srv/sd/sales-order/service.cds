@@ -115,6 +115,11 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         ContactPerson: String;
         PaymentTerms: String;
         PaymentTermCode: String;
+        Incoterms: String;
+        IncotermsLocation1: String;
+        INCO1: String;
+        INCO2: String;
+        INCO2_L: String;
     }
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])
@@ -134,6 +139,10 @@ service SalesOrderService @(path: '/odata/v4/sales-order') {
         SalesGroup: String;
         SalesGroupName: String;
         PaymentTerms: String;
+        Incoterms: String;
+        IncotermsLocation1: String;
+        INCO1: String;
+        INCO2: String;
         validForSalesArea: Boolean;
         salesAreaError: String;
         maintainedSalesAreasSummary: String;

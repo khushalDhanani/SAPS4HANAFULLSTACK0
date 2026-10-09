@@ -313,6 +313,8 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-99988");
         oModel.setProperty("/header/PaymentTerms", "PT11");
         oModel.setProperty("/header/ContactPerson", "25116");
+        oModel.setProperty("/header/Incoterms", "CIF");
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/OrderQuantity", "10.000");
         oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
@@ -328,6 +330,12 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.header.PaymentTerms).toBe("PT11");
         expect(payload.header.PaymentTermCode).toBe("PT11");
         expect(payload.header.ContactPerson).toBe("25116");
+        expect(payload.header.Incoterms).toBe("CIF");
+        expect(payload.header.INCO1).toBe("CIF");
+        expect(payload.header.IncotermsLocation1).toBe("Mumbai Port");
+        expect(payload.header.INCO2).toBe("Mumbai Port");
+        expect(payload.header.INCO2_L).toBe("Mumbai Port");
+        expect(payload.header.IncotermsClassification).toBeUndefined();
         expect(payload.header.TotalNetAmount).toBe(500);
 
         expect(payload.items).toHaveLength(1);
@@ -337,6 +345,20 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.items[0].NetPriceAmount).toBe(50);
         expect(payload.items[0].NetAmount).toBe(500);
         expect(payload.items[0].Plant).toBe("1120");
+    });
+
+    test("applyCustomerDefaults proposes INCO1 and INCO2 from customer defaults", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        SalesOrderModel.applyCustomerDefaults(oModel, {
+            CustomerName: "Customer XYZ",
+            INCO1: "EXW",
+            INCO2: "Sachin"
+        });
+
+        expect(oModel.getProperty("/header/Incoterms")).toBe("EXW");
+        expect(oModel.getProperty("/header/INCO1")).toBe("EXW");
+        expect(oModel.getProperty("/header/IncotermsLocation1")).toBe("Sachin");
+        expect(oModel.getProperty("/header/INCO2")).toBe("Sachin");
     });
 
     test("applyCustomerDefaults does not overwrite user-entered values", () => {
@@ -368,5 +390,27 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.items[0].OrderQuantity).toBe(0);
         expect(payload.items[0].OrderQuantityUnit).toBe("");
         expect(payload.items[0].Plant).toBe("");
+    });
+
+    test("validateSingleField validates Incoterms and IncotermsLocation1 length", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+
+        oModel.setProperty("/header/Incoterms", "CIF");
+        expect(SalesOrderModel.validateSingleField(oModel, "Incoterms")).toBe(true);
+        expect(oModel.getProperty("/errors/Incoterms/state")).toBe("None");
+
+        oModel.setProperty("/header/Incoterms", "TOOLONG");
+        expect(SalesOrderModel.validateSingleField(oModel, "Incoterms")).toBe(false);
+        expect(oModel.getProperty("/errors/Incoterms/state")).toBe("Error");
+        expect(oModel.getProperty("/errors/Incoterms/text")).toBe("Incoterms cannot exceed 3 characters");
+
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port Terminal 1");
+        expect(SalesOrderModel.validateSingleField(oModel, "IncotermsLocation1")).toBe(true);
+        expect(oModel.getProperty("/errors/IncotermsLocation1/state")).toBe("None");
+
+        oModel.setProperty("/header/IncotermsLocation1", "A".repeat(71));
+        expect(SalesOrderModel.validateSingleField(oModel, "IncotermsLocation1")).toBe(false);
+        expect(oModel.getProperty("/errors/IncotermsLocation1/state")).toBe("Error");
+        expect(oModel.getProperty("/errors/IncotermsLocation1/text")).toBe("Incoterms Location cannot exceed 70 characters");
     });
 });

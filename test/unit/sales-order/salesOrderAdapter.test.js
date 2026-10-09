@@ -382,7 +382,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
             ).rejects.toThrow('Contact Person is not supported by the SAP backend service');
         });
 
-        test('transmits ContactPerson via HeaderPartnerSet with partner function CP when HeaderPartner metadata has CustomerID', async () => {
+        test('transmits ContactPerson via HeaderPartnerSet with partner function ZP when HeaderPartner metadata has CustomerID', async () => {
             const mockExecute = jest.fn().mockResolvedValue({
                 status: 201,
                 data: {
@@ -418,7 +418,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(callConfig.data.ContactPerson).toBeUndefined();
             expect(callConfig.data.HeaderPartnerSet).toEqual([
                 {
-                    PartnerFunctionCode: 'CP',
+                    PartnerFunctionCode: 'ZP',
                     CustomerID: '24789'
                 }
             ]);
@@ -464,7 +464,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
                     CustomerID: '1000000001'
                 },
                 {
-                    PartnerFunctionCode: 'CP',
+                    PartnerFunctionCode: 'ZP',
                     CustomerID: '24789'
                 }
             ]);
@@ -520,7 +520,7 @@ describe('Unit: Sales Order Adapter Integration', () => {
                             HeaderPartnerSet: {
                                 results: [
                                     {
-                                        PartnerFunctionCode: 'CP',
+                                        PartnerFunctionCode: 'ZP',
                                         CustomerID: '0000024789' // zero-padded in SAP
                                     }
                                 ]

@@ -136,8 +136,23 @@ sap.ui.define([
                 "PortOfDischarge",
                 "ContactPerson",
                 "PaymentTerms",
-                "PaymentTermCode"
+                "PaymentTermCode",
+                "Incoterms",
+                "IncotermsLocation1",
+                "INCO1",
+                "INCO2",
+                "INCO2_L"
             ];
+
+            if (!rawHeader.Incoterms && rawHeader.INCO1) {
+                rawHeader.Incoterms = rawHeader.INCO1;
+            }
+            if (!rawHeader.Incoterms && rawHeader.IncotermsClassification) {
+                rawHeader.Incoterms = rawHeader.IncotermsClassification;
+            }
+            if (!rawHeader.IncotermsLocation1 && (rawHeader.INCO2_L || rawHeader.INCO2)) {
+                rawHeader.IncotermsLocation1 = rawHeader.INCO2_L || rawHeader.INCO2;
+            }
 
             var ALLOWED_ITEM_FIELDS = [
                 "SalesOrderItem",

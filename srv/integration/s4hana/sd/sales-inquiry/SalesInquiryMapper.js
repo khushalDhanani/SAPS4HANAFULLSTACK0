@@ -67,6 +67,17 @@ function mapToS4InquiryPayload(header, items, _options = {}) {
             s4Header[field] = String(header[field]).trim();
         }
     });
+    const incoInq = header.INCO1 || header.Incoterms || header.IncotermsClassification;
+    if (incoInq && String(incoInq).trim() !== '') {
+        s4Header.Incoterms = String(incoInq).trim();
+        s4Header.INCO1 = String(incoInq).trim();
+    }
+    const incoLocInq = header.INCO2_L || header.INCO2 || header.IncotermsLocation1;
+    if (incoLocInq && String(incoLocInq).trim() !== '') {
+        s4Header.IncotermsLocation1 = String(incoLocInq).trim();
+        s4Header.INCO2 = String(incoLocInq).trim();
+        s4Header.INCO2_L = String(incoLocInq).trim();
+    }
 
     const s4Items = (items || []).map((item, index) => {
         const itemNumber = item.SalesInquiryItem
@@ -165,6 +176,17 @@ function mapToS4OrderPayload(header, items, _options = {}) {
             s4Header[field] = String(header[field]).trim();
         }
     });
+    const incoOrd = header.INCO1 || header.Incoterms || header.IncotermsClassification;
+    if (incoOrd && String(incoOrd).trim() !== '') {
+        s4Header.Incoterms = String(incoOrd).trim();
+        s4Header.INCO1 = String(incoOrd).trim();
+    }
+    const incoLocOrd = header.INCO2_L || header.INCO2 || header.IncotermsLocation1;
+    if (incoLocOrd && String(incoLocOrd).trim() !== '') {
+        s4Header.IncotermsLocation1 = String(incoLocOrd).trim();
+        s4Header.INCO2 = String(incoLocOrd).trim();
+        s4Header.INCO2_L = String(incoLocOrd).trim();
+    }
 
     const s4Items = (items || []).map((item, index) => {
         const itemNumber = item.SalesOrderItem || item.SalesInquiryItem

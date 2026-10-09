@@ -357,5 +357,43 @@ describe('Unit: Sales Inquiry Mapping', () => {
             expect(s4.items[0].RequestedDeliveryDate).toBe('2026-10-15');
             expect(s4.items[1].RequestedDeliveryDate).toBe('2026-10-25');
         });
+
+        test('should map Incoterms and IncotermsLocation1 to s4 header and accept IncotermsClassification as fallback', () => {
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135',
+                Incoterms: 'CIF',
+                IncotermsLocation1: 'Mumbai Port'
+            };
+            const s4 = mapToS4OrderPayload(header, []);
+            expect(s4.header.Incoterms).toBe('CIF');
+            expect(s4.header.INCO1).toBe('CIF');
+            expect(s4.header.IncotermsLocation1).toBe('Mumbai Port');
+            expect(s4.header.INCO2).toBe('Mumbai Port');
+            expect(s4.header.INCO2_L).toBe('Mumbai Port');
+            expect(s4.header.IncotermsClassification).toBeUndefined();
+
+            const fallbackHeader = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135',
+                INCO1: 'FOB',
+                INCO2: 'Nhava Sheva'
+            };
+            const s4Fallback = mapToS4OrderPayload(fallbackHeader, []);
+            expect(s4Fallback.header.Incoterms).toBe('FOB');
+            expect(s4Fallback.header.INCO1).toBe('FOB');
+            expect(s4Fallback.header.IncotermsLocation1).toBe('Nhava Sheva');
+            expect(s4Fallback.header.INCO2).toBe('Nhava Sheva');
+            expect(s4Fallback.header.INCO2_L).toBe('Nhava Sheva');
+            expect(s4Fallback.header.IncotermsClassification).toBeUndefined();
+        });
     });
 });

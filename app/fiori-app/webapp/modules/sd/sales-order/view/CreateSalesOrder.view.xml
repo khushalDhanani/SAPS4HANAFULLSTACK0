@@ -194,7 +194,7 @@
                                 </Input>
 
                                 <Label text="{i18n>salesOrderLabelIncoterms}" />
-                                <Input id="inIncotermsClassification" value="{newOrder>/header/IncotermsClassification}" placeholder="{i18n>salesOrderPlaceholderIncoterms}" maxLength="3"
+                                <Input id="inIncoterms" value="{newOrder>/header/Incoterms}" placeholder="{i18n>salesOrderPlaceholderIncoterms}" maxLength="3"
                                     tooltip="{i18n>salesOrderTooltipIncoterms}"
                                     change=".onHeaderFieldChange" suggestionItemSelected=".onIncotermsSelect"
                                     showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesOrder>/IncotermsClassificationVH', templateShareable: false}">

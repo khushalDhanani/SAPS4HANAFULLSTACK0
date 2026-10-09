@@ -50,7 +50,7 @@ describe("Fiori SalesOrderService", () => {
         expect(await SalesOrderService.getMaterialDetails(oModel, "")).toBeNull();
     });
 
-    test("_sanitizePayload keeps only the CAP OrderHeader / OrderItem fields (no incoterms, no UI state)", () => {
+    test("_sanitizePayload keeps only the CAP OrderHeader / OrderItem fields (passes Incoterms, strips IncotermsClassification and UI state)", () => {
         const clean = SalesOrderService._sanitizePayload({
             header: {
                 SalesOrderType: "ZDOM", SoldToParty: "10135", PaymentTerms: "0001", PaymentTermCode: "0001", ContactPerson: "25363",
@@ -58,8 +58,25 @@ describe("Fiori SalesOrderService", () => {
             },
             items: [{ Material: "4000000001", OrderQuantity: 5, OrderQuantityUnit: "KG", Plant: "1120", errors: {} }]
         });
-        expect(Object.keys(clean.header).sort()).toEqual(["ContactPerson", "PaymentTermCode", "PaymentTerms", "SalesOrderType", "SoldToParty"]);
+        expect(Object.keys(clean.header).sort()).toEqual(["ContactPerson", "Incoterms", "IncotermsLocation1", "PaymentTermCode", "PaymentTerms", "SalesOrderType", "SoldToParty"]);
+        expect(clean.header.Incoterms).toBe("FOB");
+        expect(clean.header.IncotermsLocation1).toBe("Mumbai");
+        expect(clean.header.IncotermsClassification).toBeUndefined();
         expect(clean.items[0]).toEqual({ Material: "4000000001", OrderQuantity: 5, OrderQuantityUnit: "KG", Plant: "1120" });
+    });
+
+    test("_sanitizePayload normalizes INCO1 and INCO2 to Incoterms while preserving INCO1/INCO2 fields", () => {
+        const clean = SalesOrderService._sanitizePayload({
+            header: {
+                SalesOrderType: "ZDOM", SoldToParty: "10135",
+                INCO1: "CIF", INCO2: "Rotterdam"
+            },
+            items: []
+        });
+        expect(clean.header.INCO1).toBe("CIF");
+        expect(clean.header.Incoterms).toBe("CIF");
+        expect(clean.header.INCO2).toBe("Rotterdam");
+        expect(clean.header.IncotermsLocation1).toBe("Rotterdam");
     });
 
     test("createSalesOrder posts the sanitized payload to the CAP action and returns the document number", async () => {

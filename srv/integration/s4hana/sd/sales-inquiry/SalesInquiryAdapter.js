@@ -13,7 +13,7 @@ const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
  * each is sent only when the live $metadata of the service exposes the property, so the application works
  * unchanged before and after the SAP-side extension. See docs/sap-inquiry-service-extension-spec.md.
  */
-const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson', 'BindingPeriodValidityEndDate'];
+const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson', 'BindingPeriodValidityEndDate', 'Incoterms', 'IncotermsLocation1', 'INCO1', 'INCO2', 'INCO2_L', 'Inco1', 'Inco2'];
 
 /**
  * Error thrown when a multi-step Sales Inquiry creation partially succeeds (header persisted in SAP,
@@ -1048,6 +1048,10 @@ class SalesInquiryAdapter {
         SalesGroup: '',
         SalesGroupName: '',
         PaymentTerms: '',
+        Incoterms: '',
+        IncotermsLocation1: '',
+        INCO1: '',
+        INCO2: '',
         validForSalesArea: true,
         salesAreaError: '',
         maintainedSalesAreasSummary: '',
@@ -1069,6 +1073,8 @@ class SalesInquiryAdapter {
     let sGroup = '';
     let sGroupName = '';
     let sPaymentTerms = '';
+    let sInco1 = '';
+    let sInco2 = '';
     let bValidForSalesArea = true;
     let sSalesAreaError = '';
     let sMaintainedSalesAreasSummary = '';
@@ -1158,6 +1164,12 @@ class SalesInquiryAdapter {
               if (matchingArea.CustomerPaymentTerms || matchingArea.PaymentTerms) {
                 sPaymentTerms = matchingArea.CustomerPaymentTerms || matchingArea.PaymentTerms;
               }
+              if (matchingArea.Incoterms || matchingArea.IncotermsClassification || matchingArea.INCO1) {
+                sInco1 = matchingArea.Incoterms || matchingArea.IncotermsClassification || matchingArea.INCO1;
+              }
+              if (matchingArea.IncotermsLocation1 || matchingArea.IncotermsTransferLocation || matchingArea.INCO2 || matchingArea.INCO2_L) {
+                sInco2 = matchingArea.IncotermsLocation1 || matchingArea.IncotermsTransferLocation || matchingArea.INCO2 || matchingArea.INCO2_L;
+              }
             } else {
               bValidForSalesArea = false;
               const aAreas = aRecords.map(r => `${r.SalesOrganization || ''} ${r.DistributionChannel || ''} ${r.Division || ''}`.trim()).filter(Boolean);
@@ -1200,6 +1212,31 @@ class SalesInquiryAdapter {
       }
     }
 
+    // Direct RFC read on KNVV (Customer Master Sales Data) for INCO1, INCO2, ZTERM, VKBUR, VKGRP
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const sCustPadded = sCust.padStart(10, '0');
+        const knvvWhere = [`KUNNR = '${sCustPadded}'`];
+        if (sOrg) knvvWhere.push(`AND VKORG = '${sOrg}'`);
+        if (sChannel) knvvWhere.push(`AND VTWEG = '${sChannel}'`);
+        if (sDivision) knvvWhere.push(`AND SPART = '${sDivision}'`);
+        let knvvRows = await this.rfc.readTable('KNVV', ['INCO1', 'INCO2', 'ZTERM', 'VKBUR', 'VKGRP'], knvvWhere).catch(() => []);
+        if ((!knvvRows || knvvRows.length === 0) && (sOrg || sChannel || sDivision)) {
+          knvvRows = await this.rfc.readTable('KNVV', ['INCO1', 'INCO2', 'ZTERM', 'VKBUR', 'VKGRP'], [`KUNNR = '${sCustPadded}'`]).catch(() => []);
+        }
+        if (knvvRows && knvvRows.length > 0) {
+          const kRow = knvvRows[0];
+          if (kRow.INCO1 && !sInco1) sInco1 = kRow.INCO1.trim();
+          if (kRow.INCO2 && !sInco2) sInco2 = kRow.INCO2.trim();
+          if (kRow.ZTERM && !sPaymentTerms) sPaymentTerms = kRow.ZTERM.trim();
+          if (kRow.VKBUR && !sOffice) sOffice = kRow.VKBUR.trim();
+          if (kRow.VKGRP && !sGroup) sGroup = kRow.VKGRP.trim();
+        }
+      } catch (knvvErr) {
+        LOG.warn('KNVV customer lookup warning:', knvvErr.message);
+      }
+    }
+
     return {
       Customer: sCust,
       CustomerName: sName,
@@ -1214,6 +1251,10 @@ class SalesInquiryAdapter {
       SalesGroup: sGroup,
       SalesGroupName: sGroupName,
       PaymentTerms: sPaymentTerms,
+      Incoterms: sInco1,
+      IncotermsLocation1: sInco2,
+      INCO1: sInco1,
+      INCO2: sInco2,
       validForSalesArea: bValidForSalesArea,
       salesAreaError: sSalesAreaError,
       maintainedSalesAreasSummary: sMaintainedSalesAreasSummary,
@@ -1417,7 +1458,7 @@ class SalesInquiryAdapter {
 
       // Contact Person: send through the path $metadata supports:
       // 1. Header property if Header has ContactPerson
-      // 2. HeaderPartnerSet entry with PartnerFunctionCode 'CP' and CustomerID if HeaderPartner has CustomerID
+      // 2. HeaderPartnerSet entry with PartnerFunctionCode 'ZP' and CustomerID if HeaderPartner has CustomerID
       // 3. Otherwise fail with a visible error.
       if (header.ContactPerson && String(header.ContactPerson).trim() !== '') {
         const sContactPerson = String(header.ContactPerson).trim();
@@ -1426,7 +1467,7 @@ class SalesInquiryAdapter {
           headerPayload.ContactPerson = sContactPerson;
         } else if (fields.partner && (fields.partner.has('CustomerID') || fields.partner.has('ContactPersonID'))) {
           const cpEntry = {
-            PartnerFunctionCode: 'CP',
+            PartnerFunctionCode: 'ZP',
             CustomerID: sContactPerson
           };
           if (fields.partner.has('ContactPersonID')) {
@@ -1523,12 +1564,13 @@ class SalesInquiryAdapter {
           }
         }
 
-        // 2. Contact Person: Header property when the service has one, otherwise HeaderPartnerSet 'CP'
+        // 2. Contact Person: Header property when the service has one, otherwise HeaderPartnerSet 'ZP' / 'CP'
         const expContact = String(header.ContactPerson || '').trim();
         if (expContact) {
           const actualContact = String(readHeader.ContactPerson || '').trim();
           const noZeros = (v) => String(v || '').trim().replace(/^0+/, '');
           const partnerMatch = readPartners.some(p =>
+            (!p.PartnerFunctionCode || p.PartnerFunctionCode === 'ZP' || p.PartnerFunctionCode === 'CP') &&
             [p.CustomerID, p.PartnerNumber, p.ContactPersonID].some(v => noZeros(v) !== '' && noZeros(v) === noZeros(expContact)));
           if (actualContact) {
             if (actualContact !== expContact) {
@@ -1611,7 +1653,7 @@ class SalesInquiryAdapter {
         headerPayload.ContactPerson = sContactPerson;
       } else if (fields.partner && (fields.partner.has('CustomerID') || fields.partner.has('ContactPersonID'))) {
         const cpEntry = {
-          PartnerFunctionCode: 'CP',
+          PartnerFunctionCode: 'ZP',
           CustomerID: sContactPerson
         };
         if (fields.partner.has('ContactPersonID')) {

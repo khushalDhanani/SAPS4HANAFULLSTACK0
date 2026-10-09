@@ -295,8 +295,10 @@ sap.ui.define([
             if (!oItem) return;
             var sKey = oItem.getKey() || oItem.getText();
             var oModel = this.getView().getModel("newOrder");
-            oModel.setProperty("/header/IncotermsClassification", sKey);
-            oModel.setProperty("/modifiedFields/IncotermsClassification", true);
+            oModel.setProperty("/header/Incoterms", sKey);
+            oModel.setProperty("/header/INCO1", sKey);
+            oModel.setProperty("/modifiedFields/Incoterms", true);
+            oModel.setProperty("/modifiedFields/INCO1", true);
             oModel.setProperty("/isModified", true);
             SalesOrderModel.updateStatus(oModel);
         },
@@ -321,6 +323,19 @@ sap.ui.define([
                     var sPath = oBinding.getPath() || "";
                     var sField = sPath.split("/").pop();
                     if (sField) {
+                        if (sField === "Incoterms") {
+                            oModel.setProperty("/header/INCO1", oModel.getProperty("/header/Incoterms"));
+                            oModel.setProperty("/modifiedFields/INCO1", true);
+                        } else if (sField === "INCO1") {
+                            oModel.setProperty("/header/Incoterms", oModel.getProperty("/header/INCO1"));
+                            oModel.setProperty("/modifiedFields/Incoterms", true);
+                        } else if (sField === "IncotermsLocation1") {
+                            var sLocVal = oModel.getProperty("/header/IncotermsLocation1");
+                            oModel.setProperty("/header/INCO2", sLocVal);
+                            oModel.setProperty("/header/INCO2_L", sLocVal);
+                            oModel.setProperty("/modifiedFields/INCO2", true);
+                            oModel.setProperty("/modifiedFields/INCO2_L", true);
+                        }
                         oModel.setProperty("/modifiedFields/" + sField, true);
                         oModel.setProperty("/isModified", true);
                         SalesOrderModel.validateSingleField(oModel, sField);
@@ -786,9 +801,11 @@ sap.ui.define([
                     oModel.setProperty("/isModified", true);
                     SalesOrderModel.validateSingleField(oModel, "PaymentTerms");
                     SalesOrderModel.updateStatus(oModel);
-                } else if (sId.indexOf("inIncotermsClassification") !== -1) {
-                    oModel.setProperty("/header/IncotermsClassification", sKey);
-                    oModel.setProperty("/modifiedFields/IncotermsClassification", true);
+                } else if ((sId.indexOf("inIncoterms") !== -1 && sId.indexOf("inIncotermsLocation") === -1) || sId.indexOf("inINCO1") !== -1) {
+                    oModel.setProperty("/header/Incoterms", sKey);
+                    oModel.setProperty("/header/INCO1", sKey);
+                    oModel.setProperty("/modifiedFields/Incoterms", true);
+                    oModel.setProperty("/modifiedFields/INCO1", true);
                     oModel.setProperty("/isModified", true);
                     SalesOrderModel.updateStatus(oModel);
                 } else if (sId.indexOf("inContactPerson") !== -1) {

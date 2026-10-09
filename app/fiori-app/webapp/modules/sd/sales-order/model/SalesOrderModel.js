@@ -77,8 +77,11 @@ sap.ui.define([
                     CustomerGroup2: "",
                     PortOfLoading: "",
                     PortOfDischarge: "",
-                    IncotermsClassification: "",
+                    Incoterms: "",
                     IncotermsLocation1: "",
+                    INCO1: "",
+                    INCO2: "",
+                    INCO2_L: "",
                     ContactPerson: "",
                     PaymentTerms: "",
                     PaymentTermCode: "",
@@ -197,6 +200,17 @@ sap.ui.define([
             }
             if (oCustomerData.PaymentTerms && !oModified.PaymentTerms && (!oHeader.PaymentTerms || String(oHeader.PaymentTerms).trim() === "")) {
                 oModel.setProperty("/header/PaymentTerms", oCustomerData.PaymentTerms);
+            }
+            var sIncoDefault = oCustomerData.Incoterms || oCustomerData.INCO1 || oCustomerData.IncotermsClassification;
+            if (sIncoDefault && !oModified.Incoterms && !oModified.INCO1 && (!oHeader.Incoterms || String(oHeader.Incoterms).trim() === "")) {
+                oModel.setProperty("/header/Incoterms", sIncoDefault);
+                oModel.setProperty("/header/INCO1", sIncoDefault);
+            }
+            var sIncoLocDefault = oCustomerData.IncotermsLocation1 || oCustomerData.INCO2 || oCustomerData.INCO2_L;
+            if (sIncoLocDefault && !oModified.IncotermsLocation1 && !oModified.INCO2 && (!oHeader.IncotermsLocation1 || String(oHeader.IncotermsLocation1).trim() === "")) {
+                oModel.setProperty("/header/IncotermsLocation1", sIncoLocDefault);
+                oModel.setProperty("/header/INCO2", sIncoLocDefault);
+                oModel.setProperty("/header/INCO2_L", sIncoLocDefault);
             }
         },
 
@@ -320,6 +334,19 @@ sap.ui.define([
                         sError = "Contact Person is required";
                     } else if (!CONTACT_PERSON_REGEX.test(String(vVal).trim())) {
                         sError = "Contact Person must be a numeric SAP contact number (up to 10 digits)";
+                    }
+                    break;
+                case "Incoterms":
+                case "INCO1":
+                    if (vVal && String(vVal).trim().length > 3) {
+                        sError = "Incoterms cannot exceed 3 characters";
+                    }
+                    break;
+                case "IncotermsLocation1":
+                case "INCO2":
+                case "INCO2_L":
+                    if (vVal && String(vVal).trim().length > 70) {
+                        sError = "Incoterms Location cannot exceed 70 characters";
                     }
                     break;
                 default:
@@ -584,6 +611,17 @@ sap.ui.define([
             }
             if (oHeader.SalesGroup) {
                 oCleanHeader.SalesGroup = String(oHeader.SalesGroup).trim();
+            }
+            var sIncoterms = oHeader.Incoterms || oHeader.INCO1 || oHeader.IncotermsClassification;
+            if (sIncoterms && String(sIncoterms).trim() !== "") {
+                oCleanHeader.Incoterms = String(sIncoterms).trim();
+                oCleanHeader.INCO1 = String(sIncoterms).trim();
+            }
+            var sIncotermsLoc = oHeader.IncotermsLocation1 || oHeader.INCO2 || oHeader.INCO2_L;
+            if (sIncotermsLoc && String(sIncotermsLoc).trim() !== "") {
+                oCleanHeader.IncotermsLocation1 = String(sIncotermsLoc).trim();
+                oCleanHeader.INCO2 = String(sIncotermsLoc).trim();
+                oCleanHeader.INCO2_L = String(sIncotermsLoc).trim();
             }
             INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
                 if (oHeader[f.field] && String(oHeader[f.field]).trim() !== "") {
