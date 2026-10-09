@@ -107,6 +107,19 @@ const sI18nEn = fs.readFileSync(sI18nEnPath, 'utf8');
             expect(sExecXml).toContain('id="inReservationItem311"');
             expect(sExecXml).toContain('editable="{= !${gi311>/fromReservation} }"');
         });
+
+        test('declares Storage Unit panel with Suggested SU card, scan input, and candidate units table', () => {
+            expect(sExecXml).toContain('id="pnlStorageUnit311"');
+            expect(sExecXml).toContain('{i18n>gi311TitleSuggestedSU}');
+            expect(sExecXml).toContain('id="btnUseSuggestedSU311"');
+            expect(sExecXml).toContain('press=".onUseSuggestedSU"');
+            expect(sExecXml).toContain('id="inSuScan311"');
+            expect(sExecXml).toContain('submit=".onScanStorageUnitSubmit"');
+            expect(sExecXml).toContain('id="tblStorageUnits311"');
+            expect(sExecXml).toContain('items="{gi311>/storageUnits}"');
+            expect(sI18n).toContain('gi311TitleSuggestedSU=');
+            expect(sI18nEn).toContain('gi311TitleSuggestedSU=');
+        });
     });
 
     describe('manifest.json routing registration', () => {

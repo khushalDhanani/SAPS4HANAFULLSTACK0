@@ -161,6 +161,18 @@ class GoodsIssueHandler {
       return GoodsIssueAdapter.verifySerialForReservation(serialNumber, reservationNo, reservationItem, storageLocation || '');
     });
 
+    // FUNCTION: getAvailableSerialNumbers — live SAP unrestricted serials for reservation item or material
+    srv.on('getAvailableSerialNumbers', async (req) => {
+      const { reservationNo, reservationItem, material, plant, storageLocation } = req.data || {};
+      return GoodsIssueAdapter.getAvailableSerialNumbers({
+        reservationNo,
+        reservationItem,
+        material,
+        plant,
+        storageLocation
+      });
+    });
+
     // ──────────────────────────────────────────────────────────
     // FUNCTION: resolveStockUnit — SU Barcode → Stock → Batch
     // Returns StockUnitResolution with SuExists:false for business-level

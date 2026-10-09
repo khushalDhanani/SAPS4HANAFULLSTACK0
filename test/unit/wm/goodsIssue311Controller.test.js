@@ -86,6 +86,14 @@ const mockGoodsIssue311Model = {
         isSerialManaged: false,
         serialInput: '',
         serialNumbers: [],
+        suggestedStorageUnit: '',
+        hasSuggestedSU: false,
+        storageUnits: [],
+        selectedStorageUnit: '',
+        suLoading: false,
+        suScanInput: '',
+        suScanState: 'None',
+        suScanText: '',
         itemLoading: false,
         busy: false,
         hasPosted: false,
@@ -134,6 +142,12 @@ const mockGoodsIssue311Model = {
             oData.serialNumbers.splice(nIndex, 1);
         }
     }),
+    applyStockUnits: jest.fn((oData, aUnits, sSuggested) => {
+        oData.storageUnits = Array.isArray(aUnits) ? aUnits : [];
+        const sFound = sSuggested || (oData.storageUnits.length > 0 ? oData.storageUnits[0].StorageUnit : '');
+        oData.suggestedStorageUnit = sFound || '';
+        oData.hasSuggestedSU = !!sFound;
+    }),
     toBackendPayload: jest.fn((oData) => ({
         MovementType: '311',
         ReservationNo: oData.reservationNo,
@@ -147,8 +161,10 @@ const mockGoodsIssue311Model = {
 const mockGoodsIssue311Service = {
     fetchOpenReservations: jest.fn().mockResolvedValue([]),
     fetchReservationItems: jest.fn().mockResolvedValue([]),
+    fetchStockUnitsForItem: jest.fn().mockResolvedValue({ StockUnits: [], SuggestedStorageUnit: '' }),
     fetchPlants: jest.fn().mockResolvedValue([]),
     fetchStorageLocations: jest.fn().mockResolvedValue([]),
+    getAvailableSerialNumbers: jest.fn().mockResolvedValue([]),
     postGoodsIssue: jest.fn().mockResolvedValue({}),
     reverseGoodsIssue: jest.fn().mockResolvedValue({})
 };
@@ -162,6 +178,7 @@ function MockSelectDialog(cfg) {
     this.open = jest.fn();
     this.destroy = jest.fn();
     this.getBinding = jest.fn();
+    this.setBusy = jest.fn();
     createdSelectDialogs.push(this);
 }
 function MockStandardListItem(cfg) {
@@ -594,6 +611,73 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             controller.onDeleteSerial(oEvent);
             expect(mockGoodsIssue311Model.removeSerialNumber).not.toHaveBeenCalled();
         });
+
+        it('scanned known Storage Unit in serial field auto-routes to selectedStorageUnit', () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/storageUnits', [
+                { StorageUnit: '2000020148', StorageType: 'OH1', StorageBin: 'ONHOLD', AvailableStock: 1, Unit: 'NOS' }
+            ]);
+            oModel.setProperty('/serialInput', '2000020148');
+            mockGoodsIssue311Service.verifySerial = jest.fn();
+
+            controller.onAddSerialPress();
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('2000020148');
+            expect(oModel.getProperty('/suScanState')).toBe('Success');
+            expect(oModel.getProperty('/serialInput')).toBe('');
+            expect(mockGoodsIssue311Service.verifySerial).not.toHaveBeenCalled();
+            expect(mockMessageToast.show).toHaveBeenCalledWith('gi311BarcodeIsStorageUnitToast');
+        });
+
+        it('SAP response IS_STORAGE_UNIT auto-routes to selectedStorageUnit and clears serial input', async () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/reservationNo', '524283');
+            oModel.setProperty('/reservationItem', '0001');
+            oModel.setProperty('/storageLocation', 'CS02');
+            oModel.setProperty('/serialInput', '2000020148');
+
+            mockGoodsIssue311Service.verifySerial = jest.fn().mockResolvedValueOnce({
+                Status: 'IS_STORAGE_UNIT',
+                IsStorageUnit: true,
+                StorageUnit: '2000020148',
+                StorageType: 'OH1',
+                StorageBin: 'ONHOLD',
+                Available: false,
+                Message: '"2000020148" is a Storage Unit, not a Serial Number.'
+            });
+
+            const p = controller.onAddSerialPress();
+            await p;
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('2000020148');
+            expect(oModel.getProperty('/suScanState')).toBe('Success');
+            expect(oModel.getProperty('/serialInput')).toBe('');
+            expect(oModel.getProperty('/serialScanState')).toBe('Information');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('gi311BarcodeIsStorageUnitToast');
+        });
+
+        it('onSerialValueHelp opens SelectDialog with available serial numbers from SAP', async () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/reservationNo', '524283');
+            oModel.setProperty('/reservationItem', '0001');
+            oModel.setProperty('/material', '8000006485');
+            oModel.setProperty('/plant', '1120');
+            oModel.setProperty('/storageLocation', 'CS02');
+
+            mockGoodsIssue311Service.getAvailableSerialNumbers = jest.fn().mockResolvedValueOnce([
+                { SerialNumber: 'CON-40-002', StorageLocation: 'CS02', StockTypeText: 'Unrestricted-Use Stock' },
+                { SerialNumber: 'CON-40-003', StorageLocation: 'CS02', StockTypeText: 'Unrestricted-Use Stock' }
+            ]);
+
+            createdSelectDialogs = [];
+            controller.onSerialValueHelp();
+            await flush();
+
+            expect(createdSelectDialogs.length).toBe(1);
+            const dialog = createdSelectDialogs[0];
+            expect(dialog.open).toHaveBeenCalled();
+            expect(mockGoodsIssue311Service.getAvailableSerialNumbers).toHaveBeenCalledWith('524283', '0001', '8000006485', '1120', 'CS02');
+        });
     });
 
     // =============================================================
@@ -827,6 +911,108 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
 
             controller.onNavBack();
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
+        });
+    });
+
+    describe('Storage Unit Management & Suggested SU', () => {
+        it('_loadStockUnits loads units and applies suggested SU', async () => {
+            const aUnits = [
+                { StorageUnit: '2000020148', StorageType: 'OH1', StorageBin: 'ONHOLD', AvailableStock: 1, Unit: 'NOS', Suggested: true },
+                { StorageUnit: '2000020149', StorageType: 'OH1', StorageBin: 'ONHOLD', AvailableStock: 1, Unit: 'NOS', Suggested: false }
+            ];
+            mockGoodsIssue311Service.fetchStockUnitsForItem.mockResolvedValueOnce({
+                StockUnits: aUnits,
+                SuggestedStorageUnit: '2000020148'
+            });
+
+            await controller._loadStockUnits('524283', '0001');
+
+            const oModel = controller.getView().getModel('gi311');
+            expect(mockGoodsIssue311Service.fetchStockUnitsForItem).toHaveBeenCalledWith('524283', '0001');
+            expect(oModel.getProperty('/suggestedStorageUnit')).toBe('2000020148');
+            expect(oModel.getProperty('/hasSuggestedSU')).toBe(true);
+            expect(oModel.getProperty('/storageUnits').length).toBe(2);
+        });
+
+        it('onUseSuggestedSU assigns suggested SU to selected SU and sets state', () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/suggestedStorageUnit', '2000020148');
+
+            controller.onUseSuggestedSU();
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('2000020148');
+            expect(oModel.getProperty('/suScanInput')).toBe('2000020148');
+            expect(oModel.getProperty('/suScanState')).toBe('Success');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('gi311SuSelectedToast');
+        });
+
+        it('onScanStorageUnit matches known candidate unit and sets success', () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/storageUnits', [
+                { StorageUnit: '2000020148', AvailableStock: 1, Unit: 'NOS' }
+            ]);
+            oModel.setProperty('/suScanInput', '2000020148');
+
+            controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('2000020148');
+            expect(oModel.getProperty('/suScanState')).toBe('Success');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('gi311SuSelectedToast');
+        });
+
+        it('onScanStorageUnit warns when scanned unit is not in candidate list', () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/storageUnits', [
+                { StorageUnit: '2000020148', AvailableStock: 1, Unit: 'NOS' }
+            ]);
+            oModel.setProperty('/suScanInput', '9999999999');
+
+            controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('9999999999');
+            expect(oModel.getProperty('/suScanState')).toBe('Warning');
+        });
+
+        it('onSelectStorageUnitRow selects SU from row context', () => {
+            const oModel = controller.getView().getModel('gi311');
+            const oFakeEvent = {
+                getSource: () => ({
+                    getBindingContext: (modelName) => {
+                        expect(modelName).toBe('gi311');
+                        return {
+                            getObject: () => ({ StorageUnit: '2000020150' })
+                        };
+                    }
+                })
+            };
+
+            controller.onSelectStorageUnitRow(oFakeEvent);
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('2000020150');
+            expect(oModel.getProperty('/suScanState')).toBe('Success');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('gi311SuSelectedToast');
+        });
+
+        it('onClearSelectedSU clears selected storage unit and scan state', () => {
+            const oModel = controller.getView().getModel('gi311');
+            oModel.setProperty('/selectedStorageUnit', '2000020148');
+            oModel.setProperty('/suScanInput', '2000020148');
+            oModel.setProperty('/suScanState', 'Success');
+            oModel.setProperty('/suScanText', 'Verified');
+
+            controller.onClearSelectedSU();
+
+            expect(oModel.getProperty('/selectedStorageUnit')).toBe('');
+            expect(oModel.getProperty('/suScanInput')).toBe('');
+            expect(oModel.getProperty('/suScanState')).toBe('None');
+            expect(oModel.getProperty('/suScanText')).toBe('');
+        });
+
+        it('formatStorageTypeBin formats type and bin nicely', () => {
+            expect(controller.formatStorageTypeBin('OH1', 'ONHOLD')).toBe('OH1 / ONHOLD');
+            expect(controller.formatStorageTypeBin('OH1', '')).toBe('OH1');
+            expect(controller.formatStorageTypeBin('', 'ONHOLD')).toBe('ONHOLD');
+            expect(controller.formatStorageTypeBin('', '')).toBe('-');
         });
     });
 });

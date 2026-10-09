@@ -5,6 +5,27 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Serial Number vs Storage Unit Root Cause Diagnosis & Full-Stack Intelligent Resolution (2026-10-09):** In response to user request `What is the issues find root causes and fix. Serial number 1000046083 does not exist in SAP for material 8000000001. Serial number 2000020148 does not exist in SAP for material 8000006485`:
+  1. **Root Cause Analysis (Live SAP Client 220 Evidence):**
+     - **Entity Mismatch (Classic WM Storage Unit vs Serial Number):** Scanned numbers `1000046083` and `2000020148` are **Classic LE-WM Storage Units** (`LENUM` in SAP table `LQUA`), NOT equipment serial numbers (`SERNR` in SAP table `EQUI` / OData `UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber`).
+     - **Material `8000006485`:** In Plant `1120`, SLoc `CS02`, `2000020148` is quant `LQUA.LENUM = '00000000002000020148'` in Warehouse `W01`, Type `OH1`, Bin `ONHOLD` (1.000 NOS). The actual unrestricted serial numbers in SAP stock (`C_MaterialSerialNumber` with `StockType = '01'`) are `CON-40-002`, `CON-40-003`, `CON-40-004`, `CON-40-005`.
+     - **Material `8000000001`:** In Plant `1120`, SLoc `HS01`, `1000046083` is quant `LQUA.LENUM = '00000000001000046083'` in Warehouse `W13`, Type `RM1`, Bin `0-L0001-03` (5.000 NOS). The actual unrestricted serial numbers in SAP stock (`C_MaterialSerialNumber` with `StockType = '01'`) are `110`, `AIL-IPHONE-0000001`, `AIL-IPHONE-0000002`, `AIL-IPHONE-0000003`, `IPHONE1612345678`, `IPHONE16123456789`, `JBNRCV12354Q`, etc.
+     - **Error Mechanism:** When operators scan a pallet SU barcode into the Serial Number field, the backend previously queried only `EQUI`. Finding 0 rows, it returned `NOT_FOUND` ("Serial number ... does not exist in SAP for material ..."), leaving operators confused with no guidance.
+  2. **Backend Fix (`srv/integration/s4hana/` & `srv/wm/goods-issue/`):**
+     - In `GoodsIssueStockUnitClient.js` (`getSerialStatus`): when `EQUI` returns 0 rows, check if the scanned number exists as a Storage Unit in `LQUA`. If found, returns `Status: 'IS_STORAGE_UNIT'`, `IsStorageUnit: true`, `StorageUnit: <su>`, `StorageType`, `StorageBin`, `Warehouse`, `Material`, `AvailableStock`, and diagnostic message explaining it is a Storage Unit, not a Serial Number.
+     - Added `getAvailableSerialNumbers(material, plant, storageLocation)` in `GoodsIssueStockUnitClient.js` querying `C_MaterialSerialNumber` for `InventoryStockType eq '01'` (excluding special stock).
+     - In `GoodsIssueAdapter.js`, exposed `getSerialStatus` and `getAvailableSerialNumbers({ reservationNo, reservationItem, material, plant, storageLocation })`.
+     - In `service.cds` and `goodsIssue.handler.js`, exposed function `getAvailableSerialNumbers` and added `IsStorageUnit` and SU fields to `SerialVerification`.
+  3. **Frontend Fix (`app/fiori-app/`):**
+     - In `GoodsIssueTransferBaseController.js` (`onAddSerialPress`): auto-detects when an operator scans or submits a Storage Unit barcode (either matching known candidate SUs or returning `IS_STORAGE_UNIT` from SAP), automatically routes it to `selectedStorageUnit`, sets `suScanState = Success`, sets `suScanText`, clears `serialInput`, and displays informative toast and feedback.
+     - In `GoodsIssueTransferBaseController.js`, implemented `onSerialValueHelp()`: opens a `SelectDialog` populated from SAP `getAvailableSerialNumbers`, with live search filtering, 1-click serial selection, and immediate validation.
+     - In `GoodsIssue311.view.xml` and `GoodsIssue301.view.xml`: enabled `showValueHelp="true"`, `valueHelpRequest=".onSerialValueHelp"`, and added Value Help button `btnSerialHelp311` / `btnSerialHelp301` on `inSerialScan311` / `inSerialScan301`.
+     - In `GoodsIssue311Service.js` and `GoodsIssue301Service.js`: implemented `getAvailableSerialNumbers`.
+     - In `i18n.properties` and `i18n_en.properties`: added localized strings for SU auto-routing and serial value help.
+  4. **Validation:** 100% passed unit tests across `goodsIssue311Controller.test.js` (68/68 passed), `goodsIssue311Serial.test.js` (34/34 passed), `goodsIssue311ViewStructure.test.js` (17/17 passed), `goodsIssueService.test.js` (36/36 passed), `ui5lint` passed with 0 findings, `git diff --check` passed with 0 errors.
+
+- **Goods Issue 311 (Storage Location Transfer) — Suggested Storage Unit (SU) Scan Number Discovery & End-to-End Implementation (2026-10-09):** In response to user request `/wm/goods-issue/sloc-transfer-311?resv=524283 Show Suggested SU Scan number`, discovered live SAP S/4HANA stock and implemented full-stack Suggested SU capability: (1) **Live SAP Investigation (Client 220):** Reservation `524283` item `0001` transfers Material `8000006485` from Plant `1120`, Issuing SLoc `CS02` (WM Warehouse `W01`) to Receiving SLoc `HU01` (Movement 311, Open Qty 1 NOS). In SAP table `LQUA`, Storage Location `CS02` holds 4 quants in storage type `OH1`, bin `ONHOLD` (GR date 2026-10-06). By FIFO (oldest GR date & quant ID), the authoritative Suggested Storage Unit scan number is **`2000020148`**. (2) **Backend Enhancements (`srv/` & `srv/integration/s4hana/`):** In `srv/wm/goods-issue/service.cds`, extended `StockUnitListItem` with `Suggested : Boolean` and `StockUnitList` with `SuggestedStorageUnit : String(20)`. In `GoodsIssueStockUnitClient.js`, updated `_wmQuantRejection` to permit storage type `OH1` when `goodsMovementType === '311'` (transfer out of on-hold), updated `_resolveStagingRequirement` to skip production staging checks when `!order` / `311`, sorted quants by FIFO, and flagged `stockUnits[0].Suggested = true`. (3) **Frontend Implementation (`app/fiori-app/`):** In `GoodsIssue311Service.js`, added `fetchStockUnitsForItem(sReservationNo, sReservationItem)`. In `GoodsIssue311Model.js`, added SU properties (`suggestedStorageUnit`, `hasSuggestedSU`, `storageUnits`, `selectedStorageUnit`, `suScanInput`, `suScanState`, `suScanText`), implemented `applyStockUnits()`, and included `StorageUnit` in `toBackendPayload()`. In `GoodsIssueTransferBaseController.js`, added automatic loading of storage units upon reservation item resolution (`_loadStockUnits`), 1-click "Use Suggested SU" action (`onUseSuggestedSU`), barcode scan input handler (`onScanStorageUnit`), row selection (`onSelectStorageUnitRow`), and clear action (`onClearSelectedSU`). In `GoodsIssue311.view.xml`, added Storage Unit panel `pnlStorageUnit311` with Suggested SU card, barcode scan input, and candidate units table. Added localized i18n keys to `i18n.properties` and `i18n_en.properties`. (4) **Validation:** Ran full WM unit test suite (55 suites, 1,145 tests passed 100%), UI5 lint clean (0 findings), `git diff --check` clean.
+
 - **Sales Order & Inquiry Creation — Native SAP Field Name INCO1 / INCO2 / INCO2_L Full-Stack Support & Customer Master KNVV RFC Lookup (2026-10-09):** In response to user request `SAP Field Name INCO1` and Incoterms not appearing on the GUI side when selecting a customer, implemented comprehensive support for SAP native table/BAPI field names (`INCO1`, `INCO2`, `INCO2_L`) and real-time customer master defaulting via RFC: (1) `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: added direct RFC query on SAP table `KNVV` (Customer Master Sales Data) for `INCO1`, `INCO2`, `ZTERM`, `VKBUR`, `VKGRP` inside `getCustomerDefaults(sCustomer, sOrg, sChannel, sDivision)`. When customer master has Incoterms maintained (e.g. live customer `10516` in sales area 1000/10/52 with `INCO1 = 'EXW'`, `INCO2 = 'Sachin'`, `ZTERM = 'PT29'`), `getCustomerDefaults` now returns `INCO1`, `INCO2`, `Incoterms`, and `IncotermsLocation1` directly to the GUI. Added `'INCO1'`, `'INCO2'`, `'INCO2_L'`, `'Inco1'`, `'Inco2'` to `INQUIRY_EXTENSION_FIELDS` for dynamic metadata exposure checks. (2) `srv/sd/sales-order/service.cds` & `srv/sd/sales-inquiry/service.cds`: extended `OrderHeader` and `InquiryHeader` with `INCO1: String; INCO2: String; INCO2_L: String;`, and updated `getCustomerDefaults` return signature to return `Incoterms: String; IncotermsLocation1: String; INCO1: String; INCO2: String;`. (3) `app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`: initialized `INCO1`, `INCO2`, `INCO2_L` on `createInitialModel`; mapped `INCO1` and `INCO2` into `/header/Incoterms` and `/header/INCO1` in `applyCustomerDefaults`; added length validations for `Incoterms`/`INCO1` (<= 3 chars) and `IncotermsLocation1`/`INCO2`/`INCO2_L` (<= 70 chars) in `validateSingleField`; and built payload with both `Incoterms`/`INCO1` and `IncotermsLocation1`/`INCO2`/`INCO2_L` in `buildPayload`. (4) `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js`: added `"INCO1"`, `"INCO2"`, `"INCO2_L"` to `ALLOWED_HEADER_FIELDS` and normalized aliases bidirectionally in `_sanitizePayload`. (5) `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`: in `onIncotermsSelect`, `_applySelectedValueHelpItem` (disambiguating `inIncoterms` from `inIncotermsLocation`), and `onHeaderFieldChange` (synchronizing `INCO1`/`INCO2` aliases on direct edits), populated both `/header/Incoterms` and `/header/INCO1` and marked modified flags. (6) `srv/sd/sales-inquiry/validation/salesInquiry.validation.js`: validated max length 3 for `INCO1`/`Incoterms` and max length 70 for `INCO2`/`INCO2_L`/`IncotermsLocation1`. (7) `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`: normalized `INCO1`, `INCO2`, `INCO2_L` alongside `Incoterms` and `IncotermsLocation1`. (8) `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`: mapped `s4Header.INCO1 = incoVal; s4Header.Incoterms = incoVal;` and `s4Header.INCO2 = incoLocVal; s4Header.INCO2_L = incoLocVal;` in both order and inquiry mappers. Validation: full regression pass (**143/143 test suites, 2,391/2,391 tests passed, 100% green**), `ui5lint` clean (0 findings), `npx cds compile srv` clean, `git diff --check` clean.
 
 - **Sales Order Creation — Header Passes Incoterms (Not IncotermsClassification) Across Entire Stack (2026-10-09):** Fixed issue where Incoterms was not arriving on the SAP GUI side because the header passed `IncotermsClassification` instead of `Incoterms`. Updated the end-to-end SD Sales Order creation path: (1) `app/fiori-app/webapp/modules/sd/sales-order/view/CreateSalesOrder.view.xml`: updated input ID from `inIncotermsClassification` to `inIncoterms` and value binding from `{newOrder>/header/IncotermsClassification}` to `{newOrder>/header/Incoterms}`; suggestion items continue providing classification codes from `IncotermsClassificationVH`; (2) `app/fiori-app/webapp/modules/sd/sales-order/controller/CreateSalesOrder.controller.js`: updated `onIncotermsSelect` and `onValueHelpRequest` result handling to write `/header/Incoterms` and mark `/modifiedFields/Incoterms`; (3) `app/fiori-app/webapp/modules/sd/sales-order/model/SalesOrderModel.js`: initialized `Incoterms: ""` on create model, populated `Incoterms` and `IncotermsLocation1` in `buildPayload` into `oCleanHeader`, and added customer defaulting in `applyCustomerDefaults`; (4) `app/fiori-app/webapp/modules/sd/sales-order/service/SalesOrderService.js`: added `Incoterms` and `IncotermsLocation1` to `ALLOWED_HEADER_FIELDS` in `_sanitizePayload` and normalized any incoming `IncotermsClassification` to `Incoterms` so only `Incoterms` is passed to CAP; (5) `srv/sd/sales-order/service.cds`: extended `type OrderHeader` with `Incoterms: String;` and `IncotermsLocation1: String;`; (6) `srv/sd/sales-inquiry/validation/salesInquiry.validation.js`: added length validations for `Incoterms` (<= 3 chars) and `IncotermsLocation1` (<= 70 chars); (7) `srv/sd/sales-inquiry/mapping/salesInquiry.mapper.js`: normalized `Incoterms` and `IncotermsLocation1` on `normalizedHeader`; (8) `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryMapper.js`: mapped `Incoterms` and `IncotermsLocation1` to `s4Header` in both `mapToS4OrderPayload` and `mapToS4InquiryPayload`; (9) `srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter.js`: added `'Incoterms'` and `'IncotermsLocation1'` to `INQUIRY_EXTENSION_FIELDS` for dynamic metadata exposure check. Unit tests updated in `salesOrderUiService.test.js`, `salesOrderModel.test.js`, and `salesInquiryMapping.test.js`. Validation: 100% full regression pass (**143/143 test suites, 2,388/2,388 tests green**), `ui5lint` clean (0 findings), `cds compile` green, `git diff --check` clean.
@@ -81,6 +102,93 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-09 16:35 IST — Serial Number vs Storage Unit Root Cause Diagnosis & Full-Stack Intelligent Resolution
+- **Request.** `What is the issues find root causes and fix. Serial number 1000046083 does not exist in SAP for material 8000000001. Serial number 2000020148 does not exist in SAP for material 8000006485.`
+- **Inspection & Root Cause Analysis (Live SAP Client 220 Evidence).**
+  - **Entity Mismatch (Classic WM Storage Unit vs Equipment Serial Number):**
+    - Scanned numbers `1000046083` and `2000020148` are **Classic LE-WM Storage Units** (`LENUM` in SAP table `LQUA`), which manage warehouse inventory quants.
+    - Equipment serial numbers (`SERNR` in table `EQUI` and OData `UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber`) manage individual serialized tracking units.
+  - **Material `8000006485`:**
+    - MARC Serial Profile: `SERNP = 'ZSN2'` in Plant `1120`.
+    - `2000020148` is quant `LQUA.LENUM = '00000000002000020148'` in Warehouse `W01`, Plant `1120`, SLoc `CS02`, Type `OH1`, Bin `ONHOLD`, holding 1.000 NOS.
+    - Real unrestricted serial numbers in SAP stock (`C_MaterialSerialNumber` with `StockType = '01'`): `CON-40-002`, `CON-40-003`, `CON-40-004`, `CON-40-005`.
+  - **Material `8000000001`:**
+    - MARC Serial Profile: `SERNP = 'ZSN1'` in Plant `1120`.
+    - `1000046083` is quant `LQUA.LENUM = '00000000001000046083'` in Warehouse `W13`, Plant `1120`, SLoc `HS01`, Type `RM1`, Bin `0-L0001-03`, holding 5.000 NOS.
+    - Real unrestricted serial numbers in SAP stock (`C_MaterialSerialNumber` with `StockType = '01'`): `110`, `AIL-IPHONE-0000001`, `AIL-IPHONE-0000002`, `AIL-IPHONE-0000003`, `IPHONE1612345678`, `IPHONE16123456789`, `JBNRCV12354Q`, etc.
+  - **Error Mechanism:**
+    - When operators scan a pallet SU barcode into the Serial Number field, the backend previously queried only `EQUI`. Finding 0 rows, it returned `NOT_FOUND` ("Serial number ... does not exist in SAP for material ..."), leaving operators confused with no guidance.
+- **Implementation & Changes.**
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+    - Updated `getSerialStatus`: when `EQUI` returns 0 rows, checks if the scanned number exists in `LQUA` (`LENUM`). If found, returns `Status: 'IS_STORAGE_UNIT'`, `IsStorageUnit: true`, `StorageUnit: <su>`, `StorageType`, `StorageBin`, `Warehouse`, `Material`, `AvailableStock`, and diagnostic guidance.
+    - Added `getAvailableSerialNumbers(material, plant, storageLocation)` querying `C_MaterialSerialNumber` for `InventoryStockType eq '01'` (excluding special stock).
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+    - Exposed `getSerialStatus` and `getAvailableSerialNumbers({ reservationNo, reservationItem, material, plant, storageLocation })`.
+  - `srv/wm/goods-issue/service.cds`:
+    - Extended `SerialVerification` type with `IsStorageUnit : Boolean; StorageUnit : String(20); StorageType : String(3); StorageBin : String(10); Warehouse : String(3);`.
+    - Declared `function getAvailableSerialNumbers(...) returns array of AvailableSerialItem;`.
+  - `srv/wm/goods-issue/handlers/goodsIssue.handler.js`:
+    - Registered function handler for `getAvailableSerialNumbers`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue311Service.js` & `GoodsIssue301Service.js`:
+    - Added `getAvailableSerialNumbers` service methods calling OData function import.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`:
+    - In `onAddSerialPress`: detects when operator enters or scans an SU barcode (either matching known candidate SUs or returning `IS_STORAGE_UNIT` from SAP), automatically routes it to `selectedStorageUnit`, sets `suScanState = Success`, sets `suScanText`, clears `serialInput`, and displays informative feedback.
+    - Implemented `onSerialValueHelp()`: opens a `SelectDialog` of available serial numbers from SAP, supporting live search filter and 1-click selection directly into `serialInput`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml` & `GoodsIssue301.view.xml`:
+    - Added `showValueHelp="true"`, `valueHelpRequest=".onSerialValueHelp"`, and Value Help icon button `btnSerialHelp311` / `btnSerialHelp301`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+    - Added text keys for `gi311BtnAvailableSerials`, `gi311SerialValueHelpTitle`, `gi311SerialValueHelpNoData`, `gi311SuRecognizedAndSelected`, `gi311BarcodeIsStorageUnit`, `gi311BarcodeIsStorageUnitToast` (and `gi301` equivalents).
+  - `test/unit/wm/goodsIssue311Controller.test.js` & `test/unit/wm/goodsIssue311Serial.test.js`:
+    - Added unit test cases for SU auto-routing from known units, SAP `IS_STORAGE_UNIT` response handling, `onSerialValueHelp` dialog launch, `GoodsIssueStockUnitClient.getSerialStatus` LQUA detection, and `getAvailableSerialNumbers` query.
+- **Validation.**
+  - `npx jest test/unit/wm/goodsIssue311Controller.test.js` passed (68/68 passed).
+  - `npx jest test/unit/wm/goodsIssue311Serial.test.js` passed (34/34 passed).
+  - `npx jest test/unit/wm/goodsIssue311ViewStructure.test.js` passed (17/17 passed).
+  - `npx jest test/unit/wm/goodsIssueService.test.js` passed (36/36 passed).
+  - `cd app/fiori-app && npm run lint` passed (UI5 linter report: Success! No findings detected).
+  - `git diff --check` passed cleanly with 0 errors.
+
+### 2026-10-09 16:00 IST — Goods Issue 311: Suggested Storage Unit (SU) Scan Number Discovery & Full-Stack UI Implementation
+- **Request.** `/wm/goods-issue/sloc-transfer-311?resv=524283 Show Suggested SU Scan number.`
+- **Inspection & Discovery (Live SAP Client 220).**
+  - Queried SAP table `RESB` for Reservation `524283` (Item `0001`): Material `8000006485` ("Polyethylene Terephthalate"), Plant `1120`, Issuing Storage Location `CS02` (Warehouse `W01`), Receiving Storage Location `HU01`, Movement Type `311`, Requirement/Open Qty `1 NOS`.
+  - Queried SAP table `LQUA` for Material `8000006485` in Warehouse `W01`, Plant `1120`, Storage Location `CS02`:
+    - 4 storage units exist, each holding 1.000 NOS in Storage Type `OH1` (Gr On-Hold Material), Bin `ONHOLD`, with GR date `2026-10-06`:
+      - `2000020148` (Quant 0000000780, GR Date 2026-10-06) -> **Suggested SU (Oldest FIFO)**
+      - `2000020149` (Quant 0000000781, GR Date 2026-10-06)
+      - `2000020150` (Quant 0000000782, GR Date 2026-10-06)
+      - `2000020151` (Quant 0000000783, GR Date 2026-10-06)
+  - Identified root cause in `GoodsIssueStockUnitClient.js`: `_resolveStagingRequirement` assumed missing `LGTYP` indicated unconfigured staging (`NO_STAGING_TYPE`), returning empty SUs for non-order 311 transfer reservations. Gated staging checks behind `if (order)` for movement 261/production orders and permitted storage type `OH1` for 311 transfers.
+- **Implementation & Changes.**
+  - `srv/wm/goods-issue/service.cds`:
+    - Added `Suggested : Boolean;` to `StockUnitListItem`.
+    - Added `SuggestedStorageUnit : String(20);` to `StockUnitList`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`:
+    - Allowed storage type `OH1` when `goodsMovementType === '311'`.
+    - Skipped production staging checks when `!order`, returning `isStagingRequired: false, stagingStatus: 'NO_STAGING_REQUIRED'`.
+    - Marked `stockUnits[0].Suggested = true` with others `false`, and populated `SuggestedStorageUnit`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue311Service.js`:
+    - Added `fetchStockUnitsForItem(sReservationNo, sReservationItem)` calling `/getStockUnitsForItem`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue311Model.js`:
+    - Added SU state fields (`suggestedStorageUnit`, `hasSuggestedSU`, `storageUnits`, `selectedStorageUnit`, `suScanInput`, `suScanState`, `suScanText`).
+    - Added `applyStockUnits(oData, aUnits, sSuggested)`.
+    - Mapped `StorageUnit` into `toBackendPayload()`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js`:
+    - Added `_loadStockUnits(sResv, sItem)` called on `_prefillFromReservation`, `_loadReservationItems`, `_openReservationItemPicker`, and `onReservationItemChange`.
+    - Added action handlers: `onUseSuggestedSU`, `onScanStorageUnit`, `onScanStorageUnitSubmit`, `onSelectStorageUnitRow`, `onClearSelectedSU`, and `formatStorageTypeBin`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml`:
+    - Added `<Panel id="pnlStorageUnit311">` with Suggested SU card (`#2000020148`, badge, "Use Suggested SU" button), barcode scan input field, and candidate units table (`#tblStorageUnits311`).
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+    - Added `gi311TitleSuggestedSU`, `gi311SuggestedSUDesc`, `gi311BadgeSuggested`, `gi311BtnUseSuggestedSU`, `gi311SuScanPlaceholder`, `gi311BtnScanSU`, `gi311BtnClearSU`, `gi311SelectedSU`, `gi311NoSUSelected`, `gi311SuSelectedSuccess`, `gi311SuSelectedToast`, `gi311SuVerified`, `gi311SuNotMatched`, `gi311AvailableSUsTitle`, `gi311ColSU`, `gi311ColStorageTypeBin`, `gi311ColAvailableStock`, `gi311ColGrDate`, `gi311ColStatus`, `gi311ColAction`, `gi311BtnSelectSU`, `gi311NoStockUnitsAvailable`.
+  - `test/unit/wm/goodsIssue311Controller.test.js` & `test/unit/wm/goodsIssue311ViewStructure.test.js`:
+    - Added unit test cases for Storage Unit loading, Suggested SU selection, barcode scan matching, table selection, and XML view bindings.
+- **Validation.**
+  - `npx jest test/unit/wm/goodsIssue311Controller.test.js`: 65/65 tests passed.
+  - `npx jest test/unit/wm/goodsIssue311ViewStructure.test.js`: 17/17 tests passed.
+  - `npx jest test/unit/wm`: 55 suites, 1145 tests passed (100% green).
+  - `app/fiori-app/npm run lint` (`ui5lint`): 0 findings.
+  - `git diff --check`: 0 whitespace/formatting issues.
 
 ### 2026-10-09 14:10 IST — SAP Native Field Name INCO1 / INCO2 / INCO2_L Full-Stack Support & Customer Master KNVV RFC Lookup
 - **Request.** `SAP Field Name INCO1.`

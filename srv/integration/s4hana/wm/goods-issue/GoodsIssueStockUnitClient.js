@@ -658,7 +658,13 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    */
   _wmQuantRejection(q, resvBatch, usableBatchMap, ctx = {}) {
     if (!(q.VERME > 0)) return 'no available stock';
-    if (EXCLUDED_STORAGE_TYPES.includes(q.LGTYP)) return `storage type ${q.LGTYP} is excluded`;
+    if (EXCLUDED_STORAGE_TYPES.includes(q.LGTYP)) {
+      if ((ctx.goodsMovementType === '311' || ctx.movementType === '311') && q.LGTYP === 'OH1') {
+        // OH1 (on-hold storage) in CS02 is transferrable via 311
+      } else {
+        return `storage type ${q.LGTYP} is excluded`;
+      }
+    }
     if (EXCLUDED_STORAGE_TYPE_PREFIXES.some((p) => (q.LGTYP || '').startsWith(p))) {
       return `interim/excluded storage type ${q.LGTYP}`;
     }
@@ -743,23 +749,37 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       throw err;
     }
 
+    const order = String(resbRow.AUFNR || orderNo || '').trim();
     const resbLgtyp = String(resbRow.LGTYP || '').trim();
     if (!resbLgtyp) {
-      // The storage location IS WM-managed (this method only runs after a T320 hit), but the
-      // reservation item carries no staging type. Barcode/serial resolution for flows without a
-      // staging gate (301/311) keeps working, so this is a marker, not a hard UNKNOWN here.
+      if (order) {
+        // The storage location IS WM-managed, but the order reservation item carries no staging type.
+        return {
+          isStagingRequired: true,
+          stagingStatus: 'NO_STAGING_TYPE',
+          targetType: '',
+          targetBin: '',
+          warehouse: String(warehouse || '').trim(),
+          tbnum: '',
+          transferRequirementStatus: 'UNKNOWN',
+          stagingSource: 'NO_RESB_LGTYP',
+          requiredQty: Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG)),
+          uom: String(resbRow.MEINS || '').trim(),
+          error: `SAP RESB has no staging type for WM-managed reservation ${sResv} item ${sItem}; staging requirement cannot be verified.`
+        };
+      }
+      // For transfer/non-order reservations (301/311), no staging is required
       return {
         isStagingRequired: false,
-        stagingStatus: 'NO_STAGING_TYPE',
+        stagingStatus: 'NO_STAGING_REQUIRED',
         targetType: '',
         targetBin: '',
         warehouse: String(warehouse || '').trim(),
         tbnum: '',
-        transferRequirementStatus: 'UNKNOWN',
-        stagingSource: 'NO_RESB_LGTYP',
+        transferRequirementStatus: 'NOT_REQUIRED',
+        stagingSource: 'NON_ORDER_RESERVATION',
         requiredQty: Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG)),
-        uom: String(resbRow.MEINS || '').trim(),
-        error: `SAP RESB has no staging type for WM-managed reservation ${sResv} item ${sItem}; staging requirement cannot be verified.`
+        uom: String(resbRow.MEINS || '').trim()
       };
     }
 
@@ -771,7 +791,6 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       throw err;
     }
 
-    const order = String(resbRow.AUFNR || orderNo || '').trim();
     const reqQty = Math.max(0, wmNum(resbRow.BDMNG) - wmNum(resbRow.ENMNG));
     const uom = String(resbRow.MEINS || '').trim() || 'KG';
     const sapMaterial = String(resbRow.MATNR || '').replace(/^0+/, '') || material;
@@ -1093,7 +1112,8 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
     const issuable = suQuants.filter((q) => !this._wmQuantRejection(q, resvBatch, usableMap, {
       targetType: staging.targetType,
       targetBin: staging.targetBin,
-      currentOrder: staging.order
+      currentOrder: staging.order,
+      goodsMovementType: String(resvItem.GoodsMovementType || '').trim()
     }));
     const rawStockUnits = this._wmGroupStockUnits(issuable, usableMap);
 
@@ -1130,6 +1150,10 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       }
       stockUnits.push(su);
     }
+
+    stockUnits.forEach((su, idx) => {
+      su.Suggested = idx === 0;
+    });
 
     const shown = new Set(stockUnits.map((s) => s.StorageUnit));
     const allCandidateSu = quants.filter((q) => q.LENUM);
@@ -1199,6 +1223,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       ...base,
       Warehouse: wmInfo.warehouse || warehouses.join(','),
       StockUnits: stockUnits,
+      SuggestedStorageUnit: stockUnits.length > 0 ? stockUnits[0].StorageUnit : '',
       ExcludedCount: excludedCount,
       ExcludedUnconfirmedCount: excludedUnconfirmedCount,
       Message: message,
@@ -2268,6 +2293,11 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       StorageLocation: String(rec.StorageLocation || '').trim(),
       StockType: String(rec.InventoryStockType || '').trim(),
       StockTypeText: String(rec.InventoryStockType_Text || '').trim(),
+      IsStorageUnit: Boolean(rec.IsStorageUnit),
+      ...(rec.StorageUnit ? { StorageUnit: rec.StorageUnit } : {}),
+      ...(rec.StorageType ? { StorageType: rec.StorageType } : {}),
+      ...(rec.StorageBin ? { StorageBin: rec.StorageBin } : {}),
+      ...(rec.Warehouse ? { Warehouse: rec.Warehouse } : {}),
       VerifiedAt: new Date().toISOString()
     });
     const where = (rec) => `plant ${rec.Plant || '-'}, storage location ${rec.StorageLocation || '-'}, ${rec.InventoryStockType_Text || `stock type ${rec.InventoryStockType || '-'}`}`;
@@ -2343,6 +2373,36 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       const matnr = /^\d+$/.test(mKey) ? mKey.padStart(18, '0') : mKey;
       const equi = await this.rfc.readTable('EQUI', ['EQUNR'], [`SERNR = '${sKey}'`, `AND MATNR = '${matnr}'`]);
       if (!equi.length) {
+        // Before returning NOT_FOUND, check if the scanned number is actually a Storage Unit (LQUA.LENUM).
+        // Warehouse operators frequently scan the pallet SU barcode into the serial input field.
+        const sDigits = sSerial.replace(/\D/g, '');
+        const lenumKey = /^\d+$/.test(sSerial) && sSerial.length <= 20
+          ? sSerial.padStart(20, '0')
+          : (sDigits.length >= 8 && sDigits.length <= 20 ? sDigits.padStart(20, '0') : '');
+        if (lenumKey) {
+          try {
+            const lquaRows = await this.rfc.readTable('LQUA', ['LGNUM', 'LGTYP', 'LGPLA', 'LENUM', 'MATNR', 'WERKS', 'LGORT', 'VERME'], [`LENUM = '${lenumKey}'`]);
+            if (lquaRows && lquaRows.length > 0) {
+              const q = lquaRows[0];
+              const suClean = wmAlphaOut(q.LENUM);
+              const suMat = wmAlphaOut(q.MATNR);
+              const isSameMaterial = suMat === matClean;
+              return result('IS_STORAGE_UNIT', `"${sSerial}" is a Storage Unit (SU) in bin ${q.LGTYP}/${q.LGPLA} (Warehouse ${q.LGNUM}), NOT a Serial Number. ${isSameMaterial ? 'Please enter it in the Storage Unit field.' : `It belongs to material ${suMat}.`}`, {
+                IsStorageUnit: true,
+                StorageUnit: suClean,
+                StorageType: q.LGTYP,
+                StorageBin: q.LGPLA,
+                Warehouse: q.LGNUM,
+                Material: suMat,
+                Plant: q.WERKS,
+                StorageLocation: q.LGORT,
+                AvailableStock: Number(q.VERME || 0)
+              });
+            }
+          } catch (lquaErr) {
+            LOG.warn(`Storage Unit check fallback failed: ${lquaErr.message}`);
+          }
+        }
         return result('NOT_FOUND', `Serial number ${sSerial} does not exist in SAP for material ${matClean}.`);
       }
       const jest = await this.rfc.readTable('JEST', ['STAT'], [`OBJNR = 'IE${equi[0].EQUNR}'`, "AND STAT = 'I0184'", "AND INACT = ''"]);
@@ -2352,6 +2412,54 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       return result('NOT_IN_STOCK', `Serial number ${sSerial} exists in SAP for material ${matClean} but is not in stock (already issued or not yet received).`);
     } catch (err) {
       return result('UNVERIFIED', `Serial number ${sSerial} is not in stock for material ${matClean}; its SAP serial master could not be read: ${err.message}`);
+    }
+  }
+
+  /**
+   * List available unrestricted serial numbers for a material / plant / storage location.
+   * Queries /sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber.
+   *
+   * @param {string} material
+   * @param {string} plant
+   * @param {string} [storageLocation]
+   * @returns {Promise<Array<Object>>}
+   */
+  async getAvailableSerialNumbers(material, plant, storageLocation) {
+    const matClean = String(material || '').trim().replace(/^0+/, '');
+    const targetPlant = String(plant || '').trim().toUpperCase();
+    const targetSLoc = String(storageLocation || '').trim().toUpperCase();
+
+    if (!matClean || !targetPlant) {
+      return [];
+    }
+
+    const SERIAL_SET = '/sap/opu/odata/sap/UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber';
+    let filter = `Material eq '${encodeURIComponent(matClean)}' and Plant eq '${encodeURIComponent(targetPlant)}' and InventoryStockType eq '01'`;
+    if (targetSLoc) {
+      filter += ` and StorageLocation eq '${encodeURIComponent(targetSLoc)}'`;
+    }
+
+    try {
+      const rows = await this._get(SERIAL_SET, `$filter=${encodeURIComponent(filter)}&$format=json`);
+      const list = Array.isArray(rows) ? rows : [];
+      return list
+        .filter((r) => !String(r.InventorySpecialStockType || '').trim())
+        .map((r) => ({
+          SerialNumber: String(r.SerialNumber || '').trim(),
+          Material: String(r.Material || '').trim().replace(/^0+/, ''),
+          MaterialText: String(r.Material_Text || '').trim(),
+          Plant: String(r.Plant || '').trim(),
+          PlantName: String(r.PlantName || '').trim(),
+          StorageLocation: String(r.StorageLocation || '').trim(),
+          StorageLocationName: String(r.StorageLocationName || '').trim(),
+          StockType: String(r.InventoryStockType || '').trim(),
+          StockTypeText: String(r.InventoryStockType_Text || 'Unrestricted-Use Stock').trim(),
+          Batch: String(r.Batch || '').trim()
+        }))
+        .filter((r) => Boolean(r.SerialNumber));
+    } catch (err) {
+      LOG.warn(`Failed to fetch available serial numbers for ${matClean}/${targetPlant}/${targetSLoc}: ${err.message}`);
+      return [];
     }
   }
 

@@ -246,7 +246,138 @@
                     </f:SimpleForm>
                 </Panel>
 
-                <!-- 4. Conditional: Serial Numbers Management -->
+                <!-- 4. Storage Unit (SU) Management & Suggested Scan -->
+                <Panel
+                    id="pnlStorageUnit311"
+                    headerText="{i18n>gi311TitleSuggestedSU}"
+                    expandable="false"
+                    visible="{= ${gi311>/hasSuggestedSU} || (${gi311>/storageUnits} &amp;&amp; ${gi311>/storageUnits}.length > 0) || !!${gi311>/selectedStorageUnit} }"
+                    class="sapUiSmallMarginBottom">
+
+                    <VBox class="sapUiSmallMargin">
+                        <!-- Suggested SU Highlight Box -->
+                        <HBox
+                            id="boxSuggestedSUHighlight311"
+                            alignItems="Center"
+                            justifyContent="SpaceBetween"
+                            visible="{gi311>/hasSuggestedSU}"
+                            class="sapUiSmallMarginBottom sapUiTinyMarginTop"
+                            wrap="Wrap">
+                            <HBox alignItems="Center">
+                                <core:Icon src="sap-icon://palette" size="1.8rem" color="#0854a0" class="sapUiSmallMarginEnd" />
+                                <VBox>
+                                    <Label text="{i18n>gi311SuggestedSUDesc}" design="Bold" />
+                                    <HBox alignItems="Center">
+                                        <Title id="txtSuggestedSUNumber311" text="{gi311>/suggestedStorageUnit}" level="H3" class="sapUiTinyMarginEnd" />
+                                        <ObjectStatus text="{i18n>gi311BadgeSuggested}" state="Success" icon="sap-icon://accept" />
+                                    </HBox>
+                                </VBox>
+                            </HBox>
+                            <Button
+                                id="btnUseSuggestedSU311"
+                                text="{i18n>gi311BtnUseSuggestedSU}"
+                                icon="sap-icon://accept"
+                                type="Emphasized"
+                                press=".onUseSuggestedSU" />
+                        </HBox>
+
+                        <!-- Scan / Input Section -->
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
+                            <Input
+                                id="inSuScan311"
+                                value="{gi311>/suScanInput}"
+                                placeholder="{i18n>gi311SuScanPlaceholder}"
+                                submit=".onScanStorageUnitSubmit"
+                                liveChange=".onScanStorageUnit"
+                                width="18rem"
+                                maxLength="20"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnScanSU311"
+                                text="{i18n>gi311BtnScanSU}"
+                                icon="sap-icon://bar-code"
+                                press=".onScanStorageUnit"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnClearSU311"
+                                text="{i18n>gi311BtnClearSU}"
+                                icon="sap-icon://clear-filter"
+                                type="Transparent"
+                                press=".onClearSelectedSU"
+                                visible="{= !!${gi311>/selectedStorageUnit} }"
+                                class="sapUiTinyMarginEnd" />
+                            <ObjectStatus
+                                id="statSelectedSU311"
+                                text="{= ${gi311>/selectedStorageUnit} ? (${i18n>gi311SelectedSU} + ': ' + ${gi311>/selectedStorageUnit}) : ${i18n>gi311NoSUSelected} }"
+                                state="{= ${gi311>/selectedStorageUnit} ? 'Success' : 'None' }" />
+                        </HBox>
+
+                        <!-- Scan Feedback Message Strip -->
+                        <MessageStrip
+                            id="stripSuScan311"
+                            text="{gi311>/suScanText}"
+                            type="{gi311>/suScanState}"
+                            showIcon="true"
+                            visible="{= !!${gi311>/suScanText} }"
+                            class="sapUiTinyMarginBottom" />
+
+                        <!-- Available Candidate Storage Units Table -->
+                        <Table
+                            id="tblStorageUnits311"
+                            items="{gi311>/storageUnits}"
+                            noDataText="{i18n>gi311NoStockUnitsAvailable}"
+                            growing="true"
+                            growingThreshold="20"
+                            width="100%">
+                            <headerToolbar>
+                                <OverflowToolbar>
+                                    <Title text="{i18n>gi311AvailableSUsTitle}" level="H4" />
+                                    <ToolbarSpacer />
+                                </OverflowToolbar>
+                            </headerToolbar>
+                            <columns>
+                                <Column id="colSU311">
+                                    <Text text="{i18n>gi311ColSU}" />
+                                </Column>
+                                <Column id="colStorageTypeBin311">
+                                    <Text text="{i18n>gi311ColStorageTypeBin}" />
+                                </Column>
+                                <Column id="colAvailableStock311" hAlign="End">
+                                    <Text text="{i18n>gi311ColAvailableStock}" />
+                                </Column>
+                                <Column id="colGrDate311">
+                                    <Text text="{i18n>gi311ColGrDate}" />
+                                </Column>
+                                <Column id="colSUStatus311">
+                                    <Text text="{i18n>gi311ColStatus}" />
+                                </Column>
+                                <Column id="colSUAction311" width="6rem" hAlign="End">
+                                    <Text text="{i18n>gi311ColAction}" />
+                                </Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem highlight="{= ${gi311>StorageUnit} === ${gi311>/selectedStorageUnit} ? 'Success' : (${gi311>Suggested} ? 'Information' : 'None') }">
+                                    <cells>
+                                        <Text text="{gi311>StorageUnit}" class="fontBold" />
+                                        <Text text="{parts: [{path: 'gi311>StorageType'}, {path: 'gi311>StorageBin'}], formatter: '.formatStorageTypeBin'}" />
+                                        <Text text="{gi311>AvailableStock} {gi311>Unit}" />
+                                        <Text text="{gi311>GrDate}" />
+                                        <ObjectStatus
+                                            text="{= ${gi311>Suggested} ? ${i18n>gi311BadgeSuggested} : '' }"
+                                            state="Success"
+                                            icon="{= ${gi311>Suggested} ? 'sap-icon://accept' : '' }" />
+                                        <Button
+                                            text="{i18n>gi311BtnSelectSU}"
+                                            type="{= ${gi311>StorageUnit} === ${gi311>/selectedStorageUnit} ? 'Emphasized' : 'Transparent' }"
+                                            press=".onSelectStorageUnitRow" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
+                <!-- 5. Conditional: Serial Numbers Management -->
                 <Panel
                     id="pnlSerialManagement311"
                     headerText="{i18n>gi311TitleSerialManagement}"
@@ -262,6 +393,8 @@
                                 value="{gi311>/serialInput}"
                                 placeholder="{i18n>gi311SerialScanPlaceholder}"
                                 submit=".onSerialInputSubmit"
+                                showValueHelp="true"
+                                valueHelpRequest=".onSerialValueHelp"
                                 width="18rem"
                                 maxLength="18"
                                 class="sapUiTinyMarginEnd" />
@@ -272,6 +405,12 @@
                                 text="{i18n>gi311BtnAddSerial}"
                                 icon="sap-icon://bar-code"
                                 press=".onAddSerialPress"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnSerialHelp311"
+                                icon="sap-icon://value-help"
+                                tooltip="{i18n>gi311BtnAvailableSerials}"
+                                press=".onSerialValueHelp"
                                 class="sapUiTinyMarginEnd" />
                             <ObjectStatus
                                 id="statSerialCount311"
