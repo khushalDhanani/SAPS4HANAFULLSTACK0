@@ -92,6 +92,27 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Serials             : array of String(18);
         Success             : Boolean;
         Message             : String(255);
+        MaterialDocument    : String(10);
+        MaterialDocYear     : String(4);
+        StockEffect         : String(80);
+        ErrorMessage        : String(255);
+    };
+
+    type MigoProcessResult {
+        Success             : Boolean;
+        MaterialDocument    : String(10);
+        MaterialDocYear     : String(4);
+        Status              : String(2);
+        StatusText          : String(40);
+        ReservationNo       : String(10);
+        ReservationItem     : String(4);
+        TransferOrder       : String(10);
+        MovementType        : String(3);
+        Quantity            : Decimal(13, 3);
+        Unit                : String(3);
+        StockEffect         : String(80);
+        Message             : String(255);
+        ErrorMessage        : String(255);
     };
 
     type TRDetail {
@@ -170,7 +191,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         batch       : String(10),
         serials     : array of String(18),
         storageUnit : String(20),
-        autoConfirm : Boolean
+        autoConfirm : Boolean,
+        autoPostMigo: Boolean
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -183,6 +205,43 @@ service TrToService @(path: '/odata/v4/tr-to') {
         batch       : String(10),
         serials     : array of String(18),
         storageUnit : String(20),
-        autoConfirm : Boolean
+        autoConfirm : Boolean,
+        autoPostMigo: Boolean
     ) returns TOProcessResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postMigoGoodsMovement(
+        ReservationNo            : String(10),
+        ReservationItem          : String(4),
+        MovementType             : String(3),
+        Material                 : String(40),
+        Plant                    : String(4),
+        StorageLocation          : String(4),
+        Quantity                 : Decimal(13, 3),
+        Unit                     : String(3),
+        ReceivingPlant           : String(4),
+        ReceivingStorageLocation : String(4),
+        CostCenter               : String(10),
+        AssetNo                  : String(12),
+        SubNumber                : String(4),
+        TransferOrder            : String(10)
+    ) returns MigoProcessResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action PostMigoGoodsMovement(
+        ReservationNo            : String(10),
+        ReservationItem          : String(4),
+        MovementType             : String(3),
+        Material                 : String(40),
+        Plant                    : String(4),
+        StorageLocation          : String(4),
+        Quantity                 : Decimal(13, 3),
+        Unit                     : String(3),
+        ReceivingPlant           : String(4),
+        ReceivingStorageLocation : String(4),
+        CostCenter               : String(10),
+        AssetNo                  : String(12),
+        SubNumber                : String(4),
+        TransferOrder            : String(10)
+    ) returns MigoProcessResult;
 }

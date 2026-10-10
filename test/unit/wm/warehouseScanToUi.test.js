@@ -38,7 +38,8 @@ const mockWarehouseScanToService = {
         { Tbnum: '0001001839', DisplayText: 'TR 1001839', Description: 'Raw Material Transfer' }
     ]),
     lookupTR: jest.fn(),
-    createTOFromTR: jest.fn()
+    createTOFromTR: jest.fn(),
+    postMigoGoodsMovement: jest.fn()
 };
 
 class MockJSONModel {
@@ -402,14 +403,17 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             controller._validateForm();
         });
 
-        it('calls createTOFromTR with autoConfirm=true and presents confirmed result', async () => {
+        it('calls createTOFromTR with autoConfirm=true and autoPostMigo=true and presents confirmed result with material document', async () => {
             mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
                 TransferOrder: '1012970',
                 ConfirmationNumber: '0001',
                 WarehouseNumber: 'W01',
-                Status: '04 (TO Confirmed)',
+                Status: '05',
                 IsConfirmed: true,
-                ConfirmedBy: 'SAP_OPERATOR'
+                ConfirmedBy: 'SAP_OPERATOR',
+                MaterialDocument: '4900050128',
+                MaterialDocYear: '2026',
+                StockEffect: 'Stock transferred to Storage Location CS01'
             });
 
             await controller.onProcessTO();
@@ -423,14 +427,79 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
                 batch: '',
                 serials: [],
                 autoConfirm: true,
+                autoPostMigo: true,
                 storageUnit: ''
             });
 
             expect(viewModel.getProperty('/hasResult')).toBe(true);
             expect(viewModel.getProperty('/result/TransferOrder')).toBe('1012970');
-            expect(viewModel.getProperty('/result/IsConfirmed')).toBe(true);
+            expect(viewModel.getProperty('/result/MaterialDocument')).toBe('4900050128');
+            expect(viewModel.getProperty('/result/StockEffect')).toBe('Stock transferred to Storage Location CS01');
+            expect(viewModel.getProperty('/canRetryMigo')).toBe(false);
             expect(viewModel.getProperty('/hasTR')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('1012970'));
+            expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('4900050128'));
+        });
+
+        it('handles MIGO failure (status 99) by displaying warning message and enabling Retry button', async () => {
+            mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
+                TransferOrder: '1012971',
+                ConfirmationNumber: '0002',
+                WarehouseNumber: 'W01',
+                Status: '99',
+                IsConfirmed: true,
+                ConfirmedBy: 'SAP_OPERATOR',
+                ReservationNo: '0000524979',
+                ReservationItem: '0001',
+                Material: '8000000023',
+                Quantity: 5,
+                Unit: 'KG',
+                MovementType: '311',
+                ErrorMessage: 'Posting date 20261010 period closed'
+            });
+
+            await controller.onProcessTO();
+
+            expect(viewModel.getProperty('/hasResult')).toBe(true);
+            expect(viewModel.getProperty('/canRetryMigo')).toBe(true);
+            expect(viewModel.getProperty('/resultMessage')).toContain('Posting date 20261010 period closed');
+        });
+
+        it('onRetryMigo triggers postMigoGoodsMovement and recovers to status 05 on success', async () => {
+            viewModel.setProperty('/result', {
+                TransferOrder: '1012971',
+                ReservationNo: '0000524979',
+                ReservationItem: '0001',
+                Material: '8000000023',
+                Quantity: 5,
+                Unit: 'KG',
+                MovementType: '311',
+                Status: '99'
+            });
+            viewModel.setProperty('/canRetryMigo', true);
+
+            mockWarehouseScanToService.postMigoGoodsMovement.mockResolvedValueOnce({
+                MaterialDocument: '4900050129',
+                MaterialDocYear: '2026',
+                Status: '05',
+                StockEffect: 'Stock transferred to Storage Location CS01'
+            });
+
+            await controller.onRetryMigo();
+
+            expect(mockWarehouseScanToService.postMigoGoodsMovement).toHaveBeenCalledWith({
+                ReservationNo: '0000524979',
+                ReservationItem: '0001',
+                TransferOrder: '1012971',
+                MovementType: '311',
+                Material: '8000000023',
+                Quantity: 5,
+                Unit: 'KG'
+            });
+
+            expect(viewModel.getProperty('/canRetryMigo')).toBe(false);
+            expect(viewModel.getProperty('/result/MaterialDocument')).toBe('4900050129');
+            expect(viewModel.getProperty('/result/Status')).toBe('05');
+            expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('4900050129'));
         });
 
         it('handles createTOFromTR failure gracefully via MessageBox.error', async () => {

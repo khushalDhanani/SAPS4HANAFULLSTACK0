@@ -216,6 +216,113 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return await executeReservationAndAutoTR(req.data, req);
     });
 
+    // Chunk 5: Action handler for MIGO Goods Movement posting
+    this.on('postMigoGoodsMovement', async (req) => {
+      const data = req.data || {};
+      const sResNo = data.ReservationNo;
+      const sResItem = data.ReservationItem || '0001';
+
+      if (!sResNo) {
+        return req.error(400, 'ReservationNo is mandatory for MIGO posting');
+      }
+
+      // Read current record to fill in any omitted fields
+      const existing = await SELECT.one.from(ReservationEntries).where({
+        ReservationNo: sResNo,
+        ReservationItem: sResItem
+      });
+
+      const sMvt = data.MovementType || existing?.MovementType;
+      const sMat = data.Material || existing?.Material;
+      const sPlant = data.Plant || existing?.Plant;
+      const sSLoc = data.StorageLocation || existing?.StorageLocation;
+      const nQty = data.Quantity != null ? data.Quantity : existing?.Quantity;
+      const sUnit = data.Unit || existing?.Unit || 'NOS';
+      const sRecPlant = data.ReceivingPlant || existing?.ReceivingPlant;
+      const sRecSLoc = data.ReceivingStorageLocation || existing?.ReceivingStorageLocation;
+      const sCostCenter = data.CostCenter || existing?.CostCenter;
+      const sAssetNo = data.AssetNo || existing?.AssetNo;
+      const sSubNumber = data.SubNumber || existing?.SubNumber;
+
+      try {
+        const migoRes = await adapter.postGoodsMovement({
+          reservationNo: sResNo,
+          reservationItem: sResItem,
+          movementType: sMvt,
+          material: sMat,
+          plant: sPlant,
+          storageLocation: sSLoc,
+          quantity: nQty,
+          unit: sUnit,
+          receivingPlant: sRecPlant,
+          receivingStorageLocation: sRecSLoc,
+          costCenter: sCostCenter,
+          assetNo: sAssetNo,
+          subNumber: sSubNumber,
+          deriveGmCode: true
+        });
+
+        // Update status to 05 (Goods Issue Posted)
+        await UPDATE(ReservationEntries)
+          .set({
+            MaterialDocument: migoRes.materialDocument,
+            MaterialDocYear: migoRes.materialDocYear,
+            Status_code: '05',
+            ErrorMessage: ''
+          })
+          .where({
+            ReservationNo: sResNo,
+            ReservationItem: sResItem
+          });
+
+        // Insert log entry
+        await INSERT.into(ReservationLogs).entries({
+          ID: cds.utils.uuid(),
+          ReservationNo: sResNo,
+          ReservationItem: sResItem,
+          Step: 'MIGO',
+          Status: '05',
+          MessageType: 'S',
+          MessageId: 'M7',
+          MessageNo: '060',
+          MessageText: `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
+        });
+
+        return await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+      } catch (err) {
+        // Rollback already executed by adapter; update status to 99 (Error) and record log
+        await UPDATE(ReservationEntries)
+          .set({
+            Status_code: '99',
+            ErrorMessage: err.message
+          })
+          .where({
+            ReservationNo: sResNo,
+            ReservationItem: sResItem
+          });
+
+        await INSERT.into(ReservationLogs).entries({
+          ID: cds.utils.uuid(),
+          ReservationNo: sResNo,
+          ReservationItem: sResItem,
+          Step: 'MIGO',
+          Status: '99',
+          MessageType: 'E',
+          MessageId: 'M7',
+          MessageNo: '021',
+          MessageText: `MIGO failed: ${err.message}`
+        });
+
+        return await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+      }
+    });
+
     return super.init();
   }
 };

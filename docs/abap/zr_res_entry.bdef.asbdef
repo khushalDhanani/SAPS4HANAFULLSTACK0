@@ -39,6 +39,9 @@ authorization master ( instance )
   // Step 2 (Chunk 4): Create Transfer Order from TR and Auto-Confirm
   action createTOFromTR parameter ZD_TO_FROM_TR_PARAM result [1] $self;
 
+  // Step 3 (Chunk 5): Post MIGO Goods Movement and Close Reservation
+  action postMigo result [1] $self;
+
   mapping for zres_track
   {
     ReservationNo = rsnum;

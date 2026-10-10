@@ -34,4 +34,21 @@ service ReservationEntryService {
         SubNumber               : String(4),
         WarehouseNumber         : String(3)
     ) returns ReservationEntries;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postMigoGoodsMovement(
+        ReservationNo            : String(10),
+        ReservationItem          : String(4),
+        MovementType             : String(3),
+        Material                 : String(40),
+        Plant                    : String(4),
+        StorageLocation          : String(4),
+        Quantity                 : Decimal(13,3),
+        Unit                     : String(3),
+        ReceivingPlant           : String(4),
+        ReceivingStorageLocation : String(4),
+        CostCenter               : String(10),
+        AssetNo                  : String(12),
+        SubNumber                : String(4)
+    ) returns ReservationEntries;
 }

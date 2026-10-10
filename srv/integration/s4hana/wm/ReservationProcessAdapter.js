@@ -254,6 +254,19 @@ class ReservationProcessAdapter {
     const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
     const today = this._sapDate();
 
+    // Map GM_CODE: allow explicit override or derive per movement type
+    // GM_CODE 03 = MB1A (GI 201/241), 04 = MB1B (Transfer 311/301), 06 = MB11 (Reservation)
+    let sGmCode = params.gmCode;
+    if (!sGmCode) {
+      if (params.deriveGmCode) {
+        if (movementType === '201' || movementType === '241') sGmCode = '03';
+        else if (movementType === '311' || movementType === '301') sGmCode = '04';
+        else sGmCode = '06';
+      } else {
+        sGmCode = '06';
+      }
+    }
+
     const header = {
       PSTNG_DATE: today,
       DOC_DATE: today,
@@ -269,6 +282,7 @@ class ReservationProcessAdapter {
       ENTRY_UOM: String(unit || 'EA').trim(),
       RESERV_NO: pad10(reservationNo),
       RES_ITEM: pad4(reservationItem),
+      NO_MORE_GR: 'X', // Closes the reservation item (final issue)
       ...(receivingPlant ? { MOVE_PLANT: String(receivingPlant).trim() } : {}),
       ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
       ...(costCenter ? { COSTCENTER: String(costCenter).trim() } : {}),
@@ -279,13 +293,20 @@ class ReservationProcessAdapter {
     return await this.rfc.session(async (call) => {
       const res = await call('BAPI_GOODSMVT_CREATE', {
         GOODSMVT_HEADER: header,
-        GOODSMVT_CODE: { GM_CODE: '06' },
+        GOODSMVT_CODE: { GM_CODE: sGmCode },
         GOODSMVT_ITEM: [item],
         ...(testrun ? { TESTRUN: 'X' } : {})
       });
 
       const errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
       if (errors.length) {
+        if (!testrun) {
+          try {
+            await call('BAPI_TRANSACTION_ROLLBACK', {});
+          } catch (rbErr) {
+            // suppress rollback call error
+          }
+        }
         const msg = errors.map((e) => e.MESSAGE).join('; ');
         throw httpError(400, `BAPI_GOODSMVT_CREATE failed: ${msg}`);
       }
@@ -302,9 +323,29 @@ class ReservationProcessAdapter {
         materialDocument: matDoc,
         materialDocYear: docYear,
         status: '05',
+        stockEffect: this._computeStockEffect(movementType, params),
         messages: res.RETURN || []
       };
     });
+  }
+
+  /**
+   * Helper: compute human-readable stock effect description
+   */
+  _computeStockEffect(movementType, params = {}) {
+    const mvt = String(movementType).trim();
+    switch (mvt) {
+      case '201':
+        return `Stock consumed to Cost Center ${params.costCenter || ''}`.trim();
+      case '241':
+        return `Stock consumed to Asset ${params.assetNo || ''}${params.subNumber ? '/' + params.subNumber : ''}`.trim();
+      case '311':
+        return `Stock transferred to Storage Location ${params.receivingStorageLocation || ''}`.trim();
+      case '301':
+        return `Stock transferred to Plant ${params.receivingPlant || ''}`.trim();
+      default:
+        return `Goods Movement ${mvt} posted`;
+    }
   }
 }
 

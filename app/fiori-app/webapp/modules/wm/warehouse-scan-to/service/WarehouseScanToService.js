@@ -87,6 +87,35 @@ sap.ui.define([
             return ODataClient.post(sUrl, oPayload).then(function (oData) {
                 return (oData && oData.value) ? oData.value : oData;
             });
+        },
+
+        /**
+         * Step 3 / Chunk 5: Post MIGO Goods Movement and close reservation
+         * @param {Object} oPayload
+         * @param {string} [oPayload.ReservationNo]
+         * @param {string} [oPayload.ReservationItem='0001']
+         * @param {string} [oPayload.TransferOrder]
+         * @param {string} [oPayload.MovementType]
+         * @param {string} [oPayload.Material]
+         * @param {string} [oPayload.Plant]
+         * @param {string} [oPayload.StorageLocation]
+         * @param {number} [oPayload.Quantity]
+         * @param {string} [oPayload.Unit]
+         * @param {string} [oPayload.ReceivingPlant]
+         * @param {string} [oPayload.ReceivingStorageLocation]
+         * @param {string} [oPayload.CostCenter]
+         * @param {string} [oPayload.AssetNo]
+         * @param {string} [oPayload.SubNumber]
+         * @returns {Promise<Object>}
+         */
+        postMigoGoodsMovement: function (oPayload) {
+            if (!oPayload || (!oPayload.ReservationNo && !oPayload.TransferOrder)) {
+                return Promise.reject(new Error("Reservation Number or Transfer Order is required"));
+            }
+            var sUrl = BASE_PATH + "/postMigoGoodsMovement";
+            return ODataClient.post(sUrl, oPayload).then(function (oData) {
+                return (oData && oData.value) ? oData.value : oData;
+            });
         }
     };
 

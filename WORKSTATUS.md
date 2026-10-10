@@ -5,6 +5,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Chunk 5: Step 3 Auto MIGO Posting — Implemented, Validated, and Tested (2026-10-10):** In response to user request `Chunk 5: Step 3 Auto MIGO Posting`:
+  1. **Backend Integration Adapter (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+     - Enhanced `postGoodsMovement` wrapping `BAPI_GOODSMVT_CREATE`:
+       - Dynamic `GM_CODE` mapping via `deriveGmCode`: maps `03` (MB1A Goods Issue) for movement types 201 and 241; `04` (MB1B Transfer Posting) for 311 and 301; and `06` (MB11 Reservation) as universal fallback.
+       - Item field mapping per movement type: Cost Center (`COSTCENTER`) for 201, Asset Number (`ASSET_NO`) & SubNumber (`SUB_NUMBER`) for 241, Receiving Storage Location (`MOVE_STLOC`) for 311, Receiving Plant (`MOVE_PLANT`) for 301.
+       - Reservation closure: explicitly sets `NO_MORE_GR = 'X'` in `BAPI_GOODSMVT_ITEM` referencing `RESERV_NO` (padded to 10) and `RES_ITEM` (padded to 4), closing the reservation item against further withdrawal (`RESB-KZEAR = 'X'`).
+       - Rollback & LUW safety: calls `BAPI_TRANSACTION_ROLLBACK` before throwing on error; calls `BAPI_TRANSACTION_COMMIT` with `WAIT = 'X'` on success.
+       - Added `_computeStockEffect` returning human-readable stock effects (e.g. `Stock consumed to Cost Center 1011201301`, `Stock transferred to Storage Location CS01`).
+  2. **CAP Services & Handler Orchestration (`srv/wm/tr-to/` & `srv/wm/reservation-entry/`):**
+     - `srv/wm/tr-to/service.cds`: Added `MigoProcessResult` complex type; extended `TOProcessResult` with `MaterialDocument`, `MaterialDocYear`, and `StockEffect`; added action `postMigoGoodsMovement` / `PostMigoGoodsMovement`; added `autoPostMigo: Boolean` parameter to `createTOFromTR` and `CreateTOFromTR`.
+     - `srv/wm/tr-to/handlers/trTo.handler.js`:
+       - Implemented `handlePostMigoGoodsMovement`: wraps `resProcessAdapter.postGoodsMovement`, updates `ZRES_TRACK` (`MaterialDocument`, `MaterialDocYear`, `Status_code = '05'`), inserts audit log in `ZRES_LOG` (`Step: 'MIGO'`, `Status: '05'`); on error updates `Status_code = '99'` with `ErrorMessage` and records error log.
+       - In `handleCreateTOFromTR`: auto-chains `handlePostMigoGoodsMovement` after TO confirmation when `autoPostMigo=true`; advances status to `05` (`GI_POSTED`) on success; catches MIGO errors, sets status `99` with retry enabled while preserving the confirmed TO.
+     - `srv/wm/reservation-entry/service.cds` & `service.js`: Added action `postMigoGoodsMovement` returning `ReservationEntries`, updating tracking to status `05` on success or status `99` on error, and recording step-wise audit logs in `ReservationLogs`.
+  3. **Freestyle UI5 App 2 (`WarehouseScanTo`):**
+     - Added `switchAutoMigo` toggle in header (default ON), allowing warehouse operators to control whether MIGO Goods Movement runs immediately upon TO confirmation.
+     - Outcome panel (`panelResult`): displays Material Document (`MBLNR` / `MJAHR`) and Stock Effect outcome badges upon goods issue posting.
+     - Added `btnRetryMigo` ("Retry MIGO Posting") button appearing when in status `99`, wired to `onRetryMigo` calling `WarehouseScanToService.postMigoGoodsMovement` to recover from failure.
+     - Added localized strings in `i18n.properties` and `i18n_en.properties`.
+  4. **ABAP Model Alignment (`docs/abap/`):**
+     - Updated `docs/abap/zcl_res_process.clas.abap` (`post_migo` setting `no_more_gr = 'X'` and GM_CODE mapping via `CASE iv_bwart`).
+     - Updated `docs/abap/zr_res_entry.bdef.asbdef` and `docs/abap/zbp_r_res_entry.clas.locals_imp.abap` declaring and implementing RAP action `postMigo`.
+  5. **Validation:**
+     - `test/unit/wm/autoMigoPosting.test.js`: 8/8 tests passed 100% green (GM_CODE mapping, item fields, reservation closure, rollback on failure, auto-chaining after TO confirmation, failure handling, and standalone retry).
+     - `test/unit/wm/warehouseScanToUi.test.js`: 25/25 tests passed 100% green (Auto-MIGO toggle, outcome display, error state, and retry).
+     - `test/unit/wm/reservationEntryService.test.js`: 14/14 tests passed 100% green (OData `postMigoGoodsMovement` success and error persistence).
+     - Complete repository WM test pass: **62 passed, 62 total suites; 1,252 passed, 1,252 total tests (100% green)**.
+     - `ui5lint`: 0 errors, 0 warnings (clean).
+     - `git diff --check`: 0 errors (clean).
+
 - **Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm) — Implemented, Validated, and Tested (2026-10-10):** In response to user request `Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm)`:
   1. **OData Function & Action Service Extensions (`srv/wm/tr-to/` & `TrToAdapter.js`):**
      - CDS Definition (`srv/wm/tr-to/service.cds`): Added complex types `TOProcessResult` (TransferOrder, ConfirmationNumber, WarehouseNumber, Status, IsConfirmed, ConfirmedBy, ErrorMessage) and `TRDetail` (WarehouseNumber, TRNumber, TRItem, Material, MaterialDescription, Plant, StorageLocation, DestinationType, DestinationBin, TargetQty, OpenQty, Unit, Batch, IsBatchManaged, IsSerialManaged, ReservationNo, ReservationItem).
@@ -212,11 +242,11 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Chunk 5):** Proceed with **Chunk 5: Step 3 Service and App (Goods Issue / MIGO Post Against Reservation + Status 05 GI_POSTED)**:
-  - OData action / function wrapping `BAPI_GOODSMVT_CREATE` (`GOODSMVT_CODE = '06'`) referencing confirmed Transfer Order and Reservation.
-  - Final goods issue confirmation screen / step in UI.
-  - Automatic status advance to `05` (`GI_POSTED`) in `ZRES_TRACK` and persistence of generated Material Document (`MBLNR` / `MJAHR`).
-  - Validation across all 4 movement types (201, 241, 311, 301).
+- **Next Recommended Action:** Proceed with **End-to-End Integration Validation across Chunks 1–5**:
+  - Perform live S/4HANA connectivity test for full sequence: Reservation (MB21) → TR (LB01) → TO (LT04) → TO Confirm (LT12) → MIGO (MB11/MB1A/MB1B) for movement types 201, 241, 311, and 301.
+  - Verify reservation closure in SAP MM-IM (`RESB-KZEAR = 'X'`).
+  - Verify material document creation (`MBLNR` / `MJAHR`) and stock ledger impact in SAP.
+  - Review any additional dashboard KPI tiles or workflow reporting requirements.
 
 0. User to decide: reverse 4900050046/2026 with the API Cancel action (then verify ENMNG, KZEAR, stock and the WM transfer requirement), and whether to run test 2 (418011/4, 1 KG, needs a batch decision).
 1. Log in locally, open the dashboard tile "First Goods Issue 261" (WM tab) and confirm the page with plant 1120.
@@ -233,6 +263,48 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 11:35 IST — Chunk 5: Step 3 Auto MIGO Posting & Retry
+- **Request.** `Chunk 5: Step 3 Auto MIGO Posting
+Trigger after TO confirmation (direct call, or bgPF with retry)
+Map movement type to GM_CODE and item fields (cost center, asset, receiving plant/SLoc)
+Reference the reservation so it closes
+Rollback and ERROR status on failure
+
+Output: Material document created, stock consumed or transferred`
+- **1. Backend Adapter Enhancements (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+  - Enhanced `postGoodsMovement`:
+    - Added GM_CODE determination via `deriveGmCode`: maps `03` (MB1A Goods Issue) for 201/241; `04` (MB1B Transfer Posting) for 311/301; and `06` (MB11 Reservation) as universal fallback.
+    - Item mapping: maps Cost Center (`COSTCENTER`), Asset (`ASSET_NO`) & SubNumber (`SUB_NUMBER`), Receiving Storage Location (`MOVE_STLOC`), and Receiving Plant (`MOVE_PLANT`).
+    - Reservation reference & closure: sets `NO_MORE_GR = 'X'` in `BAPI_GOODSMVT_ITEM` with `RESERV_NO` and `RES_ITEM`, setting final withdrawal indicator in SAP MM-IM (`RESB-KZEAR = 'X'`).
+    - LUW rollback safety: invokes `BAPI_TRANSACTION_ROLLBACK` before throwing on error; invokes `BAPI_TRANSACTION_COMMIT` with `WAIT = 'X'` on success.
+    - Added `_computeStockEffect(movementType, params)` returning clear stock descriptions (e.g. `Stock consumed to Cost Center 1011201301`, `Stock transferred to Storage Location CS01`).
+- **2. CDS Service Extensions (`srv/wm/tr-to/service.cds` & `srv/wm/reservation-entry/service.cds`):**
+  - Added complex type `MigoProcessResult` to `srv/wm/tr-to/service.cds`.
+  - Extended `TOProcessResult` with `MaterialDocument`, `MaterialDocYear`, and `StockEffect`.
+  - Added action `postMigoGoodsMovement` and uppercase alias `PostMigoGoodsMovement` in `tr-to` service.
+  - Added parameter `autoPostMigo: Boolean` to `createTOFromTR` and `CreateTOFromTR`.
+  - Added action `postMigoGoodsMovement` to `srv/wm/reservation-entry/service.cds`.
+  - Verified compilation via `npx cds compile` on both services (exit code 0).
+- **3. CAP Handler Orchestration (`srv/wm/tr-to/handlers/trTo.handler.js` & `srv/wm/reservation-entry/service.js`):**
+  - Implemented `handlePostMigoGoodsMovement`: wraps adapter `postGoodsMovement`, updates `ZRES_TRACK` with `MaterialDocument`, `MaterialDocYear`, `Status_code = '05'`, and logs step `MIGO` with message type `S`; on failure updates `Status_code = '99'` with `ErrorMessage` and logs step `MIGO` with message type `E`.
+  - In `handleCreateTOFromTR`: when `autoPostMigo=true` and TO is confirmed, sequentially executes `handlePostMigoGoodsMovement`; advances to status `05` on success; captures failure and transitions to status `99` with retry enabled while preserving confirmed TO.
+  - In `srv/wm/reservation-entry/service.js`: added action handler for `postMigoGoodsMovement` returning `ReservationEntries`, updating tracking to status `05` on success or status `99` on error, and recording step-wise audit logs in `ReservationLogs`.
+- **4. Freestyle UI5 App 2 Integration (`WarehouseScanTo`):**
+  - `WarehouseScanToService.js`: added client method `postMigoGoodsMovement` and passed `autoPostMigo` flag in `createTOFromTR`.
+  - `WarehouseScanTo.view.xml`: added `switchAutoMigo` toggle in header (default ON); added Material Document and Stock Effect rows in result panel; added `btnRetryMigo` button ("Retry MIGO Posting") visible in status `99`.
+  - `WarehouseScanTo.controller.js`: added `autoPostMigo` and `canRetryMigo` model state; implemented `onAutoMigoChange`; added `onRetryMigo` handler for failure recovery; updated `onProcessTO` outcome presentation.
+  - Added localized text keys in `i18n.properties` and `i18n_en.properties`.
+- **5. ABAP Model Alignment (`docs/abap/`):**
+  - Updated `docs/abap/zcl_res_process.clas.abap` (`post_migo` setting `no_more_gr = 'X'` and GM_CODE mapping via `CASE iv_bwart`).
+  - Updated `docs/abap/zr_res_entry.bdef.asbdef` and `docs/abap/zbp_r_res_entry.clas.locals_imp.abap` declaring and implementing RAP action `postMigo`.
+- **6. Verification & Test Suite:**
+  - Created `test/unit/wm/autoMigoPosting.test.js`: 8/8 tests passed 100% green.
+  - Updated `test/unit/wm/warehouseScanToUi.test.js`: 25/25 tests passed 100% green.
+  - Updated `test/unit/wm/reservationEntryService.test.js`: 14/14 tests passed 100% green.
+  - Full WM test pass: **62 passed, 62 total test suites; 1,252 passed, 1,252 total tests (100% green)**.
+  - `npm run lint` (`ui5lint`): 0 findings (clean).
+  - `git diff --check`: 0 findings (clean).
 
 ### 2026-10-10 11:15 IST — Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm)
 - **Request.** `Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm)

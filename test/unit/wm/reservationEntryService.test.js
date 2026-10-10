@@ -344,4 +344,83 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(r311.StatusText).toBe('Reservation Created');
     });
   });
+
+  describe('4. Action: postMigoGoodsMovement', () => {
+    const testMigoResNo = '0000524979';
+    let postGoodsMvtSpy;
+
+    afterEach(() => {
+      postGoodsMvtSpy?.mockRestore();
+    });
+
+    test('POST /odata/v4/reservation-entry/postMigoGoodsMovement updates status to 05 and logs MIGO step', async () => {
+      postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValueOnce({
+        success: true,
+        materialDocument: '4900050888',
+        materialDocYear: '2026',
+        status: '05',
+        stockEffect: 'Stock transferred to Storage Location CS01'
+      });
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/postMigoGoodsMovement',
+        {
+          ReservationNo: testMigoResNo,
+          ReservationItem: '0001'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data.ReservationNo).toBe(testMigoResNo);
+      expect(data.MaterialDocument).toBe('4900050888');
+      expect(data.MaterialDocYear).toBe('2026');
+      expect(data.Status_code).toBe('05');
+
+      // Verify DB update
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testMigoResNo }));
+      expect(track.MaterialDocument).toBe('4900050888');
+      expect(track.Status_code).toBe('05');
+
+      // Verify log entry
+      const log = await cds.db.run(
+        SELECT.one.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo, Step: 'MIGO' })
+      );
+      expect(log).toBeTruthy();
+      expect(log.Status).toBe('05');
+      expect(log.MessageType).toBe('S');
+    });
+
+    test('POST /odata/v4/reservation-entry/postMigoGoodsMovement handles failure with status 99 and error log', async () => {
+      postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockRejectedValueOnce(
+        new Error('Posting period 10/2026 closed')
+      );
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/postMigoGoodsMovement',
+        {
+          ReservationNo: testMigoResNo,
+          ReservationItem: '0001'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data.ReservationNo).toBe(testMigoResNo);
+      expect(data.Status_code).toBe('99');
+      expect(data.ErrorMessage).toContain('Posting period 10/2026 closed');
+
+      // Verify DB update to 99
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testMigoResNo }));
+      expect(track.Status_code).toBe('99');
+      expect(track.ErrorMessage).toContain('Posting period 10/2026 closed');
+
+      // Verify error log entry
+      const log = await cds.db.run(
+        SELECT.one.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo, Step: 'MIGO', Status: '99' })
+      );
+      expect(log).toBeTruthy();
+      expect(log.MessageType).toBe('E');
+    });
+  });
 });

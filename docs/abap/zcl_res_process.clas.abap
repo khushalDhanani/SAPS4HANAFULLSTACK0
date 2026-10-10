@@ -452,8 +452,15 @@ CLASS zcl_res_process IMPLEMENTATION.
 
     CLEAR: ev_mblnr, ev_mjahr, et_return, ev_subrc.
 
-    " GM_CODE '06' = MB11 (Goods movement with reservation reference)
-    ls_code-gm_code    = '06'.
+    " Map GM_CODE: 03 for GI 201/241, 04 for Transfer 311/301, 06 for universal reservation fallback
+    CASE iv_bwart.
+      WHEN '201' OR '241'.
+        ls_code-gm_code = '03'.
+      WHEN '311' OR '301'.
+        ls_code-gm_code = '04'.
+      WHEN OTHERS.
+        ls_code-gm_code = '06'.
+    ENDCASE.
 
     ls_head-pstng_date = sy-datum.
     ls_head-doc_date   = sy-datum.
@@ -468,6 +475,7 @@ CLASS zcl_res_process IMPLEMENTATION.
     ls_item-entry_uom  = iv_meins.
     ls_item-reserv_no  = iv_rsnum.
     ls_item-res_item   = iv_rspos.
+    ls_item-no_more_gr = 'X'. " Close reservation item (RESB-KZEAR = 'X')
 
     IF iv_umwrk IS NOT INITIAL.
       ls_item-move_plant = iv_umwrk.

@@ -417,7 +417,7 @@ class TrToAdapter {
    * Step 2 Service: Create TO from TR + Auto-Confirm (wraps L_TO_CREATE_TR and L_TO_CONFIRM)
    * Validates quantity against TR open quantity, validates batch and serial requirements.
    */
-  async createTOFromTR({ lgnum = 'W01', tbnum, tbpos = '0001', qty, unit, batch = '', serials = [], storageUnit = '', autoConfirm = true } = {}) {
+  async createTOFromTR({ lgnum = 'W01', tbnum, tbpos = '0001', qty, unit, batch = '', serials = [], storageUnit = '', autoConfirm = true, autoPostMigo = false } = {}) {
     const quantity = Number(qty);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 

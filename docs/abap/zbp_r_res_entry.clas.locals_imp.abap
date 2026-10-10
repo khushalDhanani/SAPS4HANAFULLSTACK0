@@ -17,6 +17,9 @@ CLASS lhc_ReservationEntry DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS createTOFromTR FOR MODIFY
       IMPORTING keys FOR ACTION ReservationEntry~createTOFromTR RESULT result.
 
+    METHODS postMigo FOR MODIFY
+      IMPORTING keys FOR ACTION ReservationEntry~postMigo RESULT result.
+
 ENDCLASS.
 
 CLASS lhc_ReservationEntry IMPLEMENTATION.
@@ -78,6 +81,26 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
       " 2. If iv_auto_confirm = abap_true, call ZCL_RES_PROCESS->confirm_to( iv_lgnum, lv_tanum )
       " 3. Update status in ZRES_TRACK to '04' (TO_CONFIRMED)
       " 4. Append log to ZRES_LOG
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD postMigo.
+    DATA: lo_proc TYPE REF TO zcl_res_process.
+    CREATE OBJECT lo_proc.
+
+    LOOP AT keys INTO DATA(ls_key).
+      " 1. Call ZCL_RES_PROCESS->post_migo(
+      "      iv_rsnum = ls_entry-rsnum,
+      "      iv_rspos = ls_entry-rspos,
+      "      iv_bwart = ls_entry-move_type,
+      "      ... )
+      " 2. On success:
+      "    - Update ZRES_TRACK with MBLNR/MJAHR, status = '05' (GI_POSTED)
+      "    - Append success log to ZRES_LOG (Step 'MIGO', Status '05')
+      " 3. On failure:
+      "    - Call BAPI_TRANSACTION_ROLLBACK
+      "    - Update ZRES_TRACK with status = '99' (ERROR) and err_msg
+      "    - Append error log to ZRES_LOG (Step 'MIGO', Status '99')
     ENDLOOP.
   ENDMETHOD.
 

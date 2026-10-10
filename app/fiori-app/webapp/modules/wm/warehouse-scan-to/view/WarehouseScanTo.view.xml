@@ -24,6 +24,14 @@
                     customTextOff="{i18n>commonNo}"
                     change=".onAutoConfirmChange"
                     class="sapUiSmallMarginEnd" />
+                <Label text="{i18n>scanToAutoMigoLabel}" class="sapUiTinyMarginEnd" design="Bold" />
+                <Switch
+                    id="switchAutoMigo"
+                    state="{scanView>/autoPostMigo}"
+                    customTextOn="{i18n>commonYes}"
+                    customTextOff="{i18n>commonNo}"
+                    change=".onAutoMigoChange"
+                    class="sapUiSmallMarginEnd" />
                 <Button
                     id="btnToggleAudio"
                     icon="{= ${scanView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
@@ -138,10 +146,32 @@
 
                                 <Label text="{i18n>scanToLabelConfirmedBy}" design="Bold" visible="{scanView>/result/IsConfirmed}" />
                                 <Text text="{scanView>/result/ConfirmedBy}" visible="{scanView>/result/IsConfirmed}" />
+
+                                <Label text="{i18n>scanToLabelMaterialDoc}" design="Bold" visible="{= !!${scanView>/result/MaterialDocument} }" />
+                                <ObjectIdentifier
+                                    id="txtResultMaterialDoc"
+                                    title="{scanView>/result/MaterialDocument}"
+                                    text="{scanView>/result/MaterialDocYear}"
+                                    visible="{= !!${scanView>/result/MaterialDocument} }" />
+
+                                <Label text="{i18n>scanToLabelStockEffect}" design="Bold" visible="{= !!${scanView>/result/StockEffect} }" />
+                                <ObjectStatus
+                                    id="txtResultStockEffect"
+                                    text="{scanView>/result/StockEffect}"
+                                    state="Success"
+                                    visible="{= !!${scanView>/result/StockEffect} }" />
                             </form:content>
                         </form:SimpleForm>
 
                         <HBox justifyContent="End" class="sapUiSmallMarginTop">
+                            <Button
+                                id="btnRetryMigo"
+                                text="{i18n>scanToBtnRetryMigo}"
+                                icon="sap-icon://refresh"
+                                type="Attention"
+                                press=".onRetryMigo"
+                                visible="{scanView>/canRetryMigo}"
+                                class="sapUiTinyMarginEnd" />
                             <Button
                                 id="btnScanNextTR"
                                 text="{i18n>scanToBtnNextTR}"

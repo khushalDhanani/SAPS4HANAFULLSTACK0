@@ -28,6 +28,8 @@ sap.ui.define([
                 lgnum: "W01",
                 scannedTR: "",
                 autoConfirm: true,
+                autoPostMigo: true,
+                canRetryMigo: false,
                 audioEnabled: true,
                 hasTR: false,
                 hasMessage: false,
@@ -442,6 +444,11 @@ sap.ui.define([
             this.getModel("scanView").setProperty("/autoConfirm", bState);
         },
 
+        onAutoMigoChange: function (oEvent) {
+            var bState = oEvent.getParameter("state");
+            this.getModel("scanView").setProperty("/autoPostMigo", bState);
+        },
+
         _validateForm: function () {
             var oModel = this.getModel("scanView");
             var bHasTR = oModel.getProperty("/hasTR");
@@ -492,6 +499,7 @@ sap.ui.define([
             var sLgnum = oModel.getProperty("/lgnum") || "W01";
             var nQty = parseFloat(oModel.getProperty("/pickQty"));
             var bAutoConfirm = oModel.getProperty("/autoConfirm");
+            var bAutoPostMigo = oModel.getProperty("/autoPostMigo");
             var sBatch = oModel.getProperty("/batch");
             var aSerials = (oModel.getProperty("/serials") || []).map(function (item) {
                 return item.serial;
@@ -506,6 +514,7 @@ sap.ui.define([
                 batch: sBatch,
                 serials: aSerials,
                 autoConfirm: bAutoConfirm,
+                autoPostMigo: bAutoPostMigo,
                 storageUnit: ""
             };
 
@@ -515,9 +524,27 @@ sap.ui.define([
             return WarehouseScanToService.createTOFromTR(oPayload).then(function (oResult) {
                 that._playAudio("success");
 
-                var sActionText = oResult.IsConfirmed
-                    ? that.getText("scanToMsgSuccessConfirmed", [oResult.TransferOrder, oResult.ConfirmationNumber])
-                    : that.getText("scanToMsgSuccessCreated", [oResult.TransferOrder]);
+                var sActionText;
+                if (oResult.MaterialDocument) {
+                    sActionText = that.getText("scanToMsgSuccessMigoPosted", [
+                        oResult.TransferOrder,
+                        oResult.MaterialDocument,
+                        oResult.MaterialDocYear || ""
+                    ]);
+                    oModel.setProperty("/canRetryMigo", false);
+                } else if (oResult.Status === "99") {
+                    sActionText = that.getText("scanToMsgToConfirmedMigoFailed", [
+                        oResult.TransferOrder,
+                        oResult.ErrorMessage || ""
+                    ]);
+                    oModel.setProperty("/canRetryMigo", true);
+                } else if (oResult.IsConfirmed) {
+                    sActionText = that.getText("scanToMsgSuccessConfirmed", [oResult.TransferOrder, oResult.ConfirmationNumber]);
+                    oModel.setProperty("/canRetryMigo", false);
+                } else {
+                    sActionText = that.getText("scanToMsgSuccessCreated", [oResult.TransferOrder]);
+                    oModel.setProperty("/canRetryMigo", false);
+                }
 
                 oModel.setProperty("/hasResult", true);
                 oModel.setProperty("/result", oResult);
@@ -532,6 +559,50 @@ sap.ui.define([
                 that._playAudio("error");
                 oModel.setProperty("/canSubmit", true);
                 MessageBox.error(oErr.message || that.getText("scanToErrCreateFailed"));
+            });
+        },
+
+        onRetryMigo: function () {
+            var oModel = this.getModel("scanView");
+            var oResult = oModel.getProperty("/result");
+            if (!oResult) return Promise.resolve(null);
+
+            var that = this;
+            oModel.setProperty("/canRetryMigo", false);
+
+            var oPayload = {
+                ReservationNo: oResult.ReservationNo,
+                ReservationItem: oResult.ReservationItem || "0001",
+                TransferOrder: oResult.TransferOrder,
+                MovementType: oResult.MovementType,
+                Material: oResult.Material,
+                Quantity: oResult.Quantity,
+                Unit: oResult.Unit
+            };
+
+            return WarehouseScanToService.postMigoGoodsMovement(oPayload).then(function (oMigoRes) {
+                that._playAudio("success");
+                var sText = that.getText("scanToMsgSuccessMigoPosted", [
+                    oResult.TransferOrder,
+                    oMigoRes.MaterialDocument,
+                    oMigoRes.MaterialDocYear || ""
+                ]);
+
+                var oUpdatedResult = Object.assign({}, oResult, {
+                    MaterialDocument: oMigoRes.MaterialDocument,
+                    MaterialDocYear: oMigoRes.MaterialDocYear,
+                    Status: oMigoRes.Status || "05",
+                    StockEffect: oMigoRes.StockEffect
+                });
+                oModel.setProperty("/result", oUpdatedResult);
+                oModel.setProperty("/resultMessage", sText);
+                oModel.setProperty("/canRetryMigo", false);
+                MessageToast.show(sText);
+                return oMigoRes;
+            }).catch(function (oErr) {
+                that._playAudio("error");
+                oModel.setProperty("/canRetryMigo", true);
+                MessageBox.error(oErr.message || that.getText("scanToErrMigoFailed"));
             });
         },
 
@@ -555,6 +626,7 @@ sap.ui.define([
             oModel.setProperty("/serials", []);
             oModel.setProperty("/serialsCount", 0);
             oModel.setProperty("/canSubmit", false);
+            oModel.setProperty("/canRetryMigo", false);
             oModel.setProperty("/hasResult", false);
             oModel.setProperty("/result", null);
             oModel.setProperty("/resultMessage", "");
