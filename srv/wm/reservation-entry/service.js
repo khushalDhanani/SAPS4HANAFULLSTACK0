@@ -88,8 +88,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           storageLocation: StorageLocation,
           material: Material,
           quantity: Quantity,
-          unit: Unit || 'NOS',
-          receivingPlant: ReceivingPlant,
+          unit: Unit || 'KG',
+          receivingPlant: ReceivingPlant || (MovementType === '311' ? Plant : undefined),
           receivingStorageLocation: ReceivingStorageLocation,
           costCenter: CostCenter,
           assetNo: AssetNo,
@@ -153,7 +153,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           plant: Plant,
           storageLocation: StorageLocation,
           quantity: Quantity,
-          unit: Unit || 'NOS',
+          unit: Unit || 'KG',
           reservationNo: resNo,
           reservationItem: resItem
         });
@@ -178,6 +178,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         });
       } catch (err) {
         trError = err.message;
+        const isUcon = err.code === 'UCON_BLOCKED' || (err.message && (err.message.includes('2295840') || err.message.includes('Incompatible Call Rejected')));
+        const cleanMsg = isUcon
+          ? 'Auto TR creation deferred: restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)'
+          : `Auto TR creation deferred/failed: ${err.message}`;
+
         // Reservation is created, but TR failed: log warning
         await INSERT.into(ReservationLogs).entries({
           ID: cds.utils.uuid(),
@@ -191,8 +196,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MessageType: 'W',
           MessageId: 'L3',
           MessageNo: '999',
-          MessageText: `Auto TR creation deferred/failed: ${err.message}`
+          MessageText: cleanMsg
         });
+
+        if (isUcon) {
+          trError = 'TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)';
+        }
       }
 
       // Step 3: Upsert into ReservationTrack
@@ -570,9 +579,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ReservationItem: sResItem
         });
       } catch (err) {
+        const isUcon = err.code === 'UCON_BLOCKED' || (err.message && (err.message.includes('2295840') || err.message.includes('Incompatible Call Rejected')));
+        const cleanErrMsg = isUcon
+          ? `Retry ${requestedStep} deferred: L_TR_CREATE restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`
+          : `Retry ${requestedStep} failed: ${err.message}`;
+
         await UPDATE(ReservationEntries).set({
           Status_code: '99',
-          ErrorMessage: `Retry ${requestedStep} failed: ${err.message}`,
+          ErrorMessage: cleanErrMsg,
           LogHandle: sLogHandle,
           ExternalId: extId
         }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -589,7 +603,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MessageType: 'E',
           MessageId: 'ZWM',
           MessageNo: '999',
-          MessageText: `Retry ${requestedStep} failed: ${err.message}`
+          MessageText: cleanErrMsg
         });
 
         return await SELECT.one.from(ReservationEntries).where({

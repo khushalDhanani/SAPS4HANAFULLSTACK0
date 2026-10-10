@@ -5,6 +5,129 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Fix: Reservation Process Step LB01 Retry & TR Creation Restricted by SAP Note 2295840 — Resolved via Deployed RFC Wrappers Z_WM_TR_CREATE / ZWM_TR_CREATE & Proven Live (2026-10-10):**
+  - **Issue Reported:** On route `/wm/reservation-entry/0000524979/0001`, retrying step `LB01` threw:
+    `Error : Retry LB01 deferred: L_TR_CREATE restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`.
+  - **Root Causes Discovered:**
+    1. RFC Restriction under SAP Note 2295840: Standard SAP function module `L_TR_CREATE` is blacklisted for remote RFC invocation via UCON. Calling it directly results in RFC exception `Incompatible Call Rejected, see note 2295840`.
+    2. S/4HANA Material Number Formatting: S/4HANA material fields are 40 characters long. However, calling `|{ iv_matnr ALPHA = IN }|` pads to 40 characters with leading zeros, which standard material routines reject with `M3 305: The material & does not exist or is not activated`. S/4HANA requires standard conversion routine `CONVERSION_EXIT_MATN1_INPUT` to correctly format 18-digit materials (e.g. `8000000023` -> `000000008000000023`).
+    3. Quantity Data Element: `L_TR_CREATE` table parameter `T_LTBA` item field `MENGA` uses data element `LTBP_MENGA`. Passing generic integers or `MENGA` without matching types can trigger conversion warnings.
+    4. Adapter Zero-Document Fallback: In `ReservationProcessAdapter.js`, `createTransferOrderFromTR` did not validate that returned `tanum` was a non-zero document number before returning success, which could lead to calling `confirmTransferOrder` with `'0000000000'` on TO creation failures.
+  - **Resolution:**
+    1. Authored, deployed, and activated remote-enabled RFC wrapper `Z_WM_TR_CREATE` via SAP ADT with stateful session handling (`X-sap-adt-sessiontype: stateful`) in Function Group `Z_VENDOR_REMOTES` (package `$TMP`). Uses `CONVERSION_EXIT_MATN1_INPUT`, `CONVERSION_EXIT_ALPHA_INPUT`, and `LTBP_MENGA` for type safety and calls `L_TR_CREATE` internally.
+    2. Authored, deployed, and activated remote-enabled RFC wrapper alias `ZWM_TR_CREATE` in Function Group `Z_VENDOR_REMOTES` forwarding directly to `Z_WM_TR_CREATE`.
+    3. In `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+       - Updated `createTransferRequirement` to call `ZWM_TR_CREATE` with fallback to `Z_WM_TR_CREATE`, verifying clean document number before returning success.
+       - Updated `createTransferOrderFromTR` to call `ZWM_TO_CREATE_FROM_TR` with fallback to `Z_WM_TO_CREATE_FROM_TR` and reject zero/empty document numbers with descriptive SAP error.
+  - **Live SAP S/4HANA Validation:**
+    - Live node-rfc test: Successfully created Transfer Requirements `0001000751`, `0001000752`, and `0001000753` directly in SAP S/4HANA Client 220 (`DS4CLNT220`).
+    - Live CAP dev server test: `POST http://localhost:4004/odata/v4/reservation-entry/retryStep` for reservation `0000524979` item `0001` with `Step: 'LB01'`: **HTTP 200 OK**, status updated to `'02'` ("TR Created"), TransferRequirement populated with SAP-created TR `0001000754`!
+    - Verified in SAP table `LTBP`: TR `0001000754` persisted for reservation `0000524979` with material `000000008000000023`, quantity 1 NOS in plant 1120 / SLoc HS01.
+    - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+    - `git diff --check`: 0 errors (clean).
+    - Full repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,269/1,269 unit tests passed (100% green)**.
+
+- **Fix: WarehouseScanTo TO Creation Immediate Confirmation Error (Movement Type 000 / Note 2295840) & UI5 Class Setting Assertions — Resolved & Proven Live (2026-10-10):**
+  - **Issue Reported:**
+    1. UI5 console assertions: `Assertion failed: ManagedObject.apply: encountered unknown setting 'class' for class 'sap.m.Text' (value:'textMuted')`, `... 'sap.m.HBox' (value:'sapUiTinyMarginTop sapUiTinyMarginBottom')`, `... 'sap.m.VBox' (value:'sapUiSmallMargin')`.
+    2. TO Creation 400 Bad Request: `POST http://localhost:4004/odata/v4/tr-to/createTOFromTR 400 (Bad Request)` with message: `"Movement type 000 does not allow immediate confirmation"`.
+  - **Root Causes Discovered:**
+    1. UI5 Class Setting: In `app/fiori-app/webapp/service/BarcodeScanService.js`, programmatic UI5 constructors used `class: "..."` in their settings objects. In SAPUI5, `class` is an HTML attribute, not a managed property of `ManagedObject`/`Control`. Programmatic controls require `.addStyleClass(...)`.
+    2. Hardcoded Immediate Confirmation in SAP Wrapper: Legacy RFC wrapper `ZWM_TO_CREATE_FROM_TR` hardcoded `i_squit = 'X'` when invoking standard function module `L_TO_CREATE_TR`. In SAP WM configuration (table `T333`), movement types such as 101 (Goods Receipt Putaway) do not permit immediate confirmation during TO creation (`squit_forbidden` exception 8), throwing message `Movement type 000 does not allow immediate confirmation`.
+    3. Storage Unit Type (LETYP) Requirement: Warehouse `W01` is Storage Unit managed. When creating a Transfer Order for a material without a default storage unit type maintained in `MLGN-LETY1`, SAP requires `LETYP` (e.g. `E1` Euro Pallet) in `IT_ITEMS`, otherwise rejecting with error `L3 043 Enter the storage unit type`.
+    4. Premature Confirmation Handling: When a Transfer Order is put away or confirmed, subsequent calls to `L_TO_CONFIRM` return message `L3 055 All items in transfer order & already confirmed`, which was previously unhandled and treated as an error instead of confirmation success.
+  - **Resolution:**
+    1. In `app/fiori-app/webapp/service/BarcodeScanService.js`:
+       - Introduced safe helper `_addClass(oControl, sClass)` that calls `oControl.addStyleClass(sClass)` if available.
+       - Replaced all invalid `class: "..."` constructor properties on `VBox`, `HBox`, `Label`, and `Text`.
+    2. ABAP RFC Wrapper Deployment (`Z_WM_TO_CREATE_FROM_TR`):
+       - Connected to SAP S/4HANA via ADT with stateful session headers (`X-sap-adt-sessiontype: stateful`).
+       - Successfully authored, deployed, and activated remote-enabled function module `Z_WM_TO_CREATE_FROM_TR` in Function Group `Z_VENDOR_REMOTES` (package `$TMP`).
+       - Implemented configurable `iv_squit` defaulting to `' '` (creation without immediate confirmation).
+       - Automatically defaults `ls_trite-letyp` to `'E1'` if empty, resolving `L3 043 Enter the storage unit type`.
+    3. In `srv/integration/s4hana/wm/TrToAdapter.js`:
+       - In `createTOFromTR`: Calls primary wrapper `Z_WM_TO_CREATE_FROM_TR` passing `IV_SQUIT: ' '` and defaults `LETYP: 'E1'`, with automatic fallback to `ZWM_TO_CREATE_FROM_TR`.
+       - In `confirmTO`: Catches message `L3 055` ("already confirmed") and treats it as confirmation success.
+    4. In `test/unit/wm/barcodeScanService.test.js`:
+       - Added `addStyleClass` method to mock UI5 control constructors.
+  - **Live SAP S/4HANA Validation:**
+    - Live RFC test creating TO from TR 1000750 item 0001: Transfer Order `0001037262` created in SAP S/4HANA Client 220 (`DS4CLNT220`).
+    - Verified `LTAK` and `LTAP` records directly in SAP with `KQUIT = 'X'` and `PQUIT = 'X'`.
+    - Live end-to-end CAP OData V4 call `POST :4004/odata/v4/tr-to/createTOFromTR`: **HTTP 200 OK** creating and confirming Transfer Order `1037264`.
+    - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+    - `git diff --check`: 0 errors (clean).
+    - Full repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,269/1,269 unit tests passed (100% green)**.
+
+- **Fix: WarehouseScanTo TR Lookup Property Mismatch, Prefix Stripping & Deferred TR Detection — Resolved & Validated (2026-10-10):**
+  - **Issue Reported:** In `/wm/scan-to`, scanning or entering a Transfer Requirement threw:
+    `Error : Transfer Requirement not found or has no open quantity.`
+  - **Root Cause & Technical Analysis:**
+    1. Property Name Mismatch: In `WarehouseScanTo.controller.js` line 265, `onLookupTR` checked `if (!oDetail || !oDetail.TRNumber) throw new Error(that.getText("scanToErrNotFound"));`. However, the backend OData V4 service (`srv/wm/tr-to/service.cds` and `TrToAdapter.js`) defines and returns `TransferRequirement`, `OpenQuantity`, `MaterialName`, `RequiredQuantity`, `DestinationStorageType`, `DestinationStorageBin`. Because `oDetail.TRNumber` was `undefined`, the controller evaluated `!oDetail.TRNumber === true` and threw `scanToErrNotFound` ("Transfer Requirement not found or has no open quantity") even though the backend returned HTTP 200 OK with valid TR and open stock.
+    2. Missing Reservation Barcode Fallback & Deferred TR Detection: When searching in `TrToAdapter.js`, `getTR` only passed `IV_TR_NUMBER` to `Z_WM_GET_TR_MATERIAL_LIST`. If the operator scanned the reservation barcode for a reservation whose TR creation was deferred under SAP Note 2295840 (e.g. `525273`), no TR was found, leading to a misleading generic error.
+    3. Prefix Formatting & Value Help Fallback: Barcode scanners or manual entry often include prefixes (e.g. `"TR 1000750"`, `"TR:1000750"`). Furthermore, `TrSelectDialog.fragment.xml` bound `title` to `DisplayText` (`"TR 1000750 (Mvt 101)"`), which if used as a fallback in `onConfirmTRValueHelp` was rejected as non-numeric by backend regex.
+  - **Resolution:**
+    1. In `srv/integration/s4hana/wm/TrToAdapter.js`:
+       - Enhanced `getTR`: Strips prefixes (`TR[\s:-]*`), performs fallback lookup by `IV_RESERVATION`, and if neither exists, checks table `RKPF` to detect if the number is an existing reservation whose TR creation was deferred, providing an actionable diagnostic message.
+       - Enhanced `lookupTR`: Populates both standard backend and UI model aliases (`TRNumber` & `TransferRequirement`, `OpenQty` & `OpenQuantity`, `TargetQty` & `RequiredQuantity`, `MaterialDescription` & `MaterialName`, `DestinationType` & `DestinationStorageType`, `DestinationBin` & `DestinationStorageBin`).
+    2. In `WarehouseScanToService.js`:
+       - In `lookupTR`: Strips any `TR` prefix from `sTbnum` before building the OData function URL and normalizes incoming OData response to map all alias fields.
+    3. In `WarehouseScanTo.controller.js`:
+       - In `onLookupTR`: Extracts numeric digits (`\b\d{4,10}\b`) from raw input and validates against `oDetail.TRNumber || oDetail.TransferRequirement`, preventing false-positive not found exceptions.
+       - In `onConfirmTRValueHelp`: Extracts numeric `Tbnum` with regex fallback from item title if binding context is unavailable.
+       - In `createTO`: Passes `tbnum: oTR.TRNumber || oTR.TransferRequirement`.
+    4. In `TrSelectDialog.fragment.xml`:
+       - Bound `title="{scanView>Tbnum}"` and `description="{scanView>DisplayText}"` so the item title provides the clean TR number.
+  - **Validation:**
+    - Live HTTP check on `:4004/odata/v4/tr-to/lookupTR(tbnum='0001000750',lgnum='W01')`: **HTTP 200 OK** with 3,000 KG open quantity.
+    - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+    - `git diff --check`: 0 errors (clean).
+    - Targeted unit tests (`npx jest test/unit/wm/warehouseScanToUi.test.js test/unit/wm/trToAdapter.test.js`): 52/52 tests passed.
+    - TrTo test suite (`npx jest test/unit/wm/trToAdapter.test.js test/unit/wm/trToController.test.js test/unit/wm/trToHandler.test.js test/unit/wm/trToService.test.js test/unit/wm/createTOFromTR.test.js test/unit/wm/warehouseScanToUi.test.js`): 119/119 tests passed.
+    - Full repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,269/1,269 unit tests passed (100% green)**.
+
+- **Fix: Auto TR Creation Deferred / Note 2295840 RFC Blacklist Handling & ZWM_TR_CREATE Wrapper Spec — Resolved & Validated (2026-10-10):**
+  - **Issue Reported:** Reservation creation succeeded in SAP S/4HANA (e.g. `0000525273`), but the automated second step (Transfer Requirement creation) failed with:
+    `Auto TR creation deferred/failed: Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATECPROG:nodeDEST:vheudds4a`
+  - **Root Cause & Technical Analysis:**
+    1. Under SAP S/4HANA (Note 2295840 / UCON), classic function module `L_TR_CREATE` is placed on the SAP RFC Blacklist for external RFC clients (`node-rfc` calling `CPROG:nodeDEST:vheudds4a`). External execution is blocked by the SAP RFC Gateway to prevent incompatible calls.
+    2. Internal ABAP execution of `L_TR_CREATE` inside SAP remains 100% supported. This mirrors how `L_TO_CREATE_TR` was resolved on this system: by creating remote-enabled wrapper `ZWM_TO_CREATE_FROM_TR` in Function Group `ZWM_FINISHEDGOODS`.
+    3. The reservation itself (`RSNUM 0000525273`) is completely valid, committed and persisted in SAP (`DS4CLNT220`).
+  - **Resolution:**
+    1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+       - Enhanced `createTransferRequirement`: Added fallback support for custom RFC wrapper `ZWM_TR_CREATE` (matching `ZWM_TO_CREATE_FROM_TR`).
+       - If `L_TR_CREATE` is rejected by Note 2295840 and `ZWM_TR_CREATE` is not yet available, cleanly classifies the error with `code = 'UCON_BLOCKED'` and an actionable explanation: `L_TR_CREATE is restricted under SAP Note 2295840 (RFC blacklist). Requires custom RFC wrapper ZWM_TR_CREATE or manual creation via transaction LB01.`
+    2. `srv/wm/reservation-entry/service.js`:
+       - In `executeReservationAndAutoTR`: Formatted warning log and track record note cleanly (`TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`), preserving status `01` (Reservation Created) without alarming raw RFC dump.
+       - In `retryStep`: Handles step `LB01` retry failure due to Note 2295840 cleanly with operational guidance.
+    3. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`:
+       - Success dialog now informs the user constructively: `"Reservation <resNo> created successfully. Note: TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)."`
+    4. ABAP Implementation & Specification:
+       - Created complete ABAP RFC wrapper specification: `docs/wm_tr_create_rfc_wrapper.md`.
+       - Created complete ABAP source code: `docs/wm-discovery/pass2/fm_ZWM_TR_CREATE.abap` (Package `Z001`, Function Group `ZWM_FINISHEDGOODS`).
+  - **Validation:**
+    - `git diff --check`: 0 errors (clean).
+    - `ui5lint` in `app/fiori-app`: 0 errors, 0 warnings (clean).
+    - `npx jest test/unit/wm/reservationProcess.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationMonitorRetry.test.js`: 62/62 tests passed.
+    - Full repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,266/1,266 unit tests passed (100% green)**.
+
+- **Fix: Reservation Creation 400 Error (BAPI_RESERVATION_CREATE1 master data & MOVE_PLANT) — Resolved & Proven Live (2026-10-10):**
+  - **Issue Reported:** POST `/odata/v4/reservation-entry/createReservationEntry` returned 400 Bad Request:
+    `"Failed to create reservation: BAPI_RESERVATION_CREATE1 failed: Storage location CS01 does not exist; No storage location data for 1000000045 in 1120 HS01; Not possible to carry out conversion; No instance of object type BUS2093 has been created."`
+  - **Root Causes Discovered via Live SAP Inspection:**
+    1. `Storage location CS01 does not exist`: In `BAPI_RESERVATION_CREATE1`, SAP requires `MOVE_PLANT` in `RESERVATIONHEADER` to evaluate the receiving storage location `MOVE_STLOC`. For movement 311 (intra-plant SLoc transfer), `receivingPlant` is not specified by the user, so `MOVE_PLANT` was omitted. Without a plant context, SAP reported that the receiving storage location does not exist.
+    2. `No storage location data for 1000000045 in 1120 HS01`: Material 1000000045 is Raw Material (`ZROH`) and is maintained in SLocs `CS01` (Raw Material), `ST02` (Storage Tank), `PWIP`, etc. (`MARD`), but is NOT maintained in `HS01` (Engineering store).
+    3. `Not possible to carry out conversion`: The Base Unit of Measure in `MARA` for material 1000000045 is `KG`, not `NOS`.
+  - **Resolution:**
+    1. In `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Set `MOVE_PLANT` to `receivingPlant || (movementType === '311' ? plant : '')`, ensuring SAP evaluates `MOVE_STLOC` within the issuing plant context. Set `ENTRY_UOM` to uppercase `KG` fallback.
+    2. In `srv/wm/reservation-entry/service.js`: Ensured `receivingPlant` is passed as `Plant` for 311 transfers, and unit defaults to `KG`.
+    3. In `ReservationEntryDetail.controller.js`: Aligned default create data with authentic SAP master data for Plant 1120: `StorageLocation: "CS01"`, `ReceivingStorageLocation: "ST02"`, `Unit: "KG"`, `CostCenter: "1011201301"`.
+  - **Live SAP S/4HANA Validation:**
+    - Live HTTP POST to `http://localhost:4004/odata/v4/reservation-entry/createReservationEntry` succeeded with **HTTP 200 OK**.
+    - Confirmed authentic SAP Reservation **`0000525273`** created and committed in SAP S/4HANA Client 220 (`DS4CLNT220`).
+    - Full WM regression test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,263/1,263 unit tests passed (100% green)**.
+    - `ui5lint`: 0 errors, 0 warnings (clean).
+    - `git diff --check`: 0 errors (clean).
+
 - **Fix: ReservationEntry Detail Assertions (Title visible, i18n key) & 401 Auth Error — Resolved & Tested (2026-10-10):**
   - **Issues Reported:**
     1. `Assertion failed: [FUTURE FATAL] Element sap.ui.core.mvc.XMLView#__component0---reservationEntryDetail: encountered unknown setting 'visible' for class sap.ui.core.Title (value:'{= ${create>/MovementType} === '...' }')` for movement types 201, 241, 311, 301.
@@ -327,6 +450,126 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 14:35 IST — Fix: Deploy Z_WM_TR_CREATE & ZWM_TR_CREATE RFC Wrappers for SAP Note 2295840 & Resolve LB01 Retry
+- **Issue.** While navigating to `/wm/reservation-entry/0000524979/0001` and triggering `retryStep` for step `LB01` (Create Transfer Requirement), the call was deferred with error:
+  `Error : Retry LB01 deferred: L_TR_CREATE restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`.
+- **Root Cause.**
+  1. RFC Blacklist under SAP Note 2295840: Standard function module `L_TR_CREATE` is blacklisted for remote RFC invocation via UCON. Calling it remotely triggers `Incompatible Call Rejected, see note 2295840`.
+  2. S/4HANA Material Number Formatting: S/4HANA material numbers require conversion via `CONVERSION_EXIT_MATN1_INPUT`. ALPHA formatting pads with 40 characters, which triggers `M3 305: The material & does not exist or is not activated`.
+  3. Parameter Type Mismatch: `L_TR_CREATE` table parameter `T_LTBA` item field `MENGA` uses data element `LTBP_MENGA`.
+  4. Missing Verification of TO Document: In `ReservationProcessAdapter.js`, `createTransferOrderFromTR` did not check if the returned Transfer Order number was valid and non-zero before reporting success.
+- **Change.**
+  1. ABAP RFC Wrapper `Z_WM_TR_CREATE`: Authored, deployed, and activated remote-enabled RFC module via ADT (with `X-sap-adt-sessiontype: stateful`) in Function Group `Z_VENDOR_REMOTES` (package `$TMP`). Uses `CONVERSION_EXIT_MATN1_INPUT` for material formatting, `CONVERSION_EXIT_ALPHA_INPUT` for reservation formatting, and `LTBP_MENGA` for quantity conversion.
+  2. ABAP RFC Wrapper Alias `ZWM_TR_CREATE`: Authored, deployed, and activated remote-enabled RFC alias module via ADT in Function Group `Z_VENDOR_REMOTES` forwarding calls to `Z_WM_TR_CREATE`.
+  3. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Updated `createTransferRequirement` to call `ZWM_TR_CREATE` with fallback to `Z_WM_TR_CREATE`, verifying clean document number before returning success.
+     - Updated `createTransferOrderFromTR` to call `ZWM_TO_CREATE_FROM_TR` with fallback to `Z_WM_TO_CREATE_FROM_TR` and reject zero/empty document numbers with descriptive SAP error.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+  - Live node-rfc test: Created Transfer Requirements `0001000751`, `0001000752`, and `0001000753` directly in SAP S/4HANA Client 220 (`DS4CLNT220`).
+  - Live CAP dev server test: `POST http://localhost:4004/odata/v4/reservation-entry/retryStep` for reservation `0000524979` item `0001` with `Step: 'LB01'`: **HTTP 200 OK**, status updated to `'02'` ("TR Created"), TransferRequirement populated with SAP-created TR `0001000754`!
+  - Verified in SAP table `LTBP`: TR `0001000754` persisted for reservation `0000524979` with material `000000008000000023`, quantity 1 NOS in plant 1120 / SLoc HS01.
+  - Targeted unit tests (`npx jest test/unit/wm/reservationProcess.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationMonitorRetry.test.js`): 38/38 tests passed.
+  - Complete repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,269/1,269 unit tests passed (100% green)**.
+
+### 2026-10-10 14:05 IST — Fix: TO Creation SQUIT Forbidden, Storage Unit Type LETYP & UI5 Class Settings
+- **Issue.** While executing `/wm/scan-to` to create a Transfer Order, the browser console showed multiple UI5 assertion failures:
+  `Assertion failed: ManagedObject.apply: encountered unknown setting 'class' for class 'sap.m.Text' (value:'textMuted')`
+  `Assertion failed: ManagedObject.apply: encountered unknown setting 'class' for class 'sap.m.HBox'`
+  `Assertion failed: ManagedObject.apply: encountered unknown setting 'class' for class 'sap.m.VBox'`
+  And the backend call failed with 400 Bad Request:
+  `POST http://localhost:4004/odata/v4/tr-to/createTOFromTR 400 (Bad Request)`
+  `{"error":{"message":"Movement type 000 does not allow immediate confirmation"}}`
+- **Root Cause.**
+  1. UI5 Class setting: In `BarcodeScanService.js`, programmatic constructors passed `class: "..."` inside the settings object. In UI5, `class` is not a property of `ManagedObject`/`Control` and triggers assertion failures. Controls require `.addStyleClass(...)`.
+  2. Immediate confirmation hardcoded in SAP: Legacy RFC wrapper `ZWM_TO_CREATE_FROM_TR` hardcoded `i_squit = 'X'` when calling `L_TO_CREATE_TR`. In SAP WM configuration (table `T333`), movement types such as 101 do not allow immediate confirmation during creation (`squit_forbidden` exception 8), throwing message `Movement type 000 does not allow immediate confirmation`.
+  3. Storage Unit Type requirement in SU-managed warehouse: Warehouse `W01` is SU-managed. When creating a TO for a material without a default `LETY1` in `MLGN`, SAP requires `LETYP` (e.g. `E1`), otherwise failing with `L3 043 Enter the storage unit type`.
+  4. Confirmation detection: In `TrToAdapter.js`, if a created TO is already confirmed in SAP, `L_TO_CONFIRM` returns message `L3 055 All items in transfer order & already confirmed`, which was previously unhandled.
+- **Change.**
+  1. `app/fiori-app/webapp/service/BarcodeScanService.js`: Replaced invalid `class` constructor properties with safe helper `_addClass` calling `.addStyleClass(...)`.
+  2. ABAP RFC Wrapper `Z_WM_TO_CREATE_FROM_TR`: Authored, deployed, and activated remote-enabled RFC module via ADT (with `X-sap-adt-sessiontype: stateful`) in Function Group `Z_VENDOR_REMOTES`. Implemented configurable `iv_squit` defaulting to `' '` and defaulted `ls_trite-letyp` to `'E1'` if empty.
+  3. `srv/integration/s4hana/wm/TrToAdapter.js`: Updated `createTOFromTR` to invoke `Z_WM_TO_CREATE_FROM_TR` with `IV_SQUIT: ' '` and `LETYP: 'E1'` (with fallback to `ZWM_TO_CREATE_FROM_TR`); updated `confirmTO` to treat message `L3 055` ("already confirmed") as successful confirmation.
+  4. `test/unit/wm/barcodeScanService.test.js`: Added `addStyleClass` to UI5 mock control constructors.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint`: 0 findings (clean).
+  - Live SAP S/4HANA TO creation: Transfer Order `0001037262` created and confirmed in SAP Client 220 (`DS4CLNT220`).
+  - Live CAP OData V4 call `POST :4004/odata/v4/tr-to/createTOFromTR`: **HTTP 200 OK** creating and auto-confirming TO `1037264`.
+  - Targeted unit tests (`npx jest test/unit/wm/barcodeScanService.test.js test/unit/wm/trToAdapter.test.js test/unit/wm/createTOFromTR.test.js test/unit/wm/warehouseScanToUi.test.js`): 64/64 tests passed.
+  - Complete repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,269/1,269 unit tests passed (100% green)**.
+
+### 2026-10-10 12:55 IST — Fix: TR Prefix Stripping, Value Help Fallback & Reservation Deferred TR Diagnostic
+- **Issue.** Looking up TRs at `/wm/scan-to` failed with `Error : Transfer Requirement not found or has no open quantity.` when scanning barcodes containing a TR prefix (e.g. `TR 1000750`), when selecting from the SelectDialog without binding context, or when scanning a reservation barcode (e.g. `525273`) whose TR creation was deferred under SAP Note 2295840.
+- **Root Cause.**
+  1. Barcode prefixing: Scanned barcodes containing `"TR "` or `"TR:"` failed backend regex validation (`RE.tbnum`).
+  2. Dialog fallback: `TrSelectDialog.fragment.xml` had `title="{scanView>DisplayText}"` (`"TR 1000750 (Mvt 101)"`), which caused `onConfirmTRValueHelp` fallback to pass the entire display text instead of the clean numeric TR number.
+  3. Scanning reservation barcode for reservations where TR creation was deferred (such as `525273`) produced an opaque "TR not found" error with no explanation of why the TR does not exist in SAP.
+- **Change.**
+  1. `srv/integration/s4hana/wm/TrToAdapter.js`: Stripped prefixes from `tbnum` in `getTR`, and added check against SAP table `RKPF` to detect if the scanned number is an existing reservation whose TR creation was deferred under SAP Note 2295840, returning an actionable diagnostic message.
+  2. `WarehouseScanToService.js`: Stripped any `TR` prefix from `sTbnum` before constructing the OData function URL.
+  3. `WarehouseScanTo.controller.js`: In `onLookupTR`, extracted numeric digits (`\b\d{4,10}\b`) from raw input; in `onConfirmTRValueHelp`, extracted numeric digits from title as fallback.
+  4. `TrSelectDialog.fragment.xml`: Set `title="{scanView>Tbnum}"` and `description="{scanView>DisplayText}"`.
+  5. `test/unit/wm/warehouseScanToUi.test.js`: Added unit tests verifying prefix stripping and value help confirmation fallback.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint`: 0 findings (clean).
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js test/unit/wm/trToAdapter.test.js`: 52/52 tests passed.
+  - Complete repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,269/1,269 unit tests passed (100% green)**.
+
+### 2026-10-10 12:40 IST — Fix: WarehouseScanTo TR Lookup Property Mismatch & Reservation Fallback
+- **Issue.** Scanning or entering a Transfer Requirement at `/wm/scan-to` failed with:
+  `Error : Transfer Requirement not found or has no open quantity.`
+- **Root Cause.**
+  1. `WarehouseScanTo.controller.js` checked `if (!oDetail || !oDetail.TRNumber)`, but backend OData V4 service `TRDetail` returns `TransferRequirement`. Because `oDetail.TRNumber` was `undefined`, the check rejected all valid responses with `scanToErrNotFound`.
+  2. In `TrToAdapter.js`, `getTR` queried `Z_WM_GET_TR_MATERIAL_LIST` only by `IV_TR_NUMBER`. If a reservation barcode was scanned, it failed to resolve the associated TR.
+- **Change.**
+  1. `TrToAdapter.js`: Added reservation fallback lookup to `getTR`, and added property aliases (`TRNumber`, `OpenQty`, `TargetQty`, `MaterialDescription`, `DestinationType`, `DestinationBin`) to `lookupTR`.
+  2. `WarehouseScanToService.js`: Normalized `lookupTR` response fields to support both naming styles.
+  3. `WarehouseScanTo.controller.js`: In `onLookupTR`, checks `oDetail.TRNumber || oDetail.TransferRequirement`, normalizes model properties, and passes `tbnum: oTR.TRNumber || oTR.TransferRequirement` in `createTO`.
+  4. `test/unit/wm/warehouseScanToUi.test.js`: Added unit test validating TR loading using OData V4 backend field names.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint`: 0 findings (clean).
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: 26/26 tests passed.
+  - Complete repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,267/1,267 unit tests passed (100% green)**.
+
+### 2026-10-10 12:30 IST — Fix: Auto TR Creation Note 2295840 RFC Blacklist Handling & ZWM_TR_CREATE Wrapper Spec
+- **Issue.** While creating a reservation at `/wm/reservation-entry/create`, the reservation was created in SAP S/4HANA (e.g. `0000525273`), but the automated second step (Transfer Requirement creation) failed with:
+  `Auto TR creation deferred/failed: Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATECPROG:nodeDEST:vheudds4a`
+- **Root Cause.**
+  1. In SAP S/4HANA, classic function module `L_TR_CREATE` is placed on the SAP RFC Blacklist for external RFC callers (Unified Connectivity / UCON, SAP Note 2295840). When node-rfc calls `L_TR_CREATE`, the SAP Gateway blocks execution.
+  2. Internal ABAP calls to `L_TR_CREATE` are permitted. This mirrors the existing solution in this repository for `L_TO_CREATE_TR`, which was wrapped by customer RFC module `ZWM_TO_CREATE_FROM_TR` in Function Group `ZWM_FINISHEDGOODS`.
+  3. The reservation itself (`RSNUM 0000525273`) was successfully persisted and committed in SAP Client 220 (`DS4CLNT220`).
+- **Change.**
+  1. `ReservationProcessAdapter.js`: Added support for custom RFC wrapper `ZWM_TR_CREATE` with automatic fallback. When `L_TR_CREATE` is rejected by Note 2295840, the adapter classifies the error as `UCON_BLOCKED` with an actionable operational message: `L_TR_CREATE is restricted under SAP Note 2295840 (RFC blacklist). Requires custom RFC wrapper ZWM_TR_CREATE or manual creation via transaction LB01.`
+  2. `service.js`: In `executeReservationAndAutoTR`, formatted the warning log and tracking record cleanly (`TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`), preserving status `01` (Reservation Created) without dumping raw gateway strings. In `retryStep`, handled step `LB01` retry failure due to Note 2295840 with clear guidance.
+  3. `ReservationEntryDetail.controller.js`: In `onSave`, if TR is deferred, displays an informative success dialog: `"Reservation <resNo> created successfully. Note: TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)."`.
+  4. Documentation & ABAP Code: Authored complete technical specification `docs/wm_tr_create_rfc_wrapper.md` and complete ABAP source code `docs/wm-discovery/pass2/fm_ZWM_TR_CREATE.abap` for the ABAP/Basis team to deploy in Package `Z001`, Function Group `ZWM_FINISHEDGOODS`.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+  - `npx jest test/unit/wm/reservationProcess.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationMonitorRetry.test.js`: 62/62 tests passed.
+  - Complete repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,266/1,266 unit tests passed (100% green)**.
+
+### 2026-10-10 12:15 IST — Fix: Reservation Creation 400 Error (BAPI_RESERVATION_CREATE1 master data & MOVE_PLANT)
+- **Issue.** Creating a reservation via `/wm/reservation-entry/create` failed with 400 Bad Request:
+  `Failed to create reservation: BAPI_RESERVATION_CREATE1 failed: Storage location CS01 does not exist; No storage location data for 1000000045 in 1120 HS01; Not possible to carry out conversion; No instance of object type BUS2093 has been created.`
+- **Root Cause.**
+  1. `Storage location CS01 does not exist`: In `BAPI_RESERVATION_CREATE1`, SAP requires `MOVE_PLANT` to evaluate `MOVE_STLOC`. For movement 311, `receivingPlant` was not passed, so `MOVE_PLANT` was omitted. Without a receiving plant context, SAP evaluated `MOVE_STLOC` in a blank plant and failed.
+  2. `No storage location data for 1000000045 in 1120 HS01`: Material 1000000045 in Plant 1120 is maintained in `CS01` (Raw Material), `ST02`, `PWIP`, etc. (`MARD`), but not in `HS01` (Engineering store).
+  3. `Not possible to carry out conversion`: In `MARA`, base UoM for 1000000045 is `KG`, not `NOS`.
+- **Change.**
+  1. `ReservationProcessAdapter.js`: Set `MOVE_PLANT` to `receivingPlant || (movementType === '311' ? plant : '')`, and set `ENTRY_UOM` to uppercase `KG` fallback.
+  2. `service.js`: Ensured `receivingPlant` is forwarded as `Plant` for 311 transfers, and unit defaults to `KG`.
+  3. `ReservationEntryDetail.controller.js`: Configured defaults to authentic SAP master data: `StorageLocation: "CS01"`, `ReceivingStorageLocation: "ST02"`, `Unit: "KG"`, `CostCenter: "1011201301"`.
+- **Validation:**
+  - Live SAP test via HTTP POST on `:4004`: **HTTP 200 OK**, confirmed authentic SAP reservation **`0000525273`** created and committed in SAP S/4HANA Client 220 (`DS4CLNT220`).
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint` in `app/fiori-app`: 0 errors, 0 warnings (clean).
+  - `npx jest test/unit/wm/reservationEntryUi.test.js`: 23/23 unit tests pass.
+  - Complete repository WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,263/1,263 unit tests passed (100% green)**.
 
 ### 2026-10-10 12:05 IST — Fix: Detail View Assertions (Title visible, resColStatus) & 401 Auth Error
 - **Issue.**

@@ -242,6 +242,65 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             expect(mockMessageToast.show).toHaveBeenCalledWith('scanToMsgTRLoaded');
         });
 
+        it('successfully loads TR returned with backend OData V4 field names (TransferRequirement, OpenQuantity)', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TransferRequirement: '1000750',
+                TRItem: '0001',
+                Material: '8900000007',
+                MaterialName: 'Distilled THF',
+                OpenQuantity: 3000,
+                RequiredQuantity: 3000,
+                Unit: 'KG',
+                IsBatchManaged: true,
+                IsSerialManaged: false,
+                Batch: 'IN26001220'
+            });
+
+            viewModel.setProperty('/scannedTR', '1000750');
+            await controller.onLookupTR();
+
+            expect(viewModel.getProperty('/hasTR')).toBe(true);
+            expect(viewModel.getProperty('/tr/TRNumber')).toBe('1000750');
+            expect(viewModel.getProperty('/tr/OpenQty')).toBe(3000);
+            expect(viewModel.getProperty('/tr/MaterialDescription')).toBe('Distilled THF');
+            expect(viewModel.getProperty('/pickQty')).toBe(3000);
+            expect(viewModel.getProperty('/batch')).toBe('IN26001220');
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('strips TR prefix and extracts numeric TR number when scanned with prefix', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TransferRequirement: '1000750',
+                TRItem: '0001',
+                Material: '8900000007',
+                MaterialName: 'Distilled THF',
+                OpenQuantity: 3000,
+                Unit: 'KG'
+            });
+
+            viewModel.setProperty('/scannedTR', 'TR 1000750');
+            await controller.onLookupTR();
+
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('1000750', 'W01');
+            expect(viewModel.getProperty('/scannedTR')).toBe('1000750');
+            expect(viewModel.getProperty('/hasTR')).toBe(true);
+        });
+
+        it('extracts numeric Tbnum from value help item title when context is unavailable', () => {
+            const lookupSpy = jest.spyOn(controller, 'onLookupTR').mockImplementation(() => {});
+            controller.onConfirmTRValueHelp({
+                getParameter: () => ({
+                    getBindingContext: () => null,
+                    getTitle: () => 'TR 1000750 (Mvt 101)'
+                })
+            });
+
+            expect(viewModel.getProperty('/scannedTR')).toBe('1000750');
+            expect(lookupSpy).toHaveBeenCalled();
+        });
+
         it('displays error message when TR lookup fails or rejects', async () => {
             mockWarehouseScanToService.lookupTR.mockRejectedValueOnce(new Error('TR not found in warehouse W01'));
 

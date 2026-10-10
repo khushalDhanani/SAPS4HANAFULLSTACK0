@@ -30,6 +30,13 @@ sap.ui.define([
     var _oActiveCameraDialog = null;
     var _nAnimationId = null;
 
+    function _addClass(oControl, sClass) {
+        if (oControl && typeof oControl.addStyleClass === "function") {
+            oControl.addStyleClass(sClass);
+        }
+        return oControl;
+    }
+
     /**
      * Internal keydown listener to capture Zebra hardware laser scans in keystroke wedge mode
      */
@@ -200,14 +207,13 @@ sap.ui.define([
                         title: sTitle + " (Camera Simulation)",
                         contentWidth: "360px",
                         content: [
-                            new VBox({
-                                class: "sapUiSmallMargin",
+                            _addClass(new VBox({
                                 items: [
                                     new Text({ text: "Camera stream is unavailable in this browser session. You can enter or simulate a barcode scan below:" }),
-                                    new Label({ text: "Barcode Value:", class: "sapUiTinyMarginTop" }),
+                                    _addClass(new Label({ text: "Barcode Value:" }), "sapUiTinyMarginTop"),
                                     oSimInput
                                 ]
-                            })
+                            }), "sapUiSmallMargin")
                         ],
                         beginButton: new Button({
                             text: "Submit Scan",
@@ -280,19 +286,17 @@ sap.ui.define([
                     title: sTitle,
                     contentWidth: "380px",
                     content: [
-                        new VBox({
-                            class: "sapUiSmallMargin",
+                        _addClass(new VBox({
                             items: [
                                 oVideoHtml,
-                                new HBox({
+                                _addClass(new HBox({
                                     justifyContent: "SpaceBetween",
                                     alignItems: "Center",
-                                    class: "sapUiTinyMarginTop sapUiTinyMarginBottom",
                                     items: [
-                                        new Text({ text: "Align barcode inside the reticle", class: "textMuted" }),
+                                        _addClass(new Text({ text: "Align barcode inside the reticle" }), "textMuted"),
                                         oBtnTorch
                                     ]
-                                }),
+                                }), "sapUiTinyMarginTop sapUiTinyMarginBottom"),
                                 new Label({ text: "Manual Entry (Fallback):" }),
                                 new HBox({
                                     width: "100%",
@@ -311,7 +315,7 @@ sap.ui.define([
                                     ]
                                 })
                             ]
-                        })
+                        }), "sapUiSmallMargin")
                     ],
                     endButton: new Button({
                         text: "Cancel",

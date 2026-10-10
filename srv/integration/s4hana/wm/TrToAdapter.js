@@ -112,15 +112,44 @@ class TrToAdapter {
 
   async getTR(tbnum, lgnum) {
     const wh = required(lgnum, 'Warehouse', RE.lgnum);
-    const tr = alphaIn(required(tbnum, 'Transfer Requirement number', RE.tbnum), 10);
+    const sClean = String(tbnum ?? '').trim().replace(/^TR[\s:-]*/i, '');
+    const tr = alphaIn(required(sClean, 'Transfer Requirement number', RE.tbnum), 10);
     LOG.info(`Reading TR ${tr} in warehouse ${wh}`);
 
-    const res = await this._rfc(
+    let res = await this._rfc(
       () => this.rfc.call('Z_WM_GET_TR_MATERIAL_LIST', { IV_TR_NUMBER: tr, IV_LGNUM: wh }),
       `Read Transfer Requirement ${alphaOut(tr)}`
     );
-    const h = (res.ET_TR_HEADER || [])[0];
-    if (!h) throw httpError(404, `Transfer Requirement ${alphaOut(tr)} not found in warehouse ${wh}`);
+    let h = (res.ET_TR_HEADER || [])[0];
+    if (!h) {
+      try {
+        res = await this._rfc(
+          () => this.rfc.call('Z_WM_GET_TR_MATERIAL_LIST', { IV_RESERVATION: tr, IV_LGNUM: wh }),
+          `Read Transfer Requirement by Reservation ${alphaOut(tr)}`
+        );
+        h = (res.ET_TR_HEADER || [])[0];
+      } catch (_resErr) {
+        // Continue to not found check
+      }
+    }
+    if (!h) {
+      let isReservation = false;
+      try {
+        const rkpfRows = await this._rfc(
+          () => this.rfc.readTable('RKPF', ['RSNUM', 'BWART'], [`RSNUM = '${tr}'`]),
+          `Check reservation ${alphaOut(tr)}`
+        );
+        if (rkpfRows && rkpfRows.length > 0 && rkpfRows[0].RSNUM) isReservation = true;
+      } catch (_rkpfErr) {
+        // Ignore table read error
+      }
+
+      if (isReservation) {
+        throw httpError(404, `Reservation ${alphaOut(tr)} exists, but no Transfer Requirement has been created for it yet in warehouse ${wh} (TR creation deferred under SAP Note 2295840; create via transaction LB01 or deploy ZWM_TR_CREATE). To test scan-to, select an open TR (e.g. 1000750) via the Value Help dialog.`);
+      }
+
+      throw httpError(404, `Transfer Requirement ${alphaOut(tr)} not found in warehouse ${wh}`);
+    }
 
     const items = res.ET_TR_ITEMS || [];
     const desc = await this._descriptions(items.map((i) => i.MATNR));
@@ -359,6 +388,7 @@ class TrToAdapter {
 
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
+      TRNumber: alphaOut(tr.Tbnum),
       TRItem: item.Tbpos,
       WarehouseNumber: wh,
       MovementType: tr.Bwlvs || '311',
@@ -368,15 +398,20 @@ class TrToAdapter {
       ReservationItem: '0001',
       Material: item.Material,
       MaterialName: item.MaterialDesc,
+      MaterialDescription: item.MaterialDesc,
       Plant: item.Plant,
       StorageLocation: item.StorageLocation,
       DestinationStorageType: tr.Nltyp || item.DestStorageType || '921',
+      DestinationType: tr.Nltyp || item.DestStorageType || '921',
       DestinationStorageBin: tr.Nlpla || item.DestStorageBin || 'TRANSFER',
+      DestinationBin: tr.Nlpla || item.DestStorageBin || 'TRANSFER',
       SourceStorageType: tr.Vltyp || '911',
       SourceStorageBin: tr.Vlpla || '',
       RequiredQuantity: item.RequiredQty,
+      TargetQty: item.RequiredQty,
       ProcessedQuantity: item.ProcessedQty,
       OpenQuantity: item.OpenQty,
+      OpenQty: item.OpenQty,
       Unit: item.Unit,
       Batch: item.Batch || '',
       IsBatchManaged: Boolean(profile.isBatchManaged || item.Batch),
@@ -395,15 +430,28 @@ class TrToAdapter {
     const s4To = alphaIn(required(toNumber, 'Transfer Order number', /^\d{1,10}$/), 10);
     LOG.info(`Confirming Transfer Order ${alphaOut(s4To)} in warehouse ${wh}`);
 
-    await this._rfc(
-      () => this.rfc.call('L_TO_CONFIRM', {
-        I_LGNUM: wh,
-        I_TANUM: s4To,
-        I_SQUIT: squit,
-        I_COMMIT_WORK: 'X'
-      }),
-      `Confirm Transfer Order ${alphaOut(s4To)}`
-    );
+    try {
+      await this._rfc(
+        () => this.rfc.call('L_TO_CONFIRM', {
+          I_LGNUM: wh,
+          I_TANUM: s4To,
+          I_SQUIT: squit,
+          I_COMMIT_WORK: 'X'
+        }),
+        `Confirm Transfer Order ${alphaOut(s4To)}`
+      );
+    } catch (err) {
+      if (err.message?.includes('055') || err.message?.toLowerCase().includes('already confirmed')) {
+        LOG.info(`Transfer Order ${alphaOut(s4To)} is already confirmed in SAP`);
+        return {
+          TransferOrder: alphaOut(s4To),
+          Success: true,
+          Confirmed: true,
+          Message: `Transfer Order ${alphaOut(s4To)} confirmed.`
+        };
+      }
+      throw err;
+    }
 
     return {
       TransferOrder: alphaOut(s4To),
@@ -451,27 +499,45 @@ class TrToAdapter {
 
     const selectedBatch = batch || item.Batch || '';
 
-    // Create TO via ZWM_TO_CREATE_FROM_TR / L_TO_CREATE_TR
+    // Create TO via Z_WM_TO_CREATE_FROM_TR / ZWM_TO_CREATE_FROM_TR
     LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
-    const res = await this._rfc(
-      () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
-        IV_LGNUM: wh,
-        IV_TBNUM: tr.Tbnum,
-        IV_COMMIT: 'X',
-        IT_ITEMS: [{
-          TBPOS: item.Tbpos,
-          ANFME: quantity.toFixed(3),
-          ALTME: unit || item.Unit,
-          CHARG: selectedBatch,
-          NLTYP: tr.Nltyp || '921',
-          NLPLA: tr.Nlpla || 'TRANSFER',
-          VLTYP: item.DestStorageType || '911',
-          VLPLA: item.DestStorageBin || '',
-          VLENR: storageUnit || ''
-        }]
-      }),
-      `Create Transfer Order for TR ${alphaOut(tr.Tbnum)}`
-    );
+    const itItems = [{
+      TBPOS: item.Tbpos,
+      ANFME: quantity.toFixed(3),
+      ALTME: unit || item.Unit,
+      CHARG: selectedBatch,
+      LETYP: item.StorageUnitType || profile.storageUnitType || 'E1',
+      NLTYP: item.DestStorageType || tr.Nltyp || '',
+      NLPLA: item.DestStorageBin || tr.Nlpla || '',
+      VLTYP: item.SourceStorageType || tr.Vltyp || '',
+      VLPLA: item.SourceStorageBin || tr.Vlpla || '',
+      VLENR: storageUnit || ''
+    }];
+
+    let res;
+    try {
+      res = await this._rfc(
+        () => this.rfc.call('Z_WM_TO_CREATE_FROM_TR', {
+          IV_LGNUM: wh,
+          IV_TBNUM: tr.Tbnum,
+          IV_COMMIT: 'X',
+          IV_SQUIT: ' ',
+          IT_ITEMS: itItems
+        }),
+        `Create Transfer Order for TR ${alphaOut(tr.Tbnum)}`
+      );
+    } catch (primaryErr) {
+      LOG.warn(`Z_WM_TO_CREATE_FROM_TR call failed (${primaryErr.message}), falling back to ZWM_TO_CREATE_FROM_TR`);
+      res = await this._rfc(
+        () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
+          IV_LGNUM: wh,
+          IV_TBNUM: tr.Tbnum,
+          IV_COMMIT: 'X',
+          IT_ITEMS: itItems
+        }),
+        `Create Transfer Order for TR ${alphaOut(tr.Tbnum)} (fallback)`
+      );
+    }
 
     if (res?.EV_SUCCESS !== 'S' || !res.EV_TANUM) {
       throw httpError(400, res?.EV_MESSAGE || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);

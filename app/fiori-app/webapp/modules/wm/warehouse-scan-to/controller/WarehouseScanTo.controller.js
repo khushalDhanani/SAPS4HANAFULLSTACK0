@@ -235,7 +235,12 @@ sap.ui.define([
             var oSelectedItem = oEvent.getParameter("selectedItem");
             if (oSelectedItem) {
                 var oCtx = oSelectedItem.getBindingContext("scanView");
-                var sTbnum = oCtx ? oCtx.getProperty("Tbnum") : oSelectedItem.getTitle();
+                var sTbnum = oCtx ? oCtx.getProperty("Tbnum") : "";
+                if (!sTbnum) {
+                    var sRaw = oSelectedItem.getTitle() || "";
+                    var mNum = sRaw.match(/\b\d{4,10}\b/);
+                    sTbnum = mNum ? mNum[0] : sRaw.replace(/[^\d]/g, "");
+                }
                 if (sTbnum) {
                     this.getModel("scanView").setProperty("/scannedTR", sTbnum);
                     this.onLookupTR();
@@ -249,21 +254,49 @@ sap.ui.define([
 
         onLookupTR: function () {
             var oModel = this.getModel("scanView");
-            var sScanned = (oModel.getProperty("/scannedTR") || "").trim();
+            var sRawScanned = (oModel.getProperty("/scannedTR") || "").trim();
             var sLgnum = oModel.getProperty("/lgnum") || "W01";
             var that = this;
 
-            if (!sScanned) {
+            if (!sRawScanned) {
                 this._showMessage(this.getText("scanToErrEmptyTR"), "Warning");
                 this._playAudio("warn");
                 return Promise.resolve(null);
             }
 
+            // Extract numeric digits if prefix (e.g. "TR 1000750" or "TR:1000750") was scanned/typed
+            var sScanned = sRawScanned;
+            var mNum = sRawScanned.match(/\b\d{4,10}\b/);
+            if (mNum) {
+                sScanned = mNum[0];
+            }
+            oModel.setProperty("/scannedTR", sScanned);
+
             this.onCloseMessage();
 
             return WarehouseScanToService.lookupTR(sScanned, sLgnum).then(function (oDetail) {
-                if (!oDetail || !oDetail.TRNumber) {
+                var sTRNumber = oDetail ? (oDetail.TRNumber || oDetail.TransferRequirement) : null;
+                if (!oDetail || !sTRNumber) {
                     throw new Error(that.getText("scanToErrNotFound"));
+                }
+
+                // Normalize properties
+                oDetail.TRNumber = sTRNumber;
+                oDetail.TransferRequirement = sTRNumber;
+                if (oDetail.OpenQty === undefined && oDetail.OpenQuantity !== undefined) {
+                    oDetail.OpenQty = parseFloat(oDetail.OpenQuantity);
+                }
+                if (oDetail.MaterialDescription === undefined && oDetail.MaterialName !== undefined) {
+                    oDetail.MaterialDescription = oDetail.MaterialName;
+                }
+                if (oDetail.TargetQty === undefined && oDetail.RequiredQuantity !== undefined) {
+                    oDetail.TargetQty = parseFloat(oDetail.RequiredQuantity);
+                }
+                if (oDetail.DestinationType === undefined && oDetail.DestinationStorageType !== undefined) {
+                    oDetail.DestinationType = oDetail.DestinationStorageType;
+                }
+                if (oDetail.DestinationBin === undefined && oDetail.DestinationStorageBin !== undefined) {
+                    oDetail.DestinationBin = oDetail.DestinationStorageBin;
                 }
 
                 oModel.setProperty("/tr", oDetail);
@@ -507,7 +540,7 @@ sap.ui.define([
 
             var oPayload = {
                 lgnum: sLgnum,
-                tbnum: oTR.TRNumber,
+                tbnum: oTR.TRNumber || oTR.TransferRequirement,
                 tbpos: oTR.TRItem || "0001",
                 qty: nQty,
                 unit: oTR.Unit || "KG",

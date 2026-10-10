@@ -48,10 +48,11 @@ class ReservationProcessAdapter {
     if (!material) throw httpError(400, 'Material is mandatory');
     if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
 
+    const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
     const header = {
       RES_DATE: this._sapDate(),
       MOVE_TYPE: String(movementType).trim(),
-      ...(receivingPlant ? { MOVE_PLANT: String(receivingPlant).trim() } : {}),
+      ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
       ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
       ...(costCenter ? { COSTCENTER: String(costCenter).trim() } : {}),
       ...(assetNo ? { ASSET_NO: String(assetNo).trim() } : {}),
@@ -64,7 +65,7 @@ class ReservationProcessAdapter {
       PLANT: String(plant).trim(),
       ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
       ENTRY_QNT: Number(quantity),
-      ENTRY_UOM: String(unit || 'EA').trim(),
+      ENTRY_UOM: String(unit || 'KG').trim().toUpperCase(),
       MOVEMENT: 'X'
     };
 
@@ -99,7 +100,7 @@ class ReservationProcessAdapter {
 
   /**
    * Step 2: create_tr
-   * Wraps L_TR_CREATE
+   * Wraps L_TR_CREATE with fallback to custom wrapper ZWM_TR_CREATE
    */
   async createTransferRequirement(params = {}) {
     const {
@@ -119,35 +120,116 @@ class ReservationProcessAdapter {
     if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
 
     const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
+    const s4Rsnum = pad10(reservationNo);
+    const s4Rspos = pad4(reservationItem);
+    const s4Lgnum = String(warehouseNumber).trim();
+    const s4Bwlvs = String(wmMovementType || '311').trim();
+    const s4Werks = String(plant || '1120').trim();
+    const s4Lgort = String(storageLocation || 'CS01').trim();
+    const s4Menga = Number(quantity || 1);
+    const s4Altme = String(unit || 'KG').trim().toUpperCase();
+
     const ltbaItem = {
-      LGNUM: String(warehouseNumber).trim(),
-      BWLVS: String(wmMovementType || '311').trim(),
+      LGNUM: s4Lgnum,
+      BWLVS: s4Bwlvs,
       MATNR: s4Mat,
-      WERKS: String(plant || '1120').trim(),
-      LGORT: String(storageLocation || 'HS01').trim(),
-      MENGA: Number(quantity || 1),
-      ALTME: String(unit || 'EA').trim(),
-      RSNUM: pad10(reservationNo),
-      RSPOS: pad4(reservationItem)
+      WERKS: s4Werks,
+      LGORT: s4Lgort,
+      MENGA: s4Menga,
+      ALTME: s4Altme,
+      RSNUM: s4Rsnum,
+      RSPOS: s4Rspos
     };
 
     return await this.rfc.session(async (call) => {
-      const res = await call('L_TR_CREATE', {
-        I_COMMIT_WORK: 'X',
-        I_SAVE_ONLY_ALL: 'X',
-        I_SINGLE_ITEM: 'X',
-        T_LTBA: [ltbaItem]
-      });
+      let res;
+      let tbnum = '';
+      let tbpos = '0001';
+      let returnedItem = {};
 
-      const returnedItem = (res.T_LTBA || [])[0] || {};
-      const tbnum = returnedItem.TBNUM ? alphaOut(returnedItem.TBNUM) : '';
+      try {
+        res = await call('L_TR_CREATE', {
+          I_COMMIT_WORK: 'X',
+          I_SAVE_ONLY_ALL: 'X',
+          I_SINGLE_ITEM: 'X',
+          T_LTBA: [ltbaItem]
+        });
+
+        returnedItem = (res.T_LTBA || [])[0] || {};
+        tbnum = returnedItem.TBNUM ? alphaOut(returnedItem.TBNUM) : '';
+        tbpos = returnedItem.TBPOS || '0001';
+      } catch (err) {
+        // Fallback to custom RFC wrapper (ZWM_TR_CREATE / Z_WM_TR_CREATE) if L_TR_CREATE is UCON-blocked (Note 2295840) or fails
+        try {
+          let resZ;
+          try {
+            resZ = await call('ZWM_TR_CREATE', {
+              IV_LGNUM: s4Lgnum,
+              IV_BWLVS: s4Bwlvs,
+              IV_MATNR: s4Mat,
+              IV_WERKS: s4Werks,
+              IV_LGORT: s4Lgort,
+              IV_MENGA: s4Menga,
+              IV_ALTME: s4Altme,
+              IV_RSNUM: s4Rsnum,
+              IV_RSPOS: s4Rspos,
+              IV_COMMIT: 'X'
+            });
+          } catch (_z1Err) {
+            resZ = await call('Z_WM_TR_CREATE', {
+              IV_LGNUM: s4Lgnum,
+              IV_BWLVS: s4Bwlvs,
+              IV_MATNR: s4Mat,
+              IV_WERKS: s4Werks,
+              IV_LGORT: s4Lgort,
+              IV_MENGA: s4Menga,
+              IV_ALTME: s4Altme,
+              IV_RSNUM: s4Rsnum,
+              IV_RSPOS: s4Rspos,
+              IV_COMMIT: 'X'
+            });
+          }
+
+          const rawTbnum = resZ && (resZ.EV_TBNUM || resZ.E_TBNUM);
+          const cleanTbnum = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
+          if (cleanTbnum) {
+            tbnum = cleanTbnum;
+            tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
+            return {
+              success: true,
+              warehouseNumber,
+              trNumber: tbnum,
+              trNumberRaw: rawTbnum,
+              trItem: tbpos,
+              status: '02',
+              item: resZ
+            };
+          } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
+            throw new Error(resZ.EV_MESSAGE);
+          }
+        } catch (_zwmErr) {
+          if (_zwmErr.message && !_zwmErr.message.includes('NOT_FOUND') && !_zwmErr.message.includes('RFC_NO_AUTHORITY')) {
+            throw _zwmErr;
+          }
+        }
+
+        // Check if error was UCON / Note 2295840
+        if (err.message && (err.message.includes('2295840') || err.message.includes('Incompatible Call Rejected'))) {
+          const uconErr = new Error('L_TR_CREATE is restricted under SAP Note 2295840 (RFC blacklist). Requires custom RFC wrapper ZWM_TR_CREATE or manual creation via transaction LB01.');
+          uconErr.code = 'UCON_BLOCKED';
+          uconErr.originalError = err.message;
+          throw uconErr;
+        }
+
+        throw err;
+      }
 
       return {
         success: true,
         warehouseNumber,
         trNumber: tbnum,
         trNumberRaw: returnedItem.TBNUM,
-        trItem: returnedItem.TBPOS || '0001',
+        trItem: tbpos,
         status: '02',
         item: returnedItem
       };
@@ -175,15 +257,28 @@ class ReservationProcessAdapter {
           I_COMMIT_WORK: commitWork ? 'X' : ' '
         });
       } catch (_err) {
-        // Fallback to ZWM_TO_CREATE_FROM_TR wrapper if L_TO_CREATE_TR UCON blocked externally
-        res = await call('ZWM_TO_CREATE_FROM_TR', {
-          IV_LGNUM: String(warehouseNumber).trim(),
-          IV_TBNUM: s4Tr,
-          IV_COMMIT: commitWork ? 'X' : ' '
-        });
+        // Fallback to ZWM_TO_CREATE_FROM_TR / Z_WM_TO_CREATE_FROM_TR wrapper if L_TO_CREATE_TR UCON blocked externally
+        try {
+          res = await call('ZWM_TO_CREATE_FROM_TR', {
+            IV_LGNUM: String(warehouseNumber).trim(),
+            IV_TBNUM: s4Tr,
+            IV_COMMIT: commitWork ? 'X' : ' '
+          });
+        } catch (_z1Err) {
+          res = await call('Z_WM_TO_CREATE_FROM_TR', {
+            IV_LGNUM: String(warehouseNumber).trim(),
+            IV_TBNUM: s4Tr,
+            IV_COMMIT: commitWork ? 'X' : ' '
+          });
+        }
       }
 
-      const tanum = res.E_TANUM || res.EV_TANUM || '';
+      const tanum = res?.E_TANUM || res?.EV_TANUM || '';
+      if (!tanum || tanum === '0000000000') {
+        const errMsg = res?.EV_MESSAGE || 'No Transfer Order document created';
+        throw new Error(errMsg);
+      }
+
       return {
         success: true,
         warehouseNumber,

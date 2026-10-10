@@ -229,6 +229,58 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         })
       );
     });
+
+    test('Falls back to ZWM_TR_CREATE wrapper when L_TR_CREATE throws', async () => {
+      mockRfc.call
+        .mockRejectedValueOnce(new Error('Incompatible Call Rejected, see note 2295840'))
+        .mockResolvedValueOnce({
+          EV_TBNUM: '0001001839',
+          EV_TBPOS: '0001',
+          EV_SUCCESS: 'S'
+        });
+
+      const result = await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.trNumber).toBe('1001839');
+      expect(mockRfc.call).toHaveBeenCalledWith(
+        'ZWM_TR_CREATE',
+        expect.objectContaining({
+          IV_LGNUM: 'W01',
+          IV_BWLVS: '311',
+          IV_RSNUM: '0000524979',
+          IV_RSPOS: '0001'
+        })
+      );
+    });
+
+    test('Throws classified UCON Note 2295840 error when L_TR_CREATE is blacklisted and wrapper is unavailable', async () => {
+      mockRfc.call
+        .mockRejectedValueOnce(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE'))
+        .mockRejectedValueOnce(new Error('Function ZWM_TR_CREATE not found'));
+
+      await expect(
+        adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979'
+        })
+      ).rejects.toThrow(/restricted under SAP Note 2295840/);
+    });
   });
 
   describe('3. createTransferOrderFromTR (L_TO_CREATE_TR)', () => {

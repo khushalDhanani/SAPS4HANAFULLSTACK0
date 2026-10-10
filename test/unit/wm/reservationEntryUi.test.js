@@ -83,9 +83,10 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             const defaults = subject._getDefaultCreateData();
             expect(defaults.MovementType).toBe('311');
             expect(defaults.Plant).toBe('1120');
-            expect(defaults.StorageLocation).toBe('HS01');
-            expect(defaults.ReceivingStorageLocation).toBe('CS01');
+            expect(defaults.StorageLocation).toBe('CS01');
+            expect(defaults.ReceivingStorageLocation).toBe('ST02');
             expect(defaults.Quantity).toBe(10);
+            expect(defaults.Unit).toBe('KG');
             expect(defaults.WarehouseNumber).toBe('W01');
         });
 
@@ -247,6 +248,43 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
 
             expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', {
                 ReservationNo: '0000004921',
+                ReservationItem: '0001'
+            });
+        });
+
+        it('calls createReservationEntry with deferred TR (status 01), shows informative success message with note, and navigates', async () => {
+            const serviceMock = {
+                createReservationEntry: jest.fn().mockResolvedValue({
+                    ReservationNo: '0000004922',
+                    ReservationItem: '0001',
+                    TransferRequirement: '',
+                    Status_code: '01',
+                    ErrorMessage: 'TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)'
+                })
+            };
+            const routerMock = { navTo: jest.fn() };
+            const subject = createDetailSubject(serviceMock, routerMock);
+
+            subject._oCreateModel.setData({
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Material: '1000000045',
+                Quantity: 10,
+                Unit: 'KG',
+                ReceivingStorageLocation: 'ST02',
+                WarehouseNumber: 'W01'
+            });
+
+            await subject.onSave();
+
+            expect(serviceMock.createReservationEntry).toHaveBeenCalled();
+            expect(MessageBox.success).toHaveBeenCalledWith(
+                expect.stringContaining('Note: TR deferred: restricted under SAP Note 2295840'),
+                expect.any(Object)
+            );
+            expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', {
+                ReservationNo: '0000004922',
                 ReservationItem: '0001'
             });
         });

@@ -43,13 +43,13 @@ sap.ui.define([
             return {
                 MovementType: "311",
                 Plant: "1120",
-                StorageLocation: "HS01",
+                StorageLocation: "CS01",
                 WarehouseNumber: "W01",
                 Material: "1000000045",
                 MaterialName: "Raw Material 45",
                 Quantity: 10,
-                Unit: "NOS",
-                ReceivingStorageLocation: "CS01",
+                Unit: "KG",
+                ReceivingStorageLocation: "ST02",
                 ReceivingPlant: "",
                 CostCenter: "",
                 AssetNo: "",
@@ -151,8 +151,8 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/CostCenter", "");
                     break;
                 case "311":
-                    if (!this._oCreateModel.getProperty("/ReceivingStorageLocation")) {
-                        this._oCreateModel.setProperty("/ReceivingStorageLocation", "CS01");
+                    if (!this._oCreateModel.getProperty("/ReceivingStorageLocation") || this._oCreateModel.getProperty("/ReceivingStorageLocation") === this._oCreateModel.getProperty("/StorageLocation")) {
+                        this._oCreateModel.setProperty("/ReceivingStorageLocation", "ST02");
                     }
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
@@ -275,6 +275,8 @@ sap.ui.define([
                 let sMsg = "Reservation " + sResNo + " created successfully.";
                 if (sTR) {
                     sMsg += " Auto-created Transfer Requirement (TR): " + sTR + ".";
+                } else if (oResult.ErrorMessage) {
+                    sMsg += " Note: " + oResult.ErrorMessage;
                 }
 
                 MessageBox.success(sMsg, {

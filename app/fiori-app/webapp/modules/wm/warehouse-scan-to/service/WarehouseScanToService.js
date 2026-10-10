@@ -56,9 +56,36 @@ sap.ui.define([
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
             var sWh = sLgnum || "W01";
-            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
+            var sCleanTbnum = sTbnum.trim().replace(/^TR[\s:-]*/i, "");
+            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sCleanTbnum) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
             return ODataClient.get(sUrl).then(function (oData) {
-                return (oData && oData.value) ? oData.value : oData;
+                var oDetail = (oData && oData.value) ? oData.value : oData;
+                if (oDetail) {
+                    var sTrNo = oDetail.TRNumber || oDetail.TransferRequirement;
+                    oDetail.TRNumber = sTrNo;
+                    oDetail.TransferRequirement = sTrNo;
+
+                    var nOpenQty = parseFloat(oDetail.OpenQty !== undefined ? oDetail.OpenQty : (oDetail.OpenQuantity !== undefined ? oDetail.OpenQuantity : 0));
+                    oDetail.OpenQty = nOpenQty;
+                    oDetail.OpenQuantity = nOpenQty;
+
+                    var sMatDesc = oDetail.MaterialDescription || oDetail.MaterialName || "";
+                    oDetail.MaterialDescription = sMatDesc;
+                    oDetail.MaterialName = sMatDesc;
+
+                    var nTargetQty = oDetail.TargetQty !== undefined ? oDetail.TargetQty : (oDetail.RequiredQuantity !== undefined ? oDetail.RequiredQuantity : nOpenQty);
+                    oDetail.TargetQty = nTargetQty;
+                    oDetail.RequiredQuantity = nTargetQty;
+
+                    var sDestType = oDetail.DestinationType || oDetail.DestinationStorageType || "";
+                    oDetail.DestinationType = sDestType;
+                    oDetail.DestinationStorageType = sDestType;
+
+                    var sDestBin = oDetail.DestinationBin || oDetail.DestinationStorageBin || "";
+                    oDetail.DestinationBin = sDestBin;
+                    oDetail.DestinationStorageBin = sDestBin;
+                }
+                return oDetail;
             });
         },
 

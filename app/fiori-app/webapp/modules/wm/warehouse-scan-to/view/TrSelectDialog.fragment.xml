@@ -11,8 +11,8 @@
         items="{scanView>/openTRs}"
         contentWidth="34rem">
         <StandardListItem
-            title="{scanView>DisplayText}"
-            description="{scanView>Description}"
+            title="{scanView>Tbnum}"
+            description="{scanView>DisplayText}"
             info="{= ${scanView>Statu} === 'T' ? 'Partial' : 'Open' }"
             infoState="{= ${scanView>Statu} === 'T' ? 'Warning' : 'Success' }"
             icon="sap-icon://document-text"

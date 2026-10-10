@@ -47,10 +47,10 @@ global.sap = {
                 MockDialog,
                 MockButton,
                 MockInput,
-                function MockLabel() {},
-                function MockVBox(c) { this.config = c; },
-                function MockHBox(c) { this.config = c; },
-                function MockText(c) { this.config = c; },
+                function MockLabel(c) { this.config = c; this.addStyleClass = function () { return this; }; },
+                function MockVBox(c) { this.config = c; this.addStyleClass = function () { return this; }; },
+                function MockHBox(c) { this.config = c; this.addStyleClass = function () { return this; }; },
+                function MockText(c) { this.config = c; this.addStyleClass = function () { return this; }; },
                 mockMessageToast,
                 MockHTML
             );
