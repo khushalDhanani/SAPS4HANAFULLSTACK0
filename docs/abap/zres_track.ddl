@@ -13,17 +13,21 @@
    Short Description: Reservation & WM Processing Status
    Data Type: CHAR, Length: 2
    Output Length: 2
-
+/*
    Fixed Values (F4 Value Help):
    -------------------------------------------------------------
    Value | Short Text                    | Long Text
    -------------------------------------------------------------
    01    | Reservation Created           | Reservation Created (MB21)
+   11    | TR Creation Error             | TR Creation Failed (LB01)
    02    | TR Created                    | Transfer Requirement Created (LB01)
+   12    | TO Creation Error             | TO Creation Failed (LT04)
    03    | TO Created                    | Transfer Order Created (LT04)
+   13    | TO Confirmation Error         | TO Confirmation Failed (LT12)
    04    | TO Confirmed                  | Transfer Order Confirmed (LT12)
+   90    | GI Posting Error              | Goods Issue Failed (MIGO)
    05    | Goods Issue Posted            | Material Document Posted (MIGO)
-   99    | Error / Exception             | Processing Failed
+   99    | Cancelled / Reversed          | Process Cancelled & Stock Reversed
    -------------------------------------------------------------
 */
 
@@ -60,13 +64,32 @@ define table zres_track {
   key mandt     : mandt not null;
   key rsnum     : rsnum not null;
   key rspos     : rspos not null;
+  process_id    : sysuuid_x16;
+  ref_text      : bktxt;
   move_type     : bwart;
+  werks         : werks_d;
+  lgort         : lgort_d;
   lgnum         : lgnum;
+  umlgo         : umlgo;
+  umwrk         : umwrk;
+  kostl         : kostl;
+  anln1         : anln1;
+  anln2         : anln2;
+  saknr         : saknr;
+  matnr         : matnr;
+  charg         : charg_d;
+  sernr         : gernr; " Verify data element in SE11
+  menge         : erfmg;
+  conf_menge    : erfmg;
+  meins         : erfme;
+  complete_res  : xfeld;
   tbnum         : tbnum;
   tanum         : tanum;
   mblnr         : mblnr;
   mjahr         : mjahr;
   status        : zres_status;
+  retry_count   : int4;
+  error_step    : char10;
   err_msg       : bapi_msg;
   balloghndl    : balloghndl;
   balextn       : balextn;

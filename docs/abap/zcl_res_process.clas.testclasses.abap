@@ -26,7 +26,9 @@ CLASS ltcl_res_process DEFINITION FINAL FOR TESTING
       test_update_status_and_log FOR TESTING,
 
       " Validation & error handling
-      test_invalid_inputs FOR TESTING.
+      test_invalid_inputs FOR TESTING,
+      test_derive_warehouse_invalid FOR TESTING,
+      test_status_constants FOR TESTING.
 
 ENDCLASS.
 
@@ -299,6 +301,33 @@ CLASS ltcl_res_process IMPLEMENTATION.
       act = lv_subrc
       exp = 0
       msg = 'update_status must reject empty RSNUM' ).
+  ENDMETHOD.
+
+  METHOD test_derive_warehouse_invalid.
+    DATA: lv_lgnum TYPE lgnum,
+          lv_subrc TYPE sysubrc.
+
+    TRY.
+        mo_cut->derive_warehouse(
+          EXPORTING
+            iv_werks = '9999' " Non-existent plant
+            iv_lgort = 'XXXX'
+          IMPORTING
+            ev_lgnum = lv_lgnum
+            ev_subrc = lv_subrc ).
+        cl_abap_unit_assert=>fail( msg = 'derive_warehouse should raise exception for unmanaged SLoc' ).
+      CATCH zcx_res_process_error INTO DATA(lx_err).
+        cl_abap_unit_assert=>assert_not_initial(
+          act = lx_err->mv_msg
+          msg = 'Error message should be populated' ).
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD test_status_constants.
+    cl_abap_unit_assert=>assert_equals( act = zcl_res_process=>gc_status_11 exp = '11' msg = 'Status 11 must be TR Error' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_res_process=>gc_status_12 exp = '12' msg = 'Status 12 must be TO Cr Error' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_res_process=>gc_status_13 exp = '13' msg = 'Status 13 must be TO Cf Error' ).
+    cl_abap_unit_assert=>assert_equals( act = zcl_res_process=>gc_status_90 exp = '90' msg = 'Status 90 must be GI Error' ).
   ENDMETHOD.
 
 ENDCLASS.

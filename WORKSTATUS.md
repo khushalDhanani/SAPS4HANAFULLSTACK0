@@ -475,6 +475,31 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-10 15:10 IST — Fix: ABAP/RAP Architecture Corrections for Classic WM Reservation Flow (bgPF, ZRES_TRACK, Warehouse Derivation, GI Retry Guard, Status Domain)
+- **Issue.** Codebase review identified 8 architectural and transactional defects in the ABAP/RAP layer (`docs/abap/`):
+  1. `BAPI_TRANSACTION_COMMIT` and explicit commits were called inside RAP actions (prohibited in RAP interaction phase, triggering `BEHV_COMMIT_FORBIDDEN`).
+  2. Table `ZRES_TRACK` and CDS views lacked essential business and audit fields (`KOSTL`, `ANLN1`, `ANLN2`, `CHARG`, `SERNR`, `SAKNR`, `COMPLETE_RES`, `RETRY_COUNT`, `REF_TEXT`, `PROCESS_ID`, `CONF_MENGE`).
+  3. `LGNUM` lacked derivation logic and defaulted to `'W01'`.
+  4. Single error status `'99'` hid failure stages; no step-specific retry paths existed.
+  5. BDEF had conflicting creation paths and lacked unmanaged-with-draft definition.
+  6. MIGO retry lacked idempotency guard, risking duplicate material document postings.
+  7. Lacked an ADT console test runner (`IF_OO_ADT_CLASSRUN`) for headless execution without SAP GUI.
+- **Change.**
+  1. `docs/abap/zres_track.ddl`: Added missing fields (`PROCESS_ID`, `REF_TEXT`, `KOSTL`, `ANLN1`, `ANLN2`, `SAKNR`, `MATNR`, `CHARG`, `SERNR`, `MENGE`, `CONF_MENGE`, `MEINS`, `COMPLETE_RES`, `RETRY_COUNT`, `ERROR_STEP`) and per-step error statuses (`11`, `12`, `13`, `90`).
+  2. `docs/abap/zcx_res_process_error.clas.abap`: Created exception class implementing `IF_T100_MESSAGE` and `IF_T100_DYN_MSG` with typed T100 keys and `BAPIRET2` carrier.
+  3. `docs/abap/zcl_res_process.clas.abap`:
+     - Added `derive_warehouse` querying table `T320` (`WERKS` + `LGORT` -> `LGNUM`) with clear exception when SLoc is not WM-managed.
+     - Implemented GI retry guard in `post_migo` querying `MATDOC`/`MSEG` for reservation item or `REF_TEXT` before invoking `BAPI_GOODSMVT_CREATE`.
+     - Updated `update_status` and status constants (`11`, `12`, `13`, `90`) to persist step-level failures.
+  4. `docs/abap/zr_res_entry.ddls.asddls` & `docs/abap/zc_res_entry.ddls.asddls`: Exposed new fields and added `@UI.lineItem` button for `refreshStatus`.
+  5. `docs/abap/zr_res_entry.bdef.asbdef`: Updated to clean unmanaged-with-draft with draft table `zres_track_d`, master lock, field controls, and actions.
+  6. `docs/abap/zbp_r_res_entry.clas.locals_imp.abap`: Replaced direct BAPI commits in actions with asynchronous background execution (`bgPF` / background task).
+  7. `docs/abap/zcl_test_res_console.clas.abap`: Created ADT console class implementing `IF_OO_ADT_CLASSRUN` testing all 4 movement types (201, 241, 311, 301) and forced GI failure.
+  8. `docs/abap/zcl_res_process.clas.testclasses.abap`: Added ABAP Unit tests for `derive_warehouse` and status constants.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - Targeted unit tests (`npx jest test/unit/wm/reservationProcess.test.js test/unit/wm/reservationTrack.test.js`): **31/31 passed**.
+
 ### 2026-10-10 14:45 IST — Feature: Value Help & Dynamic Selection Options for Material, Plant, and Storage Location on Create Reservation (/wm/reservation-entry/create)
 - **Issue / Request.** On route `/wm/reservation-entry/create`, inputs for Material, Plant, and Storage Location lacked Value Help (F4) dialogs, search help, and auto-complete suggestions, restricting operators or requiring manual input without guidance.
 - **Root Cause & Requirements.**

@@ -21,11 +21,26 @@ CLASS zcl_res_process DEFINITION
       gc_step_migo TYPE char10 VALUE 'MIGO',
 
       gc_status_01 TYPE zres_status VALUE '01', " Reservation Created
+      gc_status_11 TYPE zres_status VALUE '11', " TR Creation Error
       gc_status_02 TYPE zres_status VALUE '02', " TR Created
+      gc_status_12 TYPE zres_status VALUE '12', " TO Creation Error
       gc_status_03 TYPE zres_status VALUE '03', " TO Created
+      gc_status_13 TYPE zres_status VALUE '13', " TO Confirmation Error
       gc_status_04 TYPE zres_status VALUE '04', " TO Confirmed
+      gc_status_90 TYPE zres_status VALUE '90', " Goods Issue Error
       gc_status_05 TYPE zres_status VALUE '05', " Goods Issue Posted
       gc_status_99 TYPE zres_status VALUE '99'. " Error / Exception
+
+    "! Step 0: Derive Warehouse Number from Plant + Storage Location (Table T320)
+    METHODS derive_warehouse
+      IMPORTING
+        !iv_werks TYPE werks_d
+        !iv_lgort TYPE lgort_d
+      EXPORTING
+        !ev_lgnum TYPE lgnum
+        !ev_subrc TYPE sysubrc
+      RAISING
+        zcx_res_process_error .
 
     "! Step 1: Create Reservation via BAPI_RESERVATION_CREATE1 (MB21)
     METHODS create_reservation
@@ -102,37 +117,58 @@ CLASS zcl_res_process DEFINITION
         !iv_meins   TYPE erfme
         !iv_umwrk   TYPE umwrk OPTIONAL
         !iv_umlgo   TYPE umlgo OPTIONAL
-        !iv_kostl   TYPE kostl OPTIONAL
-        !iv_anln1   TYPE anln1 OPTIONAL
-        !iv_anln2   TYPE anln2 OPTIONAL
-        !iv_testrun TYPE bapi2017_gm_gen OPTIONAL
+        !iv_kostl        TYPE kostl OPTIONAL
+        !iv_anln1        TYPE anln1 OPTIONAL
+        !iv_anln2        TYPE anln2 OPTIONAL
+        !iv_ref_text     TYPE bktxt OPTIONAL
+        !iv_complete_res TYPE xfeld DEFAULT 'X'
+        !iv_testrun      TYPE bapi2017_gm_gen OPTIONAL
       EXPORTING
-        !ev_mblnr   TYPE mblnr
-        !ev_mjahr   TYPE mjahr
-        !et_return  TYPE tt_bapiret2
-        !ev_subrc   TYPE sysubrc .
+        !ev_mblnr        TYPE mblnr
+        !ev_mjahr        TYPE mjahr
+        !et_return       TYPE tt_bapiret2
+        !ev_subrc        TYPE sysubrc .
 
     "! Step 6: Update Tracking and Log in ZRES_TRACK & ZRES_LOG
     METHODS update_status
       IMPORTING
-        !iv_rsnum     TYPE rsnum
-        !iv_rspos     TYPE rspos DEFAULT '0001'
-        !iv_move_type TYPE bwart OPTIONAL
-        !iv_lgnum     TYPE lgnum OPTIONAL
-        !iv_tbnum     TYPE tbnum OPTIONAL
-        !iv_tanum     TYPE tanum OPTIONAL
-        !iv_mblnr     TYPE mblnr OPTIONAL
-        !iv_mjahr     TYPE mjahr OPTIONAL
-        !iv_status    TYPE zres_status OPTIONAL
-        !iv_err_msg   TYPE bapi_msg OPTIONAL
-        !iv_step      TYPE char10 OPTIONAL
-        !iv_msgty     TYPE bapi_mtype OPTIONAL
-        !iv_msgid     TYPE symsgid OPTIONAL
-        !iv_msgno     TYPE symsgno OPTIONAL
-        !iv_message   TYPE bapi_msg OPTIONAL
+        !iv_rsnum        TYPE rsnum
+        !iv_rspos        TYPE rspos DEFAULT '0001'
+        !iv_process_id   TYPE sysuuid_x16 OPTIONAL
+        !iv_ref_text     TYPE bktxt OPTIONAL
+        !iv_move_type    TYPE bwart OPTIONAL
+        !iv_werks        TYPE werks_d OPTIONAL
+        !iv_lgort        TYPE lgort_d OPTIONAL
+        !iv_lgnum        TYPE lgnum OPTIONAL
+        !iv_umlgo        TYPE umlgo OPTIONAL
+        !iv_umwrk        TYPE umwrk OPTIONAL
+        !iv_kostl        TYPE kostl OPTIONAL
+        !iv_anln1        TYPE anln1 OPTIONAL
+        !iv_anln2        TYPE anln2 OPTIONAL
+        !iv_saknr        TYPE saknr OPTIONAL
+        !iv_matnr        TYPE matnr OPTIONAL
+        !iv_charg        TYPE charg_d OPTIONAL
+        !iv_sernr        TYPE gernr OPTIONAL
+        !iv_menge        TYPE erfmg OPTIONAL
+        !iv_conf_menge   TYPE erfmg OPTIONAL
+        !iv_meins        TYPE erfme OPTIONAL
+        !iv_complete_res TYPE xfeld OPTIONAL
+        !iv_tbnum        TYPE tbnum OPTIONAL
+        !iv_tanum        TYPE tanum OPTIONAL
+        !iv_mblnr        TYPE mblnr OPTIONAL
+        !iv_mjahr        TYPE mjahr OPTIONAL
+        !iv_status       TYPE zres_status OPTIONAL
+        !iv_retry_count  TYPE int4 OPTIONAL
+        !iv_error_step   TYPE char10 OPTIONAL
+        !iv_err_msg      TYPE bapi_msg OPTIONAL
+        !iv_step         TYPE char10 OPTIONAL
+        !iv_msgty        TYPE bapi_mtype OPTIONAL
+        !iv_msgid        TYPE symsgid OPTIONAL
+        !iv_msgno        TYPE symsgno OPTIONAL
+        !iv_message      TYPE bapi_msg OPTIONAL
       EXPORTING
-        !es_track     TYPE zres_track
-        !ev_subrc     TYPE sysubrc .
+        !es_track        TYPE zres_track
+        !ev_subrc        TYPE sysubrc .
 
     "! Step 7: Application Log Integration via BAL_LOG_CREATE, BAL_LOG_MSG_ADD, BAL_DB_SAVE (SLG1)
     METHODS write_slg1
@@ -170,6 +206,28 @@ ENDCLASS.
 
 
 CLASS zcl_res_process IMPLEMENTATION.
+
+  METHOD derive_warehouse.
+    CONSTANTS lc_tab_t320 TYPE tabname VALUE 'T320'. " Verify table T320 in SE11
+
+    CLEAR: ev_lgnum, ev_subrc.
+
+    SELECT SINGLE lgnum FROM (lc_tab_t320)
+      WHERE werks = @iv_werks AND lgort = @iv_lgort
+      INTO @ev_lgnum.
+
+    IF sy-subrc <> 0 OR ev_lgnum IS INITIAL.
+      ev_subrc = 4.
+      RAISE EXCEPTION TYPE zcx_res_process_error
+        EXPORTING
+          textid   = zcx_res_process_error=>not_wm_managed
+          mv_werks = iv_werks
+          mv_lgort = iv_lgort
+          mv_msg   = |Plant { iv_werks } SLoc { iv_lgort } is not WM-managed in table { lc_tab_t320 }|.
+    ENDIF.
+
+    ev_subrc = 0.
+  ENDMETHOD.
 
   METHOD create_reservation.
     DATA: ls_head  TYPE bapi2093_res_head,
@@ -467,7 +525,31 @@ CLASS zcl_res_process IMPLEMENTATION.
           ls_headret TYPE bapi2017_gm_head_ret,
           lt_ret     TYPE STANDARD TABLE OF bapiret2.
 
+    CONSTANTS lc_tab_matdoc TYPE tabname VALUE 'MATDOC'. " Verify table MATDOC / MSEG in SE11
+
     CLEAR: ev_mblnr, ev_mjahr, et_return, ev_subrc.
+
+    " Issue 7: GI Retry Guard - Check if already posted for this reservation item or PROCESS_ID ref
+    IF iv_rsnum IS NOT INITIAL.
+      SELECT SINGLE mblnr, mjahr
+        FROM (lc_tab_matdoc)
+        WHERE ( rsnum = @iv_rsnum AND rspos = @iv_rspos )
+           OR ( bktxt = @iv_ref_text AND bktxt <> @space )
+        INTO (@ev_mblnr, @ev_mjahr).
+
+      IF sy-subrc = 0 AND ev_mblnr IS NOT INITIAL.
+        ev_subrc = 0.
+        add_bapiret2(
+          EXPORTING
+            iv_type    = 'W'
+            iv_id      = 'M7'
+            iv_number  = '060'
+            iv_message = |Material document { ev_mblnr }/{ ev_mjahr } already exists for reservation { iv_rsnum }/{ iv_rspos } or ref { iv_ref_text }. Re-posting skipped.|
+          CHANGING
+            ct_return  = et_return ).
+        RETURN.
+      ENDIF.
+    ENDIF.
 
     " Map GM_CODE: 03 for GI 201/241, 04 for Transfer 311/301, 06 for universal reservation fallback
     CASE iv_bwart.
@@ -482,6 +564,11 @@ CLASS zcl_res_process IMPLEMENTATION.
     ls_head-pstng_date = sy-datum.
     ls_head-doc_date   = sy-datum.
     ls_head-ref_doc_no = |RES { iv_rsnum }|.
+    IF iv_ref_text IS NOT INITIAL.
+      ls_head-bktxt    = iv_ref_text.
+    ELSE.
+      ls_head-bktxt    = |RES { iv_rsnum }|.
+    ENDIF.
 
     CLEAR ls_item.
     ls_item-material   = iv_matnr.
@@ -492,7 +579,7 @@ CLASS zcl_res_process IMPLEMENTATION.
     ls_item-entry_uom  = iv_meins.
     ls_item-reserv_no  = iv_rsnum.
     ls_item-res_item   = iv_rspos.
-    ls_item-no_more_gr = 'X'. " Close reservation item (RESB-KZEAR = 'X')
+    ls_item-no_more_gr = iv_complete_res. " Close reservation item if complete flag is set
 
     IF iv_umwrk IS NOT INITIAL.
       ls_item-move_plant = iv_umwrk.
@@ -570,14 +657,33 @@ CLASS zcl_res_process IMPLEMENTATION.
     ENDIF.
 
     " 2. Apply optional updates
-    IF iv_move_type IS NOT INITIAL. ls_track-move_type = iv_move_type. ENDIF.
-    IF iv_lgnum     IS NOT INITIAL. ls_track-lgnum     = iv_lgnum.     ENDIF.
-    IF iv_tbnum     IS NOT INITIAL. ls_track-tbnum     = iv_tbnum.     ENDIF.
-    IF iv_tanum     IS NOT INITIAL. ls_track-tanum     = iv_tanum.     ENDIF.
-    IF iv_mblnr     IS NOT INITIAL. ls_track-mblnr     = iv_mblnr.     ENDIF.
-    IF iv_mjahr     IS NOT INITIAL. ls_track-mjahr     = iv_mjahr.     ENDIF.
-    IF iv_status    IS NOT INITIAL. ls_track-status    = iv_status.    ENDIF.
-    IF iv_err_msg   IS NOT INITIAL. ls_track-err_msg   = iv_err_msg.   ENDIF.
+    IF iv_process_id   IS NOT INITIAL. ls_track-process_id   = iv_process_id.   ENDIF.
+    IF iv_ref_text     IS NOT INITIAL. ls_track-ref_text     = iv_ref_text.     ENDIF.
+    IF iv_move_type    IS NOT INITIAL. ls_track-move_type    = iv_move_type.    ENDIF.
+    IF iv_werks        IS NOT INITIAL. ls_track-werks        = iv_werks.        ENDIF.
+    IF iv_lgort        IS NOT INITIAL. ls_track-lgort        = iv_lgort.        ENDIF.
+    IF iv_lgnum        IS NOT INITIAL. ls_track-lgnum        = iv_lgnum.        ENDIF.
+    IF iv_umlgo        IS NOT INITIAL. ls_track-umlgo        = iv_umlgo.        ENDIF.
+    IF iv_umwrk        IS NOT INITIAL. ls_track-umwrk        = iv_umwrk.        ENDIF.
+    IF iv_kostl        IS NOT INITIAL. ls_track-kostl        = iv_kostl.        ENDIF.
+    IF iv_anln1        IS NOT INITIAL. ls_track-anln1        = iv_anln1.        ENDIF.
+    IF iv_anln2        IS NOT INITIAL. ls_track-anln2        = iv_anln2.        ENDIF.
+    IF iv_saknr        IS NOT INITIAL. ls_track-saknr        = iv_saknr.        ENDIF.
+    IF iv_matnr        IS NOT INITIAL. ls_track-matnr        = iv_matnr.        ENDIF.
+    IF iv_charg        IS NOT INITIAL. ls_track-charg        = iv_charg.        ENDIF.
+    IF iv_sernr        IS NOT INITIAL. ls_track-sernr        = iv_sernr.        ENDIF.
+    IF iv_menge        IS NOT INITIAL. ls_track-menge        = iv_menge.        ENDIF.
+    IF iv_conf_menge   IS NOT INITIAL. ls_track-conf_menge   = iv_conf_menge.   ENDIF.
+    IF iv_meins        IS NOT INITIAL. ls_track-meins        = iv_meins.        ENDIF.
+    IF iv_complete_res IS NOT INITIAL. ls_track-complete_res = iv_complete_res. ENDIF.
+    IF iv_tbnum        IS NOT INITIAL. ls_track-tbnum        = iv_tbnum.        ENDIF.
+    IF iv_tanum        IS NOT INITIAL. ls_track-tanum        = iv_tanum.        ENDIF.
+    IF iv_mblnr        IS NOT INITIAL. ls_track-mblnr        = iv_mblnr.        ENDIF.
+    IF iv_mjahr        IS NOT INITIAL. ls_track-mjahr        = iv_mjahr.        ENDIF.
+    IF iv_status       IS NOT INITIAL. ls_track-status       = iv_status.       ENDIF.
+    IF iv_retry_count  IS NOT INITIAL. ls_track-retry_count  = iv_retry_count.  ENDIF.
+    IF iv_error_step   IS NOT INITIAL. ls_track-error_step   = iv_error_step.   ENDIF.
+    IF iv_err_msg      IS NOT INITIAL. ls_track-err_msg      = iv_err_msg.      ENDIF.
 
     ls_track-changed_by = sy-uname.
     ls_track-changed_on = sy-datum.

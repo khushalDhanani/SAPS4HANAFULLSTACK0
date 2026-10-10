@@ -1,11 +1,13 @@
-managed implementation in class zbp_r_res_entry unique;
+unmanaged implementation in class zbp_r_res_entry unique;
 strict ( 2 );
+with draft;
 
+/* REVIEW IN ADT: Verify draft table ZRES_TRACK_D creation in SE11 / ADT */
 define behavior for ZR_RES_ENTRY alias ReservationEntry
-persistent table zres_track
+draft table zres_track_d
 lock master
 authorization master ( instance )
-//etag master ChangedAt
+etag master ChangedAt
 {
   create;
   update;
@@ -19,6 +21,8 @@ authorization master ( instance )
     MaterialDocument,
     MaterialDocYear,
     Status,
+    RetryCount,
+    ErrorStep,
     ErrorMessage,
     CreatedBy,
     CreatedOn,
@@ -28,37 +32,63 @@ authorization master ( instance )
     ChangedAt;
 
   field ( mandatory )
-    MovementType;
+    MovementType,
+    Plant,
+    StorageLocation,
+    Material,
+    Quantity,
+    UnitOfMeasure;
 
-  // Validation per movement type
-  validation validateMovementType on save { create; field MovementType; }
+  // Single creation path: validation on save triggers background processing
+  validation validateMovementData on save { create; field MovementType, Plant, StorageLocation; }
 
-  // On Save: Create Reservation via BAPI and auto-create TR in background
-  determination processReservationAndTR on save { create; }
+  // Actions for decoupled step execution
+  action ( features : instance ) createTR result [1] $self;
+  action ( features : instance ) createTOFromTR result [1] $self;
+  action ( features : instance ) confirmTO result [1] $self;
+  action ( features : instance ) postMigo result [1] $self;
+  action ( features : instance ) retryStep result [1] $self;
+  action ( features : instance ) refreshStatus result [1] $self;
 
-  // Step 2 (Chunk 4): Create Transfer Order from TR and Auto-Confirm
-  action createTOFromTR parameter ZD_TO_FROM_TR_PARAM result [1] $self;
-
-  // Step 3 (Chunk 5): Post MIGO Goods Movement and Close Reservation
-  action postMigo result [1] $self;
-
-  // Step 4 (Chunk 6): Retry Failed Step (LB01 / LT04 / LT12 / MIGO)
-  action retryStep parameter ZD_RETRY_STEP_PARAM result [1] $self;
+  // Draft actions
+  draft action Edit;
+  draft action Activate optimized;
+  draft action Discard;
+  draft determine action Prepare {
+    validation validateMovementData;
+  }
 
   mapping for zres_track
   {
     ReservationNo = rsnum;
     ReservationItem = rspos;
+    ProcessId = process_id;
+    RefText = ref_text;
     MovementType = move_type;
+    Plant = werks;
+    StorageLocation = lgort;
     WarehouseNumber = lgnum;
+    ReceivingStorageLocation = umlgo;
+    ReceivingPlant = umwrk;
+    CostCenter = kostl;
+    AssetNumber = anln1;
+    AssetSubNumber = anln2;
+    GLAccount = saknr;
+    Material = matnr;
+    Batch = charg;
+    SerialNumber = sernr;
+    Quantity = menge;
+    ConfirmedQuantity = conf_menge;
+    UnitOfMeasure = meins;
+    CompleteReservation = complete_res;
     TransferRequirement = tbnum;
     TransferOrder = tanum;
     MaterialDocument = mblnr;
     MaterialDocYear = mjahr;
     Status = status;
+    RetryCount = retry_count;
+    ErrorStep = error_step;
     ErrorMessage = err_msg;
-    LogHandle = balloghndl;
-    ExternalId = balextn;
     CreatedBy = created_by;
     CreatedOn = created_on;
     CreatedAt = created_at;

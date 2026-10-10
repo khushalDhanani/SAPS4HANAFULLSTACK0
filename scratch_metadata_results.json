@@ -1,0 +1,555 @@
+{
+  "t320": {
+    "fields": [
+      {
+        "FIELDNAME": "OBEST",
+        "POSITION": "0005",
+        "DATATYPE": "CHAR",
+        "LENG": "000001",
+        "KEYFLAG": ""
+      },
+      {
+        "FIELDNAME": "LGNTB",
+        "POSITION": "0006",
+        "DATATYPE": "CHAR",
+        "LENG": "000001",
+        "KEYFLAG": ""
+      },
+      {
+        "FIELDNAME": "SLGOR",
+        "POSITION": "0007",
+        "DATATYPE": "CHAR",
+        "LENG": "000001",
+        "KEYFLAG": ""
+      },
+      {
+        "FIELDNAME": "CENSY",
+        "POSITION": "0010",
+        "DATATYPE": "CHAR",
+        "LENG": "000001",
+        "KEYFLAG": ""
+      },
+      {
+        "FIELDNAME": "MANDT",
+        "POSITION": "0001",
+        "DATATYPE": "CLNT",
+        "LENG": "000003",
+        "KEYFLAG": "X"
+      },
+      {
+        "FIELDNAME": "WERKS",
+        "POSITION": "0002",
+        "DATATYPE": "CHAR",
+        "LENG": "000004",
+        "KEYFLAG": "X"
+      },
+      {
+        "FIELDNAME": "LGORT",
+        "POSITION": "0003",
+        "DATATYPE": "CHAR",
+        "LENG": "000004",
+        "KEYFLAG": "X"
+      },
+      {
+        "FIELDNAME": "LGNUM",
+        "POSITION": "0004",
+        "DATATYPE": "CHAR",
+        "LENG": "000003",
+        "KEYFLAG": ""
+      },
+      {
+        "FIELDNAME": "OBTYP",
+        "POSITION": "0008",
+        "DATATYPE": "CHAR",
+        "LENG": "000003",
+        "KEYFLAG": ""
+      },
+      {
+        "FIELDNAME": "LGREF",
+        "POSITION": "0009",
+        "DATATYPE": "CHAR",
+        "LENG": "000002",
+        "KEYFLAG": ""
+      }
+    ],
+    "sample": [
+      {
+        "WERKS": "1120",
+        "LGORT": "HS01",
+        "LGNUM": "W01"
+      }
+    ]
+  },
+  "t321_fields": [
+    {
+      "FIELDNAME": "KZBEW",
+      "POSITION": "0005",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "BESTQ",
+      "POSITION": "0010",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "SPE_FOLAR",
+      "POSITION": "0021",
+      "DATATYPE": "CHAR",
+      "LENG": "000004",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "BSLVS",
+      "POSITION": "0004",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "TBFKZ",
+      "POSITION": "0011",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "WEDKZ",
+      "POSITION": "0012",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "UBFKZ",
+      "POSITION": "0013",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "TAFKZ",
+      "POSITION": "0014",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "WENUM",
+      "POSITION": "0015",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "BSTQE",
+      "POSITION": "0016",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "RBLVS",
+      "POSITION": "0003",
+      "DATATYPE": "NUMC",
+      "LENG": "000003",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "MANDT",
+      "POSITION": "0001",
+      "DATATYPE": "CLNT",
+      "LENG": "000003",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "LIFNR",
+      "POSITION": "0020",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "LGNUM",
+      "POSITION": "0002",
+      "DATATYPE": "CHAR",
+      "LENG": "000003",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "SOBKZ",
+      "POSITION": "0006",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "KUNWE",
+      "POSITION": "0019",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "LFART",
+      "POSITION": "0018",
+      "DATATYPE": "CHAR",
+      "LENG": "000004",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "BWLVS",
+      "POSITION": "0009",
+      "DATATYPE": "NUMC",
+      "LENG": "000003",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "LGREF",
+      "POSITION": "0008",
+      "DATATYPE": "CHAR",
+      "LENG": "000002",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "MAILK",
+      "POSITION": "0017",
+      "DATATYPE": "CHAR",
+      "LENG": "000002",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "BSSKZ",
+      "POSITION": "0007",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": "X"
+    }
+  ],
+  "t333_fields": [
+    {
+      "FIELDNAME": "TBOBL",
+      "POSITION": "0012",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "SQUIT",
+      "POSITION": "0014",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "TBMAN",
+      "POSITION": "0015",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "DUNKL",
+      "POSITION": "0016",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "VQUIT",
+      "POSITION": "0017",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "TBPRI",
+      "POSITION": "0018",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "WEDAT",
+      "POSITION": "0019",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "LPMAN",
+      "POSITION": "0020",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "VKDYN",
+      "POSITION": "0021",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "NKDYN",
+      "POSITION": "0022",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "ABILD",
+      "POSITION": "0023",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "FEHLT",
+      "POSITION": "0024",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "VFIXP",
+      "POSITION": "0025",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "NFIXP",
+      "POSITION": "0026",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "KZUAP",
+      "POSITION": "0027",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "UELIE",
+      "POSITION": "0029",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "ZUSTE",
+      "POSITION": "0031",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "VEPST",
+      "POSITION": "0035",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "QBILD",
+      "POSITION": "0033",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "DBILD",
+      "POSITION": "0036",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "NO2ST",
+      "POSITION": "0037",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "PIKTA",
+      "POSITION": "0038",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "WMMUE",
+      "POSITION": "0039",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "XDREL",
+      "POSITION": "0041",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "BWLVS",
+      "POSITION": "0003",
+      "DATATYPE": "NUMC",
+      "LENG": "000003",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "BWREF",
+      "POSITION": "0028",
+      "DATATYPE": "NUMC",
+      "LENG": "000003",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "MANDT",
+      "POSITION": "0001",
+      "DATATYPE": "CLNT",
+      "LENG": "000003",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "LGNUM",
+      "POSITION": "0002",
+      "DATATYPE": "CHAR",
+      "LENG": "000003",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "RLTYP",
+      "POSITION": "0009",
+      "DATATYPE": "CHAR",
+      "LENG": "000003",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "NLTYP",
+      "POSITION": "0007",
+      "DATATYPE": "CHAR",
+      "LENG": "000003",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "VLTYP",
+      "POSITION": "0005",
+      "DATATYPE": "CHAR",
+      "LENG": "000003",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "NLPLA",
+      "POSITION": "0008",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "VLPLA",
+      "POSITION": "0006",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "CHSWM",
+      "POSITION": "0032",
+      "DATATYPE": "CHAR",
+      "LENG": "000006",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "RULES",
+      "POSITION": "0034",
+      "DATATYPE": "CHAR",
+      "LENG": "000004",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "RLPLA",
+      "POSITION": "0010",
+      "DATATYPE": "CHAR",
+      "LENG": "000010",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "DRUKZ",
+      "POSITION": "0013",
+      "DATATYPE": "CHAR",
+      "LENG": "000002",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "TRART",
+      "POSITION": "0004",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "BETYP",
+      "POSITION": "0011",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "AUTTA",
+      "POSITION": "0030",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": ".INCLU--AP",
+      "POSITION": "0040",
+      "DATATYPE": "",
+      "LENG": "000000",
+      "KEYFLAG": ""
+    }
+  ],
+  "bgmc": {
+    "error": "ID:AD Type:E Number:718 SEOCLASS"
+  },
+  "text_lengths": {
+    "mkpf_bktxt": [
+      {
+        "TABNAME": "MKPF",
+        "FIELDNAME": "BKTXT",
+        "DATATYPE": "CHAR",
+        "LENG": "000025",
+        "INTLEN": "000050"
+      }
+    ],
+    "matdoc_bktxt": [
+      {
+        "TABNAME": "MATDOC",
+        "FIELDNAME": "BKTXT",
+        "DATATYPE": "CHAR",
+        "LENG": "000025",
+        "INTLEN": "000050"
+      }
+    ],
+    "item_text_fields": [
+      {
+        "FIELDNAME": "ITEM_TEXT",
+        "POSITION": "0025",
+        "DATATYPE": "CHAR",
+        "LENG": "000050"
+      }
+    ]
+  },
+  "locks": {
+    "error": "ID:AD Type:E Number:718 DD25L"
+  }
+}
