@@ -51,4 +51,17 @@ service ReservationEntryService {
         AssetNo                  : String(12),
         SubNumber                : String(4)
     ) returns ReservationEntries;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action retryStep(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        Step            : String(10)
+    ) returns ReservationEntries;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getApplicationLogs(
+        ReservationNo   : String(10),
+        ReservationItem : String(4)
+    ) returns array of ReservationLogs;
 }

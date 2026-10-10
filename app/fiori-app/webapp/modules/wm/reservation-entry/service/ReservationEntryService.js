@@ -1,6 +1,7 @@
 sap.ui.define([
-    "sap/ui/base/Object"
-], function (BaseObject) {
+    "sap/ui/base/Object",
+    "saps4hana/fiori/service/ODataClient"
+], function (BaseObject, ODataClient) {
     "use strict";
 
     const SERVICE_URL = "/odata/v4/reservation-entry";
@@ -25,61 +26,53 @@ sap.ui.define([
                 if (oFilterParams.Plant) {
                     aFilters.push("Plant eq '" + oFilterParams.Plant + "'");
                 }
+                if (oFilterParams.DateFrom) {
+                    aFilters.push("createdAt ge " + oFilterParams.DateFrom + "T00:00:00Z");
+                }
+                if (oFilterParams.DateTo) {
+                    aFilters.push("createdAt le " + oFilterParams.DateTo + "T23:59:59Z");
+                }
             }
 
             if (aFilters.length > 0) {
                 sUrl += "&$filter=" + encodeURIComponent(aFilters.join(" and "));
             }
 
-            return fetch(sUrl, {
-                headers: { "Accept": "application/json" }
-            }).then(function (oRes) {
-                if (!oRes.ok) throw new Error("Failed to load reservation entries (" + oRes.status + ")");
-                return oRes.json();
-            }).then(function (data) {
-                return data.value || [];
+            return ODataClient.get(sUrl).then(function (data) {
+                return (data && data.value) ? data.value : (Array.isArray(data) ? data : []);
             });
         },
 
         getEntry: function (sResNo, sItem) {
             const sUrl = SERVICE_URL + "/ReservationEntries(ReservationNo='" + sResNo + "',ReservationItem='" + (sItem || "0001") + "')?$expand=Status,Logs";
-            return fetch(sUrl, {
-                headers: { "Accept": "application/json" }
-            }).then(function (oRes) {
-                if (!oRes.ok) throw new Error("Failed to load reservation " + sResNo + " (" + oRes.status + ")");
-                return oRes.json();
-            });
+            return ODataClient.get(sUrl);
         },
 
         getStatuses: function () {
             const sUrl = SERVICE_URL + "/ReservationStatuses";
-            return fetch(sUrl, {
-                headers: { "Accept": "application/json" }
-            }).then(function (oRes) {
-                if (!oRes.ok) throw new Error("Failed to load statuses");
-                return oRes.json();
-            }).then(function (data) {
-                return data.value || [];
+            return ODataClient.get(sUrl).then(function (data) {
+                return (data && data.value) ? data.value : (Array.isArray(data) ? data : []);
             });
         },
 
         createReservationEntry: function (oPayload) {
             const sUrl = SERVICE_URL + "/createReservationEntry";
-            return fetch(sUrl, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                },
-                body: JSON.stringify(oPayload)
-            }).then(function (oRes) {
-                return oRes.json().then(function (data) {
-                    if (!oRes.ok) {
-                        const sMsg = (data.error && data.error.message) ? data.error.message : ("Error " + oRes.status);
-                        throw new Error(sMsg);
-                    }
-                    return data;
-                });
+            return ODataClient.post(sUrl, oPayload);
+        },
+
+        retryStep: function (sResNo, sItem, sStep) {
+            const sUrl = SERVICE_URL + "/retryStep";
+            return ODataClient.post(sUrl, {
+                ReservationNo: sResNo,
+                ReservationItem: sItem || "0001",
+                Step: sStep || "AUTO"
+            });
+        },
+
+        getApplicationLogs: function (sResNo, sItem) {
+            const sUrl = SERVICE_URL + "/getApplicationLogs(ReservationNo='" + sResNo + "',ReservationItem='" + (sItem || "0001") + "')";
+            return ODataClient.get(sUrl).then(function (data) {
+                return (data && data.value) ? data.value : (Array.isArray(data) ? data : []);
             });
         }
     });

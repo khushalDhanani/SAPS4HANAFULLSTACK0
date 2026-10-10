@@ -362,5 +362,86 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
                 ReservationItem: '0001'
             });
         });
+
+        it('formats Date ISO string correctly via _formatDateIso', () => {
+            const listSubject = Object.create(listCtrl);
+            expect(listSubject._formatDateIso(null)).toBe('');
+            expect(listSubject._formatDateIso('2026-10-10')).toBe('2026-10-10');
+            const d = new Date(2026, 9, 10); // month is 0-indexed, so 9 = October
+            expect(listSubject._formatDateIso(d)).toBe('2026-10-10');
+        });
+
+        it('handles onSelectionChange: enables retry for status != 05, disables for 05', () => {
+            const viewModel = new FakeJSONModel({ hasRetryableSelection: false, selectedEntry: null });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oViewModel: viewModel
+            });
+
+            // Select item with status 02 (in progress / retryable)
+            listSubject.onSelectionChange({
+                getParameter: () => ({
+                    getBindingContext: () => ({
+                        getObject: () => ({ ReservationNo: '0000001001', ReservationItem: '0001', Status_code: '02' })
+                    })
+                })
+            });
+            expect(viewModel.getProperty('/hasRetryableSelection')).toBe(true);
+            expect(viewModel.getProperty('/selectedEntry').ReservationNo).toBe('0000001001');
+
+            // Select item with status 05 (completed / not retryable)
+            listSubject.onSelectionChange({
+                getParameter: () => ({
+                    getBindingContext: () => ({
+                        getObject: () => ({ ReservationNo: '0000001002', ReservationItem: '0001', Status_code: '05' })
+                    })
+                })
+            });
+            expect(viewModel.getProperty('/hasRetryableSelection')).toBe(false);
+
+            // Deselect / null item
+            listSubject.onSelectionChange({ getParameter: () => null });
+            expect(viewModel.getProperty('/hasRetryableSelection')).toBe(false);
+            expect(viewModel.getProperty('/selectedEntry')).toBeNull();
+        });
+
+        it('triggers retryStep on onRetryPress and reloads data', async () => {
+            const serviceMock = {
+                retryStep: jest.fn().mockResolvedValue({ Status_code: '02', ErrorMessage: '' }),
+                getEntries: jest.fn().mockResolvedValue([])
+            };
+            const viewModel = new FakeJSONModel({
+                selectedEntry: { ReservationNo: '0000001001', ReservationItem: '0001', Status_code: '01' },
+                hasRetryableSelection: true,
+                busy: false
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel,
+                loadData: jest.fn()
+            });
+
+            listSubject.onRetryPress();
+            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO');
+            await Promise.resolve();
+            expect(listSubject.loadData).toHaveBeenCalled();
+        });
+    });
+
+    describe('Chunk 6: ReservationEntryDetail Retry Step Action', () => {
+        it('calls retryStep and reloads detail on onRetryStepPress', async () => {
+            const serviceMock = {
+                retryStep: jest.fn().mockResolvedValue({ Status_code: '05', ErrorMessage: '' }),
+                getEntry: jest.fn().mockResolvedValue({ ReservationNo: '0000001001', Status_code: '05' })
+            };
+            const detailSubject = createDetailSubject(serviceMock);
+            detailSubject._sCurrentResNo = '0000001001';
+            detailSubject._sCurrentResItem = '0001';
+            detailSubject._loadDetail = jest.fn();
+
+            detailSubject.onRetryStepPress();
+            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO');
+            await Promise.resolve();
+            expect(detailSubject._loadDetail).toHaveBeenCalledWith('0000001001', '0001');
+        });
     });
 });

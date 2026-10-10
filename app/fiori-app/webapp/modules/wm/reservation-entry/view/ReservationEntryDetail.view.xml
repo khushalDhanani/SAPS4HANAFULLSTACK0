@@ -53,6 +53,13 @@
 
                 <uxap:actions>
                     <Button
+                        id="btnRetryDetail"
+                        text="{i18n>resEntryBtnRetryStep}"
+                        icon="sap-icon://restart"
+                        type="Emphasized"
+                        press=".onRetryStepPress"
+                        visible="{= !${view>/isCreate} &amp;&amp; ${detail>/Status_code} !== '05' }" />
+                    <Button
                         id="btnDetailRefresh"
                         icon="sap-icon://refresh"
                         tooltip="{i18n>commonRefresh}"
@@ -62,7 +69,7 @@
                         id="btnDetailNew"
                         text="{i18n>resEntryBtnCreateNew}"
                         icon="sap-icon://add"
-                        type="Emphasized"
+                        type="Transparent"
                         press=".onNavToCreate"
                         visible="{= !${view>/isCreate} }" />
                 </uxap:actions>
@@ -278,10 +285,9 @@
                                 columnsL="2"
                                 columnsXL="2">
                                 <f:content>
+                                    <core:Title text="{i18n>resSectionAccountAssignment}" />
+
                                     <!-- Movement 201: Cost Center -->
-                                    <core:Title
-                                        text="{i18n>resMvt201Title}"
-                                        visible="{= ${create>/MovementType} === '201' }" />
                                     <Label
                                         text="{i18n>resFieldCostCenter}"
                                         required="true"
@@ -295,9 +301,6 @@
                                         liveChange=".onFieldLiveChange" />
 
                                     <!-- Movement 241: Asset & SubNumber -->
-                                    <core:Title
-                                        text="{i18n>resMvt241Title}"
-                                        visible="{= ${create>/MovementType} === '241' }" />
                                     <Label
                                         text="{i18n>resFieldAssetNo}"
                                         required="true"
@@ -321,9 +324,6 @@
                                         visible="{= ${create>/MovementType} === '241' }" />
 
                                     <!-- Movement 311: Receiving SLoc -->
-                                    <core:Title
-                                        text="{i18n>resMvt311Title}"
-                                        visible="{= ${create>/MovementType} === '311' }" />
                                     <Label
                                         text="{i18n>resFieldRecSLoc}"
                                         required="true"
@@ -337,9 +337,6 @@
                                         liveChange=".onFieldLiveChange" />
 
                                     <!-- Movement 301: Receiving Plant -->
-                                    <core:Title
-                                        text="{i18n>resMvt301Title}"
-                                        visible="{= ${create>/MovementType} === '301' }" />
                                     <Label
                                         text="{i18n>resFieldRecPlant}"
                                         required="true"
@@ -438,6 +435,12 @@
                                     <Label text="{i18n>resFieldMatDoc}" />
                                     <Text text="{= ${detail>/MaterialDocument} ? (${detail>/MaterialDocument} + (${detail>/MaterialDocYear} ? (' / ' + ${detail>/MaterialDocYear}) : '')) : '-' }" />
 
+                                    <Label text="{i18n>resFieldLogHandle}" visible="{= !!${detail>/LogHandle} }" />
+                                    <Text text="{detail>/LogHandle}" visible="{= !!${detail>/LogHandle} }" />
+
+                                    <Label text="{i18n>resFieldExternalId}" visible="{= !!${detail>/ExternalId} }" />
+                                    <Text text="{detail>/ExternalId}" visible="{= !!${detail>/ExternalId} }" />
+
                                     <Label text="{i18n>resFieldErrorMsg}" visible="{= !!${detail>/ErrorMessage} }" />
                                     <Text
                                         text="{detail>/ErrorMessage}"
@@ -450,7 +453,7 @@
                 </uxap:subSections>
             </uxap:ObjectPageSection>
 
-            <!-- Section 4: Step-wise Processing Logs (Audit Trail) -->
+            <!-- Section 4: Step-wise Processing Logs (SLG1 Audit Trail) -->
             <uxap:ObjectPageSection
                 id="secLogs"
                 title="{= ${i18n>resSectionLogs} + ' (' + (${detail>/Logs} ? ${detail>/Logs}.length : 0) + ')' }"
@@ -463,22 +466,26 @@
                                 items="{detail>/Logs}"
                                 noDataText="{i18n>resNoLogsData}">
                                 <columns>
-                                    <Column width="90px"><Text text="{i18n>resColStep}" /></Column>
+                                    <Column width="85px"><Text text="{i18n>resColStep}" /></Column>
                                     <Column width="80px"><Text text="{i18n>resColMsgType}" /></Column>
-                                    <Column width="90px"><Text text="{i18n>resColStatus}" /></Column>
+                                    <Column width="85px"><Text text="{i18n>resColStatus}" /></Column>
+                                    <Column width="110px" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColMsgClassNo}" /></Column>
+                                    <Column width="180px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resColLogHandle}" /></Column>
                                     <Column><Text text="{i18n>resColMsgText}" /></Column>
-                                    <Column width="180px" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColCreatedAt}" /></Column>
+                                    <Column width="170px" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColCreatedAt}" /></Column>
                                 </columns>
                                 <items>
                                     <ColumnListItem>
                                         <cells>
-                                            <ObjectIdentifier title="{detail>Step}" />
-                                            <ObjectStatus
-                                                text="{detail>MessageType}"
-                                                state="{= ${detail>MessageType} === 'S' ? 'Success' : (${detail>MessageType} === 'E' ? 'Error' : (${detail>MessageType} === 'W' ? 'Warning' : 'Information')) }" />
-                                            <Text text="{detail>Status}" />
-                                            <Text text="{detail>MessageText}" />
-                                            <Text text="{detail>createdAt}" />
+                                             <ObjectIdentifier title="{detail>Step}" />
+                                             <ObjectStatus
+                                                 text="{detail>MessageType}"
+                                                 state="{= ${detail>MessageType} === 'S' ? 'Success' : (${detail>MessageType} === 'E' ? 'Error' : (${detail>MessageType} === 'W' ? 'Warning' : 'Information')) }" />
+                                             <Text text="{detail>Status}" />
+                                             <Text text="{= ${detail>MessageId} ? (${detail>MessageId} + ' ' + ${detail>MessageNo}) : '-' }" />
+                                             <Text text="{= ${detail>LogHandle} ? ${detail>LogHandle} : '-' }" />
+                                             <Text text="{detail>MessageText}" />
+                                             <Text text="{detail>createdAt}" />
                                         </cells>
                                     </ColumnListItem>
                                 </items>

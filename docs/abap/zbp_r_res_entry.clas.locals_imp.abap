@@ -20,6 +20,9 @@ CLASS lhc_ReservationEntry DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS postMigo FOR MODIFY
       IMPORTING keys FOR ACTION ReservationEntry~postMigo RESULT result.
 
+    METHODS retryStep FOR MODIFY
+      IMPORTING keys FOR ACTION ReservationEntry~retryStep RESULT result.
+
 ENDCLASS.
 
 CLASS lhc_ReservationEntry IMPLEMENTATION.
@@ -101,6 +104,26 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
       "    - Call BAPI_TRANSACTION_ROLLBACK
       "    - Update ZRES_TRACK with status = '99' (ERROR) and err_msg
       "    - Append error log to ZRES_LOG (Step 'MIGO', Status '99')
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD retryStep.
+    DATA: lo_proc TYPE REF TO zcl_res_process.
+    CREATE OBJECT lo_proc.
+
+    READ ENTITIES OF zr_res_entry IN LOCAL MODE
+      ENTITY ReservationEntry
+      ALL FIELDS WITH CORRESPONDING #( keys )
+      RESULT DATA(lt_entries).
+
+    LOOP AT lt_entries INTO DATA(ls_entry).
+      " Determine recovery step from current status / failed step:
+      " - LB01: retry create_tr
+      " - LT04: retry create_to_from_tr & confirm_to
+      " - LT12: retry confirm_to
+      " - MIGO: retry post_migo
+      " Log execution in SLG1 via ZCL_RES_PROCESS->write_slg1
+      " Update status in ZRES_TRACK and append audit log in ZRES_LOG
     ENDLOOP.
   ENDMETHOD.
 

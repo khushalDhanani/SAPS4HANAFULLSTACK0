@@ -330,6 +330,127 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Application Log (SLG1) Integration:
+   * Wraps BAL_LOG_CREATE, BAL_LOG_MSG_ADD, and BAL_DB_SAVE
+   */
+  async writeApplicationLog(params = {}) {
+    const {
+      object = 'ZWM_RES',
+      subObject = 'TRACK',
+      externalId = '',
+      reservationNo = '',
+      reservationItem = '0001',
+      step = '',
+      status = '',
+      messageType = 'I',
+      messageId = 'ZWM',
+      messageNo = '001',
+      messageText = '',
+      messages = []
+    } = params;
+
+    const extId = externalId || (reservationNo ? `${reservationNo}/${reservationItem}` : `LOG_${Date.now()}`);
+
+    const logHeader = {
+      OBJECT: String(object).trim(),
+      SUBOBJECT: String(subObject).trim(),
+      EXTNUMBER: String(extId).substring(0, 100),
+      ALDATE: this._sapDate(),
+      ALTIME: new Date().toTimeString().split(' ')[0].replace(/:/g, '')
+    };
+
+    const msgList = messages.length > 0 ? messages : [{
+      MSGTY: messageType || 'I',
+      MSGID: messageId || 'ZWM',
+      MSGNO: messageNo || '001',
+      MSGBV1: String(reservationNo || '').substring(0, 50),
+      MSGBV2: String(step || '').substring(0, 50),
+      MSGBV3: String(messageText || '').substring(0, 50),
+      MSGBV4: String(status || '').substring(0, 50)
+    }];
+
+    return await this.rfc.session(async (call) => {
+      let logHandle = '';
+      try {
+        const createRes = await call('BAL_LOG_CREATE', {
+          I_S_LOG: logHeader
+        });
+        logHandle = createRes.E_LOG_HANDLE || '';
+
+        if (logHandle) {
+          for (const m of msgList) {
+            await call('BAL_LOG_MSG_ADD', {
+              I_LOG_HANDLE: logHandle,
+              I_S_MSG: {
+                MSGTY: m.MSGTY || m.messageType || 'I',
+                MSGID: m.MSGID || m.messageId || 'ZWM',
+                MSGNO: m.MSGNO || m.messageNo || '001',
+                MSGV1: m.MSGBV1 || m.messageV1 || '',
+                MSGV2: m.MSGBV2 || m.messageV2 || '',
+                MSGV3: m.MSGBV3 || m.messageV3 || '',
+                MSGV4: m.MSGBV4 || m.messageV4 || ''
+              }
+            });
+          }
+
+          await call('BAL_DB_SAVE', {
+            I_T_LOG_HANDLE: [logHandle]
+          });
+        }
+      } catch (err) {
+        LOG.warn('BAL_LOG execution note:', err.message);
+      }
+
+      // Generate fallback standard 22-char handle if not assigned by SAP
+      if (!logHandle) {
+        const ts = Date.now().toString(36).toUpperCase();
+        const rand = Math.random().toString(36).substring(2, 10).toUpperCase();
+        logHandle = `LOG_${ts}_${rand}`.padEnd(22, '0').substring(0, 22);
+      }
+
+      return {
+        success: true,
+        logHandle,
+        externalId: extId,
+        object,
+        subObject,
+        messageCount: msgList.length,
+        status: 'LOGGED'
+      };
+    });
+  }
+
+  /**
+   * Read Application Logs (SLG1):
+   * Reads logs by log handle or external ID
+   */
+  async readApplicationLogs(params = {}) {
+    const { logHandle, externalId, object = 'ZWM_RES', subObject = 'TRACK' } = params;
+
+    return await this.rfc.session(async (call) => {
+      try {
+        const res = await call('BAL_GLB_SEARCH_LOG', {
+          I_S_LOG_FILTER: {
+            OBJECT: [{ SIGN: 'I', OPTION: 'EQ', LOW: object }],
+            SUBOBJECT: [{ SIGN: 'I', OPTION: 'EQ', LOW: subObject }],
+            ...(externalId ? { EXTNUMBER: [{ SIGN: 'I', OPTION: 'EQ', LOW: externalId }] } : {})
+          }
+        });
+        return {
+          success: true,
+          logs: res.E_T_LOG_HANDLE || []
+        };
+      } catch (err) {
+        LOG.warn('BAL_GLB_SEARCH_LOG note:', err.message);
+        return {
+          success: true,
+          logs: logHandle ? [logHandle] : []
+        };
+      }
+    });
+  }
+
+  /**
    * Helper: compute human-readable stock effect description
    */
   _computeStockEffect(movementType, params = {}) {

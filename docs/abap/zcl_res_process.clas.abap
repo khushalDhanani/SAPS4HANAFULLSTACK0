@@ -134,6 +134,23 @@ CLASS zcl_res_process DEFINITION
         !es_track     TYPE zres_track
         !ev_subrc     TYPE sysubrc .
 
+    "! Step 7: Application Log Integration via BAL_LOG_CREATE, BAL_LOG_MSG_ADD, BAL_DB_SAVE (SLG1)
+    METHODS write_slg1
+      IMPORTING
+        !iv_object     TYPE balobj_d DEFAULT 'ZWM_RES'
+        !iv_subobject  TYPE balsubobj DEFAULT 'TRACK'
+        !iv_extnumber  TYPE balnrext OPTIONAL
+        !iv_msgty      TYPE symsgty DEFAULT 'I'
+        !iv_msgid      TYPE symsgid DEFAULT 'ZWM'
+        !iv_msgno      TYPE symsgno DEFAULT '001'
+        !iv_msgv1      TYPE symsgv OPTIONAL
+        !iv_msgv2      TYPE symsgv OPTIONAL
+        !iv_msgv3      TYPE symsgv OPTIONAL
+        !iv_msgv4      TYPE symsgv OPTIONAL
+      EXPORTING
+        !ev_log_handle TYPE balloghndl
+        !ev_subrc      TYPE sysubrc .
+
   PROTECTED SECTION.
   PRIVATE SECTION.
 
@@ -612,6 +629,69 @@ CLASS zcl_res_process IMPLEMENTATION.
     ls_ret-message_v1 = iv_v1.
     ls_ret-message_v2 = iv_v2.
     APPEND ls_ret TO ct_return.
+  ENDMETHOD.
+
+
+  METHOD write_slg1.
+    DATA: ls_log     TYPE bal_s_log,
+          ls_msg     TYPE bal_s_msg,
+          lt_handles TYPE bal_t_logh.
+
+    CLEAR: ev_log_handle, ev_subrc.
+
+    ls_log-object    = iv_object.
+    ls_log-subobject = iv_subobject.
+    ls_log-extnumber = iv_extnumber.
+    ls_log-aldate    = sy-datum.
+    ls_log-altime    = sy-uzeit.
+    ls_log-aluser    = sy-uname.
+    ls_log-alprog    = sy-repid.
+
+    CALL FUNCTION 'BAL_LOG_CREATE'
+      EXPORTING
+        i_s_log      = ls_log
+      IMPORTING
+        e_log_handle = ev_log_handle
+      EXCEPTIONS
+        OTHERS       = 1.
+
+    IF sy-subrc <> 0 OR ev_log_handle IS INITIAL.
+      ev_subrc = 4.
+      RETURN.
+    ENDIF.
+
+    ls_msg-msgty = iv_msgty.
+    ls_msg-msgid = iv_msgid.
+    ls_msg-msgno = iv_msgno.
+    ls_msg-msgv1 = iv_msgv1.
+    ls_msg-msgv2 = iv_msgv2.
+    ls_msg-msgv3 = iv_msgv3.
+    ls_msg-msgv4 = iv_msgv4.
+
+    CALL FUNCTION 'BAL_LOG_MSG_ADD'
+      EXPORTING
+        i_log_handle = ev_log_handle
+        i_s_msg      = ls_msg
+      EXCEPTIONS
+        OTHERS       = 2.
+
+    IF sy-subrc <> 0.
+      ev_subrc = 4.
+      RETURN.
+    ENDIF.
+
+    APPEND ev_log_handle TO lt_handles.
+    CALL FUNCTION 'BAL_DB_SAVE'
+      EXPORTING
+        i_t_log_handle = lt_handles
+      EXCEPTIONS
+        OTHERS         = 3.
+
+    IF sy-subrc = 0.
+      ev_subrc = 0.
+    ELSE.
+      ev_subrc = 4.
+    ENDIF.
   ENDMETHOD.
 
 ENDCLASS.

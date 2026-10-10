@@ -81,6 +81,20 @@
                                 <Input id="filterPlant" value="{view>/filterPlant}" change=".onFilterChange" placeholder="1120" />
                             </fb:control>
                         </fb:FilterGroupItem>
+
+                        <fb:FilterGroupItem
+                            name="DateRange"
+                            label="{i18n>resEntryFieldDateRange}"
+                            groupName="Group1"
+                            visibleInFilterBar="true">
+                            <fb:control>
+                                <DateRangeSelection
+                                    id="filterDateRange"
+                                    change=".onFilterChange"
+                                    dateValue="{view>/filterDateFrom}"
+                                    secondDateValue="{view>/filterDateTo}" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
                     </fb:filterGroupItems>
                 </fb:FilterBar>
             </f:DynamicPageHeader>
@@ -94,12 +108,19 @@
                 growingThreshold="25"
                 noDataText="{i18n>resEntryNoData}"
                 itemPress=".onRowPress"
-                mode="None">
+                selectionChange=".onSelectionChange"
+                mode="SingleSelectLeft">
                 <headerToolbar>
                     <OverflowToolbar id="toolbarResTable">
-                        <Title id="lblResTableTitle" text="{i18n>resEntryTableHeading}" level="H3" />
-                        <Badge id="badgeCount" text="{= ${view>/entries}.length }" class="sapUiTinyMarginBegin" />
+                        <Title id="lblResTableTitle" text="{= ${i18n>resEntryTableHeading} + ' (' + (${view>/entries}.length || 0) + ')' }" level="H3" />
                         <ToolbarSpacer />
+                        <Button
+                            id="btnRetryList"
+                            text="{i18n>resEntryBtnRetry}"
+                            icon="sap-icon://restart"
+                            type="Emphasized"
+                            press=".onRetryPress"
+                            enabled="{view>/hasRetryableSelection}" />
                         <SearchField
                             id="searchFieldList"
                             width="250px"
@@ -116,6 +137,7 @@
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
                     <Column width="110px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColAutoTR}" /></Column>
                     <Column width="110px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColTO}" /></Column>
+                    <Column width="120px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColMatDoc}" /></Column>
                     <Column width="140px"><Text text="{i18n>resEntryColStatus}" /></Column>
                 </columns>
 
@@ -151,6 +173,8 @@
                                 text="{= ${view>TransferRequirement} ? 'Auto-Created' : 'Pending' }" />
 
                             <Text text="{= ${view>TransferOrder} ? ${view>TransferOrder} : '-' }" />
+
+                            <Text text="{= ${view>MaterialDocument} ? (${view>MaterialDocument} + (${view>MaterialDocYear} ? (' / ' + ${view>MaterialDocYear}) : '')) : '-' }" />
 
                             <ObjectStatus
                                 text="{path: 'view>Status_code', formatter: '.formatStatusText'}"

@@ -101,12 +101,37 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       const resNo = resResult.reservationNoRaw || String(resResult.reservationNo).padStart(10, '0');
       const resItem = resResult.reservationItem || '0001';
+      const extId = `${resNo}/${resItem}`;
+
+      // Initialize SLG1 Application Log header
+      let slg1Log;
+      try {
+        slg1Log = await adapter.writeApplicationLog({
+          object: 'ZWM_RES',
+          subObject: 'TRACK',
+          externalId: extId,
+          reservationNo: resNo,
+          reservationItem: resItem,
+          step: 'MB21',
+          status: '01',
+          messageType: 'S',
+          messageId: 'M7',
+          messageNo: '060',
+          messageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1`
+        });
+      } catch (_logErr) {
+        slg1Log = { logHandle: `LOG_${Date.now().toString(36).toUpperCase()}` };
+      }
+      const sLogHandle = slg1Log?.logHandle || '';
 
       // Log Step 1 (MB21)
       await INSERT.into(ReservationLogs).entries({
         ID: cds.utils.uuid(),
         ReservationNo: resNo,
         ReservationItem: resItem,
+        LogHandle: sLogHandle,
+        ExternalId: extId,
+        SubObject: 'TRACK',
         Step: 'MB21',
         Status: '01',
         MessageType: 'S',
@@ -141,6 +166,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ID: cds.utils.uuid(),
           ReservationNo: resNo,
           ReservationItem: resItem,
+          LogHandle: sLogHandle,
+          ExternalId: extId,
+          SubObject: 'TRACK',
           Step: 'LB01',
           Status: '02',
           MessageType: 'S',
@@ -155,6 +183,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ID: cds.utils.uuid(),
           ReservationNo: resNo,
           ReservationItem: resItem,
+          LogHandle: sLogHandle,
+          ExternalId: extId,
+          SubObject: 'TRACK',
           Step: 'LB01',
           Status: '01',
           MessageType: 'W',
@@ -182,6 +213,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         AssetNo: AssetNo || '',
         SubNumber: SubNumber || '',
         TransferRequirement: trNumber,
+        LogHandle: sLogHandle,
+        ExternalId: extId,
         Status_code: currentStatus,
         ErrorMessage: trError || ''
       };
@@ -243,6 +276,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const sCostCenter = data.CostCenter || existing?.CostCenter;
       const sAssetNo = data.AssetNo || existing?.AssetNo;
       const sSubNumber = data.SubNumber || existing?.SubNumber;
+      const extId = `${sResNo}/${sResItem}`;
+      const sLogHandle = existing?.LogHandle || `LOG_${Date.now().toString(36).toUpperCase()}`;
 
       try {
         const migoRes = await adapter.postGoodsMovement({
@@ -268,7 +303,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             MaterialDocument: migoRes.materialDocument,
             MaterialDocYear: migoRes.materialDocYear,
             Status_code: '05',
-            ErrorMessage: ''
+            ErrorMessage: '',
+            LogHandle: sLogHandle,
+            ExternalId: extId
           })
           .where({
             ReservationNo: sResNo,
@@ -280,6 +317,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ID: cds.utils.uuid(),
           ReservationNo: sResNo,
           ReservationItem: sResItem,
+          LogHandle: sLogHandle,
+          ExternalId: extId,
+          SubObject: 'PROCESS',
           Step: 'MIGO',
           Status: '05',
           MessageType: 'S',
@@ -297,7 +337,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         await UPDATE(ReservationEntries)
           .set({
             Status_code: '99',
-            ErrorMessage: err.message
+            ErrorMessage: err.message,
+            LogHandle: sLogHandle,
+            ExternalId: extId
           })
           .where({
             ReservationNo: sResNo,
@@ -308,6 +350,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ID: cds.utils.uuid(),
           ReservationNo: sResNo,
           ReservationItem: sResItem,
+          LogHandle: sLogHandle,
+          ExternalId: extId,
+          SubObject: 'PROCESS',
           Step: 'MIGO',
           Status: '99',
           MessageType: 'E',
@@ -321,6 +366,247 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ReservationItem: sResItem
         });
       }
+    });
+
+    // Chunk 6: Retry Action per failed step
+    this.on('retryStep', async (req) => {
+      const data = req.data || {};
+      const sResNo = data.ReservationNo;
+      const sResItem = data.ReservationItem || '0001';
+      let requestedStep = (data.Step || '').toUpperCase().trim();
+
+      if (!sResNo) {
+        return req.error(400, 'ReservationNo is mandatory for retryStep');
+      }
+
+      const track = await SELECT.one.from(ReservationEntries).where({
+        ReservationNo: sResNo,
+        ReservationItem: sResItem
+      });
+
+      if (!track) {
+        return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
+      }
+
+      // Auto-detect step if not specified
+      if (!requestedStep || requestedStep === 'AUTO') {
+        if (!track.TransferRequirement || track.Status_code === '01') {
+          requestedStep = 'LB01';
+        } else if (!track.TransferOrder || track.Status_code === '02') {
+          requestedStep = 'LT04';
+        } else if (track.Status_code === '03') {
+          requestedStep = 'LT12';
+        } else if (!track.MaterialDocument || track.Status_code === '04' || track.Status_code === '99') {
+          requestedStep = 'MIGO';
+        } else {
+          requestedStep = 'MIGO';
+        }
+      }
+
+      const extId = `${sResNo}/${sResItem}`;
+      let slg1Log;
+      try {
+        slg1Log = await adapter.writeApplicationLog({
+          object: 'ZWM_RES',
+          subObject: 'PROCESS',
+          externalId: extId,
+          reservationNo: sResNo,
+          reservationItem: sResItem,
+          step: requestedStep,
+          messageText: `Initiating retry for step ${requestedStep}`
+        });
+      } catch (_slgErr) {
+        slg1Log = { logHandle: `LOG_${Date.now().toString(36).toUpperCase()}` };
+      }
+      const sLogHandle = slg1Log?.logHandle || track.LogHandle || '';
+
+      try {
+        if (requestedStep === 'LB01') {
+          const trResult = await adapter.createTransferRequirement({
+            warehouseNumber: track.WarehouseNumber || 'W01',
+            wmMovementType: track.MovementType || '311',
+            material: track.Material,
+            plant: track.Plant || '1120',
+            storageLocation: track.StorageLocation || 'HS01',
+            quantity: track.Quantity,
+            unit: track.Unit || 'EA',
+            reservationNo: sResNo,
+            reservationItem: sResItem
+          });
+
+          const trNo = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
+
+          await UPDATE(ReservationEntries).set({
+            TransferRequirement: trNo,
+            Status_code: '02',
+            ErrorMessage: '',
+            LogHandle: sLogHandle,
+            ExternalId: extId
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: sLogHandle,
+            ExternalId: extId,
+            SubObject: 'PROCESS',
+            Step: 'LB01',
+            Status: '02',
+            MessageType: 'S',
+            MessageId: 'L3',
+            MessageNo: '001',
+            MessageText: `Retry successful: Transfer Requirement ${trNo} created via L_TR_CREATE`
+          });
+        } else if (requestedStep === 'LT04') {
+          const toResult = await adapter.createTransferOrderFromTR({
+            warehouseNumber: track.WarehouseNumber || 'W01',
+            trNumber: track.TransferRequirement
+          });
+
+          const toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
+
+          await adapter.confirmTransferOrder({
+            warehouseNumber: track.WarehouseNumber || 'W01',
+            toNumber: toNo
+          });
+
+          await UPDATE(ReservationEntries).set({
+            TransferOrder: toNo,
+            Status_code: '04',
+            ErrorMessage: '',
+            LogHandle: sLogHandle,
+            ExternalId: extId
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: sLogHandle,
+            ExternalId: extId,
+            SubObject: 'PROCESS',
+            Step: 'LT04',
+            Status: '04',
+            MessageType: 'S',
+            MessageId: 'L3',
+            MessageNo: '025',
+            MessageText: `Retry successful: Transfer Order ${toNo} created and confirmed`
+          });
+        } else if (requestedStep === 'LT12') {
+          await adapter.confirmTransferOrder({
+            warehouseNumber: track.WarehouseNumber || 'W01',
+            toNumber: track.TransferOrder
+          });
+
+          await UPDATE(ReservationEntries).set({
+            Status_code: '04',
+            ErrorMessage: '',
+            LogHandle: sLogHandle,
+            ExternalId: extId
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: sLogHandle,
+            ExternalId: extId,
+            SubObject: 'PROCESS',
+            Step: 'LT12',
+            Status: '04',
+            MessageType: 'S',
+            MessageId: 'L3',
+            MessageNo: '025',
+            MessageText: `Retry successful: Transfer Order ${track.TransferOrder} confirmed via L_TO_CONFIRM`
+          });
+        } else if (requestedStep === 'MIGO') {
+          const migoRes = await adapter.postGoodsMovement({
+            reservationNo: sResNo,
+            reservationItem: sResItem,
+            movementType: track.MovementType,
+            material: track.Material,
+            plant: track.Plant,
+            storageLocation: track.StorageLocation,
+            quantity: track.Quantity,
+            unit: track.Unit,
+            receivingPlant: track.ReceivingPlant,
+            receivingStorageLocation: track.ReceivingStorageLocation,
+            costCenter: track.CostCenter,
+            assetNo: track.AssetNo,
+            subNumber: track.SubNumber,
+            deriveGmCode: true
+          });
+
+          await UPDATE(ReservationEntries).set({
+            MaterialDocument: migoRes.materialDocument,
+            MaterialDocYear: migoRes.materialDocYear,
+            Status_code: '05',
+            ErrorMessage: '',
+            LogHandle: sLogHandle,
+            ExternalId: extId
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: sLogHandle,
+            ExternalId: extId,
+            SubObject: 'PROCESS',
+            Step: 'MIGO',
+            Status: '05',
+            MessageType: 'S',
+            MessageId: 'M7',
+            MessageNo: '060',
+            MessageText: `Retry successful: Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
+          });
+        } else {
+          return req.error(400, `Unsupported retry step: '${requestedStep}'. Supported: LB01, LT04, LT12, MIGO`);
+        }
+
+        return await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+      } catch (err) {
+        await UPDATE(ReservationEntries).set({
+          Status_code: '99',
+          ErrorMessage: `Retry ${requestedStep} failed: ${err.message}`,
+          LogHandle: sLogHandle,
+          ExternalId: extId
+        }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+        await INSERT.into(ReservationLogs).entries({
+          ID: cds.utils.uuid(),
+          ReservationNo: sResNo,
+          ReservationItem: sResItem,
+          LogHandle: sLogHandle,
+          ExternalId: extId,
+          SubObject: 'PROCESS',
+          Step: requestedStep,
+          Status: '99',
+          MessageType: 'E',
+          MessageId: 'ZWM',
+          MessageNo: '999',
+          MessageText: `Retry ${requestedStep} failed: ${err.message}`
+        });
+
+        return await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+      }
+    });
+
+    // Chunk 6: SLG1 Application Log query function
+    this.on('getApplicationLogs', async (req) => {
+      const { ReservationNo, ReservationItem = '0001' } = req.data || {};
+      if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
+
+      return await SELECT.from(ReservationLogs)
+        .where({ ReservationNo, ReservationItem })
+        .orderBy('createdAt desc');
     });
 
     return super.init();

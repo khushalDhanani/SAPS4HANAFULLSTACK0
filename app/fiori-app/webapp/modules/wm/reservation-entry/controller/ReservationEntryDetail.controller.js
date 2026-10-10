@@ -100,6 +100,32 @@ sap.ui.define([
             }
         },
 
+        onRetryStepPress: function () {
+            const that = this;
+            if (!this._sCurrentResNo) return;
+
+            this._oViewModel.setProperty("/busy", true);
+            this._oViewModel.setProperty("/errorMessage", "");
+
+            this._oService.retryStep(this._sCurrentResNo, this._sCurrentResItem || "0001", "AUTO").then(function (oUpdated) {
+                that._oViewModel.setProperty("/busy", false);
+                const sStatus = oUpdated.Status_code;
+                if (sStatus === "99") {
+                    const sErr = oUpdated.ErrorMessage || "Retry completed with errors";
+                    that._oViewModel.setProperty("/errorMessage", sErr);
+                    MessageBox.warning(sErr);
+                } else {
+                    MessageToast.show("Step successfully executed! Current Status: " + sStatus);
+                }
+                that._loadDetail(that._sCurrentResNo, that._sCurrentResItem);
+            }).catch(function (err) {
+                that._oViewModel.setProperty("/busy", false);
+                const sError = err.message || "Retry failed";
+                that._oViewModel.setProperty("/errorMessage", sError);
+                MessageBox.error(sError);
+            });
+        },
+
         onMovementTypeChange: function (oEvent) {
             const sMvt = oEvent.getParameter("selectedItem") ? oEvent.getParameter("selectedItem").getKey() : this._oCreateModel.getProperty("/MovementType");
             this._oViewModel.setProperty("/errorMessage", "");

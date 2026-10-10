@@ -15,6 +15,10 @@ sap.ui.define([
                 filterMvtType: "",
                 filterStatus: "",
                 filterPlant: "",
+                filterDateFrom: null,
+                filterDateTo: null,
+                hasRetryableSelection: false,
+                selectedEntry: null,
                 busy: false
             });
             this.getView().setModel(this._oViewModel, "view");
@@ -27,19 +31,35 @@ sap.ui.define([
             this.loadData();
         },
 
+        _formatDateIso: function (d) {
+            if (!d) return "";
+            if (typeof d === "string") return d.split("T")[0];
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return y + "-" + m + "-" + day;
+        },
+
         loadData: function () {
             const that = this;
             this._oViewModel.setProperty("/busy", true);
 
+            const dFrom = this._oViewModel.getProperty("/filterDateFrom");
+            const dTo = this._oViewModel.getProperty("/filterDateTo");
+
             const oFilters = {
                 MovementType: this._oViewModel.getProperty("/filterMvtType"),
                 Status: this._oViewModel.getProperty("/filterStatus"),
-                Plant: this._oViewModel.getProperty("/filterPlant")
+                Plant: this._oViewModel.getProperty("/filterPlant"),
+                DateFrom: this._formatDateIso(dFrom),
+                DateTo: this._formatDateIso(dTo)
             };
 
             this._oService.getEntries(oFilters).then(function (aEntries) {
                 that._oViewModel.setProperty("/entries", aEntries);
                 that._oViewModel.setProperty("/allEntries", aEntries);
+                that._oViewModel.setProperty("/hasRetryableSelection", false);
+                that._oViewModel.setProperty("/selectedEntry", null);
                 that._oViewModel.setProperty("/busy", false);
             }).catch(function (err) {
                 that._oViewModel.setProperty("/busy", false);
@@ -64,7 +84,55 @@ sap.ui.define([
             this._oViewModel.setProperty("/filterMvtType", "");
             this._oViewModel.setProperty("/filterStatus", "");
             this._oViewModel.setProperty("/filterPlant", "");
+            this._oViewModel.setProperty("/filterDateFrom", null);
+            this._oViewModel.setProperty("/filterDateTo", null);
             this.loadData();
+        },
+
+        onSelectionChange: function (oEvent) {
+            const oItem = oEvent.getParameter("listItem");
+            if (!oItem) {
+                this._oViewModel.setProperty("/hasRetryableSelection", false);
+                this._oViewModel.setProperty("/selectedEntry", null);
+                return;
+            }
+
+            const oCtx = oItem.getBindingContext("view");
+            const oEntry = oCtx ? oCtx.getObject() : null;
+
+            if (oEntry) {
+                this._oViewModel.setProperty("/selectedEntry", oEntry);
+                // Retryable if status is not completed ('05')
+                const bRetryable = oEntry.Status_code !== "05";
+                this._oViewModel.setProperty("/hasRetryableSelection", bRetryable);
+            } else {
+                this._oViewModel.setProperty("/hasRetryableSelection", false);
+                this._oViewModel.setProperty("/selectedEntry", null);
+            }
+        },
+
+        onRetryPress: function () {
+            const that = this;
+            const oSelected = this._oViewModel.getProperty("/selectedEntry");
+            if (!oSelected) {
+                MessageToast.show("Please select a reservation entry to retry");
+                return;
+            }
+
+            this._oViewModel.setProperty("/busy", true);
+            this._oService.retryStep(oSelected.ReservationNo, oSelected.ReservationItem, "AUTO").then(function (oUpdated) {
+                that._oViewModel.setProperty("/busy", false);
+                const sStatus = oUpdated.Status_code;
+                if (sStatus === "99") {
+                    MessageToast.show("Retry completed with error: " + (oUpdated.ErrorMessage || "Failed"));
+                } else {
+                    MessageToast.show("Step retried successfully. Current Status: " + sStatus);
+                }
+                that.loadData();
+            }).catch(function (err) {
+                that._oViewModel.setProperty("/busy", false);
+                MessageToast.show("Retry failed: " + err.message);
+            });
         },
 
         onSearchFieldSearch: function (oEvent) {
@@ -81,7 +149,9 @@ sap.ui.define([
                     (e.Material && e.Material.toLowerCase().includes(sQuery)) ||
                     (e.MaterialName && e.MaterialName.toLowerCase().includes(sQuery)) ||
                     (e.MovementType && e.MovementType.includes(sQuery)) ||
-                    (e.TransferRequirement && e.TransferRequirement.includes(sQuery));
+                    (e.TransferRequirement && e.TransferRequirement.includes(sQuery)) ||
+                    (e.TransferOrder && e.TransferOrder.includes(sQuery)) ||
+                    (e.MaterialDocument && e.MaterialDocument.includes(sQuery));
             });
 
             this._oViewModel.setProperty("/entries", aFiltered);

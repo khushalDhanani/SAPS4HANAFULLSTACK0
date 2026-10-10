@@ -68,6 +68,8 @@ define table zres_track {
   mjahr         : mjahr;
   status        : zres_status;
   err_msg       : bapi_msg;
+  balloghndl    : balloghndl;
+  balextn       : balextn;
   created_by    : ernam;
   created_on    : erdat;
   created_at    : erzet;
@@ -103,6 +105,8 @@ define table zres_log {
   msgid         : symsgid;
   msgno         : symsgno;
   message       : bapi_msg;
+  balloghndl    : balloghndl;
+  balextn       : balextn;
   created_by    : ernam;
   created_on    : erdat;
   created_at    : erzet;

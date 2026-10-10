@@ -38,6 +38,8 @@ entity ReservationTrack : managed {
     TransferOrder           : String(10);    // TANUM (LT04)
     MaterialDocument        : String(10);    // MBLNR (MIGO)
     MaterialDocYear         : String(4);     // MJAHR (MIGO)
+    LogHandle               : String(22);    // BALLOGHNDL (SLG1 Application Log Handle)
+    ExternalId              : String(100);   // BALEXTN (SLG1 External ID)
     Status                  : Association to ReservationStatus; // STATUS
     ErrorMessage            : String(255);   // ERR_MSG
     Logs                    : Association to many ReservationLog
@@ -47,11 +49,14 @@ entity ReservationTrack : managed {
 
 /**
  * Step-Wise Log Table: ZRES_LOG
- * Mirrors ABAP transparent log table ZRES_LOG
+ * Mirrors ABAP transparent log table ZRES_LOG with SLG1 Application Log fields
  */
 entity ReservationLog : cuid, managed {
     ReservationNo   : String(10);    // RSNUM
     ReservationItem : String(4);     // RSPOS
+    LogHandle       : String(22);    // BALLOGHNDL (SLG1 Application Log Handle)
+    ExternalId      : String(100);   // BALEXTN (SLG1 External ID)
+    SubObject       : String(20);    // BALSUBOBJ (e.g. TRACK, PROCESS)
     Step            : String(10);    // MB21 | LB01 | LT04 | LT12 | MIGO
     Status          : String(10);    // Status at time of step
     MessageType     : String(1);     // S | E | W | I
